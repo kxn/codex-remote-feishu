@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { CODEX_METHODS, classifyMethod } from "./protocol.js";
+import {
+  APPROVAL_RESPONSE_MESSAGE_TYPE,
+  CODEX_METHODS,
+  classifyMethod,
+  createApprovalResponseMessage,
+} from "./protocol.js";
 
 describe("classifyMethod", () => {
   it("classifies agent message deltas as agentMessage", () => {
@@ -46,5 +51,19 @@ describe("classifyMethod", () => {
       "threadLifecycle",
     );
     expect(classifyMethod(undefined)).toBe("unknown");
+  });
+
+  it("creates approval response relay messages with explicit decisions", () => {
+    expect(createApprovalResponseMessage("req-1", true)).toEqual({
+      type: APPROVAL_RESPONSE_MESSAGE_TYPE,
+      requestId: "req-1",
+      decision: "accept",
+    });
+
+    expect(createApprovalResponseMessage(7, false)).toEqual({
+      type: APPROVAL_RESPONSE_MESSAGE_TYPE,
+      requestId: 7,
+      decision: "decline",
+    });
   });
 });

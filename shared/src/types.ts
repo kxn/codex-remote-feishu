@@ -33,3 +33,19 @@ export interface ApiResponse<T = unknown> {
   /** Error message (present on failure). */
   error?: string;
 }
+
+/** Approval request identifiers follow JSON-RPC request id semantics. */
+export type ApprovalRequestId = string | number;
+
+/** Explicit approval decisions relayed back to codex. */
+export type ApprovalDecision = "accept" | "decline";
+
+/** Server-to-wrapper approval response relay payload. */
+export interface ApprovalResponseRelayMessage {
+  /** Wire discriminator for approval responses. */
+  type: "approval-response";
+  /** Original JSON-RPC request id from codex. */
+  requestId: ApprovalRequestId;
+  /** Approval decision to return to codex. */
+  decision: ApprovalDecision;
+}

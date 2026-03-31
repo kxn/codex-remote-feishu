@@ -504,6 +504,23 @@ async fn injects_server_commands_only_while_attached() {
     );
 
     relay.send(json!({
+        "type": "approval-response",
+        "requestId": "req-1",
+        "decision": "decline"
+    }));
+    let approval_response = read_stdout_line(&mut stdout).await;
+    let approval_response_json: Value = serde_json::from_str(approval_response.trim())
+        .expect("approval response should be valid JSON");
+    assert_eq!(
+        approval_response_json.get("id").and_then(Value::as_str),
+        Some("req-1")
+    );
+    assert_eq!(
+        approval_response_json.pointer("/result/decision").and_then(Value::as_str),
+        Some("decline")
+    );
+
+    relay.send(json!({
         "type": "attach-status-changed",
         "attached": false
     }));

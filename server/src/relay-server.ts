@@ -62,6 +62,7 @@ const sessionInputSchema = z.union([
   z.object({
     type: z.literal("approval"),
     approved: z.boolean(),
+    requestId: z.union([z.string().min(1), z.number().finite()]),
   }),
   z.object({
     method: z.string().min(1),
@@ -69,6 +70,8 @@ const sessionInputSchema = z.union([
     content: z.string().optional(),
   }),
 ]);
+
+const APPROVAL_RESPONSE_MESSAGE_TYPE = "approval-response" as const;
 
 const attachBodySchema = z.object({
   userId: z.string().min(1),
@@ -655,8 +658,9 @@ function buildRelayInputPayload(
 
   if ("type" in input && input.type === "approval") {
     return {
-      type: "input",
-      approval: input.approved,
+      type: APPROVAL_RESPONSE_MESSAGE_TYPE,
+      requestId: input.requestId,
+      decision: input.approved ? "accept" : "decline",
     };
   }
 
@@ -684,6 +688,8 @@ function notifyAttachmentStatus(
     ...(payload.reason ? { reason: payload.reason } : {}),
   });
 }
+
+export { APPROVAL_RESPONSE_MESSAGE_TYPE };
 
 function emitAttachedUserMessage(
   registry: SessionRegistry,

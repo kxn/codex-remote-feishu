@@ -241,6 +241,18 @@ fn handle_incoming_message(
                 debug!(message = %parsed, "ignoring unsupported relay input message");
             }
         }
+        Some("approval-response") => {
+            if !attached.load(Ordering::SeqCst) {
+                debug!("ignoring relay approval response because no user is attached");
+                return;
+            }
+
+            if let Some(command) = build_approval_response_command(&parsed) {
+                let _ = child_input_tx.send(command);
+            } else {
+                debug!(message = %parsed, "ignoring malformed relay approval response");
+            }
+        }
         Some("interrupt" | "turn/interrupt") => {
             if !attached.load(Ordering::SeqCst) {
                 debug!("ignoring relay interrupt because no user is attached");
@@ -278,6 +290,29 @@ fn build_input_command(value: &Value) -> Option<ChildInputCommand> {
         Some("turn/interrupt") => Some(ChildInputCommand::Write(turn_interrupt_message())),
         _ => None,
     }
+}
+
+fn build_approval_response_command(value: &Value) -> Option<ChildInputCommand> {
+    let request_id = value.get("requestId").filter(is_jsonrpc_request_id)?.clone();
+    let decision = Value::String(value.get("decision")?.as_str()?.to_owned());
+
+    Some(ChildInputCommand::Write(
+        json!({
+            "id": request_id,
+            "result": {
+                "decision": decision,
+            }
+        })
+        .to_string()
+        .into_bytes()
+        .into_iter()
+        .chain(std::iter::once(b'\n'))
+        .collect(),
+    ))
+}
+
+fn is_jsonrpc_request_id(value: &&Value) -> bool {
+    matches!(value, Value::String(_) | Value::Number(_))
 }
 
 fn build_direct_turn_start_command(value: &Value) -> Option<ChildInputCommand> {
@@ -351,6 +386,7 @@ fn handle_disconnect(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::mpsc::error::TryRecvError;
 
     #[test]
     fn disconnect_resets_attached_state_and_drops_queued_messages() {
@@ -375,5 +411,43 @@ mod tests {
             outbound_rx.try_recv(),
             Err(tokio::sync::mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    #[test]
+    fn approval_response_is_forwarded_as_jsonrpc_result() {
+        let attached = Arc::new(AtomicBool::new(true));
+        let (child_input_tx, mut child_input_rx) = mpsc::unbounded_channel();
+
+        handle_incoming_message(
+            r#"{"type":"approval-response","requestId":"req-1","decision":"accept"}"#,
+            &attached,
+            &child_input_tx,
+        );
+
+        let command = child_input_rx
+            .try_recv()
+            .expect("approval response should be forwarded");
+        let ChildInputCommand::Write(bytes) = command else {
+            panic!("expected approval response write command");
+        };
+
+        assert_eq!(
+            String::from_utf8(bytes).expect("approval response should be utf8"),
+            "{\"id\":\"req-1\",\"result\":{\"decision\":\"accept\"}}\n"
+        );
+    }
+
+    #[test]
+    fn detached_state_ignores_approval_response_messages() {
+        let attached = Arc::new(AtomicBool::new(false));
+        let (child_input_tx, mut child_input_rx) = mpsc::unbounded_channel();
+
+        handle_incoming_message(
+            r#"{"type":"approval-response","requestId":"req-1","decision":"decline"}"#,
+            &attached,
+            &child_input_tx,
+        );
+
+        assert!(matches!(child_input_rx.try_recv(), Err(TryRecvError::Empty)));
     }
 }

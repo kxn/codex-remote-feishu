@@ -552,6 +552,29 @@ describe("relay server", () => {
     });
     await expectNoMessage(sessionA, 150);
 
+    const approvalResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-a/input`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "approval",
+          requestId: "req-1",
+          approved: true,
+        }),
+      },
+    );
+    expect(approvalResponse.status).toBe(200);
+    expect(await approvalResponse.json()).toEqual({ ok: true });
+    expect(await nextJsonMessage(sessionA)).toEqual({
+      type: "approval-response",
+      requestId: "req-1",
+      decision: "accept",
+    });
+    await expectNoMessage(sessionB, 150);
+
     const missingSession = await fetch(
       `${server.apiBaseUrl}/sessions/missing/input`,
       {
@@ -588,6 +611,26 @@ describe("relay server", () => {
     expect(await offlineResponse.json()).toEqual({
       error: "Session is offline",
     });
+
+    const invalidApprovalResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-b/input`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "approval",
+          approved: false,
+        }),
+      },
+    );
+    expect(invalidApprovalResponse.status).toBe(400);
+    expect(await invalidApprovalResponse.json()).toEqual(
+      expect.objectContaining({
+        error: "Invalid input body",
+      }),
+    );
 
     sessionB.close();
     await waitForClose(sessionB);
