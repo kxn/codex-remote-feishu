@@ -18,6 +18,32 @@ fn fixture_path(name: &str) -> String {
     path.to_string_lossy().to_string()
 }
 
+fn wrapper_log_path(pid: u32) -> PathBuf {
+    std::env::temp_dir().join(format!("codex-relay-wrapper-{pid}.log"))
+}
+
+async fn read_wrapper_log(pid: u32) -> String {
+    let log_path = wrapper_log_path(pid);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+
+    loop {
+        match tokio::fs::read_to_string(&log_path).await {
+            Ok(contents) => return contents,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    && std::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(_) => return String::new(),
+        }
+    }
+}
+
+fn remove_wrapper_log(pid: u32) {
+    let _ = std::fs::remove_file(wrapper_log_path(pid));
+}
+
 async fn spawn_wrapper_process(
     args: &[&str],
     env_vars: Vec<(&str, &str)>,
@@ -259,6 +285,7 @@ async fn stdio_proxy_continues_when_relay_is_unreachable() {
         None,
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     let mut stdin = wrapper.stdin.take().expect("missing wrapper stdin");
     let stdout = wrapper.stdout.take().expect("missing wrapper stdout");
@@ -281,10 +308,17 @@ async fn stdio_proxy_continues_when_relay_is_unreachable() {
 
     let stderr = read_stderr(&mut wrapper).await;
     assert!(
-        stderr.contains("relay")
-            && (stderr.contains("connect") || stderr.contains("degraded mode")),
-        "expected relay connectivity warning, got: {stderr}"
+        stderr.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("relay")
+            && (log_output.contains("connect") || log_output.contains("degraded mode")),
+        "expected relay connectivity warning in wrapper log, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

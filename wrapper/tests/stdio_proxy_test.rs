@@ -13,6 +13,43 @@ fn fixture_path(name: &str) -> String {
     path.to_string_lossy().to_string()
 }
 
+fn wrapper_log_path(pid: u32) -> PathBuf {
+    std::env::temp_dir().join(format!("codex-relay-wrapper-{pid}.log"))
+}
+
+async fn read_wrapper_log(pid: u32) -> String {
+    let log_path = wrapper_log_path(pid);
+    let deadline = Instant::now() + std::time::Duration::from_secs(2);
+
+    loop {
+        match tokio::fs::read_to_string(&log_path).await {
+            Ok(contents) => return contents,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound && Instant::now() < deadline =>
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+            Err(_) => return String::new(),
+        }
+    }
+}
+
+fn remove_wrapper_log(pid: u32) {
+    let _ = std::fs::remove_file(wrapper_log_path(pid));
+}
+
+async fn read_stderr(child: &mut tokio::process::Child) -> String {
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    String::from_utf8_lossy(&stderr_buf).into_owned()
+}
+
 // ---- Helper module to access proxy internals ----
 // We test via the binary or re-export. For unit-level forwarding tests,
 // see the #[cfg(test)] module in proxy.rs. Here we test the full proxy
@@ -460,31 +497,32 @@ async fn test_relay_url_can_come_from_environment() {
         None,
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take());
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success());
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
         !stderr_str.contains("wrapper configuration warning"),
         "valid relay env var should not emit degraded-mode warning, got: {stderr_str}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        !log_output.contains("wrapper configuration warning"),
+        "valid relay env var should not emit degraded-mode warning log, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test]
 async fn test_missing_relay_url_warns_but_allows_degraded_mode() {
     let mock = fixture_path("mock_codex_echo.sh");
     let mut wrapper = spawn_wrapper(&mock).await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     let mut stdin = wrapper.stdin.take().unwrap();
     stdin
@@ -505,19 +543,18 @@ async fn test_missing_relay_url_warns_but_allows_degraded_mode() {
         "{\"type\":\"turn/start\",\"prompt\":\"hello\"}\n"
     );
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        stderr_str.contains("degraded mode"),
-        "missing relay config should log degraded mode warning, got: {stderr_str}"
+        stderr_str.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr_str}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("degraded mode"),
+        "missing relay config should log degraded mode warning to file, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test]
@@ -529,26 +566,26 @@ async fn test_invalid_relay_url_warns_but_allows_degraded_mode() {
         None,
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take());
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success(), "invalid relay URL should not block stdio proxy");
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        stderr_str.contains("invalid")
-            && stderr_str.contains("degraded mode"),
-        "invalid relay URL should emit degraded mode warning, got: {stderr_str}"
+        stderr_str.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr_str}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("invalid")
+            && log_output.contains("degraded mode"),
+        "invalid relay URL should emit degraded mode warning to file, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test]
@@ -564,27 +601,27 @@ async fn test_session_name_defaults_to_current_directory_basename() {
         Some(&work_dir),
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take());
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success());
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        stderr_str.contains("workspace-name"),
-        "default session name should use cwd basename, got: {stderr_str}"
+        stderr_str.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr_str}"
+    );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("workspace-name"),
+        "default session name should use cwd basename in the wrapper log, got: {log_output}"
     );
 
     let _ = std::fs::remove_dir_all(&base_dir);
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test]
@@ -596,25 +633,25 @@ async fn test_cli_name_overrides_default_session_name() {
         None,
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take());
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success());
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        stderr_str.contains("custom-session"),
-        "explicit session name should appear in logs, got: {stderr_str}"
+        stderr_str.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr_str}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("custom-session"),
+        "explicit session name should appear in the wrapper log, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 #[tokio::test]
@@ -631,25 +668,25 @@ async fn test_sensitive_env_vars_are_not_logged() {
         None,
     )
     .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take());
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success());
 
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        !stderr_str.contains(secret),
-        "sensitive env var values must never be logged, got: {stderr_str}"
+        stderr_str.is_empty(),
+        "wrapper tracing should not contaminate stderr, got: {stderr_str}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        !log_output.contains(secret),
+        "sensitive env var values must never be logged, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
 
 // ============================================================
@@ -697,27 +734,29 @@ async fn test_stderr_passthrough() {
     let mock = fixture_path("mock_codex_echo.sh");
     let stderr_msg = "test stderr output";
 
-    let mut wrapper =
-        spawn_wrapper_with_env(&mock, vec![("MOCK_STDERR_MSG", stderr_msg)]).await;
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock],
+        vec![("MOCK_STDERR_MSG", stderr_msg), ("RUST_LOG", "info")],
+        None,
+    )
+    .await;
+    let wrapper_pid = wrapper.id().unwrap();
 
     drop(wrapper.stdin.take()); // Close stdin
 
     let status = wrapper.wait().await.unwrap();
     assert!(status.success());
 
-    // Read stderr
-    let mut stderr_buf = Vec::new();
-    if let Some(mut stderr) = wrapper.stderr.take() {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            stderr.read_to_end(&mut stderr_buf),
-        )
-        .await;
-    }
-    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    let stderr_str = read_stderr(&mut wrapper).await;
     assert!(
-        stderr_str.contains(stderr_msg),
-        "Stderr must be passed through, got: {}",
-        stderr_str
+        stderr_str == format!("{stderr_msg}\n"),
+        "stderr must contain only the child's passthrough output, got: {stderr_str:?}"
     );
+
+    let log_output = read_wrapper_log(wrapper_pid).await;
+    assert!(
+        log_output.contains("Spawning child process"),
+        "wrapper tracing should be redirected to the log file, got: {log_output}"
+    );
+    remove_wrapper_log(wrapper_pid);
 }
