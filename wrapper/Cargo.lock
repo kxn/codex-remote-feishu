@@ -151,6 +151,7 @@ dependencies = [
  "anyhow",
  "clap",
  "futures",
+ "libc",
  "serde_json",
  "thiserror",
  "tokio",
