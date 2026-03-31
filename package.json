@@ -6,5 +6,9 @@
     "shared",
     "server",
     "bot"
-  ]
+  ],
+  "devDependencies": {
+    "@typescript-eslint/parser": "^8.58.0",
+    "eslint": "^10.1.0"
+  }
 }

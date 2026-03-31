@@ -22,8 +22,8 @@ commands:
 
 services:
   relay-server:
-    start: cd server && PORT=9501 WS_PORT=9500 node dist/index.js &
-    stop: lsof -ti :9500 -ti :9501 | xargs kill 2>/dev/null
-    healthcheck: curl -sf http://localhost:9501/sessions
+    start: cd server && RELAY_API_PORT=9501 RELAY_PORT=9500 node dist/index.js &
+    stop: pids=$(lsof -ti :9500 -ti :9501 | sort -u) && [ -n "$pids" ] && kill $pids 2>/dev/null || true
+    healthcheck: curl --noproxy '*' -sf http://localhost:9501/sessions
     port: 9500
     depends_on: []
