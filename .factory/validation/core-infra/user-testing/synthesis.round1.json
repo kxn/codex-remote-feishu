@@ -1,0 +1,56 @@
+{
+  "milestone": "core-infra",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 29,
+    "passed": 28,
+    "failed": 1,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SRV-001",
+    "VAL-SRV-002",
+    "VAL-SRV-003",
+    "VAL-SRV-004",
+    "VAL-SRV-005",
+    "VAL-SRV-006",
+    "VAL-SRV-007",
+    "VAL-SRV-008",
+    "VAL-SRV-009",
+    "VAL-SRV-010",
+    "VAL-SRV-011",
+    "VAL-SRV-012",
+    "VAL-WRAP-001",
+    "VAL-WRAP-002",
+    "VAL-WRAP-003",
+    "VAL-WRAP-004",
+    "VAL-WRAP-005",
+    "VAL-WRAP-006",
+    "VAL-WRAP-007",
+    "VAL-WRAP-008",
+    "VAL-WRAP-009",
+    "VAL-WRAP-010",
+    "VAL-WRAP-011",
+    "VAL-WRAP-012",
+    "VAL-WRAP-014",
+    "VAL-WRAP-015",
+    "VAL-WRAP-016",
+    "VAL-WRAP-017"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-WRAP-013",
+      "reason": "Binary-path and relay-URL configurability checks passed, but the missing-relay-config case does not fail fast: test_missing_relay_url_warns_but_allows_degraded_mode passed, showing the wrapper continues in degraded mode instead of exiting non-zero with a clear error as required."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Documented that manual relay-api websocket checks should run `node --input-type=module` from `/data/dl/fschannel/server`, and that `POST /sessions/:id/input` requires a schema-valid payload such as `{type:\"prompt\",content:\"...\"}` rather than a bare `content` field.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

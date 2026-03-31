@@ -1,0 +1,107 @@
+{
+  "groupId": "wrapper-relay-behavior",
+  "surface": "wrapper-cli",
+  "assertions": [
+    {
+      "id": "VAL-WRAP-007",
+      "status": "pass",
+      "reason": "The exact ws_client_proxy_test startup registration test passed and verified a relay register message with a non-empty sessionId plus displayName, version, workspacePath, and pid metadata.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-007-registers_with_relay_on_startup.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-008",
+      "status": "pass",
+      "reason": "The unreachable-relay test passed, showing stdio echoed through the wrapper unchanged while the wrapper stayed in degraded mode and kept relay-connectivity diagnostics out of stderr.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-008-stdio_proxy_continues_when_relay_is_unreachable.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-009",
+      "status": "pass",
+      "reason": "The attached-forwarding test passed and covered agentMessage forwarding to the relay only after attach while still passing the message through wrapper stdout.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-009-010-forwards_only_agent_and_server_request_messages_when_attached.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-010",
+      "status": "pass",
+      "reason": "The same attached-forwarding test passed and confirmed serverRequest messages were forwarded while toolCall and unknown messages were not relayed.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-009-010-forwards_only_agent_and_server_request_messages_when_attached.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-011",
+      "status": "pass",
+      "reason": "The server-command injection test passed, verifying relay input became turn/start JSONL, interrupt became turn/interrupt JSONL, and remote input was ignored once detached.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-011-injects_server_commands_only_while_attached.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-012",
+      "status": "pass",
+      "reason": "The auto-detach test passed, showing local turn/start generated an auto-detach notice, stopped forwarding and remote input until reattach; attached non-turn/start traffic stayed forwardable in the attached-forwarding test.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-012-local_turn_start_auto_detaches_until_reattached.txt",
+        "core-infra/wrapper-ws/VAL-WRAP-009-010-forwards_only_agent_and_server_request_messages_when_attached.txt"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-014",
+      "status": "pass",
+      "reason": "The reconnect tests passed, showing the wrapper re-registered with the same sessionId after disconnect, cleared stale attached state during the outage, and resumed remote input/message forwarding after reattach.",
+      "evidence": [
+        "core-infra/wrapper-ws/VAL-WRAP-014-reconnects_and_reregisters_after_disconnect.txt",
+        "core-infra/wrapper-ws/VAL-WRAP-014-disconnect_clears_attached_state_and_drops_stale_messages_until_reattached.txt"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test registers_with_relay_on_startup -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed registers_with_relay_on_startup (1 passed, 6 filtered); validated relay registration payload fields on startup."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test stdio_proxy_continues_when_relay_is_unreachable -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed stdio_proxy_continues_when_relay_is_unreachable (1 passed, 6 filtered); validated degraded-mode stdio proxying and log-only relay warning behavior."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test forwards_only_agent_and_server_request_messages_when_attached -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed forwards_only_agent_and_server_request_messages_when_attached (1 passed, 6 filtered); validated attached agent/serverRequest forwarding and non-forwarding of toolCall/unknown traffic."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test injects_server_commands_only_while_attached -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed injects_server_commands_only_while_attached (1 passed, 6 filtered); validated turn/start and turn/interrupt injection plus detached gating."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test local_turn_start_auto_detaches_until_reattached -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed local_turn_start_auto_detaches_until_reattached (1 passed, 6 filtered); validated auto-detach on local turn/start and recovery after reattach."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test reconnects_and_reregisters_after_disconnect -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed reconnects_and_reregisters_after_disconnect (1 passed, 6 filtered); validated reconnect with the same sessionId and fresh register message."
+    },
+    {
+      "command": "env CARGO_TERM_COLOR=never cargo test --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --test ws_client_proxy_test disconnect_clears_attached_state_and_drops_stale_messages_until_reattached -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "Passed disconnect_clears_attached_state_and_drops_stale_messages_until_reattached (1 passed, 6 filtered); validated stale relay input/message suppression until explicit reattach, then resumed forwarding."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "cargo test"
+  ],
+  "summary": "Validated 7 assigned wrapper relay assertions with 7 targeted ws_client_proxy_test cargo invocations; all assigned assertions passed."
+}

@@ -1,0 +1,155 @@
+{
+  "groupId": "wrapper-stdio-lifecycle",
+  "surface": "wrapper-cli",
+  "assertions": [
+    {
+      "id": "VAL-WRAP-001",
+      "status": "pass",
+      "reason": "Exact passthrough tests passed for single-message and multi-message byte-for-byte forwarding through the wrapper binary.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-001-test_stdin_to_child_passthrough.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-001-test_multiple_messages_passthrough.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-002",
+      "status": "pass",
+      "reason": "The ordering test passed with sequenced messages preserved strictly in order.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-002-test_message_ordering_preserved.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-003",
+      "status": "pass",
+      "reason": "The sentinel-based spawn test passed, showing the wrapper launched the configured fixture binary on startup.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-003-test_child_spawned_with_correct_binary.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-004",
+      "status": "pass",
+      "reason": "Exit-code propagation tests passed for child exits 0, 1, and 42, and a direct wrapper-binary check also returned 137 when the child exited 137.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-004-test_exit_code_zero.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-004-test_exit_code_nonzero.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-004-test_exit_code_one.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-004-manual-exit-code-137.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-005",
+      "status": "pass",
+      "reason": "Both SIGTERM and SIGINT forwarding integration tests passed against the wrapper binary.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-005-test_sigterm_forwarded_to_child.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-005-test_sigint_forwarded_to_child.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-006",
+      "status": "pass",
+      "reason": "The lifecycle timing test passed, confirming the wrapper exited within the required five seconds after child exit.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-006-test_wrapper_exits_within_5s_of_child.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-015",
+      "status": "pass",
+      "reason": "The invalid-binary-path integration test passed, asserting a non-zero wrapper exit and an error mentioning the bad path.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-015-test_invalid_binary_path_exits_nonzero.log"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-016",
+      "status": "pass",
+      "reason": "The EOF propagation test passed, and a direct wrapper-binary check preserved the child stdout line after stdin closed while the child logged EOF_DETECTED.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-016-test_stdin_eof_propagated_to_child.log",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/wrapper-stdio-config/VAL-WRAP-016-manual-eof-stdout.log"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_stdin_to_child_passthrough -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_stdin_to_child_passthrough passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_multiple_messages_passthrough -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_multiple_messages_passthrough passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_message_ordering_preserved -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_message_ordering_preserved passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_child_spawned_with_correct_binary -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_child_spawned_with_correct_binary passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_exit_code_zero -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_exit_code_zero passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_exit_code_nonzero -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_exit_code_nonzero passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_exit_code_one -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_exit_code_one passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_sigterm_forwarded_to_child -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_sigterm_forwarded_to_child passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_sigint_forwarded_to_child -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_sigint_forwarded_to_child passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_wrapper_exits_within_5s_of_child -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_wrapper_exits_within_5s_of_child passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_invalid_binary_path_exits_nonzero -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_invalid_binary_path_exits_nonzero passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_stdin_eof_propagated_to_child -- --exact --nocapture",
+      "exitCode": 0,
+      "observation": "test_stdin_eof_propagated_to_child passed; exact test completed with 1 passed"
+    },
+    {
+      "command": "MOCK_EXIT_CODE=137 /data/dl/fschannel/wrapper/target/debug/codex-relay-wrapper --codex-binary /data/dl/fschannel/wrapper/tests/fixtures/mock_codex_exit.sh",
+      "exitCode": 137,
+      "observation": "manual_exit_code_137 passed; wrapper exited 137 to match child exit 137"
+    },
+    {
+      "command": "MOCK_EOF_LOG=/tmp/wrapper-validator-eof-marker.txt /data/dl/fschannel/wrapper/target/debug/codex-relay-wrapper --codex-binary /data/dl/fschannel/wrapper/tests/fixtures/mock_codex_stdin_eof.sh <<<'{\"msg\":\"last\"}'",
+      "exitCode": 0,
+      "observation": "manual_eof_stdout_after_close passed; wrapper preserved echoed stdout after stdin EOF and child logged EOF_DETECTED"
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "cargo test",
+    "wrapper binary"
+  ],
+  "summary": "Validated 8 wrapper stdio/lifecycle assertions; all passed via targeted stdio_proxy_test cargo tests, with supplemental direct-binary checks for exit code 137 and EOF/stdout behavior."
+}

@@ -1,0 +1,77 @@
+{
+  "groupId": "server-relay-history",
+  "surface": "relay-api",
+  "assertions": [
+    {
+      "id": "VAL-SRV-004",
+      "status": "pass",
+      "reason": "The live history check stored three session-A messages in chronological order with preserved classification/thread/turn metadata, while `?limit=2` returned only the newest two entries.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-006",
+      "status": "pass",
+      "reason": "A live `POST /sessions/:id/input` with `{type:\"prompt\",content:\"hello remote\"}` returned 200 and delivered only `{type:\"input\",content:\"hello remote\"}` to session A; the targeted relay-server test also passed the missing/offline rejection cases.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/vitest-relay-history-targeted.txt"
+      ]
+    },
+    {
+      "id": "VAL-SRV-007",
+      "status": "pass",
+      "reason": "A live `POST /sessions/:id/interrupt` returned 200 and delivered `{type:\"interrupt\"}` only to session B; the targeted relay-server test also passed the unknown/offline rejection scenarios.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/vitest-relay-history-targeted.txt"
+      ]
+    },
+    {
+      "id": "VAL-SRV-008",
+      "status": "pass",
+      "reason": "A live attach set `attachedUser` and emitted `attach-status-changed`, a second attach by another user returned 409 conflict, and two detach calls both returned 200 with the session ending detached (`attachedUser: null`).",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-009",
+      "status": "pass",
+      "reason": "The live wrapper-facing websocket received `attach-status-changed` with `{attached:true,userId:...}` on attach and `{attached:false}` on detach.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-010",
+      "status": "pass",
+      "reason": "Live routing and history stayed isolated: input reached only session A, interrupt reached only session B, session-A history contained only A messages, and session-B history contained only B messages.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/live-relay-history-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-relay/vitest-relay-history-targeted.txt"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "cd \"/data/dl/fschannel/server\" && node --input-type=module <<'NODE' [live relay history/routing validation script] NODE",
+      "exitCode": 0,
+      "observation": "The live relay service accepted two registered websocket sessions, returned 200 for attach/input/interrupt/detach, 409 for a second attach by a different user, delivered input only to session A and interrupt only to session B, exposed ordered per-session history with `?limit=2`, and emitted attach-status-changed frames on attach and detach."
+    },
+    {
+      "command": "cd \"/data/dl/fschannel/server\" && npx vitest run \"src/relay-server.test.ts\" -t \"delivers REST input and interrupts to the correct wrapper and rejects unavailable sessions|manages attach state, notifies wrappers, and forwards attached session events to callbacks|keeps message history and callbacks isolated per session\"",
+      "exitCode": 0,
+      "observation": "The targeted relay-server suite passed three focused tests, covering unavailable-session 404/409 cases plus attach-state notification/callback and cross-session isolation behaviors."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "node-ws",
+    "fetch",
+    "vitest"
+  ],
+  "summary": "Validated 6 relay server history/routing assertions on the live API/websocket surface with targeted test support; all assigned assertions passed."
+}

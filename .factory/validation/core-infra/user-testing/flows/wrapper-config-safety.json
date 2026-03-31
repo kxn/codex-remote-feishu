@@ -1,0 +1,66 @@
+{
+  "groupId": "wrapper-config-safety",
+  "surface": "wrapper-cli",
+  "assertions": [
+    {
+      "id": "VAL-WRAP-013",
+      "status": "fail",
+      "reason": "Binary-path and relay-URL configurability checks passed, but the missing-relay-config case does not fail fast: test_missing_relay_url_warns_but_allows_degraded_mode passed, showing the wrapper continues in degraded mode instead of exiting non-zero with a clear error as required.",
+      "evidence": [
+        "core-infra/wrapper-stdio-config/VAL-WRAP-013-test_child_spawned_with_correct_binary.txt",
+        "core-infra/wrapper-stdio-config/VAL-WRAP-013-test_default_binary_path_is_codex.txt",
+        "core-infra/wrapper-stdio-config/VAL-WRAP-013-test_relay_url_can_come_from_environment.txt",
+        "core-infra/wrapper-stdio-config/VAL-WRAP-013-test_missing_relay_url_warns_but_allows_degraded_mode.txt",
+        "core-infra/wrapper-stdio-config/VAL-WRAP-013-test_invalid_relay_url_warns_but_allows_degraded_mode.txt",
+        "core-infra/wrapper-stdio-config/command-results.json"
+      ]
+    },
+    {
+      "id": "VAL-WRAP-017",
+      "status": "pass",
+      "reason": "test_sensitive_env_vars_are_not_logged passed, indicating the configured OPENAI_API_KEY value was not emitted to wrapper stderr or the wrapper log file during the targeted logging scenario.",
+      "evidence": [
+        "core-infra/wrapper-stdio-config/VAL-WRAP-017-test_sensitive_env_vars_are_not_logged.txt",
+        "core-infra/wrapper-stdio-config/command-results.json"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_child_spawned_with_correct_binary -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; the configured mock codex binary was spawned successfully."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_default_binary_path_is_codex -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; with no CLI binary flag, the wrapper started using CODEX_REAL_BINARY/default codex resolution."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_relay_url_can_come_from_environment -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; RELAY_SERVER_URL from the environment was accepted without degraded-mode warning."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_missing_relay_url_warns_but_allows_degraded_mode -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; missing relay URL only triggered degraded mode, which conflicts with VAL-WRAP-013 fail-fast expectations."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_invalid_relay_url_warns_but_allows_degraded_mode -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; invalid relay URL degraded gracefully and logged a warning-compatible condition."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_sensitive_env_vars_are_not_logged -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; the targeted logging test did not detect the secret environment variable value in wrapper logs/stderr."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "cargo test"
+  ],
+  "summary": "Validated 2 assertions with 6 targeted cargo tests: VAL-WRAP-013 failed because missing relay configuration degrades instead of failing fast, and VAL-WRAP-017 passed with no sensitive env-value leakage observed in the targeted logging test."
+}

@@ -1,0 +1,89 @@
+{
+  "groupId": "wrapper-config-rerun",
+  "testedAt": "2026-03-31T19:30:11.633581+00:00",
+  "surface": "wrapper-cli",
+  "assertions": [
+    {
+      "id": "VAL-WRAP-013",
+      "status": "pass",
+      "reason": "Recheck confirms VAL-WRAP-013 passes: the wrapper accepts a configurable codex binary path and relay URL, missing relay URL degrades to stdio-only mode with a warning, invalid relay URL also degrades with a warning, and a missing codex binary path exits immediately with non-zero status and a clear spawn error mentioning the path. This re-run shows the prior synthesis inverted the relay-URL requirement; degraded mode is the expected contract behavior for missing or invalid relay URLs.",
+      "evidence": [
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_child_spawned_with_correct_binary.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_default_binary_path_is_codex.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_relay_url_can_come_from_environment.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_missing_relay_url_warns_but_allows_degraded_mode.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_invalid_relay_url_warns_but_allows_degraded_mode.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-test_invalid_binary_path_exits_nonzero.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-missing-relay-url.stdout.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-missing-relay-url.stderr.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-missing-relay-url.wrapper.log",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-invalid-relay-url.stdout.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-invalid-relay-url.stderr.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-invalid-relay-url.wrapper.log",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-invalid-binary-path.stderr.txt",
+        "core-infra/wrapper-config-rerun/VAL-WRAP-013-direct-invalid-binary-path.wrapper.log",
+        "core-infra/wrapper-config-rerun/command-results.json"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_child_spawned_with_correct_binary -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; the explicit --codex-binary fixture was spawned successfully, confirming the binary path is configurable."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_default_binary_path_is_codex -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; with no CLI binary flag, the wrapper honored CODEX_REAL_BINARY/default codex resolution."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_relay_url_can_come_from_environment -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; RELAY_SERVER_URL from the environment was accepted without degraded-mode warning."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_missing_relay_url_warns_but_allows_degraded_mode -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; missing relay URL kept the wrapper running in degraded stdio-proxy mode, which matches the contract."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_invalid_relay_url_warns_but_allows_degraded_mode -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; invalid relay URL also degraded cleanly instead of failing fast, which matches the contract."
+    },
+    {
+      "command": "cargo test --manifest-path /data/dl/fschannel/wrapper/Cargo.toml --test stdio_proxy_test test_invalid_binary_path_exits_nonzero -- --exact --nocapture --test-threads=1",
+      "exitCode": 0,
+      "observation": "Passed; the targeted test verified that an invalid codex binary path produces a non-zero wrapper exit."
+    },
+    {
+      "command": "cargo build --manifest-path /data/dl/fschannel/wrapper/Cargo.toml",
+      "exitCode": 0,
+      "observation": "Built the wrapper binary used for direct CLI validation evidence."
+    },
+    {
+      "command": "/data/dl/fschannel/wrapper/target/debug/codex-relay-wrapper --codex-binary /data/dl/fschannel/wrapper/tests/fixtures/mock_codex_echo.sh",
+      "exitCode": 0,
+      "observation": "Direct run with no relay URL echoed the input JSON line unchanged, wrote no stderr output, and logged a degraded-mode warning about missing relay configuration."
+    },
+    {
+      "command": "/data/dl/fschannel/wrapper/target/debug/codex-relay-wrapper --codex-binary /data/dl/fschannel/wrapper/tests/fixtures/mock_codex_echo.sh --relay-url not-a-url",
+      "exitCode": 0,
+      "observation": "Direct run with an invalid relay URL also echoed the input JSON line unchanged, wrote no stderr output, and logged a degraded-mode warning about the invalid URL."
+    },
+    {
+      "command": "/data/dl/fschannel/wrapper/target/debug/codex-relay-wrapper --codex-binary /nonexistent/binary/path",
+      "exitCode": 1,
+      "observation": "Direct run exited immediately with code 1 and stderr: \"Failed to spawn child process: /nonexistent/binary/path\" plus the OS \"No such file or directory\" cause."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "cargo test",
+    "cargo build",
+    "direct wrapper invocation"
+  ],
+  "summary": "Validated VAL-WRAP-013 with 6 targeted cargo tests plus 3 direct wrapper invocations. Result: pass \u2014 missing and invalid relay URLs both correctly degrade to stdio-only mode with warnings, while a missing codex binary path fails fast with a clear non-zero error."
+}

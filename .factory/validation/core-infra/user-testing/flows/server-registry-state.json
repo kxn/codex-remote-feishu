@@ -1,0 +1,91 @@
+{
+  "groupId": "server-registry-state",
+  "surface": "relay-api",
+  "assertions": [
+    {
+      "id": "VAL-SRV-001",
+      "status": "pass",
+      "reason": "Live WebSocket registration for utv-registry-07b565d08b3f-a returned a registered ack, GET /sessions showed the session idle and online, and duplicate registration replaced the old socket without creating a duplicate registry entry.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-002",
+      "status": "pass",
+      "reason": "After registering utv-registry-07b565d08b3f-a and utv-registry-07b565d08b3f-b, the live /sessions response listed both sessions with the expected sessionId, idle state, and online=true fields.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-003",
+      "status": "pass",
+      "reason": "The live utv-registry-07b565d08b3f-state session moved idle \u2192 executing on turn/started, to waitingApproval on serverRequest/approval, and back to idle with turnCount=1 after turn/completed.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json"
+      ]
+    },
+    {
+      "id": "VAL-SRV-005",
+      "status": "pass",
+      "reason": "Live disconnect of utv-registry-07b565d08b3f-grace produced online=false with a graceExpiresAt timestamp, reconnect within the window returned resumed=true and preserved waitingApproval state/history, and the targeted relay-server test confirmed eviction after grace expiry.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/vitest-relay-server-targeted.txt"
+      ]
+    },
+    {
+      "id": "VAL-SRV-011",
+      "status": "pass",
+      "reason": "Live websocket malformed inputs returned error frames for invalid JSON, pre-register messages, invalid register bodies, and wrong-session messages; malformed REST JSON returned HTTP 400 with {\"error\":\"Invalid JSON body\"}; and the server continued answering GET /sessions afterward.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/curl-invalid-json-headers.txt",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/curl-invalid-json-body.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/vitest-relay-server-targeted.txt"
+      ]
+    },
+    {
+      "id": "VAL-SRV-012",
+      "status": "pass",
+      "reason": "The live service answered GET /sessions with HTTP 200, application/json, and an empty array before registration, while websocket clients observed HTTP 101 upgrades; the targeted relay-server test also passed for empty-start and JSON response behavior.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/live-registry-check.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/curl-sessions-headers.txt",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/curl-sessions-body.json",
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/core-infra/server-state/vitest-relay-server-targeted.txt"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "cd \"/data/dl/fschannel/server\" && node --input-type=module <<'NODE' [live relay registry/state validation script] NODE",
+      "exitCode": 0,
+      "observation": "Saved live-registry-check.json with HTTP 200 health, websocket 101 handshakes, duplicate registration replacement, session state transitions, grace-period resume data, and malformed websocket error responses."
+    },
+    {
+      "command": "curl --noproxy \"*\" -sS -D <headers> -o <body> -w \"status=%{http_code} content_type=%{content_type}\" http://127.0.0.1:9501/sessions",
+      "exitCode": 0,
+      "observation": "Live REST health check returned status=200 and content_type=application/json; charset=utf-8."
+    },
+    {
+      "command": "curl --noproxy \"*\" -sS -D <headers> -o <body> -X POST -H \"content-type: application/json\" --data \"{bad json\" -w \"status=%{http_code} content_type=%{content_type}\" http://127.0.0.1:9501/sessions",
+      "exitCode": 0,
+      "observation": "Malformed REST JSON returned status=400 and body {\"error\":\"Invalid JSON body\"}."
+    },
+    {
+      "command": "cd \"/data/dl/fschannel/server\" && npx vitest run \"src/relay-server.test.ts\" -t \"starts empty and exposes JSON REST responses|keeps disconnected sessions during grace period, resumes on reconnect, and evicts after timeout|handles malformed websocket and REST payloads without crashing\"",
+      "exitCode": 0,
+      "observation": "Targeted relay-server suite passed 3 focused tests covering empty startup, grace-period eviction, and malformed-input resilience."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "curl",
+    "node-ws",
+    "vitest"
+  ],
+  "summary": "Validated 6 relay server registry/state assertions: VAL-SRV-001, 002, 003, 005, 011, and 012 all passed via live relay API/websocket checks, with targeted Vitest support for grace-period eviction and malformed-input/startup behaviors."
+}

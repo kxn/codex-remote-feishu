@@ -1,0 +1,18 @@
+{
+  "milestone": "core-infra",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-WRAP-013"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/core-infra/user-testing/synthesis.round1.json"
+}
