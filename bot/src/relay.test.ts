@@ -239,6 +239,78 @@ describe("RelayClient", () => {
     ]);
   });
 
+  it("lists per-user relay events for lossless attachment forwarding", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          latestEventId: 3,
+          events: [
+            {
+              type: "message",
+              id: 2,
+              occurredAt: "2026-03-31T00:00:01.000Z",
+              userId: "user-1",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              message: {
+                direction: "out",
+                classification: "agentMessage",
+                method: "item/agentMessage/delta",
+                raw: "hello",
+                payload: {
+                  params: {
+                    delta: "hello",
+                  },
+                },
+                receivedAt: "2026-03-31T00:00:01.000Z",
+              },
+            },
+            {
+              type: "auto-detach",
+              id: 3,
+              occurredAt: "2026-03-31T00:00:02.000Z",
+              userId: "user-1",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              reason: "local-input",
+            },
+          ],
+        }),
+      );
+
+    const client = new RelayClient({
+      baseUrl: "http://relay.test",
+      fetch: fetchMock,
+    });
+
+    await expect(client.listUserEvents("user-1", 1)).resolves.toEqual({
+      latestEventId: 3,
+      events: [
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          message: expect.objectContaining({
+            classification: "agentMessage",
+            raw: "hello",
+          }),
+        }),
+        expect.objectContaining({
+          type: "auto-detach",
+          sessionId: "session-1",
+          reason: "local-input",
+        }),
+      ],
+    });
+
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "http://relay.test/users/user-1/events?after=1",
+        expect.objectContaining({ method: "GET" }),
+      ],
+    ]);
+  });
+
   it("surfaces API errors with status codes", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(
@@ -291,6 +363,7 @@ function createSessionDetail(
     metadata: Record<string, unknown>;
     graceExpiresAt: string | null;
     historySize: number;
+    userEventCursor: number;
     lastMessage: {
       direction: "in" | "out";
       classification:
@@ -321,6 +394,7 @@ function createSessionDetail(
     metadata: overrides.metadata ?? {},
     graceExpiresAt: overrides.graceExpiresAt ?? null,
     historySize: overrides.historySize ?? 0,
+    userEventCursor: overrides.userEventCursor ?? 0,
     lastMessage: overrides.lastMessage ?? null,
   };
 }

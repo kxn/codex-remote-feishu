@@ -280,8 +280,8 @@ describe("BotService", () => {
       receivedAt: "2026-03-31T00:00:02.000Z",
     });
 
-    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
-      ["session-1", [initialEntry]],
+    const userEventsByUser = new Map<string, ReturnType<typeof createUserMessageEvent>[]>([
+      ["user-1", []],
     ]);
 
     const relay = createRelayDouble({
@@ -302,9 +302,11 @@ describe("BotService", () => {
             lastMessage: initialEntry,
           }),
         ),
-      getHistory: vi
+      listUserEvents: vi
         .fn()
-        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
       detach: vi
         .fn()
         .mockResolvedValue(
@@ -325,7 +327,14 @@ describe("BotService", () => {
       text: "/attach workspace-a",
     });
 
-    historyBySession.set("session-1", [initialEntry, forwardedEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: forwardedEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     expect(messenger.sendText).toHaveBeenCalledWith(
@@ -340,7 +349,20 @@ describe("BotService", () => {
       text: "/detach",
     });
 
-    historyBySession.set("session-1", [initialEntry, forwardedEntry, detachedEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: forwardedEntry,
+      }),
+      createUserMessageEvent({
+        id: 2,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: detachedEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     const sentMessages = messenger.sendText.mock.calls.map(([, text]) => text);
@@ -375,8 +397,8 @@ describe("BotService", () => {
       receivedAt: "2026-03-31T00:00:01.000Z",
     });
 
-    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
-      ["session-1", []],
+    const userEventsByUser = new Map<string, ReturnType<typeof createUserMessageEvent>[]>([
+      ["user-1", []],
     ]);
 
     const relay = createRelayDouble({
@@ -395,9 +417,11 @@ describe("BotService", () => {
             attachedUser: "user-1",
           }),
         ),
-      getHistory: vi
+      listUserEvents: vi
         .fn()
-        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
       sendApproval: vi.fn().mockResolvedValue(undefined),
       sendPrompt: vi.fn().mockResolvedValue(undefined),
     });
@@ -411,7 +435,14 @@ describe("BotService", () => {
       text: "/attach workspace-a",
     });
 
-    historyBySession.set("session-1", [approvalEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: approvalEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     expect(messenger.sendText).toHaveBeenCalledWith(
@@ -493,8 +524,8 @@ describe("BotService", () => {
       },
       receivedAt: "2026-03-31T00:00:01.000Z",
     });
-    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
-      ["session-1", []],
+    const userEventsByUser = new Map<string, ReturnType<typeof createUserMessageEvent>[]>([
+      ["user-1", []],
     ]);
 
     const relay = createRelayDouble({
@@ -513,9 +544,11 @@ describe("BotService", () => {
             attachedUser: "user-1",
           }),
         ),
-      getHistory: vi
+      listUserEvents: vi
         .fn()
-        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
       sendApproval: vi.fn().mockResolvedValue(undefined),
       sendPrompt: vi.fn().mockResolvedValue(undefined),
     });
@@ -529,7 +562,14 @@ describe("BotService", () => {
       text: "/attach workspace-a",
     });
 
-    historyBySession.set("session-1", [approvalEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: approvalEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     await service.handleTextMessage({
@@ -582,8 +622,8 @@ describe("BotService", () => {
       receivedAt: "2026-03-31T00:00:02.000Z",
     });
 
-    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
-      ["session-1", []],
+    const userEventsByUser = new Map<string, ReturnType<typeof createUserMessageEvent>[]>([
+      ["user-1", []],
     ]);
 
     const relay = createRelayDouble({
@@ -602,9 +642,11 @@ describe("BotService", () => {
             attachedUser: "user-1",
           }),
         ),
-      getHistory: vi
+      listUserEvents: vi
         .fn()
-        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
       sendApproval: vi.fn().mockResolvedValue(undefined),
       sendPrompt: vi.fn().mockResolvedValue(undefined),
     });
@@ -618,10 +660,30 @@ describe("BotService", () => {
       text: "/attach workspace-a",
     });
 
-    historyBySession.set("session-1", [approvalEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: approvalEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
-    historyBySession.set("session-1", [approvalEntry, turnCompletedEntry]);
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: approvalEntry,
+      }),
+      createUserMessageEvent({
+        id: 2,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: turnCompletedEntry,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     await service.handleTextMessage({
@@ -837,9 +899,12 @@ describe("BotService", () => {
       receivedAt: "2026-03-31T00:00:01.000Z",
     });
 
-    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
-      ["session-a", [initialA]],
-      ["session-b", [initialB]],
+    const userEventsByUser = new Map<
+      string,
+      ReturnType<typeof createUserMessageEvent>[]
+    >([
+      ["user-a", []],
+      ["user-b", []],
     ]);
 
     const relay = createRelayDouble({
@@ -862,9 +927,11 @@ describe("BotService", () => {
           lastMessage: sessionId === "session-a" ? initialA : initialB,
         }),
       ),
-      getHistory: vi
+      listUserEvents: vi
         .fn()
-        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
     });
     const messenger = createMessengerDouble();
     const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
@@ -882,8 +949,22 @@ describe("BotService", () => {
       text: "/attach workspace-b",
     });
 
-    historyBySession.set("session-a", [initialA, forwardedA]);
-    historyBySession.set("session-b", [initialB, forwardedB]);
+    userEventsByUser.set("user-a", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-a",
+        displayName: "workspace-a",
+        message: forwardedA,
+      }),
+    ]);
+    userEventsByUser.set("user-b", [
+      createUserMessageEvent({
+        id: 2,
+        sessionId: "session-b",
+        displayName: "workspace-b",
+        message: forwardedB,
+      }),
+    ]);
     await vi.advanceTimersByTimeAsync(100);
 
     const chatAMessages = messenger.sendText.mock.calls
@@ -1161,6 +1242,7 @@ function createRelayDouble(
     listSessions: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
     getHistory: ReturnType<typeof vi.fn>;
+    listUserEvents: ReturnType<typeof vi.fn>;
     listEvents: ReturnType<typeof vi.fn>;
     sendPrompt: ReturnType<typeof vi.fn>;
     sendApproval: ReturnType<typeof vi.fn>;
@@ -1175,6 +1257,14 @@ function createRelayDouble(
       overrides.getSession ??
       vi.fn().mockResolvedValue(createSessionDetail({ sessionId: "session-1" })),
     getHistory: overrides.getHistory ?? vi.fn().mockResolvedValue([]),
+    listUserEvents:
+      overrides.listUserEvents ??
+      vi
+        .fn()
+        .mockImplementation(async (_userId: string, afterEventId?: number) => ({
+          latestEventId: afterEventId ?? 0,
+          events: [],
+        })),
     listEvents:
       overrides.listEvents ??
       vi.fn().mockResolvedValue({
@@ -1230,6 +1320,7 @@ function createSessionDetail(
     graceExpiresAt: string | null;
     historySize: number;
     lastMessage: unknown;
+    userEventCursor: number;
   }> = {},
 ) {
   return {
@@ -1245,6 +1336,7 @@ function createSessionDetail(
     graceExpiresAt: overrides.graceExpiresAt ?? null,
     historySize: overrides.historySize ?? 0,
     lastMessage: overrides.lastMessage ?? null,
+    userEventCursor: overrides.userEventCursor ?? 0,
   };
 }
 
@@ -1275,5 +1367,41 @@ function createHistoryEntry(
     threadId: overrides.threadId ?? null,
     turnId: overrides.turnId ?? null,
     receivedAt: overrides.receivedAt ?? "2026-03-31T00:00:00.000Z",
+  };
+}
+
+function createUserMessageEvent(
+  overrides: Partial<{
+    id: number;
+    occurredAt: string;
+    userId: string;
+    sessionId: string;
+    displayName: string;
+    message: ReturnType<typeof createHistoryEntry>;
+  }> = {},
+) {
+  return {
+    type: "message" as const,
+    id: overrides.id ?? 1,
+    occurredAt: overrides.occurredAt ?? "2026-03-31T00:00:00.000Z",
+    userId: overrides.userId ?? "user-1",
+    sessionId: overrides.sessionId ?? "session-1",
+    displayName: overrides.displayName ?? "workspace-a",
+    message: overrides.message ?? createHistoryEntry(),
+  };
+}
+
+function createUserEventBatch(
+  events: ReturnType<typeof createUserMessageEvent>[],
+  afterEventId?: number,
+) {
+  const filtered =
+    afterEventId === undefined
+      ? events
+      : events.filter((event) => event.id > afterEventId);
+
+  return {
+    latestEventId: events.at(-1)?.id ?? afterEventId ?? 0,
+    events: filtered,
   };
 }

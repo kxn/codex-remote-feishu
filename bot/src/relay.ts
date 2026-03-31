@@ -45,6 +45,34 @@ export interface RelaySessionSummary {
 export interface RelaySessionDetail extends RelaySessionSummary {
   historySize: number;
   lastMessage: RelayHistoryEntry | null;
+  userEventCursor?: number;
+}
+
+export interface RelayUserMessageEvent {
+  type: "message";
+  id: number;
+  occurredAt: string;
+  userId: string;
+  sessionId: string;
+  displayName: string;
+  message: RelayHistoryEntry;
+}
+
+export interface RelayUserAutoDetachEvent {
+  type: "auto-detach";
+  id: number;
+  occurredAt: string;
+  userId: string;
+  sessionId: string;
+  displayName: string;
+  reason: string;
+}
+
+export type RelayUserEvent = RelayUserMessageEvent | RelayUserAutoDetachEvent;
+
+export interface RelayUserEventBatch {
+  latestEventId: number;
+  events: RelayUserEvent[];
 }
 
 export interface RelayClientOptions {
@@ -116,6 +144,26 @@ export class RelayClient {
       method: "GET",
       responseSchema: relayEventBatchSchema,
     });
+  }
+
+  async listUserEvents(
+    userId: string,
+    afterEventId?: number,
+  ): Promise<RelayUserEventBatch> {
+    const search = new URLSearchParams();
+    if (afterEventId !== undefined) {
+      search.set("after", String(afterEventId));
+    }
+
+    return this.request(
+      `/users/${encodeURIComponent(userId)}/events${
+        search.size > 0 ? `?${search.toString()}` : ""
+      }`,
+      {
+        method: "GET",
+        responseSchema: relayUserEventBatchSchema,
+      },
+    );
   }
 
   async sendInput(
@@ -246,6 +294,7 @@ const sessionSummarySchema = z.object({
 const sessionDetailSchema = sessionSummarySchema.extend({
   historySize: z.number().int().min(0),
   lastMessage: historyEntrySchema.nullable(),
+  userEventCursor: z.number().int().min(0).optional(),
 });
 
 const okResponseSchema = z.object({
@@ -286,6 +335,32 @@ const relayEventBatchSchema: z.ZodType<RelayEventBatch> = z.object({
   events: z.array(relayEventSchema),
 });
 
+
+const relayUserEventSchema: z.ZodType<RelayUserEvent> = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("message"),
+    id: z.number().int().min(0),
+    occurredAt: z.string().datetime(),
+    userId: z.string().min(1),
+    sessionId: z.string().min(1),
+    displayName: z.string().min(1),
+    message: historyEntrySchema,
+  }),
+  z.object({
+    type: z.literal("auto-detach"),
+    id: z.number().int().min(0),
+    occurredAt: z.string().datetime(),
+    userId: z.string().min(1),
+    sessionId: z.string().min(1),
+    displayName: z.string().min(1),
+    reason: z.string().min(1),
+  }),
+]);
+
+const relayUserEventBatchSchema = z.object({
+  latestEventId: z.number().int().min(0),
+  events: z.array(relayUserEventSchema),
+});
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text();
   if (text.length === 0) {

@@ -481,6 +481,56 @@ describe("integration core flows", () => {
     );
   });
 
+  it("forwards every attached agent message under burst output even when history snapshots are bounded", async () => {
+    const server = await startTestRelayServer({
+      historyLimit: 2,
+    });
+    const relayClient = new RelayClient({
+      baseUrl: server.apiBaseUrl,
+    });
+    const wrapper = await spawnMockWrapper(server.wsUrl, "workspace-burst");
+    const session = await waitForSession(relayClient, "workspace-burst");
+
+    const messenger = createMessengerRecorder();
+    const service = new BotService(relayClient, messenger, {
+      pollIntervalMs: 10,
+    });
+    cleanups.push(async () => {
+      service.close();
+    });
+
+    await service.handleTextMessage(
+      createIncomingText("user-burst", "chat-burst", "/attach workspace-burst"),
+    );
+
+    const deltas = Array.from({ length: 20 }, (_, index) => `burst-${index + 1}`);
+    await wrapper.emitCodexMessages(
+      deltas.map((delta) => ({
+        method: "item/agentMessage/delta",
+        params: {
+          delta,
+        },
+      })),
+    );
+
+    await waitForCondition(() => {
+      return (
+        filterForwardedMessages(
+          messenger.messagesFor("chat-burst"),
+          "workspace-burst",
+        ).length >= deltas.length
+      );
+    });
+
+    expect(
+      filterForwardedMessages(
+        messenger.messagesFor("chat-burst"),
+        "workspace-burst",
+      ),
+    ).toEqual(deltas.map((delta) => `[workspace-burst] ${delta}`));
+    expect((await relayClient.getHistory(session.sessionId)).map((entry) => entry.raw)).toHaveLength(2);
+  });
+
   it("keeps multiple sessions isolated, preserves ordering, and avoids duplicates across reconnects", async () => {
     const server = await startTestRelayServer();
     const relayClient = new RelayClient({
@@ -627,12 +677,17 @@ describe("integration core flows", () => {
     );
   });
 
-  async function startTestRelayServer(): Promise<StartedRelayServer> {
+  async function startTestRelayServer(
+    overrides: Partial<{
+      gracePeriodMs: number;
+      historyLimit: number;
+    }> = {},
+  ): Promise<StartedRelayServer> {
     const server = await startRelayServer({
       apiPort: 0,
       wsPort: 0,
-      gracePeriodMs: 500,
-      historyLimit: 200,
+      gracePeriodMs: overrides.gracePeriodMs ?? 500,
+      historyLimit: overrides.historyLimit ?? 200,
     });
     cleanups.push(async () => {
       await server.close();

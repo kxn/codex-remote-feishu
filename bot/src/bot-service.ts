@@ -5,6 +5,7 @@ import type {
   RelayHistoryEntry,
   RelaySessionDetail,
   RelaySessionSummary,
+  RelayUserEvent,
 } from "./relay.js";
 import { RelayClientError } from "./relay.js";
 
@@ -29,6 +30,13 @@ export interface RelayClientLike {
   listEvents: (afterEventId?: number) => Promise<{
     latestEventId: number;
     events: RelayEvent[];
+  }>;
+  listUserEvents: (
+    userId: string,
+    afterEventId?: number,
+  ) => Promise<{
+    latestEventId: number;
+    events: RelayUserEvent[];
   }>;
   getSession: (sessionId: string) => Promise<RelaySessionDetail>;
   getHistory: (
@@ -60,15 +68,9 @@ interface PendingApproval {
   signature: string;
 }
 
-interface HistoryCursor {
-  historySize: number;
-  receivedAt: string | null;
-  signature: string | null;
-}
-
 interface AttachmentForwarder {
   sessionId: string;
-  cursor: HistoryCursor;
+  cursor: number | undefined;
   polling: boolean;
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -560,7 +562,7 @@ export class BotService {
 
     const forwarder: AttachmentForwarder = {
       sessionId: attachment.sessionId,
-      cursor: createHistoryCursor(session),
+      cursor: session.userEventCursor,
       polling: false,
       timer: null,
     };
@@ -624,10 +626,9 @@ export class BotService {
     forwarder.timer = null;
 
     try {
-      const history = await this.relayClient.getHistory(sessionId);
-      const newEntries = getEntriesAfterCursor(history, forwarder.cursor);
+      const batch = await this.relayClient.listUserEvents(userId, forwarder.cursor);
 
-      for (const entry of newEntries) {
+      for (const event of batch.events) {
         const currentAttachment = this.attachments.get(userId);
         const currentForwarder = this.forwarders.get(userId);
         if (
@@ -640,39 +641,15 @@ export class BotService {
           return;
         }
 
-        if (entry.classification !== "agentMessage") {
-          if (entry.classification === "serverRequest") {
-            await this.presentApprovalRequest(userId, currentAttachment, entry);
-            continue;
-          }
-
-          if (
-            entry.method === "turn/completed" &&
-            this.pendingApprovals.get(userId)?.sessionId === sessionId
-          ) {
-            this.pendingApprovals.delete(userId);
-          }
-
-          continue;
-        }
-
-        const content = extractRelayMessageText(entry);
-        if (!content) {
-          continue;
-        }
-
-        await this.reply(
-          currentAttachment.chatId,
-          formatFeishuMessageChunks({
-            sessionName: currentAttachment.sessionName,
-            content,
-          }),
-        );
+        await this.handleForwardedUserEvent(userId, currentAttachment, event);
       }
 
-      forwarder.cursor = updateHistoryCursor(history, forwarder.cursor);
+      forwarder.cursor = batch.latestEventId;
     } catch (error) {
-      if (error instanceof RelayClientError && error.status === 404) {
+      if (
+        error instanceof RelayClientError &&
+        (error.status === 404 || error.status === 409)
+      ) {
         this.stopForwarding(userId);
         return;
       }
@@ -768,6 +745,56 @@ export class BotService {
 
     return "An unexpected bot error occurred.";
   }
+
+  private async handleForwardedUserEvent(
+    userId: string,
+    attachment: UserAttachment,
+    event: RelayUserEvent,
+  ): Promise<void> {
+    if (event.sessionId !== attachment.sessionId) {
+      return;
+    }
+
+    if (event.type === "auto-detach") {
+      this.stopForwarding(userId);
+      this.attachments.delete(userId);
+      await this.reply(
+        attachment.chatId,
+        "Auto-detached: local input detected.",
+      );
+      return;
+    }
+
+    const entry = event.message;
+    if (entry.classification !== "agentMessage") {
+      if (entry.classification === "serverRequest") {
+        await this.presentApprovalRequest(userId, attachment, entry);
+        return;
+      }
+
+      if (
+        entry.method === "turn/completed" &&
+        this.pendingApprovals.get(userId)?.sessionId === attachment.sessionId
+      ) {
+        this.pendingApprovals.delete(userId);
+      }
+
+      return;
+    }
+
+    const content = extractRelayMessageText(entry);
+    if (!content) {
+      return;
+    }
+
+    await this.reply(
+      attachment.chatId,
+      formatFeishuMessageChunks({
+        sessionName: attachment.sessionName,
+        content,
+      }),
+    );
+  }
 }
 
 function resolveSessionMatch(
@@ -832,58 +859,6 @@ function sortSessions(
       left.sessionId.localeCompare(right.sessionId)
     );
   });
-}
-
-function createHistoryCursor(session: RelaySessionDetail): HistoryCursor {
-  return {
-    historySize: session.historySize,
-    receivedAt: session.lastMessage?.receivedAt ?? null,
-    signature: session.lastMessage ? getEntrySignature(session.lastMessage) : null,
-  };
-}
-
-function updateHistoryCursor(
-  history: RelayHistoryEntry[],
-  previous: HistoryCursor,
-): HistoryCursor {
-  const lastEntry = history.at(-1);
-  if (!lastEntry) {
-    return {
-      ...previous,
-      historySize: 0,
-    };
-  }
-
-  return {
-    historySize: history.length,
-    receivedAt: lastEntry.receivedAt,
-    signature: getEntrySignature(lastEntry),
-  };
-}
-
-function getEntriesAfterCursor(
-  history: RelayHistoryEntry[],
-  cursor: HistoryCursor,
-): RelayHistoryEntry[] {
-  if (history.length === 0) {
-    return [];
-  }
-
-  if (cursor.signature) {
-    const existingIndex = history.findIndex(
-      (entry) => getEntrySignature(entry) === cursor.signature,
-    );
-    if (existingIndex >= 0) {
-      return history.slice(existingIndex + 1);
-    }
-  }
-
-  if (cursor.receivedAt) {
-    const receivedAt = cursor.receivedAt;
-    return history.filter((entry) => entry.receivedAt > receivedAt);
-  }
-
-  return history.slice(cursor.historySize);
 }
 
 function buildMessagePreview(entry: RelayHistoryEntry): string {

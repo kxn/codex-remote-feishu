@@ -106,6 +106,31 @@ export type UserSessionEvent =
   | UserSessionMessageEvent
   | UserSessionAutoDetachEvent;
 
+interface UserEventBase {
+  id: number;
+  occurredAt: string;
+  userId: string;
+  sessionId: string;
+  displayName: string;
+}
+
+interface UserMessageEvent extends UserEventBase {
+  type: "message";
+  message: SessionHistoryEntry;
+}
+
+interface UserAutoDetachEvent extends UserEventBase {
+  type: "auto-detach";
+  reason: string;
+}
+
+interface UserEventBatch {
+  latestEventId: number;
+  events: Array<UserMessageEvent | UserAutoDetachEvent>;
+}
+
+type UserEventRecord = UserMessageEvent | UserAutoDetachEvent;
+
 type UserSessionCallback = (event: UserSessionEvent) => void;
 type RelayTurnCompletedEventDraft = Omit<
   Extract<RelayEvent, { type: "turn-completed" }>,
@@ -146,7 +171,9 @@ export async function startRelayServer(
 
   const userCallbacks = new Map<string, Set<UserSessionCallback>>();
   const relayEvents: RelayEvent[] = [];
+  const userEventLogs = new Map<string, UserEventRecord[]>();
   let latestEventId = 0;
+  let latestUserEventId = 0;
 
   const app = express();
   app.disable("x-powered-by");
@@ -161,6 +188,23 @@ export async function startRelayServer(
 
     response.json(
       buildRelayEventBatch(relayEvents, latestEventId, parsedAfter),
+    );
+  });
+
+  app.get("/users/:id/events", (request, response) => {
+    const parsedAfter = parseAfterQuery(request.query.after);
+    if (parsedAfter === "invalid") {
+      response.status(400).json({ error: "Invalid after query parameter" });
+      return;
+    }
+
+    response.json(
+      buildUserEventBatch(
+        userEventLogs,
+        request.params.id,
+        latestUserEventId,
+        parsedAfter,
+      ),
     );
   });
 
@@ -273,7 +317,10 @@ export async function startRelayServer(
       });
     }
 
-    response.json(result.session);
+    response.json({
+      ...result.session,
+      userEventCursor: latestUserEventId,
+    });
   });
 
   app.post("/sessions/:id/detach", (request, response) => {
@@ -441,7 +488,17 @@ export async function startRelayServer(
               );
             }
           }
-          emitAttachedUserMessage(registry, userCallbacks, sessionId, entry);
+          emitAttachedUserMessage(
+            registry,
+            userCallbacks,
+            userEventLogs,
+            sessionId,
+            entry,
+            () => {
+              latestUserEventId += 1;
+              return latestUserEventId;
+            },
+          );
         }
         return;
       }
@@ -510,6 +567,9 @@ export async function startRelayServer(
             sessionId,
             session: detached.session,
             reason: autoDetach.data.reason,
+          }, userEventLogs, () => {
+            latestUserEventId += 1;
+            return latestUserEventId;
           });
         }
         return;
@@ -770,8 +830,10 @@ export { APPROVAL_RESPONSE_MESSAGE_TYPE };
 function emitAttachedUserMessage(
   registry: SessionRegistry,
   userCallbacks: Map<string, Set<UserSessionCallback>>,
+  userEventLogs: Map<string, UserEventRecord[]>,
   sessionId: string,
   message: SessionHistoryEntry,
+  nextId: () => number,
 ): void {
   const session = registry.getSession(sessionId);
   if (!session?.attachedUser) {
@@ -780,7 +842,8 @@ function emitAttachedUserMessage(
 
   if (
     (message.classification !== "agentMessage" &&
-      message.classification !== "serverRequest")
+      message.classification !== "serverRequest") &&
+    message.method !== "turn/completed"
   ) {
     return;
   }
@@ -791,14 +854,20 @@ function emitAttachedUserMessage(
     sessionId,
     session,
     message,
-  });
+  }, userEventLogs, nextId);
 }
 
 function emitUserEvent(
   userCallbacks: Map<string, Set<UserSessionCallback>>,
   userId: string,
   event: UserSessionEvent,
+  userEventLogs: Map<string, UserEventRecord[]>,
+  nextId: () => number,
 ): void {
+  const eventLog = userEventLogs.get(userId) ?? [];
+  eventLog.push(createUserEventRecord(event, nextId()));
+  userEventLogs.set(userId, eventLog);
+
   const callbacks = userCallbacks.get(userId);
   if (!callbacks) {
     return;
@@ -807,6 +876,35 @@ function emitUserEvent(
   for (const callback of callbacks) {
     callback(event);
   }
+}
+
+function createUserEventRecord(
+  event: UserSessionEvent,
+  id: number,
+): UserEventRecord {
+  const occurredAt = new Date().toISOString();
+
+  if (event.type === "message") {
+    return {
+      type: "message",
+      id,
+      occurredAt,
+      userId: event.userId,
+      sessionId: event.sessionId,
+      displayName: event.session.displayName,
+      message: event.message,
+    };
+  }
+
+  return {
+    type: "auto-detach",
+    id,
+    occurredAt,
+    userId: event.userId,
+    sessionId: event.sessionId,
+    displayName: event.session.displayName,
+    reason: event.reason,
+  };
 }
 
 function appendRelayEvent(
@@ -836,6 +934,34 @@ function buildRelayEventBatch(
       afterEventId === undefined
         ? []
         : relayEvents.filter((event) => event.id > afterEventId),
+  };
+}
+
+function buildUserEventBatch(
+  userEventLogs: Map<string, UserEventRecord[]>,
+  userId: string,
+  latestEventId: number,
+  afterEventId: number | undefined,
+): UserEventBatch {
+  const existing = userEventLogs.get(userId) ?? [];
+
+  if (afterEventId === undefined) {
+    return {
+      latestEventId,
+      events: existing.slice(),
+    };
+  }
+
+  const remaining = existing.filter((event) => event.id > afterEventId);
+  if (remaining.length === 0) {
+    userEventLogs.delete(userId);
+  } else if (remaining.length !== existing.length) {
+    userEventLogs.set(userId, remaining);
+  }
+
+  return {
+    latestEventId,
+    events: remaining,
   };
 }
 

@@ -926,6 +926,123 @@ describe("relay server", () => {
     await waitForClose(client);
   });
 
+  it("exposes lossless per-user message events even when history snapshots evict burst output", async () => {
+    server = await startRelayServer({
+      apiPort: 0,
+      wsPort: 0,
+      gracePeriodMs: 200,
+      historyLimit: 2,
+    });
+
+    const client = await connect(server.wsUrl);
+    await register(client);
+
+    const attachResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/attach`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: "user-1",
+        }),
+      },
+    );
+    expect(attachResponse.status).toBe(200);
+    const attachedSession = (await attachResponse.json()) as {
+      userEventCursor: number;
+    };
+    expect(attachedSession.userEventCursor).toBeTypeOf("number");
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: true,
+      userId: "user-1",
+    });
+
+    for (const raw of ["burst-1", "burst-2", "burst-3", "burst-4", "burst-5"]) {
+      await sendJson(client, {
+        type: "message",
+        sessionId: "session-1",
+        classification: "agentMessage",
+        method: "item/agentMessage/delta",
+        raw,
+        payload: {
+          params: {
+            delta: raw,
+          },
+        },
+      });
+    }
+
+    const userEventsResponse = await fetch(
+      `${server.apiBaseUrl}/users/user-1/events?after=${attachedSession.userEventCursor}`,
+    );
+    expect(userEventsResponse.status).toBe(200);
+    expect(await userEventsResponse.json()).toEqual({
+      latestEventId: expect.any(Number),
+      events: [
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          message: expect.objectContaining({
+            raw: "burst-1",
+            classification: "agentMessage",
+          }),
+        }),
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          message: expect.objectContaining({
+            raw: "burst-2",
+            classification: "agentMessage",
+          }),
+        }),
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          message: expect.objectContaining({
+            raw: "burst-3",
+            classification: "agentMessage",
+          }),
+        }),
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          message: expect.objectContaining({
+            raw: "burst-4",
+            classification: "agentMessage",
+          }),
+        }),
+        expect.objectContaining({
+          type: "message",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          message: expect.objectContaining({
+            raw: "burst-5",
+            classification: "agentMessage",
+          }),
+        }),
+      ],
+    });
+
+    const historyResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/history`,
+    );
+    expect(historyResponse.status).toBe(200);
+    expect((await historyResponse.json()).map((entry: { raw: string }) => entry.raw)).toEqual([
+      "burst-4",
+      "burst-5",
+    ]);
+
+    client.close();
+    await waitForClose(client);
+  });
+
   it("keeps message history and callbacks isolated per session", async () => {
     server = await startRelayServer({
       apiPort: 0,
