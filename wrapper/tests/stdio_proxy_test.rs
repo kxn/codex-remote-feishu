@@ -389,6 +389,51 @@ async fn test_wrapper_exits_within_5s_of_child() {
     );
 }
 
+#[tokio::test]
+async fn test_trailing_output_after_child_exit_is_not_dropped() {
+    let stdout_chunks = 4;
+    let stderr_chunks = 4;
+    let chunk_bytes = 4 * 1024;
+    let mock = fixture_path("mock_codex_trailing_output_after_exit.py");
+
+    let mut wrapper = spawn_wrapper_process(
+        &[
+            "--codex-binary",
+            &mock,
+            "--",
+            &stdout_chunks.to_string(),
+            &stderr_chunks.to_string(),
+            &chunk_bytes.to_string(),
+            "1.0",
+        ],
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let start = Instant::now();
+    let output = wrapper.wait_with_output().await.unwrap();
+    let elapsed = start.elapsed();
+
+    let mut expected_stdout = vec![b'o'; stdout_chunks * chunk_bytes];
+    expected_stdout.push(b'\n');
+    let expected_stderr = vec![b'e'; stderr_chunks * chunk_bytes];
+
+    assert!(
+        output.status.success(),
+        "wrapper should exit successfully after draining trailing output, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        elapsed >= std::time::Duration::from_millis(3500),
+        "wrapper should keep draining until EOF after child exit, got {elapsed:?}"
+    );
+    assert_eq!(output.stdout, expected_stdout);
+    assert_eq!(output.stderr, expected_stderr);
+}
+
 // ============================================================
 // VAL-WRAP-015: Invalid binary path → non-zero exit
 // ============================================================

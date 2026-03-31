@@ -273,23 +273,26 @@ where
 
     info!(status = ?status, "Child process exited");
 
-    // Abort forwarding tasks (they'll stop naturally when pipes close,
-    // but we abort to ensure cleanup within 5s)
+    // Stop tasks that can still accept new child input, then wait for the
+    // existing stdout/stderr forwarding tasks to drain until EOF.
     stdin_handle.abort();
+    let _ = stdin_handle.await;
+
     if let Some((relay_tx, relay_handle)) = relay_runtime {
         drop(relay_tx);
         relay_handle.abort();
+        let _ = relay_handle.await;
     }
-    // Wait briefly for stdout/stderr to drain
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        let _ = child_writer_handle.await;
-        let _ = stdout_handle.await;
-        let _ = stderr_handle.await;
-    })
-    .await;
+    drop(child_input_tx);
+
+    let (_child_writer_result, _stdout_result, _stderr_result) =
+        tokio::join!(child_writer_handle, stdout_handle, stderr_handle);
 
     #[cfg(unix)]
-    signal_handle.abort();
+    {
+        signal_handle.abort();
+        let _ = signal_handle.await;
+    }
 
     // Determine exit code
     let exit_code = get_exit_code(&status);
