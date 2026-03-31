@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BotService } from "./bot-service.js";
 
 describe("BotService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("lists available sessions", async () => {
     const relay = createRelayDouble({
       listSessions: vi.fn().mockResolvedValue([
@@ -38,12 +42,16 @@ describe("BotService", () => {
     );
   });
 
-  it("attaches to a session and forwards plain text as a prompt", async () => {
+  it("attaches with a unique partial match and sends a session summary", async () => {
     const relay = createRelayDouble({
       listSessions: vi.fn().mockResolvedValue([
         createSessionDetail({
           sessionId: "session-1",
           displayName: "workspace-a",
+        }),
+        createSessionDetail({
+          sessionId: "session-2",
+          displayName: "workspace-b",
         }),
       ]),
       attach: vi
@@ -52,9 +60,66 @@ describe("BotService", () => {
           createSessionDetail({
             sessionId: "session-1",
             displayName: "workspace-a",
+            state: "executing",
+            turnCount: 3,
             attachedUser: "user-1",
+            historySize: 1,
+            lastMessage: createHistoryEntry({
+              raw: '{"method":"item/agentMessage/delta","params":{"delta":"compiled successfully"}}',
+              payload: {
+                method: "item/agentMessage/delta",
+                params: {
+                  delta: "compiled successfully",
+                },
+              },
+            }),
           }),
         ),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 1_000 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach space-a",
+    });
+
+    expect(relay.attach).toHaveBeenCalledWith("session-1", "user-1");
+    expect(messenger.sendText).toHaveBeenCalledTimes(1);
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Attached to [workspace-a]."),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("State: executing"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Turns: 3"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Last message: compiled successfully"),
+    );
+
+    service.close();
+  });
+
+  it("lists ambiguous partial matches instead of attaching", async () => {
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-api",
+        }),
+        createSessionDetail({
+          sessionId: "session-2",
+          displayName: "workspace-app",
+        }),
+      ]),
     });
     const messenger = createMessengerDouble();
     const service = new BotService(relay, messenger);
@@ -66,21 +131,18 @@ describe("BotService", () => {
       text: "/attach workspace-a",
     });
 
-    await service.handleTextMessage({
-      userId: "user-1",
-      chatId: "chat-1",
-      messageId: "message-2",
-      text: "hello\nremote world",
-    });
-
-    expect(relay.attach).toHaveBeenCalledWith("session-1", "user-1");
-    expect(relay.sendPrompt).toHaveBeenCalledWith(
-      "session-1",
-      "hello\nremote world",
+    expect(relay.attach).not.toHaveBeenCalled();
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining('Multiple sessions match "workspace-a"'),
     );
     expect(messenger.sendText).toHaveBeenCalledWith(
       "chat-1",
-      "Attached to [workspace-a].",
+      expect.stringContaining("workspace-api"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("workspace-app"),
     );
   });
 
@@ -109,19 +171,27 @@ describe("BotService", () => {
             displayName: "workspace-a",
             state: "executing",
             turnCount: 3,
+            threadId: "thread-1",
+            turnId: "turn-9",
+            historySize: 1,
+            lastMessage: createHistoryEntry({
+              raw: '{"method":"item/agentMessage/delta","params":{"delta":"assistant output"}}',
+              payload: {
+                method: "item/agentMessage/delta",
+                params: {
+                  delta: "assistant output",
+                },
+              },
+            }),
           }),
         ),
       getHistory: vi.fn().mockResolvedValue([
-        {
-          direction: "out",
-          classification: "agentMessage",
-          method: "item/agentMessage/delta",
+        createHistoryEntry({
           raw: "assistant output",
           payload: { text: "assistant output" },
           threadId: "thread-1",
           turnId: "turn-1",
-          receivedAt: "2026-03-31T00:00:00.000Z",
-        },
+        }),
       ]),
     });
     const messenger = createMessengerDouble();
@@ -152,12 +222,242 @@ describe("BotService", () => {
     expect(relay.getHistory).toHaveBeenCalledWith("session-1", 1);
     expect(messenger.sendText).toHaveBeenCalledWith(
       "chat-1",
+      expect.stringContaining("Session ID: session-1"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
       expect.stringContaining("State: executing"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Thread: thread-1"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Turn: turn-9"),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Last message: assistant output"),
     );
     expect(messenger.sendText).toHaveBeenCalledWith(
       "chat-1",
       expect.stringContaining("[workspace-a]\n```text\n"),
     );
+  });
+
+  it("forwards agent messages while attached and stops after detach", async () => {
+    vi.useFakeTimers();
+
+    const initialEntry = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"existing"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "existing",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:00.000Z",
+    });
+    const forwardedEntry = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"streamed update"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "streamed update",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:01.000Z",
+    });
+    const detachedEntry = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"should stay local"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "should stay local",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:02.000Z",
+    });
+
+    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
+      ["session-1", [initialEntry]],
+    ]);
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+            historySize: 1,
+            lastMessage: initialEntry,
+          }),
+        ),
+      getHistory: vi
+        .fn()
+        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+      detach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: null,
+          }),
+        ),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    historyBySession.set("session-1", [initialEntry, forwardedEntry]);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("[workspace-a] streamed update"),
+    );
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-2",
+      text: "/detach",
+    });
+
+    historyBySession.set("session-1", [initialEntry, forwardedEntry, detachedEntry]);
+    await vi.advanceTimersByTimeAsync(100);
+
+    const sentMessages = messenger.sendText.mock.calls.map(([, text]) => text);
+    expect(sentMessages).toContain("Detached from [workspace-a].");
+    expect(sentMessages).not.toContain("[workspace-a] should stay local");
+
+    service.close();
+  });
+
+  it("keeps forwarded messages isolated per attached user", async () => {
+    vi.useFakeTimers();
+
+    const initialA = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"initial a"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "initial a",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:00.000Z",
+    });
+    const initialB = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"initial b"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "initial b",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:00.000Z",
+    });
+    const forwardedA = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"only a"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "only a",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:01.000Z",
+    });
+    const forwardedB = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"only b"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "only b",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:01.000Z",
+    });
+
+    const historyBySession = new Map<string, ReturnType<typeof createHistoryEntry>[]>([
+      ["session-a", [initialA]],
+      ["session-b", [initialB]],
+    ]);
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-a",
+          displayName: "workspace-a",
+        }),
+        createSessionDetail({
+          sessionId: "session-b",
+          displayName: "workspace-b",
+        }),
+      ]),
+      attach: vi.fn().mockImplementation(async (sessionId: string, userId: string) =>
+        createSessionDetail({
+          sessionId,
+          displayName: sessionId === "session-a" ? "workspace-a" : "workspace-b",
+          attachedUser: userId,
+          historySize: 1,
+          lastMessage: sessionId === "session-a" ? initialA : initialB,
+        }),
+      ),
+      getHistory: vi
+        .fn()
+        .mockImplementation(async (sessionId: string) => historyBySession.get(sessionId) ?? []),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-a",
+      chatId: "chat-a",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+    await service.handleTextMessage({
+      userId: "user-b",
+      chatId: "chat-b",
+      messageId: "message-2",
+      text: "/attach workspace-b",
+    });
+
+    historyBySession.set("session-a", [initialA, forwardedA]);
+    historyBySession.set("session-b", [initialB, forwardedB]);
+    await vi.advanceTimersByTimeAsync(100);
+
+    const chatAMessages = messenger.sendText.mock.calls
+      .filter(([chatId]) => chatId === "chat-a")
+      .map(([, text]) => text)
+      .join("\n");
+    const chatBMessages = messenger.sendText.mock.calls
+      .filter(([chatId]) => chatId === "chat-b")
+      .map(([, text]) => text)
+      .join("\n");
+
+    expect(chatAMessages).toContain("[workspace-a] only a");
+    expect(chatAMessages).not.toContain("only b");
+    expect(chatBMessages).toContain("[workspace-b] only b");
+    expect(chatBMessages).not.toContain("only a");
+
+    service.close();
   });
 
   it("returns user-friendly errors for unknown commands and detached prompts", async () => {
@@ -176,6 +476,13 @@ describe("BotService", () => {
       userId: "user-1",
       chatId: "chat-1",
       messageId: "message-2",
+      text: "/attach missing-session",
+    });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-3",
       text: "hello",
     });
 
@@ -187,6 +494,11 @@ describe("BotService", () => {
     );
     expect(messenger.sendText).toHaveBeenNthCalledWith(
       2,
+      "chat-1",
+      'Session "missing-session" not found.',
+    );
+    expect(messenger.sendText).toHaveBeenNthCalledWith(
+      3,
       "chat-1",
       "Attach to a session first with /attach <session>.",
     );
@@ -275,5 +587,35 @@ function createSessionDetail(
     graceExpiresAt: overrides.graceExpiresAt ?? null,
     historySize: overrides.historySize ?? 0,
     lastMessage: overrides.lastMessage ?? null,
+  };
+}
+
+function createHistoryEntry(
+  overrides: Partial<{
+    direction: "in" | "out";
+    classification:
+      | "agentMessage"
+      | "toolCall"
+      | "serverRequest"
+      | "turnLifecycle"
+      | "threadLifecycle"
+      | "unknown";
+    method: string;
+    raw: string;
+    payload: unknown;
+    threadId: string | null;
+    turnId: string | null;
+    receivedAt: string;
+  }> = {},
+) {
+  return {
+    direction: overrides.direction ?? "out",
+    classification: overrides.classification ?? "agentMessage",
+    method: overrides.method ?? "item/agentMessage/delta",
+    raw: overrides.raw ?? "assistant output",
+    payload: overrides.payload ?? { text: "assistant output" },
+    threadId: overrides.threadId ?? null,
+    turnId: overrides.turnId ?? null,
+    receivedAt: overrides.receivedAt ?? "2026-03-31T00:00:00.000Z",
   };
 }
