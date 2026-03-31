@@ -48,6 +48,12 @@ pub enum OutboundRelayMessage {
     },
 }
 
+#[derive(Debug)]
+pub enum RelayTaskCommand {
+    Outbound(OutboundRelayMessage),
+    Shutdown,
+}
+
 pub fn should_forward_outbound_message(attached: bool, message: &OutboundRelayMessage) -> bool {
     match message {
         OutboundRelayMessage::Classified {
@@ -62,22 +68,37 @@ pub fn should_forward_outbound_message(attached: bool, message: &OutboundRelayMe
     }
 }
 
+pub type RelayTaskSender = mpsc::UnboundedSender<RelayTaskCommand>;
+
+pub fn send_relay_message(
+    relay_tx: &RelayTaskSender,
+    message: OutboundRelayMessage,
+) -> Result<(), mpsc::error::SendError<RelayTaskCommand>> {
+    relay_tx.send(RelayTaskCommand::Outbound(message))
+}
+
+pub fn shutdown_relay_client(
+    relay_tx: RelayTaskSender,
+) -> Result<(), mpsc::error::SendError<RelayTaskCommand>> {
+    relay_tx.send(RelayTaskCommand::Shutdown)
+}
+
 pub fn spawn_relay_client(
     relay_url: String,
     registration: RelayRegistration,
     attached: Arc<AtomicBool>,
     child_input_tx: mpsc::UnboundedSender<ChildInputCommand>,
-) -> (mpsc::UnboundedSender<OutboundRelayMessage>, JoinHandle<()>) {
-    let (outbound_tx, outbound_rx) = mpsc::unbounded_channel();
+) -> (RelayTaskSender, JoinHandle<()>) {
+    let (command_tx, command_rx) = mpsc::unbounded_channel();
     let handle = tokio::spawn(run_relay_client(
         relay_url,
         registration,
         attached,
         child_input_tx,
-        outbound_rx,
+        command_rx,
     ));
 
-    (outbound_tx, handle)
+    (command_tx, handle)
 }
 
 async fn run_relay_client(
@@ -85,7 +106,7 @@ async fn run_relay_client(
     registration: RelayRegistration,
     attached: Arc<AtomicBool>,
     child_input_tx: mpsc::UnboundedSender<ChildInputCommand>,
-    mut outbound_rx: mpsc::UnboundedReceiver<OutboundRelayMessage>,
+    mut command_rx: mpsc::UnboundedReceiver<RelayTaskCommand>,
 ) {
     let mut reconnect_delay = INITIAL_RECONNECT_DELAY;
 
@@ -116,7 +137,7 @@ async fn run_relay_client(
 
         if let Err(error) = write.send(Message::Text(register.to_string().into())).await {
             warn!(relay_url = %relay_url, error = %error, "failed to send relay registration");
-            handle_disconnect(&attached, &mut outbound_rx);
+            handle_disconnect(&attached, &mut command_rx);
             tokio::time::sleep(reconnect_delay).await;
             reconnect_delay = next_backoff(reconnect_delay);
             continue;
@@ -126,16 +147,19 @@ async fn run_relay_client(
 
         let disconnected = loop {
             tokio::select! {
-                outbound = outbound_rx.recv() => {
-                    match outbound {
-                        Some(message) => {
+                command = command_rx.recv() => {
+                    match command {
+                        Some(RelayTaskCommand::Outbound(message)) => {
                             let payload = outbound_message_to_json(&registration.session_id, message);
                             if let Err(error) = write.send(Message::Text(payload.to_string().into())).await {
                                 warn!(relay_url = %relay_url, error = %error, "failed sending message to relay server");
                                 break true;
                             }
                         }
-                        None => break false,
+                        Some(RelayTaskCommand::Shutdown) | None => {
+                            let _ = write.send(Message::Close(None)).await;
+                            break false;
+                        }
                     }
                 }
                 inbound = read.next() => {
@@ -177,7 +201,7 @@ async fn run_relay_client(
             return;
         }
 
-        handle_disconnect(&attached, &mut outbound_rx);
+        handle_disconnect(&attached, &mut command_rx);
         tokio::time::sleep(reconnect_delay).await;
         reconnect_delay = next_backoff(reconnect_delay);
     }
@@ -388,13 +412,16 @@ fn next_backoff(current: Duration) -> Duration {
 
 fn handle_disconnect(
     attached: &Arc<AtomicBool>,
-    outbound_rx: &mut mpsc::UnboundedReceiver<OutboundRelayMessage>,
+    command_rx: &mut mpsc::UnboundedReceiver<RelayTaskCommand>,
 ) {
     attached.store(false, Ordering::SeqCst);
 
     let mut dropped_messages = 0usize;
-    while outbound_rx.try_recv().is_ok() {
-        dropped_messages += 1;
+    while let Ok(command) = command_rx.try_recv() {
+        match command {
+            RelayTaskCommand::Outbound(_) => dropped_messages += 1,
+            RelayTaskCommand::Shutdown => return,
+        }
     }
 
     if dropped_messages > 0 {
@@ -413,24 +440,24 @@ mod tests {
     #[test]
     fn disconnect_resets_attached_state_and_drops_queued_messages() {
         let attached = Arc::new(AtomicBool::new(true));
-        let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel();
+        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
 
-        outbound_tx
-            .send(OutboundRelayMessage::AutoDetach {
+        command_tx
+            .send(RelayTaskCommand::Outbound(OutboundRelayMessage::AutoDetach {
                 reason: "local-input",
-            })
+            }))
             .expect("failed to enqueue first relay message");
-        outbound_tx
-            .send(OutboundRelayMessage::AutoDetach {
+        command_tx
+            .send(RelayTaskCommand::Outbound(OutboundRelayMessage::AutoDetach {
                 reason: "second-message",
-            })
+            }))
             .expect("failed to enqueue second relay message");
 
-        handle_disconnect(&attached, &mut outbound_rx);
+        handle_disconnect(&attached, &mut command_rx);
 
         assert!(!attached.load(Ordering::SeqCst));
         assert!(matches!(
-            outbound_rx.try_recv(),
+            command_rx.try_recv(),
             Err(tokio::sync::mpsc::error::TryRecvError::Empty)
         ));
     }

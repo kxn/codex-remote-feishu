@@ -2,7 +2,7 @@ use std::io;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -12,8 +12,8 @@ use tracing::{debug, error, info};
 
 use crate::classifier::{MessageClassification, MessageClassifier};
 use crate::ws_client::{
-    self, should_forward_outbound_message, OutboundRelayMessage, RelayForwardingMode,
-    RelayRegistration,
+    self, send_relay_message, should_forward_outbound_message, shutdown_relay_client,
+    OutboundRelayMessage, RelayForwardingMode, RelayRegistration,
 };
 
 /// Forward lines from an async reader to an async writer, byte-for-byte.
@@ -199,9 +199,12 @@ where
             if stdin_attached.load(Ordering::SeqCst) && is_local_turn_start(&buf) {
                 stdin_attached.store(false, Ordering::SeqCst);
                 if let Some(relay_tx) = stdin_relay_tx.as_ref() {
-                    let _ = relay_tx.send(OutboundRelayMessage::AutoDetach {
-                        reason: "local-input",
-                    });
+                    let _ = send_relay_message(
+                        relay_tx,
+                        OutboundRelayMessage::AutoDetach {
+                            reason: "local-input",
+                        },
+                    );
                 }
             }
 
@@ -236,7 +239,7 @@ where
                     if should_forward_outbound_message(attached.load(Ordering::SeqCst), &relay_message)
                     {
                         if let Some(relay_tx) = relay_tx.as_ref() {
-                            let _ = relay_tx.send(relay_message);
+                            let _ = send_relay_message(relay_tx, relay_message);
                         }
                     }
                 }
@@ -282,15 +285,21 @@ where
     stdin_handle.abort();
     let _ = stdin_handle.await;
 
-    if let Some((relay_tx, relay_handle)) = relay_runtime {
-        drop(relay_tx);
-        relay_handle.abort();
-        let _ = relay_handle.await;
-    }
-    drop(child_input_tx);
+    let (_stdout_result, _stderr_result) = tokio::join!(stdout_handle, stderr_handle);
 
-    let (_child_writer_result, _stdout_result, _stderr_result) =
-        tokio::join!(child_writer_handle, stdout_handle, stderr_handle);
+    if let Some((relay_tx, mut relay_handle)) = relay_runtime {
+        let _ = shutdown_relay_client(relay_tx);
+        if tokio::time::timeout(Duration::from_secs(1), &mut relay_handle)
+            .await
+            .is_err()
+        {
+            relay_handle.abort();
+            let _ = relay_handle.await;
+        }
+    }
+
+    drop(child_input_tx);
+    let _child_writer_result = child_writer_handle.await;
 
     #[cfg(unix)]
     {

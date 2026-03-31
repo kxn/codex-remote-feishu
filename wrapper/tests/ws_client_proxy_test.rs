@@ -436,6 +436,88 @@ async fn forwards_lifecycle_events_and_server_requests_even_when_detached() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn forwards_final_turn_completed_when_child_exits_immediately() {
+    let relay = MockRelayServer::start().await;
+    let final_turn_script = fixture_path("mock_codex_emit_final_turn_completed.py");
+    let mut wrapper = spawn_wrapper_process(
+        &[
+            "--codex-binary",
+            "python3",
+            "--relay-url",
+            relay.url(),
+            "--",
+            &final_turn_script,
+        ],
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    let stdout = wrapper.stdout.take().expect("missing wrapper stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    let register = relay.next_message().await;
+    let session_id = register
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .expect("register message missing sessionId")
+        .to_string();
+
+    let final_stdout = read_stdout_line(&mut stdout).await;
+    let final_stdout_json: Value =
+        serde_json::from_str(final_stdout.trim_end()).expect("final stdout should be valid JSON");
+    assert_eq!(
+        final_stdout_json.get("method").and_then(Value::as_str),
+        Some("turn/completed")
+    );
+    assert_eq!(
+        final_stdout_json
+            .pointer("/params/threadId")
+            .and_then(Value::as_str),
+        Some("thread-final")
+    );
+    assert_eq!(
+        final_stdout_json.pointer("/params/turnId").and_then(Value::as_str),
+        Some("turn-final")
+    );
+
+    let status = wrapper.wait().await.expect("failed to wait for wrapper");
+    assert!(status.success(), "wrapper should exit successfully");
+
+    let final_turn_completed = relay.next_message().await;
+    assert_eq!(
+        final_turn_completed.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        final_turn_completed
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("turnLifecycle")
+    );
+    assert_eq!(
+        final_turn_completed.get("method").and_then(Value::as_str),
+        Some("turn/completed")
+    );
+    assert_eq!(
+        final_turn_completed.get("sessionId").and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
+    assert_eq!(
+        final_turn_completed
+            .pointer("/payload/params/threadId")
+            .and_then(Value::as_str),
+        Some("thread-final")
+    );
+    assert_eq!(
+        final_turn_completed
+            .pointer("/payload/params/turnId")
+            .and_then(Value::as_str),
+        Some("turn-final")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn forwards_agent_messages_only_when_attached_and_forwards_lifecycle_events() {
     let relay = MockRelayServer::start().await;
     let mock_codex = fixture_path("mock_codex_echo.sh");
