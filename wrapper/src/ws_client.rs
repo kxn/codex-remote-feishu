@@ -95,6 +95,7 @@ async fn run_relay_client(
 
         if let Err(error) = write.send(Message::Text(register.to_string().into())).await {
             warn!(relay_url = %relay_url, error = %error, "failed to send relay registration");
+            handle_disconnect(&attached, &mut outbound_rx);
             tokio::time::sleep(reconnect_delay).await;
             reconnect_delay = next_backoff(reconnect_delay);
             continue;
@@ -155,6 +156,7 @@ async fn run_relay_client(
             return;
         }
 
+        handle_disconnect(&attached, &mut outbound_rx);
         tokio::time::sleep(reconnect_delay).await;
         reconnect_delay = next_backoff(reconnect_delay);
     }
@@ -325,4 +327,53 @@ fn turn_interrupt_message() -> Vec<u8> {
 
 fn next_backoff(current: Duration) -> Duration {
     std::cmp::min(current.saturating_mul(2), MAX_RECONNECT_DELAY)
+}
+
+fn handle_disconnect(
+    attached: &Arc<AtomicBool>,
+    outbound_rx: &mut mpsc::UnboundedReceiver<OutboundRelayMessage>,
+) {
+    attached.store(false, Ordering::SeqCst);
+
+    let mut dropped_messages = 0usize;
+    while outbound_rx.try_recv().is_ok() {
+        dropped_messages += 1;
+    }
+
+    if dropped_messages > 0 {
+        debug!(
+            dropped_messages,
+            "dropped queued relay messages after disconnect"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disconnect_resets_attached_state_and_drops_queued_messages() {
+        let attached = Arc::new(AtomicBool::new(true));
+        let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel();
+
+        outbound_tx
+            .send(OutboundRelayMessage::AutoDetach {
+                reason: "local-input",
+            })
+            .expect("failed to enqueue first relay message");
+        outbound_tx
+            .send(OutboundRelayMessage::AutoDetach {
+                reason: "second-message",
+            })
+            .expect("failed to enqueue second relay message");
+
+        handle_disconnect(&attached, &mut outbound_rx);
+
+        assert!(!attached.load(Ordering::SeqCst));
+        assert!(matches!(
+            outbound_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+    }
 }

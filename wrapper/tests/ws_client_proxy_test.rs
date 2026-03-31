@@ -640,3 +640,148 @@ async fn reconnects_and_reregisters_after_disconnect() {
     let status = wrapper.wait().await.expect("failed to wait for wrapper");
     assert!(status.success(), "wrapper should exit successfully");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn disconnect_clears_attached_state_and_drops_stale_messages_until_reattached() {
+    let relay = MockRelayServer::start().await;
+    let mock_codex = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock_codex, "--relay-url", relay.url()],
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    let mut stdin = wrapper.stdin.take().expect("missing wrapper stdin");
+    let stdout = wrapper.stdout.take().expect("missing wrapper stdout");
+    let mut stdout = BufReader::new(stdout);
+
+    let first_register = relay.next_message().await;
+    let session_id = first_register
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .expect("first register missing sessionId")
+        .to_string();
+
+    relay.send(json!({
+        "type": "attach-status-changed",
+        "attached": true,
+        "userId": "user-1"
+    }));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    stdin
+        .write_all(
+            b"{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"before disconnect\"}}\n",
+        )
+        .await
+        .expect("failed to write attached agent message");
+    let _ = read_stdout_line(&mut stdout).await;
+
+    let forwarded_before_disconnect = relay.next_message().await;
+    assert_eq!(
+        forwarded_before_disconnect.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        forwarded_before_disconnect
+            .get("sessionId")
+            .and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
+    assert_eq!(
+        forwarded_before_disconnect
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+
+    relay.close_current_connection();
+
+    stdin
+        .write_all(
+            b"{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"disconnect backlog 1\"}}\n",
+        )
+        .await
+        .expect("failed to write first disconnected message");
+    let _ = read_stdout_line(&mut stdout).await;
+
+    stdin
+        .write_all(
+            b"{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"disconnect backlog 2\"}}\n",
+        )
+        .await
+        .expect("failed to write second disconnected message");
+    let _ = read_stdout_line(&mut stdout).await;
+
+    let second_register = relay.next_message().await;
+    assert_eq!(second_register.get("type").and_then(Value::as_str), Some("register"));
+    assert_eq!(
+        second_register.get("sessionId").and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
+
+    relay.expect_no_message(Duration::from_millis(300)).await;
+
+    relay.send(json!({
+        "type": "input",
+        "content": "ignore until reattached"
+    }));
+    expect_no_stdout_line(&mut stdout, Duration::from_millis(300)).await;
+
+    stdin
+        .write_all(
+            b"{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"after reconnect before attach\"}}\n",
+        )
+        .await
+        .expect("failed to write post-reconnect pre-attach message");
+    let _ = read_stdout_line(&mut stdout).await;
+    relay.expect_no_message(Duration::from_millis(250)).await;
+
+    relay.send(json!({
+        "type": "attach-status-changed",
+        "attached": true,
+        "userId": "user-1"
+    }));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    relay.send(json!({
+        "type": "input",
+        "content": "reattached remote input"
+    }));
+    let remote_prompt = read_stdout_line(&mut stdout).await;
+    let remote_prompt_json: Value =
+        serde_json::from_str(remote_prompt.trim()).expect("remote prompt should be valid JSON");
+    assert_eq!(
+        remote_prompt_json.get("method").and_then(Value::as_str),
+        Some("turn/start")
+    );
+    assert_eq!(
+        remote_prompt_json.pointer("/params/prompt").and_then(Value::as_str),
+        Some("reattached remote input")
+    );
+
+    stdin
+        .write_all(
+            b"{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"after reattach\"}}\n",
+        )
+        .await
+        .expect("failed to write reattached message");
+    let _ = read_stdout_line(&mut stdout).await;
+
+    let forwarded_after_reattach = relay.next_message().await;
+    assert_eq!(
+        forwarded_after_reattach.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        forwarded_after_reattach
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+
+    drop(stdin);
+    let status = wrapper.wait().await.expect("failed to wait for wrapper");
+    assert!(status.success(), "wrapper should exit successfully");
+}
