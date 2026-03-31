@@ -1,16 +1,22 @@
 use std::io;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use serde_json::Value;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tracing::{debug, error, info};
 
-use crate::classifier::MessageClassifier;
+use crate::classifier::{MessageClassification, MessageClassifier};
+use crate::ws_client::{self, OutboundRelayMessage, RelayRegistration};
 
 /// Forward lines from an async reader to an async writer, byte-for-byte.
 /// Each line is delimited by `\n`. The newline is included in the forwarded bytes.
 /// Returns when the reader reaches EOF.
+#[cfg(test)]
 pub async fn forward_lines(
     mut reader: impl AsyncBufRead + Unpin,
     mut writer: impl AsyncWrite + Unpin,
@@ -57,6 +63,12 @@ pub struct ProxyConfig {
     pub relay_url: Option<String>,
     pub session_name: String,
     pub args: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum ChildInputCommand {
+    Write(Vec<u8>),
+    Close,
 }
 
 /// Spawn the child process and run the stdio proxy.
@@ -123,17 +135,80 @@ where
 
     debug!(pid = ?child_pid, "Child process spawned");
 
-    // Forward wrapper stdin → child stdin
-    let stdin_handle = tokio::spawn(async move {
-        let result = forward_lines(BufReader::new(wrapper_stdin), child_stdin).await;
-        if let Err(ref e) = result {
-            // BrokenPipe is expected when child exits before stdin is closed
-            if e.kind() != io::ErrorKind::BrokenPipe {
-                error!(error = %e, "stdin forwarding error");
+    let attached = Arc::new(AtomicBool::new(false));
+    let (child_input_tx, mut child_input_rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let relay_runtime = config.relay_url.clone().map(|relay_url| {
+        let registration = RelayRegistration {
+            session_id: generate_session_id(),
+            display_name: config.session_name.clone(),
+            workspace_path: current_workspace_path(),
+            wrapper_version: env!("CARGO_PKG_VERSION").to_string(),
+            pid: std::process::id(),
+        };
+
+        let (relay_tx, relay_handle) = ws_client::spawn_relay_client(
+            relay_url,
+            registration,
+            Arc::clone(&attached),
+            child_input_tx.clone(),
+        );
+
+        (relay_tx, relay_handle)
+    });
+
+    let relay_tx = relay_runtime.as_ref().map(|(tx, _)| tx.clone());
+
+    let child_writer_handle = tokio::spawn(async move {
+        let mut child_stdin = child_stdin;
+        while let Some(command) = child_input_rx.recv().await {
+            match command {
+                ChildInputCommand::Write(bytes) => {
+                    child_stdin.write_all(&bytes).await?;
+                    child_stdin.flush().await?;
+                }
+                ChildInputCommand::Close => {
+                    child_stdin.shutdown().await?;
+                    break;
+                }
             }
         }
+        debug!("child stdin writer finished");
+        Ok::<(), io::Error>(())
+    });
+
+    // Forward wrapper stdin → child stdin
+    let stdin_attached = Arc::clone(&attached);
+    let stdin_relay_tx = relay_tx.clone();
+    let stdin_child_input_tx = child_input_tx.clone();
+    let stdin_handle = tokio::spawn(async move {
+        let mut reader = BufReader::new(wrapper_stdin);
+        let mut buf = Vec::with_capacity(4096);
+
+        loop {
+            buf.clear();
+            let n = reader.read_until(b'\n', &mut buf).await?;
+            if n == 0 {
+                let _ = stdin_child_input_tx.send(ChildInputCommand::Close);
+                break;
+            }
+
+            if stdin_attached.load(Ordering::SeqCst) && is_local_turn_start(&buf) {
+                stdin_attached.store(false, Ordering::SeqCst);
+                if let Some(relay_tx) = stdin_relay_tx.as_ref() {
+                    let _ = relay_tx.send(OutboundRelayMessage::AutoDetach {
+                        reason: "local-input",
+                    });
+                }
+            }
+
+            stdin_child_input_tx
+                .send(ChildInputCommand::Write(buf.clone()))
+                .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "child stdin channel closed"))?;
+        }
+
         debug!("stdin forwarding finished");
-        result
+        Ok::<(), io::Error>(())
     });
 
     // Forward child stdout → wrapper stdout
@@ -141,6 +216,8 @@ where
         let mut classifier = MessageClassifier::default();
         let mut child_stdout = BufReader::new(child_stdout);
         let mut wrapper_stdout = wrapper_stdout;
+        let attached = attached;
+        let relay_tx = relay_tx;
         let result =
             forward_lines_with_observer(&mut child_stdout, &mut wrapper_stdout, |line| {
                 let classified = classifier.classify(line);
@@ -151,6 +228,14 @@ where
                     turn_id = ?classified.turn_id,
                     "classified codex stdout line"
                 );
+
+                if attached.load(Ordering::SeqCst) {
+                    if let Some(relay_message) = build_relay_message(&classified, line) {
+                        if let Some(relay_tx) = relay_tx.as_ref() {
+                            let _ = relay_tx.send(relay_message);
+                        }
+                    }
+                }
             })
             .await;
         if let Err(ref e) = result {
@@ -191,8 +276,13 @@ where
     // Abort forwarding tasks (they'll stop naturally when pipes close,
     // but we abort to ensure cleanup within 5s)
     stdin_handle.abort();
+    if let Some((relay_tx, relay_handle)) = relay_runtime {
+        drop(relay_tx);
+        relay_handle.abort();
+    }
     // Wait briefly for stdout/stderr to drain
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        let _ = child_writer_handle.await;
         let _ = stdout_handle.await;
         let _ = stderr_handle.await;
     })
@@ -256,6 +346,48 @@ fn send_signal(pid: u32, signal: i32) {
     unsafe {
         libc::kill(pid as i32, signal);
     }
+}
+
+fn build_relay_message(
+    classified: &crate::classifier::ClassifiedMessage,
+    line: &[u8],
+) -> Option<OutboundRelayMessage> {
+    let classification = match classified.classification {
+        MessageClassification::AgentMessage => "agentMessage",
+        MessageClassification::ServerRequest => "serverRequest",
+        _ => return None,
+    };
+
+    Some(OutboundRelayMessage::Classified {
+        classification,
+        method: classified.method.clone(),
+        thread_id: classified.thread_id.clone(),
+        turn_id: classified.turn_id.clone(),
+        raw: String::from_utf8_lossy(line).to_string(),
+        payload: serde_json::from_slice::<Value>(line).ok(),
+    })
+}
+
+fn current_workspace_path() -> String {
+    std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .to_string_lossy()
+        .to_string()
+}
+
+fn generate_session_id() -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("wrapper-{}-{timestamp}", std::process::id())
+}
+
+fn is_local_turn_start(line: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(line)
+        .ok()
+        .and_then(|value| value.get("method").and_then(Value::as_str).map(str::to_owned))
+        .is_some_and(|method| method == "turn/start")
 }
 
 #[cfg(test)]

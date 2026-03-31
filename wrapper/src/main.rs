@@ -1,6 +1,7 @@
 mod classifier;
 mod config;
 mod proxy;
+mod ws_client;
 
 use anyhow::Result;
 use tracing::warn;
