@@ -1,34 +1,30 @@
+mod config;
 mod proxy;
 
 use anyhow::Result;
-use clap::Parser;
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
-
-/// Codex Relay Wrapper - stdio proxy for the codex CLI
-#[derive(Parser, Debug)]
-#[command(version, about)]
-struct Cli {
-    /// Path to the real codex binary
-    #[arg(long, env = "CODEX_REAL_BINARY", default_value = "codex")]
-    codex_binary: String,
-
-    /// Additional arguments to pass to the codex binary
-    #[arg(trailing_var_arg = true)]
-    args: Vec<String>,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(env_filter)
         .with_writer(std::io::stderr)
         .init();
 
-    let cli = Cli::parse();
+    let (wrapper_config, warnings) = config::parse_wrapper_config();
+    for warning in warnings {
+        warn!(warning = %warning, "wrapper configuration warning");
+    }
 
     let config = proxy::ProxyConfig {
-        binary_path: cli.codex_binary,
-        args: cli.args,
+        binary_path: wrapper_config.binary_path,
+        relay_url: wrapper_config.relay_url,
+        session_name: wrapper_config.session_name,
+        args: wrapper_config.args,
     };
 
     let exit_code = proxy::run_proxy(&config).await?;

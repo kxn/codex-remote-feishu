@@ -31,4 +31,5 @@ Environment variables, external dependencies, and setup notes.
 - Wrapper targets Linux x86_64 (primary) and macOS (secondary)
 - Signal forwarding (SIGINT, SIGTERM) is Unix-specific
 - Rust 1.85+ required for wrapper compilation
+- This Debian image does not include `cargo clippy` or `cargo fmt` on `PATH` by default. To run `clippy` without root, download the `rust-clippy` `.deb`, extract it to a temp dir, and prepend the extracted `usr/bin` directory to `PATH` for the validator command.
 - Node.js 22+ required for server and bot

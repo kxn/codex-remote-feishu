@@ -38,6 +38,8 @@ pub async fn forward_bytes(
 /// Configuration for the stdio proxy.
 pub struct ProxyConfig {
     pub binary_path: String,
+    pub relay_url: Option<String>,
+    pub session_name: String,
     pub args: Vec<String>,
 }
 
@@ -72,7 +74,12 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
     E: AsyncWrite + Unpin + Send + 'static,
 {
-    info!(binary = %config.binary_path, "Spawning child process");
+    info!(
+        binary = %config.binary_path,
+        session_name = %config.session_name,
+        relay_configured = config.relay_url.is_some(),
+        "Spawning child process"
+    );
 
     let mut child = Command::new(&config.binary_path)
         .args(&config.args)

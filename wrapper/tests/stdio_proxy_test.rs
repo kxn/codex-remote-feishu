@@ -20,16 +20,31 @@ fn fixture_path(name: &str) -> String {
 
 /// Spawn the wrapper binary as a child process for integration testing.
 async fn spawn_wrapper(codex_binary: &str) -> tokio::process::Child {
+    spawn_wrapper_process(&["--codex-binary", codex_binary], Vec::new(), None).await
+}
+
+async fn spawn_wrapper_process(
+    args: &[&str],
+    env_vars: Vec<(&str, &str)>,
+    current_dir: Option<&std::path::Path>,
+) -> tokio::process::Child {
     let wrapper_bin = env!("CARGO_BIN_EXE_codex-relay-wrapper");
-    Command::new(wrapper_bin)
-        .arg("--codex-binary")
-        .arg(codex_binary)
+    let mut cmd = Command::new(wrapper_bin);
+    cmd.args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .expect("Failed to spawn wrapper binary")
+        .kill_on_drop(true);
+
+    if let Some(dir) = current_dir {
+        cmd.current_dir(dir);
+    }
+
+    for (k, v) in env_vars {
+        cmd.env(k, v);
+    }
+
+    cmd.spawn().expect("Failed to spawn wrapper binary")
 }
 
 /// Spawn the wrapper binary with extra env vars.
@@ -37,18 +52,7 @@ async fn spawn_wrapper_with_env(
     codex_binary: &str,
     env_vars: Vec<(&str, &str)>,
 ) -> tokio::process::Child {
-    let wrapper_bin = env!("CARGO_BIN_EXE_codex-relay-wrapper");
-    let mut cmd = Command::new(wrapper_bin);
-    cmd.arg("--codex-binary")
-        .arg(codex_binary)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    for (k, v) in env_vars {
-        cmd.env(k, v);
-    }
-    cmd.spawn().expect("Failed to spawn wrapper binary")
+    spawn_wrapper_process(&["--codex-binary", codex_binary], env_vars, None).await
 }
 
 // ============================================================
@@ -153,9 +157,9 @@ async fn test_message_ordering_preserved() {
     }
 
     assert_eq!(received_seqs.len(), count, "All messages received");
-    for i in 0..count {
+    for (i, seq) in received_seqs.iter().enumerate().take(count) {
         assert_eq!(
-            received_seqs[i], i as i64,
+            *seq, i as i64,
             "Message ordering must be strictly monotonic"
         );
     }
@@ -377,6 +381,274 @@ async fn test_invalid_binary_path_exits_nonzero() {
         stderr_str.contains("nonexistent") || stderr_str.contains("Failed") || stderr_str.contains("No such file"),
         "Error message should mention the invalid path, got: {}",
         stderr_str
+    );
+}
+
+#[tokio::test]
+async fn test_default_binary_path_is_codex() {
+    let capture_file = format!("/tmp/mock_codex_args_default_{}", std::process::id());
+    let mock = fixture_path("mock_codex_echo.sh");
+
+    let mut wrapper = spawn_wrapper_process(
+        &[],
+        vec![
+            ("PATH", "/usr/bin:/bin"),
+            ("CODEX_REAL_BINARY", &mock),
+            ("MOCK_ARGS_LOG", &capture_file),
+        ],
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success(), "wrapper should start using CODEX_REAL_BINARY");
+
+    let logged_args = std::fs::read_to_string(&capture_file).unwrap_or_default();
+    assert!(
+        logged_args.trim().is_empty(),
+        "wrapper should not pass synthetic args to the child, got: {logged_args:?}"
+    );
+
+    let _ = std::fs::remove_file(&capture_file);
+}
+
+#[tokio::test]
+async fn test_child_receives_environment_variables() {
+    let capture_file = format!("/tmp/mock_codex_env_{}", std::process::id());
+    let mock = fixture_path("mock_codex_echo.sh");
+    let secret = "child-secret-value-456";
+    let custom_value = "workspace-123";
+
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock],
+        vec![
+            ("OPENAI_API_KEY", secret),
+            ("CUSTOM_WRAPPER_TEST_ENV", custom_value),
+            ("MOCK_ENV_CAPTURE_FILE", &capture_file),
+            ("MOCK_ENV_CAPTURE_KEYS", "OPENAI_API_KEY,CUSTOM_WRAPPER_TEST_ENV"),
+        ],
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success());
+
+    let captured = std::fs::read_to_string(&capture_file).unwrap_or_default();
+    assert!(
+        captured.contains(&format!("OPENAI_API_KEY={secret}")),
+        "child should inherit OPENAI_API_KEY, got: {captured}"
+    );
+    assert!(
+        captured.contains(&format!("CUSTOM_WRAPPER_TEST_ENV={custom_value}")),
+        "child should inherit custom env vars, got: {captured}"
+    );
+
+    let _ = std::fs::remove_file(&capture_file);
+}
+
+#[tokio::test]
+async fn test_relay_url_can_come_from_environment() {
+    let mock = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock],
+        vec![("RELAY_SERVER_URL", "ws://localhost:9500")],
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success());
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        !stderr_str.contains("wrapper configuration warning"),
+        "valid relay env var should not emit degraded-mode warning, got: {stderr_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_missing_relay_url_warns_but_allows_degraded_mode() {
+    let mock = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper(&mock).await;
+
+    let mut stdin = wrapper.stdin.take().unwrap();
+    stdin
+        .write_all(b"{\"type\":\"turn/start\",\"prompt\":\"hello\"}\n")
+        .await
+        .unwrap();
+    drop(stdin);
+
+    let mut stdout_buf = Vec::new();
+    if let Some(mut stdout) = wrapper.stdout.take() {
+        stdout.read_to_end(&mut stdout_buf).await.unwrap();
+    }
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success(), "wrapper should continue in degraded mode");
+    assert_eq!(
+        String::from_utf8_lossy(&stdout_buf),
+        "{\"type\":\"turn/start\",\"prompt\":\"hello\"}\n"
+    );
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        stderr_str.contains("degraded mode"),
+        "missing relay config should log degraded mode warning, got: {stderr_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_invalid_relay_url_warns_but_allows_degraded_mode() {
+    let mock = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock, "--relay-url", "not-a-url"],
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success(), "invalid relay URL should not block stdio proxy");
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        stderr_str.contains("invalid")
+            && stderr_str.contains("degraded mode"),
+        "invalid relay URL should emit degraded mode warning, got: {stderr_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_session_name_defaults_to_current_directory_basename() {
+    let base_dir = std::env::temp_dir().join(format!("wrapper-config-name-{}", std::process::id()));
+    let work_dir = base_dir.join("workspace-name");
+    std::fs::create_dir_all(&work_dir).unwrap();
+
+    let mock = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock],
+        vec![("RUST_LOG", "info")],
+        Some(&work_dir),
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success());
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        stderr_str.contains("workspace-name"),
+        "default session name should use cwd basename, got: {stderr_str}"
+    );
+
+    let _ = std::fs::remove_dir_all(&base_dir);
+}
+
+#[tokio::test]
+async fn test_cli_name_overrides_default_session_name() {
+    let mock = fixture_path("mock_codex_echo.sh");
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock, "--name", "custom-session"],
+        vec![("RUST_LOG", "info")],
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success());
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        stderr_str.contains("custom-session"),
+        "explicit session name should appear in logs, got: {stderr_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_sensitive_env_vars_are_not_logged() {
+    let mock = fixture_path("mock_codex_echo.sh");
+    let secret = "wrapper-sensitive-value-123";
+    let mut wrapper = spawn_wrapper_process(
+        &["--codex-binary", &mock],
+        vec![
+            ("OPENAI_API_KEY", secret),
+            ("RUST_LOG", "debug"),
+            ("RELAY_SERVER_URL", "ws://localhost:9500"),
+        ],
+        None,
+    )
+    .await;
+
+    drop(wrapper.stdin.take());
+
+    let status = wrapper.wait().await.unwrap();
+    assert!(status.success());
+
+    let mut stderr_buf = Vec::new();
+    if let Some(mut stderr) = wrapper.stderr.take() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            stderr.read_to_end(&mut stderr_buf),
+        )
+        .await;
+    }
+    let stderr_str = String::from_utf8_lossy(&stderr_buf);
+    assert!(
+        !stderr_str.contains(secret),
+        "sensitive env var values must never be logged, got: {stderr_str}"
     );
 }
 
