@@ -49,3 +49,52 @@ export interface ApprovalResponseRelayMessage {
   /** Approval decision to return to codex. */
   decision: ApprovalDecision;
 }
+
+/** Base shape for relay event polling responses consumed by the bot. */
+export interface RelayEventBase {
+  /** Monotonic event identifier for polling cursors. */
+  id: number;
+  /** When the relay observed the event. */
+  occurredAt: string;
+  /** Session identifier associated with the event. */
+  sessionId: string;
+  /** Human-readable session name. */
+  displayName: string;
+}
+
+/** Lightweight notification that a turn completed for a session. */
+export interface RelayTurnCompletedEvent extends RelayEventBase {
+  type: "turn-completed";
+  /** Updated turn count after completion. */
+  turnCount: number;
+}
+
+/** Lightweight notification that Codex is waiting for user approval/input. */
+export interface RelayInputRequiredEvent extends RelayEventBase {
+  type: "input-required";
+  /** Optional request identifier if the relay could parse one. */
+  requestId?: ApprovalRequestId;
+}
+
+/** User-specific auto-detach event triggered by local VS Code input. */
+export interface RelayAutoDetachEvent extends RelayEventBase {
+  type: "auto-detach";
+  /** Feishu user that was detached. */
+  userId: string;
+  /** Relay-provided detach reason. */
+  reason: string;
+}
+
+/** Union of relay events available through the polling API. */
+export type RelayEvent =
+  | RelayTurnCompletedEvent
+  | RelayInputRequiredEvent
+  | RelayAutoDetachEvent;
+
+/** Polling response for the relay event stream. */
+export interface RelayEventBatch {
+  /** Latest event ID currently retained by the relay. */
+  latestEventId: number;
+  /** Events strictly newer than the requested cursor. */
+  events: RelayEvent[];
+}

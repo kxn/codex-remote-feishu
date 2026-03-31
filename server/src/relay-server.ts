@@ -8,6 +8,7 @@ import express, {
 } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
+import type { ApprovalRequestId, RelayEvent, RelayEventBatch } from "shared";
 
 import {
   SessionRegistry,
@@ -72,6 +73,7 @@ const sessionInputSchema = z.union([
 ]);
 
 const APPROVAL_RESPONSE_MESSAGE_TYPE = "approval-response" as const;
+const RELAY_EVENT_LOG_LIMIT = 1_000;
 
 const attachBodySchema = z.object({
   userId: z.string().min(1),
@@ -105,6 +107,22 @@ export type UserSessionEvent =
   | UserSessionAutoDetachEvent;
 
 type UserSessionCallback = (event: UserSessionEvent) => void;
+type RelayTurnCompletedEventDraft = Omit<
+  Extract<RelayEvent, { type: "turn-completed" }>,
+  "id" | "occurredAt"
+>;
+type RelayInputRequiredEventDraft = Omit<
+  Extract<RelayEvent, { type: "input-required" }>,
+  "id" | "occurredAt"
+>;
+type RelayAutoDetachEventDraft = Omit<
+  Extract<RelayEvent, { type: "auto-detach" }>,
+  "id" | "occurredAt"
+>;
+type RelayEventDraft =
+  | RelayTurnCompletedEventDraft
+  | RelayInputRequiredEventDraft
+  | RelayAutoDetachEventDraft;
 
 export interface StartedRelayServer {
   apiPort: number;
@@ -127,10 +145,24 @@ export async function startRelayServer(
   });
 
   const userCallbacks = new Map<string, Set<UserSessionCallback>>();
+  const relayEvents: RelayEvent[] = [];
+  let latestEventId = 0;
 
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json());
+
+  app.get("/events", (request, response) => {
+    const parsedAfter = parseAfterQuery(request.query.after);
+    if (parsedAfter === "invalid") {
+      response.status(400).json({ error: "Invalid after query parameter" });
+      return;
+    }
+
+    response.json(
+      buildRelayEventBatch(relayEvents, latestEventId, parsedAfter),
+    );
+  });
 
   app.get("/sessions", (_request, response) => {
     response.json(registry.listSessions());
@@ -379,6 +411,7 @@ export async function startRelayServer(
           return;
         }
 
+        const previousSession = registry.getSession(sessionId);
         const entry = registry.recordMessage(sessionId, {
           direction: message.data.direction as MessageDirection,
           classification: message.data.classification as MessageClassification,
@@ -390,6 +423,24 @@ export async function startRelayServer(
         });
 
         if (entry) {
+          const nextSession = registry.getSession(sessionId);
+          if (nextSession) {
+            const relayEvent = createRelayEventFromMessage(
+              previousSession,
+              nextSession,
+              entry,
+            );
+            if (relayEvent) {
+              appendRelayEvent(
+                relayEvents,
+                relayEvent,
+                () => {
+                  latestEventId += 1;
+                  return latestEventId;
+                },
+              );
+            }
+          }
           emitAttachedUserMessage(registry, userCallbacks, sessionId, entry);
         }
         return;
@@ -433,6 +484,21 @@ export async function startRelayServer(
           detached.previousUser &&
           detached.session
         ) {
+          appendRelayEvent(
+            relayEvents,
+            {
+              type: "auto-detach",
+              userId: detached.previousUser,
+              sessionId,
+              displayName: detached.session.displayName,
+              reason: autoDetach.data.reason,
+            },
+            () => {
+              latestEventId += 1;
+              return latestEventId;
+            },
+          );
+
           notifyAttachmentStatus(registry, sessionId, {
             attached: false,
             reason: autoDetach.data.reason,
@@ -568,6 +634,16 @@ function safeParseJson(
 }
 
 function parseLimitQuery(value: unknown): number | undefined | "invalid" {
+  return parseNonNegativeIntegerQuery(value);
+}
+
+function parseAfterQuery(value: unknown): number | undefined | "invalid" {
+  return parseNonNegativeIntegerQuery(value);
+}
+
+function parseNonNegativeIntegerQuery(
+  value: unknown,
+): number | undefined | "invalid" {
   if (value === undefined) {
     return undefined;
   }
@@ -731,4 +807,92 @@ function emitUserEvent(
   for (const callback of callbacks) {
     callback(event);
   }
+}
+
+function appendRelayEvent(
+  relayEvents: RelayEvent[],
+  event: RelayEventDraft,
+  nextId: () => number,
+): void {
+  relayEvents.push({
+    ...event,
+    id: nextId(),
+    occurredAt: new Date().toISOString(),
+  } as RelayEvent);
+
+  if (relayEvents.length > RELAY_EVENT_LOG_LIMIT) {
+    relayEvents.splice(0, relayEvents.length - RELAY_EVENT_LOG_LIMIT);
+  }
+}
+
+function buildRelayEventBatch(
+  relayEvents: RelayEvent[],
+  latestEventId: number,
+  afterEventId: number | undefined,
+): RelayEventBatch {
+  return {
+    latestEventId,
+    events:
+      afterEventId === undefined
+        ? []
+        : relayEvents.filter((event) => event.id > afterEventId),
+  };
+}
+
+function createRelayEventFromMessage(
+  previousSession: SessionDetail | undefined,
+  nextSession: SessionDetail,
+  entry: SessionHistoryEntry,
+): RelayEventDraft | undefined {
+  if (
+    entry.method === "turn/completed" &&
+    nextSession.turnCount > (previousSession?.turnCount ?? 0)
+  ) {
+    return {
+      type: "turn-completed",
+      sessionId: nextSession.sessionId,
+      displayName: nextSession.displayName,
+      turnCount: nextSession.turnCount,
+    };
+  }
+
+  if (entry.classification === "serverRequest") {
+    const requestId = extractApprovalRequestId(entry);
+    return {
+      type: "input-required",
+      sessionId: nextSession.sessionId,
+      displayName: nextSession.displayName,
+      ...(requestId === undefined ? {} : { requestId }),
+    };
+  }
+
+  return undefined;
+}
+
+function extractApprovalRequestId(
+  entry: SessionHistoryEntry,
+): ApprovalRequestId | undefined {
+  const payload = asRecord(entry.payload) ?? parseJsonObject(entry.raw);
+  const params = asRecord(payload?.params);
+  const candidate =
+    params?.id ?? params?.requestId ?? payload?.id ?? payload?.requestId;
+
+  return typeof candidate === "string" || typeof candidate === "number"
+    ? candidate
+    : undefined;
+}
+
+function parseJsonObject(
+  value: string,
+): Record<string, unknown> | undefined {
+  const parsed = safeParseJson(value);
+  return parsed.ok ? parsed.value : undefined;
+}
+
+function asRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

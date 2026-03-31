@@ -903,6 +903,214 @@ describe("BotService", () => {
     service.close();
   });
 
+  it("auto-detaches on local input events for the attached session only", async () => {
+    vi.useFakeTimers();
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+          }),
+        ),
+      listEvents: vi
+        .fn()
+        .mockResolvedValueOnce({
+          latestEventId: 0,
+          events: [],
+        })
+        .mockResolvedValueOnce({
+          latestEventId: 2,
+          events: [
+            {
+              type: "auto-detach",
+              id: 1,
+              occurredAt: "2026-03-31T00:00:01.000Z",
+              userId: "user-1",
+              sessionId: "session-2",
+              displayName: "workspace-b",
+              reason: "local-input",
+            },
+            {
+              type: "auto-detach",
+              id: 2,
+              occurredAt: "2026-03-31T00:00:02.000Z",
+              userId: "user-1",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              reason: "local-input",
+            },
+          ],
+        })
+        .mockResolvedValue({
+          latestEventId: 2,
+          events: [],
+        }),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(service.getAttachment("user-1")).toBeUndefined();
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "Auto-detached: local input detected.",
+    );
+
+    const autoDetachMessages = messenger.sendText.mock.calls
+      .filter(([, text]) => text === "Auto-detached: local input detected.");
+    expect(autoDetachMessages).toHaveLength(1);
+
+    service.close();
+  });
+
+  it("sends lightweight notifications when not attached", async () => {
+    vi.useFakeTimers();
+
+    const relay = createRelayDouble({
+      listEvents: vi
+        .fn()
+        .mockResolvedValueOnce({
+          latestEventId: 0,
+          events: [],
+        })
+        .mockResolvedValueOnce({
+          latestEventId: 2,
+          events: [
+            {
+              type: "turn-completed",
+              id: 1,
+              occurredAt: "2026-03-31T00:00:01.000Z",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              turnCount: 3,
+            },
+            {
+              type: "input-required",
+              id: 2,
+              occurredAt: "2026-03-31T00:00:02.000Z",
+              sessionId: "session-2",
+              displayName: "workspace-b",
+              requestId: "req-1",
+            },
+          ],
+        })
+        .mockResolvedValue({
+          latestEventId: 2,
+          events: [],
+        }),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/list",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "[workspace-a] Turn completed.",
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "[workspace-b] Input required.",
+    );
+
+    service.close();
+  });
+
+  it("suppresses lightweight notifications for the currently attached session", async () => {
+    vi.useFakeTimers();
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+          }),
+        ),
+      listEvents: vi
+        .fn()
+        .mockResolvedValueOnce({
+          latestEventId: 0,
+          events: [],
+        })
+        .mockResolvedValueOnce({
+          latestEventId: 2,
+          events: [
+            {
+              type: "input-required",
+              id: 1,
+              occurredAt: "2026-03-31T00:00:01.000Z",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              requestId: "req-2",
+            },
+            {
+              type: "turn-completed",
+              id: 2,
+              occurredAt: "2026-03-31T00:00:02.000Z",
+              sessionId: "session-2",
+              displayName: "workspace-b",
+              turnCount: 1,
+            },
+          ],
+        })
+        .mockResolvedValue({
+          latestEventId: 2,
+          events: [],
+        }),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    const sentMessages = messenger.sendText.mock.calls.map(([, text]) => text);
+    expect(sentMessages).toContain("[workspace-b] Turn completed.");
+    expect(sentMessages).not.toContain("[workspace-a] Input required.");
+
+    service.close();
+  });
+
   it("returns user-friendly errors for unknown commands and detached prompts", async () => {
     const relay = createRelayDouble();
     const messenger = createMessengerDouble();
@@ -953,6 +1161,7 @@ function createRelayDouble(
     listSessions: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
     getHistory: ReturnType<typeof vi.fn>;
+    listEvents: ReturnType<typeof vi.fn>;
     sendPrompt: ReturnType<typeof vi.fn>;
     sendApproval: ReturnType<typeof vi.fn>;
     interrupt: ReturnType<typeof vi.fn>;
@@ -966,6 +1175,12 @@ function createRelayDouble(
       overrides.getSession ??
       vi.fn().mockResolvedValue(createSessionDetail({ sessionId: "session-1" })),
     getHistory: overrides.getHistory ?? vi.fn().mockResolvedValue([]),
+    listEvents:
+      overrides.listEvents ??
+      vi.fn().mockResolvedValue({
+        latestEventId: 0,
+        events: [],
+      }),
     sendPrompt: overrides.sendPrompt ?? vi.fn().mockResolvedValue(undefined),
     sendApproval:
       overrides.sendApproval ?? vi.fn().mockResolvedValue(undefined),

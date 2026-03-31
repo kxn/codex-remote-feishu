@@ -1,5 +1,6 @@
 import { parseIncomingText } from "./commands.js";
 import { formatFeishuMessageChunks, formatSessionTag } from "./formatter.js";
+import type { RelayEvent } from "shared";
 import type {
   RelayHistoryEntry,
   RelaySessionDetail,
@@ -25,6 +26,10 @@ export interface BotMessenger {
 
 export interface RelayClientLike {
   listSessions: () => Promise<RelaySessionSummary[]>;
+  listEvents: (afterEventId?: number) => Promise<{
+    latestEventId: number;
+    events: RelayEvent[];
+  }>;
   getSession: (sessionId: string) => Promise<RelaySessionDetail>;
   getHistory: (
     sessionId: string,
@@ -85,6 +90,14 @@ export class BotService {
 
   private readonly forwarders = new Map<string, AttachmentForwarder>();
 
+  private eventCursor: number | null = null;
+
+  private eventCursorInitialization: Promise<void> | null = null;
+
+  private eventPolling = false;
+
+  private eventTimer: ReturnType<typeof setTimeout> | null = null;
+
   private readonly pollIntervalMs: number;
 
   private readonly timerApi: {
@@ -109,6 +122,9 @@ export class BotService {
     const parsed = parseIncomingText(message.text);
 
     try {
+      await this.ensureEventCursorInitialized();
+      this.ensureEventPollingStarted();
+
       switch (parsed.kind) {
         case "invalid":
           await this.reply(message.chatId, parsed.error);
@@ -154,6 +170,9 @@ export class BotService {
     const normalizedAction = normalizeMenuActionKey(action.eventKey);
 
     try {
+      await this.ensureEventCursorInitialized();
+      this.ensureEventPollingStarted();
+
       switch (normalizedAction) {
         case "list":
           await this.handleList(chatId);
@@ -182,6 +201,109 @@ export class BotService {
   close(): void {
     for (const userId of this.forwarders.keys()) {
       this.stopForwarding(userId);
+    }
+
+    if (this.eventTimer) {
+      this.timerApi.clearTimeout(this.eventTimer);
+      this.eventTimer = null;
+    }
+  }
+
+  private async ensureEventCursorInitialized(): Promise<void> {
+    if (this.eventCursor !== null) {
+      return;
+    }
+
+    if (!this.eventCursorInitialization) {
+      this.eventCursorInitialization = (async () => {
+        try {
+          const batch = await this.relayClient.listEvents();
+          this.eventCursor = batch.latestEventId;
+        } catch {
+          // Event polling is best-effort; command handling should continue.
+        } finally {
+          this.eventCursorInitialization = null;
+        }
+      })();
+    }
+
+    await this.eventCursorInitialization;
+  }
+
+  private ensureEventPollingStarted(): void {
+    if (this.lastSeenChats.size === 0 || this.eventTimer || this.eventPolling) {
+      return;
+    }
+
+    this.scheduleEventPolling();
+  }
+
+  private scheduleEventPolling(): void {
+    if (this.lastSeenChats.size === 0 || this.eventTimer) {
+      return;
+    }
+
+    this.eventTimer = this.timerApi.setTimeout(() => {
+      void this.pollEvents();
+    }, this.pollIntervalMs);
+  }
+
+  private async pollEvents(): Promise<void> {
+    if (this.eventPolling) {
+      this.scheduleEventPolling();
+      return;
+    }
+
+    this.eventPolling = true;
+    this.eventTimer = null;
+
+    try {
+      await this.ensureEventCursorInitialized();
+      if (this.eventCursor === null) {
+        return;
+      }
+
+      const batch = await this.relayClient.listEvents(this.eventCursor);
+      this.eventCursor = batch.latestEventId;
+
+      for (const event of batch.events) {
+        await this.handleRelayEvent(event);
+      }
+    } catch {
+      // Best-effort polling; user-facing commands already surface relay errors.
+    } finally {
+      this.eventPolling = false;
+      this.scheduleEventPolling();
+    }
+  }
+
+  private async handleRelayEvent(event: RelayEvent): Promise<void> {
+    if (event.type === "auto-detach") {
+      const attachment = this.attachments.get(event.userId);
+      if (!attachment || attachment.sessionId !== event.sessionId) {
+        return;
+      }
+
+      this.stopForwarding(event.userId);
+      this.attachments.delete(event.userId);
+      await this.reply(
+        attachment.chatId,
+        "Auto-detached: local input detected.",
+      );
+      return;
+    }
+
+    const message =
+      event.type === "turn-completed"
+        ? `${formatSessionTag(event.displayName)} Turn completed.`
+        : `${formatSessionTag(event.displayName)} Input required.`;
+
+    for (const [userId, chatId] of this.lastSeenChats) {
+      if (this.attachments.get(userId)?.sessionId === event.sessionId) {
+        continue;
+      }
+
+      await this.reply(chatId, message);
     }
   }
 

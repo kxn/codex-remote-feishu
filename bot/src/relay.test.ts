@@ -169,6 +169,76 @@ describe("RelayClient", () => {
     ]);
   });
 
+  it("lists relay events for polling clients", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          latestEventId: 4,
+          events: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          latestEventId: 6,
+          events: [
+            {
+              type: "turn-completed",
+              id: 5,
+              occurredAt: "2026-03-31T00:00:01.000Z",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              turnCount: 3,
+            },
+            {
+              type: "auto-detach",
+              id: 6,
+              occurredAt: "2026-03-31T00:00:02.000Z",
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              userId: "user-1",
+              reason: "local-input",
+            },
+          ],
+        }),
+      );
+
+    const client = new RelayClient({
+      baseUrl: "http://relay.test",
+      fetch: fetchMock,
+    });
+
+    await expect(client.listEvents()).resolves.toEqual({
+      latestEventId: 4,
+      events: [],
+    });
+
+    await expect(client.listEvents(4)).resolves.toEqual({
+      latestEventId: 6,
+      events: [
+        expect.objectContaining({
+          type: "turn-completed",
+          sessionId: "session-1",
+          turnCount: 3,
+        }),
+        expect.objectContaining({
+          type: "auto-detach",
+          sessionId: "session-1",
+          userId: "user-1",
+          reason: "local-input",
+        }),
+      ],
+    });
+
+    expect(fetchMock.mock.calls).toEqual([
+      ["http://relay.test/events", expect.objectContaining({ method: "GET" })],
+      [
+        "http://relay.test/events?after=4",
+        expect.objectContaining({ method: "GET" }),
+      ],
+    ]);
+  });
+
   it("surfaces API errors with status codes", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

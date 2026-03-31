@@ -6,6 +6,12 @@ export {
   ApprovalRequestId,
   ApprovalDecision,
   ApprovalResponseRelayMessage,
+  RelayEventBase,
+  RelayTurnCompletedEvent,
+  RelayInputRequiredEvent,
+  RelayAutoDetachEvent,
+  RelayEvent,
+  RelayEventBatch,
 } from "./types.js";
 export {
   APPROVAL_RESPONSE_MESSAGE_TYPE,

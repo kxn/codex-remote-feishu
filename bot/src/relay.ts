@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import type { MessageType, SessionState } from "shared";
+import type {
+  MessageType,
+  RelayEvent,
+  RelayEventBatch,
+  SessionState,
+} from "shared";
 
 const sessionStateSchema = z.enum(["idle", "executing", "waitingApproval"]);
 const messageTypeSchema = z.enum([
@@ -99,6 +104,18 @@ export class RelayClient {
         responseSchema: z.array(historyEntrySchema),
       },
     );
+  }
+
+  async listEvents(afterEventId?: number): Promise<RelayEventBatch> {
+    const search = new URLSearchParams();
+    if (afterEventId !== undefined) {
+      search.set("after", String(afterEventId));
+    }
+
+    return this.request(`/events${search.size > 0 ? `?${search.toString()}` : ""}`, {
+      method: "GET",
+      responseSchema: relayEventBatchSchema,
+    });
   }
 
   async sendInput(
@@ -237,6 +254,36 @@ const okResponseSchema = z.object({
 
 const relayErrorSchema = z.object({
   error: z.string().min(1),
+});
+
+const approvalRequestIdSchema = z.union([z.string().min(1), z.number().finite()]);
+
+const relayEventBaseSchema = z.object({
+  id: z.number().int().min(0),
+  occurredAt: z.string().datetime(),
+  sessionId: z.string().min(1),
+  displayName: z.string().min(1),
+});
+
+const relayEventSchema: z.ZodType<RelayEvent> = z.discriminatedUnion("type", [
+  relayEventBaseSchema.extend({
+    type: z.literal("turn-completed"),
+    turnCount: z.number().int().min(0),
+  }),
+  relayEventBaseSchema.extend({
+    type: z.literal("input-required"),
+    requestId: approvalRequestIdSchema.optional(),
+  }),
+  relayEventBaseSchema.extend({
+    type: z.literal("auto-detach"),
+    userId: z.string().min(1),
+    reason: z.string().min(1),
+  }),
+]);
+
+const relayEventBatchSchema: z.ZodType<RelayEventBatch> = z.object({
+  latestEventId: z.number().int().min(0),
+  events: z.array(relayEventSchema),
 });
 
 async function parseJsonResponse(response: Response): Promise<unknown> {

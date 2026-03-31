@@ -464,6 +464,143 @@ describe("relay server", () => {
     await waitForClose(client);
   });
 
+  it("exposes lifecycle and auto-detach events for polling clients", async () => {
+    server = await startRelayServer({
+      apiPort: 0,
+      wsPort: 0,
+      gracePeriodMs: 200,
+      historyLimit: 10,
+    });
+
+    const client = await connect(server.wsUrl);
+    await register(client);
+
+    const baselineResponse = await fetch(`${server.apiBaseUrl}/events`);
+    expect(baselineResponse.status).toBe(200);
+    expect(await baselineResponse.json()).toEqual({
+      latestEventId: 0,
+      events: [],
+    });
+
+    const attachResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/attach`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: "user-1",
+        }),
+      },
+    );
+    expect(attachResponse.status).toBe(200);
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: true,
+      userId: "user-1",
+    });
+
+    await sendJson(client, {
+      type: "message",
+      sessionId: "session-1",
+      classification: "turnLifecycle",
+      method: "turn/started",
+      raw: '{"method":"turn/started"}',
+    });
+    await sendJson(client, {
+      type: "message",
+      sessionId: "session-1",
+      classification: "serverRequest",
+      method: "serverRequest/approval",
+      raw: '{"method":"serverRequest/approval","params":{"id":"req-1"}}',
+      payload: {
+        method: "serverRequest/approval",
+        params: {
+          id: "req-1",
+        },
+      },
+    });
+    await sendJson(client, {
+      type: "message",
+      sessionId: "session-1",
+      classification: "turnLifecycle",
+      method: "turn/completed",
+      raw: '{"method":"turn/completed"}',
+    });
+    await sendJson(client, {
+      type: "auto-detach",
+      sessionId: "session-1",
+      reason: "local-input",
+    });
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "ack",
+      acknowledged: "auto-detach",
+    });
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: false,
+      reason: "local-input",
+    });
+
+    const eventsResponse = await fetch(`${server.apiBaseUrl}/events?after=0`);
+    expect(eventsResponse.status).toBe(200);
+    expect(await eventsResponse.json()).toEqual({
+      latestEventId: 3,
+      events: [
+        expect.objectContaining({
+          id: 1,
+          type: "input-required",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          requestId: "req-1",
+        }),
+        expect.objectContaining({
+          id: 2,
+          type: "turn-completed",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          turnCount: 1,
+        }),
+        expect.objectContaining({
+          id: 3,
+          type: "auto-detach",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          userId: "user-1",
+          reason: "local-input",
+        }),
+      ],
+    });
+
+    const filteredResponse = await fetch(`${server.apiBaseUrl}/events?after=1`);
+    expect(filteredResponse.status).toBe(200);
+    expect(await filteredResponse.json()).toEqual({
+      latestEventId: 3,
+      events: [
+        expect.objectContaining({
+          id: 2,
+          type: "turn-completed",
+        }),
+        expect.objectContaining({
+          id: 3,
+          type: "auto-detach",
+        }),
+      ],
+    });
+
+    const invalidAfterResponse = await fetch(
+      `${server.apiBaseUrl}/events?after=-1`,
+    );
+    expect(invalidAfterResponse.status).toBe(400);
+    expect(await invalidAfterResponse.json()).toEqual({
+      error: "Invalid after query parameter",
+    });
+
+    client.close();
+    await waitForClose(client);
+  });
+
   it("parses configuration from both relay-specific and manifest environment variables", () => {
     expect(
       readRelayServerConfig({
