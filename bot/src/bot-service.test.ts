@@ -373,6 +373,114 @@ describe("BotService", () => {
     service.close();
   });
 
+  it("suppresses empty agent messages and still forwards non-empty text fields", async () => {
+    vi.useFakeTimers();
+
+    const emptyEntry = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"","text":"   "}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "",
+          text: "   ",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:00.000Z",
+    });
+    const nonEmptyEntry = createHistoryEntry({
+      raw: '{"method":"item/agentMessage/delta","params":{"delta":"","text":"assistant output"}}',
+      payload: {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "",
+          text: "assistant output",
+        },
+      },
+      receivedAt: "2026-03-31T00:00:01.000Z",
+    });
+
+    const userEventsByUser = new Map<string, ReturnType<typeof createUserMessageEvent>[]>([
+      ["user-1", []],
+    ]);
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+            historySize: 1,
+            lastMessage: emptyEntry,
+          }),
+        ),
+      listUserEvents: vi
+        .fn()
+        .mockImplementation(async (userId: string, afterEventId?: number) =>
+          createUserEventBatch(userEventsByUser.get(userId) ?? [], afterEventId),
+        ),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("Last message: (none yet)"),
+    );
+
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: emptyEntry,
+      }),
+    ]);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(messenger.sendText).toHaveBeenCalledTimes(1);
+
+    userEventsByUser.set("user-1", [
+      createUserMessageEvent({
+        id: 1,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: emptyEntry,
+      }),
+      createUserMessageEvent({
+        id: 2,
+        sessionId: "session-1",
+        displayName: "workspace-a",
+        message: nonEmptyEntry,
+      }),
+    ]);
+    await vi.advanceTimersByTimeAsync(100);
+
+    const sentMessages = messenger.sendText.mock.calls.map(([, text]) => text);
+    expect(sentMessages).toContain("[workspace-a] assistant output");
+    expect(
+      sentMessages.some((message) =>
+        message.includes('{"method":"item/agentMessage/delta"'),
+      ),
+    ).toBe(false);
+
+    service.close();
+  });
+
   it("logs and recovers from unexpected forwarding poll errors without leaking unhandled rejections", async () => {
     vi.useFakeTimers();
 

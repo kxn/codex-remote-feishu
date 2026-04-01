@@ -965,7 +965,7 @@ function sortSessions(
 }
 
 function buildMessagePreview(entry: RelayHistoryEntry): string {
-  return truncatePreview(extractRelayMessageText(entry) ?? entry.raw);
+  return truncatePreview(extractRelayMessageText(entry) ?? "");
 }
 
 function truncatePreview(text: string): string {
@@ -983,14 +983,18 @@ function truncatePreview(text: string): string {
 
 function extractRelayMessageText(entry: RelayHistoryEntry): string | null {
   const payloadText = extractTextFromPayload(entry.payload);
-  if (payloadText) {
+  if (payloadText !== null) {
     return payloadText;
   }
 
   const rawPayload = safeParseJson(entry.raw);
   const rawPayloadText = extractTextFromPayload(rawPayload);
-  if (rawPayloadText) {
+  if (rawPayloadText !== null) {
     return rawPayloadText;
+  }
+
+  if (entry.classification === "agentMessage") {
+    return null;
   }
 
   const raw = entry.raw.trim();
@@ -998,18 +1002,26 @@ function extractRelayMessageText(entry: RelayHistoryEntry): string | null {
 }
 
 function extractTextFromPayload(payload: unknown): string | null {
-  const text =
-    getNestedString(payload, ["params", "delta"]) ??
-    getNestedString(payload, ["params", "text"]) ??
-    getNestedString(payload, ["delta"]) ??
-    getNestedString(payload, ["text"]);
+  for (const path of relayMessageTextPaths) {
+    const text = getNestedString(payload, path);
+    if (text === undefined) {
+      continue;
+    }
 
-  if (!text) {
-    return null;
+    if (text.trim().length > 0) {
+      return text;
+    }
   }
 
-  return text.trim().length > 0 ? text : null;
+  return null;
 }
+
+const relayMessageTextPaths = [
+  ["params", "delta"],
+  ["params", "text"],
+  ["delta"],
+  ["text"],
+] as const;
 
 function getNestedString(
   value: unknown,
