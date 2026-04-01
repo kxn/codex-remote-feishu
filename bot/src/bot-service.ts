@@ -627,8 +627,22 @@ export class BotService {
     }
 
     forwarder.timer = this.timerApi.setTimeout(() => {
-      void this.pollForwarding(userId, forwarder.sessionId);
+      void this.runScheduledForwarding(userId, forwarder.sessionId);
     }, this.pollIntervalMs);
+  }
+
+  private async runScheduledForwarding(
+    userId: string,
+    sessionId: string,
+  ): Promise<void> {
+    try {
+      await this.pollForwarding(userId, sessionId);
+    } catch (error) {
+      console.error(
+        `Background forwarding poll failed for user ${userId} on session ${sessionId}.`,
+        error,
+      );
+    }
   }
 
   private async syncForwarding(

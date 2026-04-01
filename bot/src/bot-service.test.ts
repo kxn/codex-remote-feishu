@@ -5,6 +5,7 @@ import { BotService } from "./bot-service.js";
 describe("BotService", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("lists available sessions", async () => {
@@ -370,6 +371,75 @@ describe("BotService", () => {
     expect(sentMessages).not.toContain("[workspace-a] should stay local");
 
     service.close();
+  });
+
+  it("logs and recovers from unexpected forwarding poll errors without leaking unhandled rejections", async () => {
+    vi.useFakeTimers();
+
+    const rejection = new Error("relay fetch failed");
+    const unhandledRejections: unknown[] = [];
+    const handleUnhandledRejection = (reason: unknown) => {
+      unhandledRejections.push(reason);
+    };
+    process.on("unhandledRejection", handleUnhandledRejection);
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+          }),
+        ),
+      listUserEvents: vi
+        .fn()
+        .mockRejectedValueOnce(rejection)
+        .mockResolvedValue({
+          latestEventId: 0,
+          events: [],
+        }),
+    });
+    const messenger = createMessengerDouble();
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    try {
+      await service.handleTextMessage({
+        userId: "user-1",
+        chatId: "chat-1",
+        messageId: "message-1",
+        text: "/attach workspace-a",
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+
+      expect(unhandledRejections).toEqual([]);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Background forwarding poll failed"),
+        rejection,
+      );
+      expect(service.getAttachment("user-1")).toMatchObject({
+        sessionId: "session-1",
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(relay.listUserEvents).toHaveBeenCalledTimes(2);
+    } finally {
+      service.close();
+      process.off("unhandledRejection", handleUnhandledRejection);
+    }
   });
 
   it("prompts for approvals, re-prompts on non-y/n replies, and approves on y", async () => {
