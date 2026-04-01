@@ -872,6 +872,14 @@ export class BotService {
       return;
     }
 
+    if (event.type === "session-offline") {
+      await this.reply(
+        attachment.chatId,
+        `${formatSessionTag(attachment.sessionName)} Session went offline`,
+      );
+      return;
+    }
+
     const entry = event.message;
     if (entry.classification !== "agentMessage") {
       if (entry.classification === "serverRequest") {

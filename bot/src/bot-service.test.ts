@@ -1241,6 +1241,78 @@ describe("BotService", () => {
     service.close();
   });
 
+  it("notifies the attached user when their session goes offline", async () => {
+    vi.useFakeTimers();
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi
+        .fn()
+        .mockResolvedValue(
+          createSessionDetail({
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            attachedUser: "user-1",
+          }),
+        ),
+      listEvents: vi
+        .fn()
+        .mockResolvedValueOnce({
+          latestEventId: 0,
+          events: [],
+        })
+        .mockResolvedValue({
+          latestEventId: 0,
+          events: [],
+        }),
+      listUserEvents: vi
+        .fn()
+        .mockResolvedValueOnce({
+          latestEventId: 1,
+          events: [
+            createUserOfflineEvent({
+              id: 1,
+              sessionId: "session-1",
+              displayName: "workspace-a",
+              graceExpiresAt: "2026-03-31T00:05:00.000Z",
+            }),
+          ],
+        })
+        .mockResolvedValue({
+          latestEventId: 1,
+          events: [],
+        }),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(service.getAttachment("user-1")).toEqual(
+      expect.objectContaining({
+        sessionId: "session-1",
+      }),
+    );
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "[workspace-a] Session went offline",
+    );
+
+    service.close();
+  });
+
   it("sends lightweight notifications for previously attached sessions when not attached", async () => {
     vi.useFakeTimers();
 
@@ -1767,8 +1839,32 @@ function createUserMessageEvent(
   };
 }
 
+function createUserOfflineEvent(
+  overrides: Partial<{
+    id: number;
+    occurredAt: string;
+    userId: string;
+    sessionId: string;
+    displayName: string;
+    graceExpiresAt: string | null;
+  }> = {},
+) {
+  return {
+    type: "session-offline" as const,
+    id: overrides.id ?? 1,
+    occurredAt: overrides.occurredAt ?? "2026-03-31T00:00:00.000Z",
+    userId: overrides.userId ?? "user-1",
+    sessionId: overrides.sessionId ?? "session-1",
+    displayName: overrides.displayName ?? "workspace-a",
+    graceExpiresAt: overrides.graceExpiresAt ?? null,
+  };
+}
+
 function createUserEventBatch(
-  events: ReturnType<typeof createUserMessageEvent>[],
+  events: Array<
+    | ReturnType<typeof createUserMessageEvent>
+    | ReturnType<typeof createUserOfflineEvent>
+  >,
   afterEventId?: number,
 ) {
   const filtered =

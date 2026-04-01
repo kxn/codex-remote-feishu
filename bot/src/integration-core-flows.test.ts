@@ -746,7 +746,7 @@ describe("integration core flows", () => {
     const chatAMessages = filterForwardedMessages(
       messenger.messagesFor("chat-a"),
       "workspace-c",
-    );
+    ).filter((message) => message !== "[workspace-c] Session went offline");
     const chatBMessages = filterForwardedMessages(
       messenger.messagesFor("chat-b"),
       "workspace-d",
@@ -771,6 +771,62 @@ describe("integration core flows", () => {
     expect(chatBMessages.some((message) => message.includes("[workspace-c]"))).toBe(
       false,
     );
+  });
+
+  it("notifies the attached user when the wrapper disconnects and resumes forwarding after reconnect", async () => {
+    const server = await startTestRelayServer();
+    const relayClient = new RelayClient({
+      baseUrl: server.apiBaseUrl,
+    });
+    const wrapper = await spawnMockWrapper(server.wsUrl, "workspace-offline");
+    const session = await waitForSession(relayClient, "workspace-offline");
+
+    const messenger = createMessengerRecorder();
+    const service = new BotService(relayClient, messenger, {
+      pollIntervalMs: 25,
+    });
+    cleanups.push(async () => {
+      service.close();
+    });
+
+    await service.handleTextMessage(
+      createIncomingText("user-offline", "chat-offline", "/attach workspace-offline"),
+    );
+
+    const shadowSocket = await connectShadowSession(
+      server.wsUrl,
+      session.sessionId,
+      session.displayName,
+    );
+    await closeShadowSession(shadowSocket);
+
+    await waitForCondition(() => {
+      return messenger
+        .messagesFor("chat-offline")
+        .includes("[workspace-offline] Session went offline");
+    });
+
+    await waitForCondition(async () => {
+      return !(await relayClient.getSession(session.sessionId)).online;
+    });
+    await waitForCondition(async () => {
+      return (await relayClient.getSession(session.sessionId)).online;
+    });
+
+    await wrapper.emitCodexMessages([
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          delta: "after offline reconnect",
+        },
+      },
+    ]);
+
+    await waitForCondition(() => {
+      return messenger
+        .messagesFor("chat-offline")
+        .includes("[workspace-offline] after offline reconnect");
+    });
   });
 
   async function startTestRelayServer(

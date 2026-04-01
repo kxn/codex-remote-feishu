@@ -85,6 +85,15 @@ export interface RelayAutoDetachEvent extends RelayEventBase {
   reason: string;
 }
 
+/** User-specific session offline event triggered when a wrapper disconnects. */
+export interface RelaySessionOfflineEvent extends RelayEventBase {
+  type: "session-offline";
+  /** Feishu user still attached when the session went offline. */
+  userId: string;
+  /** Grace-period deadline for reconnect, if present. */
+  graceExpiresAt: string | null;
+}
+
 /** Union of relay events available through the polling API. */
 export type RelayEvent =
   | RelayTurnCompletedEvent

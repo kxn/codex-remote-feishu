@@ -311,6 +311,50 @@ describe("RelayClient", () => {
     ]);
   });
 
+  it("parses session-offline per-user relay events", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        latestEventId: 4,
+        events: [
+          {
+            type: "session-offline",
+            id: 4,
+            occurredAt: "2026-03-31T00:00:03.000Z",
+            userId: "user-1",
+            sessionId: "session-1",
+            displayName: "workspace-a",
+            graceExpiresAt: "2026-03-31T00:05:03.000Z",
+          },
+        ],
+      }),
+    );
+
+    const client = new RelayClient({
+      baseUrl: "http://relay.test",
+      fetch: fetchMock,
+    });
+
+    await expect(client.listUserEvents("user-1", 3)).resolves.toEqual({
+      latestEventId: 4,
+      events: [
+        expect.objectContaining({
+          type: "session-offline",
+          userId: "user-1",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          graceExpiresAt: "2026-03-31T00:05:03.000Z",
+        }),
+      ],
+    });
+
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "http://relay.test/users/user-1/events?after=3",
+        expect.objectContaining({ method: "GET" }),
+      ],
+    ]);
+  });
+
   it("surfaces API errors with status codes", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

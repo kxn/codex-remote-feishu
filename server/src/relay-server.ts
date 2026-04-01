@@ -102,9 +102,18 @@ export interface UserSessionAutoDetachEvent {
   reason: string;
 }
 
+export interface UserSessionOfflineEvent {
+  type: "session-offline";
+  userId: string;
+  sessionId: string;
+  session: SessionDetail;
+  graceExpiresAt: string | null;
+}
+
 export type UserSessionEvent =
   | UserSessionMessageEvent
-  | UserSessionAutoDetachEvent;
+  | UserSessionAutoDetachEvent
+  | UserSessionOfflineEvent;
 
 interface UserEventBase {
   id: number;
@@ -124,12 +133,20 @@ interface UserAutoDetachEvent extends UserEventBase {
   reason: string;
 }
 
-interface UserEventBatch {
-  latestEventId: number;
-  events: Array<UserMessageEvent | UserAutoDetachEvent>;
+interface UserSessionOfflineRecord extends UserEventBase {
+  type: "session-offline";
+  graceExpiresAt: string | null;
 }
 
-type UserEventRecord = UserMessageEvent | UserAutoDetachEvent;
+interface UserEventBatch {
+  latestEventId: number;
+  events: Array<UserMessageEvent | UserAutoDetachEvent | UserSessionOfflineRecord>;
+}
+
+type UserEventRecord =
+  | UserMessageEvent
+  | UserAutoDetachEvent
+  | UserSessionOfflineRecord;
 
 type UserSessionCallback = (event: UserSessionEvent) => void;
 type RelayTurnCompletedEventDraft = Omit<
@@ -583,7 +600,32 @@ export async function startRelayServer(
 
     socket.on("close", () => {
       if (!shuttingDown && sessionId) {
-        registry.disconnect(sessionId, connection);
+        const disconnectingCurrentConnection =
+          registry.getConnection(sessionId) === connection;
+        const disconnected = registry.disconnect(sessionId, connection);
+        const session =
+          disconnectingCurrentConnection && disconnected
+            ? registry.getSession(sessionId)
+            : undefined;
+
+        if (session?.attachedUser) {
+          emitUserEvent(
+            userCallbacks,
+            session.attachedUser,
+            {
+              type: "session-offline",
+              userId: session.attachedUser,
+              sessionId,
+              session,
+              graceExpiresAt: session.graceExpiresAt,
+            },
+            userEventLogs,
+            () => {
+              latestUserEventId += 1;
+              return latestUserEventId;
+            },
+          );
+        }
       }
     });
   });
@@ -893,6 +935,18 @@ function createUserEventRecord(
       sessionId: event.sessionId,
       displayName: event.session.displayName,
       message: event.message,
+    };
+  }
+
+  if (event.type === "session-offline") {
+    return {
+      type: "session-offline",
+      id,
+      occurredAt,
+      userId: event.userId,
+      sessionId: event.sessionId,
+      displayName: event.session.displayName,
+      graceExpiresAt: event.graceExpiresAt,
     };
   }
 

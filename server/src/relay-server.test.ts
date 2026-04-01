@@ -330,6 +330,81 @@ describe("relay server", () => {
     await waitForClose(resumedClient);
   });
 
+  it("emits a session-offline user event when an attached wrapper disconnects", async () => {
+    server = await startRelayServer({
+      apiPort: 0,
+      wsPort: 0,
+      gracePeriodMs: 200,
+      historyLimit: 10,
+    });
+
+    const client = await connect(server.wsUrl);
+    await register(client);
+
+    const events: UserSessionEvent[] = [];
+    const unsubscribe = server.subscribeUserEvents("user-1", (event) => {
+      events.push(event);
+    });
+
+    const attachResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/attach`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: "user-1",
+        }),
+      },
+    );
+    expect(attachResponse.status).toBe(200);
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: true,
+      userId: "user-1",
+    });
+
+    client.close();
+    await waitForClose(client);
+
+    await waitForCondition(() => events.length === 1);
+    expect(events[0]).toEqual(
+      expect.objectContaining({
+        type: "session-offline",
+        userId: "user-1",
+        sessionId: "session-1",
+        graceExpiresAt: expect.any(String),
+        session: expect.objectContaining({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          online: false,
+          attachedUser: "user-1",
+          graceExpiresAt: expect.any(String),
+        }),
+      }),
+    );
+
+    const userEventsResponse = await fetch(
+      `${server.apiBaseUrl}/users/user-1/events`,
+    );
+    expect(userEventsResponse.status).toBe(200);
+    expect(await userEventsResponse.json()).toEqual({
+      latestEventId: expect.any(Number),
+      events: [
+        expect.objectContaining({
+          type: "session-offline",
+          userId: "user-1",
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          graceExpiresAt: expect.any(String),
+        }),
+      ],
+    });
+
+    unsubscribe();
+  });
+
   it("returns history in order and honors the limit query", async () => {
     server = await startRelayServer({
       apiPort: 0,

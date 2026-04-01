@@ -4,6 +4,7 @@ import type {
   MessageType,
   RelayEvent,
   RelayEventBatch,
+  RelaySessionOfflineEvent,
   SessionState,
 } from "shared";
 
@@ -68,7 +69,13 @@ export interface RelayUserAutoDetachEvent {
   reason: string;
 }
 
-export type RelayUserEvent = RelayUserMessageEvent | RelayUserAutoDetachEvent;
+export interface RelayUserSessionOfflineEvent
+  extends RelaySessionOfflineEvent {}
+
+export type RelayUserEvent =
+  | RelayUserMessageEvent
+  | RelayUserAutoDetachEvent
+  | RelayUserSessionOfflineEvent;
 
 export interface RelayUserEventBatch {
   latestEventId: number;
@@ -364,6 +371,15 @@ const relayUserEventSchema: z.ZodType<RelayUserEvent> = z.discriminatedUnion("ty
     sessionId: z.string().min(1),
     displayName: z.string().min(1),
     reason: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("session-offline"),
+    id: z.number().int().min(0),
+    occurredAt: z.string().datetime(),
+    userId: z.string().min(1),
+    sessionId: z.string().min(1),
+    displayName: z.string().min(1),
+    graceExpiresAt: z.string().datetime().nullable(),
   }),
 ]);
 

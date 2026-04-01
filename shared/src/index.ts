@@ -10,6 +10,7 @@ export {
   RelayTurnCompletedEvent,
   RelayInputRequiredEvent,
   RelayAutoDetachEvent,
+  RelaySessionOfflineEvent,
   RelayEvent,
   RelayEventBatch,
 } from "./types.js";
