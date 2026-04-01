@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-integration-reproducibility",
+  "reviewedAt": "2026-04-01T00:26:00Z",
+  "commitId": "f23722f4cb121286832af477d8ae0dedf806fda7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the mission docs, architecture/services guidance, the ts-worker skill, the fix handoff and transcript skeleton, the prior failed review, the original integration-core-flows commit 61b8e52a30310d139c97d51a6266201f1927b005, and the fix commit f23722f4cb121286832af477d8ae0dedf806fda7. The fix directly addresses the reproducibility failure by wiring bot Vitest through a global setup hook (`bot/vitest.config.ts:5`, `bot/src/vitest.global-setup.ts:1`) that rebuilds the missing shared/server/wrapper artifacts in order before the existing integration suite loads `../../server/dist/relay-server.js` and `wrapper/target/debug/codex-relay-wrapper` (`bot/src/integration-core-flows.test.ts:19,32`). The added unit tests cover build ordering and fail-fast behavior (`bot/src/integration-test-setup.test.ts:8,50`), and I did not find any new blocking correctness issues in the reviewed fix.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/data/dl/fschannel/.factory/validation/feishu-bot/scrutiny/reviews/integration-core-flows.json",
+  "summary": "Pass. The fix resolves the prior blocking reproducibility issue by ensuring the documented `cd bot && npx vitest run` path rebuilds shared, server, and wrapper artifacts before the integration suite runs, so the suite no longer relies on ignored prebuilt outputs."
+}

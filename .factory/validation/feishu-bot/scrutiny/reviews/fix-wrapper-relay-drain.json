@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-wrapper-relay-drain",
+  "reviewedAt": "2026-04-01T00:14:35Z",
+  "commitId": "1606a87e421fd5b1790c9272050be6176ecb5513",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "I reviewed the mission and architecture guidance, the fix feature transcript skeleton, the prior failed review, and both the original and fix commit diffs. This fix addresses the prior shutdown-ordering bug by letting stdout/stderr forwarding drain before relay shutdown in `wrapper/src/proxy.rs`, switching relay traffic to ordered `RelayTaskCommand`s with an explicit shutdown path in `wrapper/src/ws_client.rs`, and adding a regression test that proves a final `turn/completed` still reaches the relay when the child exits immediately. I did not find a new blocking issue in the reviewed scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/data/dl/fschannel/.factory/validation/feishu-bot/scrutiny/reviews/fix-wrapper-always-forward-lifecycle.json",
+  "summary": "Pass. Commit `1606a87e421fd5b1790c9272050be6176ecb5513` adequately resolves the prior blocking shutdown-ordering bug from `fix-wrapper-always-forward-lifecycle` and adds deterministic regression coverage for the immediate-exit `turn/completed` case. No new blocking problems were found in this review."
+}

@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-bot-notification-isolation",
+  "reviewedAt": "2026-04-01T00:22:06Z",
+  "commitId": "1bb1853835e9684f4f0e2375eb839fc1f2854ef4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the mission and architecture guidance, the prior failed review, both handoffs, the fix transcript skeleton, the ts-worker skill, the original commit 1fe2a81589f3b139ea85f0aaf76555d4dee3b893, and the fix commit 1bb1853835e9684f4f0e2375eb839fc1f2854ef4. The fix replaces the leaking `lastSeenChats` fan-out with per-user/per-session notification routes in `notificationChats`, registers those routes only when a user attaches, and adds unit/integration coverage proving detached-session notifications stay isolated from other users and from unrelated `/list` chats. That adequately resolves the prior blocking notification-isolation leak, and I did not find a new blocking regression in the reviewed scope.",
+    "issues": [
+      {
+        "file": "bot/src/bot-service.ts",
+        "line": 296,
+        "severity": "non_blocking",
+        "description": "Both auto-detach reply paths still send `Auto-detached: local input detected.` with a trailing period (also repeated at line 852), so the user-visible text remains slightly off-spec relative to `validation-contract.md:192` and `features.json:702`. This discrepancy was already noted in the prior review and remains unfixed here."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Shared architecture docs still describe the bot as holding only the in-memory user\u2192session attach mapping, but the reviewed fix now also depends on an in-memory per-user/per-session notification route map that persists after detach to scope background notifications. Future workers reasoning about notification behavior or restart semantics would have to rediscover that state from code.",
+      "evidence": ".factory/library/architecture.md:88-90,159 says the bot is stateless except for attachment mapping; the reviewed implementation stores detached notification routes in bot/src/bot-service.ts:90,387,824-835."
+    }
+  ],
+  "addressesFailureFrom": "/data/dl/fschannel/.factory/validation/feishu-bot/scrutiny/reviews/bot-auto-detach-and-notifications.json",
+  "summary": "Pass. Commit `1bb1853835e9684f4f0e2375eb839fc1f2854ef4` fixes the prior blocking multi-user notification leak by limiting background alerts to session-specific chat routes created by previous attaches, and the new tests cover both cross-user isolation and the unrelated-`/list` case. I found no new blocking problems in the reviewed scope, though the earlier non-blocking auto-detach punctuation mismatch is still present."
+}

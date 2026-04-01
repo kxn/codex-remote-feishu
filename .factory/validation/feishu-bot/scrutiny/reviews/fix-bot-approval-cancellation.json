@@ -1,0 +1,22 @@
+{
+  "featureId": "fix-bot-approval-cancellation",
+  "reviewedAt": "2026-04-01T08:09:15+08:00",
+  "commitId": "bc5eae629795c3f248d1d114dd279dd242684464",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the mission docs, prior failure report, both handoffs, the fix transcript skeleton, the ts-worker skill, and commit bc5eae629795c3f248d1d114dd279dd242684464. The new `syncForwarding()` path in `handlePrompt()` drains queued user events before deciding whether a follow-up message is still an approval reply, and the updated test shows that this resolves the original cancelled-approval misclassification. However, the refactor also changes the forwarding loop so unexpected polling/send failures are rethrown out of the background timer path, which can now crash the bot under Node 22 via an unhandled promise rejection.",
+    "issues": [
+      {
+        "file": "bot/src/bot-service.ts",
+        "line": 716,
+        "severity": "blocking",
+        "description": "`consumeForwardedUserEvents()` now rethrows every non-404/409 failure at line 716, but scheduled background polls still launch `pollForwarding()` fire-and-forget via `void this.pollForwarding(...)` at lines 620-621. If `listUserEvents()` or `handleForwardedUserEvent()` rejects (for example on a transient relay fetch failure or `messenger.sendText()` error), that rejection is left unhandled on the timer path. In Node 22, unhandled promise rejections are fatal, so this fix can terminate the bot instead of recovering and continuing to forward events."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/data/dl/fschannel/.factory/validation/feishu-bot/scrutiny/reviews/bot-approval-and-stop.json",
+  "summary": "Fail. The fix does address the original cancelled-approval prompt misclassification by draining queued user events before processing the next user message, but it introduces a new blocking reliability bug: background forwarding now rethrows unexpected polling/send errors into a fire-and-forget timer path, which can crash the bot via an unhandled promise rejection."
+}

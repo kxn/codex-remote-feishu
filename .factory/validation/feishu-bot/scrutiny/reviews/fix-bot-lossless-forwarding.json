@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-bot-lossless-forwarding",
+  "reviewedAt": "2026-04-01T00:01:43Z",
+  "commitId": "87c1e9994dd36dc85223172f3c75349f76ba6994",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the mission docs, fix handoff, transcript skeleton, prior failed review, the original bot-attach-detach commit cc4f056780c0bf333f2484849d761dbddf3716c7, and the fix commit 87c1e9994dd36dc85223172f3c75349f76ba6994. The fix replaces lossy `/sessions/:id/history` snapshot polling with a cursor-based per-user `/users/:id/events` feed, seeds the bot forwarder from the attach response's `userEventCursor`, and adds focused server, bot, and integration tests that reproduce bounded-history eviction while confirming all attached burst messages still reach Feishu. I did not find any new blocking correctness issues in the reviewed feature.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Shared architecture docs still describe attached output forwarding only at a high level and do not record the concrete per-user event feed contract introduced by this fix (`/users/:id/events` plus attach-time `userEventCursor`). Future workers would likely have to rediscover that API surface from code.",
+      "evidence": ".factory/library/architecture.md:67-72,79-80,102-113 still describes generic REST/polling forwarding; the reviewed implementation now depends on server/src/relay-server.ts:194-208,320-323 plus bot/src/relay.ts:149-167 and bot/src/bot-service.ts:563-647 in commit 87c1e9994dd36dc85223172f3c75349f76ba6994."
+    }
+  ],
+  "addressesFailureFrom": "/data/dl/fschannel/.factory/validation/feishu-bot/scrutiny/reviews/bot-attach-detach.json",
+  "summary": "Pass. The original blocking issue from bot-attach-detach is addressed: attached forwarding no longer depends on bounded history snapshots, and the new regression tests specifically prove bursty agent output is delivered losslessly to the attached bot user."
+}

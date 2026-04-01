@@ -23,7 +23,7 @@ Remote monitoring and interaction with OpenAI Codex CLI sessions via Feishu (Lar
 │   (sessions, messages, commands)                              │     │
 └───────────────────────────────────────────────────────────────┼─────┘
                                                                 │
-                                              REST + polling/SSE│
+                                  REST + cursor event feed/API │
                                                                 │
 ┌───────────────────────────────────────────────────────────────┼─────┐
 │  Feishu Bot (TypeScript / Node.js)                            │     │
@@ -67,6 +67,9 @@ Central hub that bridges wrappers and the bot.
 - Caches recent message history per session in a configurable ring buffer.
 - Exposes a REST API consumed by the bot:
   - List sessions, get session status/history.
+  - Expose a per-user event feed at `/users/:id/events`; `POST /sessions/:id/attach`
+    returns a `userEventCursor` so attached forwarding can resume losslessly from a
+    known point.
   - Send prompts and approval responses to a session.
 - Bridges real-time messages: wrapper → server → bot (if a user is attached).
 - Handles lifecycle: registration, heartbeat, disconnect, reconnect, LRU eviction.
@@ -76,7 +79,8 @@ Central hub that bridges wrappers and the bot.
 Independent service that provides the user-facing interface via Feishu/Lark.
 
 - Connects to Feishu via `@larksuiteoapi/node-sdk` WSClient (WebSocket long connection).
-- Connects to relay server via REST API + polling/SSE for real-time updates.
+- Connects to relay server via REST API plus cursor-based `/users/:id/events`
+  polling for attached-session forwarding.
 - Parses user commands:
   - `/list` — show available sessions
   - `/attach <session>` — start watching a session
@@ -86,8 +90,11 @@ Independent service that provides the user-facing interface via Feishu/Lark.
   - `/history` — recent message history
 - Forwards free-text as prompts and approval responses to the relay server.
 - Manages per-user attach state (which user → which session).
+- Keeps an in-memory per-user/per-session notification route map so detached users
+  only receive background notifications for sessions they previously attached to.
 - Sends notifications on session state changes (online/offline/evicted).
-- **Stateless** except for the in-memory user→session attach mapping.
+- **In-memory only**: attachment state, notification routes, pending approvals, and
+  event cursors are not persisted across bot restarts.
 
 ### 4. Shared Types (TypeScript)
 
@@ -108,7 +115,8 @@ codex stdout
   → forward original bytes to VS Code stdout (transparent, <5ms)
   → send classified message to Relay Server via WebSocket
   → server stores in history buffer
-  → if a user is attached: forward to Feishu Bot
+  → if a user is attached: bot consumes the per-user `/users/:id/events` feed from
+    the attach-time `userEventCursor`
   → bot formats message → sends to Feishu user
 ```
 
@@ -156,6 +164,8 @@ The wrapper speaks the **Codex App Server protocol**: bidirectional JSON-RPC 2.0
 
 1. **Transparent forwarding**: The wrapper never drops or modifies messages between VS Code and codex. It is a read-only tap with <5ms added latency.
 2. **Server is source of truth**: All session state (online/offline/evicted) lives in the relay server. Wrappers and bot defer to it.
-3. **Bot is stateless**: The bot holds only the ephemeral user→session attach mapping. Everything else is fetched from the server.
+3. **Bot state is in-memory only**: The bot keeps ephemeral attachment mappings,
+   per-session notification routes, pending approvals, and event cursors; none of
+   that state survives a restart.
 4. **Graceful reconnect**: When a wrapper disconnects, the session enters `offline` with a grace period. If the wrapper reconnects in time, the session resumes. Otherwise it is LRU-evicted.
 5. **Single attach**: A Feishu user can be attached to at most one session at a time.

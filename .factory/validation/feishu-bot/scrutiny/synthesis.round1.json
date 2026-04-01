@@ -1,0 +1,117 @@
+{
+  "milestone": "feishu-bot",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/wrapper\" && cargo test && cd \"/data/dl/fschannel/shared\" && npx vitest run && cd \"/data/dl/fschannel/server\" && npx vitest run && cd \"/data/dl/fschannel/bot\" && npx vitest run",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/shared\" && npx tsc --noEmit && cd \"/data/dl/fschannel/server\" && npx tsc --noEmit && cd \"/data/dl/fschannel/bot\" && npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/server\" && npx eslint src/ && cd \"/data/dl/fschannel/bot\" && npx eslint src/ && tmpdir=$(mktemp -d) && cd \"$tmpdir\" && apt-get download rust-clippy >/dev/null && dpkg-deb -x rust-clippy_*.deb \"$tmpdir/extract\" && PATH=\"$tmpdir/extract/usr/bin:$PATH\" cargo clippy --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --all-targets --all-features -- -D warnings",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 7,
+    "passed": 1,
+    "failed": 5,
+    "superseded": 1,
+    "failedFeatures": [
+      "bot-attach-detach",
+      "bot-approval-and-stop",
+      "fix-wrapper-always-forward-lifecycle",
+      "bot-auto-detach-and-notifications",
+      "integration-core-flows"
+    ],
+    "supersededFeatures": [
+      "bot-command-parser"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "bot-attach-detach",
+      "severity": "blocking",
+      "description": "Attached-session forwarding polls the bounded `/sessions/:id/history` snapshot instead of consuming a lossless per-message stream, so bursty agent output can be evicted from the relay ring buffer before the bot fetches it."
+    },
+    {
+      "featureId": "bot-approval-and-stop",
+      "severity": "blocking",
+      "description": "Cancelled approvals are only cleared when the background forwarding poll later observes `turn/completed`, so a prompt sent immediately after approval cancellation can still be misclassified as a malformed `y`/`n` reply."
+    },
+    {
+      "featureId": "fix-wrapper-always-forward-lifecycle",
+      "severity": "blocking",
+      "description": "After the child exits, the wrapper aborts the relay task before draining buffered stdout, so a final `turn/completed` or `serverRequest/*` frame can still be dropped during shutdown."
+    },
+    {
+      "featureId": "bot-auto-detach-and-notifications",
+      "severity": "blocking",
+      "description": "Lightweight turn/input notifications are broadcast to every cached `lastSeenChats` entry except the actively attached user, leaking one user's session activity to unrelated users and violating multi-user isolation."
+    },
+    {
+      "featureId": "integration-core-flows",
+      "severity": "blocking",
+      "description": "The bot integration suite imports `server/dist/relay-server.js` and launches `wrapper/target/debug/codex-relay-wrapper`, so it is not reproducible from a clean checkout where those ignored build artifacts have not been prebuilt."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "features.json / validation-contract.md",
+      "suggestion": "Keep feature-to-assertion mappings and claimed coverage aligned with the behavior actually implemented and tested. Do not map a partial feature to an entire contract item or full assertion range unless the supporting behavior/tests are already present.",
+      "evidence": "The bot-command-parser review found `VAL-BOT-001` was assigned before partial/ambiguous `/attach` behavior existed, and the integration-core-flows review found the feature metadata claimed `VAL-CROSS-001` through `VAL-CROSS-023` while only three scenarios were implemented.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document the current bot-facing relay surfaces and their delivery guarantees: `GET /sessions` returns summaries, `GET /sessions/:id` returns detail objects, `/events` carries lifecycle notifications, and `/sessions/:id/history` is a bounded ring buffer snapshot rather than a lossless attached-message stream.",
+      "evidence": "The fix-relay-list-schema review passed only after correcting the undocumented list/detail schema split, while the bot-attach-detach review found attached forwarding built on `/history` polling can silently lose bursty agent output because the relay history buffer is bounded.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify the notification-scoping rule for multi-user bot work: lightweight session notifications must stay scoped to the intended recipient(s) and must never broadcast across unrelated users just because the bot remembers their last chat.",
+      "evidence": "The bot-auto-detach-and-notifications review found the feature description's 'any registered session' wording was interpreted broadly enough to leak one user's session activity to every cached chat, conflicting with the existing multi-user isolation contract.",
+      "isSystemic": true
+    },
+    {
+      "target": ".factory/services.yaml / .factory/init.sh",
+      "suggestion": "Either make the bot integration suite source-driven or encode its build prerequisites explicitly in the shared commands/init flow, because the current suite depends on prebuilt `server/dist` and wrapper debug artifacts that a clean checkout does not have.",
+      "evidence": "The integration-core-flows review found `bot/src/integration-core-flows.test.ts` imports `../../server/dist/relay-server.js` and launches `wrapper/target/debug/codex-relay-wrapper`, but `test-bot` and `.factory/init.sh` do not build those artifacts first.",
+      "isSystemic": false
+    },
+    {
+      "target": "rust-worker skill",
+      "suggestion": "Add the wrapper relay-shutdown invariant to the skill guidance: when wrapper features depend on forwarding stdout-derived lifecycle frames, workers must preserve relay delivery until stdout has drained, not abort the relay task immediately after `child.wait()` returns.",
+      "evidence": "The fix-wrapper-always-forward-lifecycle review found the detached-forwarding policy itself was correct, but the wrapper still aborts the relay path before draining final stdout output, which can drop the last lifecycle event on child exit.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "bot-command-parser's `/sessions` schema mismatch should remain an actionable scrutiny failure for the milestone.",
+      "reason": "Rejected as already remediated in the same milestone by the passing fix-relay-list-schema feature, so it is tracked as a superseded historical failure rather than a new fix request."
+    },
+    {
+      "observation": "Add a shared bot service entry immediately to `.factory/services.yaml`.",
+      "reason": "Rejected for now because the bot has no stable healthcheck/port contract and depends on external Feishu credentials; adding a nominal start command during scrutiny would be low-value and potentially misleading."
+    },
+    {
+      "observation": "Update architecture docs to declare `lastSeenChats` and `pendingApprovals` as the intended canonical bot runtime state.",
+      "reason": "Rejected because the current `lastSeenChats` usage underlies the blocking notification-leak bug, so documenting that state as canonical now would be premature."
+    },
+    {
+      "observation": "Separate notes about REST schema duplication, missing attached-message delivery semantics, and notification scoping gaps should all be tracked independently.",
+      "reason": "Consolidated into the broader AGENTS.md guidance updates above to avoid duplicating closely related relay/bot contract issues."
+    }
+  ],
+  "previousRound": null
+}
