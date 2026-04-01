@@ -334,6 +334,24 @@ describe("RelayClient", () => {
     );
   });
 
+  it("maps transport failures to a stable relay-unavailable error", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("fetch failed"));
+
+    const client = new RelayClient({
+      baseUrl: "http://relay.test",
+      fetch: fetchMock,
+    });
+
+    await expect(client.listSessions()).rejects.toEqual(
+      expect.objectContaining<Partial<RelayClientError>>({
+        message: "Relay server is unavailable, please try again later.",
+        status: 503,
+      }),
+    );
+  });
+
   it("rejects malformed API responses", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

@@ -80,6 +80,9 @@ export interface RelayClientOptions {
   fetch?: typeof fetch;
 }
 
+export const RELAY_UNAVAILABLE_MESSAGE =
+  "Relay server is unavailable, please try again later.";
+
 export class RelayClientError extends Error {
   public readonly status: number;
 
@@ -233,17 +236,24 @@ export class RelayClient {
       responseSchema: z.ZodType<T>;
     },
   ): Promise<T> {
-    const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-      method: options.method,
-      headers:
-        options.body === undefined
-          ? undefined
-          : {
-              "content-type": "application/json",
-            },
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
+        method: options.method,
+        headers:
+          options.body === undefined
+            ? undefined
+            : {
+                "content-type": "application/json",
+              },
+        body:
+          options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+    } catch (error) {
+      throw new RelayClientError(RELAY_UNAVAILABLE_MESSAGE, 503, {
+        cause: error,
+      });
+    }
 
     const payload = await parseJsonResponse(response);
     if (!response.ok) {

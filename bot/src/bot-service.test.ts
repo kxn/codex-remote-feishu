@@ -1591,6 +1591,26 @@ describe("BotService", () => {
       "Attach to a session first with /attach <session>.",
     );
   });
+
+  it("maps relay transport failures to a user-friendly unavailable message", async () => {
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger);
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/list",
+    });
+
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "Relay server is unavailable, please try again later.",
+    );
+  });
 });
 
 function createRelayDouble(

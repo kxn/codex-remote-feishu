@@ -7,7 +7,7 @@ import type {
   RelaySessionSummary,
   RelayUserEvent,
 } from "./relay.js";
-import { RelayClientError } from "./relay.js";
+import { RELAY_UNAVAILABLE_MESSAGE, RelayClientError } from "./relay.js";
 
 export interface IncomingTextMessage {
   userId: string;
@@ -814,6 +814,10 @@ export class BotService {
   }
 
   private formatErrorMessage(error: unknown): string {
+    if (isRelayUnavailableError(error)) {
+      return RELAY_UNAVAILABLE_MESSAGE;
+    }
+
     if (error instanceof RelayClientError) {
       return error.message;
     }
@@ -1237,4 +1241,28 @@ function safeParseJson(value: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+function isRelayUnavailableError(error: unknown): boolean {
+  if (
+    error instanceof RelayClientError &&
+    error.status === 503 &&
+    error.message === RELAY_UNAVAILABLE_MESSAGE
+  ) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.trim().toLowerCase();
+  return (
+    normalizedMessage.includes("fetch failed") ||
+    normalizedMessage.includes("failed to fetch") ||
+    normalizedMessage.includes("network error") ||
+    normalizedMessage.includes("networkerror") ||
+    normalizedMessage.includes("econnrefused") ||
+    normalizedMessage.includes("socket hang up")
+  );
 }
