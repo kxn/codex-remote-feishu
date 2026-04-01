@@ -346,6 +346,11 @@ describe("integration core flows", () => {
     await sleep(200);
 
     expect(userEvents).toHaveLength(eventCountAfterDetach);
+    expect(
+      (await relayClient.getHistory(session.sessionId, 20)).some((entry) =>
+        entry.raw.includes("after detach should stay local"),
+      ),
+    ).toBe(true);
   });
 
   it("runs approval flows end-to-end through the bot service with a mocked messenger", async () => {

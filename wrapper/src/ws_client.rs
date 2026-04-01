@@ -29,7 +29,6 @@ pub struct RelayRegistration {
 #[derive(Debug, Clone)]
 pub enum RelayForwardingMode {
     Always,
-    WhenAttached,
 }
 
 #[derive(Debug, Clone)]
@@ -54,17 +53,13 @@ pub enum RelayTaskCommand {
     Shutdown,
 }
 
-pub fn should_forward_outbound_message(attached: bool, message: &OutboundRelayMessage) -> bool {
+pub fn should_forward_outbound_message(_attached: bool, message: &OutboundRelayMessage) -> bool {
     match message {
         OutboundRelayMessage::Classified {
             forwarding_mode: RelayForwardingMode::Always,
             ..
         }
         | OutboundRelayMessage::AutoDetach { .. } => true,
-        OutboundRelayMessage::Classified {
-            forwarding_mode: RelayForwardingMode::WhenAttached,
-            ..
-        } => attached,
     }
 }
 
@@ -147,21 +142,7 @@ async fn run_relay_client(
 
         let disconnected = loop {
             tokio::select! {
-                command = command_rx.recv() => {
-                    match command {
-                        Some(RelayTaskCommand::Outbound(message)) => {
-                            let payload = outbound_message_to_json(&registration.session_id, message);
-                            if let Err(error) = write.send(Message::Text(payload.to_string().into())).await {
-                                warn!(relay_url = %relay_url, error = %error, "failed sending message to relay server");
-                                break true;
-                            }
-                        }
-                        Some(RelayTaskCommand::Shutdown) | None => {
-                            let _ = write.send(Message::Close(None)).await;
-                            break false;
-                        }
-                    }
-                }
+                biased;
                 inbound = read.next() => {
                     match inbound {
                         Some(Ok(Message::Text(text))) => {
@@ -191,6 +172,21 @@ async fn run_relay_client(
                         None => {
                             warn!(relay_url = %relay_url, "relay websocket connection closed");
                             break true;
+                        }
+                    }
+                }
+                command = command_rx.recv() => {
+                    match command {
+                        Some(RelayTaskCommand::Outbound(message)) => {
+                            let payload = outbound_message_to_json(&registration.session_id, message);
+                            if let Err(error) = write.send(Message::Text(payload.to_string().into())).await {
+                                warn!(relay_url = %relay_url, error = %error, "failed sending message to relay server");
+                                break true;
+                            }
+                        }
+                        Some(RelayTaskCommand::Shutdown) | None => {
+                            let _ = write.send(Message::Close(None)).await;
+                            break false;
                         }
                     }
                 }
@@ -517,9 +513,9 @@ mod tests {
     }
 
     #[test]
-    fn agent_messages_require_attachment_state() {
+    fn agent_messages_are_forwarded_regardless_of_attachment_state() {
         let message = OutboundRelayMessage::Classified {
-            forwarding_mode: RelayForwardingMode::WhenAttached,
+            forwarding_mode: RelayForwardingMode::Always,
             classification: "agentMessage",
             method: Some("item/agentMessage/delta".to_owned()),
             thread_id: Some("thread-1".to_owned()),
@@ -529,6 +525,6 @@ mod tests {
         };
 
         assert!(should_forward_outbound_message(true, &message));
-        assert!(!should_forward_outbound_message(false, &message));
+        assert!(should_forward_outbound_message(false, &message));
     }
 }

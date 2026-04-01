@@ -926,6 +926,98 @@ describe("relay server", () => {
     await waitForClose(client);
   });
 
+  it("keeps post-detach agent output in history without forwarding it to detached users", async () => {
+    server = await startRelayServer({
+      apiPort: 0,
+      wsPort: 0,
+      gracePeriodMs: 200,
+      historyLimit: 10,
+    });
+
+    const client = await connect(server.wsUrl);
+    await register(client);
+
+    const events: UserSessionEvent[] = [];
+    const unsubscribe = server.subscribeUserEvents("user-1", (event) => {
+      events.push(event);
+    });
+
+    const attachResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/attach`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: "user-1",
+        }),
+      },
+    );
+    expect(attachResponse.status).toBe(200);
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: true,
+      userId: "user-1",
+    });
+
+    const detachResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/detach`,
+      {
+        method: "POST",
+      },
+    );
+    expect(detachResponse.status).toBe(200);
+    expect(await detachResponse.json()).toEqual(
+      expect.objectContaining({
+        attachedUser: null,
+      }),
+    );
+    expect(await nextJsonMessage(client)).toEqual({
+      type: "attach-status-changed",
+      attached: false,
+    });
+    await expectNoMessage(client, 150);
+
+    const eventCountAfterDetach = events.length;
+    await sendJson(client, {
+      type: "message",
+      sessionId: "session-1",
+      classification: "agentMessage",
+      method: "item/agentMessage/delta",
+      raw: "post-detach history",
+      payload: {
+        params: {
+          delta: "post-detach history",
+        },
+      },
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+
+    await sleep(50);
+    expect(events).toHaveLength(eventCountAfterDetach);
+
+    const historyResponse = await fetch(
+      `${server.apiBaseUrl}/sessions/session-1/history`,
+    );
+    expect(historyResponse.status).toBe(200);
+    expect(await historyResponse.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          raw: "post-detach history",
+          classification: "agentMessage",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        }),
+      ]),
+    );
+
+    unsubscribe();
+    client.close();
+    await waitForClose(client);
+  });
+
   it("exposes lossless per-user message events even when history snapshots evict burst output", async () => {
     server = await startRelayServer({
       apiPort: 0,

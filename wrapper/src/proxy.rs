@@ -369,9 +369,7 @@ fn build_relay_message(
     line: &[u8],
 ) -> Option<OutboundRelayMessage> {
     let (forwarding_mode, classification) = match classified.classification {
-        MessageClassification::AgentMessage => {
-            (RelayForwardingMode::WhenAttached, "agentMessage")
-        }
+        MessageClassification::AgentMessage => (RelayForwardingMode::Always, "agentMessage"),
         MessageClassification::ServerRequest => (RelayForwardingMode::Always, "serverRequest"),
         MessageClassification::TurnLifecycle => (RelayForwardingMode::Always, "turnLifecycle"),
         _ => return None,

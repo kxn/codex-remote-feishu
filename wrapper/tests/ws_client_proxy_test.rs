@@ -428,7 +428,21 @@ async fn forwards_lifecycle_events_and_server_requests_even_when_detached() {
         .await
         .expect("failed to write detached agent message");
     let _ = read_stdout_line(&mut stdout).await;
-    relay.expect_no_message(Duration::from_millis(250)).await;
+    let detached_agent_message = relay.next_message().await;
+    assert_eq!(
+        detached_agent_message.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        detached_agent_message
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+    assert_eq!(
+        detached_agent_message.get("sessionId").and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
 
     drop(stdin);
     let status = wrapper.wait().await.expect("failed to wait for wrapper");
@@ -518,7 +532,7 @@ async fn forwards_final_turn_completed_when_child_exits_immediately() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn forwards_agent_messages_only_when_attached_and_forwards_lifecycle_events() {
+async fn forwards_agent_messages_and_lifecycle_events_even_before_attach() {
     let relay = MockRelayServer::start().await;
     let mock_codex = fixture_path("mock_codex_echo.sh");
     let mut wrapper = spawn_wrapper_process(
@@ -546,7 +560,21 @@ async fn forwards_agent_messages_only_when_attached_and_forwards_lifecycle_event
         .await
         .expect("failed to write pre-attach agent message");
     let _ = read_stdout_line(&mut stdout).await;
-    relay.expect_no_message(Duration::from_millis(250)).await;
+    let forwarded_pre_attach_agent = relay.next_message().await;
+    assert_eq!(
+        forwarded_pre_attach_agent.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        forwarded_pre_attach_agent
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+    assert_eq!(
+        forwarded_pre_attach_agent.get("sessionId").and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
 
     relay.send(json!({
         "type": "attach-status-changed",
@@ -798,7 +826,21 @@ async fn local_turn_start_auto_detaches_until_reattached() {
         .await
         .expect("failed to write post-detach agent message");
     let _ = read_stdout_line(&mut stdout).await;
-    relay.expect_no_message(Duration::from_millis(250)).await;
+    let detached_agent_message = relay.next_message().await;
+    assert_eq!(
+        detached_agent_message.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        detached_agent_message
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+    assert_eq!(
+        detached_agent_message.get("sessionId").and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
 
     relay.send(json!({
         "type": "input",
@@ -866,7 +908,7 @@ async fn reconnects_and_reregisters_after_disconnect() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn disconnect_clears_attached_state_and_drops_stale_messages_until_reattached() {
+async fn disconnect_clears_attached_state_and_drops_stale_remote_input_until_reattached() {
     let relay = MockRelayServer::start().await;
     let mock_codex = fixture_path("mock_codex_echo.sh");
     let mut wrapper = spawn_wrapper_process(
@@ -945,7 +987,21 @@ async fn disconnect_clears_attached_state_and_drops_stale_messages_until_reattac
         Some(session_id.as_str())
     );
 
-    relay.expect_no_message(Duration::from_millis(300)).await;
+    let backlog_after_reconnect = [relay.next_message().await, relay.next_message().await];
+    assert_eq!(
+        backlog_after_reconnect
+            .iter()
+            .map(|message| message.get("type").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        vec![Some("message"), Some("message")]
+    );
+    assert_eq!(
+        backlog_after_reconnect
+            .iter()
+            .map(|message| message.get("classification").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        vec![Some("agentMessage"), Some("agentMessage")]
+    );
 
     relay.send(json!({
         "type": "input",
@@ -960,7 +1016,23 @@ async fn disconnect_clears_attached_state_and_drops_stale_messages_until_reattac
         .await
         .expect("failed to write post-reconnect pre-attach message");
     let _ = read_stdout_line(&mut stdout).await;
-    relay.expect_no_message(Duration::from_millis(250)).await;
+    let pre_attach_after_reconnect = relay.next_message().await;
+    assert_eq!(
+        pre_attach_after_reconnect.get("type").and_then(Value::as_str),
+        Some("message")
+    );
+    assert_eq!(
+        pre_attach_after_reconnect
+            .get("classification")
+            .and_then(Value::as_str),
+        Some("agentMessage")
+    );
+    assert_eq!(
+        pre_attach_after_reconnect
+            .get("sessionId")
+            .and_then(Value::as_str),
+        Some(session_id.as_str())
+    );
 
     relay.send(json!({
         "type": "attach-status-changed",
