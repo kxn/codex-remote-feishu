@@ -1,0 +1,24 @@
+{
+  "milestone": "robustness",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CROSS-020"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Recorded the dedicated SIGTERM shutdown harness guidance, expected attached-user shutdown message, and the successful robustness rerun outcome for VAL-CROSS-020.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

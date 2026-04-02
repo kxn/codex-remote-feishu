@@ -1,0 +1,38 @@
+{
+  "groupId": "graceful-shutdown-sigterm",
+  "surface": "relay-bot-integration",
+  "assertions": [
+    {
+      "id": "VAL-CROSS-020",
+      "status": "pass",
+      "reason": "A real SIGTERM harness launched server/dist/index.js on ports 9510/9511, attached a mocked Feishu user through BotService, observed the attached-user shutdown message, confirmed the server exited cleanly with code 0, and verified the wrapper continued local stdio proxying by echoing a post-shutdown local prompt with no console or unhandled errors.",
+      "evidence": [
+        "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/robustness/graceful-shutdown-sigterm/shutdown-sigterm-check.json"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "node \"/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/evidence/robustness/graceful-shutdown-sigterm/graceful-shutdown-sigterm.mjs\"",
+      "exitCode": 0,
+      "observation": "The dedicated harness sent SIGTERM to the real relay server process, recorded server exit code 0 with stderr 'Received SIGTERM, shutting down relay server.', observed the attached-user message 'Relay server is unavailable; detached from [workspace-shutdown-sigterm-1775094612070-7e525c]. Local proxy will continue until the relay reconnects.', and confirmed the wrapper still accepted and echoed a local turn/start prompt after relay shutdown."
+    },
+    {
+      "command": "cd \"/data/dl/fschannel/server\" && npx vitest run",
+      "exitCode": 0,
+      "observation": "Server suite passed 25/25 tests, including relay-server shutdown coverage ('notifies wrappers before shutting down')."
+    },
+    {
+      "command": "cd \"/data/dl/fschannel/bot\" && npx vitest run",
+      "exitCode": 0,
+      "observation": "Bot suite passed 49/49 tests, including the integration case 'keeps the local proxy alive and informs attached users when the relay shuts down'."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "node",
+    "vitest"
+  ],
+  "summary": "Validated VAL-CROSS-020 as passing through a real SIGTERM shutdown harness plus supporting server/bot suites: the bot notified the attached user, the wrapper stayed alive in degraded local-proxy mode, and no crashes or unhandled errors were observed."
+}
