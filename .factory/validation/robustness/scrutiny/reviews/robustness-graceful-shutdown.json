@@ -1,0 +1,31 @@
+{
+  "featureId": "robustness-graceful-shutdown",
+  "reviewedAt": "2026-04-02T09:11:43+08:00",
+  "commitId": "47bc1fdbad61ab9f60fda6b1f0280aead453ce84",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the mission docs, worker transcript skeleton, worker handoff, and commit `47bc1fdbad61ab9f60fda6b1f0280aead453ce84` against the graceful-shutdown feature contract and `VAL-CROSS-020`. The landed change traps `SIGINT`/`SIGTERM` in the relay server and bot, emits `server-shutdown` notifications to wrappers before closing, keeps the wrapper in degraded local-proxy mode after relay loss, and detaches attached bot users with a clear relay-unavailable message once shutdown makes the relay unreachable. The added unit and integration coverage exercises both the server notification and the end-to-end shutdown flow. I did not find any blocking or non-blocking correctness issues in the reviewed scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Bot-side shutdown propagation is implemented indirectly through per-user forwarding polls detecting relay unavailability, not through a dedicated server-to-bot shutdown event.",
+      "evidence": "server/src/relay-server.ts sends `server-shutdown` only to wrappers, while bot/src/bot-service.ts detaches attached users when `listUserEvents()` starts returning the relay-unavailable error."
+    },
+    {
+      "area": "knowledge",
+      "observation": "During shutdown, the server suppresses its normal attached-user `session-offline` emission, so attached-user shutdown notification currently depends on the bot's attachment polling path rather than a durable shutdown event record.",
+      "evidence": "server/src/relay-server.ts gates the websocket close handler on `!shuttingDown`, and bot/src/bot-service.ts surfaces shutdown by handling relay-unavailable errors during forwarding."
+    },
+    {
+      "area": "process",
+      "observation": "Mission validation artifacts still record the historical pre-fix `VAL-CROSS-020` failure, so the pending robustness user-testing validator will need to refresh that state after this scrutiny pass.",
+      "evidence": "/home/dl/.factory/missions/33afaa22-b81b-48d3-b9b3-131d99d630c7/validation-state.json still contains the old blocked note, while the current code/tests and `bot/src/integration-core-flows.test.ts` now pass the shutdown scenario."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The graceful-shutdown feature satisfies the reviewed robustness scope and I found no remaining code-review defects in the landed implementation."
+}

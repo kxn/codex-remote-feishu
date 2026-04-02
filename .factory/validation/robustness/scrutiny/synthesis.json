@@ -1,0 +1,45 @@
+{
+  "milestone": "robustness",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/wrapper\" && cargo test && cd \"/data/dl/fschannel/shared\" && npx vitest run && cd \"/data/dl/fschannel/server\" && npx vitest run && cd \"/data/dl/fschannel/bot\" && npx vitest run",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/shared\" && npx tsc --noEmit && cd \"/data/dl/fschannel/server\" && npx tsc --noEmit && cd \"/data/dl/fschannel/bot\" && npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "cd \"/data/dl/fschannel/server\" && npx eslint src/ && cd \"/data/dl/fschannel/bot\" && npx eslint src/ && tmpdir=$(mktemp -d) && cd \"$tmpdir\" && apt-get download rust-clippy >/dev/null && dpkg-deb -x rust-clippy_*.deb \"$tmpdir/extract\" && PATH=\"$tmpdir/extract/usr/bin:$PATH\" cargo clippy --manifest-path \"/data/dl/fschannel/wrapper/Cargo.toml\" --all-targets --all-features -- -D warnings",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/library/architecture.md",
+      "suggestion": "Document the graceful-shutdown propagation semantics across the relay, bot, and wrapper: the relay emits `server-shutdown` frames to wrappers before closing, wrappers drop remote attachment state but keep the local stdio proxy alive, and attached bot users currently learn about intentional shutdown through relay-unavailable detection during per-user event polling rather than a dedicated shutdown event.",
+      "evidence": "The robustness-graceful-shutdown review found the implementation is correct but the runtime behavior is distributed across `server/src/relay-server.ts`, `wrapper/src/ws_client.rs`, and `bot/src/bot-service.ts`, with shutdown intentionally suppressing the usual `session-offline` event path.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Mission validation artifacts still mention the historical `VAL-CROSS-020` failure.",
+      "reason": "This is expected transient mission state that belongs to the pending robustness user-testing validator rerun, not a durable scrutiny guidance update."
+    }
+  ],
+  "previousRound": null
+}
