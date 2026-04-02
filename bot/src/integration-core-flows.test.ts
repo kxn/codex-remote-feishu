@@ -829,6 +829,63 @@ describe("integration core flows", () => {
     });
   });
 
+  it("keeps the local proxy alive and informs attached users when the relay shuts down", async () => {
+    const server = await startTestRelayServer();
+    const relayClient = new RelayClient({
+      baseUrl: server.apiBaseUrl,
+    });
+    const wrapper = await spawnMockWrapper(server.wsUrl, "workspace-shutdown");
+
+    await waitForSession(relayClient, "workspace-shutdown");
+
+    const messenger = createMessengerRecorder();
+    const service = new BotService(relayClient, messenger, {
+      pollIntervalMs: 25,
+    });
+    cleanups.push(async () => {
+      service.close();
+    });
+
+    await service.handleTextMessage(
+      createIncomingText(
+        "user-shutdown",
+        "chat-shutdown",
+        "/attach workspace-shutdown",
+      ),
+    );
+
+    await server.close();
+
+    await waitForCondition(() => {
+      return messenger.messagesFor("chat-shutdown").includes(
+        "Relay server is unavailable; detached from [workspace-shutdown]. Local proxy will continue until the relay reconnects.",
+      );
+    });
+
+    expect(service.getAttachment("user-shutdown")).toBeUndefined();
+    expect(wrapper.process.exitCode).toBeNull();
+
+    const localPrompt = "local after relay shutdown";
+    await wrapper.sendLocalJson({
+      method: "turn/start",
+      params: {
+        prompt: localPrompt,
+      },
+    });
+
+    await waitForLoggedInput(wrapper, (message) => {
+      const parsed = asRecord(message.parsed);
+      return (
+        parsed?.method === "turn/start" &&
+        asRecord(parsed.params)?.prompt === localPrompt
+      );
+    });
+
+    await waitForCondition(() => {
+      return wrapper.stdoutLines.some((line) => line.includes(`echo:${localPrompt}`));
+    });
+  });
+
   async function startTestRelayServer(
     overrides: Partial<{
       gracePeriodMs: number;

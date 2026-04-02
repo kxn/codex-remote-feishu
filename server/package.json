@@ -9,10 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "express": "^4.21.0",
+    "shared": "*",
     "ws": "^8.18.0",
-    "zod": "^3.24.0",
-    "shared": "*"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

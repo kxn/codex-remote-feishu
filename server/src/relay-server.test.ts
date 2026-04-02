@@ -45,6 +45,29 @@ describe("relay server", () => {
     expect(await response.json()).toEqual([]);
   });
 
+  it("notifies wrappers before shutting down", async () => {
+    server = await startRelayServer({
+      apiPort: 0,
+      wsPort: 0,
+      gracePeriodMs: 50,
+      historyLimit: 5,
+    });
+
+    const client = await connect(server.wsUrl);
+    await register(client);
+
+    const closePromise = server.close();
+
+    await expect(nextJsonMessage(client)).resolves.toEqual({
+      type: "server-shutdown",
+      reason: "graceful-shutdown",
+    });
+
+    await waitForClose(client);
+    await closePromise;
+    server = undefined;
+  });
+
   it("registers wrapper sessions and exposes them over REST", async () => {
     server = await startRelayServer({
       apiPort: 0,

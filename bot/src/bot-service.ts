@@ -736,8 +736,33 @@ export class BotService {
         return;
       }
 
+      if (isRelayUnavailableError(error)) {
+        await this.detachUnavailableRelayAttachment(userId, sessionId);
+        return;
+      }
+
       throw error;
     }
+  }
+
+  private async detachUnavailableRelayAttachment(
+    userId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const attachment = this.attachments.get(userId);
+    if (!attachment || attachment.sessionId !== sessionId) {
+      this.stopForwarding(userId);
+      return;
+    }
+
+    this.stopForwarding(userId);
+    this.attachments.delete(userId);
+    await this.reply(
+      attachment.chatId,
+      `Relay server is unavailable; detached from ${formatSessionTag(
+        attachment.sessionName,
+      )}. Local proxy will continue until the relay reconnects.`,
+    );
   }
 
   private async presentApprovalRequest(

@@ -74,6 +74,8 @@ const sessionInputSchema = z.union([
 
 const APPROVAL_RESPONSE_MESSAGE_TYPE = "approval-response" as const;
 const RELAY_EVENT_LOG_LIMIT = 1_000;
+const SERVER_SHUTDOWN_REASON = "graceful-shutdown" as const;
+const SERVER_SHUTDOWN_TIMEOUT_MS = 5_000;
 
 const attachBodySchema = z.object({
   userId: z.string().min(1),
@@ -379,6 +381,15 @@ export async function startRelayServer(
   let shuttingDown = false;
 
   websocketServer.on("connection", (socket) => {
+    if (shuttingDown) {
+      sendJson(socket, {
+        type: "server-shutdown",
+        reason: SERVER_SHUTDOWN_REASON,
+      });
+      socket.close(1001, SERVER_SHUTDOWN_REASON);
+      return;
+    }
+
     let sessionId: string | undefined;
     const connection: SessionConnection = {
       close: () => {
@@ -663,7 +674,17 @@ export async function startRelayServer(
       registry.dispose();
 
       for (const client of websocketServer.clients) {
-        client.close();
+        sendJson(client, {
+          type: "server-shutdown",
+          reason: SERVER_SHUTDOWN_REASON,
+        });
+
+        if (
+          client.readyState === WebSocket.OPEN ||
+          client.readyState === WebSocket.CONNECTING
+        ) {
+          client.close(1001, SERVER_SHUTDOWN_REASON);
+        }
       }
 
       await Promise.all([
@@ -802,19 +823,33 @@ function getPort(server: http.Server | WebSocketServer): number {
 
 function closeHttpServer(server: http.Server): Promise<void> {
   return new Promise((resolve, reject) => {
+    const forceCloseTimer = setTimeout(() => {
+      server.closeAllConnections?.();
+    }, SERVER_SHUTDOWN_TIMEOUT_MS);
+
     server.close((error) => {
+      clearTimeout(forceCloseTimer);
       if (error) {
         reject(error);
         return;
       }
       resolve();
     });
+
+    server.closeIdleConnections?.();
   });
 }
 
 function closeWebSocketServer(server: WebSocketServer): Promise<void> {
   return new Promise((resolve, reject) => {
+    const forceCloseTimer = setTimeout(() => {
+      for (const client of server.clients) {
+        client.terminate();
+      }
+    }, SERVER_SHUTDOWN_TIMEOUT_MS);
+
     server.close((error) => {
+      clearTimeout(forceCloseTimer);
       if (error) {
         reject(error);
         return;

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BotService } from "./bot-service.js";
+import { RELAY_UNAVAILABLE_MESSAGE, RelayClientError } from "./relay.js";
 
 describe("BotService", () => {
   afterEach(() => {
@@ -484,7 +485,7 @@ describe("BotService", () => {
   it("logs and recovers from unexpected forwarding poll errors without leaking unhandled rejections", async () => {
     vi.useFakeTimers();
 
-    const rejection = new Error("relay fetch failed");
+    const rejection = new Error("unexpected poll failure");
     const unhandledRejections: unknown[] = [];
     const handleUnhandledRejection = (reason: unknown) => {
       unhandledRejections.push(reason);
@@ -1662,6 +1663,51 @@ describe("BotService", () => {
       "chat-1",
       "Attach to a session first with /attach <session>.",
     );
+  });
+
+  it("notifies and detaches attached users when the relay becomes unavailable during forwarding", async () => {
+    vi.useFakeTimers();
+
+    const relay = createRelayDouble({
+      listSessions: vi.fn().mockResolvedValue([
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+        }),
+      ]),
+      attach: vi.fn().mockResolvedValue(
+        createSessionDetail({
+          sessionId: "session-1",
+          displayName: "workspace-a",
+          attachedUser: "user-1",
+          userEventCursor: 0,
+        }),
+      ),
+      listUserEvents: vi
+        .fn()
+        .mockRejectedValue(
+          new RelayClientError(RELAY_UNAVAILABLE_MESSAGE, 503),
+        ),
+    });
+    const messenger = createMessengerDouble();
+    const service = new BotService(relay, messenger, { pollIntervalMs: 100 });
+
+    await service.handleTextMessage({
+      userId: "user-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      text: "/attach workspace-a",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(service.getAttachment("user-1")).toBeUndefined();
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      "chat-1",
+      "Relay server is unavailable; detached from [workspace-a]. Local proxy will continue until the relay reconnects.",
+    );
+
+    service.close();
   });
 
   it("maps relay transport failures to a user-friendly unavailable message", async () => {

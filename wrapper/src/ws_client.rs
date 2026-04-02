@@ -271,6 +271,10 @@ fn handle_incoming_message(
             attached.store(is_attached, Ordering::SeqCst);
             debug!(attached = is_attached, "updated relay attachment state");
         }
+        Some("server-shutdown") => {
+            attached.store(false, Ordering::SeqCst);
+            debug!("relay server is shutting down; continuing local proxy without relay");
+        }
         Some("input") => {
             if !attached.load(Ordering::SeqCst) {
                 debug!("ignoring relay input because no user is attached");
@@ -493,6 +497,21 @@ mod tests {
             &child_input_tx,
         );
 
+        assert!(matches!(child_input_rx.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn server_shutdown_notification_detaches_without_stopping_local_proxy() {
+        let attached = Arc::new(AtomicBool::new(true));
+        let (child_input_tx, mut child_input_rx) = mpsc::unbounded_channel();
+
+        handle_incoming_message(
+            r#"{"type":"server-shutdown","reason":"graceful-shutdown"}"#,
+            &attached,
+            &child_input_tx,
+        );
+
+        assert!(!attached.load(Ordering::SeqCst));
         assert!(matches!(child_input_rx.try_recv(), Err(TryRecvError::Empty)));
     }
 

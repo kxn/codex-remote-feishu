@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.60.0",
-    "zod": "^3.24.0",
-    "shared": "*"
+    "dotenv": "^17.3.1",
+    "shared": "*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
