@@ -51,5 +51,8 @@ jobs:
           go build ./cmd/relay-wrapper
           go build ./cmd/relay-install
 
+      - name: Smoke test release installer
+        run: bash scripts/check/smoke-install-release.sh
+
       - name: Test
         run: go test ./...

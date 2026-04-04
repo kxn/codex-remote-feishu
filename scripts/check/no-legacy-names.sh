@@ -15,7 +15,7 @@ patterns=(
 )
 pattern="$(IFS='|'; printf '%s' "${patterns[*]}")"
 
-if rg -n "${pattern}" README.md DEVELOPER.md .env.example Makefile install.sh setup.sh setup.ps1 cmd internal docs deploy .github; then
+if rg -n "${pattern}" README.md QUICKSTART.md DEVELOPER.md .env.example Makefile install.sh install-release.sh setup.sh setup.ps1 cmd internal docs deploy .github; then
   echo "Found legacy project names or deprecated paths." >&2
   exit 1
 fi

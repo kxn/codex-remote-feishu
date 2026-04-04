@@ -3,6 +3,11 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: Explicit version to release, e.g. v1.0.0. Leave empty to auto-calculate.
+        required: false
+        default: ""
+        type: string
       bump:
         description: Version bump strategy
         required: true
@@ -67,11 +72,21 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Smoke test release installer
+        run: bash scripts/check/smoke-install-release.sh
+
       - name: Determine next version
         id: version
         run: |
-          version="$(BUMP_OVERRIDE='${{ inputs.bump }}' bash scripts/release/next-version.sh)"
-          latest_tag="$(git tag --list 'v*' --sort=-version:refname | head -n1 || true)"
+          if [[ -n '${{ inputs.version }}' ]]; then
+            version='${{ inputs.version }}'
+          else
+            version="$(BUMP_OVERRIDE='${{ inputs.bump }}' bash scripts/release/next-version.sh)"
+          fi
+          if [[ ! "${version}" =~ ^v[0-9] ]]; then
+            version="v${version}"
+          fi
+          latest_tag="$(git tag --list 'v*' --sort=-version:refname | grep -vx "${version}" | head -n1 || true)"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "latest_tag=${latest_tag}" >> "${GITHUB_OUTPUT}"
 

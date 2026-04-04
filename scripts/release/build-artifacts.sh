@@ -48,7 +48,7 @@ for platform in "${platforms[@]}"; do
     CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -o "${staging_dir}/${name}${extension}" "${package}"
   done
 
-  cp README.md DEVELOPER.md install.sh setup.sh setup.ps1 .env.example "${staging_dir}/"
+  cp README.md QUICKSTART.md DEVELOPER.md install.sh install-release.sh setup.sh setup.ps1 .env.example "${staging_dir}/"
   cp -R deploy "${staging_dir}/"
 
   if [[ "${goos}" == "windows" ]]; then
@@ -66,6 +66,8 @@ for platform in "${platforms[@]}"; do
   rm -rf "${staging_dir}"
 done
 
+cp install-release.sh "${output_dir}/codex-remote-feishu-install.sh"
+
 checksum_cmd="sha256sum"
 if ! command -v "${checksum_cmd}" >/dev/null 2>&1; then
   checksum_cmd="shasum -a 256"
@@ -73,5 +75,5 @@ fi
 
 (
   cd "${output_dir}"
-  ${checksum_cmd} ./*.tar.gz ./*.zip > checksums.txt
+  ${checksum_cmd} ./*.tar.gz ./*.zip ./*.sh > checksums.txt
 )

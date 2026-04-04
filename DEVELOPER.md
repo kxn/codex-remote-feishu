@@ -56,11 +56,14 @@ testkit/
 - `setup.ps1`
   - Windows PowerShell 的交互安装入口
   - 无参数时默认 `-interactive`
+- `install-release.sh`
+  - 面向最终用户的在线安装入口
+  - 负责下载最新 release 包并启动包内 `setup.sh`
 - `install.sh`
   - Linux 开发 / 运维辅助脚本
   - 提供 `bootstrap/start/stop/status/logs/build`
 
-`setup.*` 是产品入口，`install.sh` 是仓库内运维辅助，不要混淆。
+`setup.*` 和 `install-release.sh` 是产品入口，`install.sh` 是仓库内运维辅助，不要混淆。
 
 ## 关键文档
 
@@ -121,6 +124,12 @@ cp deploy/docker/.env.example deploy/docker/.env
 docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d --build
 ```
 
+release 安装器 smoke test：
+
+```bash
+bash scripts/check/smoke-install-release.sh
+```
+
 ## 安装实现要点
 
 - Linux 默认同时启用 `editor_settings` 和 `managed_shim`
@@ -128,6 +137,7 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 - `managed_shim` 会把扩展 bundle 中的 `codex` 重命名为 `codex.real`
 - 然后把 `relay-wrapper` 二进制复制到原始 `codex` 路径
 - `CODEX_REAL_BINARY` 会自动指向保留下来的 `codex.real`
+- `install-release.sh` 必须兼容 `curl | bash`，因此交互 setup 需要显式从 `/dev/tty` 取 stdin
 
 当前配置路径仍沿用统一布局：
 
@@ -207,6 +217,7 @@ gofmt -w $(find cmd internal testkit -name '*.go' | sort)
 go test ./...
 bash scripts/check/no-local-paths.sh
 bash scripts/check/no-legacy-names.sh
+bash scripts/check/smoke-install-release.sh
 ```
 
 ## GitHub Actions
@@ -215,9 +226,10 @@ bash scripts/check/no-legacy-names.sh
   - 检查公开文档是否泄漏本机路径
   - 检查旧项目名是否回流
   - 检查 `gofmt`
+  - 跑 release 安装器 smoke test
   - 构建并运行 `go test ./...`
 - `Release`
-  - 自动决定下一个语义化版本
+  - 支持显式指定版本或自动决定下一个语义化版本
   - 构建多平台产物
   - 创建 GitHub Release
 

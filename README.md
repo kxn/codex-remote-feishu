@@ -47,6 +47,27 @@
 - `App Secret`
 - 消息接收、reaction、机器人菜单相关权限和事件
 
+## 一条命令安装
+
+macOS / Linux 可以直接执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+```
+
+这个脚本会自动：
+
+- 识别平台
+- 下载最新 release 包
+- 解压到本地 release 缓存目录
+- 启动包内的 `setup.sh` 进入交互安装
+
+如果要安装指定版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+```
+
 ## 交互安装
 
 macOS / Linux:
@@ -121,6 +142,12 @@ Windows PowerShell:
 - [deploy/docker/compose.yml](./deploy/docker/compose.yml)
 - [deploy/docker/.env.example](./deploy/docker/.env.example)
 
+release 包内也会附带：
+
+- [QUICKSTART.md](./QUICKSTART.md)
+- [install-release.sh](./install-release.sh)
+- `setup.sh` / `setup.ps1`
+
 用法：
 
 ```bash
@@ -184,7 +211,8 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 ## 发布
 
 - Push / PR 会触发 GitHub Actions CI
-- `Release` workflow 会自动计算版本号、构建多平台产物并创建 GitHub Release
+- `Release` workflow 支持显式指定版本号
+- release 产物会包含各平台安装包、在线安装脚本和校验文件
 
 ## 开发
 

@@ -58,6 +58,20 @@ else
   echo "Initial release."
 fi
 echo
+echo "## Install"
+echo
+echo "Latest macOS / Linux install:"
+echo
+echo '```bash'
+echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash"
+echo '```'
+echo
+echo "Pin this version:"
+echo
+echo '```bash'
+echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version ${version}"
+echo '```'
+echo
 
 print_section "Breaking Changes" "${breaking[@]}"
 print_section "Features" "${features[@]}"

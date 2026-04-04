@@ -4,6 +4,7 @@
 
 这份文档描述当前 Go 版本的安装、配置和部署模型，覆盖：
 
+- 在线安装脚本
 - 交互安装脚本
 - `relay-install` 非交互安装
 - VS Code / VS Code Remote 接管方式
@@ -28,7 +29,29 @@
 - macOS: 默认 `editor_settings`
 - Windows: 默认 `editor_settings`
 
-### 2.2 `relay-install`
+### 2.2 `install-release.sh`
+
+在线安装入口，面向最终用户。
+
+职责：
+
+- 解析平台和架构
+- 下载最新或指定 release 包
+- 解压到本地 release cache
+- 启动包内的 `setup.sh`
+
+它需要兼容：
+
+- `curl | bash`
+- 指定版本安装
+- CI 中通过本地 HTTP server 做 smoke test
+
+默认缓存目录：
+
+- Linux: `~/.local/share/codex-remote/releases`
+- macOS: `~/Library/Application Support/codex-remote/releases`
+
+### 2.3 `relay-install`
 
 安装器核心逻辑。
 
@@ -47,7 +70,7 @@
 - 交互模式：`-interactive`
 - 非交互模式：直接传 flags
 
-### 2.3 `install.sh`
+### 2.4 `install.sh`
 
 Linux 仓库内运维脚本，不是跨平台产品入口。
 
@@ -213,6 +236,18 @@ ws://127.0.0.1:9500/ws/agent
 - P2P 单聊消息权限
 
 ## 8. 非交互安装示例
+
+在线安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+```
+
+固定版本在线安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+```
 
 Linux + VS Code Remote：
 
