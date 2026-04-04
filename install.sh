@@ -104,9 +104,19 @@ start() {
     echo "relayd already running with pid $(cat "${PID_FILE}")"
     return 0
   fi
-  nohup env CODEX_RELAY_SERVICES_CONFIG="${SERVICES_CONFIG}" "${BIN_DIR}/relayd" >>"${LOG_FILE}" 2>&1 &
-  echo $! > "${PID_FILE}"
-  echo "relayd started with pid $(cat "${PID_FILE}")"
+  rm -f "${PID_FILE}"
+  setsid env CODEX_RELAY_SERVICES_CONFIG="${SERVICES_CONFIG}" "${BIN_DIR}/relayd" </dev/null >>"${LOG_FILE}" 2>&1 &
+  local pid=$!
+  echo "${pid}" > "${PID_FILE}"
+  sleep 1
+  if kill -0 "${pid}" 2>/dev/null; then
+    echo "relayd started with pid ${pid}"
+    return 0
+  fi
+  echo "relayd failed to start; recent log:" >&2
+  tail -n 20 "${LOG_FILE}" >&2 || true
+  rm -f "${PID_FILE}"
+  return 1
 }
 
 stop() {
@@ -127,8 +137,15 @@ stop() {
 }
 
 status() {
-  if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
-    echo "relayd: running (pid $(cat "${PID_FILE}"))"
+  if [[ -f "${PID_FILE}" ]]; then
+    local pid
+    pid="$(cat "${PID_FILE}")"
+    if kill -0 "${pid}" 2>/dev/null; then
+      echo "relayd: running (pid ${pid})"
+    else
+      rm -f "${PID_FILE}"
+      echo "relayd: stopped"
+    fi
   else
     echo "relayd: stopped"
   fi

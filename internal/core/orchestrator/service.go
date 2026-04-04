@@ -124,6 +124,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 	if inst == nil {
 		return nil
 	}
+	if isInternalHelperEvent(event) {
+		return nil
+	}
 	preface := s.flushPendingTurnTextIfTurnContinues(instanceID, event)
 
 	switch event.Kind {
@@ -142,6 +145,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
+		if event.TrafficClass != "" {
+			thread.TrafficClass = event.TrafficClass
+		}
 		if event.Name != "" {
 			thread.Name = event.Name
 		}
@@ -176,6 +182,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			if current == nil {
 				current = &state.ThreadRecord{ThreadID: thread.ThreadID}
 			}
+			current.TrafficClass = agentproto.TrafficClassPrimary
 			if thread.Name != "" {
 				current.Name = thread.Name
 			}
@@ -416,6 +423,9 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	if initialThreadID == "" {
 		initialThreadID = inst.ActiveThreadID
 	}
+	if !threadVisible(inst.Threads[initialThreadID]) {
+		initialThreadID = ""
+	}
 	if initialThreadID != "" {
 		surface.SelectedThreadID = initialThreadID
 		surface.RouteMode = state.RouteModePinned
@@ -459,7 +469,7 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord) []
 	}
 	threads := make([]*state.ThreadRecord, 0, len(inst.Threads))
 	for _, thread := range inst.Threads {
-		if !thread.Archived {
+		if threadVisible(thread) {
 			threads = append(threads, thread)
 		}
 	}
@@ -797,19 +807,20 @@ func freezeRoute(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord
 	switch {
 	case surface.SelectedThreadID != "":
 		threadID = surface.SelectedThreadID
-		if thread := inst.Threads[threadID]; thread != nil {
+		if thread := inst.Threads[threadID]; threadVisible(thread) {
 			cwd = thread.CWD
+			return threadID, cwd, state.RouteModePinned, false
 		}
-		return threadID, cwd, state.RouteModePinned, false
 	case surface.RouteMode == state.RouteModeFollowLocal && inst.ObservedFocusedThreadID != "":
 		threadID = inst.ObservedFocusedThreadID
-		if thread := inst.Threads[threadID]; thread != nil {
+		if thread := inst.Threads[threadID]; threadVisible(thread) {
 			cwd = thread.CWD
+			return threadID, cwd, state.RouteModeFollowLocal, false
 		}
-		return threadID, cwd, state.RouteModeFollowLocal, false
 	default:
 		return "", inst.WorkspaceRoot, surface.RouteMode, true
 	}
+	return "", inst.WorkspaceRoot, surface.RouteMode, true
 }
 
 func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []control.UIEvent {
@@ -1154,9 +1165,12 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 	}
 	if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {
 		selected := inst.Threads[surface.SelectedThreadID]
+		if !threadVisible(selected) {
+			selected = nil
+		}
 		selectedTitle := ""
 		selectedPreview := ""
-		if surface.SelectedThreadID != "" {
+		if selected != nil {
 			selectedTitle = displayThreadTitle(inst, selected, surface.SelectedThreadID)
 			selectedPreview = threadPreview(selected)
 		}
@@ -1185,7 +1199,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			continue
 		}
 		for _, thread := range inst.Threads {
-			if thread.Archived {
+			if !threadVisible(thread) {
 				continue
 			}
 			snapshot.Threads = append(snapshot.Threads, control.ThreadSummary{
@@ -1493,6 +1507,9 @@ func (s *Service) bindSurfaceToThread(surface *state.SurfaceConsoleRecord, inst 
 		return nil
 	}
 	thread := s.ensureThread(inst, threadID)
+	if !threadVisible(thread) {
+		return nil
+	}
 	surface.SelectedThreadID = threadID
 	surface.RouteMode = state.RouteModePinned
 	return s.threadSelectionEvents(
@@ -1613,7 +1630,7 @@ func duplicateThreadTitle(inst *state.InstanceRecord, title string) bool {
 	}
 	count := 0
 	for threadID, thread := range inst.Threads {
-		if thread == nil || thread.Archived {
+		if !threadVisible(thread) {
 			continue
 		}
 		if threadTitle(inst, thread, threadID) != title {
@@ -1657,7 +1674,7 @@ func (s *Service) maybeRequestThreadRefresh(surface *state.SurfaceConsoleRecord,
 }
 
 func threadNeedsRefresh(thread *state.ThreadRecord) bool {
-	if thread == nil {
+	if thread == nil || !threadVisible(thread) {
 		return false
 	}
 	return !thread.Loaded || strings.TrimSpace(thread.Name) == ""
@@ -1679,6 +1696,14 @@ func selectionPromptExpired(now time.Time, prompt *state.SelectionPromptRecord) 
 		return false
 	}
 	return !now.Before(prompt.ExpiresAt)
+}
+
+func isInternalHelperEvent(event agentproto.Event) bool {
+	return event.TrafficClass == agentproto.TrafficClassInternalHelper || event.Initiator.Kind == agentproto.InitiatorInternalHelper
+}
+
+func threadVisible(thread *state.ThreadRecord) bool {
+	return thread != nil && !thread.Archived && thread.TrafficClass != agentproto.TrafficClassInternalHelper
 }
 
 func shortenThreadID(threadID string) string {

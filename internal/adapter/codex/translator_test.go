@@ -2,6 +2,7 @@ package codex
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"fschannel/internal/core/agentproto"
@@ -334,6 +335,257 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 	turnParams, _ := turnStart["params"].(map[string]any)
 	if turnParams["model"] != "gpt-5.4" || turnParams["effort"] != "high" {
 		t.Fatalf("expected followup turn/start overrides, got %#v", turnParams)
+	}
+}
+
+func TestStructuredLocalTurnStartDoesNotOverwriteReusableTurnTemplate(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.3-codex","reasoning_effort":"medium"}}}}`)); err != nil {
+		t.Fatalf("observe baseline turn start: %v", err)
+	}
+	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","outputSchema":{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"}}},"collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.3-codex","reasoning_effort":"low"}}}}`)); err != nil {
+		t.Fatalf("observe structured helper turn start: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandPromptSend,
+		Origin: agentproto.Origin{ChatID: "surface-1"},
+		Target: agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one turn/start command, got %d", len(commands))
+	}
+
+	var turnStart map[string]any
+	if err := json.Unmarshal(commands[0], &turnStart); err != nil {
+		t.Fatalf("unmarshal turn/start: %v", err)
+	}
+	params, _ := turnStart["params"].(map[string]any)
+	if _, exists := params["outputSchema"]; exists {
+		t.Fatalf("structured helper output schema leaked into remote turn/start: %#v", params)
+	}
+	collaborationMode, _ := params["collaborationMode"].(map[string]any)
+	settings, _ := collaborationMode["settings"].(map[string]any)
+	if settings["reasoning_effort"] != "medium" {
+		t.Fatalf("structured helper turn overwrote reusable reasoning config, got %#v", params["collaborationMode"])
+	}
+}
+
+func TestInternalHelperThreadStartDoesNotPoisonRemoteThreadStart(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"/tmp/project","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false,"model":"gpt-5.4","config":{"model_reasoning_effort":"low"}}}`)); err != nil {
+		t.Fatalf("observe helper thread start: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandPromptSend,
+		Origin: agentproto.Origin{ChatID: "surface-1"},
+		Target: agentproto.Target{CWD: "/tmp/project"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one thread/start command, got %d", len(commands))
+	}
+
+	var threadStart map[string]any
+	if err := json.Unmarshal(commands[0], &threadStart); err != nil {
+		t.Fatalf("unmarshal thread/start: %v", err)
+	}
+	params, _ := threadStart["params"].(map[string]any)
+	if params["approvalPolicy"] != "on-request" {
+		t.Fatalf("helper thread start overwrote approval policy, got %#v", params)
+	}
+	if _, exists := params["ephemeral"]; exists {
+		t.Fatalf("helper thread start leaked ephemeral flag into remote thread/start: %#v", params)
+	}
+	if params["model"] != nil {
+		t.Fatalf("helper thread start leaked model into remote thread/start: %#v", params)
+	}
+}
+
+func TestInternalHelperThreadLifecycleIsAnnotatedInsteadOfSuppressed(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"/tmp/project","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false}}`)); err != nil {
+		t.Fatalf("observe helper thread start: %v", err)
+	}
+
+	result, err := tr.ObserveServer([]byte(`{"id":"helper-thread-1","result":{"thread":{"id":"helper-thread"}}}`))
+	if err != nil {
+		t.Fatalf("observe helper thread response: %v", err)
+	}
+	if result.Suppress {
+		t.Fatalf("helper thread response must still reach parent stdout: %#v", result)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("helper thread response should not emit canonical events, got %#v", result.Events)
+	}
+
+	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"helper-thread","cwd":"/tmp/project"}}}`))
+	if err != nil {
+		t.Fatalf("observe helper thread started: %v", err)
+	}
+	if started.Suppress {
+		t.Fatalf("helper thread notification must still reach parent stdout: %#v", started)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected annotated helper thread event, got %#v", started.Events)
+	}
+	if started.Events[0].Kind != agentproto.EventThreadDiscovered ||
+		started.Events[0].TrafficClass != agentproto.TrafficClassInternalHelper ||
+		started.Events[0].Initiator.Kind != agentproto.InitiatorInternalHelper {
+		t.Fatalf("unexpected helper thread event: %#v", started.Events[0])
+	}
+}
+
+func TestStructuredHelperTurnLifecycleIsAnnotatedInsteadOfSuppressed(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"/tmp/project","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false}}`)); err != nil {
+		t.Fatalf("observe helper thread start: %v", err)
+	}
+	if _, err := tr.ObserveServer([]byte(`{"id":"helper-thread-1","result":{"thread":{"id":"helper-thread"}}}`)); err != nil {
+		t.Fatalf("observe helper thread response: %v", err)
+	}
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"helper-thread","cwd":"/tmp/project"}}}`)); err != nil {
+		t.Fatalf("observe helper thread started: %v", err)
+	}
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-turn-1","method":"turn/start","params":{"threadId":"helper-thread","cwd":"/tmp/project","outputSchema":{"type":"object","properties":{"title":{"type":"string"}}}}}`)); err != nil {
+		t.Fatalf("observe helper turn start: %v", err)
+	}
+	result, err := tr.ObserveServer([]byte(`{"id":"helper-turn-1","result":{"turn":{"id":"turn-helper"}}}`))
+	if err != nil {
+		t.Fatalf("observe helper turn response: %v", err)
+	}
+	if result.Suppress {
+		t.Fatalf("helper turn response must still reach parent stdout: %#v", result)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("helper turn response should not emit canonical events, got %#v", result.Events)
+	}
+
+	started, err := tr.ObserveServer([]byte(`{"method":"turn/started","params":{"threadId":"helper-thread","turn":{"id":"turn-helper"}}}`))
+	if err != nil {
+		t.Fatalf("observe helper turn started: %v", err)
+	}
+	if started.Suppress {
+		t.Fatalf("helper turn started must still reach parent stdout: %#v", started)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected annotated helper turn started event, got %#v", started.Events)
+	}
+	if started.Events[0].Kind != agentproto.EventTurnStarted ||
+		started.Events[0].TrafficClass != agentproto.TrafficClassInternalHelper ||
+		started.Events[0].Initiator.Kind != agentproto.InitiatorInternalHelper {
+		t.Fatalf("unexpected helper turn started event: %#v", started.Events[0])
+	}
+
+	delta, err := tr.ObserveServer([]byte(`{"method":"item/agentMessage/delta","params":{"threadId":"helper-thread","turnId":"turn-helper","itemId":"item-1","delta":"{\"title\":\"ok\"}"}}`))
+	if err != nil {
+		t.Fatalf("observe helper delta: %v", err)
+	}
+	if delta.Suppress {
+		t.Fatalf("helper item delta must still reach parent stdout: %#v", delta)
+	}
+	if len(delta.Events) != 1 {
+		t.Fatalf("expected annotated helper delta event, got %#v", delta.Events)
+	}
+	if delta.Events[0].Kind != agentproto.EventItemDelta ||
+		delta.Events[0].TrafficClass != agentproto.TrafficClassInternalHelper ||
+		delta.Events[0].Initiator.Kind != agentproto.InitiatorInternalHelper {
+		t.Fatalf("unexpected helper delta event: %#v", delta.Events[0])
+	}
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"turn/completed","params":{"threadId":"helper-thread","turn":{"id":"turn-helper","status":"completed"}}}`))
+	if err != nil {
+		t.Fatalf("observe helper turn completed: %v", err)
+	}
+	if completed.Suppress {
+		t.Fatalf("helper turn completed must still reach parent stdout: %#v", completed)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected annotated helper turn completed event, got %#v", completed.Events)
+	}
+	if completed.Events[0].Kind != agentproto.EventTurnCompleted ||
+		completed.Events[0].TrafficClass != agentproto.TrafficClassInternalHelper ||
+		completed.Events[0].Initiator.Kind != agentproto.InitiatorInternalHelper {
+		t.Fatalf("unexpected helper turn completed event: %#v", completed.Events[0])
+	}
+}
+
+func TestHelperTurnOnSameThreadDoesNotSuppressRemoteTurn(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-turn-1","method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","outputSchema":{"type":"object","properties":{"title":{"type":"string"}}}}}`)); err != nil {
+		t.Fatalf("observe helper turn start: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandPromptSend,
+		Origin: agentproto.Origin{Surface: "surface-1", ChatID: "chat-1"},
+		Target: agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+	})
+	if err != nil {
+		t.Fatalf("translate remote command: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one remote turn/start command, got %d", len(commands))
+	}
+
+	if _, err := tr.ObserveServer([]byte(`{"id":"helper-turn-1","result":{"turn":{"id":"turn-helper"}}}`)); err != nil {
+		t.Fatalf("observe helper turn response: %v", err)
+	}
+
+	var remoteTurnStart map[string]any
+	if err := json.Unmarshal(commands[0], &remoteTurnStart); err != nil {
+		t.Fatalf("unmarshal remote turn/start: %v", err)
+	}
+	remoteRequestID, _ := remoteTurnStart["id"].(string)
+	if remoteRequestID == "" {
+		t.Fatalf("expected remote turn/start request id, got %#v", remoteTurnStart)
+	}
+
+	response, err := tr.ObserveServer([]byte(fmt.Sprintf(`{"id":%q,"result":{"turn":{"id":"turn-remote"}}}`, remoteRequestID)))
+	if err != nil {
+		t.Fatalf("observe remote turn response: %v", err)
+	}
+	if !response.Suppress {
+		t.Fatalf("expected relay-owned remote turn/start response to stay suppressed, got %#v", response)
+	}
+
+	started, err := tr.ObserveServer([]byte(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-remote"}}}`))
+	if err != nil {
+		t.Fatalf("observe remote turn started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one remote turn started event, got %#v", started.Events)
+	}
+	if started.Events[0].Kind != agentproto.EventTurnStarted || started.Events[0].Initiator.Kind != agentproto.InitiatorRemoteSurface {
+		t.Fatalf("expected remote turn started event, got %#v", started.Events[0])
+	}
+
+	item, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-remote","item":{"id":"item-1","type":"agentMessage","text":"您好"}}}`))
+	if err != nil {
+		t.Fatalf("observe remote item completed: %v", err)
+	}
+	if len(item.Events) != 1 || item.Events[0].ItemKind != "agent_message" {
+		t.Fatalf("expected remote assistant item event, got %#v", item.Events)
+	}
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-remote","status":"completed"}}}`))
+	if err != nil {
+		t.Fatalf("observe remote turn completed: %v", err)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one remote turn completed event, got %#v", completed.Events)
+	}
+	if completed.Events[0].Kind != agentproto.EventTurnCompleted || completed.Events[0].Initiator.Kind != agentproto.InitiatorRemoteSurface {
+		t.Fatalf("expected remote turn completed event, got %#v", completed.Events[0])
 	}
 }
 

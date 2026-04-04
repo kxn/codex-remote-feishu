@@ -47,8 +47,41 @@ For bugs that involve multiple layers or state machines (for example VS Code <->
 
 - Do not patch the first plausible cause and stop.
 - First collect runtime evidence from the full path: current server state, relevant logs, and the actual event/control flow.
+- For protocol/render regressions, capture one real upstream payload and one actual downstream payload before changing code; do not reason only from mocks or remembered protocol shapes.
+- Distinguish user-visible conversation traffic from editor/internal helper traffic before reusing templates or forwarding events. Internal helper fields such as structured-output schemas or ephemeral thread settings must not be treated as reusable chat defaults.
 - Translate the user-reported reproduction into tests before or together with the fix.
 - If multiple layers participate in the bug, fix the whole chain in one pass instead of doing isolated partial tweaks.
 - Do not consider the issue fixed just because unit tests pass; verify that the observed runtime state actually changes in the expected way.
 
 This rule exists because partial fixes on stateful flows often leave the visible behavior unchanged and waste debugging cycles.
+
+## Config Preservation Rule
+
+For installers, bootstrap commands, and config migration code:
+
+- Never clear an existing credential, token, secret, or app key just because the current invocation omitted that flag or env var.
+- Empty input means "preserve existing value" unless the product explicitly defines a destructive reset flow.
+- Add a regression test for any config writer that touches persisted auth or integration settings.
+
+## Service Lifecycle Rule
+
+For local service control during debugging:
+
+- Do not run mutating lifecycle commands for the same service in parallel. In particular, never overlap `stop`, `start`, `restart`, or `bootstrap` for one daemon.
+- When validating a daemon restart, verify the post-start runtime state directly with `ps`, bound ports, and a real health/status call instead of trusting the shell script's success message.
+
+## Protocol Correlation Rule
+
+For app-server helper or internal traffic:
+
+- Never suppress or classify helper turns by thread-local heuristics such as "same thread" or "next turn on this thread".
+- Correlate helper thread/turn lifecycle only through protocol-level identifiers returned by the server, such as request `id -> result.thread.id` or `id -> result.turn.id`.
+- If the real protocol provides an exact correlation handle, use it. Do not replace it with timing-based or adjacency-based guesses in production logic or mocks.
+
+## Layer Ownership Rule
+
+For wrapper/server protocol work:
+
+- The wrapper is responsible for accurate translation and explicit annotation, not for product-side visibility policy.
+- If a native lifecycle event is real app-server runtime traffic, prefer emitting it with canonical metadata such as `trafficClass` / `initiator` instead of silently swallowing it.
+- Product decisions such as "pause queue", "render to Feishu", "hide helper traffic", or "update selected thread" belong in the server/orchestrator layer and must be tested there.

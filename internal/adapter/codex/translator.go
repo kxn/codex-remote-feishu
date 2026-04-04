@@ -10,17 +10,21 @@ import (
 )
 
 type Translator struct {
-	instanceID                string
-	nextID                    int
-	currentThreadID           string
-	knownThreadCWD            map[string]string
-	pendingRemoteTurnByThread map[string]string
-	pendingLocalTurnByThread  map[string]bool
-	pendingLocalNewThreadTurn bool
-	pendingThreadCreate       map[string]pendingThreadCreate
-	pendingThreadResume       map[string]pendingThreadResume
-	pendingThreadNameSet      map[string]pendingThreadNameSet
-	turnInitiators            map[string]agentproto.Initiator
+	instanceID                  string
+	nextID                      int
+	currentThreadID             string
+	knownThreadCWD              map[string]string
+	pendingRemoteTurnByThread   map[string]string
+	pendingLocalTurnByThread    map[string]bool
+	pendingLocalNewThreadTurn   bool
+	pendingThreadCreate         map[string]pendingThreadCreate
+	pendingThreadResume         map[string]pendingThreadResume
+	pendingThreadNameSet        map[string]pendingThreadNameSet
+	pendingInternalThreadSet    map[string]bool
+	pendingInternalTurnSet      map[string]bool
+	internalThreadIDs           map[string]bool
+	internalTurnIDs             map[string]bool
+	turnInitiators              map[string]agentproto.Initiator
 
 	latestThreadStartParams map[string]any
 	latestTurnStartTemplate map[string]any
@@ -55,18 +59,22 @@ type Result struct {
 
 func NewTranslator(instanceID string) *Translator {
 	return &Translator{
-		instanceID:                instanceID,
-		knownThreadCWD:            map[string]string{},
-		pendingRemoteTurnByThread: map[string]string{},
-		pendingLocalTurnByThread:  map[string]bool{},
-		pendingThreadCreate:       map[string]pendingThreadCreate{},
-		pendingThreadResume:       map[string]pendingThreadResume{},
-		pendingThreadNameSet:      map[string]pendingThreadNameSet{},
-		turnInitiators:            map[string]agentproto.Initiator{},
-		turnStartByThread:         map[string]map[string]any{},
-		pendingThreadReads:        map[string]string{},
-		threadRefreshRecords:      map[string]agentproto.ThreadSnapshotRecord{},
-		pendingSuppressedResponse: map[string]bool{},
+		instanceID:                  instanceID,
+		knownThreadCWD:              map[string]string{},
+		pendingRemoteTurnByThread:   map[string]string{},
+		pendingLocalTurnByThread:    map[string]bool{},
+		pendingThreadCreate:         map[string]pendingThreadCreate{},
+		pendingThreadResume:         map[string]pendingThreadResume{},
+		pendingThreadNameSet:        map[string]pendingThreadNameSet{},
+		pendingInternalThreadSet:    map[string]bool{},
+		pendingInternalTurnSet:      map[string]bool{},
+		internalThreadIDs:           map[string]bool{},
+		internalTurnIDs:             map[string]bool{},
+		turnInitiators:              map[string]agentproto.Initiator{},
+		turnStartByThread:           map[string]map[string]any{},
+		pendingThreadReads:          map[string]string{},
+		threadRefreshRecords:        map[string]agentproto.ThreadSnapshotRecord{},
+		pendingSuppressedResponse:   map[string]bool{},
 	}
 }
 
@@ -93,11 +101,30 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			FocusSource: "local_ui",
 		}}}, nil
 	case "thread/start":
+		if isInternalLocalThreadStart(params) {
+			if requestID, ok := message["id"]; ok {
+				t.pendingInternalThreadSet[fmt.Sprint(requestID)] = true
+			}
+			return Result{}, nil
+		}
 		t.latestThreadStartParams = normalizeThreadStartParams(params)
 		return Result{Events: configObservedEvents("", lookupStringFromAny(params["cwd"]), params, true)}, nil
 	case "turn/start":
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)
+		if isInternalLocalTurnStart(params) {
+			if requestID, ok := message["id"]; ok {
+				t.pendingInternalTurnSet[fmt.Sprint(requestID)] = true
+			}
+			return Result{Events: []agentproto.Event{{
+				Kind:         agentproto.EventLocalInteractionObserved,
+				ThreadID:     threadID,
+				CWD:          cwd,
+				Action:       "turn_start",
+				TrafficClass: agentproto.TrafficClassInternalHelper,
+				Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+			}}}, nil
+		}
 		t.currentThreadID = threadID
 		if cwd != "" {
 			t.knownThreadCWD[threadID] = cwd
@@ -115,10 +142,12 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		}
 		events := configObservedEvents(threadID, cwd, params, threadID == "")
 		events = append(events, agentproto.Event{
-			Kind:     agentproto.EventLocalInteractionObserved,
-			ThreadID: threadID,
-			CWD:      cwd,
-			Action:   "turn_start",
+			Kind:         agentproto.EventLocalInteractionObserved,
+			ThreadID:     threadID,
+			CWD:          cwd,
+			Action:       "turn_start",
+			TrafficClass: agentproto.TrafficClassPrimary,
+			Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
 		})
 		return Result{Events: events}, nil
 	case "turn/steer":
@@ -130,9 +159,11 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			t.pendingLocalTurnByThread[threadID] = true
 		}
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventLocalInteractionObserved,
-			ThreadID: threadID,
-			Action:   "turn_steer",
+			Kind:         agentproto.EventLocalInteractionObserved,
+			ThreadID:     threadID,
+			Action:       "turn_steer",
+			TrafficClass: agentproto.TrafficClassPrimary,
+			Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
 		}}}, nil
 	case "thread/name/set":
 		if requestID, ok := message["id"]; ok {
@@ -158,6 +189,29 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if t.pendingSuppressedResponse[requestID] {
 			delete(t.pendingSuppressedResponse, requestID)
 			return Result{Suppress: true}, nil
+		}
+		if t.pendingInternalThreadSet[requestID] {
+			delete(t.pendingInternalThreadSet, requestID)
+			threadID := lookupString(message, "result", "thread", "id")
+			if threadID == "" {
+				threadID = lookupString(message, "result", "id")
+			}
+			if threadID != "" {
+				t.internalThreadIDs[threadID] = true
+			}
+			return Result{}, nil
+		}
+		if t.pendingInternalTurnSet[requestID] {
+			delete(t.pendingInternalTurnSet, requestID)
+			turnID := lookupString(message, "result", "turn", "id")
+			if turnID == "" {
+				turnID = lookupString(message, "result", "id")
+			}
+			if turnID != "" {
+				t.internalTurnIDs[turnID] = true
+				t.turnInitiators[turnID] = agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+			}
+			return Result{}, nil
 		}
 		if pending, exists := t.pendingThreadCreate[requestID]; exists {
 			threadID := lookupString(message, "result", "thread", "id")
@@ -295,6 +349,21 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if name == "" {
 			name = lookupString(message, "params", "thread", "title")
 		}
+		if t.internalThreadIDs[threadID] {
+			if cwd != "" {
+				t.knownThreadCWD[threadID] = cwd
+			}
+			return Result{Events: []agentproto.Event{{
+				Kind:         agentproto.EventThreadDiscovered,
+				ThreadID:     threadID,
+				CWD:          cwd,
+				Name:         name,
+				FocusSource:  "remote_created_thread",
+				TrafficClass: agentproto.TrafficClassInternalHelper,
+				Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+				Metadata:     map[string]any{"internalHelper": true},
+			}}}, nil
+		}
 		t.currentThreadID = threadID
 		if t.pendingLocalNewThreadTurn && threadID != "" {
 			t.pendingLocalTurnByThread[threadID] = true
@@ -312,6 +381,20 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}}}, nil
 	case "thread/name/updated":
 		threadID := lookupString(message, "params", "threadId")
+		if t.internalThreadIDs[threadID] {
+			name := lookupString(message, "params", "name")
+			if name == "" {
+				name = lookupString(message, "params", "thread", "name")
+			}
+			return Result{Events: []agentproto.Event{{
+				Kind:         agentproto.EventThreadDiscovered,
+				ThreadID:     threadID,
+				Name:         name,
+				TrafficClass: agentproto.TrafficClassInternalHelper,
+				Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+				Metadata:     map[string]any{"internalHelper": true},
+			}}}, nil
+		}
 		name := lookupString(message, "params", "name")
 		if name == "" {
 			name = lookupString(message, "params", "thread", "name")
@@ -330,24 +413,18 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if turnID == "" {
 			turnID = lookupString(message, "params", "turnId")
 		}
-		initiator := agentproto.Initiator{Kind: agentproto.InitiatorUnknown}
-		switch {
-		case t.pendingRemoteTurnByThread[threadID] != "":
-			initiator = agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: t.pendingRemoteTurnByThread[threadID]}
-			delete(t.pendingRemoteTurnByThread, threadID)
-		case t.pendingLocalTurnByThread[threadID]:
-			initiator = agentproto.Initiator{Kind: agentproto.InitiatorLocalUI}
-			delete(t.pendingLocalTurnByThread, threadID)
-		}
+		trafficClass := t.trafficClassForTurn(threadID, turnID)
+		initiator := t.resolveTurnInitiator(threadID, turnID, trafficClass)
 		if turnID != "" {
 			t.turnInitiators[turnID] = initiator
 		}
 		return Result{Events: []agentproto.Event{{
-			Kind:      agentproto.EventTurnStarted,
-			ThreadID:  threadID,
-			TurnID:    turnID,
-			Status:    "running",
-			Initiator: initiator,
+			Kind:         agentproto.EventTurnStarted,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			Status:       "running",
+			TrafficClass: trafficClass,
+			Initiator:    initiator,
 		}}}, nil
 	case "turn/completed":
 		threadID := lookupString(message, "params", "thread", "id")
@@ -358,19 +435,25 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if turnID == "" {
 			turnID = lookupString(message, "params", "turnId")
 		}
+		trafficClass := t.trafficClassForTurn(threadID, turnID)
 		status := lookupString(message, "params", "turn", "status")
 		if status == "" {
 			status = "completed"
 		}
 		errMsg := lookupString(message, "params", "turn", "error", "message")
 		initiator := t.turnInitiators[turnID]
+		if initiator.Kind == "" {
+			initiator = t.resolveTurnInitiator(threadID, turnID, trafficClass)
+		}
 		delete(t.turnInitiators, turnID)
+		delete(t.internalTurnIDs, turnID)
 		return Result{Events: []agentproto.Event{{
 			Kind:         agentproto.EventTurnCompleted,
 			ThreadID:     threadID,
 			TurnID:       turnID,
 			Status:       status,
 			ErrorMessage: errMsg,
+			TrafficClass: trafficClass,
 			Initiator:    initiator,
 		}}}, nil
 	case "item/completed":
@@ -387,12 +470,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		))
 		metadata := extractItemMetadata(itemKind, item)
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemCompleted,
-			ThreadID: threadID,
-			TurnID:   turnID,
-			ItemID:   itemID,
-			ItemKind: itemKind,
-			Metadata: metadata,
+			Kind:         agentproto.EventItemCompleted,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       itemID,
+			ItemKind:     itemKind,
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     metadata,
 		}}}, nil
 	case "item/started":
 		threadID := lookupString(message, "params", "threadId")
@@ -407,68 +492,94 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			lookupString(message, "params", "itemType"),
 		))
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemStarted,
-			ThreadID: threadID,
-			TurnID:   turnID,
-			ItemID:   itemID,
-			ItemKind: itemKind,
-			Metadata: extractItemMetadata(itemKind, item),
+			Kind:         agentproto.EventItemStarted,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       itemID,
+			ItemKind:     itemKind,
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     extractItemMetadata(itemKind, item),
 		}}}, nil
 	case "item/agentMessage/delta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "agent_message",
-			Delta:    lookupString(message, "params", "delta"),
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "agent_message",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
 	case "item/plan/delta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "plan",
-			Delta:    lookupString(message, "params", "delta"),
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "plan",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
 	case "item/reasoning/summaryTextDelta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "reasoning_summary",
-			Delta:    lookupString(message, "params", "delta"),
-			Metadata: map[string]any{"summaryIndex": lookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "reasoning_summary",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     map[string]any{"summaryIndex": lookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
 		}}}, nil
 	case "item/reasoning/textDelta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "reasoning_content",
-			Delta:    lookupString(message, "params", "delta"),
-			Metadata: map[string]any{"contentIndex": lookupIntFromAny(lookupAny(message, "params", "contentIndex"))},
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "reasoning_content",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     map[string]any{"contentIndex": lookupIntFromAny(lookupAny(message, "params", "contentIndex"))},
 		}}}, nil
 	case "item/commandExecution/outputDelta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "command_execution_output",
-			Delta:    lookupString(message, "params", "delta"),
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "command_execution_output",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
 	case "item/fileChange/outputDelta":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
 		return Result{Events: []agentproto.Event{{
-			Kind:     agentproto.EventItemDelta,
-			ThreadID: lookupString(message, "params", "threadId"),
-			TurnID:   lookupString(message, "params", "turnId"),
-			ItemID:   lookupString(message, "params", "itemId"),
-			ItemKind: "file_change_output",
-			Delta:    lookupString(message, "params", "delta"),
+			Kind:         agentproto.EventItemDelta,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "file_change_output",
+			Delta:        lookupString(message, "params", "delta"),
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
 	default:
 		return Result{}, nil
@@ -607,7 +718,6 @@ func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.Pro
 	setDefault(params, "developerInstructions", nil)
 	setDefault(params, "sandbox", "read-only")
 	setDefault(params, "personality", nil)
-	setDefault(params, "ephemeral", nil)
 	setDefault(params, "experimentalRawEvents", false)
 	setDefault(params, "dynamicTools", nil)
 	applyPromptOverridesToThreadStart(params, overrides)
@@ -627,7 +737,6 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	setDefault(template, "effort", nil)
 	setDefault(template, "summary", "auto")
 	setDefault(template, "personality", nil)
-	setDefault(template, "outputSchema", nil)
 	setDefault(template, "collaborationMode", nil)
 	setDefault(template, "attachments", []any{})
 	applyPromptOverridesToTurnStart(template, command.Overrides)
@@ -754,6 +863,8 @@ func (t *Translator) nextRequest(prefix string) string {
 
 func normalizeThreadStartParams(params map[string]any) map[string]any {
 	normalized := cloneMap(params)
+	delete(normalized, "ephemeral")
+	delete(normalized, "persistExtendedHistory")
 	setDefault(normalized, "cwd", nil)
 	setDefault(normalized, "model", nil)
 	setDefault(normalized, "modelProvider", nil)
@@ -763,7 +874,6 @@ func normalizeThreadStartParams(params map[string]any) map[string]any {
 	setDefault(normalized, "developerInstructions", nil)
 	setDefault(normalized, "sandbox", "read-only")
 	setDefault(normalized, "personality", nil)
-	setDefault(normalized, "ephemeral", nil)
 	setDefault(normalized, "experimentalRawEvents", false)
 	setDefault(normalized, "dynamicTools", nil)
 	return normalized
@@ -779,7 +889,6 @@ func normalizeTurnStartTemplate(params map[string]any) map[string]any {
 		"effort",
 		"summary",
 		"personality",
-		"outputSchema",
 		"collaborationMode",
 		"attachments",
 	} {
@@ -790,6 +899,62 @@ func normalizeTurnStartTemplate(params map[string]any) map[string]any {
 	setDefault(normalized, "summary", "auto")
 	setDefault(normalized, "attachments", []any{})
 	return normalized
+}
+
+func isInternalLocalThreadStart(params map[string]any) bool {
+	if lookupBoolFromAny(params["ephemeral"]) {
+		return true
+	}
+	value, ok := params["persistExtendedHistory"].(bool)
+	return ok && !value
+}
+
+func isInternalLocalTurnStart(params map[string]any) bool {
+	return !isNull(params["outputSchema"])
+}
+
+func (t *Translator) trafficClassForTurn(threadID, turnID string) agentproto.TrafficClass {
+	switch {
+	case turnID != "" && t.internalTurnIDs[turnID]:
+		return agentproto.TrafficClassInternalHelper
+	case threadID != "" && t.internalThreadIDs[threadID]:
+		return agentproto.TrafficClassInternalHelper
+	default:
+		return agentproto.TrafficClassPrimary
+	}
+}
+
+func (t *Translator) resolveTurnInitiator(threadID, turnID string, trafficClass agentproto.TrafficClass) agentproto.Initiator {
+	if trafficClass == agentproto.TrafficClassInternalHelper {
+		return agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+	}
+	if surfaceID := t.pendingRemoteTurnByThread[threadID]; surfaceID != "" {
+		delete(t.pendingRemoteTurnByThread, threadID)
+		delete(t.pendingLocalTurnByThread, threadID)
+		return agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surfaceID}
+	}
+	if t.pendingLocalTurnByThread[threadID] {
+		delete(t.pendingLocalTurnByThread, threadID)
+		return agentproto.Initiator{Kind: agentproto.InitiatorLocalUI}
+	}
+	if turnID != "" {
+		if initiator := t.turnInitiators[turnID]; initiator.Kind != "" {
+			return initiator
+		}
+	}
+	return agentproto.Initiator{Kind: agentproto.InitiatorUnknown}
+}
+
+func (t *Translator) initiatorForTurn(threadID, turnID string) agentproto.Initiator {
+	if turnID != "" {
+		if initiator := t.turnInitiators[turnID]; initiator.Kind != "" {
+			return initiator
+		}
+	}
+	if t.trafficClassForTurn(threadID, turnID) == agentproto.TrafficClassInternalHelper {
+		return agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+	}
+	return agentproto.Initiator{}
 }
 
 func parseThreadList(result any) []agentproto.ThreadSnapshotRecord {

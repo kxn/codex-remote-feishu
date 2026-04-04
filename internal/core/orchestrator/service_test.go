@@ -362,6 +362,146 @@ func TestLocalPauseNoticeIsNotRepeatedWhenTurnStartedArrives(t *testing.T) {
 	}
 }
 
+func TestInternalHelperLocalInteractionDoesNotPauseSurface(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventLocalInteractionObserved,
+		ThreadID:     "thread-helper",
+		CWD:          "/data/dl/droid",
+		Action:       "turn_start",
+		TrafficClass: agentproto.TrafficClassInternalHelper,
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected helper interaction to stay out of product UI, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].DispatchMode != state.DispatchModeNormal {
+		t.Fatalf("expected helper interaction not to pause surface, got %q", svc.root.Surfaces["surface-1"].DispatchMode)
+	}
+	if svc.root.Instances["inst-1"].ObservedFocusedThreadID != "" {
+		t.Fatalf("expected helper interaction not to mutate observed focus, got %q", svc.root.Instances["inst-1"].ObservedFocusedThreadID)
+	}
+}
+
+func TestInternalHelperThreadIsNotAddedToVisibleThreadState(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventThreadDiscovered,
+		ThreadID:     "thread-helper",
+		CWD:          "/data/dl/droid",
+		Name:         "helper",
+		TrafficClass: agentproto.TrafficClassInternalHelper,
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected helper thread discovery not to emit UI events, got %#v", events)
+	}
+	if _, exists := svc.root.Instances["inst-1"].Threads["thread-helper"]; exists {
+		t.Fatalf("expected helper thread not to enter visible thread state, got %#v", svc.root.Instances["inst-1"].Threads["thread-helper"])
+	}
+}
+
+func TestInternalHelperTurnLifecycleDoesNotAffectRemoteQueue(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	queued := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	foundDispatch := false
+	for _, event := range queued {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			foundDispatch = true
+			break
+		}
+	}
+	if !foundDispatch {
+		t.Fatalf("expected remote queue item to dispatch immediately, got %#v", queued)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	activeQueueItemID := surface.ActiveQueueItemID
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnStarted,
+		ThreadID:     "thread-helper",
+		TurnID:       "turn-helper",
+		TrafficClass: agentproto.TrafficClassInternalHelper,
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+	})
+	if len(started) != 0 {
+		t.Fatalf("expected helper turn start to stay out of UI, got %#v", started)
+	}
+	item := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventItemCompleted,
+		ThreadID:     "thread-helper",
+		TurnID:       "turn-helper",
+		ItemID:       "item-helper",
+		ItemKind:     "agent_message",
+		TrafficClass: agentproto.TrafficClassInternalHelper,
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+		Metadata:     map[string]any{"text": "{\"title\":\"helper\"}"},
+	})
+	if len(item) != 0 {
+		t.Fatalf("expected helper item completion not to render, got %#v", item)
+	}
+	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnCompleted,
+		ThreadID:     "thread-helper",
+		TurnID:       "turn-helper",
+		Status:       "completed",
+		TrafficClass: agentproto.TrafficClassInternalHelper,
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+	})
+	if len(completed) != 0 {
+		t.Fatalf("expected helper turn completion to stay out of UI, got %#v", completed)
+	}
+	if surface.ActiveQueueItemID != activeQueueItemID {
+		t.Fatalf("expected helper lifecycle not to disturb remote active queue item, before=%q after=%q", activeQueueItemID, surface.ActiveQueueItemID)
+	}
+	if svc.root.Instances["inst-1"].ActiveTurnID != "" {
+		t.Fatalf("expected helper lifecycle not to mutate instance active turn, got %q", svc.root.Instances["inst-1"].ActiveTurnID)
+	}
+}
+
 func TestStopInterruptsActiveTurnAndDiscardsQueuedMessages(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

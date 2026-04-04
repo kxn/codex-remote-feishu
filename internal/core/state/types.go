@@ -76,6 +76,7 @@ type ThreadRecord struct {
 	ExplicitReasoningEffort string
 	Loaded                  bool
 	Archived                bool
+	TrafficClass            agentproto.TrafficClass
 }
 
 type SurfaceConsoleRecord struct {

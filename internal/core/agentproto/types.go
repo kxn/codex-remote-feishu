@@ -7,7 +7,15 @@ type InitiatorKind string
 const (
 	InitiatorUnknown       InitiatorKind = "unknown"
 	InitiatorLocalUI       InitiatorKind = "local_ui"
+	InitiatorInternalHelper InitiatorKind = "internal_helper"
 	InitiatorRemoteSurface InitiatorKind = "remote_surface"
+)
+
+type TrafficClass string
+
+const (
+	TrafficClassPrimary        TrafficClass = "primary"
+	TrafficClassInternalHelper TrafficClass = "internal_helper"
 )
 
 type Initiator struct {
@@ -53,6 +61,7 @@ type Event struct {
 	ConfigScope     string                 `json:"configScope,omitempty"`
 	Loaded          bool                   `json:"loaded,omitempty"`
 	Archived        bool                   `json:"archived,omitempty"`
+	TrafficClass    TrafficClass           `json:"trafficClass,omitempty"`
 	Initiator       Initiator              `json:"initiator,omitempty"`
 	Metadata        map[string]any         `json:"metadata,omitempty"`
 	Threads         []ThreadSnapshotRecord `json:"threads,omitempty"`

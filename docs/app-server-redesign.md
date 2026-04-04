@@ -53,6 +53,22 @@ Codex 原生协议里，下面这些边界是稳定的：
 - 这个 item 什么时候结束
 - 本地 UI 是否已经发起了新的交互，哪怕它只是对当前 turn 的 `steer`
 
+另外，这次需要把一件事明确写死：
+
+- `ephemeral`
+- `persistExtendedHistory`
+- `outputSchema`
+
+这些字段最多只能作为“本地 helper/internal traffic 的识别线索”或“模板复用时的排除条件”。
+
+它们**不能**直接变成：
+
+- wrapper 里是否吞掉 `turn.started`
+- 是否吞掉 `item.completed`
+- 是否吞掉 `turn.completed`
+
+换句话说，helper/internal traffic 的问题，不能再通过“在 adapter 里把生命周期事件吃掉”来解决。
+
 ### 2.2 协议里没有的边界
 
 Codex 的 `agentMessage` 最终只是一条 `text` 字符串。
@@ -110,6 +126,7 @@ wrapper 是“特定 agent 协议适配层”。
   - item streaming 关联
   - 观察到的本地 focused thread
   - 原生命令模板
+  - local-ui / internal-helper 的流量标注
 
 它不负责：
 
@@ -117,6 +134,21 @@ wrapper 是“特定 agent 协议适配层”。
 - 飞书当前该向哪个 thread 发消息
 - 文本最终如何切成卡片
 - bot 展示策略
+- 决定 native lifecycle event 是否对产品层“可见”
+
+这里再单独冻结一条：
+
+- wrapper 可以 suppress 自己为了执行 canonical command 而主动注入的原生命令响应
+  - 例如 wrapper 自己发出的 `thread/start`
+  - `thread/read`
+  - `turn/start`
+- wrapper 不可以因为它“看起来像 helper/internal traffic”，就 suppress 掉真实 runtime lifecycle event
+  - 例如 `thread/started`
+  - `turn/started`
+  - `item/completed`
+  - `turn/completed`
+
+helper/internal traffic 如果需要区别对待，必须变成 canonical event 上的显式标注，交给 server 决定如何使用。
 
 ### 3.2 Server = Orchestrator + Renderer Planner
 
@@ -254,6 +286,32 @@ server 不应该对 wrapper 暴露“原生命令级”的公共控制面。
 至于 native `thread/start` / `thread/resume` / `turn/start`，由 adapter 内部决定什么时候发。
 
 这件事很关键，因为它直接避免了之前“以为应该 startThread，结果方向反了”的问题。
+
+### 5.4 helper/internal 的正式处理方式
+
+这一轮新增一个明确约束：
+
+- native client 自己发起的 helper/internal traffic，不再靠 wrapper 内部的吞消息逻辑处理
+- adapter 只做两件事
+  - 识别“它是不是 internal helper”
+  - 在 canonical event 上打标
+
+server 再根据这个标记决定：
+
+- 是否进入 surface 主状态机
+- 是否参与 attach/use-thread 可见 thread 列表
+- 是否参与 local-priority 仲裁
+- 是否进入普通 render feed
+- 是否只留在 debug/replay
+
+最小落地原则：
+
+- `outputSchema != null` 的本地 `turn/start`
+  - 只影响 turn template 复用
+  - 同时标记后续 turn/item lifecycle 为 `internal_helper`
+- `ephemeral = true` 或 `persistExtendedHistory = false` 的本地 `thread/start`
+  - 只影响 thread template 复用
+  - 同时标记对应 thread lifecycle 为 `internal_helper`
 
 ## 6. 逻辑边界不等于部署边界
 

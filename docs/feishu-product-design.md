@@ -185,6 +185,14 @@ stop 的产品语义冻结为：
 - 只有当 instance 空闲，且一段时间内没有再出现新的本地交互，才自动恢复远端 autosend
 - 同时允许后续增加显式“恢复远端队列”按钮
 
+补充约束：
+
+- 只有 `local.interaction.observed(interactionClass=local_ui)` 才会触发 local-priority
+- 对 `interactionClass=internal_helper` 的本地 helper/internal 流量：
+  - server 可以记录
+  - 但不得暂停飞书队列
+  - 也不得向用户发送“检测到本地 VS Code 正在使用”的提示
+
 这样做的原因是：
 
 - wrapper 看得到本地 `turn/start` / `turn/steer`

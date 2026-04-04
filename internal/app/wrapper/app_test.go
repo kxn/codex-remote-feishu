@@ -125,6 +125,89 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 	}
 }
 
+func TestWrapperKeepsEphemeralHelperTrafficOnStdoutAndAnnotatesRelay(t *testing.T) {
+	repoRoot, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot = filepath.Clean(filepath.Join(repoRoot, "..", "..", ".."))
+
+	helloCh := make(chan agentproto.Hello, 1)
+	eventsCh := make(chan []agentproto.Event, 8)
+	server := relayws.NewServer(relayws.ServerCallbacks{
+		OnHello: func(_ context.Context, hello agentproto.Hello) {
+			helloCh <- hello
+		},
+		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+			eventsCh <- events
+		},
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+
+	stdinReader, stdinWriter := io.Pipe()
+	defer stdinWriter.Close()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cfg := Config{
+		RelayServerURL:  wsURL,
+		CodexRealBinary: "go",
+		Args:            []string{"run", "./testkit/mockcodex/cmd/mockcodex"},
+		InstanceID:      "inst-wrapper",
+		DisplayName:     "fschannel",
+		WorkspaceRoot:   repoRoot,
+		WorkspaceKey:    repoRoot,
+		ShortName:       filepath.Base(repoRoot),
+		Version:         "test",
+	}
+	app := New(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := app.Run(ctx, stdinReader, &stdout, &stderr)
+		done <- err
+	}()
+
+	select {
+	case <-helloCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for wrapper hello")
+	}
+
+	line := `{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"` + repoRoot + `","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false}}` + "\n"
+	if _, err := io.WriteString(stdinWriter, line); err != nil {
+		t.Fatalf("write helper thread start: %v", err)
+	}
+
+	waitForStdout(t, 10*time.Second, &stdout, &stderr, done, func(out string) bool {
+		return strings.Contains(out, `"id":"helper-thread-1"`) && strings.Contains(out, `"method":"thread/started"`)
+	})
+
+	waitForEvent(t, eventsCh, 5*time.Second, func(events []agentproto.Event) bool {
+		return len(events) == 1 &&
+			events[0].Kind == agentproto.EventThreadDiscovered &&
+			events[0].TrafficClass == agentproto.TrafficClassInternalHelper &&
+			events[0].Initiator.Kind == agentproto.InitiatorInternalHelper
+	}, &stdout, &stderr, done)
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("wrapper run failed: %v\nstderr:\n%s", err, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for wrapper shutdown")
+	}
+}
+
 func TestWrapperKillsChildWhenRelayConnectionFails(t *testing.T) {
 	tempDir := t.TempDir()
 	pidFile := filepath.Join(tempDir, "mockcodex.pid")
@@ -193,6 +276,25 @@ func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time
 			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 		case <-deadline:
 			t.Fatalf("timed out waiting for matching event\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+		}
+	}
+}
+
+func waitForStdout(t *testing.T, timeout time.Duration, stdout, stderr *bytes.Buffer, done <-chan error, match func(string) bool) {
+	t.Helper()
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case err := <-done:
+			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		case <-ticker.C:
+			if match(stdout.String()) {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for matching stdout\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 		}
 	}
 }

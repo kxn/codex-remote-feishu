@@ -216,7 +216,7 @@ func (m *MockCodex) HandleLocalClientMessage(raw []byte) ([][]byte, error) {
 		m.FocusedThreadID = threadID
 		return [][]byte{mustJSON(map[string]any{"method": "thread/started", "params": map[string]any{"thread": map[string]any{"id": threadID, "cwd": choose(cwd, thread.CWD)}}})}, nil
 	case "turn/start":
-		return m.handleLocalTurn(params)
+		return m.handleLocalTurn(fmt.Sprint(message["id"]), params)
 	case "turn/steer":
 		if m.ActiveTurn == nil {
 			return nil, nil
@@ -263,14 +263,16 @@ func (m *MockCodex) CompleteActiveTurn(text string) [][]byte {
 	return m.completeTurnFrames(turn.ThreadID, turn.ID, fmt.Sprintf("item-%d", m.nextItemID), text)
 }
 
-func (m *MockCodex) handleLocalTurn(params map[string]any) ([][]byte, error) {
+func (m *MockCodex) handleLocalTurn(requestID string, params map[string]any) ([][]byte, error) {
 	threadID, _ := params["threadId"].(string)
 	m.nextTurnID++
 	turnID := fmt.Sprintf("turn-%d", m.nextTurnID)
 	m.ActiveTurn = &Turn{ID: turnID, ThreadID: threadID}
-	outputs := [][]byte{
-		mustJSON(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}}}),
+	outputs := [][]byte{}
+	if requestID != "" && requestID != "<nil>" {
+		outputs = append(outputs, mustJSON(map[string]any{"id": requestID, "result": map[string]any{"turn": map[string]any{"id": turnID}}}))
 	}
+	outputs = append(outputs, mustJSON(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}}}))
 	if m.AutoComplete {
 		outputs = append(outputs, m.CompleteActiveTurn("本地操作已完成。")...)
 	}

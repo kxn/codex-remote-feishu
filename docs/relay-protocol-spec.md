@@ -90,6 +90,13 @@ canonical model 不能再把重要语义压扁成“纯文本流”。
   - `turn.interrupt`
   - `request.respond`
   - `threads.refresh`
+- helper/internal traffic 不能再靠 wrapper 直接吞掉 runtime lifecycle event
+  - `ephemeral`
+  - `persistExtendedHistory`
+  - `outputSchema`
+  这些字段只允许影响：
+  - adapter 的模板复用
+  - canonical event 上的 `trafficClass`
 - 产品层是否“跟随本地 focused thread”必须由显式 `routeMode` 表达，不能再只靠 `selectedThreadId = null` 猜
 - reconnect 只保证“同一个 wrapper 进程复用同一个 `instanceId`”时可恢复
 - wrapper 进程重启视为新 instance，不做隐式逻辑合并
@@ -396,9 +403,25 @@ type CanonicalEventBase = {
   occurredAt: string;
   kind: string;
   agentFamily: "codex" | string;
+  trafficClass?: "primary" | "internal_helper";
   agentSpecific?: Record<string, unknown>;
 };
 ```
+
+`trafficClass` 语义冻结为：
+
+- `primary`
+  - 默认值
+  - 表示该事件属于正常对话主链路
+- `internal_helper`
+  - 表示该事件来自 native client 自己发起的 helper/internal 流量
+  - server 必须接收，但是否进入产品主链路由 server 决定
+
+额外约束：
+
+- `trafficClass` 不能由 bot 决定
+- 不能因为 `trafficClass = internal_helper`，就在 wrapper 里直接吞掉 runtime lifecycle event
+- wrapper 唯一允许 suppress 的，仍然只有“adapter 自己主动注入的原生命令响应”
 
 排序和恢复规则：
 
@@ -502,6 +525,7 @@ type LocalInteractionObservedEvent = CanonicalEventBase & {
   turnId: string | null;
   cwd: string | null;
   action: "turn_start" | "turn_steer";
+  interactionClass: "local_ui" | "internal_helper";
 };
 ```
 
@@ -515,6 +539,9 @@ type LocalInteractionObservedEvent = CanonicalEventBase & {
 - 它的用途是给 server 一个“本地正在抢占交互权”的早期信号
 - 它不等价于“新 turn 已经开始”
   - 尤其 `turn/steer` 可能不会对应新的 `turn.started`
+- `interactionClass = internal_helper` 时
+  - 该事件只用于 server 记录或 debug
+  - 不得触发本地优先仲裁
 
 ### 6.5.4 Turn 事件
 
@@ -526,6 +553,7 @@ type TurnStartedEvent = CanonicalEventBase & {
   status: "running";
   initiator:
     | { kind: "local_ui" }
+    | { kind: "internal_helper" }
     | { kind: "remote_surface"; surfaceSessionId: string | null }
     | { kind: "unknown" };
 };
@@ -539,6 +567,7 @@ type TurnCompletedEvent = CanonicalEventBase & {
   errorDetails: string | null;
   initiator:
     | { kind: "local_ui" }
+    | { kind: "internal_helper" }
     | { kind: "remote_surface"; surfaceSessionId: string | null }
     | { kind: "unknown" };
 };
@@ -550,6 +579,7 @@ Codex 的原生 `inProgress` 统一映射为 canonical `running`。
 
 - wrapper 自己根据 canonical `prompt.send` 触发的 turn，标记为 `remote_surface`
 - 从本地 VS Code / Cursor 客户端直接观察到的 `turn/start`，标记为 `local_ui`
+- 从 native client 自己发起、但已识别为 helper/internal 的 turn，标记为 `internal_helper`
 - 无法可靠判定时，标记为 `unknown`
 
 补充约束：
@@ -602,6 +632,11 @@ type ItemStartedEvent = CanonicalEventBase & {
   kind: "item.started";
   threadId: string;
   turnId: string;
+  initiator?:
+    | { kind: "local_ui" }
+    | { kind: "internal_helper" }
+    | { kind: "remote_surface"; surfaceSessionId: string | null }
+    | { kind: "unknown" };
   item: {
     itemId: string;
     itemKind: CanonicalItemKind;
@@ -618,6 +653,11 @@ type ItemDeltaEvent = CanonicalEventBase & {
   turnId: string;
   itemId: string;
   itemKind: CanonicalItemKind;
+  initiator?:
+    | { kind: "local_ui" }
+    | { kind: "internal_helper" }
+    | { kind: "remote_surface"; surfaceSessionId: string | null }
+    | { kind: "unknown" };
   delta:
     | { type: "text"; text: string }
     | { type: "command_output"; stream: "stdout" | "stderr" | "combined"; text: string }
@@ -633,6 +673,11 @@ type ItemCompletedEvent = CanonicalEventBase & {
   kind: "item.completed";
   threadId: string;
   turnId: string;
+  initiator?:
+    | { kind: "local_ui" }
+    | { kind: "internal_helper" }
+    | { kind: "remote_surface"; surfaceSessionId: string | null }
+    | { kind: "unknown" };
   item: {
     itemId: string;
     itemKind: CanonicalItemKind;
@@ -652,6 +697,16 @@ metadata 最低要求：
 | `collab_agent_call` | `tool`, `senderThreadId`, `receiverThreadIds`, `status` |
 | `web_search` | `query` |
 | `review_state` | `transition`, `review` |
+
+helper/internal 补充约束：
+
+- 如果 item 所属 turn 已被 adapter 标记为 `internal_helper`
+  - item lifecycle 仍然要进入 canonical event 流
+  - 但必须带上：
+    - `trafficClass = internal_helper`
+    - `initiator.kind = internal_helper`
+- server 可以决定这些 item 不进入普通 render feed
+- 但 wrapper 不得直接吞掉这些 item event
 
 ### 6.5.5 Request 事件
 

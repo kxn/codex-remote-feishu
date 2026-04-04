@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"fschannel/internal/adapter/editor"
 	"fschannel/internal/config"
@@ -57,6 +58,10 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	wrapperConfigPath := filepath.Join(configDir, "wrapper.env")
 	servicesConfigPath := filepath.Join(configDir, "services.env")
 	statePath := filepath.Join(stateDir, "install-state.json")
+	existingServices, err := config.LoadEnvFile(servicesConfigPath)
+	if err != nil && !os.IsNotExist(err) {
+		return InstallState{}, err
+	}
 
 	if err := config.WriteEnvFile(wrapperConfigPath, map[string]string{
 		"RELAY_SERVER_URL":                     opts.RelayServerURL,
@@ -69,8 +74,8 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	if err := config.WriteEnvFile(servicesConfigPath, map[string]string{
 		"RELAY_PORT":              "9500",
 		"RELAY_API_PORT":          "9501",
-		"FEISHU_APP_ID":           opts.FeishuAppID,
-		"FEISHU_APP_SECRET":       opts.FeishuAppSecret,
+		"FEISHU_APP_ID":           choosePreservedValue(opts.FeishuAppID, existingServices["FEISHU_APP_ID"]),
+		"FEISHU_APP_SECRET":       choosePreservedValue(opts.FeishuAppSecret, existingServices["FEISHU_APP_SECRET"]),
 		"FEISHU_USE_SYSTEM_PROXY": boolString(opts.UseSystemProxy),
 	}); err != nil {
 		return InstallState{}, err
@@ -112,4 +117,11 @@ func boolString(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func choosePreservedValue(incoming, existing string) string {
+	if strings.TrimSpace(incoming) != "" {
+		return incoming
+	}
+	return existing
 }

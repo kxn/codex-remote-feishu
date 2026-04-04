@@ -85,3 +85,39 @@ func TestBootstrapManagedShimWritesBundleEntrypoint(t *testing.T) {
 		t.Fatalf("expected bundle entrypoint to export real binary, got %s", text)
 	}
 }
+
+func TestBootstrapPreservesExistingFeishuSecretsWhenFlagsAreEmpty(t *testing.T) {
+	baseDir := t.TempDir()
+	configDir := filepath.Join(baseDir, ".config", "codex-relay")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	servicesPath := filepath.Join(configDir, "services.env")
+	if err := os.WriteFile(servicesPath, []byte("RELAY_PORT=9500\nRELAY_API_PORT=9501\nFEISHU_APP_ID=cli_existing\nFEISHU_APP_SECRET=secret_existing\nFEISHU_USE_SYSTEM_PROXY=false\n"), 0o600); err != nil {
+		t.Fatalf("seed services env: %v", err)
+	}
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:         baseDir,
+		WrapperBinary:   "/usr/local/bin/relay-wrapper",
+		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
+		CodexRealBinary: "/usr/local/bin/codex",
+		IntegrationMode: IntegrationEditorSettings,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+
+	serviceRaw, err := os.ReadFile(state.ServicesConfigPath)
+	if err != nil {
+		t.Fatalf("read services config: %v", err)
+	}
+	text := string(serviceRaw)
+	if !strings.Contains(text, "FEISHU_APP_ID=cli_existing") {
+		t.Fatalf("expected app id to be preserved, got %s", text)
+	}
+	if !strings.Contains(text, "FEISHU_APP_SECRET=secret_existing") {
+		t.Fatalf("expected app secret to be preserved, got %s", text)
+	}
+}

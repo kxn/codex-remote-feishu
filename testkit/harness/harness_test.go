@@ -94,3 +94,70 @@ func TestPinnedThreadRemainsPromptTargetAfterLocalFocusChanges(t *testing.T) {
 		t.Fatalf("send text: %v", err)
 	}
 }
+
+func TestStructuredLocalHelperTurnIsIgnoredWhenAttached(t *testing.T) {
+	h := New()
+	if err := h.ApplyAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       h.InstanceID,
+	}); err != nil {
+		t.Fatalf("attach instance: %v", err)
+	}
+
+	blockCount := len(h.Feishu.Blocks)
+	if err := h.LocalClient([]byte(`{"id":"helper-turn-1","method":"turn/start","params":{"threadId":"thread-1","cwd":"/data/dl/droid","outputSchema":{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"}}}}}` + "\n")); err != nil {
+		t.Fatalf("local helper turn: %v", err)
+	}
+
+	if len(h.Feishu.Blocks) != blockCount {
+		t.Fatalf("expected structured helper turn to stay hidden from feishu, got blocks=%#v notices=%#v", h.Feishu.Blocks[blockCount:], h.Feishu.Notices)
+	}
+}
+
+func TestStructuredLocalHelperTurnDoesNotPoisonRemoteReply(t *testing.T) {
+	h := New()
+	h.Codex.Responder = func(turn mockcodex.TurnStart) string {
+		if h.Codex.LastTurnStart["outputSchema"] != nil {
+			return "{\"title\":\"当前目录是 `/data/dl`。\",\"body\":\"```text\\nREADME.md\\n```\"}"
+		}
+		return "当前目录是 `/data/dl`。\n\n```text\nREADME.md\n```"
+	}
+	if err := h.LocalClient([]byte(`{"id":"helper-turn-1","method":"turn/start","params":{"threadId":"thread-1","cwd":"/data/dl/droid","outputSchema":{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"}}}}}` + "\n")); err != nil {
+		t.Fatalf("local helper turn: %v", err)
+	}
+	if err := h.ApplyAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       h.InstanceID,
+	}); err != nil {
+		t.Fatalf("attach instance: %v", err)
+	}
+	if err := h.ApplyAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "列一下目录",
+	}); err != nil {
+		t.Fatalf("send text: %v", err)
+	}
+
+	foundNormal := false
+	for _, block := range h.Feishu.Blocks {
+		if strings.Contains(block.Text, `{"title":`) {
+			t.Fatalf("expected remote reply to stay plain text, got blocks=%#v", h.Feishu.Blocks)
+		}
+		if strings.Contains(block.Text, "当前目录是 `/data/dl`。") {
+			foundNormal = true
+		}
+	}
+	if !foundNormal {
+		t.Fatalf("expected normalized remote reply block, got %#v", h.Feishu.Blocks)
+	}
+}

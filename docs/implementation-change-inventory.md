@@ -99,6 +99,9 @@
   - 只接受真实的 focus 变化，不允许被后台输出隐式改写
 - `agent.native.frame`
   - 只进 debug/replay，不进 bot 主链路
+- `trafficClass = internal_helper`
+  - helper/internal native traffic 不再靠 wrapper 内部 suppress 掉生命周期事件
+  - 而是显式标注给 server
 
 ### 3.3 Server -> Wrapper command 面必须收缩
 
@@ -198,6 +201,13 @@ prompt: {
 7. reconnect 时只能在“同进程 + 同 instanceId”下恢复，不得隐式合并新旧实例。
 8. 不得在 wrapper 启动时主动 `startThread`。
    - 只在 server 明确发来 `prompt.send(createThreadIfMissing=true)` 时，才内部决定是否需要 `thread/start`。
+9. `ephemeral` / `persistExtendedHistory` / `outputSchema`
+   - 只允许影响模板复用和 canonical `trafficClass`
+   - 不允许继续作为“吞掉 runtime lifecycle event”的依据。
+10. native helper/internal turn 的 `turn.started` / `item.*` / `turn.completed`
+   - 必须继续上送 server
+   - 但要显式带上 `trafficClass=internal_helper`
+   - 由 server 决定是否进入主状态机和普通 render feed
 
 ### 4.4 必须删除的错误假设
 
@@ -294,6 +304,12 @@ server 收到飞书文本时，必须在入队那一刻冻结：
 4. 窗口结束仍无新的本地交互
    - 才恢复远端 autosend
 
+补充一条硬约束：
+
+- `local.interaction.observed(interactionClass=internal_helper)`
+  - 不得触发 `paused_for_local`
+  - 不得让飞书 queue 进入 handoff 逻辑
+
 ### 5.6 server 必须新增 renderer planner
 
 server 不能再把“怎么切文本”丢给 bot。
@@ -321,6 +337,13 @@ bot 应只接收用户层 render/control 事件，例如：
 - `block.committed`
 
 server 不应再把原始 `item.delta`、`turn.started`、`thread/started` 直接暴露给 bot。
+
+补充约束：
+
+- 对 `trafficClass=internal_helper` 的 canonical event
+  - server 可以记录
+  - 但默认不应产出普通 `block.committed`
+  - 也不应污染 attach/use-thread 面向用户的 thread 视图
 
 ### 5.8 必须补上的失败处理
 
