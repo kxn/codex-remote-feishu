@@ -77,6 +77,7 @@ type ThreadSnapshotRecord struct {
 	Loaded          bool   `json:"loaded"`
 	Archived        bool   `json:"archived"`
 	State           string `json:"state,omitempty"`
+	ListOrder       int    `json:"listOrder,omitempty"`
 }
 
 type CommandKind string

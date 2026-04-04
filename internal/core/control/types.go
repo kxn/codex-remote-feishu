@@ -20,6 +20,7 @@ const (
 	ActionReactionCreated  ActionKind = "surface.message.reaction.created"
 	ActionAttachInstance   ActionKind = "surface.button.attach_instance"
 	ActionShowThreads      ActionKind = "surface.button.show_threads"
+	ActionShowAllThreads   ActionKind = "surface.button.show_all_threads"
 	ActionUseThread        ActionKind = "surface.button.use_thread"
 	ActionFollowLocal      ActionKind = "surface.button.follow_local"
 	ActionDetach           ActionKind = "surface.button.detach"
@@ -60,6 +61,8 @@ type SelectionPrompt struct {
 	Kind      SelectionPromptKind
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	Title     string
+	Hint      string
 	Options   []SelectionOption
 }
 

@@ -77,6 +77,8 @@ type ThreadRecord struct {
 	Loaded                  bool
 	Archived                bool
 	TrafficClass            agentproto.TrafficClass
+	LastUsedAt              time.Time
+	ListOrder               int
 }
 
 type SurfaceConsoleRecord struct {
@@ -110,6 +112,8 @@ type SelectionPromptRecord struct {
 	Kind      string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	Title     string
+	Hint      string
 	Options   []SelectionOptionRecord
 }
 

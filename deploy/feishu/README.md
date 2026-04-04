@@ -14,7 +14,11 @@
 5. 打开“机器人菜单”，创建以下菜单 key：
    - `list`
    - `status`
-   - `threads`
+   - `threads`（展示“切换会话”即可）
    - `stop`
+   - `reasonlow`
+   - `reasonmedium`
+   - `reasonhigh`
+   - `reasonxhigh`
 
 如果你主要通过单聊与机器人交互，还需要额外开通 P2P 消息接收权限。

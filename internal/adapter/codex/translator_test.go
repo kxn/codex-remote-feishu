@@ -757,11 +757,14 @@ func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	if secondRead.Events[0].Kind != agentproto.EventThreadsSnapshot || len(secondRead.Events[0].Threads) != 2 {
 		t.Fatalf("unexpected snapshot payload: %#v", secondRead.Events[0])
 	}
-	if secondRead.Events[0].Threads[0].ThreadID != "thread-1" || secondRead.Events[0].Threads[0].Name != "修复登录流程" {
-		t.Fatalf("expected sorted snapshot with thread-1 title, got %#v", secondRead.Events[0].Threads)
+	if secondRead.Events[0].Threads[0].ThreadID != "thread-2" || secondRead.Events[0].Threads[0].CWD != "/data/dl/droid" {
+		t.Fatalf("expected snapshot to preserve thread/list order, got %#v", secondRead.Events[0].Threads)
 	}
-	if secondRead.Events[0].Threads[1].ThreadID != "thread-2" || secondRead.Events[0].Threads[1].CWD != "/data/dl/droid" {
-		t.Fatalf("expected thread/read patch to populate cwd, got %#v", secondRead.Events[0].Threads)
+	if secondRead.Events[0].Threads[1].ThreadID != "thread-1" || secondRead.Events[0].Threads[1].Name != "修复登录流程" {
+		t.Fatalf("expected thread/read patch to populate title and preserve ordering, got %#v", secondRead.Events[0].Threads)
+	}
+	if secondRead.Events[0].Threads[0].ListOrder != 1 || secondRead.Events[0].Threads[1].ListOrder != 2 {
+		t.Fatalf("expected snapshot records to retain list order metadata, got %#v", secondRead.Events[0].Threads)
 	}
 }
 

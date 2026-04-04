@@ -84,20 +84,20 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		})
 		return nil
 	})
+	dispatch.OnP2MessageReactionDeletedV1(func(context.Context, *larkim.P2MessageReactionDeletedV1) error {
+		return nil
+	})
 	dispatch.OnP2BotMenuV6(func(ctx context.Context, event *larkapplication.P2BotMenuV6) error {
 		if event == nil || event.Event == nil || event.Event.EventKey == nil {
 			return nil
 		}
-		kind, ok := menuActionKind(*event.Event.EventKey)
+		action, ok := menuAction(*event.Event.EventKey)
 		if !ok {
 			return nil
 		}
 		operatorID := operatorUserID(event.Event.Operator)
-		action := control.Action{
-			Kind:             kind,
-			SurfaceSessionID: surfaceIDForInbound("", "p2p", operatorID),
-			ActorUserID:      operatorID,
-		}
+		action.SurfaceSessionID = surfaceIDForInbound("", "p2p", operatorID)
+		action.ActorUserID = operatorID
 		handler(ctx, action)
 		return nil
 	})
@@ -361,8 +361,10 @@ func parseTextAction(text string) (control.Action, bool) {
 		return control.Action{Kind: control.ActionStatus}, true
 	case "/stop":
 		return control.Action{Kind: control.ActionStop}, true
-	case "/threads", "/use":
+	case "/threads", "/use", "/sessions":
 		return control.Action{Kind: control.ActionShowThreads}, true
+	case "/useall", "/sessionsall", "/sessions/all":
+		return control.Action{Kind: control.ActionShowAllThreads}, true
 	case "/follow":
 		return control.Action{Kind: control.ActionFollowLocal}, true
 	case "/detach":
@@ -372,19 +374,37 @@ func parseTextAction(text string) (control.Action, bool) {
 	}
 }
 
-func menuActionKind(eventKey string) (control.ActionKind, bool) {
+func menuAction(eventKey string) (control.Action, bool) {
 	switch eventKey {
 	case "list":
-		return control.ActionListInstances, true
+		return control.Action{Kind: control.ActionListInstances}, true
 	case "status":
-		return control.ActionStatus, true
+		return control.Action{Kind: control.ActionStatus}, true
 	case "stop":
-		return control.ActionStop, true
-	case "threads":
-		return control.ActionShowThreads, true
+		return control.Action{Kind: control.ActionStop}, true
+	case "threads", "use", "sessions", "show_threads", "show_sessions":
+		return control.Action{Kind: control.ActionShowThreads}, true
+	case "threads_all", "useall", "sessions_all", "show_all_threads", "show_all_sessions":
+		return control.Action{Kind: control.ActionShowAllThreads}, true
+	case "reasonlow", "reason_low", "reason-low":
+		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning low"}, true
+	case "reasonmedium", "reason_medium", "reason-medium":
+		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning medium"}, true
+	case "reasonhigh", "reason_high", "reason-high":
+		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning high"}, true
+	case "reasonxhigh", "reason_xhigh", "reason-xhigh":
+		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning xhigh"}, true
 	default:
+		return control.Action{}, false
+	}
+}
+
+func menuActionKind(eventKey string) (control.ActionKind, bool) {
+	action, ok := menuAction(eventKey)
+	if !ok {
 		return "", false
 	}
+	return action.Kind, true
 }
 
 func surfaceID(chatID, fallbackUserID string) string {

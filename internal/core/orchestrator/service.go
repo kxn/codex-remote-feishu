@@ -110,7 +110,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionReasoningCommand:
 		return s.handleReasoningCommand(surface, action)
 	case control.ActionShowThreads:
-		return s.presentThreadSelection(surface)
+		return s.presentThreadSelection(surface, false)
+	case control.ActionShowAllThreads:
+		return s.presentThreadSelection(surface, true)
 	case control.ActionUseThread:
 		return s.useThread(surface, action.ThreadID)
 	case control.ActionFollowLocal:
@@ -153,6 +155,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		if event.CWD != "" {
 			thread.CWD = event.CWD
 		}
+		s.touchThread(thread)
 		return append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...)
 	case agentproto.EventConfigObserved:
 		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort)
@@ -179,6 +182,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			thread.ExplicitReasoningEffort = event.ReasoningEffort
 		}
 		thread.Loaded = true
+		s.touchThread(thread)
 		return append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...)
 	case agentproto.EventThreadsSnapshot:
 		delete(s.threadRefreshes, instanceID)
@@ -218,6 +222,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			if thread.State != "" {
 				current.State = thread.State
 			}
+			current.ListOrder = thread.ListOrder
 			nextThreads[thread.ThreadID] = current
 		}
 		inst.Threads = nextThreads
@@ -229,12 +234,16 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			if event.CWD != "" {
 				thread.CWD = event.CWD
 			}
+			s.touchThread(thread)
 		}
 		return append(preface, s.pauseForLocal(instanceID)...)
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		inst.ActiveTurnID = event.TurnID
 		inst.ActiveThreadID = event.ThreadID
+		if event.ThreadID != "" {
+			s.touchThread(s.ensureThread(inst, event.ThreadID))
+		}
 		if surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID); surface != nil {
 			surface.ActiveTurnOrigin = event.Initiator.Kind
 		}
@@ -257,6 +266,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		inst.ActiveTurnID = ""
 		if event.ThreadID != "" {
 			inst.ActiveThreadID = event.ThreadID
+			s.touchThread(s.ensureThread(inst, event.ThreadID))
 		}
 		if surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID); surface != nil {
 			surface.ActiveTurnOrigin = ""
@@ -404,6 +414,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 		Kind:      "attach_instance",
 		CreatedAt: createdAt,
 		ExpiresAt: expiresAt,
+		Title:     "在线实例",
 		Options:   recordOptions,
 	}
 	surface.SelectionPrompt = prompt
@@ -415,6 +426,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 			Kind:      control.SelectionPromptAttachInstance,
 			CreatedAt: createdAt,
 			ExpiresAt: expiresAt,
+			Title:     prompt.Title,
 			Options:   options,
 		},
 	}}
@@ -460,7 +472,7 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 		Preview:   lastPreview,
 	}
 
-	title := "未绑定 thread"
+	title := "未绑定会话"
 	if surface.SelectedThreadID != "" {
 		title = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID], surface.SelectedThreadID)
 	}
@@ -476,20 +488,28 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	return events
 }
 
-func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")
 	}
-	threads := make([]*state.ThreadRecord, 0, len(inst.Threads))
-	for _, thread := range inst.Threads {
-		if threadVisible(thread) {
-			threads = append(threads, thread)
+	threads := visibleThreads(inst)
+	if len(threads) == 0 {
+		surface.SelectionPrompt = nil
+		return notice(surface, "no_visible_threads", "当前还没有可用会话。")
+	}
+	sortVisibleThreads(threads)
+	limit := len(threads)
+	title := "全部会话"
+	hint := ""
+	if !showAll {
+		title = "最近会话"
+		if limit > 5 {
+			limit = 5
+			hint = "发送 `/useall` 查看全部会话。"
 		}
 	}
-	sort.Slice(threads, func(i, j int) bool {
-		return threads[i].ThreadID < threads[j].ThreadID
-	})
+	threads = threads[:limit]
 	options := make([]control.SelectionOption, 0, len(threads))
 	recordOptions := make([]state.SelectionOptionRecord, 0, len(threads))
 	for i, thread := range threads {
@@ -518,6 +538,8 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord) []
 		Kind:      "use_thread",
 		CreatedAt: createdAt,
 		ExpiresAt: expiresAt,
+		Title:     title,
+		Hint:      hint,
 		Options:   recordOptions,
 	}
 	return []control.UIEvent{{
@@ -528,6 +550,8 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord) []
 			Kind:      control.SelectionPromptUseThread,
 			CreatedAt: createdAt,
 			ExpiresAt: expiresAt,
+			Title:     title,
+			Hint:      hint,
 			Options:   options,
 		},
 	}}
@@ -541,8 +565,10 @@ func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string
 	title := threadID
 	preview := ""
 	if inst != nil {
-		title = displayThreadTitle(inst, inst.Threads[threadID], threadID)
-		preview = threadPreview(inst.Threads[threadID])
+		thread := s.ensureThread(inst, threadID)
+		s.touchThread(thread)
+		title = displayThreadTitle(inst, thread, threadID)
+		preview = threadPreview(thread)
 	}
 	events := s.threadSelectionEvents(surface, threadID, string(surface.RouteMode), title, preview)
 	if len(events) != 0 {
@@ -621,7 +647,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if selectionPromptExpired(s.now(), surface.SelectionPrompt) {
 		surface.SelectionPrompt = nil
 		if isDigits(text) {
-			return notice(surface, "selection_expired", "之前的序号选择已过期，请重新发送 /list 或 /use。")
+			return notice(surface, "selection_expired", "之前的序号选择已过期，请重新发送 /list、/use 或 /useall。")
 		}
 	}
 
@@ -780,7 +806,7 @@ func (s *Service) resolveSelection(surface *state.SurfaceConsoleRecord, text str
 	}
 	if selectionPromptExpired(s.now(), surface.SelectionPrompt) {
 		surface.SelectionPrompt = nil
-		return notice(surface, "selection_expired", "之前的序号选择已过期，请重新发送 /list 或 /use。")
+		return notice(surface, "selection_expired", "之前的序号选择已过期，请重新发送 /list、/use 或 /useall。")
 	}
 	for _, option := range surface.SelectionPrompt.Options {
 		if option.Index != index || option.Disabled {
@@ -1021,6 +1047,7 @@ func (s *Service) renderTextItem(instanceID, threadID, turnID, itemID, text stri
 	}
 	if thread != nil {
 		thread.Preview = previewOfText(text)
+		s.touchThread(thread)
 	}
 	return events
 }
@@ -1330,10 +1357,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		if inst.InstanceID != surface.AttachedInstanceID {
 			continue
 		}
-		for _, thread := range inst.Threads {
-			if !threadVisible(thread) {
-				continue
-			}
+		for _, thread := range visibleThreads(inst) {
 			snapshot.Threads = append(snapshot.Threads, control.ThreadSummary{
 				ThreadID:          thread.ThreadID,
 				Name:              thread.Name,
@@ -1351,9 +1375,6 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 	}
 	sort.Slice(snapshot.Instances, func(i, j int) bool {
 		return snapshot.Instances[i].WorkspaceKey < snapshot.Instances[j].WorkspaceKey
-	})
-	sort.Slice(snapshot.Threads, func(i, j int) bool {
-		return snapshot.Threads[i].ThreadID < snapshot.Threads[j].ThreadID
 	})
 	return snapshot
 }
@@ -1893,6 +1914,13 @@ func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMo
 	}
 }
 
+func (s *Service) touchThread(thread *state.ThreadRecord) {
+	if thread == nil {
+		return
+	}
+	thread.LastUsedAt = s.now()
+}
+
 func removeString(values []string, target string) []string {
 	out := values[:0]
 	for _, value := range values {
@@ -1927,6 +1955,9 @@ func threadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallbac
 	}
 	if thread.Name != "" {
 		return fmt.Sprintf("%s · %s", short, thread.Name)
+	}
+	if summary := previewSnippet(thread.Preview); summary != "" {
+		return fmt.Sprintf("%s · %s", short, summary)
 	}
 	if thread.CWD != "" {
 		base := filepath.Base(thread.CWD)
@@ -2011,18 +2042,17 @@ func threadNeedsRefresh(thread *state.ThreadRecord) bool {
 	if thread == nil || !threadVisible(thread) {
 		return false
 	}
-	return !thread.Loaded || strings.TrimSpace(thread.Name) == ""
+	return !thread.Loaded || (strings.TrimSpace(thread.Name) == "" && strings.TrimSpace(thread.Preview) == "")
 }
 
 func threadSelectionSubtitle(thread *state.ThreadRecord, threadID string) string {
-	parts := []string{}
-	if threadID != "" {
-		parts = append(parts, "ID "+shortenThreadID(threadID))
-	}
 	if thread != nil && thread.CWD != "" {
-		parts = append(parts, thread.CWD)
+		return thread.CWD
 	}
-	return strings.Join(parts, " · ")
+	if short := shortenThreadID(threadID); short != "" {
+		return "会话 ID " + short
+	}
+	return ""
 }
 
 func selectionPromptExpired(now time.Time, prompt *state.SelectionPromptRecord) bool {
@@ -2038,6 +2068,43 @@ func isInternalHelperEvent(event agentproto.Event) bool {
 
 func threadVisible(thread *state.ThreadRecord) bool {
 	return thread != nil && !thread.Archived && thread.TrafficClass != agentproto.TrafficClassInternalHelper
+}
+
+func visibleThreads(inst *state.InstanceRecord) []*state.ThreadRecord {
+	if inst == nil {
+		return nil
+	}
+	threads := make([]*state.ThreadRecord, 0, len(inst.Threads))
+	for _, thread := range inst.Threads {
+		if threadVisible(thread) {
+			threads = append(threads, thread)
+		}
+	}
+	sortVisibleThreads(threads)
+	return threads
+}
+
+func sortVisibleThreads(threads []*state.ThreadRecord) {
+	sort.SliceStable(threads, func(i, j int) bool {
+		left := threads[i]
+		right := threads[j]
+		switch {
+		case left == nil:
+			return false
+		case right == nil:
+			return true
+		case !left.LastUsedAt.Equal(right.LastUsedAt):
+			return left.LastUsedAt.After(right.LastUsedAt)
+		case left.ListOrder == 0 && right.ListOrder != 0:
+			return false
+		case left.ListOrder != 0 && right.ListOrder == 0:
+			return true
+		case left.ListOrder != right.ListOrder:
+			return left.ListOrder < right.ListOrder
+		default:
+			return left.ThreadID < right.ThreadID
+		}
+	})
 }
 
 func shortenThreadID(threadID string) string {
@@ -2101,7 +2168,7 @@ func formatOverrideNotice(summary control.PromptRouteSummary, prefix string) str
 	if summary.ThreadTitle != "" {
 		lines = append(lines, fmt.Sprintf("当前输入目标：%s", summary.ThreadTitle))
 	} else if summary.CreateThread {
-		lines = append(lines, "当前输入目标：新建 thread")
+		lines = append(lines, "当前输入目标：新建会话")
 	}
 	lines = append(lines, "说明：仅对之后从飞书发出的消息生效，不会同步 VS Code。")
 	return strings.Join(lines, "\n")
@@ -2117,7 +2184,7 @@ func displayConfigValue(value string) string {
 func configSourceLabel(value string) string {
 	switch value {
 	case "thread":
-		return "thread 配置"
+		return "会话配置"
 	case "cwd_default":
 		return "工作目录默认配置"
 	case "surface_override":

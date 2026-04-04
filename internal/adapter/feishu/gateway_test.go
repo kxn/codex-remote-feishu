@@ -8,15 +8,39 @@ import (
 
 func TestMenuActionKindKnownValues(t *testing.T) {
 	tests := map[string]control.ActionKind{
-		"list":    control.ActionListInstances,
-		"status":  control.ActionStatus,
-		"stop":    control.ActionStop,
-		"threads": control.ActionShowThreads,
+		"list":          control.ActionListInstances,
+		"status":        control.ActionStatus,
+		"stop":          control.ActionStop,
+		"threads":       control.ActionShowThreads,
+		"sessions":      control.ActionShowThreads,
+		"use":           control.ActionShowThreads,
+		"show_threads":  control.ActionShowThreads,
+		"show_sessions": control.ActionShowThreads,
+		"useall":        control.ActionShowAllThreads,
+		"threads_all":   control.ActionShowAllThreads,
 	}
 	for key, want := range tests {
 		got, ok := menuActionKind(key)
 		if !ok || got != want {
 			t.Fatalf("event key %q => (%q, %v), want (%q, true)", key, got, ok, want)
+		}
+	}
+}
+
+func TestMenuActionReasoningPresets(t *testing.T) {
+	tests := map[string]string{
+		"reasonlow":    "/reasoning low",
+		"reasonmedium": "/reasoning medium",
+		"reasonhigh":   "/reasoning high",
+		"reasonxhigh":  "/reasoning xhigh",
+	}
+	for key, wantText := range tests {
+		got, ok := menuAction(key)
+		if !ok {
+			t.Fatalf("expected menu action for %q", key)
+		}
+		if got.Kind != control.ActionReasoningCommand || got.Text != wantText {
+			t.Fatalf("event key %q => %#v, want reasoning command %q", key, got, wantText)
 		}
 	}
 }
@@ -59,6 +83,25 @@ func TestParseTextActionRecognizesModelAndReasoningCommands(t *testing.T) {
 		}
 		if action.Text != input {
 			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseTextActionRecognizesSessionCommands(t *testing.T) {
+	tests := map[string]control.ActionKind{
+		"/threads":     control.ActionShowThreads,
+		"/use":         control.ActionShowThreads,
+		"/sessions":    control.ActionShowThreads,
+		"/useall":      control.ActionShowAllThreads,
+		"/sessionsall": control.ActionShowAllThreads,
+	}
+	for input, want := range tests {
+		action, handled := parseTextAction(input)
+		if !handled {
+			t.Fatalf("expected %q to be handled", input)
+		}
+		if action.Kind != want {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, want)
 		}
 	}
 }

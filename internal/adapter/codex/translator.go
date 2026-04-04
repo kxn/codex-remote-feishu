@@ -3,7 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -34,6 +34,7 @@ type Translator struct {
 	pendingThreadListRequestID string
 	pendingThreadReads         map[string]string
 	threadRefreshRecords       map[string]agentproto.ThreadSnapshotRecord
+	threadRefreshOrder         []string
 	pendingSuppressedResponse  map[string]bool
 }
 
@@ -271,8 +272,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if requestID == t.pendingThreadListRequestID {
 			delete(t.threadRefreshRecords, "")
 			t.pendingThreadListRequestID = ""
+			t.threadRefreshOrder = nil
 			threads := parseThreadList(message["result"])
 			if len(threads) == 0 {
+				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{{
@@ -282,8 +285,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}, nil
 			}
 			var outbound [][]byte
-			for _, thread := range threads {
+			for index, thread := range threads {
+				thread.ListOrder = index + 1
 				t.threadRefreshRecords[thread.ThreadID] = thread
+				t.threadRefreshOrder = append(t.threadRefreshOrder, thread.ThreadID)
 				readID := t.nextRequest("thread-read")
 				t.pendingThreadReads[readID] = thread.ThreadID
 				payload := map[string]any{
@@ -315,13 +320,31 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			delete(t.pendingThreadReads, requestID)
 			if len(t.pendingThreadReads) == 0 {
 				records := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
-				for _, current := range t.threadRefreshRecords {
+				seen := map[string]bool{}
+				for _, originalThreadID := range t.threadRefreshOrder {
+					current, ok := t.threadRefreshRecords[originalThreadID]
+					if !ok || current.ThreadID == "" || seen[current.ThreadID] {
+						continue
+					}
 					records = append(records, current)
+					seen[current.ThreadID] = true
 				}
-				slices.SortFunc(records, func(a, b agentproto.ThreadSnapshotRecord) int {
-					return strings.Compare(a.ThreadID, b.ThreadID)
+				extras := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
+				for _, current := range t.threadRefreshRecords {
+					if current.ThreadID == "" || seen[current.ThreadID] {
+						continue
+					}
+					extras = append(extras, current)
+				}
+				sort.Slice(extras, func(i, j int) bool {
+					if extras[i].ListOrder != extras[j].ListOrder {
+						return extras[i].ListOrder < extras[j].ListOrder
+					}
+					return strings.Compare(extras[i].ThreadID, extras[j].ThreadID) < 0
 				})
+				records = append(records, extras...)
 				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
+				t.threadRefreshOrder = nil
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{{
@@ -973,13 +996,14 @@ func parseThreadList(result any) []agentproto.ThreadSnapshotRecord {
 		raw = value
 	}
 	output := make([]agentproto.ThreadSnapshotRecord, 0, len(raw))
-	for _, current := range raw {
+	for index, current := range raw {
 		switch item := current.(type) {
 		case string:
-			output = append(output, agentproto.ThreadSnapshotRecord{ThreadID: item, Loaded: true})
+			output = append(output, agentproto.ThreadSnapshotRecord{ThreadID: item, Loaded: true, ListOrder: index + 1})
 		case map[string]any:
 			record := parseThreadRecord(item)
 			record.Loaded = true
+			record.ListOrder = index + 1
 			if record.ThreadID != "" {
 				output = append(output, record)
 			}
@@ -1032,7 +1056,20 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 		Loaded:   lookupBoolFromAny(object["loaded"]),
 		Archived: lookupBoolFromAny(object["archived"]),
 		State:    lookupStringFromAny(object["state"]),
+		ListOrder: lookupIntFromAny(chooseAny(
+			object["listOrder"],
+			object["list_order"],
+		)),
 	}
+}
+
+func chooseAny(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func cloneMap(input map[string]any) map[string]any {

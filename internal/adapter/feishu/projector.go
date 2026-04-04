@@ -81,18 +81,28 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			}
 			lines = append(lines, line)
 		}
-		title := "请选择"
-		switch event.SelectionPrompt.Kind {
-		case control.SelectionPromptAttachInstance:
-			title = "在线实例"
-		case control.SelectionPromptUseThread:
-			title = "可用线程"
+		title := strings.TrimSpace(event.SelectionPrompt.Title)
+		if title == "" {
+			title = "请选择"
+			switch event.SelectionPrompt.Kind {
+			case control.SelectionPromptAttachInstance:
+				title = "在线实例"
+			case control.SelectionPromptUseThread:
+				title = "会话列表"
+			}
+		}
+		body := strings.Join(lines, separator)
+		if hint := strings.TrimSpace(event.SelectionPrompt.Hint); hint != "" {
+			if body != "" {
+				body += "\n\n"
+			}
+			body += hint
 		}
 		return []Operation{{
 			Kind:         OperationSendCard,
 			ChatID:       chatID,
 			CardTitle:    title,
-			CardBody:     strings.Join(lines, separator),
+			CardBody:     body,
 			CardThemeKey: "system",
 		}}
 	case control.UIEventPendingInput:
@@ -204,7 +214,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		case snapshot.Attachment.SelectedThreadID != "":
 			lines = append(lines, fmt.Sprintf("当前输入目标：%s", snapshot.Attachment.SelectedThreadID))
 		default:
-			lines = append(lines, "当前输入目标：未绑定")
+			lines = append(lines, "当前输入目标：未绑定会话")
 		}
 		if preview := strings.TrimSpace(snapshot.Attachment.SelectedThreadPreview); preview != "" {
 			lines = append(lines, fmt.Sprintf("最近信息：%s", preview))
@@ -212,7 +222,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		lines = append(lines, fmt.Sprintf("路由模式：%s", snapshot.Attachment.RouteMode))
 		lines = append(lines, "")
 		lines = append(lines, "如果现在从飞书发送一条消息：")
-		target := "新建 thread"
+		target := "新建会话"
 		switch {
 		case snapshot.NextPrompt.ThreadTitle != "":
 			target = snapshot.NextPrompt.ThreadTitle
@@ -257,7 +267,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 	}
 	if len(snapshot.Threads) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, "已知 thread：")
+		lines = append(lines, "已知会话：")
 		for _, thread := range snapshot.Threads {
 			flags := []string{}
 			if thread.IsSelected {
@@ -300,7 +310,7 @@ func displaySnapshotValue(value string) string {
 func snapshotConfigSourceLabel(source string) string {
 	switch source {
 	case "thread":
-		return "thread 配置"
+		return "会话配置"
 	case "cwd_default":
 		return "工作目录默认配置"
 	case "surface_override":

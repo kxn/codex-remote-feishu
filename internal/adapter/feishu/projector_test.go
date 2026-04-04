@@ -30,6 +30,30 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	}
 }
 
+func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Kind:  control.SelectionPromptUseThread,
+			Title: "最近会话",
+			Hint:  "发送 `/useall` 查看全部会话。",
+			Options: []control.SelectionOption{
+				{Index: 1, Label: "droid · 修复登录流程", Subtitle: "/data/dl/droid"},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "最近会话" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if ops[0].CardBody != "1. droid · 修复登录流程\n`/data/dl/droid`\n\n发送 `/useall` 查看全部会话。" {
+		t.Fatalf("unexpected card body: %#v", ops[0])
+	}
+}
+
 func TestProjectTypingAndThumbsDownReactions(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -148,7 +172,7 @@ func TestProjectSnapshotIncludesEffectivePromptConfig(t *testing.T) {
 	if !containsAll(ops[0].CardBody,
 		"如果现在从飞书发送一条消息：",
 		"模型：`gpt-5.4`（飞书临时覆盖）",
-		"推理强度：`medium`（thread 配置）",
+		"推理强度：`medium`（会话配置）",
 		"飞书临时覆盖：模型 `gpt-5.4`",
 	) {
 		t.Fatalf("unexpected snapshot body: %#v", ops[0])

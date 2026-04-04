@@ -933,7 +933,7 @@ func TestDispatchingRemoteTurnOverridesStaleLocalClassification(t *testing.T) {
 	}
 }
 
-func TestThreadTitleFallsBackToStableShortIDWhenNameMissing(t *testing.T) {
+func TestThreadTitleUsesPreviewSummaryWhenNameMissing(t *testing.T) {
 	title := threadTitle(&state.InstanceRecord{
 		DisplayName:   "dl",
 		WorkspaceKey:  "/data/dl",
@@ -945,8 +945,8 @@ func TestThreadTitleFallsBackToStableShortIDWhenNameMissing(t *testing.T) {
 		CWD:      "/data/dl",
 	}, "019d5679-370c-7b03-b86f-15a33a017c83")
 
-	if title != "dl · 370c…7c83" {
-		t.Fatalf("expected stable short id fallback, got %q", title)
+	if title != "dl · 当前目录 `/data/dl` 下的内容如下：" {
+		t.Fatalf("expected preview summary fallback, got %q", title)
 	}
 }
 
@@ -1145,6 +1145,22 @@ func TestDisplayThreadTitleDisambiguatesDuplicateTitles(t *testing.T) {
 	}
 }
 
+func TestThreadTitleFallsBackToPreviewSummary(t *testing.T) {
+	title := threadTitle(&state.InstanceRecord{
+		DisplayName:  "droid",
+		WorkspaceKey: "/data/dl/droid",
+		ShortName:    "droid",
+	}, &state.ThreadRecord{
+		ThreadID: "thread-1",
+		Preview:  "我先按 fschannel 这个工程统计了入口文件和模块边界。",
+		CWD:      "/data/dl/droid",
+	}, "thread-1")
+
+	if title != "droid · 我先按 fschannel 这个工程统计了入口文件和模块边界。" {
+		t.Fatalf("unexpected preview-based title: %q", title)
+	}
+}
+
 func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1168,8 +1184,90 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 	if len(events) != 1 || events[0].SelectionPrompt == nil || len(events[0].SelectionPrompt.Options) != 1 {
 		t.Fatalf("expected one thread selection prompt, got %#v", events)
 	}
-	if events[0].SelectionPrompt.Options[0].Subtitle != "ID de5e…1acb · /data/dl" {
-		t.Fatalf("expected subtitle to include stable short id, got %#v", events[0].SelectionPrompt.Options[0])
+	if events[0].SelectionPrompt.Title != "最近会话" {
+		t.Fatalf("expected recent session prompt title, got %#v", events[0].SelectionPrompt)
+	}
+	if events[0].SelectionPrompt.Options[0].Subtitle != "/data/dl" {
+		t.Fatalf("expected subtitle to prefer cwd, got %#v", events[0].SelectionPrompt.Options[0])
+	}
+}
+
+func TestPresentThreadSelectionShowsMostRecentFive(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := &state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "dl",
+		WorkspaceRoot: "/data/dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	}
+	for i := 1; i <= 6; i++ {
+		threadID := "thread-" + string(rune('0'+i))
+		inst.Threads[threadID] = &state.ThreadRecord{
+			ThreadID:   threadID,
+			Name:       "会话" + string(rune('0'+i)),
+			CWD:        "/data/dl",
+			LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+			ListOrder:  i,
+		}
+	}
+	svc.UpsertInstance(inst)
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 5 {
+		t.Fatalf("expected recent prompt to show five sessions, got %#v", prompt.Options)
+	}
+	if prompt.Title != "最近会话" || prompt.Hint != "发送 `/useall` 查看全部会话。" {
+		t.Fatalf("unexpected recent prompt metadata: %#v", prompt)
+	}
+	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[4].OptionID != "thread-2" {
+		t.Fatalf("expected most recent sessions first, got %#v", prompt.Options)
+	}
+}
+
+func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "dl",
+		WorkspaceRoot: "/data/dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "较早会话", CWD: "/data/dl", LastUsedAt: now.Add(1 * time.Minute), ListOrder: 2},
+			"thread-2": {ThreadID: "thread-2", Name: "最新会话", CWD: "/data/dl", LastUsedAt: now.Add(2 * time.Minute), ListOrder: 1},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "全部会话" || prompt.Hint != "" {
+		t.Fatalf("unexpected all-session prompt metadata: %#v", prompt)
+	}
+	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
+		t.Fatalf("expected all sessions sorted by recency, got %#v", prompt.Options)
 	}
 }
 

@@ -12,17 +12,37 @@
       {
         "key": "status",
         "name": "当前状态",
-        "description": "查看当前接管实例、thread、模型和排队状态。"
+        "description": "查看当前接管实例、会话、模型和排队状态。"
       },
       {
         "key": "threads",
-        "name": "切换 Thread",
-        "description": "列出当前实例的已知 thread，并等待回复序号切换。"
+        "name": "切换会话",
+        "description": "列出当前实例的已知会话，并等待回复序号切换。"
       },
       {
         "key": "stop",
         "name": "停止当前执行",
         "description": "向当前 turn 发送 stop，并丢弃尚未发出的飞书队列。"
+      },
+      {
+        "key": "reasonlow",
+        "name": "推理 Low",
+        "description": "把之后飞书发出的消息推理强度切到 low。"
+      },
+      {
+        "key": "reasonmedium",
+        "name": "推理 Medium",
+        "description": "把之后飞书发出的消息推理强度切到 medium。"
+      },
+      {
+        "key": "reasonhigh",
+        "name": "推理 High",
+        "description": "把之后飞书发出的消息推理强度切到 high。"
+      },
+      {
+        "key": "reasonxhigh",
+        "name": "推理 XHigh",
+        "description": "把之后飞书发出的消息推理强度切到 xhigh。"
       }
     ]
   },
@@ -41,7 +61,7 @@
     },
     {
       "event": "application.bot.menu_v6",
-      "purpose": "处理机器人菜单里的 list/status/threads/stop。"
+      "purpose": "处理机器人菜单里的 list/status/threads/stop 以及推理强度快捷键。"
     }
   ],
   "permissions_checklist": [
