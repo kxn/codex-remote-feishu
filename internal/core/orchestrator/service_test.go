@@ -709,11 +709,168 @@ func TestStopInterruptsActiveTurnAndDiscardsQueuedMessages(t *testing.T) {
 		Kind:             control.ActionStop,
 		SurfaceSessionID: "surface-1",
 	})
-	if len(events) != 3 {
-		t.Fatalf("expected interrupt + 2 discard events, got %#v", events)
+	if len(events) != 4 {
+		t.Fatalf("expected interrupt + 2 discard events + notice, got %#v", events)
 	}
 	if events[0].Command == nil || events[0].Command.Kind != agentproto.CommandTurnInterrupt {
 		t.Fatalf("expected interrupt command, got %#v", events[0])
+	}
+	if events[3].Notice == nil || events[3].Notice.Code != "stop_requested" {
+		t.Fatalf("expected stop_requested notice, got %#v", events[3])
+	}
+}
+
+func TestStopWithoutActiveTurnReturnsNotice(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStop,
+		SurfaceSessionID: "surface-1",
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "stop_no_active_turn" {
+		t.Fatalf("expected stop_no_active_turn notice, got %#v", events)
+	}
+}
+
+func TestMessageRecallCancelsQueuedItemAcrossTextAndImageSources(t *testing.T) {
+	now := time.Date(2026, 4, 6, 9, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	surface := svc.root.Surfaces["surface-1"]
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:               "queue-1",
+		SourceMessageID:  "msg-text",
+		SourceMessageIDs: []string{"msg-text", "msg-img"},
+		Status:           state.QueueItemQueued,
+	}
+	surface.StagedImages["img-1"] = &state.StagedImageRecord{
+		ImageID:         "img-1",
+		SourceMessageID: "msg-img",
+		State:           state.ImageBound,
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: "surface-1",
+		TargetMessageID:  "msg-img",
+	})
+	if len(events) != 2 {
+		t.Fatalf("expected discard reactions for text and image sources, got %#v", events)
+	}
+	for _, event := range events {
+		if event.PendingInput == nil || !event.PendingInput.QueueOff || !event.PendingInput.ThumbsDown || event.PendingInput.Status != string(state.QueueItemDiscarded) {
+			t.Fatalf("unexpected queued item discard projection: %#v", events)
+		}
+	}
+	if surface.QueueItems["queue-1"].Status != state.QueueItemDiscarded || len(surface.QueuedQueueItemIDs) != 0 {
+		t.Fatalf("expected queue item to be removed from queue, got item=%#v queue=%#v", surface.QueueItems["queue-1"], surface.QueuedQueueItemIDs)
+	}
+	if surface.StagedImages["img-1"].State != state.ImageDiscarded {
+		t.Fatalf("expected bound image to be marked discarded, got %#v", surface.StagedImages["img-1"])
+	}
+}
+
+func TestMessageRecallCancelsStagedImage(t *testing.T) {
+	now := time.Date(2026, 4, 6, 9, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
+		SurfaceSessionID: "surface-1",
+		QueueItems:       map[string]*state.QueueItemRecord{},
+		StagedImages: map[string]*state.StagedImageRecord{
+			"img-1": {
+				ImageID:         "img-1",
+				SourceMessageID: "msg-img",
+				State:           state.ImageStaged,
+			},
+		},
+		PendingRequests: map[string]*state.RequestPromptRecord{},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: "surface-1",
+		TargetMessageID:  "msg-img",
+	})
+	if len(events) != 1 || events[0].PendingInput == nil {
+		t.Fatalf("expected staged image cancellation event, got %#v", events)
+	}
+	if events[0].PendingInput.Status != string(state.ImageCancelled) || !events[0].PendingInput.QueueOff || !events[0].PendingInput.ThumbsDown {
+		t.Fatalf("unexpected staged image cancellation projection: %#v", events[0].PendingInput)
+	}
+}
+
+func TestMessageRecallRunningItemReturnsNotice(t *testing.T) {
+	now := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
+		SurfaceSessionID:  "surface-1",
+		ActiveQueueItemID: "queue-1",
+		QueueItems: map[string]*state.QueueItemRecord{
+			"queue-1": {
+				ID:               "queue-1",
+				SourceMessageID:  "msg-text",
+				SourceMessageIDs: []string{"msg-text", "msg-img"},
+				Status:           state.QueueItemRunning,
+			},
+		},
+		StagedImages:    map[string]*state.StagedImageRecord{},
+		PendingRequests: map[string]*state.RequestPromptRecord{},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: "surface-1",
+		TargetMessageID:  "msg-img",
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "message_recall_too_late" {
+		t.Fatalf("expected message_recall_too_late notice, got %#v", events)
+	}
+}
+
+func TestMessageRecallCompletedItemIsIgnored(t *testing.T) {
+	now := time.Date(2026, 4, 6, 10, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
+		SurfaceSessionID: "surface-1",
+		QueueItems: map[string]*state.QueueItemRecord{
+			"queue-1": {
+				ID:               "queue-1",
+				SourceMessageID:  "msg-text",
+				SourceMessageIDs: []string{"msg-text", "msg-img"},
+				Status:           state.QueueItemCompleted,
+			},
+		},
+		StagedImages:    map[string]*state.StagedImageRecord{},
+		PendingRequests: map[string]*state.RequestPromptRecord{},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: "surface-1",
+		TargetMessageID:  "msg-text",
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected completed item recall to be ignored, got %#v", events)
 	}
 }
 

@@ -22,6 +22,7 @@ const (
 	ActionTextMessage      ActionKind = "surface.message.text"
 	ActionImageMessage     ActionKind = "surface.message.image"
 	ActionReactionCreated  ActionKind = "surface.message.reaction.created"
+	ActionMessageRecalled  ActionKind = "surface.message.recalled"
 	ActionSelectPrompt     ActionKind = "surface.selection.prompt"
 	ActionAttachInstance   ActionKind = "surface.button.attach_instance"
 	ActionShowThreads      ActionKind = "surface.button.show_threads"
@@ -101,14 +102,14 @@ type AttachmentSummary struct {
 }
 
 type PendingHeadlessSummary struct {
-	InstanceID   string
-	ThreadID     string
-	ThreadTitle  string
-	ThreadCWD    string
-	Status       string
-	PID          int
-	ExpiresAt    time.Time
-	RequestedAt  time.Time
+	InstanceID  string
+	ThreadID    string
+	ThreadTitle string
+	ThreadCWD   string
+	Status      string
+	PID         int
+	ExpiresAt   time.Time
+	RequestedAt time.Time
 }
 
 type PromptRouteSummary struct {
@@ -164,6 +165,8 @@ type PendingInputState struct {
 	SourceMessageID string
 	Status          string
 	QueuePosition   int
+	QueueOn         bool
+	QueueOff        bool
 	TypingOn        bool
 	TypingOff       bool
 	ThumbsDown      bool

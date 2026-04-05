@@ -33,6 +33,12 @@ type Operation struct {
 	CardElements     []map[string]any
 }
 
+const (
+	emojiQueuePending = "OneSecond"
+	emojiThinking     = "THINKING"
+	emojiDiscarded    = "ThumbsDown"
+)
+
 type Projector struct{}
 
 func NewProjector() *Projector {
@@ -120,13 +126,31 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			return nil
 		}
 		var ops []Operation
+		if event.PendingInput.QueueOn {
+			ops = append(ops, Operation{
+				Kind:             OperationAddReaction,
+				SurfaceSessionID: event.SurfaceSessionID,
+				ChatID:           chatID,
+				MessageID:        event.PendingInput.SourceMessageID,
+				EmojiType:        emojiQueuePending,
+			})
+		}
+		if event.PendingInput.QueueOff {
+			ops = append(ops, Operation{
+				Kind:             OperationRemoveReaction,
+				SurfaceSessionID: event.SurfaceSessionID,
+				ChatID:           chatID,
+				MessageID:        event.PendingInput.SourceMessageID,
+				EmojiType:        emojiQueuePending,
+			})
+		}
 		if event.PendingInput.TypingOn {
 			ops = append(ops, Operation{
 				Kind:             OperationAddReaction,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
-				EmojiType:        "THINKING",
+				EmojiType:        emojiThinking,
 			})
 		}
 		if event.PendingInput.TypingOff {
@@ -135,7 +159,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
-				EmojiType:        "THINKING",
+				EmojiType:        emojiThinking,
 			})
 		}
 		if event.PendingInput.ThumbsDown {
@@ -144,7 +168,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
-				EmojiType:        "THUMBSDOWN",
+				EmojiType:        emojiDiscarded,
 			})
 		}
 		return ops

@@ -192,6 +192,7 @@ type QueueItemRecord struct {
 	ID                 string
 	SurfaceSessionID   string
 	SourceMessageID    string
+	SourceMessageIDs   []string
 	Inputs             []agentproto.Input
 	FrozenThreadID     string
 	FrozenCWD          string

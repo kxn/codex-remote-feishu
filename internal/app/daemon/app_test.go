@@ -420,6 +420,72 @@ func TestDaemonTickResumesQueuedRemoteInputAfterLocalTurnCompletes(t *testing.T)
 	}
 }
 
+func TestDaemonProjectsQueuedAndDiscardedReactionsForRecalledMessage(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+		},
+	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true}},
+	}})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-1",
+		CWD:      "/data/dl/droid",
+		Action:   "turn_start",
+	}})
+
+	beforeQueue := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-queued",
+		Text:             "先排队",
+	})
+	queueOps := gateway.operations[beforeQueue:]
+	if len(queueOps) == 0 || queueOps[0].Kind != feishu.OperationAddReaction || queueOps[0].EmojiType != "OneSecond" {
+		t.Fatalf("expected queued message to receive OneSecond reaction, got %#v", queueOps)
+	}
+
+	beforeRecall := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		TargetMessageID:  "msg-queued",
+	})
+	recallOps := gateway.operations[beforeRecall:]
+	if len(recallOps) != 2 {
+		t.Fatalf("expected queue reaction removal plus discard reaction, got %#v", recallOps)
+	}
+	if recallOps[0].Kind != feishu.OperationRemoveReaction || recallOps[0].EmojiType != "OneSecond" {
+		t.Fatalf("expected first recall op to remove queue reaction, got %#v", recallOps)
+	}
+	if recallOps[1].Kind != feishu.OperationAddReaction || recallOps[1].EmojiType != "ThumbsDown" {
+		t.Fatalf("expected second recall op to add discard reaction, got %#v", recallOps)
+	}
+}
+
 func TestDaemonStatusExportsSurfacesAndRemoteTurnState(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

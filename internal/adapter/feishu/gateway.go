@@ -79,21 +79,12 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		handler(ctx, action)
 		return nil
 	})
-	dispatch.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
-		if event == nil || event.Event == nil || event.Event.MessageId == nil {
+	dispatch.OnP2MessageRecalledV1(func(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
+		action, ok := g.parseMessageRecalledEvent(event)
+		if !ok {
 			return nil
 		}
-		g.mu.Lock()
-		surfaceSessionID := g.messages[*event.Event.MessageId]
-		g.mu.Unlock()
-		handler(ctx, control.Action{
-			Kind:             control.ActionReactionCreated,
-			SurfaceSessionID: surfaceSessionID,
-			TargetMessageID:  *event.Event.MessageId,
-		})
-		return nil
-	})
-	dispatch.OnP2MessageReactionDeletedV1(func(context.Context, *larkim.P2MessageReactionDeletedV1) error {
+		handler(ctx, action)
 		return nil
 	})
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
@@ -289,6 +280,28 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 	default:
 		return control.Action{}, false, nil
 	}
+}
+
+func (g *LiveGateway) parseMessageRecalledEvent(event *larkim.P2MessageRecalledV1) (control.Action, bool) {
+	if event == nil || event.Event == nil || event.Event.MessageId == nil {
+		return control.Action{}, false
+	}
+	messageID := strings.TrimSpace(*event.Event.MessageId)
+	if messageID == "" {
+		return control.Action{}, false
+	}
+	g.mu.Lock()
+	surfaceSessionID := g.messages[messageID]
+	g.mu.Unlock()
+	if surfaceSessionID == "" {
+		return control.Action{}, false
+	}
+	return control.Action{
+		Kind:             control.ActionMessageRecalled,
+		SurfaceSessionID: surfaceSessionID,
+		ChatID:           strings.TrimSpace(stringPtr(event.Event.ChatId)),
+		TargetMessageID:  messageID,
+	}, true
 }
 
 func (g *LiveGateway) downloadImage(ctx context.Context, messageID, rawContent string) (string, string, error) {

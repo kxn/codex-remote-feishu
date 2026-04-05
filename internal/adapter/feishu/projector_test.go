@@ -166,19 +166,24 @@ func TestProjectNewInstanceSelectionPromptUsesRecoverAction(t *testing.T) {
 	}
 }
 
-func TestProjectTypingAndThumbsDownReactions(t *testing.T) {
+func TestProjectQueueTypingAndThumbsDownReactions(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventPendingInput,
 		PendingInput: &control.PendingInputState{
 			SourceMessageID: "msg-1",
+			QueueOn:         true,
+			QueueOff:        true,
 			TypingOn:        true,
 			TypingOff:       true,
 			ThumbsDown:      true,
 		},
 	})
-	if len(ops) != 3 {
-		t.Fatalf("expected 3 operations, got %#v", ops)
+	if len(ops) != 5 {
+		t.Fatalf("expected 5 operations, got %#v", ops)
+	}
+	if ops[0].EmojiType != emojiQueuePending || ops[1].EmojiType != emojiQueuePending || ops[4].EmojiType != emojiDiscarded {
+		t.Fatalf("unexpected queue/discard reaction projection: %#v", ops)
 	}
 }
 

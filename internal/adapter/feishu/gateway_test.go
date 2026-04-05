@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 func TestMenuActionKindKnownValues(t *testing.T) {
@@ -296,4 +297,43 @@ func TestParseCardActionTriggerEventFallsBackToApprovedBool(t *testing.T) {
 	if action.RequestOptionID != "decline" || action.Approved {
 		t.Fatalf("unexpected legacy request respond payload: %#v", action)
 	}
+}
+
+func TestParseMessageRecalledEventBuildsRecallAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{})
+	gateway.recordSurfaceMessage("om-msg-1", "feishu:user:user-1")
+	event := &larkim.P2MessageRecalledV1{
+		Event: &larkim.P2MessageRecalledV1Data{
+			MessageId: stringRef("om-msg-1"),
+			ChatId:    stringRef("oc_1"),
+		},
+	}
+
+	action, ok := gateway.parseMessageRecalledEvent(event)
+	if !ok {
+		t.Fatal("expected recalled event to be parsed")
+	}
+	if action.Kind != control.ActionMessageRecalled {
+		t.Fatalf("unexpected action kind: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:user:user-1" || action.TargetMessageID != "om-msg-1" || action.ChatID != "oc_1" {
+		t.Fatalf("unexpected recalled action payload: %#v", action)
+	}
+}
+
+func TestParseMessageRecalledEventIgnoresUnknownMessage(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{})
+	event := &larkim.P2MessageRecalledV1{
+		Event: &larkim.P2MessageRecalledV1Data{
+			MessageId: stringRef("om-missing"),
+		},
+	}
+
+	if action, ok := gateway.parseMessageRecalledEvent(event); ok || action.Kind != "" {
+		t.Fatalf("expected unknown recalled message to be ignored, got %#v", action)
+	}
+}
+
+func stringRef(value string) *string {
+	return &value
 }

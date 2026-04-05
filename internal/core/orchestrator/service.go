@@ -143,7 +143,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionImageMessage:
 		return s.stageImage(surface, action)
 	case control.ActionReactionCreated:
-		return s.cancelPending(surface, action.TargetMessageID)
+		return nil
+	case control.ActionMessageRecalled:
+		return s.handleMessageRecalled(surface, action.TargetMessageID)
 	case control.ActionSelectPrompt:
 		return s.resolveSelectionOption(surface, action.PromptID, action.OptionID)
 	case control.ActionStop:
@@ -1029,12 +1031,12 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	}
 
 	threadID, cwd, routeMode, createThread := freezeRoute(inst, surface)
-	inputs := s.consumeStagedInputs(surface)
+	inputs, stagedMessageIDs := s.consumeStagedInputs(surface)
 	inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: text})
 	if createThread {
 		_ = createThread
 	}
-	return s.enqueueQueueItem(surface, action.MessageID, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)
+	return s.enqueueQueueItem(surface, action.MessageID, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)
 }
 
 func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
@@ -1068,41 +1070,57 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 			QueueItemID:     image.ImageID,
 			SourceMessageID: image.SourceMessageID,
 			Status:          string(image.State),
+			QueueOn:         true,
 		},
 	}}
 }
 
-func (s *Service) cancelPending(surface *state.SurfaceConsoleRecord, targetMessageID string) []control.UIEvent {
-	for _, image := range surface.StagedImages {
-		if image.SourceMessageID == targetMessageID && image.State == state.ImageStaged {
-			image.State = state.ImageCancelled
-			return []control.UIEvent{{
-				Kind:             control.UIEventPendingInput,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				PendingInput: &control.PendingInputState{
-					QueueItemID:     image.ImageID,
-					SourceMessageID: image.SourceMessageID,
-					Status:          string(image.State),
-					ThumbsDown:      true,
-				},
-			}}
+func (s *Service) handleMessageRecalled(surface *state.SurfaceConsoleRecord, targetMessageID string) []control.UIEvent {
+	targetMessageID = strings.TrimSpace(targetMessageID)
+	if surface == nil || targetMessageID == "" {
+		return nil
+	}
+	if activeID := surface.ActiveQueueItemID; activeID != "" {
+		if item := surface.QueueItems[activeID]; item != nil && queueItemHasSourceMessage(item, targetMessageID) {
+			switch item.Status {
+			case state.QueueItemDispatching, state.QueueItemRunning:
+				return []control.UIEvent{{
+					Kind:             control.UIEventNotice,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					Notice: &control.Notice{
+						Code:     "message_recall_too_late",
+						Title:    "无法撤回排队",
+						Text:     "这条输入已经开始执行，不能通过撤回取消。若要中断当前 turn，请发送 `/stop`。",
+						ThemeKey: "system",
+					},
+				}}
+			}
 		}
 	}
 	for _, queueID := range surface.QueuedQueueItemIDs {
 		item := surface.QueueItems[queueID]
-		if item != nil && item.SourceMessageID == targetMessageID && item.Status == state.QueueItemQueued {
-			item.Status = state.QueueItemDiscarded
-			surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
-			return []control.UIEvent{{
-				Kind:             control.UIEventPendingInput,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				PendingInput: &control.PendingInputState{
-					QueueItemID:     item.ID,
-					SourceMessageID: item.SourceMessageID,
-					Status:          string(item.Status),
-					ThumbsDown:      true,
-				},
-			}}
+		if item == nil || item.Status != state.QueueItemQueued || !queueItemHasSourceMessage(item, targetMessageID) {
+			continue
+		}
+		item.Status = state.QueueItemDiscarded
+		s.markImagesForMessages(surface, queueItemSourceMessageIDs(item), state.ImageDiscarded)
+		surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
+		return s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+			QueueOff:    true,
+			ThumbsDown:  true,
+		}, queueItemSourceMessageIDs(item))
+	}
+	for _, image := range surface.StagedImages {
+		if image.SourceMessageID == targetMessageID && image.State == state.ImageStaged {
+			image.State = state.ImageCancelled
+			return s.pendingInputEvents(surface, control.PendingInputState{
+				QueueItemID: image.ImageID,
+				Status:      string(image.State),
+				QueueOff:    true,
+				ThumbsDown:  true,
+			}, []string{image.SourceMessageID})
 		}
 	}
 	return nil
@@ -1110,7 +1128,14 @@ func (s *Service) cancelPending(surface *state.SurfaceConsoleRecord, targetMessa
 
 func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	var events []control.UIEvent
+	discarded := countPendingDrafts(surface)
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	notice := control.Notice{
+		Code:     "stop_no_active_turn",
+		Title:    "没有正在运行的推理",
+		Text:     "当前没有正在运行的推理。",
+		ThemeKey: "system",
+	}
 	if inst != nil && inst.ActiveTurnID != "" {
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventAgentCommand,
@@ -1128,13 +1153,32 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []control.UIE
 				},
 			},
 		})
+		notice = control.Notice{
+			Code:     "stop_requested",
+			Title:    "已发送停止请求",
+			Text:     "已向当前运行中的 turn 发送停止请求。",
+			ThemeKey: "system",
+		}
+	} else if surface.ActiveQueueItemID != "" {
+		notice = control.Notice{
+			Code:     "stop_not_interruptible",
+			Title:    "当前还不能停止",
+			Text:     "当前请求正在派发，尚未进入可中断状态。",
+			ThemeKey: "system",
+		}
 	}
 
 	events = append(events, s.discardDrafts(surface)...)
-	surface.QueuedQueueItemIDs = nil
 	surface.SelectionPrompt = nil
 	clearSurfaceRequests(surface)
-	s.clearRemoteOwnership(surface)
+	if discarded > 0 {
+		notice.Text += fmt.Sprintf(" 已清空 %d 条排队或暂存输入。", discarded)
+	}
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice:           &notice,
+	})
 	return events
 }
 
@@ -1519,18 +1563,20 @@ func (s *Service) consumeCapturedRequestFeedback(surface *state.SurfaceConsoleRe
 		},
 	}}
 	events = append(events, notice(surface, "request_feedback_queued", "已记录处理意见。当前确认会先被拒绝，随后继续处理你的下一步要求。")...)
-	events = append(events, s.enqueueQueueItem(surface, action.MessageID, []agentproto.Input{{Type: agentproto.InputText, Text: text}}, threadID, cwd, routeMode, surface.PromptOverride, true)...)
+	events = append(events, s.enqueueQueueItem(surface, action.MessageID, nil, []agentproto.Input{{Type: agentproto.InputText, Text: text}}, threadID, cwd, routeMode, surface.PromptOverride, true)...)
 	return events
 }
 
-func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []control.UIEvent {
+func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []control.UIEvent {
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	sourceMessageIDs := uniqueStrings(append([]string{sourceMessageID}, relatedMessageIDs...))
 	item := &state.QueueItemRecord{
 		ID:                 itemID,
 		SurfaceSessionID:   surface.SurfaceSessionID,
 		SourceMessageID:    sourceMessageID,
+		SourceMessageIDs:   sourceMessageIDs,
 		Inputs:             inputs,
 		FrozenThreadID:     threadID,
 		FrozenCWD:          cwd,
@@ -1556,12 +1602,13 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 			SourceMessageID: item.SourceMessageID,
 			Status:          string(item.Status),
 			QueuePosition:   position,
+			QueueOn:         true,
 		},
 	}}
 	return append(events, s.dispatchNext(surface)...)
 }
 
-func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) []agentproto.Input {
+func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]agentproto.Input, []string) {
 	keys := make([]string, 0, len(surface.StagedImages))
 	for imageID := range surface.StagedImages {
 		keys = append(keys, imageID)
@@ -1569,6 +1616,7 @@ func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) []age
 	sort.Strings(keys)
 
 	var inputs []agentproto.Input
+	var sourceMessageIDs []string
 	for _, imageID := range keys {
 		image := surface.StagedImages[imageID]
 		if image.State != state.ImageStaged {
@@ -1580,8 +1628,9 @@ func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) []age
 			MIMEType: image.MIMEType,
 		})
 		image.State = state.ImageBound
+		sourceMessageIDs = append(sourceMessageIDs, image.SourceMessageID)
 	}
-	return inputs
+	return inputs, sourceMessageIDs
 }
 
 func freezeRoute(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord) (threadID, cwd string, routeMode state.RouteMode, createThread bool) {
@@ -1653,23 +1702,17 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []control.UI
 		},
 	}
 
-	return []control.UIEvent{
-		{
-			Kind:             control.UIEventPendingInput,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			PendingInput: &control.PendingInputState{
-				QueueItemID:     item.ID,
-				SourceMessageID: item.SourceMessageID,
-				Status:          string(item.Status),
-				TypingOn:        true,
-			},
-		},
-		{
-			Kind:             control.UIEventAgentCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Command:          command,
-		},
-	}
+	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
+		QueueItemID: item.ID,
+		Status:      string(item.Status),
+		QueueOff:    true,
+	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, true)
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventAgentCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Command:          command,
+	})
+	return events
 }
 
 func (s *Service) markRemoteTurnRunning(instanceID, threadID, turnID string) []control.UIEvent {
@@ -1732,16 +1775,11 @@ func (s *Service) completeRemoteTurn(instanceID, threadID, turnID, status, error
 		item.Status = state.QueueItemCompleted
 	}
 	surface.ActiveQueueItemID = ""
-	events := []control.UIEvent{{
-		Kind:             control.UIEventPendingInput,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		PendingInput: &control.PendingInputState{
-			QueueItemID:     item.ID,
-			SourceMessageID: item.SourceMessageID,
-			Status:          string(item.Status),
-			TypingOff:       true,
-		},
-	}}
+	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
+		QueueItemID: item.ID,
+		Status:      string(item.Status),
+		QueueOff:    true,
+	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, false)
 	if errorMessage != "" {
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventNotice,
@@ -2750,16 +2788,12 @@ func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []control.U
 			continue
 		}
 		image.State = state.ImageDiscarded
-		events = append(events, control.UIEvent{
-			Kind:             control.UIEventPendingInput,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			PendingInput: &control.PendingInputState{
-				QueueItemID:     image.ImageID,
-				SourceMessageID: image.SourceMessageID,
-				Status:          string(image.State),
-				ThumbsDown:      true,
-			},
-		})
+		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: image.ImageID,
+			Status:      string(image.State),
+			QueueOff:    true,
+			ThumbsDown:  true,
+		}, []string{image.SourceMessageID})...)
 	}
 	for _, queueID := range append([]string{}, surface.QueuedQueueItemIDs...) {
 		item := surface.QueueItems[queueID]
@@ -2767,19 +2801,15 @@ func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []control.U
 			continue
 		}
 		item.Status = state.QueueItemDiscarded
-		events = append(events, control.UIEvent{
-			Kind:             control.UIEventPendingInput,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			PendingInput: &control.PendingInputState{
-				QueueItemID:     item.ID,
-				SourceMessageID: item.SourceMessageID,
-				Status:          string(item.Status),
-				ThumbsDown:      true,
-			},
-		})
+		s.markImagesForMessages(surface, queueItemSourceMessageIDs(item), state.ImageDiscarded)
+		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+			QueueOff:    true,
+			ThumbsDown:  true,
+		}, queueItemSourceMessageIDs(item))...)
 	}
 	surface.QueuedQueueItemIDs = nil
-	surface.QueueItems = map[string]*state.QueueItemRecord{}
 	surface.StagedImages = map[string]*state.StagedImageRecord{}
 	return events
 }
@@ -3255,12 +3285,137 @@ func (s *Service) touchThread(thread *state.ThreadRecord) {
 	thread.LastUsedAt = s.now()
 }
 
+func (s *Service) pendingInputEvents(surface *state.SurfaceConsoleRecord, pending control.PendingInputState, sourceMessageIDs []string) []control.UIEvent {
+	if surface == nil {
+		return nil
+	}
+	messageIDs := uniqueStrings(sourceMessageIDs)
+	if len(messageIDs) == 0 && pending.SourceMessageID != "" {
+		messageIDs = []string{pending.SourceMessageID}
+	}
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	events := make([]control.UIEvent, 0, len(messageIDs))
+	for _, messageID := range messageIDs {
+		pendingCopy := pending
+		pendingCopy.SourceMessageID = messageID
+		events = append(events, control.UIEvent{
+			Kind:             control.UIEventPendingInput,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			PendingInput:     &pendingCopy,
+		})
+	}
+	return events
+}
+
+func appendPendingInputTyping(events []control.UIEvent, primaryMessageID string, typingOn bool) []control.UIEvent {
+	if primaryMessageID == "" {
+		return events
+	}
+	for i := range events {
+		pending := events[i].PendingInput
+		if pending == nil || pending.SourceMessageID != primaryMessageID {
+			continue
+		}
+		pending.TypingOn = typingOn
+		pending.TypingOff = !typingOn
+		return events
+	}
+	return events
+}
+
+func queueItemSourceMessageIDs(item *state.QueueItemRecord) []string {
+	if item == nil {
+		return nil
+	}
+	return uniqueStrings(append([]string{item.SourceMessageID}, item.SourceMessageIDs...))
+}
+
+func queueItemHasSourceMessage(item *state.QueueItemRecord, messageID string) bool {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" || item == nil {
+		return false
+	}
+	for _, candidate := range queueItemSourceMessageIDs(item) {
+		if candidate == messageID {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) markImagesForMessages(surface *state.SurfaceConsoleRecord, sourceMessageIDs []string, next state.ImageState) {
+	if surface == nil || len(surface.StagedImages) == 0 {
+		return
+	}
+	targets := map[string]struct{}{}
+	for _, messageID := range uniqueStrings(sourceMessageIDs) {
+		if messageID == "" {
+			continue
+		}
+		targets[messageID] = struct{}{}
+	}
+	if len(targets) == 0 {
+		return
+	}
+	for _, image := range surface.StagedImages {
+		if image == nil {
+			continue
+		}
+		if _, ok := targets[image.SourceMessageID]; ok {
+			image.State = next
+		}
+	}
+}
+
+func countPendingDrafts(surface *state.SurfaceConsoleRecord) int {
+	if surface == nil {
+		return 0
+	}
+	total := 0
+	for _, image := range surface.StagedImages {
+		if image != nil && image.State == state.ImageStaged {
+			total++
+		}
+	}
+	for _, queueID := range surface.QueuedQueueItemIDs {
+		if item := surface.QueueItems[queueID]; item != nil && item.Status == state.QueueItemQueued {
+			total++
+		}
+	}
+	return total
+}
+
 func removeString(values []string, target string) []string {
 	out := values[:0]
 	for _, value := range values {
 		if value != target {
 			out = append(out, value)
 		}
+	}
+	return out
+}
+
+func uniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
