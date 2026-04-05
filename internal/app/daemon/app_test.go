@@ -512,16 +512,17 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	}
 }
 
-func TestDaemonStartsHeadlessFromRecoverableThreadAndAutoAttaches(t *testing.T) {
+func TestDaemonStartsHeadlessAndPromptsForResumeAfterRefresh(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
 		ConfigPath: "/tmp/config.env",
 		BaseEnv:    []string{"PATH=/usr/bin"},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),
-			StateDir: t.TempDir(),
+			StateDir: stateDir,
 		},
 	})
 
@@ -531,23 +532,59 @@ func TestDaemonStartsHeadlessFromRecoverableThreadAndAutoAttaches(t *testing.T) 
 		return 4321, nil
 	}
 
-	app.service.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-src",
-		DisplayName:   "droid",
-		WorkspaceRoot: "/data/dl/droid",
-		WorkspaceKey:  "/data/dl/droid",
-		Online:        true,
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", LastUsedAt: time.Now()},
-		},
-	})
-
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionNewInstance,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected pending headless snapshot, got %#v", snapshot)
+	}
+	if captured.WorkDir != stateDir || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
+		t.Fatalf("unexpected headless launch opts: %#v", captured)
+	}
+	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") || !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") {
+		t.Fatalf("expected headless env overrides, got %#v", captured.Env)
+	}
+	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless") {
+		t.Fatalf("expected headless display name override, got %#v", captured.Env)
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    snapshot.PendingHeadless.InstanceID,
+			DisplayName:   "headless",
+			WorkspaceRoot: stateDir,
+			WorkspaceKey:  stateDir,
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+
+	snapshot = app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID == "" || snapshot.Attachment.Source != "headless" || !snapshot.Attachment.Managed || snapshot.Attachment.SelectedThreadID != "" {
+		t.Fatalf("expected auto-attached headless snapshot, got %#v", snapshot)
+	}
+	if snapshot.PendingHeadless.Status != string(state.HeadlessLaunchSelecting) {
+		t.Fatalf("expected pending selection state, got %#v", snapshot.PendingHeadless)
+	}
+
+	app.onEvents(context.Background(), snapshot.Attachment.InstanceID, []agentproto.Event{{
+		Kind: agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{
+			ThreadID:  "thread-1",
+			Name:      "修复登录流程",
+			Preview:   "修登录",
+			CWD:       "/data/dl/droid",
+			Loaded:    true,
+			ListOrder: 1,
+		}},
+	}})
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionTextMessage,
 		SurfaceSessionID: "surface-1",
@@ -557,33 +594,9 @@ func TestDaemonStartsHeadlessFromRecoverableThreadAndAutoAttaches(t *testing.T) 
 		Text:             "1",
 	})
 
-	snapshot := app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
-		t.Fatalf("expected pending headless snapshot, got %#v", snapshot)
-	}
-	if captured.WorkDir != "/data/dl/droid" || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
-		t.Fatalf("unexpected headless launch opts: %#v", captured)
-	}
-	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") || !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") {
-		t.Fatalf("expected headless env overrides, got %#v", captured.Env)
-	}
-
-	app.onHello(context.Background(), agentproto.Hello{
-		Instance: agentproto.InstanceHello{
-			InstanceID:    snapshot.PendingHeadless.InstanceID,
-			DisplayName:   "droid",
-			WorkspaceRoot: "/data/dl/droid",
-			WorkspaceKey:  "/data/dl/droid",
-			ShortName:     "droid",
-			Source:        "headless",
-			Managed:       true,
-			PID:           4321,
-		},
-	})
-
 	snapshot = app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.Attachment.InstanceID == "" || snapshot.Attachment.Source != "headless" || !snapshot.Attachment.Managed || snapshot.Attachment.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected auto-attached headless snapshot, got %#v", snapshot)
+	if snapshot == nil || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected selected headless thread after prompt resolution, got %#v", snapshot)
 	}
 }
 

@@ -110,7 +110,8 @@ type SurfaceConsoleRecord struct {
 type HeadlessLaunchStatus string
 
 const (
-	HeadlessLaunchStarting HeadlessLaunchStatus = "starting"
+	HeadlessLaunchStarting  HeadlessLaunchStatus = "starting"
+	HeadlessLaunchSelecting HeadlessLaunchStatus = "selecting"
 )
 
 type HeadlessLaunchRecord struct {

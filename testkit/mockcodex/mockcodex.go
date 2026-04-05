@@ -7,17 +7,19 @@ import (
 )
 
 type MockCodex struct {
-	nextThreadID    int
-	nextTurnID      int
-	nextItemID      int
-	Threads         map[string]*Thread
-	FocusedThreadID string
-	ActiveTurn      *Turn
-	AutoComplete    bool
-	EmitItemDeltas  bool
-	OmitFinalText   bool
-	LastTurnStart   map[string]any
-	Responder       func(turn TurnStart) string
+	nextThreadID      int
+	nextTurnID        int
+	nextItemID        int
+	Threads           map[string]*Thread
+	FocusedThreadID   string
+	ActiveTurn        *Turn
+	AutoComplete      bool
+	EmitItemDeltas    bool
+	OmitFinalText     bool
+	RequireInitialize bool
+	Initialized       bool
+	LastTurnStart     map[string]any
+	Responder         func(turn TurnStart) string
 }
 
 type Thread struct {
@@ -68,7 +70,20 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 	params, _ := message["params"].(map[string]any)
 
 	switch method {
+	case "initialize":
+		m.Initialized = true
+		return [][]byte{
+			mustJSON(map[string]any{"id": id, "result": map[string]any{
+				"userAgent":      "mockcodex/0.0.1",
+				"codexHome":      "/tmp/mockcodex",
+				"platformFamily": "unix",
+				"platformOs":     "linux",
+			}}),
+		}, nil
 	case "thread/start":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		m.nextThreadID++
 		threadID := fmt.Sprintf("thread-%d", m.nextThreadID)
 		cwd, _ := params["cwd"].(string)
@@ -79,6 +94,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			mustJSON(map[string]any{"method": "thread/started", "params": map[string]any{"thread": map[string]any{"id": threadID, "cwd": cwd, "name": "新会话"}}}),
 		}, nil
 	case "thread/resume":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		threadID, _ := params["threadId"].(string)
 		thread := m.Threads[threadID]
 		if thread == nil {
@@ -94,6 +112,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			mustJSON(map[string]any{"method": "thread/started", "params": map[string]any{"thread": map[string]any{"id": thread.ID, "cwd": thread.CWD, "name": thread.Name}}}),
 		}, nil
 	case "thread/loaded/list":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		items := make([]map[string]any, 0, len(m.Threads))
 		for _, thread := range m.Threads {
 			items = append(items, map[string]any{
@@ -108,6 +129,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			mustJSON(map[string]any{"id": id, "result": map[string]any{"threads": items}}),
 		}, nil
 	case "thread/list":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		items := make([]map[string]any, 0, len(m.Threads))
 		for _, thread := range m.Threads {
 			items = append(items, map[string]any{
@@ -122,6 +146,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			mustJSON(map[string]any{"id": id, "result": map[string]any{"data": items}}),
 		}, nil
 	case "thread/read":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		threadID, _ := params["threadId"].(string)
 		thread := m.Threads[threadID]
 		if thread == nil {
@@ -137,6 +164,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			}}}),
 		}, nil
 	case "thread/name/set":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		threadID, _ := params["threadId"].(string)
 		name, _ := params["name"].(string)
 		thread := m.Threads[threadID]
@@ -150,6 +180,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 			mustJSON(map[string]any{"method": "thread/name/updated", "params": map[string]any{"threadId": threadID, "name": name}}),
 		}, nil
 	case "turn/start":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)
 		inputs, _ := params["input"].([]any)
@@ -180,6 +213,9 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 		}
 		return outputs, nil
 	case "turn/interrupt":
+		if outputs := m.requireInitialized(id); outputs != nil {
+			return outputs, nil
+		}
 		if m.ActiveTurn == nil {
 			return [][]byte{mustJSON(map[string]any{"id": id, "result": map[string]any{}})}, nil
 		}
@@ -194,6 +230,18 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported remote method: %s", method)
+	}
+}
+
+func (m *MockCodex) requireInitialized(id string) [][]byte {
+	if !m.RequireInitialize || m.Initialized {
+		return nil
+	}
+	return [][]byte{
+		mustJSON(map[string]any{"id": id, "error": map[string]any{
+			"code":    -32600,
+			"message": "Not initialized",
+		}}),
 	}
 }
 

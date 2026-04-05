@@ -132,6 +132,92 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 	}
 }
 
+func TestWrapperHeadlessBootstrapsInitializeBeforeRelayCommands(t *testing.T) {
+	repoRoot, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot = filepath.Clean(filepath.Join(repoRoot, "..", "..", ".."))
+
+	helloCh := make(chan agentproto.Hello, 1)
+	eventsCh := make(chan []agentproto.Event, 8)
+	server := relayws.NewServer(relayws.ServerCallbacks{
+		OnHello: func(_ context.Context, hello agentproto.Hello) {
+			helloCh <- hello
+		},
+		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+			eventsCh <- events
+		},
+	})
+	server.SetServerIdentity(agentproto.ServerIdentity{
+		BinaryIdentity: agentproto.BinaryIdentity{
+			Product:          "codex-remote",
+			Version:          "test",
+			BuildFingerprint: "fp-test",
+			BinaryPath:       "/test/codex-remote",
+		},
+		PID: 1,
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cfg := Config{
+		RelayServerURL:   wsURL,
+		CodexRealBinary:  "go",
+		Args:             []string{"run", "./testkit/mockcodex/cmd/mockcodex", "--require-initialize"},
+		InstanceID:       "inst-headless",
+		DisplayName:      "headless",
+		WorkspaceRoot:    repoRoot,
+		WorkspaceKey:     repoRoot,
+		ShortName:        filepath.Base(repoRoot),
+		Source:           "headless",
+		Managed:          true,
+		Version:          "test",
+		BuildFingerprint: "fp-test",
+		BinaryPath:       "/test/codex-remote",
+		DaemonBinaryPath: "/test/codex-remote",
+	}
+	app := New(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := app.Run(ctx, strings.NewReader(""), &stdout, &stderr)
+		done <- err
+	}()
+
+	waitForHello(t, helloCh, "inst-headless")
+
+	if err := server.SendCommand("inst-headless", agentproto.Command{
+		CommandID: "cmd-refresh",
+		Kind:      agentproto.CommandThreadsRefresh,
+	}); err != nil {
+		t.Fatalf("send refresh: %v", err)
+	}
+
+	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
+		return len(events) == 1 && events[0].Kind == agentproto.EventThreadsSnapshot && len(events[0].Threads) == 1
+	}, &stdout, &stderr, done)
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("wrapper run failed: %v\nstderr:\n%s", err, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for wrapper shutdown")
+	}
+}
+
 func TestWrapperKeepsEphemeralHelperTrafficOnStdoutAndAnnotatesRelay(t *testing.T) {
 	repoRoot, err := os.Getwd()
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"log"
 	"os"
 
@@ -9,7 +10,11 @@ import (
 )
 
 func main() {
+	requireInitialize := flag.Bool("require-initialize", false, "require initialize before other requests")
+	flag.Parse()
+
 	engine := mockcodex.New()
+	engine.RequireInitialize = *requireInitialize
 	engine.SeedThread("thread-1", "/data/dl/droid", "修复登录流程")
 
 	scanner := bufio.NewScanner(os.Stdin)

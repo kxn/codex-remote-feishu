@@ -549,13 +549,21 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED=1",
 	)
+	if strings.TrimSpace(command.ThreadCWD) == "" {
+		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
+	}
+
+	workDir := strings.TrimSpace(command.ThreadCWD)
+	if workDir == "" {
+		workDir = strings.TrimSpace(cfg.Paths.StateDir)
+	}
 
 	pid, err := a.startHeadless(relayruntime.HeadlessLaunchOptions{
 		BinaryPath: cfg.BinaryPath,
 		ConfigPath: cfg.ConfigPath,
 		Env:        env,
 		Paths:      cfg.Paths,
-		WorkDir:    command.ThreadCWD,
+		WorkDir:    workDir,
 		InstanceID: command.InstanceID,
 		Args:       cfg.LaunchArgs,
 	})
@@ -576,7 +584,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 		PID:        pid,
 		StartedAt:  time.Now().UTC(),
 		ThreadID:   command.ThreadID,
-		ThreadCWD:  command.ThreadCWD,
+		ThreadCWD:  workDir,
 	}
 	log.Printf(
 		"headless start requested: surface=%s instance=%s pid=%d thread=%s cwd=%s",
@@ -584,7 +592,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 		command.InstanceID,
 		pid,
 		command.ThreadID,
-		command.ThreadCWD,
+		workDir,
 	)
 	return a.service.HandleHeadlessLaunchStarted(command.SurfaceSessionID, command.InstanceID, pid)
 }

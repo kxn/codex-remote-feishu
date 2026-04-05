@@ -229,6 +229,12 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	errCh := make(chan error, 8)
 	problems := &problemReporter{}
 
+	if err := a.bootstrapHeadlessCodex(childStdin, rawLogger, problems.Emit); err != nil {
+		childCancel()
+		_ = cmd.Wait()
+		return 1, err
+	}
+
 	var client *relayws.Client
 	connectedOnce := false
 	client = relayws.NewClient(a.config.RelayServerURL, agentproto.Hello{
@@ -618,25 +624,74 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 			if len(line) == 0 {
 				continue
 			}
-			if debugf != nil {
-				debugf("write to codex: %s", summarizeFrame(line))
-			}
-			logRawFrame(rawLogger, "codex.stdin", "out", line, "", "")
-			if _, err := childStdin.Write(line); err != nil {
-				if reportProblem != nil {
-					reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
-						Code:      "write_codex_stdin_failed",
-						Layer:     "wrapper",
-						Stage:     "write_codex_stdin",
-						Operation: "codex.stdin",
-						Message:   "wrapper 无法继续向 Codex 子进程写入数据。",
-					}))
-				}
+			if err := writeCodexFrame(childStdin, line, debugf, rawLogger, reportProblem); err != nil {
 				errCh <- err
 				return
 			}
 		}
 	}
+}
+
+func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
+	frames, err := a.syntheticBootstrapFrames()
+	if err != nil || len(frames) == 0 {
+		return err
+	}
+	a.debugf("headless bootstrap: frames=%s", summarizeFrames(frames))
+	for _, frame := range frames {
+		if err := writeCodexFrame(childStdin, frame, a.debugf, rawLogger, reportProblem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *App) syntheticBootstrapFrames() ([][]byte, error) {
+	if !strings.EqualFold(strings.TrimSpace(a.config.Source), "headless") {
+		return nil, nil
+	}
+	payload := map[string]any{
+		"id":     "relay-bootstrap-initialize",
+		"method": "initialize",
+		"params": map[string]any{
+			"clientInfo": map[string]any{
+				"name":    "Codex Remote Headless",
+				"title":   "Codex Remote Headless",
+				"version": firstNonEmpty(a.config.Version, "dev"),
+			},
+			"capabilities": map[string]any{
+				"experimentalApi": true,
+			},
+		},
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{append(bytes, '\n')}, nil
+}
+
+func writeCodexFrame(childStdin io.Writer, line []byte, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
+	if len(line) == 0 {
+		return nil
+	}
+	if debugf != nil {
+		debugf("write to codex: %s", summarizeFrame(line))
+	}
+	logRawFrame(rawLogger, "codex.stdin", "out", line, "", "")
+	if _, err := childStdin.Write(line); err != nil {
+		if reportProblem != nil {
+			reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+				Code:      "write_codex_stdin_failed",
+				Layer:     "wrapper",
+				Stage:     "write_codex_stdin",
+				Operation: "codex.stdin",
+				Message:   "wrapper 无法继续向 Codex 子进程写入数据。",
+			}))
+		}
+		return err
+	}
+	return nil
 }
 
 func logRawFrame(rawLogger *debuglog.RawLogger, channel, direction string, payload []byte, envelopeType, commandID string) {
