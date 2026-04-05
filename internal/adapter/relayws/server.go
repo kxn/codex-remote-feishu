@@ -138,13 +138,28 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 		}
 		s.logRaw("in", raw, envelopeType, currentInstanceID, commandID)
 		if err != nil {
-			_ = writeError(conn, "bad_envelope", err.Error())
+			_ = writeError(conn, agentproto.ErrorInfo{
+				Code:      "bad_envelope",
+				Layer:     "relayws_server",
+				Stage:     "decode_envelope",
+				Operation: "relay.read",
+				Message:   "relay 收到无法解析的 websocket envelope。",
+				Details:   err.Error(),
+				Retryable: true,
+			})
 			continue
 		}
 		switch envelope.Type {
 		case agentproto.EnvelopeHello:
 			if envelope.Hello == nil {
-				_ = writeError(conn, "bad_hello", "missing hello payload")
+				_ = writeError(conn, agentproto.ErrorInfo{
+					Code:      "bad_hello",
+					Layer:     "relayws_server",
+					Stage:     "hello",
+					Operation: "relay.handshake",
+					Message:   "relay hello 缺少负载。",
+					Retryable: false,
+				})
 				return
 			}
 			hello := *envelope.Hello
@@ -219,12 +234,14 @@ func (s *Server) logRaw(direction string, payload []byte, envelopeType agentprot
 	})
 }
 
-func writeError(conn *websocket.Conn, code, message string) error {
+func writeError(conn *websocket.Conn, problem agentproto.ErrorInfo) error {
+	problem = problem.Normalize()
 	payload, err := agentproto.MarshalEnvelope(agentproto.Envelope{
 		Type: agentproto.EnvelopeError,
 		Error: &agentproto.ErrorEnvelope{
-			Code:    code,
-			Message: message,
+			Code:    problem.Code,
+			Message: problem.Message,
+			Problem: &problem,
 		},
 	})
 	if err != nil {

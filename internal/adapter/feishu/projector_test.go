@@ -173,6 +173,25 @@ func TestProjectNoticeAsSystemCard(t *testing.T) {
 	}
 }
 
+func TestProjectNoticeUsesCustomTitleAndTheme(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventNotice,
+		Notice: &control.Notice{
+			Code:     "debug_error",
+			Title:    "链路错误 · wrapper.observe_codex_stdout",
+			Text:     "调试信息",
+			ThemeKey: "relay-error",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "链路错误 · wrapper.observe_codex_stdout" || ops[0].CardThemeKey != "relay-error" {
+		t.Fatalf("expected custom notice projection, got %#v", ops[0])
+	}
+}
+
 func TestProjectFinalAssistantBlockAsThreadCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

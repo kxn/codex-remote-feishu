@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +36,22 @@ func (g *ctxCheckingGateway) Start(context.Context, feishu.ActionHandler) error 
 
 func (g *ctxCheckingGateway) Apply(ctx context.Context, operations []feishu.Operation) error {
 	g.ctxErr = ctx.Err()
+	g.operations = append(g.operations, operations...)
+	return nil
+}
+
+type flakyGateway struct {
+	failures   int
+	operations []feishu.Operation
+}
+
+func (g *flakyGateway) Start(context.Context, feishu.ActionHandler) error { return nil }
+
+func (g *flakyGateway) Apply(_ context.Context, operations []feishu.Operation) error {
+	if g.failures > 0 {
+		g.failures--
+		return errors.New("lark temporarily unavailable")
+	}
 	g.operations = append(g.operations, operations...)
 	return nil
 }
@@ -459,5 +477,36 @@ func TestDaemonStatusExportsSurfacesAndRemoteTurnState(t *testing.T) {
 	}
 	if len(payload.ActiveRemoteTurns) != 0 {
 		t.Fatalf("expected no active remote turns before turn/started, got %#v", payload.ActiveRemoteTurns)
+	}
+}
+
+func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
+	gateway := &flakyGateway{failures: 1}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected first gateway apply to fail without delivered operations, got %#v", gateway.operations)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(gateway.operations) < 2 {
+		t.Fatalf("expected queued error notice and current card after recovery, got %#v", gateway.operations)
+	}
+	if !strings.Contains(gateway.operations[0].CardTitle, "链路错误") || !strings.Contains(gateway.operations[0].CardBody, "位置：`gateway_apply`") {
+		t.Fatalf("expected queued gateway failure notice first, got %#v", gateway.operations[0])
+	}
+	if gateway.operations[1].CardTitle == "" || !strings.Contains(gateway.operations[1].CardBody, "当前没有在线实例") {
+		t.Fatalf("expected current response card after queued notice, got %#v", gateway.operations[1])
 	}
 }

@@ -2200,7 +2200,19 @@ func TestHandleCommandRejectedClearsPendingRemoteState(t *testing.T) {
 	})
 	svc.BindPendingRemoteCommand("surface-1", "cmd-1")
 
-	events := svc.HandleCommandRejected("inst-1", "cmd-1", "translator failed")
+	events := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{
+		CommandID: "cmd-1",
+		Accepted:  false,
+		Error:     "translator failed",
+		Problem: &agentproto.ErrorInfo{
+			Code:      "translate_command_failed",
+			Layer:     "wrapper",
+			Stage:     "translate_command",
+			Message:   "wrapper 无法把 relay 命令转换成 Codex 请求。",
+			Details:   "translator failed",
+			CommandID: "cmd-1",
+		},
+	})
 	if svc.pendingRemote["inst-1"] != nil {
 		t.Fatalf("expected pending remote binding to clear after rejected command")
 	}
@@ -2223,6 +2235,55 @@ func TestHandleCommandRejectedClearsPendingRemoteState(t *testing.T) {
 	}
 	if !sawTypingOff || !sawNotice {
 		t.Fatalf("expected typing-off and rejection notice, got %#v", events)
+	}
+	for _, event := range events {
+		if event.Notice == nil || event.Notice.Code != "command_rejected" {
+			continue
+		}
+		if !strings.Contains(event.Notice.Title, "wrapper.translate_command") || !strings.Contains(event.Notice.Text, "translator failed") {
+			t.Fatalf("expected structured rejection notice, got %#v", event.Notice)
+		}
+	}
+}
+
+func TestApplyAgentSystemErrorTargetsAttachedSurface(t *testing.T) {
+	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+		Code:      "stdout_parse_failed",
+		Layer:     "wrapper",
+		Stage:     "observe_codex_stdout",
+		Operation: "codex.stdout",
+		Message:   "wrapper 无法解析 Codex 子进程输出的 JSON-RPC 帧。",
+		Details:   "invalid character 'x' looking for beginning of value",
+	}))
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected one problem notice, got %#v", events)
+	}
+	if events[0].SurfaceSessionID != "surface-1" {
+		t.Fatalf("expected notice on attached surface, got %#v", events[0])
+	}
+	if events[0].Notice.Code != debugErrorNoticeCode {
+		t.Fatalf("unexpected notice code: %#v", events[0].Notice)
+	}
+	if !strings.Contains(events[0].Notice.Title, "wrapper.observe_codex_stdout") || !strings.Contains(events[0].Notice.Text, "invalid character") {
+		t.Fatalf("expected structured problem text, got %#v", events[0].Notice)
 	}
 }
 

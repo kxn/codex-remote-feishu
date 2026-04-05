@@ -38,6 +38,7 @@ const (
 	EventItemCompleted            EventKind = "item.completed"
 	EventRequestStarted           EventKind = "request.started"
 	EventRequestResolved          EventKind = "request.resolved"
+	EventSystemError              EventKind = "system.error"
 )
 
 type Event struct {
@@ -63,6 +64,7 @@ type Event struct {
 	Archived        bool                   `json:"archived,omitempty"`
 	TrafficClass    TrafficClass           `json:"trafficClass,omitempty"`
 	Initiator       Initiator              `json:"initiator,omitempty"`
+	Problem         *ErrorInfo             `json:"problem,omitempty"`
 	Metadata        map[string]any         `json:"metadata,omitempty"`
 	Threads         []ThreadSnapshotRecord `json:"threads,omitempty"`
 }

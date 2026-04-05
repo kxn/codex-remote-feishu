@@ -57,13 +57,21 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.Notice == nil {
 			return nil
 		}
+		title := strings.TrimSpace(event.Notice.Title)
+		if title == "" {
+			title = "系统提示"
+		}
+		themeKey := strings.TrimSpace(event.Notice.ThemeKey)
+		if themeKey == "" {
+			themeKey = "system"
+		}
 		return []Operation{{
 			Kind:             OperationSendCard,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
-			CardTitle:        "系统提示",
+			CardTitle:        title,
 			CardBody:         event.Notice.Text,
-			CardThemeKey:     "system",
+			CardThemeKey:     themeKey,
 		}}
 	case control.UIEventSelectionPrompt:
 		if event.SelectionPrompt == nil {

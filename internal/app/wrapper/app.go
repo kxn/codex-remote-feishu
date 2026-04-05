@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -51,6 +52,45 @@ type Config struct {
 	DebugRelayFlow       bool
 	DebugRelayRaw        bool
 	RawLogPath           string
+}
+
+type problemReporter struct {
+	mu      sync.Mutex
+	client  *relayws.Client
+	pending []agentproto.ErrorInfo
+}
+
+func (r *problemReporter) SetClient(client *relayws.Client) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.client = client
+}
+
+func (r *problemReporter) Emit(problem agentproto.ErrorInfo) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pending = append(r.pending, problem.Normalize())
+	r.flushLocked()
+}
+
+func (r *problemReporter) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.flushLocked()
+}
+
+func (r *problemReporter) flushLocked() {
+	if r.client == nil || len(r.pending) == 0 {
+		return
+	}
+	events := make([]agentproto.Event, 0, len(r.pending))
+	for _, problem := range r.pending {
+		events = append(events, agentproto.NewSystemErrorEvent(problem))
+	}
+	if err := r.client.SendEvents(events); err != nil {
+		return
+	}
+	r.pending = nil
 }
 
 func LoadConfig(args []string) (Config, error) {
@@ -172,6 +212,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 
 	writeCh := make(chan []byte, 128)
 	errCh := make(chan error, 8)
+	problems := &problemReporter{}
 
 	var client *relayws.Client
 	connectedOnce := false
@@ -203,6 +244,11 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		},
 		OnConnect: func(context.Context) error {
 			a.debugf("relay connected: instance=%s connectedOnce=%t", a.config.InstanceID, connectedOnce)
+			problems.Flush()
+			return nil
+		},
+		OnError: func(_ context.Context, problem agentproto.ErrorInfo) error {
+			problems.Emit(problem)
 			return nil
 		},
 		OnCommand: func(ctx context.Context, command agentproto.Command) error {
@@ -219,7 +265,18 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			outbound, err := a.translator.TranslateCommand(command)
 			if err != nil {
 				a.debugf("relay command translation failed: command=%s err=%v", command.CommandID, err)
-				return err
+				return agentproto.ErrorInfo{
+					Code:             "translate_command_failed",
+					Layer:            "wrapper",
+					Stage:            "translate_command",
+					Operation:        string(command.Kind),
+					Message:          "wrapper 无法把 relay 命令转换成 Codex 请求。",
+					Details:          err.Error(),
+					SurfaceSessionID: command.Origin.Surface,
+					CommandID:        command.CommandID,
+					ThreadID:         command.Target.ThreadID,
+					TurnID:           command.Target.TurnID,
+				}
 			}
 			a.debugf("relay command translated: command=%s outbound=%d frames=%s", command.CommandID, len(outbound), summarizeFrames(outbound))
 			for _, line := range outbound {
@@ -233,6 +290,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			return nil
 		},
 	})
+	problems.SetClient(client)
 	client.SetRawLogger(rawLogger)
 
 	go func() {
@@ -241,9 +299,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		}
 	}()
 
-	go writeLoop(ctx, childStdin, writeCh, errCh, a.debugf, rawLogger)
-	go stdinLoop(ctx, stdin, writeCh, a.translator, client, errCh, a.debugf, rawLogger)
-	go stdoutLoop(ctx, childStdout, stdout, writeCh, a.translator, client, errCh, a.debugf, rawLogger)
+	go writeLoop(ctx, childStdin, writeCh, errCh, a.debugf, rawLogger, problems.Emit)
+	go stdinLoop(ctx, stdin, writeCh, a.translator, client, errCh, a.debugf, rawLogger, problems.Emit)
+	go stdoutLoop(ctx, childStdout, stdout, writeCh, a.translator, client, errCh, a.debugf, rawLogger, problems.Emit)
 	go streamCopy(childStderr, stderr, errCh)
 
 	waitErr := make(chan error, 1)
@@ -364,7 +422,7 @@ func startChild(cmd *exec.Cmd) (io.WriteCloser, io.ReadCloser, io.ReadCloser, er
 	return stdin, stdout, stderr, nil
 }
 
-func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger) {
+func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(stdin)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -379,9 +437,31 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 				}
 				if sendErr := client.SendEvents(result.Events); sendErr != nil {
 					log.Printf("relay send client events failed: %v", sendErr)
+					if reportProblem != nil {
+						reportProblem(agentproto.ErrorInfoFromError(sendErr, agentproto.ErrorInfo{
+							Code:      "relay_send_client_events_failed",
+							Layer:     "wrapper",
+							Stage:     "forward_client_events",
+							Operation: "parent.stdin",
+							Message:   "wrapper 无法把本地客户端事件发送到 relay。",
+							Retryable: true,
+						}))
+					}
 				}
-			} else if debugf != nil {
-				debugf("stdin observe parse failed: err=%v preview=%q", parseErr, previewRawLine(line))
+			} else {
+				if debugf != nil {
+					debugf("stdin observe parse failed: err=%v preview=%q", parseErr, previewRawLine(line))
+				}
+				if reportProblem != nil {
+					reportProblem(agentproto.ErrorInfo{
+						Code:      "stdin_parse_failed",
+						Layer:     "wrapper",
+						Stage:     "observe_parent_stdin",
+						Operation: "parent.stdin",
+						Message:   "wrapper 无法解析上游传来的 JSON-RPC 帧。",
+						Details:   fmt.Sprintf("%v; frame=%q", parseErr, previewRawLine(line)),
+					})
+				}
 			}
 			select {
 			case writeCh <- line:
@@ -403,7 +483,7 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 	}
 }
 
-func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger) {
+func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(childStdout)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -425,6 +505,16 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 				}
 				if sendErr := client.SendEvents(result.Events); sendErr != nil {
 					log.Printf("relay send server events failed: %v", sendErr)
+					if reportProblem != nil {
+						reportProblem(agentproto.ErrorInfoFromError(sendErr, agentproto.ErrorInfo{
+							Code:      "relay_send_server_events_failed",
+							Layer:     "wrapper",
+							Stage:     "forward_server_events",
+							Operation: "codex.stdout",
+							Message:   "wrapper 无法把 Codex 事件发送到 relay。",
+							Retryable: true,
+						}))
+					}
 				}
 				for _, followup := range result.OutboundToCodex {
 					select {
@@ -438,6 +528,15 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 				}
 				if !result.Suppress {
 					if _, writeErr := parentStdout.Write(line); writeErr != nil {
+						if reportProblem != nil {
+							reportProblem(agentproto.ErrorInfoFromError(writeErr, agentproto.ErrorInfo{
+								Code:      "write_parent_stdout_failed",
+								Layer:     "wrapper",
+								Stage:     "write_parent_stdout",
+								Operation: "parent.stdout",
+								Message:   "wrapper 无法把 Codex 输出回传给上游客户端。",
+							}))
+						}
 						errCh <- writeErr
 						return
 					}
@@ -446,7 +545,26 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 				if debugf != nil {
 					debugf("stdout observe parse failed: err=%v preview=%q", parseErr, previewRawLine(line))
 				}
+				if reportProblem != nil {
+					reportProblem(agentproto.ErrorInfo{
+						Code:      "stdout_parse_failed",
+						Layer:     "wrapper",
+						Stage:     "observe_codex_stdout",
+						Operation: "codex.stdout",
+						Message:   "wrapper 无法解析 Codex 子进程输出的 JSON-RPC 帧。",
+						Details:   fmt.Sprintf("%v; frame=%q", parseErr, previewRawLine(line)),
+					})
+				}
 				if _, writeErr := parentStdout.Write(line); writeErr != nil {
+					if reportProblem != nil {
+						reportProblem(agentproto.ErrorInfoFromError(writeErr, agentproto.ErrorInfo{
+							Code:      "write_parent_stdout_failed",
+							Layer:     "wrapper",
+							Stage:     "write_parent_stdout",
+							Operation: "parent.stdout",
+							Message:   "wrapper 无法把 Codex 输出回传给上游客户端。",
+						}))
+					}
 					errCh <- writeErr
 					return
 				}
@@ -463,7 +581,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 	}
 }
 
-func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []byte, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger) {
+func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []byte, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	defer childStdin.Close()
 	for {
 		select {
@@ -478,6 +596,15 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 			}
 			logRawFrame(rawLogger, "codex.stdin", "out", line, "", "")
 			if _, err := childStdin.Write(line); err != nil {
+				if reportProblem != nil {
+					reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+						Code:      "write_codex_stdin_failed",
+						Layer:     "wrapper",
+						Stage:     "write_codex_stdin",
+						Operation: "codex.stdin",
+						Message:   "wrapper 无法继续向 Codex 子进程写入数据。",
+					}))
+				}
 				errCh <- err
 				return
 			}

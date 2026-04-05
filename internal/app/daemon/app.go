@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -37,6 +36,8 @@ type App struct {
 
 	commandSeq uint64
 	mu         sync.Mutex
+
+	pendingGatewayNotices map[string][]control.UIEvent
 }
 
 func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agentproto.ServerIdentity) *App {
@@ -44,9 +45,10 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gateway = feishu.NopGateway{}
 	}
 	app := &App{
-		service:   orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
-		projector: feishu.NewProjector(),
-		gateway:   gateway,
+		service:               orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
+		projector:             feishu.NewProjector(),
+		gateway:               gateway,
+		pendingGatewayNotices: map[string][]control.UIEvent{},
 	}
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.onHello,
@@ -192,6 +194,15 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	if err := a.relay.SendCommand(hello.Instance.InstanceID, command); err != nil {
 		log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
+		a.handleUIEvents(ctx, a.service.HandleProblem(hello.Instance.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:      "relay_send_command_failed",
+			Layer:     "daemon",
+			Stage:     "send_threads_refresh",
+			Operation: string(command.Kind),
+			Message:   "daemon 无法向本地 wrapper 发送初始化命令。",
+			CommandID: command.CommandID,
+			Retryable: true,
+		})))
 	}
 }
 
@@ -230,7 +241,7 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 	if ack.Accepted {
 		return
 	}
-	a.handleUIEvents(ctx, a.service.HandleCommandRejected(instanceID, ack.CommandID, ack.Error))
+	a.handleUIEvents(ctx, a.service.HandleCommandRejected(instanceID, ack))
 }
 
 func (a *App) onDisconnect(ctx context.Context, instanceID string) {
@@ -294,13 +305,30 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 			)
 			if instanceID == "" {
 				log.Printf("ui command skipped: surface=%s kind=%s err=no attached instance", event.SurfaceSessionID, event.Command.Kind)
-				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, errors.New("no attached instance"))
+				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, agentproto.ErrorInfo{
+					Code:             "no_attached_instance",
+					Layer:            "daemon",
+					Stage:            "dispatch_prepare",
+					Operation:        string(event.Command.Kind),
+					Message:          "当前飞书会话还没有接管实例。",
+					SurfaceSessionID: event.SurfaceSessionID,
+					CommandID:        event.Command.CommandID,
+				})
 				a.handleUIEvents(context.Background(), rollback)
 				continue
 			}
 			if err := a.relay.SendCommand(instanceID, *event.Command); err != nil {
 				log.Printf("relay send command failed: instance=%s kind=%s err=%v", instanceID, event.Command.Kind, err)
-				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, err)
+				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+					Code:             "relay_send_command_failed",
+					Layer:            "daemon",
+					Stage:            "relay_send_command",
+					Operation:        string(event.Command.Kind),
+					Message:          "daemon 无法把消息发送到本地 wrapper。",
+					SurfaceSessionID: event.SurfaceSessionID,
+					CommandID:        event.Command.CommandID,
+					Retryable:        true,
+				}))
 				a.handleUIEvents(context.Background(), rollback)
 			} else {
 				a.debugf(
@@ -315,55 +343,110 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 			}
 			continue
 		}
-		chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
-		actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
-		receiveID, receiveIDType := feishu.ResolveReceiveTarget(chatID, actorUserID)
-		if receiveID == "" || receiveIDType == "" {
-			continue
-		}
-		log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
-		if a.markdownPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
-			rewriteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			rewrittenBlock, err := a.markdownPreviewer.RewriteFinalBlock(rewriteCtx, feishu.MarkdownPreviewRequest{
-				SurfaceSessionID: event.SurfaceSessionID,
-				ChatID:           chatID,
-				ActorUserID:      actorUserID,
-				WorkspaceRoot:    a.previewWorkspaceRoot(event.SurfaceSessionID, *event.Block),
-				ThreadCWD:        a.previewThreadCWD(event.SurfaceSessionID, *event.Block),
-				Block:            *event.Block,
-			})
-			cancel()
-			event.Block = &rewrittenBlock
-			if err != nil {
-				log.Printf(
-					"markdown preview rewrite failed: surface=%s instance=%s thread=%s item=%s err=%v",
-					event.SurfaceSessionID,
-					rewrittenBlock.InstanceID,
-					rewrittenBlock.ThreadID,
-					rewrittenBlock.ItemID,
-					err,
-				)
-			}
-		}
-		operations := a.projector.Project(chatID, event)
-		for i := range operations {
-			if operations[i].SurfaceSessionID == "" {
-				operations[i].SurfaceSessionID = event.SurfaceSessionID
-			}
-			if operations[i].ReceiveID == "" {
-				operations[i].ReceiveID = receiveID
-			}
-			if operations[i].ReceiveIDType == "" {
-				operations[i].ReceiveIDType = receiveIDType
-			}
-		}
-		applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := a.gateway.Apply(applyCtx, operations)
-		cancel()
-		if err != nil {
+		a.flushPendingGatewayNotices(event.SurfaceSessionID)
+		if err := a.deliverUIEvent(event); err != nil {
+			chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 			log.Printf("gateway apply failed: chat=%s event=%s err=%v", chatID, event.Kind, err)
+			a.queueGatewayFailureNotice(event, err)
 		}
 	}
+}
+
+func (a *App) deliverUIEvent(event control.UIEvent) error {
+	chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
+	actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
+	receiveID, receiveIDType := feishu.ResolveReceiveTarget(chatID, actorUserID)
+	if receiveID == "" || receiveIDType == "" {
+		return nil
+	}
+	log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
+	if a.markdownPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
+		rewriteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		rewrittenBlock, err := a.markdownPreviewer.RewriteFinalBlock(rewriteCtx, feishu.MarkdownPreviewRequest{
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      actorUserID,
+			WorkspaceRoot:    a.previewWorkspaceRoot(event.SurfaceSessionID, *event.Block),
+			ThreadCWD:        a.previewThreadCWD(event.SurfaceSessionID, *event.Block),
+			Block:            *event.Block,
+		})
+		cancel()
+		event.Block = &rewrittenBlock
+		if err != nil {
+			log.Printf(
+				"markdown preview rewrite failed: surface=%s instance=%s thread=%s item=%s err=%v",
+				event.SurfaceSessionID,
+				rewrittenBlock.InstanceID,
+				rewrittenBlock.ThreadID,
+				rewrittenBlock.ItemID,
+				err,
+			)
+		}
+	}
+	operations := a.projector.Project(chatID, event)
+	for i := range operations {
+		if operations[i].SurfaceSessionID == "" {
+			operations[i].SurfaceSessionID = event.SurfaceSessionID
+		}
+		if operations[i].ReceiveID == "" {
+			operations[i].ReceiveID = receiveID
+		}
+		if operations[i].ReceiveIDType == "" {
+			operations[i].ReceiveIDType = receiveIDType
+		}
+	}
+	applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	err := a.gateway.Apply(applyCtx, operations)
+	cancel()
+	return err
+}
+
+func (a *App) flushPendingGatewayNotices(surfaceID string) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return
+	}
+	pending := a.pendingGatewayNotices[surfaceID]
+	if len(pending) == 0 {
+		return
+	}
+	for _, event := range pending {
+		if err := a.deliverUIEvent(event); err != nil {
+			return
+		}
+	}
+	delete(a.pendingGatewayNotices, surfaceID)
+}
+
+func (a *App) queueGatewayFailureNotice(event control.UIEvent, err error) {
+	if strings.TrimSpace(event.SurfaceSessionID) == "" {
+		return
+	}
+	if event.Notice != nil && event.Notice.Code == "gateway_apply_failed" {
+		return
+	}
+	notice := orchestrator.NoticeForProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+		Code:             "gateway_apply_failed",
+		Layer:            "daemon",
+		Stage:            "gateway_apply",
+		Operation:        string(event.Kind),
+		Message:          "daemon 无法把消息发送到飞书。",
+		SurfaceSessionID: event.SurfaceSessionID,
+		Retryable:        true,
+	}))
+	notice.Code = "gateway_apply_failed"
+	queued := control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: event.SurfaceSessionID,
+		Notice:           &notice,
+	}
+	pending := a.pendingGatewayNotices[event.SurfaceSessionID]
+	if len(pending) > 0 {
+		last := pending[len(pending)-1]
+		if last.Notice != nil && last.Notice.Code == queued.Notice.Code && last.Notice.Text == queued.Notice.Text {
+			return
+		}
+	}
+	a.pendingGatewayNotices[event.SurfaceSessionID] = append(pending, queued)
 }
 
 func (a *App) nextCommandID() string {

@@ -149,8 +149,10 @@ type PendingInputState struct {
 }
 
 type Notice struct {
-	Code string
-	Text string
+	Code     string
+	Title    string
+	Text     string
+	ThemeKey string
 }
 
 type ThreadSelectionChanged struct {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ type ClientCallbacks struct {
 	OnCommand func(context.Context, agentproto.Command) error
 	OnWelcome func(context.Context, agentproto.Welcome) error
 	OnConnect func(context.Context) error
+	OnError   func(context.Context, agentproto.ErrorInfo) error
 }
 
 type Client struct {
@@ -181,6 +183,7 @@ func (c *Client) RunOnce(ctx context.Context) error {
 	c.logRaw("out", helloBytes, agentproto.EnvelopeHello, c.hello.Instance.InstanceID, "")
 
 	writeErr := make(chan error, 1)
+	welcomed := false
 	go func() {
 		for {
 			select {
@@ -231,6 +234,17 @@ func (c *Client) RunOnce(ctx context.Context) error {
 		c.logRaw("in", raw, envelopeType, instanceID, commandID)
 		if err != nil {
 			log.Printf("relay client decode failed: %v", err)
+			if c.callbacks.OnError != nil {
+				_ = c.callbacks.OnError(ctx, agentproto.ErrorInfo{
+					Code:      "relay_client_bad_envelope",
+					Layer:     "relayws_client",
+					Stage:     "decode_envelope",
+					Operation: "relay.read",
+					Message:   "relay 返回了无法解析的 envelope。",
+					Details:   err.Error(),
+					Retryable: true,
+				}.Normalize())
+			}
 			continue
 		}
 		switch envelope.Type {
@@ -238,6 +252,7 @@ func (c *Client) RunOnce(ctx context.Context) error {
 			if envelope.Welcome == nil {
 				continue
 			}
+			welcomed = true
 			if c.callbacks.OnWelcome != nil {
 				if err := c.callbacks.OnWelcome(ctx, *envelope.Welcome); err != nil {
 					return err
@@ -254,20 +269,71 @@ func (c *Client) RunOnce(ctx context.Context) error {
 			}
 			if c.callbacks.OnCommand != nil {
 				if err := c.callbacks.OnCommand(ctx, *envelope.Command); err != nil {
+					problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+						Code:             "command_rejected",
+						Layer:            "wrapper",
+						Stage:            "handle_command",
+						Operation:        string(envelope.Command.Kind),
+						Message:          "wrapper 拒绝执行 relay 命令。",
+						SurfaceSessionID: envelope.Command.Origin.Surface,
+						CommandID:        envelope.Command.CommandID,
+						ThreadID:         envelope.Command.Target.ThreadID,
+						TurnID:           envelope.Command.Target.TurnID,
+					})
 					_ = c.SendCommandAck(agentproto.CommandAck{
 						CommandID: envelope.Command.CommandID,
 						Accepted:  false,
-						Error:     err.Error(),
+						Error:     problem.Message,
+						Problem:   &problem,
 					})
-					return err
+					continue
 				}
 			}
 			_ = c.SendCommandAck(agentproto.CommandAck{
 				CommandID: envelope.Command.CommandID,
 				Accepted:  true,
 			})
+		case agentproto.EnvelopeError:
+			problem := relayEnvelopeProblem(envelope.Error)
+			if c.callbacks.OnError != nil {
+				if err := c.callbacks.OnError(ctx, problem); err != nil {
+					return err
+				}
+			}
+			if !welcomed {
+				return FatalError{Err: problem}
+			}
 		}
 	}
+}
+
+func relayEnvelopeProblem(envelope *agentproto.ErrorEnvelope) agentproto.ErrorInfo {
+	defaults := agentproto.ErrorInfo{
+		Code:      "relay_error",
+		Layer:     "relayws_server",
+		Stage:     "error_envelope",
+		Operation: "relay.read",
+		Message:   "relay 返回了错误 envelope。",
+		Retryable: true,
+	}
+	if envelope == nil {
+		return defaults.Normalize()
+	}
+	defaults.Code = strings.TrimSpace(firstNonEmptyRelayString(envelope.Code, defaults.Code))
+	defaults.Message = strings.TrimSpace(firstNonEmptyRelayString(envelope.Message, defaults.Message))
+	if envelope.Problem == nil {
+		return defaults.Normalize()
+	}
+	return envelope.Problem.WithDefaults(defaults)
+}
+
+func firstNonEmptyRelayString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func (c *Client) logRaw(direction string, payload []byte, envelopeType agentproto.EnvelopeType, instanceID, commandID string) {

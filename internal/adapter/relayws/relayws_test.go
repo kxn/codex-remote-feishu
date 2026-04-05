@@ -199,6 +199,177 @@ func TestClientReceivesWelcomeServerIdentity(t *testing.T) {
 	}
 }
 
+func TestClientReportsErrorEnvelope(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatalf("upgrade websocket: %v", err)
+		}
+		defer conn.Close()
+		if _, _, err := conn.ReadMessage(); err != nil {
+			t.Fatalf("read hello: %v", err)
+		}
+		welcome, err := agentproto.MarshalEnvelope(agentproto.Envelope{
+			Type: agentproto.EnvelopeWelcome,
+			Welcome: &agentproto.Welcome{
+				Protocol:   agentproto.WireProtocol,
+				ServerTime: time.Now(),
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal welcome: %v", err)
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, welcome); err != nil {
+			t.Fatalf("write welcome: %v", err)
+		}
+		problem := agentproto.ErrorInfo{
+			Code:      "bad_envelope",
+			Layer:     "relayws_server",
+			Stage:     "decode_envelope",
+			Message:   "relay 收到无法解析的 websocket envelope。",
+			Details:   "unexpected token",
+			Retryable: true,
+		}
+		payload, err := agentproto.MarshalEnvelope(agentproto.Envelope{
+			Type: agentproto.EnvelopeError,
+			Error: &agentproto.ErrorEnvelope{
+				Code:    problem.Code,
+				Message: problem.Message,
+				Problem: &problem,
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal error envelope: %v", err)
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			t.Fatalf("write error envelope: %v", err)
+		}
+	}))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+	problemCh := make(chan agentproto.ErrorInfo, 1)
+	client := NewClient(wsURL, agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{
+			InstanceID: "inst-error",
+		},
+	}, ClientCallbacks{
+		OnError: func(_ context.Context, problem agentproto.ErrorInfo) error {
+			problemCh <- problem
+			return context.Canceled
+		},
+	})
+
+	if err := client.Run(context.Background()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("client run: %v", err)
+	}
+	select {
+	case problem := <-problemCh:
+		if problem.Layer != "relayws_server" || problem.Stage != "decode_envelope" || problem.Details != "unexpected token" {
+			t.Fatalf("unexpected reported problem: %#v", problem)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for error envelope callback")
+	}
+}
+
+func TestClientSendsStructuredRejectedAckAndKeepsConnection(t *testing.T) {
+	helloCh := make(chan agentproto.Hello, 1)
+	ackCh := make(chan agentproto.CommandAck, 2)
+	commandCh := make(chan string, 2)
+
+	server := NewServer(ServerCallbacks{
+		OnHello: func(_ context.Context, hello agentproto.Hello) {
+			helloCh <- hello
+		},
+		OnCommandAck: func(_ context.Context, _ string, ack agentproto.CommandAck) {
+			ackCh <- ack
+		},
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+	client := NewClient(wsURL, agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{
+			InstanceID: "inst-ack",
+		},
+	}, ClientCallbacks{
+		OnCommand: func(_ context.Context, command agentproto.Command) error {
+			commandCh <- command.CommandID
+			if command.CommandID == "cmd-bad" {
+				return agentproto.ErrorInfo{
+					Code:      "translate_command_failed",
+					Layer:     "wrapper",
+					Stage:     "translate_command",
+					Message:   "wrapper 无法把 relay 命令转换成 Codex 请求。",
+					Details:   "unknown model",
+					CommandID: command.CommandID,
+				}
+			}
+			return nil
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = client.Run(ctx)
+	}()
+	defer client.Close()
+
+	select {
+	case <-helloCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for hello")
+	}
+
+	if err := server.SendCommand("inst-ack", agentproto.Command{CommandID: "cmd-bad", Kind: agentproto.CommandPromptSend}); err != nil {
+		t.Fatalf("send bad command: %v", err)
+	}
+	if err := server.SendCommand("inst-ack", agentproto.Command{CommandID: "cmd-good", Kind: agentproto.CommandThreadsRefresh}); err != nil {
+		t.Fatalf("send good command: %v", err)
+	}
+
+	for _, wantCommand := range []string{"cmd-bad", "cmd-good"} {
+		select {
+		case got := <-commandCh:
+			if got != wantCommand {
+				t.Fatalf("command callback order mismatch: got %s want %s", got, wantCommand)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for command callback %s", wantCommand)
+		}
+	}
+
+	var badAck, goodAck agentproto.CommandAck
+	for i := 0; i < 2; i++ {
+		select {
+		case ack := <-ackCh:
+			switch ack.CommandID {
+			case "cmd-bad":
+				badAck = ack
+			case "cmd-good":
+				goodAck = ack
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for command ack")
+		}
+	}
+	if badAck.Accepted || badAck.Problem == nil || badAck.Problem.Stage != "translate_command" {
+		t.Fatalf("expected structured rejected ack, got %#v", badAck)
+	}
+	if !goodAck.Accepted {
+		t.Fatalf("expected follow-up command to still be accepted, got %#v", goodAck)
+	}
+}
+
 func TestServerSendsWelcomeBeforeOnHelloCommand(t *testing.T) {
 	commandErrCh := make(chan error, 1)
 	var server *Server

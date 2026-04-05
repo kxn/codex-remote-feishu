@@ -302,6 +302,8 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return append(preface, s.presentRequestPrompt(instanceID, event)...)
 	case agentproto.EventRequestResolved:
 		return append(preface, s.resolveRequestPrompt(instanceID, event)...)
+	case agentproto.EventSystemError:
+		return append(preface, s.handleProblem(instanceID, problemFromEvent(event))...)
 	default:
 		return preface
 	}
@@ -1981,7 +1983,7 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	binding.CommandID = commandID
 }
 
-func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, noticeCode, noticeText string, tryDispatchNext bool) []control.UIEvent {
+func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, notice *control.Notice, tryDispatchNext bool) []control.UIEvent {
 	if surface == nil || item == nil {
 		return nil
 	}
@@ -2004,14 +2006,11 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 			TypingOff:       true,
 		},
 	}}
-	if noticeText != "" {
+	if notice != nil && (strings.TrimSpace(notice.Code) != "" || strings.TrimSpace(notice.Title) != "" || strings.TrimSpace(notice.Text) != "") {
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code: noticeCode,
-				Text: noticeText,
-			},
+			Notice:           notice,
 		})
 	}
 	if tryDispatchNext {
@@ -2029,19 +2028,24 @@ func (s *Service) HandleCommandDispatchFailure(surfaceID string, err error) []co
 	if item == nil || item.Status != state.QueueItemDispatching {
 		return nil
 	}
-	noticeText := ""
-	if err != nil {
-		noticeText = fmt.Sprintf("消息未成功发送到本地 Codex：%v", err)
-	}
-	return s.failSurfaceActiveQueueItem(surface, item, "dispatch_failed", noticeText, true)
+	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+		Code:             "dispatch_failed",
+		Layer:            "daemon",
+		Stage:            "dispatch_command",
+		Message:          "消息未成功发送到本地 Codex。",
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	notice := NoticeForProblem(problem)
+	notice.Code = "dispatch_failed"
+	return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
 }
 
-func (s *Service) HandleCommandRejected(instanceID, commandID, errorMessage string) []control.UIEvent {
-	if commandID == "" {
+func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.CommandAck) []control.UIEvent {
+	if ack.CommandID == "" {
 		return nil
 	}
 	binding := s.pendingRemote[instanceID]
-	if binding == nil || binding.CommandID != commandID {
+	if binding == nil || binding.CommandID != ack.CommandID {
 		return nil
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
@@ -2054,11 +2058,9 @@ func (s *Service) HandleCommandRejected(instanceID, commandID, errorMessage stri
 		delete(s.pendingRemote, instanceID)
 		return nil
 	}
-	text := "本地 Codex 拒绝了这条消息。"
-	if strings.TrimSpace(errorMessage) != "" {
-		text = fmt.Sprintf("本地 Codex 拒绝了这条消息：%s", strings.TrimSpace(errorMessage))
-	}
-	return s.failSurfaceActiveQueueItem(surface, item, "command_rejected", text, true)
+	notice := NoticeForProblem(commandAckProblem(surface.SurfaceSessionID, ack))
+	notice.Code = "command_rejected"
+	return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
 }
 
 func (s *Service) Instance(instanceID string) *state.InstanceRecord {
@@ -2192,7 +2194,10 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 
 		if surface.ActiveQueueItemID != "" {
 			if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
-				events = append(events, s.failSurfaceActiveQueueItem(surface, item, "attached_instance_offline", fmt.Sprintf("当前接管实例已离线：%s", inst.DisplayName), false)...)
+				events = append(events, s.failSurfaceActiveQueueItem(surface, item, &control.Notice{
+					Code: "attached_instance_offline",
+					Text: fmt.Sprintf("当前接管实例已离线：%s", inst.DisplayName),
+				}, false)...)
 				continue
 			}
 			surface.ActiveQueueItemID = ""
@@ -2358,6 +2363,91 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Notice:           &control.Notice{Code: code, Text: text},
 	}}
+}
+
+func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
+	return s.handleProblem(instanceID, problem)
+}
+
+func (s *Service) handleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
+	problem = problem.Normalize()
+	surfaces := s.problemTargets(instanceID, problem)
+	if len(surfaces) == 0 {
+		return nil
+	}
+	notice := NoticeForProblem(problem)
+	events := make([]control.UIEvent, 0, len(surfaces))
+	for _, surface := range surfaces {
+		if surface == nil {
+			continue
+		}
+		noticeCopy := notice
+		events = append(events, control.UIEvent{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           &noticeCopy,
+		})
+	}
+	return events
+}
+
+func (s *Service) problemTargets(instanceID string, problem agentproto.ErrorInfo) []*state.SurfaceConsoleRecord {
+	if surface := s.root.Surfaces[problem.SurfaceSessionID]; surface != nil {
+		return []*state.SurfaceConsoleRecord{surface}
+	}
+	if problem.CommandID != "" {
+		for _, binding := range s.pendingRemote {
+			if binding != nil && binding.CommandID == problem.CommandID {
+				if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
+					return []*state.SurfaceConsoleRecord{surface}
+				}
+			}
+		}
+		for _, binding := range s.activeRemote {
+			if binding != nil && binding.CommandID == problem.CommandID {
+				if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
+					return []*state.SurfaceConsoleRecord{surface}
+				}
+			}
+		}
+	}
+	if surface := s.turnSurface(instanceID, problem.ThreadID, problem.TurnID); surface != nil {
+		return []*state.SurfaceConsoleRecord{surface}
+	}
+	if strings.TrimSpace(instanceID) == "" {
+		return nil
+	}
+	return s.findAttachedSurfaces(instanceID)
+}
+
+func commandAckProblem(surfaceID string, ack agentproto.CommandAck) agentproto.ErrorInfo {
+	defaults := agentproto.ErrorInfo{
+		Code:             "command_rejected",
+		Layer:            "wrapper",
+		Stage:            "command_ack",
+		Message:          "本地 Codex 拒绝了这条消息。",
+		Details:          strings.TrimSpace(ack.Error),
+		SurfaceSessionID: surfaceID,
+		CommandID:        ack.CommandID,
+	}
+	if ack.Problem == nil {
+		return defaults.Normalize()
+	}
+	return ack.Problem.WithDefaults(defaults)
+}
+
+func problemFromEvent(event agentproto.Event) agentproto.ErrorInfo {
+	defaults := agentproto.ErrorInfo{
+		Message:   event.ErrorMessage,
+		ThreadID:  event.ThreadID,
+		TurnID:    event.TurnID,
+		ItemID:    event.ItemID,
+		RequestID: event.RequestID,
+	}
+	if event.Problem == nil {
+		return defaults.Normalize()
+	}
+	return event.Problem.WithDefaults(defaults)
 }
 
 func metadataString(metadata map[string]any, key string) string {

@@ -69,15 +69,17 @@ type EventBatch struct {
 }
 
 type CommandAck struct {
-	InstanceID string `json:"instanceId,omitempty"`
-	CommandID  string `json:"commandId,omitempty"`
-	Accepted   bool   `json:"accepted"`
-	Error      string `json:"error,omitempty"`
+	InstanceID string     `json:"instanceId,omitempty"`
+	CommandID  string     `json:"commandId,omitempty"`
+	Accepted   bool       `json:"accepted"`
+	Error      string     `json:"error,omitempty"`
+	Problem    *ErrorInfo `json:"problem,omitempty"`
 }
 
 type ErrorEnvelope struct {
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message"`
+	Code    string     `json:"code,omitempty"`
+	Message string     `json:"message"`
+	Problem *ErrorInfo `json:"problem,omitempty"`
 }
 
 type Envelope struct {
