@@ -62,6 +62,10 @@
     {
       "event": "application.bot.menu_v6",
       "purpose": "处理机器人菜单里的 list/status/threads/stop 以及推理强度快捷键。"
+    },
+    {
+      "event": "card.action.trigger",
+      "purpose": "处理消息卡片里的 attach / 切换会话按钮。"
     }
   ],
   "permissions_checklist": [
@@ -80,7 +84,8 @@
       "items": [
         "开启 P2P 消息接收事件",
         "开启消息 reaction 创建事件",
-        "开启机器人菜单点击事件"
+        "开启机器人菜单点击事件",
+        "开启卡片回调事件 card.action.trigger"
       ]
     },
     {

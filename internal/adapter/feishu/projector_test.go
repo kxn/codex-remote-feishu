@@ -13,9 +13,10 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSelectionPrompt,
 		SelectionPrompt: &control.SelectionPrompt{
-			Kind: control.SelectionPromptAttachInstance,
+			Kind:     control.SelectionPromptAttachInstance,
+			PromptID: "prompt-1",
 			Options: []control.SelectionOption{
-				{Index: 1, Label: "droid", Subtitle: "/data/dl/droid", IsCurrent: true},
+				{Index: 1, OptionID: "inst-1", Label: "droid", Subtitle: "/data/dl/droid", IsCurrent: true},
 			},
 		},
 	})
@@ -25,8 +26,22 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	if ops[0].CardTitle != "在线实例" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
-	if ops[0].CardBody != "1. droid - 工作目录 `/data/dl/droid` [当前]" {
-		t.Fatalf("unexpected card body: %#v", ops[0])
+	if ops[0].CardBody != "" {
+		t.Fatalf("expected interactive selection card body to be empty markdown root, got %#v", ops[0])
+	}
+	if len(ops[0].CardElements) != 2 {
+		t.Fatalf("expected markdown + action button elements, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "1. droid - 工作目录 `/data/dl/droid` [当前]" {
+		t.Fatalf("unexpected first element: %#v", ops[0].CardElements[0])
+	}
+	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
+	}
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["prompt_id"] != "prompt-1" || value["option_id"] != "inst-1" {
+		t.Fatalf("unexpected action payload: %#v", value)
 	}
 }
 
@@ -35,11 +50,12 @@ func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSelectionPrompt,
 		SelectionPrompt: &control.SelectionPrompt{
-			Kind:  control.SelectionPromptUseThread,
-			Title: "最近会话",
-			Hint:  "发送 `/useall` 查看全部会话。",
+			Kind:     control.SelectionPromptUseThread,
+			PromptID: "prompt-2",
+			Title:    "最近会话",
+			Hint:     "发送 `/useall` 查看全部会话。",
 			Options: []control.SelectionOption{
-				{Index: 1, Label: "droid · 修复登录流程", Subtitle: "/data/dl/droid"},
+				{Index: 1, OptionID: "thread-1", Label: "droid · 修复登录流程", Subtitle: "/data/dl/droid"},
 			},
 		},
 	})
@@ -49,8 +65,22 @@ func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
 	if ops[0].CardTitle != "最近会话" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
-	if ops[0].CardBody != "1. droid · 修复登录流程\n`/data/dl/droid`\n\n发送 `/useall` 查看全部会话。" {
-		t.Fatalf("unexpected card body: %#v", ops[0])
+	if len(ops[0].CardElements) != 3 {
+		t.Fatalf("expected markdown + action + hint elements, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "1. droid · 修复登录流程\n`/data/dl/droid`" {
+		t.Fatalf("unexpected option element: %#v", ops[0].CardElements[0])
+	}
+	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
+	}
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["prompt_id"] != "prompt-2" || value["option_id"] != "thread-1" || value["kind"] != "prompt_select" {
+		t.Fatalf("unexpected action payload: %#v", value)
+	}
+	if ops[0].CardElements[2]["content"] != "发送 `/useall` 查看全部会话。" {
+		t.Fatalf("unexpected hint element: %#v", ops[0].CardElements[2])
 	}
 }
 

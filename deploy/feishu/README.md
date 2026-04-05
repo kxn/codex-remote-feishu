@@ -10,6 +10,7 @@
    - `im.message.receive_v1`
    - `im.message.reaction.created_v1`
    - `application.bot.menu_v6`
+   - `card.action.trigger`
 4. 打开“权限管理”，补齐模板里列出的消息、P2P 和 reaction 相关权限。
 5. 打开“机器人菜单”，创建以下菜单 key：
    - `list`

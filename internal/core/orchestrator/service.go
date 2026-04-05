@@ -125,6 +125,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.stageImage(surface, action)
 	case control.ActionReactionCreated:
 		return s.cancelPending(surface, action.TargetMessageID)
+	case control.ActionSelectPrompt:
+		return s.resolveSelectionOption(surface, action.PromptID, action.OptionID)
 	case control.ActionStop:
 		return s.stopSurface(surface)
 	case control.ActionStatus:
@@ -820,6 +822,28 @@ func (s *Service) resolveSelection(surface *state.SurfaceConsoleRecord, text str
 		}
 	}
 	return notice(surface, "selection_invalid", "无效的序号。")
+}
+
+func (s *Service) resolveSelectionOption(surface *state.SurfaceConsoleRecord, promptID, optionID string) []control.UIEvent {
+	if surface.SelectionPrompt == nil || promptID == "" || optionID == "" || surface.SelectionPrompt.PromptID != promptID {
+		return notice(surface, "selection_expired", "这个按钮对应的选择已过期，请重新发送 /list、/use 或 /useall。")
+	}
+	if selectionPromptExpired(s.now(), surface.SelectionPrompt) {
+		surface.SelectionPrompt = nil
+		return notice(surface, "selection_expired", "这个按钮对应的选择已过期，请重新发送 /list、/use 或 /useall。")
+	}
+	for _, option := range surface.SelectionPrompt.Options {
+		if option.OptionID != optionID || option.Disabled {
+			continue
+		}
+		switch surface.SelectionPrompt.Kind {
+		case "attach_instance":
+			return s.attachInstance(surface, option.OptionID)
+		case "use_thread":
+			return s.useThread(surface, option.OptionID)
+		}
+	}
+	return notice(surface, "selection_invalid", "这个按钮对应的选项无效。")
 }
 
 func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) []agentproto.Input {

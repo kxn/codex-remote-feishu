@@ -26,6 +26,7 @@ type Operation struct {
 	CardTitle    string
 	CardBody     string
 	CardThemeKey string
+	CardElements []map[string]any
 }
 
 type Projector struct{}
@@ -62,25 +63,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.SelectionPrompt == nil {
 			return nil
 		}
-		lines := make([]string, 0, len(event.SelectionPrompt.Options))
-		separator := "\n\n"
-		for _, option := range event.SelectionPrompt.Options {
-			current := ""
-			if option.IsCurrent {
-				current = " [当前]"
-			}
-			line := fmt.Sprintf("%d. %s%s", option.Index, option.Label, current)
-			if option.Subtitle != "" {
-				switch event.SelectionPrompt.Kind {
-				case control.SelectionPromptAttachInstance:
-					separator = "\n"
-					line = fmt.Sprintf("%d. %s - 工作目录 `%s`%s", option.Index, option.Label, option.Subtitle, current)
-				default:
-					line += "\n`" + option.Subtitle + "`"
-				}
-			}
-			lines = append(lines, line)
-		}
 		title := strings.TrimSpace(event.SelectionPrompt.Title)
 		if title == "" {
 			title = "请选择"
@@ -91,19 +73,13 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				title = "会话列表"
 			}
 		}
-		body := strings.Join(lines, separator)
-		if hint := strings.TrimSpace(event.SelectionPrompt.Hint); hint != "" {
-			if body != "" {
-				body += "\n\n"
-			}
-			body += hint
-		}
 		return []Operation{{
 			Kind:         OperationSendCard,
 			ChatID:       chatID,
 			CardTitle:    title,
-			CardBody:     body,
+			CardBody:     "",
 			CardThemeKey: "system",
+			CardElements: selectionPromptElements(*event.SelectionPrompt),
 		}}
 	case control.UIEventPendingInput:
 		if event.PendingInput == nil {
@@ -197,6 +173,83 @@ func fenced(language, text string) string {
 		language = "text"
 	}
 	return "```" + language + "\n" + text + "\n```"
+}
+
+func selectionPromptElements(prompt control.SelectionPrompt) []map[string]any {
+	if len(prompt.Options) == 0 {
+		return nil
+	}
+	elements := make([]map[string]any, 0, len(prompt.Options)*2+1)
+	for _, option := range prompt.Options {
+		line := selectionOptionBody(prompt.Kind, option)
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": line,
+		})
+		elements = append(elements, map[string]any{
+			"tag": "action",
+			"actions": []map[string]any{
+				selectionOptionButton(prompt, option),
+			},
+		})
+	}
+	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
+	return elements
+}
+
+func selectionOptionBody(kind control.SelectionPromptKind, option control.SelectionOption) string {
+	current := ""
+	if option.IsCurrent {
+		current = " [当前]"
+	}
+	switch kind {
+	case control.SelectionPromptAttachInstance:
+		if option.Subtitle != "" {
+			return fmt.Sprintf("%d. %s - 工作目录 `%s`%s", option.Index, option.Label, option.Subtitle, current)
+		}
+	default:
+		if option.Subtitle != "" {
+			return fmt.Sprintf("%d. %s%s\n`%s`", option.Index, option.Label, current, option.Subtitle)
+		}
+	}
+	return fmt.Sprintf("%d. %s%s", option.Index, option.Label, current)
+}
+
+func selectionOptionButton(prompt control.SelectionPrompt, option control.SelectionOption) map[string]any {
+	text := "选择"
+	switch prompt.Kind {
+	case control.SelectionPromptAttachInstance:
+		text = "接管"
+	case control.SelectionPromptUseThread:
+		text = "切换"
+	}
+	disabled := option.Disabled
+	buttonType := "default"
+	if option.IsCurrent {
+		text = "当前"
+		disabled = true
+	} else {
+		buttonType = "primary"
+	}
+	return map[string]any{
+		"tag":  "button",
+		"type": buttonType,
+		"text": map[string]any{
+			"tag":     "plain_text",
+			"content": text,
+		},
+		"disabled": disabled,
+		"value": map[string]any{
+			"kind":      "prompt_select",
+			"prompt_id": prompt.PromptID,
+			"option_id": option.OptionID,
+		},
+	}
 }
 
 func formatSnapshot(snapshot control.Snapshot) string {

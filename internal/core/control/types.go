@@ -18,6 +18,7 @@ const (
 	ActionTextMessage      ActionKind = "surface.message.text"
 	ActionImageMessage     ActionKind = "surface.message.image"
 	ActionReactionCreated  ActionKind = "surface.message.reaction.created"
+	ActionSelectPrompt     ActionKind = "surface.selection.prompt"
 	ActionAttachInstance   ActionKind = "surface.button.attach_instance"
 	ActionShowThreads      ActionKind = "surface.button.show_threads"
 	ActionShowAllThreads   ActionKind = "surface.button.show_all_threads"
@@ -33,6 +34,8 @@ type Action struct {
 	ActorUserID      string
 	MessageID        string
 	Text             string
+	PromptID         string
+	OptionID         string
 	InstanceID       string
 	ThreadID         string
 	LocalPath        string

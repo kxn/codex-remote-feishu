@@ -12,6 +12,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"github.com/larksuite/oapi-sdk-go/v3/ws"
@@ -87,6 +88,13 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 	dispatch.OnP2MessageReactionDeletedV1(func(context.Context, *larkim.P2MessageReactionDeletedV1) error {
 		return nil
 	})
+	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
+		action, ok := g.parseCardActionTriggerEvent(event)
+		if ok {
+			handler(ctx, action)
+		}
+		return &larkcallback.CardActionTriggerResponse{}, nil
+	})
 	dispatch.OnP2BotMenuV6(func(ctx context.Context, event *larkapplication.P2BotMenuV6) error {
 		if event == nil || event.Event == nil || event.Event.EventKey == nil {
 			return nil
@@ -132,9 +140,12 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		if !resp.Success() {
 			return fmt.Errorf("send text failed: code=%d msg=%s", resp.Code, resp.Msg)
 		}
+		if resp.Data != nil {
+			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), surfaceID(operation.ChatID, ""))
+		}
 		return nil
 	case OperationSendCard:
-		card, err := json.Marshal(buildCard(operation.CardTitle, operation.CardBody, operation.CardThemeKey))
+		card, err := json.Marshal(buildCard(operation.CardTitle, operation.CardBody, operation.CardThemeKey, operation.CardElements))
 		if err != nil {
 			return err
 		}
@@ -151,6 +162,9 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		}
 		if !resp.Success() {
 			return fmt.Errorf("send card failed: code=%d msg=%s", resp.Code, resp.Msg)
+		}
+		if resp.Data != nil {
+			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), surfaceID(operation.ChatID, ""))
 		}
 		return nil
 	case OperationAddReaction:
@@ -306,7 +320,15 @@ func (g *LiveGateway) downloadImage(ctx context.Context, messageID, rawContent s
 	return target, mimeType, nil
 }
 
-func buildCard(title, body, themeKey string) map[string]any {
+func buildCard(title, body, themeKey string, extraElements []map[string]any) map[string]any {
+	elements := make([]map[string]any, 0, len(extraElements)+1)
+	if strings.TrimSpace(body) != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": body,
+		})
+	}
+	elements = append(elements, extraElements...)
 	return map[string]any{
 		"config": map[string]any{
 			"wide_screen_mode": true,
@@ -319,12 +341,7 @@ func buildCard(title, body, themeKey string) map[string]any {
 				"content": title,
 			},
 		},
-		"elements": []map[string]any{
-			{
-				"tag":     "markdown",
-				"content": body,
-			},
-		},
+		"elements": elements,
 	}
 }
 
@@ -341,6 +358,67 @@ func cardTemplate(themeKey, fallback string) string {
 		sum += int(r)
 	}
 	return templates[sum%len(templates)]
+}
+
+func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardActionTriggerEvent) (control.Action, bool) {
+	if event == nil || event.Event == nil || event.Event.Action == nil {
+		return control.Action{}, false
+	}
+	value := event.Event.Action.Value
+	kind := strings.TrimSpace(stringMapValue(value, "kind"))
+	if kind == "" {
+		return control.Action{}, false
+	}
+
+	operatorID := operatorUserIDFromCard(event.Event.Operator)
+	chatID := ""
+	messageID := ""
+	if event.Event.Context != nil {
+		chatID = strings.TrimSpace(event.Event.Context.OpenChatID)
+		messageID = strings.TrimSpace(event.Event.Context.OpenMessageID)
+	}
+	surfaceSessionID := g.surfaceForCardAction(messageID, chatID, operatorID)
+	if surfaceSessionID == "" {
+		return control.Action{}, false
+	}
+
+	switch kind {
+	case "prompt_select":
+		promptID := strings.TrimSpace(stringMapValue(value, "prompt_id"))
+		optionID := strings.TrimSpace(stringMapValue(value, "option_id"))
+		if promptID == "" || optionID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionSelectPrompt,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PromptID:         promptID,
+			OptionID:         optionID,
+		}, true
+	default:
+		return control.Action{}, false
+	}
+}
+
+func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string) string {
+	if operatorID != "" {
+		return surfaceIDForInbound("", "p2p", operatorID)
+	}
+	if messageID != "" {
+		g.mu.Lock()
+		surfaceSessionID := g.messages[messageID]
+		g.mu.Unlock()
+		if surfaceSessionID != "" {
+			return surfaceSessionID
+		}
+	}
+	if chatID != "" {
+		return surfaceID(chatID, "")
+	}
+	return ""
 }
 
 func parseTextAction(text string) (control.Action, bool) {
@@ -443,6 +521,16 @@ func operatorUserID(operator *larkapplication.Operator) string {
 	)
 }
 
+func operatorUserIDFromCard(operator *larkcallback.Operator) string {
+	if operator == nil {
+		return ""
+	}
+	return chooseFirst(
+		stringPtr(operator.UserID),
+		strings.TrimSpace(operator.OpenID),
+	)
+}
+
 func reactionKey(messageID, emojiType string) string {
 	return messageID + "|" + emojiType
 }
@@ -485,4 +573,22 @@ func chooseFirst(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func stringMapValue(values map[string]interface{}, key string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	value, ok := values[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch current := value.(type) {
+	case string:
+		return current
+	case fmt.Stringer:
+		return current.String()
+	default:
+		return fmt.Sprint(current)
+	}
 }

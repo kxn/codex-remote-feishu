@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
 
 func TestMenuActionKindKnownValues(t *testing.T) {
@@ -103,5 +104,41 @@ func TestParseTextActionRecognizesSessionCommands(t *testing.T) {
 		if action.Kind != want {
 			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, want)
 		}
+	}
+}
+
+func TestParseCardActionTriggerEventBuildsPromptSelectionAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{})
+	gateway.recordSurfaceMessage("om-card-1", "feishu:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":      "prompt_select",
+					"prompt_id": "prompt-1",
+					"option_id": "thread-1",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-1",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected card callback to be parsed")
+	}
+	if action.Kind != control.ActionSelectPrompt {
+		t.Fatalf("unexpected action kind: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
+		t.Fatalf("unexpected action routing: %#v", action)
+	}
+	if action.PromptID != "prompt-1" || action.OptionID != "thread-1" {
+		t.Fatalf("unexpected prompt selection payload: %#v", action)
 	}
 }

@@ -1048,6 +1048,71 @@ func TestExpiredSelectionPromptShowsNoticeInsteadOfSilentFailure(t *testing.T) {
 	}
 }
 
+func TestPromptSelectionActionUsesPromptAndOptionID(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	events := svc.ApplySurfaceAction(control.Action{Kind: control.ActionShowAllThreads, SurfaceSessionID: "surface-1"})
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+
+	useEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSelectPrompt,
+		SurfaceSessionID: "surface-1",
+		PromptID:         prompt.PromptID,
+		OptionID:         "thread-1",
+	})
+	if len(useEvents) != 1 || useEvents[0].ThreadSelection == nil || useEvents[0].ThreadSelection.ThreadID != "thread-1" {
+		t.Fatalf("expected selection result for prompt button, got %#v", useEvents)
+	}
+}
+
+func TestExpiredPromptSelectionActionShowsNotice(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	events := svc.ApplySurfaceAction(control.Action{Kind: control.ActionShowAllThreads, SurfaceSessionID: "surface-1"})
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	now = now.Add(11 * time.Minute)
+
+	useEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSelectPrompt,
+		SurfaceSessionID: "surface-1",
+		PromptID:         prompt.PromptID,
+		OptionID:         "thread-1",
+	})
+	if len(useEvents) != 1 || useEvents[0].Notice == nil || useEvents[0].Notice.Code != "selection_expired" {
+		t.Fatalf("expected selection expired notice for button prompt, got %#v", useEvents)
+	}
+}
+
 func TestLocalTurnCompletedWithoutLocalPauseDoesNotEnterHandoff(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
