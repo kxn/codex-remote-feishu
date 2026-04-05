@@ -3,13 +3,14 @@
 package relayruntime
 
 import (
-	"os"
 	"os/exec"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
 )
+
+const windowsStillActive = 259
 
 func processAlive(pid int) bool {
 	if pid <= 0 {
@@ -24,7 +25,7 @@ func processAlive(pid int) bool {
 	if err := windows.GetExitCodeProcess(handle, &exitCode); err != nil {
 		return false
 	}
-	return exitCode == windows.STILL_ACTIVE
+	return exitCode == windowsStillActive
 }
 
 func terminateProcess(pid int, grace time.Duration) error {
