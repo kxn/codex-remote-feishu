@@ -11,7 +11,7 @@ mkdir -p "${BIN_DIR}"
 
 args=("$@")
 if [[ ${#args[@]} -eq 0 ]]; then
-  args=(-interactive)
+  args=(-bootstrap-only -start-daemon)
 fi
 
 exec "${BIN_DIR}/codex-remote" install "${args[@]}"

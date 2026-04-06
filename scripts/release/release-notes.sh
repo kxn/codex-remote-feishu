@@ -66,10 +66,18 @@ echo '```bash'
 echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash"
 echo '```'
 echo
+echo "The installer downloads the GitHub-built release archive, installs the binary, starts the local daemon, and opens or prints the WebSetup URL."
+echo
 echo "Pin this version:"
 echo
 echo '```bash'
 echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version ${version}"
+echo '```'
+echo
+echo "Manual archive install:"
+echo
+echo '```bash'
+echo "./codex-remote install -bootstrap-only -start-daemon"
 echo '```'
 echo
 

@@ -25,7 +25,7 @@ type Options struct {
 
 type RunnerSet struct {
 	RunDaemon  func(context.Context, string) error
-	RunInstall func([]string, io.Reader, io.Writer, io.Writer) error
+	RunInstall func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunWrapper func(context.Context, []string, io.Reader, io.Writer, io.Writer, string) (int, error)
 }
 
@@ -58,7 +58,7 @@ func Main(opts Options) int {
 		}
 		return 0
 	case RoleInstall:
-		if err := opts.Runners.RunInstall(decision.Args, opts.Stdin, opts.Stdout, opts.Stderr); err != nil {
+		if err := opts.Runners.RunInstall(decision.Args, opts.Stdin, opts.Stdout, opts.Stderr, opts.Version); err != nil {
 			_, _ = fmt.Fprintf(opts.Stderr, "install error: %v\n", err)
 			return 1
 		}

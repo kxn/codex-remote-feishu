@@ -27,6 +27,7 @@ type Options struct {
 	FeishuAppID        string
 	FeishuAppSecret    string
 	UseSystemProxy     bool
+	BootstrapOnly      bool
 }
 
 type InstallState struct {
@@ -67,7 +68,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 
 	integrations := opts.Integrations
-	if len(integrations) == 0 && opts.IntegrationMode != "" {
+	if !opts.BootstrapOnly && len(integrations) == 0 && opts.IntegrationMode != "" {
 		integrations = []WrapperIntegrationMode{opts.IntegrationMode}
 	}
 	integrations = normalizeIntegrations(integrations)
@@ -91,10 +92,15 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		installedBinary = sourceBinary
 	}
 
+	emptyIntegrationMode := string(IntegrationEditorSettings)
+	if opts.BootstrapOnly {
+		emptyIntegrationMode = "none"
+	}
+
 	cfg.Relay.ServerURL = firstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
 	cfg.Wrapper.CodexRealBinary = choosePreservedValue(codexRealBinary, cfg.Wrapper.CodexRealBinary)
 	cfg.Wrapper.NameMode = firstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
-	cfg.Wrapper.IntegrationMode = integrationsConfigValue(integrations)
+	cfg.Wrapper.IntegrationMode = integrationsConfigValueOr(integrations, emptyIntegrationMode)
 	cfg.Feishu.UseSystemProxy = opts.UseSystemProxy
 	cfg.Feishu.Apps = mergePrimaryFeishuApp(cfg.Feishu.Apps, opts.FeishuAppID, opts.FeishuAppSecret)
 

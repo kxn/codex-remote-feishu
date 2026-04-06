@@ -22,9 +22,10 @@ github.com/kxn/codex-remote-feishu
     - 真实 `codex` 的包装器
     - native app-server -> canonical protocol 适配
   - `install`
-    - 安装器
-    - 写配置
-    - patch VS Code 入口
+    - bootstrap 安装器
+    - 安装稳定二进制
+    - 写统一配置
+    - 启动 WebSetup / Admin UI
 
 兼容期内仓库仍保留：
 
@@ -58,22 +59,28 @@ internal/
 testkit/
 ```
 
-## 用户入口
+## 用户入口与开发入口
 
-- `setup.sh`
-  - macOS / Linux 的交互安装入口
-  - 无参数时默认 `-interactive`
-- `setup.ps1`
-  - Windows PowerShell 的交互安装入口
-  - 无参数时默认 `-interactive`
+产品入口：
+
 - `install-release.sh`
   - 面向最终用户的在线安装入口
-  - 负责下载最新 release 包并启动包内 `setup.sh`
+  - 下载 GitHub-built release 包
+  - 执行 `codex-remote install -bootstrap-only -start-daemon`
+- release archive 内的 `codex-remote`
+  - 手动安装时执行 `./codex-remote install -bootstrap-only -start-daemon`
+
+仓库 helper：
+
+- `setup.sh` / `setup.ps1`
+  - 源码仓库辅助脚本
+  - 默认构建本地 binary 后启动同一套 WebSetup 流程
+  - 如显式传参，则直接透传给 `codex-remote install`
 - `install.sh`
   - Linux 开发 / 运维辅助脚本
-  - 提供 `bootstrap/start/stop/status/logs/build`
+  - 提供 `bootstrap/start/stop/restart/refresh/status/logs/build`
 
-`setup.*` 和 `install-release.sh` 是产品入口，`install.sh` 是仓库内运维辅助，不要混淆。
+不要再把 `setup.sh` / `setup.ps1` 当成 release 包产品入口。
 
 ## 关键文档
 
@@ -112,10 +119,10 @@ go build ./cmd/codex-remote
 go build ./cmd/...
 ```
 
-安装器 smoke test：
+源码仓库启动 WebSetup：
 
 ```bash
-./setup.sh -integration editor_settings -feishu-app-id cli_xxx -feishu-app-secret secret_xxx
+./setup.sh
 ```
 
 Linux 本地运行：
@@ -141,19 +148,31 @@ release 安装器 smoke test：
 bash scripts/check/smoke-install-release.sh
 ```
 
+本地仅做 release 打包预演：
+
+```bash
+make release-artifacts VERSION=v0.1.0
+```
+
+这不是正式发布路径，正式 release 由 GitHub Actions 完成构建和发布。
+
 ## 安装实现要点
 
-- Linux 默认同时启用 `editor_settings` 和 `managed_shim`
-- macOS / Windows 默认只启用 `editor_settings`
+- release / online installer 默认只做 bootstrap，不再在 CLI 里采集飞书凭证或 VS Code 路径
+- 飞书配置、VS Code detect/apply、shim 重装统一在 WebSetup / Admin UI 中完成
+- `setup.sh` / `setup.ps1` 默认走 `-bootstrap-only -start-daemon`
+- `install.sh bootstrap` 仍适合仓库内联调和回归测试
 - `managed_shim` 会把扩展 bundle 中的 `codex` 重命名为 `codex.real`
 - 然后把统一二进制 `codex-remote` 复制到原始 `codex` 路径
 - `CODEX_REAL_BINARY` 会自动指向保留下来的 `codex.real`
-- `install-release.sh` 必须兼容 `curl | bash`，因此交互 setup 需要显式从 `/dev/tty` 取 stdin
+- `install-release.sh` 必须兼容 `curl | bash`
+- release 包必须能在没有 Go toolchain 和没有源码目录的情况下完成安装
 
 当前配置路径仍沿用统一布局：
 
 - `<baseDir>/.config/codex-remote/config.json`
-- `<baseDir>/.local/share/codex-remote`
+- `<baseDir>/.local/share/codex-remote/install-state.json`
+- `<baseDir>/.local/share/codex-remote/logs/codex-remote-relayd.log`
 
 这是当前 runtime config lookup 的约束，不要随意只改安装器而不改运行时读取逻辑。
 
@@ -174,28 +193,29 @@ ps -ef | rg 'codex-remote|relayd|relay-wrapper' | rg -v rg
 ss -ltnp | rg '9500|9501'
 ```
 
-2. relayd 状态接口
+2. WebSetup / admin 状态接口
 
 ```bash
+curl --noproxy '*' -sf http://127.0.0.1:9501/api/admin/bootstrap-state | jq .
 curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .
 ```
 
 重点字段：
 
+- `phase`
+- `setupRequired`
+- `gateways[*].state`
 - `instances[*].Online`
-- `instances[*].ObservedFocusedThreadID`
-- `instances[*].ActiveThreadID`
-- `instances[*].ActiveTurnID`
 - `surfaces[*].AttachedInstanceID`
 - `surfaces[*].SelectedThreadID`
-- `surfaces[*].DispatchMode`
-- `surfaces[*].ActiveQueueItemID`
-- `surfaces[*].QueuedQueueItemIDs`
 
 3. relayd 日志
 
 重点前缀：
 
+- `startup state:`
+- `web setup:`
+- `web admin:`
 - `surface action:`
 - `agent event:`
 - `ui command:`
@@ -237,14 +257,9 @@ bash scripts/check/smoke-install-release.sh
   - 检查公开文档是否泄漏本机路径
   - 检查旧项目名是否回流
   - 检查 `gofmt`
-  - 跑 release 安装器 smoke test
+  - 跑 WebSetup release 安装器 smoke test
   - 构建并运行 `go test ./...`
 - `Release`
   - 支持显式指定版本或自动决定下一个语义化版本
-  - 构建多平台产物
-  - 创建 GitHub Release
-
-本地可预演：
-
-- `make check`
-- `make release-artifacts VERSION=v0.1.0`
+  - 在 GitHub 上构建 admin UI 与多平台产物
+  - 生成 release notes、checksums 并创建 GitHub Release

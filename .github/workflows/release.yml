@@ -72,7 +72,7 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Smoke test release installer
+      - name: Smoke test WebSetup release installer
         run: bash scripts/check/smoke-install-release.sh
 
       - name: Determine next version

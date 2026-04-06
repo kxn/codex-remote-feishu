@@ -462,16 +462,24 @@ wrapper 需要保留这个特殊语义，因为它本质上仍然是 `codex.real
 
 ### 9.2 `install-release.sh`
 
-无需大改逻辑，但 release 包内只包含一个可执行文件。
+当前已经进一步收敛为：
+
+- release 包下载后不再执行包内 `setup.sh`
+- 直接执行：
+
+```bash
+codex-remote install -bootstrap-only -start-daemon
+```
+
+- 由 WebSetup / Admin UI 接管后续 Feishu 与 VS Code 配置
 
 ### 9.3 `scripts/release/build-artifacts.sh`
-
-当前是为每个平台打三个 binary。
 
 目标是：
 
 - 每个平台只构建一个 `codex-remote`
-- release 包内附带脚本、文档、deploy 目录
+- release 包内附带最终用户需要的文档和 `deploy/`
+- 在线安装脚本作为独立 release 资产单独发布
 - 不再生成三份独立的 exe / elf
 
 ## 10. 兼容策略
@@ -496,7 +504,9 @@ wrapper 需要保留这个特殊语义，因为它本质上仍然是 `codex.real
 做法：
 
 - release 只产出 `codex-remote`
-- `install.sh` / `setup.sh` / release script 全部改为单一 binary
+- release script 直接驱动单一 binary 的 bootstrap 路径
+- `setup.sh` / `setup.ps1` 降级为源码仓库 helper
+- `install.sh` 保留为仓库联调 helper
 - 删除旧 binary 资产
 
 等这一阶段稳定后，再考虑是否删除旧 `cmd/*` 源码入口。
@@ -561,7 +571,7 @@ wrapper 需要保留这个特殊语义，因为它本质上仍然是 `codex.real
 2. 把现有三个 `main.go` 下沉为 role entry
 3. 为 launcher 补 role 识别测试
 4. 修改安装器数据模型，从双 binary 收敛成单 binary
-5. 修改 `install.sh` / `setup.sh` / release 脚本
+5. 修改 `install.sh` / `setup.sh` / release 脚本，并把产品配置入口切到 WebSetup
 6. 最后再移除旧二进制发布形态
 
 这样风险最低，也最容易定位问题。

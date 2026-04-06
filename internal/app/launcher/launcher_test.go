@@ -96,7 +96,7 @@ func TestMainRoutesToWrapper(t *testing.T) {
 		Stderr:  &bytes.Buffer{},
 		Runners: RunnerSet{
 			RunDaemon: func(context.Context, string) error { t.Fatal("unexpected daemon run"); return nil },
-			RunInstall: func([]string, io.Reader, io.Writer, io.Writer) error {
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
 			},
@@ -145,8 +145,11 @@ func TestMainRunsInstall(t *testing.T) {
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
 			RunDaemon: func(context.Context, string) error { t.Fatal("unexpected daemon run"); return nil },
-			RunInstall: func(args []string, _ io.Reader, _, _ io.Writer) error {
+			RunInstall: func(args []string, _ io.Reader, _, _ io.Writer, version string) error {
 				gotArgs = append([]string(nil), args...)
+				if version != "dev" {
+					t.Fatalf("install version = %q, want dev", version)
+				}
 				return nil
 			},
 			RunWrapper: func(context.Context, []string, io.Reader, io.Writer, io.Writer, string) (int, error) {
@@ -171,7 +174,7 @@ func TestMainReportsDaemonError(t *testing.T) {
 		Stderr: &stderr,
 		Runners: RunnerSet{
 			RunDaemon: func(context.Context, string) error { return errors.New("boom") },
-			RunInstall: func([]string, io.Reader, io.Writer, io.Writer) error {
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
 			},
@@ -200,7 +203,7 @@ func TestMainRunsDaemonForEmptyArgs(t *testing.T) {
 				ran = true
 				return nil
 			},
-			RunInstall: func([]string, io.Reader, io.Writer, io.Writer) error {
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
 			},

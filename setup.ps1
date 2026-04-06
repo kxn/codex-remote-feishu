@@ -11,7 +11,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $installArgs = @($args)
 if ($installArgs.Count -eq 0) {
-  $installArgs = @("-interactive")
+  $installArgs = @("-bootstrap-only", "-start-daemon")
 }
 
 & (Join-Path $BinDir "codex-remote.exe") install @installArgs

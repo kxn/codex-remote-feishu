@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"time"
@@ -258,7 +259,12 @@ func probeWelcome(ctx context.Context, relayURL string, hello agentproto.Hello) 
 	dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, normalizeRelayURL(relayURL), http.Header{})
+	targetURL := normalizeRelayURL(relayURL)
+	dialer := *websocket.DefaultDialer
+	if relayURLUsesLoopback(targetURL) {
+		dialer.Proxy = nil
+	}
+	conn, resp, err := dialer.DialContext(dialCtx, targetURL, http.Header{})
 	if err != nil {
 		if websocket.IsCloseError(err) {
 			return agentproto.Welcome{}, ProbeUnknown, err
@@ -324,6 +330,19 @@ func normalizeRelayURL(raw string) string {
 		return raw + "ws/agent"
 	}
 	return raw + "/ws/agent"
+}
+
+func relayURLUsesLoopback(raw string) bool {
+	parsed, err := neturl.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func identitySummary(identity agentproto.BinaryIdentity) string {

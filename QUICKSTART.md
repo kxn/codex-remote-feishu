@@ -9,9 +9,10 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 This command will:
 
 1. Detect your platform
-2. Download the latest release package
+2. Download the GitHub-built release archive
 3. Extract it under your local release cache
-4. Start the packaged interactive installer
+4. Install `codex-remote` to a stable local path
+5. Start the local daemon and print the WebSetup URL
 
 To pin a specific version:
 
@@ -28,38 +29,40 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 macOS / Linux:
 
 ```bash
-./setup.sh
+./codex-remote install -bootstrap-only -start-daemon
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\setup.ps1
+.\codex-remote.exe install -bootstrap-only -start-daemon
 ```
 
-## After installation
+## Finish setup in the Web UI
 
-Start the relay service on Linux with:
+After the daemon starts, open the printed `/setup` URL.
 
-```bash
-./install.sh start
-```
+In WebSetup:
 
-If you only need to restart the current relay chain, or recover from a stale daemon that is still alive without a PID file:
+1. Add or verify your Feishu app credentials
+2. Let the page detect your VS Code environment
+3. Apply `editor_settings` or `managed_shim`
+4. Reinstall shim after extension upgrades when the page asks for it
 
-```bash
-./install.sh restart
-```
+## Repo-only helpers
 
-If you changed Go code and use `managed_shim`, refresh the installed wrapper binary and VS Code bundle entrypoint before testing:
+If you are working from a source checkout instead of a release archive:
 
-```bash
-./install.sh refresh
-```
+- `./setup.sh` or `./setup.ps1`
+  - builds a local binary
+  - bootstraps the daemon
+  - opens or prints the same WebSetup flow
+- `./install.sh`
+  - repo-local lifecycle helper for `bootstrap/start/stop/restart/refresh/status/logs`
 
-`restart` and `refresh` may interrupt an active VS Code Codex session because they proactively stop the current managed wrapper/app-server/daemon chain before starting again.
+These repo helpers are not part of the released product package.
 
-Before you test in Feishu:
+## Before you test in Feishu
 
 - make sure the app has the bot message/event permissions from `deploy/feishu/README.md`
 - if you want local `.md` links to become Feishu preview links, also grant `drive:drive`

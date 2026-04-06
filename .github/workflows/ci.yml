@@ -49,7 +49,7 @@ jobs:
         run: |
           go build ./cmd/...
 
-      - name: Smoke test release installer
+      - name: Smoke test WebSetup release installer
         run: bash scripts/check/smoke-install-release.sh
 
       - name: Test

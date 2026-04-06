@@ -68,9 +68,13 @@ func hasIntegration(values []WrapperIntegrationMode, target WrapperIntegrationMo
 }
 
 func integrationsConfigValue(values []WrapperIntegrationMode) string {
+	return integrationsConfigValueOr(values, string(IntegrationEditorSettings))
+}
+
+func integrationsConfigValueOr(values []WrapperIntegrationMode, emptyValue string) string {
 	values = normalizeIntegrations(values)
 	if len(values) == 0 {
-		return string(IntegrationEditorSettings)
+		return emptyValue
 	}
 	if len(values) == 2 && hasIntegration(values, IntegrationEditorSettings) && hasIntegration(values, IntegrationManagedShim) {
 		return "both"

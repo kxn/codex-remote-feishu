@@ -95,3 +95,9 @@ func TestIntegrationsConfigValue(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationsConfigValueOr(t *testing.T) {
+	if got := integrationsConfigValueOr(nil, "none"); got != "none" {
+		t.Fatalf("integrationsConfigValueOr(nil, none)=%q, want none", got)
+	}
+}

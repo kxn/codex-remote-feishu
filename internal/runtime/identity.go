@@ -20,7 +20,12 @@ func CurrentBinaryIdentity(version string) (agentproto.BinaryIdentity, error) {
 	if err != nil {
 		return agentproto.BinaryIdentity{}, err
 	}
-	executable, err = filepath.EvalSymlinks(executable)
+	return BinaryIdentityForPath(executable, version)
+}
+
+func BinaryIdentityForPath(executable, version string) (agentproto.BinaryIdentity, error) {
+	executable = filepath.Clean(executable)
+	executable, err := filepath.EvalSymlinks(executable)
 	if err != nil {
 		executable = filepath.Clean(executable)
 	}

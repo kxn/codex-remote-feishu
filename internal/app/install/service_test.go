@@ -119,6 +119,46 @@ func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
 	}
 }
 
+func TestBootstrapOnlyWritesConfigWithoutTouchingVSCode(t *testing.T) {
+	baseDir := t.TempDir()
+	settingsPath := filepath.Join(baseDir, "Code", "User", "settings.json")
+	entrypoint := filepath.Join(baseDir, ".vscode-server", "extensions", "openai.chatgpt-test", "bin", "linux-x86_64", "codex")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "bootstrap-bin")
+	seedBinary(t, entrypoint, "original-codex")
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:            baseDir,
+		InstallBinDir:      filepath.Join(baseDir, "installed-bin"),
+		BinaryPath:         sourceBinary,
+		RelayServerURL:     "ws://127.0.0.1:9500/ws/agent",
+		VSCodeSettingsPath: settingsPath,
+		BundleEntrypoint:   entrypoint,
+		BootstrapOnly:      true,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap only: %v", err)
+	}
+
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	if cfg.Wrapper.IntegrationMode != "none" {
+		t.Fatalf("wrapper integration mode = %q, want none", cfg.Wrapper.IntegrationMode)
+	}
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Fatalf("expected settings.json to stay untouched, stat err=%v", err)
+	}
+	raw, err := os.ReadFile(entrypoint)
+	if err != nil {
+		t.Fatalf("read bundle entrypoint: %v", err)
+	}
+	if string(raw) != "original-codex" {
+		t.Fatalf("expected bundle entrypoint to remain unchanged, got %q", string(raw))
+	}
+	if len(state.Integrations) != 0 {
+		t.Fatalf("state integrations = %#v, want none", state.Integrations)
+	}
+}
+
 func TestBootstrapPreservesExistingFeishuSecretsWhenFlagsAreEmpty(t *testing.T) {
 	baseDir := t.TempDir()
 	configDir := filepath.Join(baseDir, ".config", "codex-remote")

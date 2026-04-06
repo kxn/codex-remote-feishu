@@ -2,95 +2,128 @@
 
 > Type: `general`
 > Updated: `2026-04-06`
-> Summary: 迁移到 `docs/general` 并统一文档元信息头，同步修正目录迁移后的相对链接。
+> Summary: 将 release / 安装 / 部署文档统一更新为 WebSetup-first 发布模型，并明确 GitHub 端构建发布是唯一正式 release 路径。
 
 ## 1. 范围
 
 这份文档描述当前 Go 版本的安装、配置和部署模型，覆盖：
 
-- 在线安装脚本
-- 交互安装脚本
-- `codex-remote install` 非交互安装
-- VS Code / VS Code Remote 接管方式
-- `relayd` 本机运行与 Docker 运行
-- 飞书应用配置模板
+- GitHub Release 产物形态
+- 在线安装脚本与手动解压安装
+- `codex-remote install` 的 bootstrap 语义
+- WebSetup / Admin UI 的职责边界
+- 仓库 helper 与产品入口的区分
+- Docker relayd 部署
 
-## 2. 操作入口
+## 2. 当前产品入口
 
-### 2.1 `setup.sh` / `setup.ps1`
-
-产品入口。
-
-职责：
-
-- 构建统一二进制 `codex-remote`
-- 调起 `codex-remote install`
-- 无参数时默认进入交互向导
-
-默认行为：
-
-- Linux: 默认 `editor_settings + managed_shim`
-- macOS: 默认 `editor_settings`
-- Windows: 默认 `editor_settings`
-
-### 2.2 `install-release.sh`
+### 2.1 `install-release.sh`
 
 在线安装入口，面向最终用户。
 
 职责：
 
 - 解析平台和架构
-- 下载最新或指定 release 包
+- 下载 GitHub Releases 中最新或指定版本的平台包
 - 解压到本地 release cache
-- 启动包内的 `setup.sh`
+- 执行：
 
-它需要兼容：
-
-- `curl | bash`
-- 指定版本安装
-- CI 中通过本地 HTTP server 做 smoke test
+```bash
+codex-remote install -bootstrap-only -start-daemon
+```
 
 默认缓存目录：
 
 - Linux: `~/.local/share/codex-remote/releases`
 - macOS: `~/Library/Application Support/codex-remote/releases`
 
-### 2.3 `codex-remote install`
+它必须兼容：
 
-安装器核心逻辑。
+- `curl | bash`
+- 指定版本安装
+- CI 中通过本地 HTTP server 做 smoke test
 
-职责：
+### 2.2 手动解压 release 包
 
-- 写统一配置 `config.json`
-- 保留已有飞书凭证
-- 安装或复制二进制到稳定目录
-- patch `settings.json`
-- 或 patch 扩展 bundle 入口
-- 记录 `install-state.json`
+release 包解压后，最终用户直接运行统一二进制：
 
-它同时支持：
+macOS / Linux:
 
-- 交互模式：`-interactive`
-- 非交互模式：直接传 flags
+```bash
+./codex-remote install -bootstrap-only -start-daemon
+```
 
-### 2.4 `install.sh`
+Windows PowerShell:
 
-Linux 仓库内运维脚本，不是跨平台产品入口。
+```powershell
+.\codex-remote.exe install -bootstrap-only -start-daemon
+```
 
-职责：
+这一步只负责：
 
-- `bootstrap`
-- `start`
-- `stop`
-- `status`
-- `logs`
-- `build`
+- 安装稳定二进制
+- 写入统一配置
+- 启动 daemon 与嵌入式 Web UI
 
-它主要方便开发和仓库内联调。
+后续飞书与 VS Code 配置都在 `/setup` 和 `/` 管理页中完成。
 
-## 3. 默认布局
+### 2.3 WebSetup / Admin UI
 
-### 3.1 配置与状态
+产品配置入口已经收敛到 WebSetup：
+
+- 飞书 App 凭证与多 App 管理
+- VS Code detect / apply
+- `managed_shim` reinstall
+- bootstrap state / runtime state 展示
+
+也就是说，release 安装器不再做这些事情：
+
+- CLI 交互采集飞书 `App ID` / `App Secret`
+- CLI 交互采集 VS Code settings/bundle 路径
+- 直接在 release 包里分发 `setup.sh` / `setup.ps1` 作为产品入口
+
+### 2.4 仓库 helper
+
+仓库中仍保留两个辅助入口，但它们不再是 release 包产品路径：
+
+- `setup.sh` / `setup.ps1`
+  - 源码仓库 helper
+  - 默认执行本地构建后再跑 `-bootstrap-only -start-daemon`
+- `install.sh`
+  - Linux 仓库内运维 / 联调 helper
+  - 提供 `bootstrap/start/stop/restart/refresh/status/logs/build`
+
+## 3. `codex-remote install` 的当前语义
+
+### 3.1 默认非交互 bootstrap
+
+当前 release / 在线安装路径使用：
+
+- `-bootstrap-only`
+- `-start-daemon`
+
+意义是：
+
+- 写 `config.json`
+- 保留旧配置迁移与已有凭证
+- 写 `install-state.json`
+- 不直接改 VS Code
+- 启动 daemon 并输出 WebSetup / Admin URL
+
+### 3.2 仍保留的高级模式
+
+`codex-remote install` 仍然保留旧的完整安装能力，方便仓库联调和特殊场景：
+
+- `-interactive`
+- `-integration editor_settings`
+- `-integration managed_shim`
+- `-integration both`
+
+这些能力主要用于源码仓库或定向调试，不再作为发布包默认路径。
+
+## 4. 默认布局
+
+### 4.1 配置与状态
 
 当前 runtime 仍使用统一布局：
 
@@ -103,19 +136,19 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 
 默认 `baseDir` 是用户 home 目录。
 
-### 3.2 已安装二进制目录
+### 4.2 已安装二进制目录
 
-默认安装目录按平台区分：
+默认稳定安装目录按平台区分：
 
 - Linux: `~/.local/bin`
 - macOS: `~/Library/Application Support/codex-remote/bin`
-- Windows: `%LOCALAPPDATA%\codex-remote\bin`
+- Windows: `%LOCALAPPDATA%\\codex-remote\\bin`
 
-这里是安装器放置稳定二进制的位置，和配置目录是两回事。
+release 包中的归档目录只是版本缓存位置，不是长期运行路径。
 
-## 4. 集成模式
+## 5. VS Code 接管模型
 
-### 4.1 `editor_settings`
+### 5.1 `editor_settings`
 
 修改 VS Code `settings.json`：
 
@@ -124,9 +157,9 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 适用：
 
 - 本机桌面 VS Code
-- 不方便直接改 bundle 时
+- 不方便直接改 bundle 的场景
 
-### 4.2 `managed_shim`
+### 5.2 `managed_shim`
 
 直接接管扩展 bundle 里的 `codex` 入口：
 
@@ -139,54 +172,70 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 - VS Code Remote
 - 希望不依赖 `settings.json` 的场景
 
-### 4.3 默认选择策略
+### 5.3 当前产品约束
 
-- Linux 默认两者都做
-- macOS / Windows 默认只做 `editor_settings`
-- 非交互安装如果显式传 `-integration`，以显式参数为准
+对 release 用户：
 
-## 5. 配置内容
+- 安装器 bootstrap 完成后，`wrapper.integrationMode` 默认会记录为 `none`
+- 真正的 `editor_settings` / `managed_shim` apply 在 WebSetup / Admin UI 中进行
 
-### 5.1 `config.json`
+对仓库联调：
 
-安装器统一写入：
+- `setup.sh`
+- `install.sh bootstrap`
+- `codex-remote install -interactive`
 
-- `relay.serverURL`
-- `relay.listenHost`
-- `relay.listenPort`
-- `admin.listenHost`
-- `admin.listenPort`
-- `wrapper.codexRealBinary`
-- `wrapper.nameMode`
-- `wrapper.integrationMode`
-- `feishu.useSystemProxy`
-- `feishu.apps[0].appId`
-- `feishu.apps[0].appSecret`
+仍然可以直接在 CLI 里触发接管。
 
-规则：
+## 6. release 打包与发布
 
-- wrapper role 和 daemon role 从同一个文件里各取所需
-- 如果启用了 `managed_shim` 且未显式给 `wrapper.codexRealBinary`
-- 则自动使用 bundle 内保留下来的 `codex.real`
-- 如果这次安装没有显式传新的飞书凭证
-- 会保留已有值，不做清空
-- 如果当前机器还只有 legacy `config.env` / `wrapper.env` / `services.env`
-- 启动时会自动迁移到 `config.json` 并备份旧文件
+### 6.1 产物内容
 
-### 5.2 `install-state.json`
+当前 `scripts/release/build-artifacts.sh` 为每个平台构建：
 
-当前记录：
+- 一个带版本号的 `codex-remote`
+- `README.md`
+- `QUICKSTART.md`
+- `deploy/`
 
-- config 路径
-- 安装状态路径
-- 已安装统一二进制路径
-- 实际启用的 integrations
-- `settings.json` 路径
-- bundle 入口路径
+另外单独生成：
 
-## 6. Docker 模型
+- `codex-remote-feishu-install.sh`
+- `checksums.txt`
 
-Docker 只部署 `relayd`。
+release 包内不再附带：
+
+- `setup.sh`
+- `setup.ps1`
+- `install.sh`
+
+### 6.2 构建与发布位置
+
+正式 release 只走 GitHub Actions：
+
+- `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
+- GitHub 端生成 release notes 和 checksums
+- GitHub 端创建并发布 GitHub Release
+
+本地 `make release-artifacts VERSION=...` 仅用于打包预演，不是正式发布路径。
+
+### 6.3 smoke test 要求
+
+release smoke test 必须覆盖真实产品路径：
+
+1. 构建 release 归档
+2. 通过本地 HTTP server 模拟 release 下载
+3. 执行 `install-release.sh`
+4. 确认：
+   - 归档内容正确
+   - 二进制版本号正确
+   - `config.json` / `install-state.json` 被写入
+   - daemon 成功启动
+   - `/api/setup/bootstrap-state` 可访问
+
+## 7. Docker 模型
+
+Docker 只部署 `codex-remote daemon`。
 
 不放进容器的部分：
 
@@ -197,7 +246,7 @@ Docker 只部署 `relayd`。
 原因：
 
 - wrapper 必须和 VS Code / Codex 进程在同一侧
-- `relayd` 作为常驻服务，容器化收益更高
+- daemon 作为常驻服务，容器化收益更高
 
 当前资产：
 
@@ -205,18 +254,7 @@ Docker 只部署 `relayd`。
 - [deploy/docker/compose.yml](../../deploy/docker/compose.yml)
 - [deploy/docker/.env.example](../../deploy/docker/.env.example)
 
-默认映射：
-
-- `127.0.0.1:9500 -> relay websocket`
-- `127.0.0.1:9501 -> status api`
-
-因此 host 上的 wrapper 默认仍可直接连：
-
-```text
-ws://127.0.0.1:9500/ws/agent
-```
-
-## 7. 飞书配置模板
+## 8. 飞书配置模板
 
 当前仓库提供：
 
@@ -238,16 +276,7 @@ ws://127.0.0.1:9500/ws/agent
 
 - `drive:drive`
 
-原因是当前实现会在发送前自动完成：
-
-- 创建应用云空间目录
-- 上传 Markdown 文件
-- 查询文件访问链接
-- 给目录和文件增加协作者权限
-
-如果缺少这部分权限，relay 主功能仍可使用，但 `.md` 链接会保留原样，不会被替换成飞书预览链接。
-
-## 8. 非交互安装示例
+## 9. 示例
 
 在线安装：
 
@@ -261,28 +290,16 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
 ```
 
-Linux + VS Code Remote：
+手动解压后启动 WebSetup：
 
 ```bash
-./setup.sh \
-  -integration both \
-  -bundle-entrypoint "$HOME/.vscode-server/extensions/openai.chatgpt-<version>/bin/linux-x86_64/codex" \
-  -feishu-app-id cli_xxx \
-  -feishu-app-secret secret_xxx \
-  -relay-url ws://127.0.0.1:9500/ws/agent
+./codex-remote install -bootstrap-only -start-daemon
 ```
 
-Docker relayd + host wrapper：
+仓库联调：
 
 ```bash
-cp deploy/docker/.env.example deploy/docker/.env
-docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d --build
-./setup.sh -relay-url ws://127.0.0.1:9500/ws/agent
+./setup.sh
+./install.sh bootstrap
+./install.sh start
 ```
-
-## 9. 已知边界
-
-- 还没有 uninstall / rollback
-- 飞书模板还不是官方一键导入格式
-- runtime config lookup 仍沿用统一 `.config` / `.local` 布局
-- `install.sh` 仍是仓库脚本，不是系统级服务管理器

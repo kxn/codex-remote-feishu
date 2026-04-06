@@ -38,9 +38,11 @@ for platform in "${platforms[@]}"; do
     extension=".exe"
   fi
 
-  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
+  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+    go build -trimpath -ldflags "-X main.version=${version}" \
+    -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
 
-  cp README.md QUICKSTART.md DEVELOPER.md install.sh install-release.sh setup.sh setup.ps1 .env.example "${staging_dir}/"
+  cp README.md QUICKSTART.md "${staging_dir}/"
   cp -R deploy "${staging_dir}/"
 
   if [[ "${goos}" == "windows" ]]; then

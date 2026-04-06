@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -8,7 +9,7 @@ import (
 	"runtime"
 )
 
-func RunMain(args []string, stdin io.Reader, stdout, _ io.Writer) error {
+func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version string) error {
 	defaults, err := DetectPlatformDefaults()
 	if err != nil {
 		return err
@@ -19,10 +20,12 @@ func RunMain(args []string, stdin io.Reader, stdout, _ io.Writer) error {
 	flagSet.SetOutput(stdout)
 
 	interactive := flagSet.Bool("interactive", false, "run interactive installer wizard")
+	bootstrapOnly := flagSet.Bool("bootstrap-only", false, "install binary and config only; do not patch VS Code integration")
+	startDaemon := flagSet.Bool("start-daemon", false, "ensure the local daemon is running after install")
 	baseDir := flagSet.String("base-dir", defaults.BaseDir, "base directory for config and install state")
 	installBinDir := flagSet.String("install-bin-dir", defaults.InstallBinDir, "target directory for installed binary; empty keeps source path")
 	binaryPath := flagSet.String("binary", defaultBinary, "codex-remote binary source path")
-	relayURL := flagSet.String("relay-url", "ws://127.0.0.1:9500/ws/agent", "relay websocket url")
+	relayURL := flagSet.String("relay-url", "", "relay websocket url; empty preserves existing or default config")
 	codexBinary := flagSet.String("codex-binary", "", "real codex binary path; empty keeps wrapper default and lets managed_shim auto-resolve codex.real")
 	integrationMode := flagSet.String("integration", "auto", "integration mode: auto, editor_settings, managed_shim, both, or comma list")
 	feishuAppID := flagSet.String("feishu-app-id", "", "feishu app id")
@@ -41,9 +44,16 @@ func RunMain(args []string, stdin io.Reader, stdout, _ io.Writer) error {
 		return err
 	}
 
-	integrations, err := ParseIntegrations(*integrationMode, defaults.GOOS)
-	if err != nil {
-		return err
+	if *interactive && *bootstrapOnly {
+		return fmt.Errorf("-interactive cannot be combined with -bootstrap-only")
+	}
+
+	var integrations []WrapperIntegrationMode
+	if !*bootstrapOnly {
+		integrations, err = ParseIntegrations(*integrationMode, defaults.GOOS)
+		if err != nil {
+			return err
+		}
 	}
 
 	service := NewService()
@@ -61,6 +71,7 @@ func RunMain(args []string, stdin io.Reader, stdout, _ io.Writer) error {
 		FeishuAppSecret:    *feishuSecret,
 		UseSystemProxy:     *useSystemProxy,
 		Integrations:       integrations,
+		BootstrapOnly:      *bootstrapOnly,
 	}
 	if *interactive {
 		opts, err = RunInteractiveWizard(stdin, stdout, defaults, opts)
@@ -82,6 +93,31 @@ func RunMain(args []string, stdin io.Reader, stdout, _ io.Writer) error {
 		state.InstalledBinary,
 		state.Integrations,
 	)
+	if err != nil {
+		return err
+	}
+	if !*startDaemon {
+		return nil
+	}
+
+	status, err := ensureDaemonReady(context.Background(), state, version)
+	if err != nil {
+		if stderr != nil {
+			_, _ = fmt.Fprintf(stderr, "daemon startup log: %s\n", status.LogPath)
+		}
+		return err
+	}
+	if _, err := fmt.Fprintf(stdout, "daemon: ready\nweb admin: %s\n", status.AdminURL); err != nil {
+		return err
+	}
+	if status.SetupRequired {
+		if _, err := fmt.Fprintf(stdout, "web setup: %s\n", status.SetupURL); err != nil {
+			return err
+		}
+	}
+	if status.LogPath != "" {
+		_, err = fmt.Fprintf(stdout, "logs: %s\n", status.LogPath)
+	}
 	return err
 }
 

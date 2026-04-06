@@ -10,16 +10,17 @@ DOWNLOAD_ONLY=0
 
 usage() {
   cat <<'EOF'
-Usage: install-release.sh [options] [-- setup-args...]
+Usage: install-release.sh [options] [-- install-args...]
 
 Downloads the latest compatible Codex Remote Feishu release package,
-extracts it locally, and then runs the packaged setup script.
+extracts it locally, bootstraps the installed binary, starts the local
+daemon, and prints the WebSetup URL.
 
 Options:
   --version <vX.Y.Z>     Install a specific version instead of latest
   --repo <owner/name>    GitHub repository to use
   --install-root <dir>   Directory used to store downloaded releases
-  --download-only        Download and extract, but do not run setup.sh
+  --download-only        Download and extract, but do not run codex-remote install
   -h, --help             Show this help
 
 Environment overrides:
@@ -32,11 +33,11 @@ Environment overrides:
 Examples:
   curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
   curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
-  curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --download-only
+  curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- -- --install-bin-dir /opt/codex-remote/bin
 EOF
 }
 
-setup_args=()
+install_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
@@ -61,11 +62,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --)
       shift
-      setup_args=("$@")
+      install_args=("$@")
       break
       ;;
     *)
-      setup_args+=("$1")
+      install_args+=("$1")
       shift
       ;;
   esac
@@ -172,20 +173,10 @@ if [[ "${DOWNLOAD_ONLY}" == "1" || "${SKIP_SETUP}" == "1" ]]; then
   exit 0
 fi
 
-cd "${target_dir}"
-
-if [[ -t 0 ]]; then
-  exec "${target_dir}/setup.sh" "${setup_args[@]}"
-fi
-if [[ -r /dev/tty ]]; then
-  exec "${target_dir}/setup.sh" "${setup_args[@]}" </dev/tty
+binary_path="${target_dir}/codex-remote"
+if [[ ! -x "${binary_path}" ]]; then
+  echo "Downloaded package did not contain an executable codex-remote binary." >&2
+  exit 1
 fi
 
-echo "No interactive terminal is available for setup.sh." >&2
-echo "Run this command manually:" >&2
-printf '  %q/setup.sh' "${target_dir}" >&2
-if [[ ${#setup_args[@]} -gt 0 ]]; then
-  printf ' %q' "${setup_args[@]}" >&2
-fi
-printf '\n' >&2
-exit 1
+exec "${binary_path}" install -bootstrap-only -start-daemon "${install_args[@]}"

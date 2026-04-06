@@ -20,8 +20,18 @@
     - 包装真实 `codex`
     - 把原生 app-server 协议翻译成统一事件流
   - `install` role
-    - 安装器
-    - 负责写配置并接管 VS Code / VS Code Remote
+    - 引导安装器
+    - 负责安装稳定二进制、写统一配置并启动 WebSetup
+
+当前官方发布模型是：
+
+- GitHub Releases 的平台包内只放最终用户需要的运行资产
+  - `codex-remote` / `codex-remote.exe`
+  - `README.md`
+  - `QUICKSTART.md`
+  - `deploy/`
+- 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
+- 正式 release 构建与发布全部在 GitHub Actions 的 `Release` workflow 上完成
 
 ## 功能
 
@@ -35,10 +45,10 @@
 
 ## 安装前准备
 
-1. 安装 Go 1.24+
-2. 确保真实 `codex` 在目标机器上可运行
-3. 安装 VS Code 的 ChatGPT / Codex 扩展
-4. 准备飞书自建应用
+1. 确保真实 `codex` 在目标机器上可运行
+2. 安装 VS Code 的 ChatGPT / Codex 扩展
+3. 准备飞书自建应用
+4. 只有在源码构建或仓库联调时才需要 Go 1.24+
 
 飞书应用配置可参考：
 
@@ -65,9 +75,11 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 这个脚本会自动：
 
 - 识别平台
-- 下载最新 release 包
+- 下载 GitHub 构建好的 release 包
 - 解压到本地 release 缓存目录
-- 启动包内的 `setup.sh` 进入交互安装
+- 安装稳定路径下的 `codex-remote`
+- 启动本地 daemon
+- 打开或打印 WebSetup 链接
 
 如果要安装指定版本：
 
@@ -75,35 +87,42 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
 ```
 
-## 交互安装
+## 手动安装 release 包
+
+从 GitHub Releases 下载对应平台归档后，直接运行归档内的统一二进制。
 
 macOS / Linux:
 
 ```bash
-./setup.sh
+./codex-remote install -bootstrap-only -start-daemon
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\setup.ps1
+.\codex-remote.exe install -bootstrap-only -start-daemon
 ```
 
-安装向导会：
+启动后打开输出中的 `/setup` 链接，后续飞书配置、VS Code detect/apply 和 shim 重装都在 WebSetup / Admin UI 完成。
 
-- 构建 `codex-remote`
-- 询问飞书 `App ID` / `App Secret`
-- 询问 relay 地址
-- 让你选择 VS Code 集成方式
-- 自动写入统一配置 `config.json` 和 `install-state.json`
+## WebSetup 与 VS Code 接管
 
-默认集成方式：
+release 安装器现在只做 bootstrap：
 
-- Linux: `editor_settings + managed_shim`
-- macOS: `editor_settings`
-- Windows: `editor_settings`
+- 复制或安装稳定二进制
+- 写统一配置 `config.json`
+- 保留旧版 `config.env` / `wrapper.env` / `services.env` 的迁移结果
+- 启动 daemon 与嵌入式 Web UI
 
-两种集成方式的区别：
+真正的产品配置入口已经收敛到 WebSetup / Admin UI：
+
+- 飞书 App 新增、验证、启停
+- VS Code `detect`
+- `editor_settings` apply
+- `managed_shim` apply
+- 扩展升级后的 `reinstall-shim`
+
+VS Code 两种接管方式的区别：
 
 - `editor_settings`
   - 修改 `settings.json` 的 `chatgpt.cliExecutable`
@@ -113,21 +132,22 @@ Windows PowerShell:
   - 原始入口会保留成 `codex.real`
   - 更适合 VS Code Remote
 
-如果你想做非交互安装，可以直接给 `setup.sh` / `setup.ps1` 透传 `codex-remote install` 的参数，例如：
+如果你是从源码仓库联调而不是从 release 包安装：
+
+- `./setup.sh`
+  - 构建本地二进制
+  - 默认执行 `codex-remote install -bootstrap-only -start-daemon`
+- `./setup.ps1`
+  - Windows 上的同等辅助脚本
+
+它们是仓库 helper，不是 release 包产品入口。
+
+## 仓库内开发脚本
+
+`install.sh` 仍保留为 Linux 仓库内联调脚本，不是 release 用户入口：
 
 ```bash
-./setup.sh \
-  -integration both \
-  -feishu-app-id cli_xxx \
-  -feishu-app-secret secret_xxx \
-  -relay-url ws://127.0.0.1:9500/ws/agent
-```
-
-## 运行 relayd
-
-本机 Linux 运维脚本：
-
-```bash
+./install.sh bootstrap
 ./install.sh start
 ./install.sh restart
 ./install.sh refresh
@@ -141,15 +161,13 @@ Windows PowerShell:
 - 只想重启当前 relay 服务链路，或回收“pid 文件丢了但 daemon 还活着”的残留状态：`./install.sh restart`
 - 刚改过 Go 代码，且启用了 `managed_shim`，需要把 `~/.local/bin` 和 VS Code 扩展 bundle 一起刷新到新版本：`./install.sh refresh`
 
-`restart` 和 `refresh` 都会尝试停止当前安装链路上的 wrapper/app-server/daemon 进程再拉起；如果 VS Code 里正开着 Codex，会话可能被中断，这是预期行为。区别是 `refresh` 还会把 `~/.local/bin` 和 managed shim bundle 入口重新刷新到最新构建。
-
 默认会写入：
 
 - `~/.config/codex-remote/config.json`
 - `~/.local/share/codex-remote/install-state.json`
 - `~/.local/share/codex-remote/logs/codex-remote-relayd.log`
 
-如果本机还只有旧的 `config.env` / `wrapper.env` / `services.env`，启动时会自动迁移到 `config.json`，并把旧文件备份成 `*.migrated-<timestamp>.bak`。
+如果本机还只有旧的 `config.env` / `wrapper.env` / `services.env`，bootstrap 或启动时会自动迁移到 `config.json`，并把旧文件备份成 `*.migrated-<timestamp>.bak`。
 
 ## Docker 部署
 
@@ -159,11 +177,12 @@ Windows PowerShell:
 - [deploy/docker/compose.yml](./deploy/docker/compose.yml)
 - [deploy/docker/.env.example](./deploy/docker/.env.example)
 
-release 包内也会附带：
+release 包内会附带：
 
 - [QUICKSTART.md](./QUICKSTART.md)
-- [install-release.sh](./install-release.sh)
-- `setup.sh` / `setup.ps1`
+- [deploy/docker/Dockerfile](./deploy/docker/Dockerfile)
+- [deploy/docker/compose.yml](./deploy/docker/compose.yml)
+- [deploy/feishu/app-template.json](./deploy/feishu/app-template.json)
 
 用法：
 
@@ -221,11 +240,17 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 然后按顺序检查：
 
-1. `./install.sh status`
+1. `curl --noproxy '*' -sf http://127.0.0.1:9501/api/admin/bootstrap-state | jq .`
 2. `curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .`
 3. `config.json` 里的 `relay.serverURL`、`wrapper.codexRealBinary`、飞书凭证和监听地址
-5. VS Code 是否真的已经通过 wrapper 启动 Codex
-6. `codex-remote-relayd.log`
+4. VS Code 是否真的已经通过 wrapper 启动 Codex
+5. `~/.local/share/codex-remote/logs/codex-remote-relayd.log`
+
+如果你是在仓库内调试 `install.sh` 流程，再额外看：
+
+```bash
+./install.sh status
+```
 
 ## 文档
 
@@ -241,7 +266,8 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 - Push / PR 会触发 GitHub Actions CI
 - `Release` workflow 支持显式指定版本号
-- release 产物会包含各平台安装包、在线安装脚本和校验文件
+- admin UI、各平台二进制、checksums 和 GitHub Release 发布都在 GitHub 端完成
+- 本地 `make release-artifacts VERSION=vX.Y.Z` 只建议作为打包预演，不是正式发布路径
 
 ## 开发
 
