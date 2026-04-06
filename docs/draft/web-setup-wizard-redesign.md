@@ -1,8 +1,8 @@
 # Web Setup 向导流程重设计
 
 > Type: `draft`
-> Updated: `2026-04-06`
-> Summary: 根据最新反馈调整为“单步曝光但当前步骤信息充分”，并细化飞书后台直达链接、保存即测试、分步平台配置和统一报错交互。
+> Updated: `2026-04-07`
+> Summary: 改为引用新的管理页产品文档，继续保持 setup 向导与 admin 管理页的职责分离。
 
 ## 1. 文档定位
 
@@ -22,7 +22,7 @@
 
 相关背景文档：
 
-- [web-install-admin-ui-design.md](./web-install-admin-ui-design.md)
+- [web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
 - [web-install-admin-prerequisites-design.md](./web-install-admin-prerequisites-design.md)
 
 ## 2. 背景收敛

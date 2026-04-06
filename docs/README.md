@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 将 remote surface 状态机提升为长期核心文档，并同步更新索引。
+> Updated: `2026-04-07`
+> Summary: 补充管理页重设计与工程审查报告，并将旧的安装/管理总设计稿归档到 obsoleted。
 
 ## 1. 适用范围
 
@@ -135,10 +135,12 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
+- [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
+- [web-admin-ui-redesign.md](./draft/web-admin-ui-redesign.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
-- [web-install-admin-ui-design.md](./draft/web-install-admin-ui-design.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
 
 ### 6.5 `obsoleted`
 
 - [app-server-redesign.md](./obsoleted/app-server-redesign.md)
+- [web-install-admin-ui-design.md](./obsoleted/web-install-admin-ui-design.md)

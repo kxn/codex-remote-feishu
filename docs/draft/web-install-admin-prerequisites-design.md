@@ -1,8 +1,8 @@
 # Web 安装与管理界面前置改造设计
 
 > Type: `draft`
-> Updated: `2026-04-06`
-> Summary: 细化统一 JSON 配置、多 App 在线、gateway controller、预览管理、启动鉴权与 SPA 接入的前置改造。
+> Updated: `2026-04-07`
+> Summary: 同步引用新的管理页产品文档，并保留前置改造范围与当前落地边界。
 
 ## 1. 文档定位
 
@@ -18,7 +18,7 @@
 
 产品层设计见：
 
-- [web-install-admin-ui-design.md](./web-install-admin-ui-design.md)
+- [web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
 
 ## 1.1 当前落地状态
 
@@ -945,7 +945,7 @@ scopes JSON 以当前已确认样例为基线：
 
 ## 9. 参考资料
 
-- [web-install-admin-ui-design.md](./web-install-admin-ui-design.md)
+- [web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
 - [internal/config/envfile.go](../../internal/config/envfile.go)
 - [internal/app/daemon/entry.go](../../internal/app/daemon/entry.go)
 - [internal/app/daemon/app.go](../../internal/app/daemon/app.go)

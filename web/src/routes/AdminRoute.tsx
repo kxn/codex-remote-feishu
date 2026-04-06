@@ -18,34 +18,24 @@ import type {
   RuntimeStatus,
   VSCodeDetectResponse,
 } from "../lib/types";
-import { DefinitionList, ErrorState, LoadingState, Panel, ShellFrame, StatCard, StatGrid, StatusBadge } from "../components/ui";
-
-const newAppID = "__new__";
-
-type AppDraft = {
-  isNew: boolean;
-  id: string;
-  name: string;
-  appId: string;
-  appSecret: string;
-  enabled: boolean;
-};
-
-type Notice = {
-  tone: "good" | "warn" | "danger";
-  message: string;
-};
-
-type PreviewMap = Record<string, PreviewDriveStatusResponse>;
-
-const emptyDraft = (): AppDraft => ({
-  isNew: true,
-  id: "",
-  name: "",
-  appId: "",
-  appSecret: "",
-  enabled: true,
-});
+import { ErrorState, LoadingState, ShellFrame } from "../components/ui";
+import {
+  AdminFeishuPanel,
+  AdminInstancesPanel,
+  AdminOverviewPanel,
+  AdminStoragePanel,
+  AdminVSCodePanel,
+} from "./admin/AdminPanels";
+import {
+  appToDraft,
+  blankToUndefined,
+  emptyDraft,
+  loadVSCodeState,
+  syncDraftSelection,
+  vscodeReadinessText,
+} from "./admin/helpers";
+import type { AppDraft, Notice, PreviewMap } from "./admin/types";
+import { newAppID } from "./admin/types";
 
 export function AdminRoute() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
@@ -58,7 +48,7 @@ export function AdminRoute() {
   const [imageStaging, setImageStaging] = useState<ImageStagingStatusResponse | null>(null);
   const [previews, setPreviews] = useState<PreviewMap>({});
   const [selectedAppID, setSelectedAppID] = useState<string>(newAppID);
-  const [draft, setDraft] = useState<AppDraft>(emptyDraft);
+  const [draft, setDraft] = useState<AppDraft>(emptyDraft());
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -118,6 +108,10 @@ export function AdminRoute() {
 
   const activeApp = selectedAppID === newAppID ? null : apps.find((app) => app.id === selectedAppID) ?? null;
   const scopesJSON = useMemo(() => JSON.stringify(manifest?.scopesImport ?? { scopes: { tenant: [], user: [] } }, null, 2), [manifest]);
+  const gatewayRows = useMemo(() => {
+    const source = runtime?.gateways?.length ? runtime.gateways : bootstrap?.gateways ?? [];
+    return source;
+  }, [bootstrap?.gateways, runtime?.gateways]);
 
   async function runAction(label: string, work: () => Promise<void>) {
     setBusyAction(label);
@@ -144,6 +138,9 @@ export function AdminRoute() {
   }
 
   async function saveApp() {
+    if (activeApp?.readOnly && !draft.isNew) {
+      return;
+    }
     await runAction(draft.isNew ? "create-app" : "save-app", async () => {
       const payload = {
         id: draft.isNew ? blankToUndefined(draft.id) : undefined,
@@ -303,11 +300,6 @@ export function AdminRoute() {
     });
   }
 
-  const gatewayRows = useMemo(() => {
-    const source = runtime?.gateways?.length ? runtime.gateways : bootstrap?.gateways ?? [];
-    return source;
-  }, [bootstrap?.gateways, runtime?.gateways]);
-
   return (
     <ShellFrame
       routeLabel="Local Admin"
@@ -330,411 +322,52 @@ export function AdminRoute() {
       {error ? <ErrorState title="无法加载管理页状态" description="当前 admin shell 已接入，但页面数据读取失败。" detail={error} /> : null}
       {bootstrap && runtime && manifest && imageStaging ? (
         <>
-          <Panel id="overview" title="运行总览" description="这部分用于确认 daemon、queue、surface 和 gateway 的整体健康状态。">
-            <StatGrid>
-              <StatCard label="Phase" value={bootstrap.phase} tone={bootstrap.phase === "ready" ? "accent" : "warn"} detail={bootstrap.setupRequired ? "setup 未完成" : "setup 已完成"} />
-              <StatCard label="Instances" value={instances.length} detail={`${runtime.surfaces.length} surfaces`} />
-              <StatCard label="Remote Queue" value={runtime.pendingRemoteTurns.length} detail={`${runtime.activeRemoteTurns.length} active turns`} />
-              <StatCard label="Gateways" value={gatewayRows.length} detail={`${apps.length} configured apps`} />
-            </StatGrid>
-            <DefinitionList
-              items={[
-                { label: "Config Path", value: bootstrap.config.path },
-                { label: "Admin URL", value: bootstrap.admin.url },
-                { label: "Admin Listen", value: `${bootstrap.admin.listenHost}:${bootstrap.admin.listenPort}` },
-                { label: "Relay Listen", value: `${bootstrap.relay.listenHost}:${bootstrap.relay.listenPort}` },
-                { label: "Session Scope", value: bootstrap.session.scope || "unknown" },
-                { label: "Session Access", value: bootstrap.session.trustedLoopback ? <StatusBadge value="trusted loopback" tone="good" /> : <StatusBadge value="session cookie" tone="neutral" /> },
-              ]}
-            />
-            <div className="wizard-progress">
-              {gatewayRows.map((gateway) => (
-                <div key={gateway.gatewayId} className="wizard-step">
-                  <StatusBadge value={gateway.state} tone={statusTone(gateway.state)} />
-                  <div>
-                    <strong>{gateway.name || gateway.gatewayId}</strong>
-                    <p>{gateway.lastError || (gateway.lastConnectedAt ? `最近连接于 ${formatDateTime(gateway.lastConnectedAt)}` : "当前没有额外错误。")}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {notice ? <div className={`notice-banner ${notice.tone}`}>{notice.message}</div> : null}
-          </Panel>
-
-          <Panel
-            id="feishu"
-            title="飞书 App 管理"
-            description="这里沿用 setup 的多 App 模型，但更偏运行管理：编辑凭证、verify、reconnect、enable/disable 和查看 wizard 进度。"
-            actions={
-              <button className="secondary-button" type="button" onClick={beginNewApp} disabled={busyAction !== ""}>
-                新建 App
-              </button>
-            }
-          >
-            <div className="setup-two-column">
-              <div className="app-list-grid">
-                {apps.map((app) => (
-                  <button key={app.id} type="button" className={`app-card${selectedAppID === app.id ? " selected" : ""}`} onClick={() => selectApp(app)}>
-                    <div className="app-card-head">
-                      <strong>{app.name || app.id}</strong>
-                      <StatusBadge value={app.status?.state || (app.enabled ? "configured" : "disabled")} tone={statusTone(app.status?.state)} />
-                    </div>
-                    <p>{app.id}</p>
-                    <div className="app-card-flags">
-                      <StatusBadge value={app.enabled ? "enabled" : "disabled"} tone={app.enabled ? "good" : "warn"} />
-                      <StatusBadge value={app.wizard?.connectionVerifiedAt ? "verified" : "unverified"} tone={app.wizard?.connectionVerifiedAt ? "good" : "warn"} />
-                    </div>
-                  </button>
-                ))}
-                <button type="button" className={`app-card app-card-create${selectedAppID === newAppID ? " selected" : ""}`} onClick={beginNewApp}>
-                  <strong>创建新 App</strong>
-                  <p>继续向未来多机器人并行在线的模型扩展。</p>
-                </button>
-              </div>
-
-              <div className="wizard-editor">
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Gateway ID</span>
-                    <input value={draft.id} placeholder="main-bot" disabled={!draft.isNew} onChange={(event) => setDraft((current) => ({ ...current, id: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>显示名称</span>
-                    <input value={draft.name} placeholder="Main Bot" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>App ID</span>
-                    <input value={draft.appId} placeholder="cli_xxx" onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>App Secret</span>
-                    <input type="password" value={draft.appSecret} placeholder={activeApp?.hasSecret ? "留空表示保留现有 secret" : "secret_xxx"} onChange={(event) => setDraft((current) => ({ ...current, appSecret: event.target.value }))} />
-                  </label>
-                </div>
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-                  <span>启用这个飞书 App</span>
-                </label>
-                <div className="button-row">
-                  <button className="primary-button" type="button" onClick={() => void saveApp()} disabled={busyAction !== ""}>
-                    {draft.isNew ? "创建 App" : "保存更改"}
-                  </button>
-                  <button className="secondary-button" type="button" onClick={() => void verifyApp()} disabled={!activeApp || busyAction !== ""}>
-                    验证长连接
-                  </button>
-                  <button className="secondary-button" type="button" onClick={() => void reconnectApp()} disabled={!activeApp || busyAction !== ""}>
-                    热重连
-                  </button>
-                  <button className="ghost-button" type="button" onClick={() => void toggleAppEnabled(!activeApp?.enabled)} disabled={!activeApp || activeApp.readOnly || busyAction !== ""}>
-                    {activeApp?.enabled ? "停用" : "启用"}
-                  </button>
-                  <button className="danger-button" type="button" onClick={() => void deleteApp()} disabled={!activeApp || activeApp.readOnly || busyAction !== ""}>
-                    删除 App
-                  </button>
-                </div>
-
-                {activeApp ? (
-                  <>
-                    <div className="wizard-progress">
-                      {buildWizardRows(activeApp).map((item) => (
-                        <div key={item.label} className="wizard-step">
-                          <StatusBadge value={item.done ? "done" : "pending"} tone={item.done ? "good" : "warn"} />
-                          <div>
-                            <strong>{item.label}</strong>
-                            <p>{item.timestamp ? formatDateTime(item.timestamp) : "尚未记录"}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {activeApp.readOnly ? <div className="notice-banner warn">{activeApp.readOnlyReason || "当前 App 由运行时环境变量接管，不能从管理页修改。"}</div> : null}
-                  </>
-                ) : null}
-
-                <div className="manifest-block">
-                  <h4>当前 Scopes JSON</h4>
-                  <textarea className="code-textarea" readOnly value={scopesJSON} />
-                </div>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel id="instances" title="实例管理" description="这里不复用飞书 `/newinstance` 的交互语义，直接走后台 managed headless instance 模型。">
-            <div className="form-grid">
-              <label className="field">
-                <span>Workspace Root</span>
-                <input value={workspaceRoot} placeholder="/data/dl/project" onChange={(event) => setWorkspaceRoot(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>显示名称</span>
-                <input value={displayName} placeholder="Alpha" onChange={(event) => setDisplayName(event.target.value)} />
-              </label>
-            </div>
-            <div className="button-row">
-              <button className="primary-button" type="button" onClick={() => void createInstance()} disabled={busyAction !== ""}>
-                新建 Managed Instance
-              </button>
-            </div>
-            <div className="app-list-grid">
-              {instances.map((instance) => (
-                <div key={instance.instanceId} className="app-card">
-                  <div className="app-card-head">
-                    <strong>{instance.displayName || instance.instanceId}</strong>
-                    <StatusBadge value={instance.status} tone={instance.online ? "good" : instance.status === "error" ? "danger" : "neutral"} />
-                  </div>
-                  <p>{instance.workspaceRoot || "workspace unknown"}</p>
-                  <div className="app-card-flags">
-                    <StatusBadge value={instance.source || "unknown"} tone="neutral" />
-                    {instance.pid ? <StatusBadge value={`pid ${instance.pid}`} tone="neutral" /> : null}
-                    {instance.managed ? <StatusBadge value="managed" tone="good" /> : null}
-                  </div>
-                  {instance.lastError ? <p>{instance.lastError}</p> : null}
-                  {instance.managed && instance.source === "headless" ? (
-                    <div className="button-row">
-                      <button className="danger-button" type="button" onClick={() => void deleteInstance(instance.instanceId, instance.displayName || instance.instanceId)} disabled={busyAction !== ""}>
-                        删除实例
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel id="storage" title="存储管理" description="图片暂存和 Markdown 预览飞书云盘分开管理；preview cleanup 会让旧消息里的预览链接失效。">
-            <div className="checklist-grid">
-              <div className="checklist-column">
-                <div className="manifest-block">
-                  <h4>图片暂存区</h4>
-                  <DefinitionList
-                    items={[
-                      { label: "Root Dir", value: imageStaging.rootDir || "not configured" },
-                      { label: "Files", value: imageStaging.fileCount },
-                      { label: "Total", value: formatBytes(imageStaging.totalBytes) },
-                      { label: "Active Files", value: imageStaging.activeFileCount },
-                      { label: "Active Bytes", value: formatBytes(imageStaging.activeBytes) },
-                    ]}
-                  />
-                  <div className="button-row">
-                    <button className="secondary-button" type="button" onClick={() => void cleanupImageStaging()} disabled={busyAction !== ""}>
-                      删除一天前未引用文件
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="checklist-column">
-                {apps.map((app) => {
-                  const preview = previews[app.id];
-                  return (
-                    <div key={app.id} className="manifest-block">
-                      <h4>{app.name || app.id} 预览云盘</h4>
-                      {preview ? (
-                        <>
-                          <DefinitionList
-                            items={[
-                              { label: "Root URL", value: preview.summary.rootURL || "not created" },
-                              { label: "Files", value: preview.summary.fileCount },
-                              { label: "Scopes", value: preview.summary.scopeCount },
-                              { label: "Estimated", value: formatBytes(preview.summary.estimatedBytes) },
-                              { label: "Last Used", value: preview.summary.newestLastUsedAt ? formatDateTime(preview.summary.newestLastUsedAt) : "unknown" },
-                            ]}
-                          />
-                          <div className="button-row">
-                            <button className="secondary-button" type="button" onClick={() => void cleanupPreview(app.id)} disabled={busyAction !== ""}>
-                              清理一天前预览
-                            </button>
-                            <button className="ghost-button" type="button" onClick={() => void reconcilePreview(app.id)} disabled={busyAction !== ""}>
-                              对账 / Reconcile
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="inline-note">
-                          <StatusBadge value="Unavailable" tone="warn" />
-                          <span>当前没有拿到这个 App 的 preview drive 摘要。</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Panel>
-
-          <Panel id="vscode" title="VS Code 集成" description="这里重点关注推荐模式、当前模式以及 shim 是否跟上最新扩展 bundle。">
-            {vscodeError ? <div className="notice-banner warn">VS Code 检测暂时不可用：{vscodeError}</div> : null}
-            <StatGrid>
-              <StatCard label="Recommended" value={vscode?.recommendedMode || "unavailable"} tone="accent" detail={vscode?.sshSession ? "ssh session" : "local session"} />
-              <StatCard label="Current Mode" value={vscode?.currentMode || "unknown"} detail={vscode?.currentBinary || "unavailable"} />
-              <StatCard label="Settings" value={vscode?.settings.matchesBinary ? "ready" : "pending"} detail={vscode?.settings.path || "unavailable"} />
-              <StatCard label="Managed Shim" value={vscode?.latestShim.matchesBinary ? "ready" : "pending"} detail={vscode?.latestBundleEntrypoint || "bundle not detected"} />
-            </StatGrid>
-            <div className="button-row">
-              <button className="primary-button" type="button" onClick={() => void applyVSCode(vscode?.recommendedMode || "all")} disabled={!vscode || busyAction !== ""}>
-                应用推荐模式
-              </button>
-              <button className="secondary-button" type="button" onClick={() => void applyVSCode("editor_settings")} disabled={!vscode || busyAction !== ""}>
-                写入 settings.json
-              </button>
-              <button className="secondary-button" type="button" onClick={() => void applyVSCode("managed_shim")} disabled={!vscode || busyAction !== ""}>
-                安装 managed shim
-              </button>
-              <button className="ghost-button" type="button" onClick={() => void reinstallShim()} disabled={!vscode?.needsShimReinstall || busyAction !== ""}>
-                重新安装 shim
-              </button>
-            </div>
-            <DefinitionList
-              items={[
-                { label: "Current Binary", value: vscode?.currentBinary || "unavailable" },
-                { label: "Install State Path", value: vscode?.installStatePath || "unavailable" },
-                { label: "Latest Bundle", value: vscode?.latestBundleEntrypoint || "not detected" },
-                { label: "Recorded Bundle", value: vscode?.recordedBundleEntrypoint || "not recorded" },
-                { label: "Needs Reinstall", value: vscode?.needsShimReinstall ? "yes" : "no" },
-                { label: "Readiness", value: vscodeReadinessText(vscode) },
-              ]}
-            />
-          </Panel>
+          <AdminOverviewPanel bootstrap={bootstrap} runtime={runtime} apps={apps} instances={instances} gatewayRows={gatewayRows} notice={notice} />
+          <AdminFeishuPanel
+            apps={apps}
+            selectedAppID={selectedAppID}
+            draft={draft}
+            activeApp={activeApp}
+            scopesJSON={scopesJSON}
+            busyAction={busyAction}
+            onBeginNewApp={beginNewApp}
+            onSelectApp={selectApp}
+            onDraftChange={setDraft}
+            onSaveApp={() => void saveApp()}
+            onVerifyApp={() => void verifyApp()}
+            onReconnectApp={() => void reconnectApp()}
+            onToggleAppEnabled={(enabled) => void toggleAppEnabled(enabled)}
+            onDeleteApp={() => void deleteApp()}
+          />
+          <AdminInstancesPanel
+            workspaceRoot={workspaceRoot}
+            displayName={displayName}
+            instances={instances}
+            busyAction={busyAction}
+            onWorkspaceRootChange={setWorkspaceRoot}
+            onDisplayNameChange={setDisplayName}
+            onCreateInstance={() => void createInstance()}
+            onDeleteInstance={(instanceID, display) => void deleteInstance(instanceID, display)}
+          />
+          <AdminStoragePanel
+            apps={apps}
+            imageStaging={imageStaging}
+            previews={previews}
+            busyAction={busyAction}
+            onCleanupImageStaging={() => void cleanupImageStaging()}
+            onCleanupPreview={(gatewayID) => void cleanupPreview(gatewayID)}
+            onReconcilePreview={(gatewayID) => void reconcilePreview(gatewayID)}
+          />
+          <AdminVSCodePanel
+            vscode={vscode}
+            vscodeError={vscodeError}
+            busyAction={busyAction}
+            readinessText={vscodeReadinessText(vscode)}
+            onApplyVSCode={(mode) => void applyVSCode(mode)}
+            onReinstallShim={() => void reinstallShim()}
+          />
         </>
       ) : null}
     </ShellFrame>
   );
-}
-
-function appToDraft(app: FeishuAppSummary): AppDraft {
-  return {
-    isNew: false,
-    id: app.id,
-    name: app.name || "",
-    appId: app.appId || "",
-    appSecret: "",
-    enabled: app.enabled,
-  };
-}
-
-function syncDraftSelection(
-  apps: FeishuAppSummary[],
-  preferredID: string,
-  setSelectedID: (value: string) => void,
-  setDraft: (value: AppDraft) => void,
-) {
-  const preferredApp = apps.find((app) => app.id === preferredID);
-  if (preferredApp) {
-    setSelectedID(preferredApp.id);
-    setDraft(appToDraft(preferredApp));
-    return;
-  }
-  if (apps.length > 0) {
-    setSelectedID(apps[0].id);
-    setDraft(appToDraft(apps[0]));
-    return;
-  }
-  setSelectedID(newAppID);
-  setDraft(emptyDraft());
-}
-
-function blankToUndefined(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetectResponse | null; error: string }> {
-  try {
-    return {
-      data: await requestJSON<VSCodeDetectResponse>(path),
-      error: "",
-    };
-  } catch (err: unknown) {
-    return {
-      data: null,
-      error: formatError(err),
-    };
-  }
-}
-
-function buildWizardRows(app: FeishuAppSummary) {
-  return [
-    { label: "凭证已保存", done: Boolean(app.wizard?.credentialsSavedAt), timestamp: app.wizard?.credentialsSavedAt },
-    { label: "连接已验证", done: Boolean(app.wizard?.connectionVerifiedAt), timestamp: app.wizard?.connectionVerifiedAt },
-    { label: "Scopes 已导出", done: Boolean(app.wizard?.scopesExportedAt), timestamp: app.wizard?.scopesExportedAt },
-    { label: "事件已确认", done: Boolean(app.wizard?.eventsConfirmedAt), timestamp: app.wizard?.eventsConfirmedAt },
-    { label: "回调长连接已确认", done: Boolean(app.wizard?.callbacksConfirmedAt), timestamp: app.wizard?.callbacksConfirmedAt },
-    { label: "菜单已确认", done: Boolean(app.wizard?.menusConfirmedAt), timestamp: app.wizard?.menusConfirmedAt },
-    { label: "机器人已发布", done: Boolean(app.wizard?.publishedAt), timestamp: app.wizard?.publishedAt },
-  ];
-}
-
-function statusTone(state?: string): "neutral" | "good" | "warn" | "danger" {
-  switch (state) {
-    case "connected":
-      return "good";
-    case "connecting":
-    case "degraded":
-      return "warn";
-    case "auth_failed":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function formatBytes(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) {
-    return "0 B";
-  }
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let current = value;
-  let unitIndex = 0;
-  while (current >= 1024 && unitIndex < units.length - 1) {
-    current /= 1024;
-    unitIndex += 1;
-  }
-  return `${current.toFixed(current >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  if (vscode.recommendedMode === "managed_shim") {
-    return vscode.latestShim.matchesBinary;
-  }
-  if (vscode.recommendedMode === "all") {
-    return vscode.settings.matchesBinary && vscode.latestShim.matchesBinary;
-  }
-  return vscode.settings.matchesBinary;
-}
-
-function vscodeReadinessText(vscode: VSCodeDetectResponse | null): string {
-  if (!vscode) {
-    return "尚未检测";
-  }
-  if (vscodeIsReady(vscode)) {
-    return "当前推荐模式已就绪。";
-  }
-  if (vscode.recommendedMode === "managed_shim" && !vscode.latestBundleEntrypoint) {
-    return "还没有检测到可替换的 VS Code 扩展 bundle。";
-  }
-  if (vscode.recommendedMode === "all" && !vscode.latestBundleEntrypoint) {
-    return "当前推荐的是 all，但还没有检测到可替换的 VS Code 扩展 bundle。";
-  }
-  if (vscode.needsShimReinstall) {
-    return "检测到扩展已升级，建议重新安装 shim。";
-  }
-  if (vscode.recommendedMode === "all") {
-    return "当前模式还没有同时覆盖 settings.json 和最新的 managed shim。";
-  }
-  return "当前模式还没有指向最新的 wrapper binary。";
 }
