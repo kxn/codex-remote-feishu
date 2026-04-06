@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -66,7 +67,12 @@ func RunMain(ctx context.Context, version string) error {
 	}
 	defer os.Remove(paths.IdentityFile)
 
-	app := New(":"+cfg.RelayPort, ":"+cfg.RelayAPIPort, gateway, identity)
+	app := New(
+		net.JoinHostPort(cfg.RelayHost, cfg.RelayPort),
+		net.JoinHostPort(cfg.RelayAPIHost, cfg.RelayAPIPort),
+		gateway,
+		identity,
+	)
 	baseEnv := config.FilterEnvWithoutProxy(os.Environ())
 	baseEnv = append(baseEnv, capturedProxyEnv...)
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{

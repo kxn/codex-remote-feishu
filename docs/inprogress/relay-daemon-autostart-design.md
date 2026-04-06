@@ -437,7 +437,7 @@ wrapper 启动 daemon 时：
 - `stdin` 指向 `os.DevNull`
 - `stdout/stderr` 重定向到统一 log
 - 创建独立 session / detached process
-- 传入 `CODEX_REMOTE_CONFIG=<统一 config.env>`
+- 传入 `CODEX_REMOTE_CONFIG=<统一 config.json>`
 
 这里有一个必须满足的实现细节：
 

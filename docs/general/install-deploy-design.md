@@ -61,7 +61,7 @@
 
 职责：
 
-- 写统一配置 `config.env`
+- 写统一配置 `config.json`
 - 保留已有飞书凭证
 - 安装或复制二进制到稳定目录
 - patch `settings.json`
@@ -95,7 +95,7 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 当前 runtime 仍使用统一布局：
 
 ```text
-<baseDir>/.config/codex-remote/config.env
+<baseDir>/.config/codex-remote/config.json
 <baseDir>/.local/share/codex-remote/install-state.json
 <baseDir>/.local/share/codex-remote/logs/codex-remote-relayd.log
 <baseDir>/.local/state/codex-remote/codex-remote-relayd.pid
@@ -132,7 +132,7 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 
 1. 原始 `codex` 重命名为 `codex.real` 或 `codex.real.exe`
 2. 把统一二进制 `codex-remote` 复制到原始 `codex` 路径
-3. `config.env` 的 `CODEX_REAL_BINARY` 自动指向保留的 `codex.real`
+3. `config.json` 的 `wrapper.codexRealBinary` 自动指向保留的 `codex.real`
 
 适用：
 
@@ -147,27 +147,31 @@ Linux 仓库内运维脚本，不是跨平台产品入口。
 
 ## 5. 配置内容
 
-### 5.1 `config.env`
+### 5.1 `config.json`
 
 安装器统一写入：
 
-- `RELAY_SERVER_URL`
-- `CODEX_REAL_BINARY`
-- `CODEX_REMOTE_WRAPPER_NAME_MODE`
-- `CODEX_REMOTE_WRAPPER_INTEGRATION_MODE`
-- `RELAY_PORT`
-- `RELAY_API_PORT`
-- `FEISHU_APP_ID`
-- `FEISHU_APP_SECRET`
-- `FEISHU_USE_SYSTEM_PROXY`
+- `relay.serverURL`
+- `relay.listenHost`
+- `relay.listenPort`
+- `admin.listenHost`
+- `admin.listenPort`
+- `wrapper.codexRealBinary`
+- `wrapper.nameMode`
+- `wrapper.integrationMode`
+- `feishu.useSystemProxy`
+- `feishu.apps[0].appId`
+- `feishu.apps[0].appSecret`
 
 规则：
 
 - wrapper role 和 daemon role 从同一个文件里各取所需
-- 如果启用了 `managed_shim` 且未显式给 `CODEX_REAL_BINARY`
+- 如果启用了 `managed_shim` 且未显式给 `wrapper.codexRealBinary`
 - 则自动使用 bundle 内保留下来的 `codex.real`
 - 如果这次安装没有显式传新的飞书凭证
 - 会保留已有值，不做清空
+- 如果当前机器还只有 legacy `config.env` / `wrapper.env` / `services.env`
+- 启动时会自动迁移到 `config.json` 并备份旧文件
 
 ### 5.2 `install-state.json`
 

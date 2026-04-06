@@ -152,7 +152,7 @@ bash scripts/check/smoke-install-release.sh
 
 当前配置路径仍沿用统一布局：
 
-- `<baseDir>/.config/codex-remote/config.env`
+- `<baseDir>/.config/codex-remote/config.json`
 - `<baseDir>/.local/share/codex-remote`
 
 这是当前 runtime config lookup 的约束，不要随意只改安装器而不改运行时读取逻辑。

@@ -95,7 +95,7 @@ Windows PowerShell:
 - 询问飞书 `App ID` / `App Secret`
 - 询问 relay 地址
 - 让你选择 VS Code 集成方式
-- 自动写入统一配置 `config.env` 和 `install-state.json`
+- 自动写入统一配置 `config.json` 和 `install-state.json`
 
 默认集成方式：
 
@@ -145,9 +145,11 @@ Windows PowerShell:
 
 默认会写入：
 
-- `~/.config/codex-remote/config.env`
+- `~/.config/codex-remote/config.json`
 - `~/.local/share/codex-remote/install-state.json`
 - `~/.local/share/codex-remote/logs/codex-remote-relayd.log`
+
+如果本机还只有旧的 `config.env` / `wrapper.env` / `services.env`，启动时会自动迁移到 `config.json`，并把旧文件备份成 `*.migrated-<timestamp>.bak`。
 
 ## Docker 部署
 
@@ -221,7 +223,7 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 1. `./install.sh status`
 2. `curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .`
-3. `config.env` 里的 `RELAY_SERVER_URL`、`CODEX_REAL_BINARY`、飞书凭证和端口
+3. `config.json` 里的 `relay.serverURL`、`wrapper.codexRealBinary`、飞书凭证和监听地址
 5. VS Code 是否真的已经通过 wrapper 启动 Codex
 6. `codex-remote-relayd.log`
 

@@ -106,6 +106,7 @@ func withDefaults(opts Options) Options {
 
 func usageText() string {
 	return `Usage:
+  codex-remote
   codex-remote daemon
   codex-remote install [flags]
   codex-remote app-server [codex app-server args...]
@@ -114,6 +115,7 @@ func usageText() string {
   codex-remote help
 
 Notes:
+  - no arguments defaults to daemon mode
   - wrapper role only supports Codex app-server mode
   - unknown top-level commands do not fall through to wrapper
 `

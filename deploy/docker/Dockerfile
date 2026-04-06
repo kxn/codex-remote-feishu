@@ -16,7 +16,9 @@ WORKDIR /app
 
 COPY --from=build /out/codex-remote /usr/local/bin/codex-remote
 
-ENV RELAY_PORT=9500 \
+ENV RELAY_HOST=0.0.0.0 \
+    RELAY_PORT=9500 \
+    RELAY_API_HOST=0.0.0.0 \
     RELAY_API_PORT=9501 \
     FEISHU_USE_SYSTEM_PROXY=false
 

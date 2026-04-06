@@ -72,14 +72,16 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 	integrations = normalizeIntegrations(integrations)
 
-	configPath := filepath.Join(configDir, "config.env")
+	configPath := filepath.Join(configDir, "config.json")
+	legacyConfigPath := filepath.Join(configDir, "config.env")
 	legacyWrapperConfigPath := filepath.Join(configDir, "wrapper.env")
 	legacyServicesConfigPath := filepath.Join(configDir, "services.env")
 	statePath := filepath.Join(stateDir, "install-state.json")
-	existingValues, err := loadExistingConfigValues(configPath, legacyWrapperConfigPath, legacyServicesConfigPath)
+	existing, err := config.LoadAppConfigAtPath(configPath, legacyConfigPath, legacyWrapperConfigPath, legacyServicesConfigPath)
 	if err != nil {
 		return InstallState{}, err
 	}
+	cfg := existing.Config
 
 	codexRealBinary := opts.CodexRealBinary
 	if codexRealBinary == "" && hasIntegration(integrations, IntegrationManagedShim) && opts.BundleEntrypoint != "" {
@@ -89,23 +91,16 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		installedBinary = sourceBinary
 	}
 
-	if err := config.WriteEnvFile(configPath, map[string]string{
-		"RELAY_SERVER_URL":                      opts.RelayServerURL,
-		"CODEX_REAL_BINARY":                     codexRealBinary,
-		"CODEX_REMOTE_WRAPPER_NAME_MODE":        "workspace_basename",
-		"CODEX_REMOTE_WRAPPER_INTEGRATION_MODE": integrationsConfigValue(integrations),
-		"RELAY_PORT":                            "9500",
-		"RELAY_API_PORT":                        "9501",
-		"FEISHU_APP_ID":                         choosePreservedValue(opts.FeishuAppID, existingValues["FEISHU_APP_ID"]),
-		"FEISHU_APP_SECRET":                     choosePreservedValue(opts.FeishuAppSecret, existingValues["FEISHU_APP_SECRET"]),
-		"FEISHU_USE_SYSTEM_PROXY":               boolString(opts.UseSystemProxy),
-		config.DebugRelayFlowEnv:                choosePreservedValue("", existingValues[config.DebugRelayFlowEnv]),
-		config.DebugRelayRawEnv:                 choosePreservedValue("", existingValues[config.DebugRelayRawEnv]),
-	}); err != nil {
+	cfg.Relay.ServerURL = firstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
+	cfg.Wrapper.CodexRealBinary = choosePreservedValue(codexRealBinary, cfg.Wrapper.CodexRealBinary)
+	cfg.Wrapper.NameMode = firstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
+	cfg.Wrapper.IntegrationMode = integrationsConfigValue(integrations)
+	cfg.Feishu.UseSystemProxy = opts.UseSystemProxy
+	cfg.Feishu.Apps = mergePrimaryFeishuApp(cfg.Feishu.Apps, opts.FeishuAppID, opts.FeishuAppSecret)
+
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		return InstallState{}, err
 	}
-	cleanupLegacyConfigPath(legacyWrapperConfigPath, configPath)
-	cleanupLegacyConfigPath(legacyServicesConfigPath, configPath)
 
 	if hasIntegration(integrations, IntegrationEditorSettings) && opts.VSCodeSettingsPath != "" {
 		if err := editor.PatchVSCodeSettings(opts.VSCodeSettingsPath, installedBinary); err != nil {
@@ -223,34 +218,53 @@ func resolveBinaryPath(opts Options) (string, error) {
 	return "", fmt.Errorf("binary path is required")
 }
 
-func loadExistingConfigValues(configPath, legacyWrapperConfigPath, legacyServicesConfigPath string) (map[string]string, error) {
-	if values, err := config.LoadEnvFile(configPath); err == nil {
-		return values, nil
-	} else if !os.IsNotExist(err) {
-		return nil, err
+func mergePrimaryFeishuApp(apps []config.FeishuAppConfig, incomingAppID, incomingSecret string) []config.FeishuAppConfig {
+	if len(apps) == 0 && strings.TrimSpace(incomingAppID) == "" && strings.TrimSpace(incomingSecret) == "" {
+		return nil
 	}
 
-	merged := map[string]string{}
-	for _, path := range []string{legacyWrapperConfigPath, legacyServicesConfigPath} {
-		values, err := config.LoadEnvFile(path)
-		if err == nil {
-			for key, value := range values {
-				merged[key] = value
-			}
-			continue
-		}
-		if !os.IsNotExist(err) {
-			return nil, err
+	merged := append([]config.FeishuAppConfig(nil), apps...)
+	index := 0
+	for i, app := range merged {
+		if app.Enabled == nil || *app.Enabled {
+			index = i
+			break
 		}
 	}
-	return merged, nil
+	if len(merged) == 0 {
+		merged = append(merged, config.FeishuAppConfig{
+			ID:      "legacy-default",
+			Name:    "Legacy Default",
+			Enabled: boolPtr(true),
+		})
+		index = 0
+	}
+
+	app := merged[index]
+	if strings.TrimSpace(app.ID) == "" {
+		app.ID = "legacy-default"
+	}
+	if strings.TrimSpace(app.Name) == "" {
+		app.Name = "Legacy Default"
+	}
+	if app.Enabled == nil {
+		app.Enabled = boolPtr(true)
+	}
+	app.AppID = choosePreservedValue(incomingAppID, app.AppID)
+	app.AppSecret = choosePreservedValue(incomingSecret, app.AppSecret)
+	merged[index] = app
+	return merged
 }
 
-func cleanupLegacyConfigPath(path, unifiedPath string) {
-	if strings.TrimSpace(path) == "" || samePath(path, unifiedPath) {
-		return
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return
-	}
+	return ""
 }

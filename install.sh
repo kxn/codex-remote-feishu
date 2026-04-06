@@ -15,7 +15,7 @@ STATE_DIR="${XDG_DATA_HOME}/codex-remote"
 RUN_DIR="${XDG_STATE_HOME}/codex-remote"
 LOG_DIR="${STATE_DIR}/logs"
 
-CONFIG_FILE="${CONFIG_DIR}/config.env"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
 PID_FILE="${RUN_DIR}/codex-remote-relayd.pid"
 RUNTIME_LOCK_FILE="${RUN_DIR}/relayd.lock"
 LOG_FILE="${LOG_DIR}/codex-remote-relayd.log"

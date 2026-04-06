@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-06`
-> Summary: 建立文档生命周期分类、目录结构和统一元信息头规范。
+> Summary: 新增 Web 安装管理前置改造文档，并补充多 App 在线与 JSON 配置方向。
 
 ## 1. 适用范围
 
@@ -132,6 +132,8 @@
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
+- [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
+- [web-install-admin-ui-design.md](./draft/web-install-admin-ui-design.md)
 
 ### 6.5 `obsoleted`
 

@@ -584,7 +584,7 @@ func TestDaemonStartsHeadlessAndPromptsForResumeAfterRefresh(t *testing.T) {
 	stateDir := t.TempDir()
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
-		ConfigPath: "/tmp/config.env",
+		ConfigPath: "/tmp/config.json",
 		BaseEnv:    []string{"PATH=/usr/bin"},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),

@@ -26,7 +26,7 @@
 从当前代码看，三个 `cmd/*` 已经都非常薄：
 
 - [cmd/relayd/main.go](../../cmd/relayd/main.go)
-  - 只负责加载统一 `config.env` 中 daemon 关心的键
+  - 只负责加载统一 `config.json` 中 daemon 关心的键
   - 创建 Feishu gateway
   - 装配 `internal/app/daemon`
 - [cmd/relay-wrapper/main.go](../../cmd/relay-wrapper/main.go)
@@ -296,11 +296,11 @@ launcher
 其中：
 
 - `daemon entry`
-  - 负责加载统一 `config.env` 中 daemon 关心的键
+  - 负责加载统一 `config.json` 中 daemon 关心的键
   - 负责初始化 gateway / relay server / status API
   - 接收外部传入的 `context.Context`
 - `wrapper entry`
-  - 负责加载统一 `config.env` 中 wrapper 关心的键
+  - 负责加载统一 `config.json` 中 wrapper 关心的键
   - 负责捕获并清理自身代理环境
   - 负责拉起 `codex.real`
   - 必须先校验 forwarded args 的第一个参数就是 `app-server`
@@ -354,7 +354,7 @@ wrapper 需要保留这个特殊语义，因为它本质上仍然是 `codex.real
 
 当前运行时已切到统一配置文件：
 
-- `config.env`
+- `config.json`
 
 其中同时包含：
 

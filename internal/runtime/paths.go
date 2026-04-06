@@ -40,7 +40,7 @@ func DefaultPaths() (Paths, error) {
 	stateDir := filepath.Join(stateHome, ProductName)
 	return Paths{
 		ConfigDir:        configDir,
-		ConfigFile:       filepath.Join(configDir, "config.env"),
+		ConfigFile:       filepath.Join(configDir, "config.json"),
 		DataDir:          dataDir,
 		LogsDir:          logsDir,
 		DaemonLogFile:    filepath.Join(logsDir, "codex-remote-relayd.log"),

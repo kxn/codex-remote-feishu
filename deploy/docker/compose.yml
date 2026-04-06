@@ -6,7 +6,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
     restart: unless-stopped
     environment:
+      RELAY_HOST: ${RELAY_HOST:-0.0.0.0}
       RELAY_PORT: ${RELAY_PORT:-9500}
+      RELAY_API_HOST: ${RELAY_API_HOST:-0.0.0.0}
       RELAY_API_PORT: ${RELAY_API_PORT:-9501}
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
       FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}

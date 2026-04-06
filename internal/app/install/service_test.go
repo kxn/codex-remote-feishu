@@ -34,26 +34,23 @@ func TestBootstrapWritesConfigsAndState(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	if state.ConfigPath != filepath.Join(baseDir, ".config", "codex-remote", "config.env") {
+	if state.ConfigPath != filepath.Join(baseDir, ".config", "codex-remote", "config.json") {
 		t.Fatalf("unexpected config path: %s", state.ConfigPath)
 	}
 	if state.WrapperConfigPath != state.ConfigPath || state.ServicesConfigPath != state.ConfigPath {
 		t.Fatalf("expected wrapper/services config paths to match unified config path")
 	}
 
-	wrapperRaw, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read wrapper config: %v", err)
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	if cfg.Relay.ServerURL != "ws://127.0.0.1:9500/ws/agent" {
+		t.Fatalf("unexpected relay server url: %s", cfg.Relay.ServerURL)
 	}
-	if !strings.Contains(string(wrapperRaw), "RELAY_SERVER_URL=ws://127.0.0.1:9500/ws/agent") {
-		t.Fatalf("unexpected wrapper config: %s", wrapperRaw)
+	if cfg.Wrapper.CodexRealBinary != "/usr/local/bin/codex" {
+		t.Fatalf("unexpected codex real binary: %s", cfg.Wrapper.CodexRealBinary)
 	}
-	if !strings.Contains(string(wrapperRaw), "CODEX_REAL_BINARY=/usr/local/bin/codex") {
-		t.Fatalf("unexpected wrapper config: %s", wrapperRaw)
-	}
-
-	if !strings.Contains(string(wrapperRaw), "FEISHU_APP_ID=cli_xxx") {
-		t.Fatalf("unexpected unified config: %s", wrapperRaw)
+	app := config.SelectRuntimeFeishuApp(cfg.Feishu.Apps)
+	if app.AppID != "cli_xxx" || app.AppSecret != "secret" {
+		t.Fatalf("unexpected feishu app: %#v", app)
 	}
 
 	settingsRaw, err := os.ReadFile(settingsPath)
@@ -116,12 +113,9 @@ func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
 		t.Fatalf("expected preserved real binary content, got %q", string(realRaw))
 	}
 
-	wrapperEnv, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read wrapper env: %v", err)
-	}
-	if !strings.Contains(string(wrapperEnv), "CODEX_REAL_BINARY="+editor.ManagedShimRealBinaryPath(entrypoint)) {
-		t.Fatalf("expected wrapper env to point to managed shim real binary, got %s", wrapperEnv)
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	if cfg.Wrapper.CodexRealBinary != editor.ManagedShimRealBinaryPath(entrypoint) {
+		t.Fatalf("expected config to point to managed shim real binary, got %s", cfg.Wrapper.CodexRealBinary)
 	}
 }
 
@@ -148,20 +142,15 @@ func TestBootstrapPreservesExistingFeishuSecretsWhenFlagsAreEmpty(t *testing.T) 
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	serviceRaw, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read services config: %v", err)
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	app := config.SelectRuntimeFeishuApp(cfg.Feishu.Apps)
+	if app.AppID != "cli_existing" {
+		t.Fatalf("expected app id to be preserved, got %#v", app)
 	}
-	text := string(serviceRaw)
-	if !strings.Contains(text, "FEISHU_APP_ID=cli_existing") {
-		t.Fatalf("expected app id to be preserved, got %s", text)
+	if app.AppSecret != "secret_existing" {
+		t.Fatalf("expected app secret to be preserved, got %#v", app)
 	}
-	if !strings.Contains(text, "FEISHU_APP_SECRET=secret_existing") {
-		t.Fatalf("expected app secret to be preserved, got %s", text)
-	}
-	if _, err := os.Stat(servicesPath); !os.IsNotExist(err) {
-		t.Fatalf("expected legacy services.env to be removed, got err=%v", err)
-	}
+	assertMigratedBackupExists(t, servicesPath)
 }
 
 func TestBootstrapPreservesExistingDebugRelayFlowFlag(t *testing.T) {
@@ -170,8 +159,10 @@ func TestBootstrapPreservesExistingDebugRelayFlowFlag(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
-	configPath := filepath.Join(configDir, "config.env")
-	if err := os.WriteFile(configPath, []byte(config.DebugRelayFlowEnv+"=true\n"), 0o600); err != nil {
+	configPath := filepath.Join(configDir, "config.json")
+	cfg := config.DefaultAppConfig()
+	cfg.Debug.RelayFlow = true
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("seed unified config: %v", err)
 	}
 
@@ -187,12 +178,9 @@ func TestBootstrapPreservesExistingDebugRelayFlowFlag(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	raw, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read unified config: %v", err)
-	}
-	if !strings.Contains(string(raw), config.DebugRelayFlowEnv+"=true") {
-		t.Fatalf("expected debug relay flow flag to be preserved, got %s", raw)
+	loaded := loadAppConfigForTest(t, state.ConfigPath)
+	if !loaded.Debug.RelayFlow {
+		t.Fatalf("expected debug relay flow flag to be preserved, got %#v", loaded.Debug)
 	}
 }
 
@@ -202,8 +190,10 @@ func TestBootstrapPreservesExistingDebugRelayRawFlag(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
-	configPath := filepath.Join(configDir, "config.env")
-	if err := os.WriteFile(configPath, []byte(config.DebugRelayRawEnv+"=true\n"), 0o600); err != nil {
+	configPath := filepath.Join(configDir, "config.json")
+	cfg := config.DefaultAppConfig()
+	cfg.Debug.RelayRaw = true
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("seed unified config: %v", err)
 	}
 
@@ -219,12 +209,9 @@ func TestBootstrapPreservesExistingDebugRelayRawFlag(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	raw, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read unified config: %v", err)
-	}
-	if !strings.Contains(string(raw), config.DebugRelayRawEnv+"=true") {
-		t.Fatalf("expected debug relay raw flag to be preserved, got %s", raw)
+	loaded := loadAppConfigForTest(t, state.ConfigPath)
+	if !loaded.Debug.RelayRaw {
+		t.Fatalf("expected debug relay raw flag to be preserved, got %#v", loaded.Debug)
 	}
 }
 
@@ -288,20 +275,13 @@ func TestBootstrapMergesLegacySplitConfigFiles(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	raw, err := os.ReadFile(state.ConfigPath)
-	if err != nil {
-		t.Fatalf("read unified config: %v", err)
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	app := config.SelectRuntimeFeishuApp(cfg.Feishu.Apps)
+	if app.AppID != "cli_old" || app.AppSecret != "secret_old" {
+		t.Fatalf("expected legacy services values in unified config, got %#v", app)
 	}
-	text := string(raw)
-	if !strings.Contains(text, "FEISHU_APP_ID=cli_old") || !strings.Contains(text, "FEISHU_APP_SECRET=secret_old") {
-		t.Fatalf("expected legacy services values in unified config, got %s", text)
-	}
-	if _, err := os.Stat(wrapperPath); !os.IsNotExist(err) {
-		t.Fatalf("expected legacy wrapper.env to be removed, got err=%v", err)
-	}
-	if _, err := os.Stat(servicesPath); !os.IsNotExist(err) {
-		t.Fatalf("expected legacy services.env to be removed, got err=%v", err)
-	}
+	assertMigratedBackupExists(t, wrapperPath)
+	assertMigratedBackupExists(t, servicesPath)
 }
 
 func seedBinary(t *testing.T, path, content string) string {
@@ -313,4 +293,24 @@ func seedBinary(t *testing.T, path, content string) string {
 		t.Fatalf("write %s: %v", path, err)
 	}
 	return path
+}
+
+func loadAppConfigForTest(t *testing.T, path string) config.AppConfig {
+	t.Helper()
+	loaded, err := config.LoadAppConfigAtPath(path)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath(%s): %v", path, err)
+	}
+	return loaded.Config
+}
+
+func assertMigratedBackupExists(t *testing.T, legacyPath string) {
+	t.Helper()
+	backups, err := filepath.Glob(legacyPath + ".migrated-*.bak")
+	if err != nil {
+		t.Fatalf("glob backups for %s: %v", legacyPath, err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("expected one migrated backup for %s, got %v", legacyPath, backups)
+	}
 }

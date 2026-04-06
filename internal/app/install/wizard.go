@@ -35,7 +35,7 @@ func RunInteractiveWizard(in io.Reader, out io.Writer, defaults PlatformDefaults
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "这一步会完成：")
 	fmt.Fprintln(out, "- 安装 codex-remote 统一二进制到稳定路径")
-	fmt.Fprintln(out, "- 写入统一配置文件 config.env")
+	fmt.Fprintln(out, "- 写入统一配置文件 config.json")
 	fmt.Fprintln(out, "- 按你的选择接管 VS Code")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, integrationHelpText(defaults.GOOS))

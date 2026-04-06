@@ -42,9 +42,9 @@ func TestDetect(t *testing.T) {
 			want: Decision{Role: RoleVersion},
 		},
 		{
-			name:    "empty args rejected",
-			args:    nil,
-			wantErr: "missing role or app-server mode",
+			name: "empty args defaults to daemon",
+			args: nil,
+			want: Decision{Role: RoleDaemon},
 		},
 		{
 			name:    "resume rejected",
@@ -186,5 +186,34 @@ func TestMainReportsDaemonError(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "daemon error: boom") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestMainRunsDaemonForEmptyArgs(t *testing.T) {
+	ran := false
+	exitCode := Main(Options{
+		Args:   nil,
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Runners: RunnerSet{
+			RunDaemon: func(context.Context, string) error {
+				ran = true
+				return nil
+			},
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer) error {
+				t.Fatal("unexpected install run")
+				return nil
+			},
+			RunWrapper: func(context.Context, []string, io.Reader, io.Writer, io.Writer, string) (int, error) {
+				t.Fatal("unexpected wrapper run")
+				return 0, nil
+			},
+		},
+	})
+	if exitCode != 0 {
+		t.Fatalf("Main exitCode = %d, want 0", exitCode)
+	}
+	if !ran {
+		t.Fatal("expected daemon runner to be called")
 	}
 }

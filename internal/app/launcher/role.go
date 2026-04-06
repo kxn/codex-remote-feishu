@@ -19,7 +19,7 @@ type Decision struct {
 
 func Detect(args []string) (Decision, error) {
 	if len(args) == 0 {
-		return Decision{}, usageError("missing role or app-server mode")
+		return Decision{Role: RoleDaemon}, nil
 	}
 
 	switch args[0] {

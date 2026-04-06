@@ -20,7 +20,9 @@ type WrapperConfig struct {
 }
 
 type ServicesConfig struct {
+	RelayHost            string
 	RelayPort            string
+	RelayAPIHost         string
 	RelayAPIPort         string
 	FeishuAppID          string
 	FeishuAppSecret      string
@@ -66,10 +68,12 @@ func WriteEnvFile(path string, values map[string]string) error {
 	builder := strings.Builder{}
 	keys := []string{
 		"RELAY_SERVER_URL",
+		"RELAY_HOST",
 		"CODEX_REAL_BINARY",
 		"CODEX_REMOTE_WRAPPER_NAME_MODE",
 		"CODEX_REMOTE_WRAPPER_INTEGRATION_MODE",
 		"RELAY_PORT",
+		"RELAY_API_HOST",
 		"RELAY_API_PORT",
 		"FEISHU_APP_ID",
 		"FEISHU_APP_SECRET",
@@ -102,39 +106,41 @@ func WriteEnvFile(path string, values map[string]string) error {
 }
 
 func LoadWrapperConfig() (WrapperConfig, error) {
-	configPath, values, err := loadOptionalEnvChain(
-		xdgConfigPath("codex-remote", "config.env"),
-		os.Getenv(UnifiedConfigEnvPath),
-		os.Getenv("CODEX_REMOTE_WRAPPER_CONFIG"),
-		xdgConfigPath("codex-remote", "config.env"),
-		xdgConfigPath("codex-remote", "wrapper.env"),
-		filepath.Join(mustGetwd(), ".env"),
-	)
+	loaded, err := LoadAppConfig()
 	if err != nil {
 		return WrapperConfig{}, err
 	}
+	relayPort := chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)
 	cfg := WrapperConfig{
-		RelayServerURL:  chooseNonEmpty(os.Getenv("RELAY_SERVER_URL"), values["RELAY_SERVER_URL"], "ws://127.0.0.1:9500/ws/agent"),
-		CodexRealBinary: chooseNonEmpty(os.Getenv("CODEX_REAL_BINARY"), values["CODEX_REAL_BINARY"], "codex"),
+		RelayServerURL: chooseNonEmpty(
+			os.Getenv("RELAY_SERVER_URL"),
+			loaded.Config.Relay.ServerURL,
+			defaultRelayServerURL(relayPort),
+		),
+		CodexRealBinary: chooseNonEmpty(
+			os.Getenv("CODEX_REAL_BINARY"),
+			loaded.Config.Wrapper.CodexRealBinary,
+			"codex",
+		),
 		NameMode: chooseNonEmpty(
 			os.Getenv("CODEX_REMOTE_WRAPPER_NAME_MODE"),
-			values["CODEX_REMOTE_WRAPPER_NAME_MODE"],
+			loaded.Config.Wrapper.NameMode,
 			"workspace_basename",
 		),
 		IntegrationMode: chooseNonEmpty(
 			os.Getenv("CODEX_REMOTE_WRAPPER_INTEGRATION_MODE"),
-			values["CODEX_REMOTE_WRAPPER_INTEGRATION_MODE"],
+			loaded.Config.Wrapper.IntegrationMode,
 			"editor_settings",
 		),
-		ConfigPath: configPath,
+		ConfigPath: loaded.Path,
 		DebugRelayFlow: chooseBool(
 			os.Getenv(DebugRelayFlowEnv),
-			values[DebugRelayFlowEnv],
+			boolString(loaded.Config.Debug.RelayFlow),
 			false,
 		),
 		DebugRelayRaw: chooseBool(
 			os.Getenv(DebugRelayRawEnv),
-			values[DebugRelayRawEnv],
+			boolString(loaded.Config.Debug.RelayRaw),
 			false,
 		),
 	}
@@ -142,79 +148,42 @@ func LoadWrapperConfig() (WrapperConfig, error) {
 }
 
 func LoadServicesConfig() (ServicesConfig, error) {
-	configPath, values, err := loadOptionalEnvChain(
-		xdgConfigPath("codex-remote", "config.env"),
-		os.Getenv(UnifiedConfigEnvPath),
-		os.Getenv("CODEX_REMOTE_SERVICES_CONFIG"),
-		xdgConfigPath("codex-remote", "config.env"),
-		xdgConfigPath("codex-remote", "services.env"),
-		filepath.Join(mustGetwd(), ".env"),
-	)
+	loaded, err := LoadAppConfig()
 	if err != nil {
 		return ServicesConfig{}, err
 	}
+	selectedApp := SelectRuntimeFeishuApp(loaded.Config.Feishu.Apps)
 	cfg := ServicesConfig{
-		RelayPort:    chooseNonEmpty(os.Getenv("RELAY_PORT"), values["RELAY_PORT"], "9500"),
-		RelayAPIPort: chooseNonEmpty(os.Getenv("RELAY_API_PORT"), values["RELAY_API_PORT"], "9501"),
+		RelayHost:    chooseNonEmpty(os.Getenv("RELAY_HOST"), loaded.Config.Relay.ListenHost, defaultRelayListenHost),
+		RelayPort:    strconv.Itoa(chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)),
+		RelayAPIHost: chooseNonEmpty(os.Getenv("RELAY_API_HOST"), loaded.Config.Admin.ListenHost, defaultAdminListenHost),
+		RelayAPIPort: strconv.Itoa(chooseInt(os.Getenv("RELAY_API_PORT"), loaded.Config.Admin.ListenPort)),
 		FeishuAppID: chooseNonEmpty(
 			os.Getenv("FEISHU_APP_ID"),
-			values["FEISHU_APP_ID"],
+			selectedApp.AppID,
 		),
 		FeishuAppSecret: chooseNonEmpty(
 			os.Getenv("FEISHU_APP_SECRET"),
-			values["FEISHU_APP_SECRET"],
+			selectedApp.AppSecret,
 		),
 		FeishuUseSystemProxy: chooseBool(
 			os.Getenv("FEISHU_USE_SYSTEM_PROXY"),
-			values["FEISHU_USE_SYSTEM_PROXY"],
-			false,
+			boolString(loaded.Config.Feishu.UseSystemProxy),
+			loaded.Config.Feishu.UseSystemProxy,
 		),
-		ConfigPath: configPath,
+		ConfigPath: loaded.Path,
 		DebugRelayFlow: chooseBool(
 			os.Getenv(DebugRelayFlowEnv),
-			values[DebugRelayFlowEnv],
-			false,
+			boolString(loaded.Config.Debug.RelayFlow),
+			loaded.Config.Debug.RelayFlow,
 		),
 		DebugRelayRaw: chooseBool(
 			os.Getenv(DebugRelayRawEnv),
-			values[DebugRelayRawEnv],
-			false,
+			boolString(loaded.Config.Debug.RelayRaw),
+			loaded.Config.Debug.RelayRaw,
 		),
 	}
 	return cfg, nil
-}
-
-func loadOptionalEnv(path string) (map[string]string, error) {
-	if path == "" {
-		return map[string]string{}, nil
-	}
-	values, err := LoadEnvFile(path)
-	if err == nil {
-		return values, nil
-	}
-	if os.IsNotExist(err) {
-		return map[string]string{}, nil
-	}
-	return nil, err
-}
-
-func loadOptionalEnvChain(defaultPath string, candidates ...string) (string, map[string]string, error) {
-	seen := map[string]bool{}
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" || seen[candidate] {
-			continue
-		}
-		seen[candidate] = true
-		values, err := loadOptionalEnv(candidate)
-		if err != nil {
-			return "", nil, err
-		}
-		if len(values) > 0 || fileExists(candidate) {
-			return candidate, values, nil
-		}
-	}
-	return defaultPath, map[string]string{}, nil
 }
 
 func fileExists(path string) bool {
@@ -248,15 +217,6 @@ func mustGetwd() string {
 	return wd
 }
 
-func firstEnv(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func chooseNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -277,4 +237,11 @@ func chooseBool(primary, secondary string, fallback bool) bool {
 		}
 	}
 	return fallback
+}
+
+func boolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }

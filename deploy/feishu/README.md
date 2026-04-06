@@ -8,6 +8,7 @@
 2. 打开“添加能力”或“机器人”，确保机器人可接收文本和图片消息，并可发送文本、卡片与 reaction。
 3. 打开“事件与回调”，订阅：
    - `im.message.receive_v1`
+   - `im.message.recalled_v1`
    - `im.message.reaction.created_v1`
    - `application.bot.menu_v6`
    - `card.action.trigger`
@@ -54,15 +55,17 @@
 
 ### 2. 事件订阅
 
-当前实现依赖这 4 个事件：
+当前实现依赖这 5 个事件：
 
 - `im.message.receive_v1`
+- `im.message.recalled_v1`
 - `im.message.reaction.created_v1`
 - `application.bot.menu_v6`
 - `card.action.trigger`
 
 其中：
 
+- `im.message.recalled_v1` 负责撤回尚未发送的排队输入，或取消 staged image
 - `application.bot.menu_v6` 负责实例列表、状态、推理强度和执行权限快捷菜单
 - `card.action.trigger` 负责 selection prompt 和 approval request 两类卡片交互
 

@@ -169,7 +169,7 @@ Feishu 平台适配层，负责：
 
 安装器服务层，负责：
 
-- 写统一配置 `config.env`
+- 写统一配置 `config.json`
 - 写 `install-state.json`
 - patch editor settings 或 managed shim
 
