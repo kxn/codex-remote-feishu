@@ -165,3 +165,84 @@ export interface SetupCompleteResponse {
   adminURL: string;
   message: string;
 }
+
+export interface AdminInstancesResponse {
+  instances: AdminInstanceSummary[];
+}
+
+export interface AdminInstanceSummary {
+  instanceId: string;
+  displayName?: string;
+  workspaceRoot?: string;
+  source?: string;
+  managed: boolean;
+  online: boolean;
+  pid?: number;
+  status: string;
+  requestedAt?: string;
+  startedAt?: string;
+  idleSince?: string;
+  lastError?: string;
+}
+
+export interface ImageStagingStatusResponse {
+  rootDir: string;
+  fileCount: number;
+  totalBytes: number;
+  activeFileCount: number;
+  activeBytes: number;
+}
+
+export interface ImageStagingCleanupResponse {
+  rootDir: string;
+  olderThanHours: number;
+  deletedFiles: number;
+  deletedBytes: number;
+  skippedActiveCount: number;
+  remainingFileCount: number;
+  remainingBytes: number;
+}
+
+export interface PreviewDriveSummary {
+  statePath?: string;
+  rootToken?: string;
+  rootURL?: string;
+  fileCount: number;
+  scopeCount: number;
+  estimatedBytes: number;
+  unknownSizeFileCount: number;
+  oldestLastUsedAt?: string;
+  newestLastUsedAt?: string;
+}
+
+export interface PreviewDriveStatusResponse {
+  gatewayId: string;
+  name?: string;
+  summary: PreviewDriveSummary;
+}
+
+export interface PreviewDriveCleanupResponse {
+  gatewayId: string;
+  name?: string;
+  olderThanHours: number;
+  result: {
+    deletedFileCount: number;
+    deletedEstimatedBytes: number;
+    skippedUnknownLastUsedCount: number;
+    summary: PreviewDriveSummary;
+  };
+}
+
+export interface PreviewDriveReconcileResponse {
+  gatewayId: string;
+  name?: string;
+  result: {
+    summary: PreviewDriveSummary;
+    rootMissing: boolean;
+    remoteMissingScopeCount: number;
+    remoteMissingFileCount: number;
+    localOnlyScopeCount: number;
+    localOnlyFileCount: number;
+    permissionDriftCount: number;
+  };
+}
