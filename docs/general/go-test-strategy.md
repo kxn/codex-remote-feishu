@@ -1,5 +1,9 @@
 # Go 测试策略
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，测试策略内容未做实质改动。
+
 ## 1. 目标
 
 当前测试策略仍然是：

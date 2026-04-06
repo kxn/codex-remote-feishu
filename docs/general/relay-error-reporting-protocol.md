@@ -1,5 +1,9 @@
 # Relay Error Reporting Protocol
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，保留当前错误回传协议说明。
+
 ## Goal
 
 When any layer in the relay stack fails, Feishu should receive a visible debug card instead of silent timeout/log-only failure.

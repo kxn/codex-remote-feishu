@@ -1,5 +1,9 @@
 # 架构
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，内容未做实质改动。
+
 ## 1. 当前状态
 
 当前仓库只维护 Go 版本实现。

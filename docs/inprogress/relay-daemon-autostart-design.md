@@ -1,5 +1,9 @@
 # Relay Daemon Autostart Design
 
+> Type: `inprogress`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/inprogress` 并统一文档元信息头，保留待实现的 relay 自动拉起设计。
+
 ## 1. 背景
 
 当前 `relay-wrapper` 的行为是：

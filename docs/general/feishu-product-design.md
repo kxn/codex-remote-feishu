@@ -1,5 +1,9 @@
 # Feishu 产品设计
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，作为当前飞书产品行为基线。
+
 ## 1. 文档定位
 
 这份文档描述的是**当前 Go 版本实现中的 Feishu 产品层行为**。
@@ -19,7 +23,7 @@
 - P2P 会话：`feishu:user:<userId>`
 - 群聊/其他 chat：`feishu:chat:<chatId>`
 
-这个规则定义在 [gateway.go](../internal/adapter/feishu/gateway.go) 的 `surfaceIDForInbound()` 中。
+这个规则定义在 [gateway.go](../../internal/adapter/feishu/gateway.go) 的 `surfaceIDForInbound()` 中。
 
 ## 3. 当前支持的飞书入口
 
@@ -34,23 +38,28 @@
 - `/list`
 - `/status`
 - `/stop`
-- `/threads`
-- `/use`
+- `/threads` / `/use` / `/sessions`
+- `/useall` / `/sessionsall`
 - `/follow`
 - `/detach`
 - `/model`
-- `/reasoning`
+- `/reasoning` / `/effort`
+- `/access` / `/approval`
 
 ### 3.2 菜单事件
 
-当前支持的机器人菜单：
+当前代码支持的机器人菜单 key：
 
 - `list`
 - `status`
 - `stop`
-- `threads`
+- `threads` / `use` / `sessions` / `show_threads` / `show_sessions`
+- `threads_all` / `useall` / `sessions_all` / `show_all_threads` / `show_all_sessions`
+- `reasonlow` / `reasonmedium` / `reasonhigh` / `reasonxhigh`
+- `access_full` / `approval_full`
+- `access_confirm` / `approval_confirm`
 
-`/follow`、`/detach`、`/model`、`/reasoning` 当前仍是文本命令，不是菜单项。
+默认模板当前只预置其中常用的一组菜单项；其余 alias 属于兼容输入。
 
 ### 3.3 图片消息
 
@@ -71,6 +80,22 @@
 - `surface.message.reaction.created`
 
 当前**不处理** reaction deleted 事件。
+
+### 3.5 卡片回调
+
+当前支持两类卡片按钮：
+
+- selection prompt 选择
+- approval request 确认
+
+approval request 卡片当前按动态 option 渲染，常见选项包括：
+
+- `accept`
+- `acceptForSession`
+- `decline`
+- `captureFeedback`
+
+不再支持靠文本回复 `yes/no` 处理确认。
 
 ## 4. Attachment 与 thread 路由
 
@@ -167,6 +192,38 @@ attach 成功后：
 3. 丢弃未绑定到文本的 staged image
 4. 对被丢弃项加 `THUMBSDOWN`
 
+### 5.5 待确认请求优先级
+
+当前 surface 上只要存在 pending approval request：
+
+- 普通文本不会进入 queue，而是返回 notice，要求先处理卡片
+- 图片也不会进入 staged 队列，避免形成“当前 turn 等确认，后续消息又排在它后面”的死锁感
+- slash command 和 selection prompt 数字回复仍然照常处理
+
+### 5.6 `captureFeedback`
+
+当用户在 approval card 上点击“告诉 Codex 怎么改”后：
+
+- surface 进入一次性反馈捕获模式，默认有效期 10 分钟
+- 下一条普通文本不会按普通消息入队
+- 系统会先对当前 request 发送 `decline`
+- 再把这条文本作为 follow-up queue item 插入队列头部
+
+如果在这个模式下发送图片：
+
+- 返回提示，要求先发文字或重新处理卡片
+
+### 5.7 飞书侧执行权限覆盖
+
+飞书侧 prompt override 包含 `accessMode`。
+
+当前规则：
+
+- 默认有效执行权限是 `full access`
+- `/access confirm` 或菜单 `access_confirm` 会把之后飞书发出的消息切到确认模式
+- `/access full` 或菜单 `access_full` 会恢复为全放行
+- `/access clear` 会清除 surface override，并回到默认的 `full access`
+
 ## 6. 图片语义
 
 图片在当前实现中是**暂存**语义，不会单独触发 turn。
@@ -180,7 +237,7 @@ attach 成功后：
 
 ## 7. 飞书输出投影
 
-当前投影由 [projector.go](../internal/adapter/feishu/projector.go) 完成。
+当前投影由 [projector.go](../../internal/adapter/feishu/projector.go) 完成。
 
 ### 7.1 系统卡片
 
@@ -189,7 +246,31 @@ attach 成功后：
 - `snapshot.updated`
 - `notice`
 - `selection.prompt`
+- `request.prompt`
 - `thread.selection.changed`
+
+### 7.1.1 Approval Request 卡片
+
+当本地 Codex 发出 approval request 时：
+
+- bot 会发送一张单独的确认卡片
+- 卡片包含当前会话标题和请求正文
+- 若 native payload 带有命令文本，正文会以 fenced code block 展示
+- 卡片按钮来自 `request.prompt.options`
+
+常见按钮组合：
+
+- `允许一次`
+- `本会话允许`
+- `拒绝`
+- `告诉 Codex 怎么改`
+
+点击按钮后：
+
+- 直接通过卡片回调下发 `request.respond`
+- 不依赖文本 `yes/no`
+- `告诉 Codex 怎么改` 不会直接发送 native decision，而是让 surface 进入一次性反馈捕获模式
+- 若请求已经在其他端处理完成，再次点击会提示已过期
 
 ### 7.2 过程消息
 
@@ -203,6 +284,8 @@ final `block.committed`：
 
 - 发卡片
 - 标题为 `最终回复 · <thread title>`
+- 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
+- 预览物化失败时不会阻塞主回复，正文保持原样
 
 ### 7.4 代码块
 

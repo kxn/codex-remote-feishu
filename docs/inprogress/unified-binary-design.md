@@ -1,5 +1,9 @@
 # 单一二进制设计
 
+> Type: `inprogress`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/inprogress` 并统一文档元信息头，保留统一二进制方案设计。
+
 ## 1. 目标
 
 把当前的三个可执行入口：
@@ -21,14 +25,14 @@
 
 从当前代码看，三个 `cmd/*` 已经都非常薄：
 
-- [cmd/relayd/main.go](../cmd/relayd/main.go)
+- [cmd/relayd/main.go](../../cmd/relayd/main.go)
   - 只负责加载统一 `config.env` 中 daemon 关心的键
   - 创建 Feishu gateway
   - 装配 `internal/app/daemon`
-- [cmd/relay-wrapper/main.go](../cmd/relay-wrapper/main.go)
+- [cmd/relay-wrapper/main.go](../../cmd/relay-wrapper/main.go)
   - 只负责加载 wrapper 配置
   - 装配 `internal/app/wrapper`
-- [cmd/relay-install/main.go](../cmd/relay-install/main.go)
+- [cmd/relay-install/main.go](../../cmd/relay-install/main.go)
   - 只负责解析 flag
   - 装配 `internal/app/install`
 

@@ -1,5 +1,9 @@
 # Feishu Headless 实例设计
 
+> Type: `inprogress`
+> Updated: `2026-04-06`
+> Summary: 标记为进行中文档并迁移到 `docs/inprogress`，保留当前 headless 实例方案与未收尾部分。
+
 ## 1. 文档定位
 
 这份文档描述的是 **Feishu 侧创建和管理 headless Codex app-server 实例** 的产品设计与可行性方案。

@@ -203,11 +203,13 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 ## 文档
 
-- [架构说明](./docs/architecture.md)
-- [协议说明](./docs/relay-protocol-spec.md)
-- [飞书产品行为](./docs/feishu-product-design.md)
-- [安装与部署](./docs/install-deploy-design.md)
-- [测试策略](./docs/go-test-strategy.md)
+- [文档索引](./docs/README.md)
+- [架构说明](./docs/general/architecture.md)
+- [协议说明](./docs/general/relay-protocol-spec.md)
+- [飞书产品行为](./docs/general/feishu-product-design.md)
+- [飞书 Markdown 预览设计](./docs/implemented/feishu-md-preview-design.md)
+- [安装与部署](./docs/general/install-deploy-design.md)
+- [测试策略](./docs/general/go-test-strategy.md)
 
 ## 发布
 

@@ -1,5 +1,9 @@
 # 安装与部署设计
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，同步修正目录迁移后的相对链接。
+
 ## 1. 范围
 
 这份文档描述当前 Go 版本的安装、配置和部署模型，覆盖：
@@ -193,9 +197,9 @@ Docker 只部署 `relayd`。
 
 当前资产：
 
-- [deploy/docker/Dockerfile](../deploy/docker/Dockerfile)
-- [deploy/docker/compose.yml](../deploy/docker/compose.yml)
-- [deploy/docker/.env.example](../deploy/docker/.env.example)
+- [deploy/docker/Dockerfile](../../deploy/docker/Dockerfile)
+- [deploy/docker/compose.yml](../../deploy/docker/compose.yml)
+- [deploy/docker/.env.example](../../deploy/docker/.env.example)
 
 默认映射：
 
@@ -212,8 +216,8 @@ ws://127.0.0.1:9500/ws/agent
 
 当前仓库提供：
 
-- [deploy/feishu/app-template.json](../deploy/feishu/app-template.json)
-- [deploy/feishu/README.md](../deploy/feishu/README.md)
+- [deploy/feishu/app-template.json](../../deploy/feishu/app-template.json)
+- [deploy/feishu/README.md](../../deploy/feishu/README.md)
 
 它们的作用是固定项目依赖的菜单、事件和权限，不是飞书官方导入格式。
 
@@ -225,6 +229,19 @@ ws://127.0.0.1:9500/ws/agent
 - 机器人菜单点击事件
 - 机器人发送文本 / 卡片 / reaction 的能力
 - P2P 单聊消息权限
+
+如果要启用 assistant 最终回复里的本地 `.md` 预览，推荐额外开通：
+
+- `drive:drive`
+
+原因是当前实现会在发送前自动完成：
+
+- 创建应用云空间目录
+- 上传 Markdown 文件
+- 查询文件访问链接
+- 给目录和文件增加协作者权限
+
+如果缺少这部分权限，relay 主功能仍可使用，但 `.md` 链接会保留原样，不会被替换成飞书预览链接。
 
 ## 8. 非交互安装示例
 

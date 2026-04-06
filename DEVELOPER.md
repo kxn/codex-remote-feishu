@@ -77,12 +77,13 @@ testkit/
 
 ## 关键文档
 
-- [架构说明](./docs/architecture.md)
-- [协议说明](./docs/relay-protocol-spec.md)
-- [飞书产品行为](./docs/feishu-product-design.md)
-- [安装与部署](./docs/install-deploy-design.md)
-- [测试策略](./docs/go-test-strategy.md)
-- [单一二进制设计](./docs/unified-binary-design.md)
+- [文档索引](./docs/README.md)
+- [架构说明](./docs/general/architecture.md)
+- [协议说明](./docs/general/relay-protocol-spec.md)
+- [飞书产品行为](./docs/general/feishu-product-design.md)
+- [安装与部署](./docs/general/install-deploy-design.md)
+- [测试策略](./docs/general/go-test-strategy.md)
+- [单一二进制设计](./docs/inprogress/unified-binary-design.md)
 
 如果改了这些内容，文档也要同步：
 

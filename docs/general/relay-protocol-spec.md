@@ -1,5 +1,9 @@
 # Relay Protocol Spec
 
+> Type: `general`
+> Updated: `2026-04-06`
+> Summary: 迁移到 `docs/general` 并统一文档元信息头，继续作为当前 canonical 协议文档。
+
 ## 1. 文档定位
 
 这份文档描述的是**当前仓库已经实现的协议和内部模型**。
@@ -64,7 +68,7 @@
 
 ### 3.2 Envelope 类型
 
-当前实现的 envelope 类型定义在 [wire.go](../internal/core/agentproto/wire.go)：
+当前实现的 envelope 类型定义在 [wire.go](../../internal/core/agentproto/wire.go)：
 
 - `hello`
 - `welcome`
@@ -205,7 +209,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `request.respond`
 - `threads.refresh`
 
-这四个 command 的真实定义在 [types.go](../internal/core/agentproto/types.go)。
+这四个 command 的真实定义在 [types.go](../../internal/core/agentproto/types.go)。
 
 ### 4.1 `prompt.send`
 
@@ -227,6 +231,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `overrides`
   - `model`
   - `reasoningEffort`
+  - `accessMode`
 
 ### 4.2 `turn.interrupt`
 
@@ -238,6 +243,34 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 ### 4.3 `request.respond`
 
 用于将 approval / structured response 回写给 native request id。
+
+对于当前已经打通的 approval request，canonical `response` 形态是：
+
+```json
+{
+  "type": "approval",
+  "decision": "accept"
+}
+```
+
+当前已实现的 `decision`：
+
+- `accept`
+- `acceptForSession`
+- `decline`
+
+兼容规则：
+
+- Feishu gateway 仍接受旧卡片里的 `approved: true/false`
+- orchestrator 会把旧布尔值映射成 `accept` / `decline`
+- 发往 wrapper 的 canonical command 优先使用 `decision`，不再只依赖布尔字段
+
+需要注意：
+
+- `captureFeedback` 是 Feishu 产品层 option，不是 native approval decision
+- 它会在 server 层翻译成：
+  - 对当前 request 发送 `decision=decline`
+  - 再把用户下一条文字作为 follow-up prompt 入队
 
 ### 4.4 `threads.refresh`
 
@@ -284,7 +317,31 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - item 是否应进入 Feishu 主渲染面
 - 本地交互是否应触发 `paused_for_local`
 
-### 5.2 Helper/Internal traffic 规则
+### 5.2 Request 元数据
+
+`request.started` 当前至少会携带：
+
+- `requestId`
+- `threadId`
+- `turnId`
+- `metadata.requestType`
+- `metadata.requestKind`
+- `metadata.title`
+- `metadata.body`
+
+若 native payload 显式暴露 request options，translator 还会透传：
+
+- `metadata.options[]`
+  - `optionId`
+  - `label`
+  - `style`
+
+当前 server 只在产品层对 approval request 做额外补全：
+
+- 若 upstream 未显式给出 option，但请求种类可确认支持 session 级放行，则补出 `acceptForSession`
+- `captureFeedback` 只存在于 Feishu `request.prompt` 渲染层，不回写到 canonical event
+
+### 5.3 Helper/Internal traffic 规则
 
 当前冻结规则：
 
@@ -311,13 +368,15 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 
 ### 6.1 Inbound control
 
-飞书入口最终被归一到 [control.Action](../internal/core/control/types.go)：
+飞书入口最终被归一到 [control.Action](../../internal/core/control/types.go)：
 
 - `surface.menu.list_instances`
 - `surface.menu.status`
 - `surface.menu.stop`
 - `surface.command.model`
 - `surface.command.reasoning`
+- `surface.command.access`
+- `surface.request.respond`
 - `surface.message.text`
 - `surface.message.image`
 - `surface.message.reaction.created`
@@ -327,17 +386,47 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `surface.button.follow_local`
 - `surface.button.detach`
 
+其中与 approval 相关的关键字段是：
+
+- `surface.request.respond`
+  - `requestId`
+  - `requestType`
+  - `requestOptionId`
+  - `approved`
+
+当前含义：
+
+- `requestOptionId` 是主路径，来自飞书卡片按钮值
+- `approved` 只是旧卡片兼容字段
+
 ### 6.2 Outbound UI events
 
-`orchestrator` 输出 [control.UIEvent](../internal/core/control/types.go)，再由 Feishu projector 映射成文本、卡片和 reaction：
+`orchestrator` 输出 [control.UIEvent](../../internal/core/control/types.go)，再由 Feishu projector 映射成文本、卡片和 reaction：
 
 - `snapshot.updated`
 - `selection.prompt`
+- `request.prompt`
 - `pending.input.state`
 - `notice`
 - `thread.selection.changed`
 - `block.committed`
 - `agent.command`
+
+其中与 approval 相关的关键字段是：
+
+- `request.prompt`
+  - `requestId`
+  - `requestType`
+  - `title`
+  - `body`
+  - `threadTitle`
+  - `options[]`
+
+`options[]` 是 Feishu 可直接渲染的产品层动作集合，可能包含：
+
+- upstream 原生透传的 approval option
+- server 合成的 `acceptForSession`
+- Feishu 专用的 `captureFeedback`
 
 ## 7. 当前不暴露的能力
 

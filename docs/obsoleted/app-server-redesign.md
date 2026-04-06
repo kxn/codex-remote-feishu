@@ -1,11 +1,16 @@
 # App-Server Relay 重构设计
 
+> Type: `obsoleted`
+> Updated: `2026-04-06`
+> Summary: 当前实现已以 canonical 协议和产品文档为准，本文仅保留历史设计理由。
+> Superseded By: `docs/general/relay-protocol-spec.md`, `docs/general/feishu-product-design.md`
+
 这份文档保留的是**为什么这么设计**的理由说明。
 
 当前已经实现的实际协议和运行时模型见：
 
-- [relay-protocol-spec.md](./relay-protocol-spec.md)
-- [feishu-product-design.md](./feishu-product-design.md)
+- [relay-protocol-spec.md](../general/relay-protocol-spec.md)
+- [feishu-product-design.md](../general/feishu-product-design.md)
 
 ## 1. 目标
 
@@ -380,7 +385,7 @@ server 再根据这个标记决定：
 
 ## 8. 当前建议
 
-在开始编码前，应继续以 [relay-protocol-spec.md](./relay-protocol-spec.md) 为主，把下面几个点继续守住：
+在开始编码前，应继续以 [relay-protocol-spec.md](../general/relay-protocol-spec.md) 为主，把下面几个点继续守住：
 
 - 先按 canonical model 实现，不要再把 bot 绑回原生协议
 - 先让 server 成为唯一的状态中心

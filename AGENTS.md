@@ -12,6 +12,26 @@ Trigger it for:
 - Codex app-server protocol changes
 - `/list`, `/attach`, `/use`, queue, thread routing, missing reply, helper/internal traffic issues
 
+## Documentation Convention
+
+For lifecycle design/reference docs under `docs/`:
+
+- Place each file under exactly one of `docs/draft/`, `docs/inprogress/`, `docs/implemented/`, `docs/general/`, or `docs/obsoleted/`.
+- Every `docs/**/*.md` file must start with a visible metadata block directly under the title:
+  - `Type`
+  - `Updated`
+  - `Summary`
+- `Type` must match the directory name.
+- If a document becomes obsolete, move it to `docs/obsoleted/` instead of leaving stale copies in place.
+- When moving docs, update relative links and the index in `docs/README.md` in the same change.
+
+## Git Push Rule
+
+When a change is intentionally committed during task work:
+
+- Push it to GitHub in the same turn by default.
+- Do not leave a local-only commit behind unless the user explicitly asks not to push yet.
+
 ## Proxy Environment
 
 This repository is often developed on hosts where `http_proxy` / `https_proxy` are set globally.
