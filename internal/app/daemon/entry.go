@@ -34,6 +34,7 @@ func RunMain(ctx context.Context, version string) error {
 	var markdownPreviewer feishu.MarkdownPreviewService
 	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
 		liveGateway := feishu.NewLiveGateway(feishu.LiveGatewayConfig{
+			GatewayID:      cfg.FeishuGatewayID,
 			AppID:          cfg.FeishuAppID,
 			AppSecret:      cfg.FeishuAppSecret,
 			TempDir:        os.TempDir(),

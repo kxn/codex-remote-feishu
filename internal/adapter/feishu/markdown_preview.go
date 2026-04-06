@@ -36,6 +36,7 @@ type MarkdownPreviewService interface {
 }
 
 type MarkdownPreviewRequest struct {
+	GatewayID        string
 	SurfaceSessionID string
 	ChatID           string
 	ActorUserID      string
@@ -171,7 +172,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksLocked(ctx context.Context,
 		return text, false, nil
 	}
 
-	scopeKey := previewScopeKey(req.SurfaceSessionID, req.ChatID, req.ActorUserID)
+	scopeKey := previewScopeKey(req.GatewayID, req.SurfaceSessionID, req.ChatID, req.ActorUserID)
 	rewrittenTargets := map[string]string{}
 	var errs []string
 
@@ -566,7 +567,7 @@ func previewPrincipals(surfaceSessionID, chatID, actorUserID string) []previewPr
 		seen[userPrincipal.Key] = true
 		values = append(values, userPrincipal)
 	}
-	if strings.HasPrefix(surfaceSessionID, "feishu:chat:") {
+	if ref, ok := ParseSurfaceRef(surfaceSessionID); ok && ref.ScopeKind == ScopeKindChat {
 		if chatPrincipal, ok := previewChatPrincipal(chatID); ok && !seen[chatPrincipal.Key] {
 			seen[chatPrincipal.Key] = true
 			values = append(values, chatPrincipal)
@@ -608,14 +609,25 @@ func previewChatPrincipal(chatID string) (previewPrincipal, bool) {
 	}, true
 }
 
-func previewScopeKey(surfaceSessionID, chatID, actorUserID string) string {
+func previewScopeKey(gatewayID, surfaceSessionID, chatID, actorUserID string) string {
 	if strings.TrimSpace(surfaceSessionID) != "" {
 		return surfaceSessionID
 	}
+	gatewayID = normalizeGatewayID(gatewayID)
 	if strings.TrimSpace(chatID) != "" {
-		return "feishu:chat:" + chatID
+		return SurfaceRef{
+			Platform:  PlatformFeishu,
+			GatewayID: gatewayID,
+			ScopeKind: ScopeKindChat,
+			ScopeID:   strings.TrimSpace(chatID),
+		}.SurfaceID()
 	}
-	return "feishu:user:" + strings.TrimSpace(actorUserID)
+	return SurfaceRef{
+		Platform:  PlatformFeishu,
+		GatewayID: gatewayID,
+		ScopeKind: ScopeKindUser,
+		ScopeID:   strings.TrimSpace(actorUserID),
+	}.SurfaceID()
 }
 
 func previewScopeFolderName(scopeKey string) string {

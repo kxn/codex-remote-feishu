@@ -34,6 +34,7 @@ func (NopGateway) Start(context.Context, ActionHandler) error { return nil }
 func (NopGateway) Apply(context.Context, []Operation) error   { return nil }
 
 type LiveGatewayConfig struct {
+	GatewayID      string
 	AppID          string
 	AppSecret      string
 	TempDir        string
@@ -52,6 +53,7 @@ type LiveGateway struct {
 }
 
 func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
+	config.GatewayID = normalizeGatewayID(config.GatewayID)
 	client := lark.NewClient(config.AppID, config.AppSecret)
 	return &LiveGateway{
 		config:    config,
@@ -106,7 +108,8 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		}
 		log.Printf("feishu bot menu handled: raw_key=%q normalized=%q action=%s", rawKey, normalizeMenuEventKey(rawKey), action.Kind)
 		operatorID := operatorUserID(event.Event.Operator)
-		action.SurfaceSessionID = surfaceIDForInbound("", "p2p", operatorID)
+		action.GatewayID = g.config.GatewayID
+		action.SurfaceSessionID = surfaceIDForInbound(g.config.GatewayID, "", "p2p", operatorID)
 		action.ActorUserID = operatorID
 		handler(ctx, action)
 		return nil
@@ -117,6 +120,9 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 
 func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 	for _, operation := range operations {
+		if operation.GatewayID != "" && normalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
+			return fmt.Errorf("gateway apply mismatch: operation gateway=%s gateway=%s", operation.GatewayID, g.config.GatewayID)
+		}
 		if err := g.applyOne(ctx, operation); err != nil {
 			return err
 		}
@@ -239,8 +245,9 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 	chatID := stringPtr(message.ChatId)
 	chatType := stringPtr(message.ChatType)
 	senderUserID := userIDFromMessage(event.Event.Sender)
-	surfaceSessionID := surfaceIDForInbound(chatID, chatType, senderUserID)
+	surfaceSessionID := surfaceIDForInbound(g.config.GatewayID, chatID, chatType, senderUserID)
 	action := control.Action{
+		GatewayID:        g.config.GatewayID,
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           chatID,
 		ActorUserID:      senderUserID,
@@ -298,6 +305,7 @@ func (g *LiveGateway) parseMessageRecalledEvent(event *larkim.P2MessageRecalledV
 	}
 	return control.Action{
 		Kind:             control.ActionMessageRecalled,
+		GatewayID:        g.config.GatewayID,
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           strings.TrimSpace(stringPtr(event.Event.ChatId)),
 		TargetMessageID:  messageID,
@@ -429,6 +437,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionSelectPrompt,
+			GatewayID:        g.config.GatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -453,6 +462,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionRespondRequest,
+			GatewayID:        g.config.GatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -469,7 +479,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 
 func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string) string {
 	if operatorID != "" {
-		return surfaceIDForInbound("", "p2p", operatorID)
+		return surfaceIDForInbound(g.config.GatewayID, "", "p2p", operatorID)
 	}
 	if messageID != "" {
 		g.mu.Lock()
@@ -480,7 +490,7 @@ func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string)
 		}
 	}
 	if chatID != "" {
-		return surfaceID(chatID, "")
+		return surfaceID(g.config.GatewayID, chatID, "")
 	}
 	return ""
 }
@@ -614,18 +624,28 @@ func menuActionKind(eventKey string) (control.ActionKind, bool) {
 	return action.Kind, true
 }
 
-func surfaceID(chatID, fallbackUserID string) string {
+func surfaceID(gatewayID, chatID, fallbackUserID string) string {
 	if chatID != "" {
-		return "feishu:chat:" + chatID
+		return SurfaceRef{
+			Platform:  PlatformFeishu,
+			GatewayID: normalizeGatewayID(gatewayID),
+			ScopeKind: ScopeKindChat,
+			ScopeID:   strings.TrimSpace(chatID),
+		}.SurfaceID()
 	}
-	return "feishu:user:" + fallbackUserID
+	return SurfaceRef{
+		Platform:  PlatformFeishu,
+		GatewayID: normalizeGatewayID(gatewayID),
+		ScopeKind: ScopeKindUser,
+		ScopeID:   strings.TrimSpace(fallbackUserID),
+	}.SurfaceID()
 }
 
-func surfaceIDForInbound(chatID, chatType, fallbackUserID string) string {
+func surfaceIDForInbound(gatewayID, chatID, chatType, fallbackUserID string) string {
 	if strings.EqualFold(chatType, "p2p") && fallbackUserID != "" {
-		return "feishu:user:" + fallbackUserID
+		return surfaceID(gatewayID, "", fallbackUserID)
 	}
-	return surfaceID(chatID, fallbackUserID)
+	return surfaceID(gatewayID, chatID, fallbackUserID)
 }
 
 func userIDFromMessage(sender *larkim.EventSender) string {

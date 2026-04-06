@@ -88,6 +88,7 @@ type ThreadRecord struct {
 type SurfaceConsoleRecord struct {
 	SurfaceSessionID     string
 	Platform             string
+	GatewayID            string
 	ChatID               string
 	ActorUserID          string
 	AttachedInstanceID   string

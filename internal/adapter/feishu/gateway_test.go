@@ -140,16 +140,34 @@ func TestResolveReceiveTarget(t *testing.T) {
 }
 
 func TestSurfaceIDForInboundUsesUserScopeForP2P(t *testing.T) {
-	got := surfaceIDForInbound("oc_xxx", "p2p", "user-1")
-	if got != "feishu:user:user-1" {
+	got := surfaceIDForInbound("app-1", "oc_xxx", "p2p", "user-1")
+	if got != "feishu:app-1:user:user-1" {
 		t.Fatalf("unexpected p2p surface id: %q", got)
 	}
 }
 
 func TestSurfaceIDForInboundUsesChatScopeForGroup(t *testing.T) {
-	got := surfaceIDForInbound("oc_xxx", "group", "user-1")
-	if got != "feishu:chat:oc_xxx" {
+	got := surfaceIDForInbound("app-1", "oc_xxx", "group", "user-1")
+	if got != "feishu:app-1:chat:oc_xxx" {
 		t.Fatalf("unexpected group surface id: %q", got)
+	}
+}
+
+func TestParseSurfaceRefSupportsLegacyAndGatewayAwareFormats(t *testing.T) {
+	newRef, ok := ParseSurfaceRef("feishu:app-1:chat:oc_1")
+	if !ok {
+		t.Fatal("expected gateway-aware surface id to parse")
+	}
+	if newRef.GatewayID != "app-1" || newRef.ScopeKind != ScopeKindChat || newRef.ScopeID != "oc_1" {
+		t.Fatalf("unexpected new surface ref: %#v", newRef)
+	}
+
+	legacyRef, ok := ParseSurfaceRef("feishu:user:user-1")
+	if !ok {
+		t.Fatal("expected legacy surface id to parse")
+	}
+	if legacyRef.GatewayID != LegacyDefaultGatewayID || legacyRef.ScopeKind != ScopeKindUser || legacyRef.ScopeID != "user-1" {
+		t.Fatalf("unexpected legacy surface ref: %#v", legacyRef)
 	}
 }
 
@@ -199,8 +217,8 @@ func TestParseTextActionRecognizesSessionCommands(t *testing.T) {
 }
 
 func TestParseCardActionTriggerEventBuildsPromptSelectionAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{})
-	gateway.recordSurfaceMessage("om-card-1", "feishu:user:user-1")
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-1", "feishu:app-1:user:user-1")
 	userID := "user-1"
 	event := &larkcallback.CardActionTriggerEvent{
 		Event: &larkcallback.CardActionTriggerRequest{
@@ -226,7 +244,10 @@ func TestParseCardActionTriggerEventBuildsPromptSelectionAction(t *testing.T) {
 	if action.Kind != control.ActionSelectPrompt {
 		t.Fatalf("unexpected action kind: %#v", action)
 	}
-	if action.SurfaceSessionID != "feishu:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
+	if action.GatewayID != "app-1" {
+		t.Fatalf("unexpected gateway id: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
 		t.Fatalf("unexpected action routing: %#v", action)
 	}
 	if action.PromptID != "prompt-1" || action.OptionID != "thread-1" {
@@ -235,8 +256,8 @@ func TestParseCardActionTriggerEventBuildsPromptSelectionAction(t *testing.T) {
 }
 
 func TestParseCardActionTriggerEventBuildsRequestRespondAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{})
-	gateway.recordSurfaceMessage("om-card-2", "feishu:user:user-1")
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-2", "feishu:app-1:user:user-1")
 	userID := "user-1"
 	event := &larkcallback.CardActionTriggerEvent{
 		Event: &larkcallback.CardActionTriggerRequest{
@@ -269,8 +290,8 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAction(t *testing.T) {
 }
 
 func TestParseCardActionTriggerEventFallsBackToApprovedBool(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{})
-	gateway.recordSurfaceMessage("om-card-3", "feishu:user:user-1")
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-3", "feishu:app-1:user:user-1")
 	userID := "user-1"
 	event := &larkcallback.CardActionTriggerEvent{
 		Event: &larkcallback.CardActionTriggerRequest{
@@ -300,8 +321,8 @@ func TestParseCardActionTriggerEventFallsBackToApprovedBool(t *testing.T) {
 }
 
 func TestParseMessageRecalledEventBuildsRecallAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{})
-	gateway.recordSurfaceMessage("om-msg-1", "feishu:user:user-1")
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-msg-1", "feishu:app-1:user:user-1")
 	event := &larkim.P2MessageRecalledV1{
 		Event: &larkim.P2MessageRecalledV1Data{
 			MessageId: stringRef("om-msg-1"),
@@ -316,13 +337,16 @@ func TestParseMessageRecalledEventBuildsRecallAction(t *testing.T) {
 	if action.Kind != control.ActionMessageRecalled {
 		t.Fatalf("unexpected action kind: %#v", action)
 	}
-	if action.SurfaceSessionID != "feishu:user:user-1" || action.TargetMessageID != "om-msg-1" || action.ChatID != "oc_1" {
+	if action.GatewayID != "app-1" {
+		t.Fatalf("unexpected gateway id: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.TargetMessageID != "om-msg-1" || action.ChatID != "oc_1" {
 		t.Fatalf("unexpected recalled action payload: %#v", action)
 	}
 }
 
 func TestParseMessageRecalledEventIgnoresUnknownMessage(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{})
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	event := &larkim.P2MessageRecalledV1{
 		Event: &larkim.P2MessageRecalledV1Data{
 			MessageId: stringRef("om-missing"),

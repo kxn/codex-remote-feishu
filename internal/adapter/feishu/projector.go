@@ -20,6 +20,7 @@ const (
 
 type Operation struct {
 	Kind             OperationKind
+	GatewayID        string
 	SurfaceSessionID string
 	ReceiveID        string
 	ReceiveIDType    string
@@ -53,6 +54,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		return []Operation{{
 			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        "当前状态",
@@ -73,6 +75,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		return []Operation{{
 			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        title,
@@ -97,6 +100,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		return []Operation{{
 			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        title,
@@ -114,6 +118,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		return []Operation{{
 			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        title,
@@ -129,6 +134,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.PendingInput.QueueOn {
 			ops = append(ops, Operation{
 				Kind:             OperationAddReaction,
+				GatewayID:        event.GatewayID,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
@@ -138,6 +144,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.PendingInput.QueueOff {
 			ops = append(ops, Operation{
 				Kind:             OperationRemoveReaction,
+				GatewayID:        event.GatewayID,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
@@ -147,6 +154,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.PendingInput.TypingOn {
 			ops = append(ops, Operation{
 				Kind:             OperationAddReaction,
+				GatewayID:        event.GatewayID,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
@@ -156,6 +164,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.PendingInput.TypingOff {
 			ops = append(ops, Operation{
 				Kind:             OperationRemoveReaction,
+				GatewayID:        event.GatewayID,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
@@ -165,6 +174,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.PendingInput.ThumbsDown {
 			ops = append(ops, Operation{
 				Kind:             OperationAddReaction,
+				GatewayID:        event.GatewayID,
 				SurfaceSessionID: event.SurfaceSessionID,
 				ChatID:           chatID,
 				MessageID:        event.PendingInput.SourceMessageID,
@@ -176,7 +186,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.Block == nil {
 			return nil
 		}
-		return projectBlock(event.SurfaceSessionID, chatID, *event.Block)
+		return projectBlock(event.GatewayID, event.SurfaceSessionID, chatID, *event.Block)
 	case control.UIEventThreadSelectionChange:
 		if event.ThreadSelection == nil {
 			return nil
@@ -190,6 +200,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		return []Operation{{
 			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        "系统提示",
@@ -201,10 +212,11 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 	}
 }
 
-func projectBlock(surfaceSessionID, chatID string, block render.Block) []Operation {
+func projectBlock(gatewayID, surfaceSessionID, chatID string, block render.Block) []Operation {
 	if !block.Final {
 		return []Operation{{
 			Kind:             OperationSendText,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			Text:             block.Text,
@@ -224,6 +236,7 @@ func projectBlock(surfaceSessionID, chatID string, block render.Block) []Operati
 	}
 	return []Operation{{
 		Kind:             OperationSendCard,
+		GatewayID:        gatewayID,
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           chatID,
 		CardTitle:        title,

@@ -330,6 +330,13 @@ daemon 当前只接受一个 `feishu.Gateway`。
 - 凭证热替换
 - 单 App 重连/停用/状态查询
 
+另外按当前仓库实际依赖的 `github.com/larksuite/oapi-sdk-go/v3/ws` 实现来看：
+
+- `Client.Start(ctx)` 内部不会在 `ctx.Done()` 时主动返回
+- SDK 没有公开的 `Stop` / `Close` API
+
+因此 2B 不能简单按“worker 持有一个 ctx，取消即完成热替换”实现，必须额外设计连接关闭 workaround 或自管长连接生命周期。
+
 #### 5.4.2 推荐接口
 
 建议把当前 `Gateway` 提升为 controller：
@@ -352,6 +359,8 @@ type GatewayController interface {
 - `Apply` 先按 `GatewayID` 分组，再发到对应 worker
 - `UpsertApp` 支持凭证更新后的热替换
 - `RemoveApp` 负责关闭 ws client 并清理状态
+
+这里的 `worker` 不应直接把 SDK client 暴露到 controller 外层，否则后续 stop/reconnect workaround 很容易散落到 daemon 代码里。
 
 #### 5.4.3 验证语义
 

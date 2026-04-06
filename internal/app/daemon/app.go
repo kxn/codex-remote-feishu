@@ -420,6 +420,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 func (a *App) deliverUIEvent(event control.UIEvent) error {
 	chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 	actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
+	gatewayID := firstNonEmpty(event.GatewayID, a.service.SurfaceGatewayID(event.SurfaceSessionID))
 	receiveID, receiveIDType := feishu.ResolveReceiveTarget(chatID, actorUserID)
 	if receiveID == "" || receiveIDType == "" {
 		return nil
@@ -428,6 +429,7 @@ func (a *App) deliverUIEvent(event control.UIEvent) error {
 	if a.markdownPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
 		rewriteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		rewrittenBlock, err := a.markdownPreviewer.RewriteFinalBlock(rewriteCtx, feishu.MarkdownPreviewRequest{
+			GatewayID:        gatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      actorUserID,
@@ -450,6 +452,9 @@ func (a *App) deliverUIEvent(event control.UIEvent) error {
 	}
 	operations := a.projector.Project(chatID, event)
 	for i := range operations {
+		if operations[i].GatewayID == "" {
+			operations[i].GatewayID = gatewayID
+		}
 		if operations[i].SurfaceSessionID == "" {
 			operations[i].SurfaceSessionID = event.SurfaceSessionID
 		}

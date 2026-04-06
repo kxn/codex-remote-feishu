@@ -34,6 +34,7 @@ const (
 
 type Action struct {
 	Kind             ActionKind
+	GatewayID        string
 	SurfaceSessionID string
 	ChatID           string
 	ActorUserID      string
@@ -225,6 +226,7 @@ const (
 
 type DaemonCommand struct {
 	Kind             DaemonCommandKind
+	GatewayID        string
 	SurfaceSessionID string
 	InstanceID       string
 	ThreadID         string
@@ -234,6 +236,7 @@ type DaemonCommand struct {
 
 type UIEvent struct {
 	Kind             UIEventKind
+	GatewayID        string
 	SurfaceSessionID string
 	Snapshot         *Snapshot
 	SelectionPrompt  *SelectionPrompt

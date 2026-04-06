@@ -393,6 +393,9 @@ func (s *Service) Tick(now time.Time) []control.UIEvent {
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
 	surface := s.root.Surfaces[action.SurfaceSessionID]
 	if surface != nil {
+		if action.GatewayID != "" {
+			surface.GatewayID = action.GatewayID
+		}
 		if action.ChatID != "" {
 			surface.ChatID = action.ChatID
 		}
@@ -408,6 +411,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 	surface = &state.SurfaceConsoleRecord{
 		SurfaceSessionID: action.SurfaceSessionID,
 		Platform:         "feishu",
+		GatewayID:        action.GatewayID,
 		ChatID:           action.ChatID,
 		ActorUserID:      action.ActorUserID,
 		RouteMode:        state.RouteModeUnbound,
@@ -2431,6 +2435,14 @@ func (s *Service) SurfaceChatID(surfaceID string) string {
 	return surface.ChatID
 }
 
+func (s *Service) SurfaceGatewayID(surfaceID string) string {
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil {
+		return ""
+	}
+	return surface.GatewayID
+}
+
 func (s *Service) SurfaceActorUserID(surfaceID string) string {
 	surface := s.root.Surfaces[surfaceID]
 	if surface == nil {
@@ -2889,6 +2901,7 @@ func (s *Service) threadSelectionEvents(surface *state.SurfaceConsoleRecord, thr
 func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UIEvent {
 	return []control.UIEvent{{
 		Kind:             control.UIEventNotice,
+		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Notice:           &control.Notice{Code: code, Text: text},
 	}}
@@ -2920,6 +2933,7 @@ func (s *Service) handleProblem(instanceID string, problem agentproto.ErrorInfo)
 		noticeCopy := notice
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventNotice,
+			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice:           &noticeCopy,
 		})
@@ -3268,6 +3282,7 @@ func metadataRequestOptions(metadata map[string]any) []state.RequestPromptOption
 func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMode, title, preview string) control.UIEvent {
 	return control.UIEvent{
 		Kind:             control.UIEventThreadSelectionChange,
+		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ThreadSelection: &control.ThreadSelectionChanged{
 			ThreadID:  threadID,
@@ -3302,6 +3317,7 @@ func (s *Service) pendingInputEvents(surface *state.SurfaceConsoleRecord, pendin
 		pendingCopy.SourceMessageID = messageID
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventPendingInput,
+			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			PendingInput:     &pendingCopy,
 		})

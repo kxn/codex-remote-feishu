@@ -365,6 +365,27 @@ func TestDriveMarkdownPreviewerSkipsMarkdownOutsideAllowedRoots(t *testing.T) {
 	}
 }
 
+func TestPreviewScopeKeyIncludesGatewayID(t *testing.T) {
+	got := previewScopeKey("app-1", "", "oc_chat", "")
+	if got != "feishu:app-1:chat:oc_chat" {
+		t.Fatalf("unexpected chat scope key: %q", got)
+	}
+	got = previewScopeKey("app-1", "", "", "ou_user")
+	if got != "feishu:app-1:user:ou_user" {
+		t.Fatalf("unexpected user scope key: %q", got)
+	}
+}
+
+func TestPreviewPrincipalsRecognizeGatewayAwareChatSurface(t *testing.T) {
+	principals := previewPrincipals("feishu:app-1:chat:oc_chat", "oc_chat", "ou_user")
+	if len(principals) != 2 {
+		t.Fatalf("expected user and chat principals, got %#v", principals)
+	}
+	if principals[0].Type != "user" || principals[1].Type != "chat" {
+		t.Fatalf("unexpected principals order/types: %#v", principals)
+	}
+}
+
 func writeMarkdownFile(t *testing.T, path, content string) string {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

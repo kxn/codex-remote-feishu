@@ -24,6 +24,7 @@ type ServicesConfig struct {
 	RelayPort            string
 	RelayAPIHost         string
 	RelayAPIPort         string
+	FeishuGatewayID      string
 	FeishuAppID          string
 	FeishuAppSecret      string
 	FeishuUseSystemProxy bool
@@ -158,6 +159,15 @@ func LoadServicesConfig() (ServicesConfig, error) {
 		RelayPort:    strconv.Itoa(chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)),
 		RelayAPIHost: chooseNonEmpty(os.Getenv("RELAY_API_HOST"), loaded.Config.Admin.ListenHost, defaultAdminListenHost),
 		RelayAPIPort: strconv.Itoa(chooseInt(os.Getenv("RELAY_API_PORT"), loaded.Config.Admin.ListenPort)),
+		FeishuGatewayID: chooseNonEmpty(
+			selectedApp.ID,
+			defaultGatewayIDForCredentials(
+				os.Getenv("FEISHU_APP_ID"),
+				os.Getenv("FEISHU_APP_SECRET"),
+				selectedApp.AppID,
+				selectedApp.AppSecret,
+			),
+		),
 		FeishuAppID: chooseNonEmpty(
 			os.Getenv("FEISHU_APP_ID"),
 			selectedApp.AppID,
@@ -244,4 +254,13 @@ func boolString(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func defaultGatewayIDForCredentials(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return "legacy-default"
+		}
+	}
+	return ""
 }

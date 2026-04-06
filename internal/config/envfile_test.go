@@ -94,6 +94,9 @@ func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 	if loaded.ConfigPath != overridePath {
 		t.Fatalf("ConfigPath = %q, want %q", loaded.ConfigPath, overridePath)
 	}
+	if loaded.FeishuGatewayID != "main" {
+		t.Fatalf("FeishuGatewayID = %q, want main", loaded.FeishuGatewayID)
+	}
 	if loaded.RelayHost != "0.0.0.0" || loaded.RelayAPIHost != "0.0.0.0" {
 		t.Fatalf("hosts = %q/%q", loaded.RelayHost, loaded.RelayAPIHost)
 	}
