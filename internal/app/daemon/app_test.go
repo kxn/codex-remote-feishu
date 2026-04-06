@@ -712,6 +712,9 @@ func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
 		t.Fatalf("expected surface to detach after kill, got %#v", snapshot)
 	}
+	if app.service.Instance("inst-headless-1") != nil {
+		t.Fatalf("expected managed headless instance to be removed after kill, got %#v", app.service.Instance("inst-headless-1"))
+	}
 }
 
 func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
@@ -744,6 +747,9 @@ func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
 
 	if stoppedPID != 2468 {
 		t.Fatalf("expected idle managed headless pid to stop, got %d", stoppedPID)
+	}
+	if app.service.Instance("inst-headless-2") != nil {
+		t.Fatalf("expected idle managed headless instance to be removed, got %#v", app.service.Instance("inst-headless-2"))
 	}
 }
 

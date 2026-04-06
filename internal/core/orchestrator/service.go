@@ -2756,6 +2756,59 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 	return events
 }
 
+func (s *Service) RemoveInstance(instanceID string) {
+	if strings.TrimSpace(instanceID) == "" {
+		return
+	}
+	for _, surface := range s.root.Surfaces {
+		if surface == nil {
+			continue
+		}
+		if surface.PendingHeadless != nil && surface.PendingHeadless.InstanceID == instanceID {
+			surface.PendingHeadless = nil
+			if surface.SelectionPrompt != nil && surface.SelectionPrompt.Kind == "new_instance_thread" {
+				surface.SelectionPrompt = nil
+			}
+		}
+		if surface.AttachedInstanceID != instanceID {
+			continue
+		}
+		s.discardDrafts(surface)
+		surface.ActiveTurnOrigin = ""
+		delete(s.handoffUntil, surface.SurfaceSessionID)
+		if surface.ActiveQueueItemID != "" {
+			if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
+				s.failSurfaceActiveQueueItem(surface, item, nil, false)
+			} else {
+				s.clearRemoteOwnership(surface)
+				surface.ActiveQueueItemID = ""
+			}
+		} else {
+			s.clearRemoteOwnership(surface)
+		}
+		surface.AttachedInstanceID = ""
+		surface.SelectedThreadID = ""
+		surface.RouteMode = state.RouteModeUnbound
+		surface.DispatchMode = state.DispatchModeNormal
+		surface.PromptOverride = state.ModelConfigRecord{}
+		surface.SelectionPrompt = nil
+		surface.PendingHeadless = nil
+		clearSurfaceRequests(surface)
+		surface.LastSelection = nil
+	}
+	delete(s.root.Instances, instanceID)
+	delete(s.pendingRemote, instanceID)
+	delete(s.activeRemote, instanceID)
+	delete(s.threadRefreshes, instanceID)
+	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
+	for key, item := range s.pendingTurnText {
+		if item == nil || item.InstanceID != instanceID {
+			continue
+		}
+		delete(s.pendingTurnText, key)
+	}
+}
+
 func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope, model, effort string) {
 	if inst == nil {
 		return

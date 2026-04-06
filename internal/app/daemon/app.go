@@ -34,12 +34,17 @@ type HeadlessRuntimeConfig struct {
 }
 
 type managedHeadlessProcess struct {
-	InstanceID string
-	PID        int
-	StartedAt  time.Time
-	IdleSince  time.Time
-	ThreadID   string
-	ThreadCWD  string
+	InstanceID    string
+	PID           int
+	RequestedAt   time.Time
+	StartedAt     time.Time
+	IdleSince     time.Time
+	ThreadID      string
+	ThreadCWD     string
+	WorkspaceRoot string
+	DisplayName   string
+	Status        string
+	LastError     string
 }
 
 type App struct {
@@ -305,9 +310,11 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	defer a.mu.Unlock()
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
+		a.noteManagedHeadlessDisconnectedLocked(instanceID)
 		return
 	}
 	uiEvents := a.service.ApplyInstanceDisconnected(instanceID)
+	a.noteManagedHeadlessDisconnectedLocked(instanceID)
 	log.Printf(
 		"relay instance disconnected: id=%s workspace=%s display=%s source=%s managed=%t pid=%d",
 		inst.InstanceID,
@@ -590,11 +597,15 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 	}
 
 	a.managedHeadless[command.InstanceID] = &managedHeadlessProcess{
-		InstanceID: command.InstanceID,
-		PID:        pid,
-		StartedAt:  time.Now().UTC(),
-		ThreadID:   command.ThreadID,
-		ThreadCWD:  workDir,
+		InstanceID:    command.InstanceID,
+		PID:           pid,
+		RequestedAt:   time.Now().UTC(),
+		StartedAt:     time.Now().UTC(),
+		ThreadID:      command.ThreadID,
+		ThreadCWD:     workDir,
+		WorkspaceRoot: workDir,
+		DisplayName:   "headless",
+		Status:        "starting",
 	}
 	log.Printf(
 		"headless start requested: surface=%s instance=%s pid=%d thread=%s cwd=%s",
@@ -655,6 +666,7 @@ func (a *App) killManagedHeadless(command control.DaemonCommand) []control.UIEve
 		}))
 	}
 	delete(a.managedHeadless, command.InstanceID)
+	a.service.RemoveInstance(command.InstanceID)
 	log.Printf("headless kill requested: surface=%s instance=%s pid=%d", command.SurfaceSessionID, command.InstanceID, pid)
 	return nil
 }
@@ -666,14 +678,23 @@ func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
 	managed := a.managedHeadless[inst.InstanceID]
 	if managed == nil {
 		managed = &managedHeadlessProcess{
-			InstanceID: inst.InstanceID,
-			StartedAt:  time.Now().UTC(),
+			InstanceID:  inst.InstanceID,
+			RequestedAt: time.Now().UTC(),
+			StartedAt:   time.Now().UTC(),
+			Status:      "online",
 		}
 		a.managedHeadless[inst.InstanceID] = managed
 	}
 	if inst.PID > 0 {
 		managed.PID = inst.PID
 	}
+	if strings.TrimSpace(inst.DisplayName) != "" {
+		managed.DisplayName = inst.DisplayName
+	}
+	if strings.TrimSpace(inst.WorkspaceRoot) != "" {
+		managed.WorkspaceRoot = inst.WorkspaceRoot
+	}
+	managed.Status = "online"
 }
 
 func (a *App) reapIdleHeadless(now time.Time) {
@@ -721,6 +742,7 @@ func (a *App) reapIdleHeadless(now time.Time) {
 		}
 		log.Printf("headless idle cleanup: instance=%s pid=%d idle_since=%s", instanceID, managed.PID, managed.IdleSince.Format(time.RFC3339))
 		delete(a.managedHeadless, instanceID)
+		a.service.RemoveInstance(instanceID)
 	}
 }
 
