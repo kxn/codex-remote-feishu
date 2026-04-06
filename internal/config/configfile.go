@@ -57,13 +57,24 @@ type FeishuSettings struct {
 	Apps           []FeishuAppConfig `json:"apps,omitempty"`
 }
 
+type FeishuAppWizardState struct {
+	CredentialsSavedAt   *time.Time `json:"credentialsSavedAt,omitempty"`
+	ConnectionVerifiedAt *time.Time `json:"connectionVerifiedAt,omitempty"`
+	ScopesExportedAt     *time.Time `json:"scopesExportedAt,omitempty"`
+	EventsConfirmedAt    *time.Time `json:"eventsConfirmedAt,omitempty"`
+	CallbacksConfirmedAt *time.Time `json:"callbacksConfirmedAt,omitempty"`
+	MenusConfirmedAt     *time.Time `json:"menusConfirmedAt,omitempty"`
+	PublishedAt          *time.Time `json:"publishedAt,omitempty"`
+}
+
 type FeishuAppConfig struct {
-	ID         string     `json:"id,omitempty"`
-	Name       string     `json:"name,omitempty"`
-	AppID      string     `json:"appId,omitempty"`
-	AppSecret  string     `json:"appSecret,omitempty"`
-	Enabled    *bool      `json:"enabled,omitempty"`
-	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+	ID         string               `json:"id,omitempty"`
+	Name       string               `json:"name,omitempty"`
+	AppID      string               `json:"appId,omitempty"`
+	AppSecret  string               `json:"appSecret,omitempty"`
+	Enabled    *bool                `json:"enabled,omitempty"`
+	VerifiedAt *time.Time           `json:"verifiedAt,omitempty"`
+	Wizard     FeishuAppWizardState `json:"wizard,omitempty"`
 }
 
 type DebugSettings struct {

@@ -40,19 +40,38 @@ type feishuAppWriteRequest struct {
 	Enabled   *bool   `json:"enabled,omitempty"`
 }
 
+type feishuAppWizardUpdateRequest struct {
+	ScopesExported     *bool `json:"scopesExported,omitempty"`
+	EventsConfirmed    *bool `json:"eventsConfirmed,omitempty"`
+	CallbacksConfirmed *bool `json:"callbacksConfirmed,omitempty"`
+	MenusConfirmed     *bool `json:"menusConfirmed,omitempty"`
+	Published          *bool `json:"published,omitempty"`
+}
+
+type adminFeishuAppWizardView struct {
+	CredentialsSavedAt   *time.Time `json:"credentialsSavedAt,omitempty"`
+	ConnectionVerifiedAt *time.Time `json:"connectionVerifiedAt,omitempty"`
+	ScopesExportedAt     *time.Time `json:"scopesExportedAt,omitempty"`
+	EventsConfirmedAt    *time.Time `json:"eventsConfirmedAt,omitempty"`
+	CallbacksConfirmedAt *time.Time `json:"callbacksConfirmedAt,omitempty"`
+	MenusConfirmedAt     *time.Time `json:"menusConfirmedAt,omitempty"`
+	PublishedAt          *time.Time `json:"publishedAt,omitempty"`
+}
+
 type adminFeishuAppSummary struct {
-	ID              string                `json:"id"`
-	Name            string                `json:"name,omitempty"`
-	AppID           string                `json:"appId,omitempty"`
-	HasSecret       bool                  `json:"hasSecret"`
-	Enabled         bool                  `json:"enabled"`
-	VerifiedAt      *time.Time            `json:"verifiedAt,omitempty"`
-	Persisted       bool                  `json:"persisted"`
-	RuntimeOnly     bool                  `json:"runtimeOnly,omitempty"`
-	RuntimeOverride bool                  `json:"runtimeOverride,omitempty"`
-	ReadOnly        bool                  `json:"readOnly,omitempty"`
-	ReadOnlyReason  string                `json:"readOnlyReason,omitempty"`
-	Status          *feishu.GatewayStatus `json:"status,omitempty"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name,omitempty"`
+	AppID           string                    `json:"appId,omitempty"`
+	HasSecret       bool                      `json:"hasSecret"`
+	Enabled         bool                      `json:"enabled"`
+	VerifiedAt      *time.Time                `json:"verifiedAt,omitempty"`
+	Wizard          *adminFeishuAppWizardView `json:"wizard,omitempty"`
+	Persisted       bool                      `json:"persisted"`
+	RuntimeOnly     bool                      `json:"runtimeOnly,omitempty"`
+	RuntimeOverride bool                      `json:"runtimeOverride,omitempty"`
+	ReadOnly        bool                      `json:"readOnly,omitempty"`
+	ReadOnlyReason  string                    `json:"readOnlyReason,omitempty"`
+	Status          *feishu.GatewayStatus     `json:"status,omitempty"`
 }
 
 func (a *App) handleFeishuManifest(w http.ResponseWriter, _ *http.Request) {
@@ -133,6 +152,7 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	now := time.Now().UTC()
 	app := config.FeishuAppConfig{
 		ID:      gatewayID,
 		Name:    firstNonEmpty(trimmedString(req.Name), trimmedString(req.AppID), gatewayID),
@@ -142,6 +162,7 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 	if secret := trimmedString(req.AppSecret); secret != "" {
 		app.AppSecret = secret
 	}
+	markFeishuCredentialsSaved(&app, now)
 	updated.Feishu.Apps = append(updated.Feishu.Apps, app)
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
 		a.adminConfigMu.Unlock()
@@ -229,23 +250,29 @@ func (a *App) handleFeishuAppUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	current := updated.Feishu.Apps[index]
-	credentialsChanged := false
+	appIDChanged := false
+	secretChanged := false
 	if name := trimmedString(req.Name); name != "" {
 		current.Name = name
 	}
 	if appID := trimmedString(req.AppID); appID != "" && appID != current.AppID {
 		current.AppID = appID
-		credentialsChanged = true
+		appIDChanged = true
 	}
 	if secret := trimmedString(req.AppSecret); secret != "" && secret != current.AppSecret {
 		current.AppSecret = secret
-		credentialsChanged = true
+		secretChanged = true
 	}
 	if req.Enabled != nil {
 		current.Enabled = daemonBoolPtr(*req.Enabled)
 	}
-	if credentialsChanged {
-		current.VerifiedAt = nil
+	if appIDChanged || secretChanged {
+		now := time.Now().UTC()
+		markFeishuCredentialsSaved(&current, now)
+		resetFeishuVerification(&current)
+		if appIDChanged {
+			resetFeishuWizardManualSteps(&current)
+		}
 	}
 	updated.Feishu.Apps[index] = current
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
@@ -274,6 +301,35 @@ func (a *App) handleFeishuAppUpdate(w http.ResponseWriter, r *http.Request) {
 			Code:    "feishu_app_unavailable",
 			Message: "failed to load updated feishu app",
 			Details: err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, feishuAppResponse{App: summary})
+}
+
+func (a *App) handleFeishuAppWizardUpdate(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	var req feishuAppWizardUpdateRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "invalid_request",
+			Message: "failed to decode feishu wizard payload",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	updated, err := a.updateFeishuAppWizard(gatewayID, req, time.Now().UTC())
+	if err != nil {
+		a.writeFeishuMutationError(w, gatewayID, err)
+		return
+	}
+	summary, _, err := a.adminFeishuAppSummary(updated, gatewayID)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "feishu_app_unavailable",
+			Message: "failed to load feishu app after wizard update",
+			Details: gatewayID,
 		})
 		return
 	}
@@ -571,6 +627,7 @@ func buildFeishuAppSummary(gatewayID string, persisted config.FeishuAppConfig, r
 		HasSecret:       strings.TrimSpace(firstNonEmpty(strings.TrimSpace(runtime.AppSecret), strings.TrimSpace(persisted.AppSecret))) != "",
 		Enabled:         runtime.Enabled == nil || *runtime.Enabled,
 		VerifiedAt:      persisted.VerifiedAt,
+		Wizard:          adminWizardStateView(persisted.Wizard),
 		Persisted:       persistedConfig,
 		RuntimeOnly:     runtimeOnly,
 		RuntimeOverride: readOnly,
@@ -582,6 +639,27 @@ func buildFeishuAppSummary(gatewayID string, persisted config.FeishuAppConfig, r
 		summary.Status = &statusCopy
 	}
 	return summary
+}
+
+func adminWizardStateView(state config.FeishuAppWizardState) *adminFeishuAppWizardView {
+	if state.CredentialsSavedAt == nil &&
+		state.ConnectionVerifiedAt == nil &&
+		state.ScopesExportedAt == nil &&
+		state.EventsConfirmedAt == nil &&
+		state.CallbacksConfirmedAt == nil &&
+		state.MenusConfirmedAt == nil &&
+		state.PublishedAt == nil {
+		return nil
+	}
+	return &adminFeishuAppWizardView{
+		CredentialsSavedAt:   state.CredentialsSavedAt,
+		ConnectionVerifiedAt: state.ConnectionVerifiedAt,
+		ScopesExportedAt:     state.ScopesExportedAt,
+		EventsConfirmedAt:    state.EventsConfirmedAt,
+		CallbacksConfirmedAt: state.CallbacksConfirmedAt,
+		MenusConfirmedAt:     state.MenusConfirmedAt,
+		PublishedAt:          state.PublishedAt,
+	}
 }
 
 func feishuAppReadOnly(admin adminRuntimeState, gatewayID string) (bool, string) {
@@ -650,7 +728,82 @@ func (a *App) markFeishuAppVerified(path, gatewayID string, verifiedAt time.Time
 	updated := loaded.Config
 	value := verifiedAt.UTC()
 	updated.Feishu.Apps[index].VerifiedAt = &value
+	updated.Feishu.Apps[index].Wizard.ConnectionVerifiedAt = &value
 	return config.WriteAppConfig(path, updated)
+}
+
+func (a *App) updateFeishuAppWizard(gatewayID string, req feishuAppWizardUpdateRequest, at time.Time) (config.LoadedAppConfig, error) {
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
+
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return config.LoadedAppConfig{}, err
+	}
+	admin := a.snapshotAdminRuntime()
+	if readOnly, reason := feishuAppReadOnly(admin, gatewayID); readOnly {
+		return config.LoadedAppConfig{}, fmt.Errorf("runtime_override_read_only:%s", reason)
+	}
+	updated := loaded.Config
+	index := indexOfConfigFeishuApp(updated.Feishu.Apps, gatewayID)
+	if index < 0 {
+		return config.LoadedAppConfig{}, fmt.Errorf("feishu_app_not_found:%s", gatewayID)
+	}
+
+	current := updated.Feishu.Apps[index]
+	applyWizardToggle(&current.Wizard.ScopesExportedAt, req.ScopesExported, at)
+	applyWizardToggle(&current.Wizard.EventsConfirmedAt, req.EventsConfirmed, at)
+	applyWizardToggle(&current.Wizard.CallbacksConfirmedAt, req.CallbacksConfirmed, at)
+	applyWizardToggle(&current.Wizard.MenusConfirmedAt, req.MenusConfirmed, at)
+	applyWizardToggle(&current.Wizard.PublishedAt, req.Published, at)
+	updated.Feishu.Apps[index] = current
+
+	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
+		return config.LoadedAppConfig{}, err
+	}
+	return config.LoadedAppConfig{Path: loaded.Path, Config: updated}, nil
+}
+
+func markFeishuCredentialsSaved(app *config.FeishuAppConfig, at time.Time) {
+	if app == nil {
+		return
+	}
+	if strings.TrimSpace(app.AppID) == "" || strings.TrimSpace(app.AppSecret) == "" {
+		return
+	}
+	value := at.UTC()
+	app.Wizard.CredentialsSavedAt = &value
+}
+
+func resetFeishuVerification(app *config.FeishuAppConfig) {
+	if app == nil {
+		return
+	}
+	app.VerifiedAt = nil
+	app.Wizard.ConnectionVerifiedAt = nil
+}
+
+func resetFeishuWizardManualSteps(app *config.FeishuAppConfig) {
+	if app == nil {
+		return
+	}
+	app.Wizard.ScopesExportedAt = nil
+	app.Wizard.EventsConfirmedAt = nil
+	app.Wizard.CallbacksConfirmedAt = nil
+	app.Wizard.MenusConfirmedAt = nil
+	app.Wizard.PublishedAt = nil
+}
+
+func applyWizardToggle(target **time.Time, enabled *bool, at time.Time) {
+	if enabled == nil || target == nil {
+		return
+	}
+	if *enabled {
+		value := at.UTC()
+		*target = &value
+		return
+	}
+	*target = nil
 }
 
 func (a *App) setFeishuAppEnabled(gatewayID string, enabled *bool) (config.LoadedAppConfig, config.LoadedAppConfig, error) {
