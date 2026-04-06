@@ -16,7 +16,6 @@ import (
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
-	"github.com/larksuite/oapi-sdk-go/v3/ws"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -37,6 +36,7 @@ type LiveGatewayConfig struct {
 	GatewayID      string
 	AppID          string
 	AppSecret      string
+	Domain         string
 	TempDir        string
 	UseSystemProxy bool
 }
@@ -44,10 +44,10 @@ type LiveGatewayConfig struct {
 type LiveGateway struct {
 	config    LiveGatewayConfig
 	client    *lark.Client
-	wsClient  *ws.Client
 	projector *Projector
 
 	mu        sync.Mutex
+	stateHook func(GatewayState, error)
 	reactions map[string]string
 	messages  map[string]string
 }
@@ -114,8 +114,22 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		handler(ctx, action)
 		return nil
 	})
-	g.wsClient = ws.NewClient(g.config.AppID, g.config.AppSecret, ws.WithEventHandler(dispatch))
-	return g.wsClient.Start(ctx)
+	return newGatewayWSRunner(g.config, dispatch, g.emitState).Run(ctx)
+}
+
+func (g *LiveGateway) SetStateHook(hook func(GatewayState, error)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.stateHook = hook
+}
+
+func (g *LiveGateway) emitState(state GatewayState, err error) {
+	g.mu.Lock()
+	hook := g.stateHook
+	g.mu.Unlock()
+	if hook != nil {
+		hook(state, err)
+	}
 }
 
 func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
