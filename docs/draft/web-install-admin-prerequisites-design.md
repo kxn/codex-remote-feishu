@@ -703,6 +703,22 @@ scopes JSON 以当前已确认样例为基线：
 - [deploy/feishu/README.md](../../deploy/feishu/README.md)
 - [deploy/feishu/app-template.json](../../deploy/feishu/app-template.json)
 
+#### 5.8.4 当前阶段拍板
+
+当前阶段已经把 manifest 收口到后端包：
+
+- `internal/feishuapp/manifest.go`
+
+并补了回归约束：
+
+- `deploy/feishu/app-template.json` 中的
+  - `scopes_import`
+  - 事件列表
+  - 菜单 key
+- 必须与后端 manifest 保持同步
+
+这样后续页面和文档都可以复用同一份 source of truth。
+
 ### 5.9 Admin API 骨架
 
 #### 5.9.1 推荐最小接口集
@@ -743,16 +759,32 @@ scopes JSON 以当前已确认样例为基线：
   - `GET /api/admin/bootstrap-state`
   - `GET /api/admin/runtime-status`
   - `GET /api/admin/config`
+  - `GET /api/admin/feishu/manifest`
+  - `GET /api/admin/feishu/apps`
+  - `POST /api/admin/feishu/apps`
+  - `PUT /api/admin/feishu/apps/:id`
+  - `DELETE /api/admin/feishu/apps/:id`
+  - `POST /api/admin/feishu/apps/:id/verify`
+  - `POST /api/admin/feishu/apps/:id/reconnect`
+  - `POST /api/admin/feishu/apps/:id/enable`
+  - `POST /api/admin/feishu/apps/:id/disable`
+  - `GET /api/admin/feishu/apps/:id/scopes-json`
   - `GET /setup`
   - `GET /`
 - 已注册但暂时返回结构化 `501 not_implemented`：
-  - 其余 `feishu/apps`
   - `instances`
   - `storage/*`
   - `vscode/*`
   - `PUT /api/admin/config`
 
 这样后续阶段可以在不改路径 contract 的前提下逐步把能力填实。
+
+额外约束：
+
+- 如果当前 runtime 仍由 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` override 驱动：
+  - 对应 gateway 在管理页按只读展示
+  - 允许查看状态、导出 manifest、执行 verify / reconnect
+  - 不允许通过 Web 直接改写该 gateway 的持久化配置
 
 #### 5.9.2 返回值要求
 

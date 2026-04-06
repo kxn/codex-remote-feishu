@@ -427,6 +427,7 @@ V1 建议按 App 作用域提供接口，而不是“单 App 全局接口”：
 - `GET /api/admin/runtime-status`
 - `GET /api/admin/config`
 - `PUT /api/admin/config`
+- `GET /api/admin/feishu/manifest`
 - `GET /api/admin/feishu/apps`
 - `POST /api/admin/feishu/apps`
 - `PUT /api/admin/feishu/apps/:id`
@@ -447,6 +448,10 @@ V1 建议按 App 作用域提供接口，而不是“单 App 全局接口”：
 - `GET /api/admin/storage/preview-drive/:appId`
 - `POST /api/admin/storage/preview-drive/:appId/reconcile`
 - `POST /api/admin/storage/preview-drive/:appId/cleanup`
+
+当前阶段额外约束：
+
+- 如果运行时仍由 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` env override 驱动，该 App 在页面上应按只读展示
 
 ## 7. 风险与 workaround
 

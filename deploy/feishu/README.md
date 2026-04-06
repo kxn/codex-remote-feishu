@@ -13,6 +13,7 @@
    - `application.bot.menu_v6`
    - `card.action.trigger`
 4. 打开“权限管理”，补齐模板里列出的消息、P2P 和 reaction 相关权限。
+   - 如果控制台支持权限 JSON 导入，可直接使用模板中的 `scopes_import`
 5. 打开“机器人菜单”，创建以下菜单 key：
    - `list`
    - `status`
@@ -42,6 +43,22 @@
 - `/approval`
 
 ## 当前实现必需能力
+
+## 权限导入 JSON
+
+`app-template.json` 里的 `scopes_import` 字段就是当前后端 manifest 使用的导入样例。
+
+如果你的飞书控制台支持权限 JSON 导入，优先使用这段内容，再补手工确认：
+
+- `drive:drive`
+- `im:message`
+- `im:message.group_at_msg:readonly`
+- `im:message.group_msg`
+- `im:message.p2p_msg:readonly`
+- `im:message.reactions:read`
+- `im:message.reactions:write_only`
+- `im:message:send_as_bot`
+- `im:resource`
 
 ### 1. 基础机器人收发
 

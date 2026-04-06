@@ -18,26 +18,30 @@ import (
 )
 
 type AdminRuntimeOptions struct {
-	ConfigPath      string
-	LoadConfig      func() (config.LoadedAppConfig, error)
-	Services        config.ServicesConfig
-	AdminListenHost string
-	AdminListenPort string
-	AdminURL        string
-	SetupURL        string
-	SSHSession      bool
-	SetupRequired   bool
+	ConfigPath           string
+	LoadConfig           func() (config.LoadedAppConfig, error)
+	Services             config.ServicesConfig
+	AdminListenHost      string
+	AdminListenPort      string
+	AdminURL             string
+	SetupURL             string
+	SSHSession           bool
+	SetupRequired        bool
+	EnvOverrideActive    bool
+	EnvOverrideGatewayID string
 }
 
 type adminRuntimeState struct {
-	loadConfig      func() (config.LoadedAppConfig, error)
-	services        config.ServicesConfig
-	adminListenHost string
-	adminListenPort string
-	adminURL        string
-	setupURL        string
-	sshSession      bool
-	setupRequired   bool
+	loadConfig           func() (config.LoadedAppConfig, error)
+	services             config.ServicesConfig
+	adminListenHost      string
+	adminListenPort      string
+	adminURL             string
+	setupURL             string
+	sshSession           bool
+	setupRequired        bool
+	envOverrideActive    bool
+	envOverrideGatewayID string
 }
 
 type requestAuthState struct {
@@ -155,15 +159,16 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))
-	mux.HandleFunc("GET /api/admin/feishu/apps", a.requireAdmin(a.handleNotImplemented("GET /api/admin/feishu/apps")))
-	mux.HandleFunc("POST /api/admin/feishu/apps", a.requireAdmin(a.handleNotImplemented("POST /api/admin/feishu/apps")))
-	mux.HandleFunc("PUT /api/admin/feishu/apps/{id}", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/feishu/apps/{id}")))
-	mux.HandleFunc("DELETE /api/admin/feishu/apps/{id}", a.requireAdmin(a.handleNotImplemented("DELETE /api/admin/feishu/apps/{id}")))
-	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/verify", a.requireAdmin(a.handleNotImplemented("POST /api/admin/feishu/apps/{id}/verify")))
-	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/reconnect", a.requireAdmin(a.handleNotImplemented("POST /api/admin/feishu/apps/{id}/reconnect")))
-	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/enable", a.requireAdmin(a.handleNotImplemented("POST /api/admin/feishu/apps/{id}/enable")))
-	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/disable", a.requireAdmin(a.handleNotImplemented("POST /api/admin/feishu/apps/{id}/disable")))
-	mux.HandleFunc("GET /api/admin/feishu/apps/{id}/scopes-json", a.requireAdmin(a.handleNotImplemented("GET /api/admin/feishu/apps/{id}/scopes-json")))
+	mux.HandleFunc("GET /api/admin/feishu/manifest", a.requireAdmin(a.handleFeishuManifest))
+	mux.HandleFunc("GET /api/admin/feishu/apps", a.requireAdmin(a.handleFeishuAppsList))
+	mux.HandleFunc("POST /api/admin/feishu/apps", a.requireAdmin(a.handleFeishuAppCreate))
+	mux.HandleFunc("PUT /api/admin/feishu/apps/{id}", a.requireAdmin(a.handleFeishuAppUpdate))
+	mux.HandleFunc("DELETE /api/admin/feishu/apps/{id}", a.requireAdmin(a.handleFeishuAppDelete))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/verify", a.requireAdmin(a.handleFeishuAppVerify))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/reconnect", a.requireAdmin(a.handleFeishuAppReconnect))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/enable", a.requireAdmin(a.handleFeishuAppEnable))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/disable", a.requireAdmin(a.handleFeishuAppDisable))
+	mux.HandleFunc("GET /api/admin/feishu/apps/{id}/scopes-json", a.requireAdmin(a.handleFeishuAppScopesJSON))
 	mux.HandleFunc("GET /api/admin/instances", a.requireAdmin(a.handleNotImplemented("GET /api/admin/instances")))
 	mux.HandleFunc("POST /api/admin/instances", a.requireAdmin(a.handleNotImplemented("POST /api/admin/instances")))
 	mux.HandleFunc("DELETE /api/admin/instances/{id}", a.requireAdmin(a.handleNotImplemented("DELETE /api/admin/instances/{id}")))
@@ -193,14 +198,16 @@ func (a *App) ConfigureAdmin(opts AdminRuntimeOptions) {
 
 	a.mu.Lock()
 	a.admin = adminRuntimeState{
-		loadConfig:      loadConfig,
-		services:        opts.Services,
-		adminListenHost: opts.AdminListenHost,
-		adminListenPort: opts.AdminListenPort,
-		adminURL:        opts.AdminURL,
-		setupURL:        opts.SetupURL,
-		sshSession:      opts.SSHSession,
-		setupRequired:   opts.SetupRequired,
+		loadConfig:           loadConfig,
+		services:             opts.Services,
+		adminListenHost:      opts.AdminListenHost,
+		adminListenPort:      opts.AdminListenPort,
+		adminURL:             opts.AdminURL,
+		setupURL:             opts.SetupURL,
+		sshSession:           opts.SSHSession,
+		setupRequired:        opts.SetupRequired,
+		envOverrideActive:    opts.EnvOverrideActive,
+		envOverrideGatewayID: opts.EnvOverrideGatewayID,
 	}
 	a.mu.Unlock()
 }

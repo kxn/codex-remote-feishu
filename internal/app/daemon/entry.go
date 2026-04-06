@@ -66,6 +66,7 @@ func RunMain(ctx context.Context, version string) error {
 
 	env := envMap(os.Environ())
 	startup := buildStartupAccessPlan(loadedConfig.Config, cfg, env)
+	envOverrideActive := strings.TrimSpace(os.Getenv("FEISHU_APP_ID")) != "" || strings.TrimSpace(os.Getenv("FEISHU_APP_SECRET")) != ""
 
 	app := New(
 		net.JoinHostPort(cfg.RelayHost, cfg.RelayPort),
@@ -84,14 +85,16 @@ func RunMain(ctx context.Context, version string) error {
 	app.SetMarkdownPreviewer(markdownPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)
 	app.ConfigureAdmin(AdminRuntimeOptions{
-		ConfigPath:      loadedConfig.Path,
-		Services:        cfg,
-		AdminListenHost: startup.AdminBindHost,
-		AdminListenPort: cfg.RelayAPIPort,
-		AdminURL:        startup.AdminURL,
-		SetupURL:        startup.SetupURL,
-		SSHSession:      startup.SSHSession,
-		SetupRequired:   startup.SetupRequired,
+		ConfigPath:           loadedConfig.Path,
+		Services:             cfg,
+		AdminListenHost:      startup.AdminBindHost,
+		AdminListenPort:      cfg.RelayAPIPort,
+		AdminURL:             startup.AdminURL,
+		SetupURL:             startup.SetupURL,
+		SSHSession:           startup.SSHSession,
+		SetupRequired:        startup.SetupRequired,
+		EnvOverrideActive:    envOverrideActive,
+		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
 	if cfg.DebugRelayRaw {
 		rawLogger, err := debuglog.OpenRaw(paths.DaemonRawLogFile, "daemon", "", os.Getpid())

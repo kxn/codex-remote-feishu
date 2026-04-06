@@ -54,8 +54,9 @@ type App struct {
 	relayServer *http.Server
 	apiServer   *http.Server
 
-	commandSeq uint64
-	mu         sync.Mutex
+	commandSeq    uint64
+	mu            sync.Mutex
+	adminConfigMu sync.Mutex
 
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig

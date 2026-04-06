@@ -60,6 +60,22 @@
     "text",
     "image"
   ],
+  "scopes_import": {
+    "scopes": {
+      "tenant": [
+        "drive:drive",
+        "im:message",
+        "im:message.group_at_msg:readonly",
+        "im:message.group_msg",
+        "im:message.p2p_msg:readonly",
+        "im:message.reactions:read",
+        "im:message.reactions:write_only",
+        "im:message:send_as_bot",
+        "im:resource"
+      ],
+      "user": []
+    }
+  },
   "event_subscriptions": [
     {
       "event": "im.message.receive_v1",
