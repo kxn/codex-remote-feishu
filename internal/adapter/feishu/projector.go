@@ -48,6 +48,8 @@ const (
 	cardThemeApproval = "approval"
 )
 
+const maxEmbeddedFileSummaryRows = 6
+
 type Projector struct{}
 
 func NewProjector() *Projector {
@@ -192,12 +194,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.Block == nil {
 			return nil
 		}
-		return projectBlock(event.GatewayID, event.SurfaceSessionID, chatID, *event.Block)
-	case control.UIEventFileChangeSummary:
-		if event.FileChangeSummary == nil {
-			return nil
-		}
-		return []Operation{projectFileChangeSummary(event.GatewayID, event.SurfaceSessionID, chatID, *event.FileChangeSummary)}
+		return projectBlock(event.GatewayID, event.SurfaceSessionID, chatID, *event.Block, event.FileChangeSummary)
 	case control.UIEventThreadSelectionChange:
 		if event.ThreadSelection == nil {
 			return nil
@@ -223,7 +220,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 	}
 }
 
-func projectBlock(gatewayID, surfaceSessionID, chatID string, block render.Block) []Operation {
+func projectBlock(gatewayID, surfaceSessionID, chatID string, block render.Block, summary *control.FileChangeSummary) []Operation {
 	if !block.Final {
 		return []Operation{{
 			Kind:             OperationSendText,
@@ -245,6 +242,7 @@ func projectBlock(gatewayID, surfaceSessionID, chatID string, block render.Block
 	if block.Kind == render.BlockAssistantCode {
 		body = fenced(block.Language, block.Text)
 	}
+	elements := finalBlockExtraElements(summary)
 	return []Operation{{
 		Kind:             OperationSendCard,
 		GatewayID:        gatewayID,
@@ -253,36 +251,8 @@ func projectBlock(gatewayID, surfaceSessionID, chatID string, block render.Block
 		CardTitle:        title,
 		CardBody:         body,
 		CardThemeKey:     cardThemeFinal,
-	}}
-}
-
-func projectFileChangeSummary(gatewayID, surfaceSessionID, chatID string, summary control.FileChangeSummary) Operation {
-	title := "文件修改摘要"
-	if threadTitle := strings.TrimSpace(summary.ThreadTitle); threadTitle != "" {
-		title += " · " + threadTitle
-	}
-	body := fmt.Sprintf(
-		"本次 turn 共修改 %d 个文件\n%s",
-		summary.FileCount,
-		formatFileChangeCountsMarkdown(summary.AddedLines, summary.RemovedLines),
-	)
-	elements := make([]map[string]any, 0, len(summary.Files))
-	for index, file := range summary.Files {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": fmt.Sprintf("%d. %s\n%s", index+1, formatFileChangePath(file), formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines)),
-		})
-	}
-	return Operation{
-		Kind:             OperationSendCard,
-		GatewayID:        gatewayID,
-		SurfaceSessionID: surfaceSessionID,
-		ChatID:           chatID,
-		CardTitle:        title,
-		CardBody:         body,
-		CardThemeKey:     cardThemeInfo,
 		CardElements:     elements,
-	}
+	}}
 }
 
 func fenced(language, text string) string {
@@ -502,19 +472,167 @@ func requestPromptContainsOption(options []control.RequestPromptOption, optionID
 	return false
 }
 
-func formatFileChangePath(file control.FileChangeSummaryEntry) string {
+func finalBlockExtraElements(summary *control.FileChangeSummary) []map[string]any {
+	if summary == nil || summary.FileCount == 0 || len(summary.Files) == 0 {
+		return nil
+	}
+	elements := []map[string]any{{
+		"tag": "markdown",
+		"content": fmt.Sprintf(
+			"**本次修改** %d 个文件  %s",
+			summary.FileCount,
+			formatFileChangeCountsMarkdown(summary.AddedLines, summary.RemovedLines),
+		),
+	}}
+	labels := fileChangeDisplayLabels(summary.Files)
+	limit := len(summary.Files)
+	if limit > maxEmbeddedFileSummaryRows {
+		limit = maxEmbeddedFileSummaryRows
+	}
+	for index := 0; index < limit; index++ {
+		elements = append(elements, map[string]any{
+			"tag": "markdown",
+			"content": fmt.Sprintf(
+				"%d. %s\n%s",
+				index+1,
+				formatFileChangePath(summary.Files[index], labels),
+				formatFileChangeCountsMarkdown(summary.Files[index].AddedLines, summary.Files[index].RemovedLines),
+			),
+		})
+	}
+	if remaining := len(summary.Files) - limit; remaining > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": fmt.Sprintf("另有 %d 个文件未展开。", remaining),
+		})
+	}
+	return elements
+}
+
+func formatFileChangePath(file control.FileChangeSummaryEntry, labels map[string]string) string {
 	path := strings.TrimSpace(file.Path)
 	movePath := strings.TrimSpace(file.MovePath)
 	switch {
 	case path != "" && movePath != "":
-		return fmt.Sprintf("`%s` -> `%s`", path, movePath)
+		return fmt.Sprintf("`%s` -> `%s`", fileChangeDisplayLabel(path, labels), fileChangeDisplayLabel(movePath, labels))
 	case path != "":
-		return fmt.Sprintf("`%s`", path)
+		return fmt.Sprintf("`%s`", fileChangeDisplayLabel(path, labels))
 	case movePath != "":
-		return fmt.Sprintf("`%s`", movePath)
+		return fmt.Sprintf("`%s`", fileChangeDisplayLabel(movePath, labels))
 	default:
 		return "`(unknown)`"
 	}
+}
+
+func fileChangeDisplayLabels(files []control.FileChangeSummaryEntry) map[string]string {
+	paths := make([]string, 0, len(files)*2)
+	for _, file := range files {
+		if path := normalizeFileSummaryPath(file.Path); path != "" {
+			paths = append(paths, path)
+		}
+		if movePath := normalizeFileSummaryPath(file.MovePath); movePath != "" {
+			paths = append(paths, movePath)
+		}
+	}
+	return shortestUniquePathSuffixes(paths)
+}
+
+func fileChangeDisplayLabel(path string, labels map[string]string) string {
+	normalized := normalizeFileSummaryPath(path)
+	if normalized == "" {
+		return ""
+	}
+	if label := strings.TrimSpace(labels[normalized]); label != "" {
+		return label
+	}
+	return clampDisplayPath(normalized)
+}
+
+func shortestUniquePathSuffixes(paths []string) map[string]string {
+	unique := uniqueNormalizedPaths(paths)
+	if len(unique) == 0 {
+		return map[string]string{}
+	}
+	resolved := make(map[string]string, len(unique))
+	maxDepth := 0
+	for _, path := range unique {
+		if depth := len(strings.Split(path, "/")); depth > maxDepth {
+			maxDepth = depth
+		}
+	}
+	for depth := 1; depth <= maxDepth; depth++ {
+		counts := map[string]int{}
+		for _, path := range unique {
+			if resolved[path] != "" {
+				continue
+			}
+			suffix := pathSuffix(path, depth)
+			counts[suffix]++
+		}
+		for _, path := range unique {
+			if resolved[path] != "" {
+				continue
+			}
+			suffix := pathSuffix(path, depth)
+			if counts[suffix] == 1 {
+				resolved[path] = clampDisplayPath(suffix)
+			}
+		}
+	}
+	for _, path := range unique {
+		if resolved[path] == "" {
+			resolved[path] = clampDisplayPath(path)
+		}
+	}
+	return resolved
+}
+
+func uniqueNormalizedPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		normalized := normalizeFileSummaryPath(path)
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func normalizeFileSummaryPath(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.ReplaceAll(path, "\\", "/")
+	path = strings.Trim(path, "/")
+	return path
+}
+
+func pathSuffix(path string, depth int) string {
+	parts := strings.Split(normalizeFileSummaryPath(path), "/")
+	if depth >= len(parts) {
+		return strings.Join(parts, "/")
+	}
+	return strings.Join(parts[len(parts)-depth:], "/")
+}
+
+func clampDisplayPath(path string) string {
+	path = normalizeFileSummaryPath(path)
+	const maxLen = 36
+	if len(path) <= maxLen {
+		return path
+	}
+	if idx := strings.Index(path, "/"); idx >= 0 {
+		tail := path
+		if len(tail) > maxLen-4 {
+			tail = tail[len(tail)-(maxLen-4):]
+		}
+		return ".../" + strings.TrimLeft(tail, "/")
+	}
+	return path[len(path)-maxLen:]
 }
 
 func formatFileChangeCountsMarkdown(added, removed int) string {

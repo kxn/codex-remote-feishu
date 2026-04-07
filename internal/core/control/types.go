@@ -237,7 +237,6 @@ const (
 	UIEventNotice                UIEventKind = "notice"
 	UIEventThreadSelectionChange UIEventKind = "thread.selection.changed"
 	UIEventBlockCommitted        UIEventKind = "block.committed"
-	UIEventFileChangeSummary     UIEventKind = "file_change.summary"
 	UIEventAgentCommand          UIEventKind = "agent.command"
 	UIEventDaemonCommand         UIEventKind = "daemon.command"
 )

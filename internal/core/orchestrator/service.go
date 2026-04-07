@@ -352,8 +352,8 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			surface.ActiveTurnOrigin = ""
 		}
 		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)
-		events := s.flushPendingTurnText(instanceID, event.ThreadID, event.TurnID, true)
-		events = append(events, s.completeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)...)
+		summary := s.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
+		events := s.flushPendingTurnTextWithSummary(instanceID, event.ThreadID, event.TurnID, true, summary)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
 			if surface != nil {

@@ -280,45 +280,6 @@ func TestProjectTurnFailedNoticeUsesErrorTheme(t *testing.T) {
 	}
 }
 
-func TestProjectFileChangeSummaryAsCard(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventFileChangeSummary,
-		FileChangeSummary: &control.FileChangeSummary{
-			ThreadID:     "thread-1",
-			ThreadTitle:  "droid · 修复登录流程",
-			FileCount:    2,
-			AddedLines:   5,
-			RemovedLines: 3,
-			Files: []control.FileChangeSummaryEntry{
-				{Path: "old.txt", MovePath: "new.txt", AddedLines: 2, RemovedLines: 1},
-				{Path: "pkg/app.go", AddedLines: 3, RemovedLines: 2},
-			},
-		},
-	})
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if ops[0].CardTitle != "文件修改摘要 · droid · 修复登录流程" {
-		t.Fatalf("unexpected file change card title: %#v", ops[0])
-	}
-	if ops[0].CardThemeKey != cardThemeInfo {
-		t.Fatalf("expected file change summary to use info theme, got %#v", ops[0])
-	}
-	if !containsAll(ops[0].CardBody, "本次 turn 共修改 2 个文件", "<font color='green'>+5</font>", "<font color='red'>-3</font>") {
-		t.Fatalf("unexpected file change card body: %#v", ops[0].CardBody)
-	}
-	if len(ops[0].CardElements) != 2 {
-		t.Fatalf("expected two file rows, got %#v", ops[0].CardElements)
-	}
-	if ops[0].CardElements[0]["content"] != "1. `old.txt` -> `new.txt`\n<font color='green'>+2</font> <font color='red'>-1</font>" {
-		t.Fatalf("unexpected rename element: %#v", ops[0].CardElements[0])
-	}
-	if ops[0].CardElements[1]["content"] != "2. `pkg/app.go`\n<font color='green'>+3</font> <font color='red'>-2</font>" {
-		t.Fatalf("unexpected file element: %#v", ops[0].CardElements[1])
-	}
-}
-
 func TestProjectSnapshotShowsFollowWaitingAndAbandoning(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -407,6 +368,60 @@ func TestProjectFinalAssistantBlockAsThreadCard(t *testing.T) {
 	}
 	if ops[0].CardBody != "已收到：\n\n```text\nREADME.md\nsrc\n```" {
 		t.Fatalf("unexpected card body: %#v", ops[0])
+	}
+}
+
+func TestProjectFinalAssistantBlockEmbedsFileChangeSummary(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventBlockCommitted,
+		Block: &render.Block{
+			Kind:        render.BlockAssistantMarkdown,
+			Text:        "已完成修改。",
+			ThreadID:    "thread-1",
+			ThreadTitle: "droid · 修复登录流程",
+			ThemeKey:    "thread-1",
+			Final:       true,
+		},
+		FileChangeSummary: &control.FileChangeSummary{
+			ThreadID:     "thread-1",
+			ThreadTitle:  "droid · 修复登录流程",
+			FileCount:    3,
+			AddedLines:   8,
+			RemovedLines: 3,
+			Files: []control.FileChangeSummaryEntry{
+				{Path: "internal/core/orchestrator/service.go", AddedLines: 3, RemovedLines: 1},
+				{Path: "internal/adapter/feishu/service.go", AddedLines: 2, RemovedLines: 1},
+				{Path: "docs/old/guide.md", MovePath: "docs/new/guide.md", AddedLines: 3, RemovedLines: 1},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "最终回复 · droid · 修复登录流程" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if ops[0].CardThemeKey != cardThemeFinal {
+		t.Fatalf("unexpected theme key: %#v", ops[0])
+	}
+	if ops[0].CardBody != "已完成修改。" {
+		t.Fatalf("unexpected card body: %#v", ops[0])
+	}
+	if len(ops[0].CardElements) != 4 {
+		t.Fatalf("expected summary header plus three file rows, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "**本次修改** 3 个文件  <font color='green'>+8</font> <font color='red'>-3</font>" {
+		t.Fatalf("unexpected summary header: %#v", ops[0].CardElements[0])
+	}
+	if ops[0].CardElements[1]["content"] != "1. `orchestrator/service.go`\n<font color='green'>+3</font> <font color='red'>-1</font>" {
+		t.Fatalf("unexpected unique-suffix element: %#v", ops[0].CardElements[1])
+	}
+	if ops[0].CardElements[2]["content"] != "2. `feishu/service.go`\n<font color='green'>+2</font> <font color='red'>-1</font>" {
+		t.Fatalf("unexpected second unique-suffix element: %#v", ops[0].CardElements[2])
+	}
+	if ops[0].CardElements[3]["content"] != "3. `old/guide.md` -> `new/guide.md`\n<font color='green'>+3</font> <font color='red'>-1</font>" {
+		t.Fatalf("unexpected rename summary element: %#v", ops[0].CardElements[3])
 	}
 }
 

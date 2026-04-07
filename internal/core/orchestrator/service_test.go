@@ -3104,7 +3104,7 @@ func TestRemoteTurnLifecycleUsesExplicitSurfaceBinding(t *testing.T) {
 	}
 }
 
-func TestTurnCompletedAppendsFileChangeSummaryAfterFinalAssistantBlock(t *testing.T) {
+func TestTurnCompletedEmbedsFileChangeSummaryIntoFinalAssistantBlock(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -3166,28 +3166,25 @@ func TestTurnCompletedAppendsFileChangeSummaryAfterFinalAssistantBlock(t *testin
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
 
-	finalIndex := -1
-	summaryIndex := -1
-	for i, event := range finished {
+	var finalBlockEvent *control.UIEvent
+	for i := range finished {
+		event := finished[i]
 		if event.Block != nil && event.Block.Final && event.Block.Text == "已完成修改。" {
-			finalIndex = i
-		}
-		if event.FileChangeSummary != nil {
-			summaryIndex = i
-			if event.FileChangeSummary.FileCount != 1 || event.FileChangeSummary.AddedLines != 2 || event.FileChangeSummary.RemovedLines != 1 {
-				t.Fatalf("unexpected file change summary payload: %#v", event.FileChangeSummary)
-			}
+			finalBlockEvent = &finished[i]
 		}
 	}
-	if finalIndex == -1 || summaryIndex == -1 {
-		t.Fatalf("expected final assistant block and file summary, got %#v", finished)
+	if finalBlockEvent == nil {
+		t.Fatalf("expected final assistant block, got %#v", finished)
 	}
-	if summaryIndex <= finalIndex {
-		t.Fatalf("expected file summary after final assistant block, got %#v", finished)
+	if finalBlockEvent.FileChangeSummary == nil {
+		t.Fatalf("expected final assistant block to embed file summary, got %#v", finalBlockEvent)
+	}
+	if finalBlockEvent.FileChangeSummary.FileCount != 1 || finalBlockEvent.FileChangeSummary.AddedLines != 2 || finalBlockEvent.FileChangeSummary.RemovedLines != 1 {
+		t.Fatalf("unexpected embedded file change summary payload: %#v", finalBlockEvent.FileChangeSummary)
 	}
 }
 
-func TestTurnCompletedAggregatesMultipleCompletedFileChangeItemsIntoOneSummary(t *testing.T) {
+func TestTurnCompletedAggregatesMultipleCompletedFileChangeItemsIntoFinalBlock(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -3258,16 +3255,15 @@ func TestTurnCompletedAggregatesMultipleCompletedFileChangeItemsIntoOneSummary(t
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
 
-	var summaries []*control.FileChangeSummary
+	var summary *control.FileChangeSummary
 	for _, event := range finished {
-		if event.FileChangeSummary != nil {
-			summaries = append(summaries, event.FileChangeSummary)
+		if event.Block != nil && event.Block.Final {
+			summary = event.FileChangeSummary
 		}
 	}
-	if len(summaries) != 1 {
-		t.Fatalf("expected one aggregated file change summary, got %#v", summaries)
+	if summary == nil {
+		t.Fatalf("expected aggregated file change summary on final block, got %#v", finished)
 	}
-	summary := summaries[0]
 	if summary.FileCount != 2 || summary.AddedLines != 3 || summary.RemovedLines != 1 {
 		t.Fatalf("unexpected aggregated summary totals: %#v", summary)
 	}
@@ -3279,7 +3275,74 @@ func TestTurnCompletedAggregatesMultipleCompletedFileChangeItemsIntoOneSummary(t
 	}
 }
 
-func TestDeclinedFileChangeDoesNotProduceFinalSummary(t *testing.T) {
+func TestTurnCompletedSynthesizesFinalBlockWhenOnlyFileSummaryExists(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "处理一下",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "file-1",
+		ItemKind: "file_change",
+		Status:   "completed",
+		FileChanges: []agentproto.FileChangeRecord{{
+			Path: "pkg/app.go",
+			Kind: agentproto.FileChangeUpdate,
+			Diff: "@@ -1 +1 @@\n-old\n+new",
+		}},
+	})
+
+	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+
+	var finalBlockEvent *control.UIEvent
+	for i := range finished {
+		if finished[i].Block != nil && finished[i].Block.Final {
+			finalBlockEvent = &finished[i]
+		}
+	}
+	if finalBlockEvent == nil {
+		t.Fatalf("expected synthetic final block when only file summary exists, got %#v", finished)
+	}
+	if finalBlockEvent.Block.Text != "已完成文件修改。" {
+		t.Fatalf("expected synthetic final block text, got %#v", finalBlockEvent.Block)
+	}
+	if finalBlockEvent.FileChangeSummary == nil || finalBlockEvent.FileChangeSummary.FileCount != 1 {
+		t.Fatalf("expected synthetic final block to carry file summary, got %#v", finalBlockEvent)
+	}
+}
+
+func TestDeclinedFileChangeDoesNotEmbedFinalSummary(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{

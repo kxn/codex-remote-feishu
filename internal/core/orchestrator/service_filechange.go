@@ -58,7 +58,7 @@ func (s *Service) recordTurnFileChanges(instanceID string, event agentproto.Even
 	}
 }
 
-func (s *Service) completeTurnFileChangeSummary(instanceID, threadID, turnID string) []control.UIEvent {
+func (s *Service) takeTurnFileChangeSummary(instanceID, threadID, turnID string) *control.FileChangeSummary {
 	key := turnRenderKey(instanceID, threadID, turnID)
 	summary := s.turnFileChanges[key]
 	if summary == nil || len(summary.Files) == 0 {
@@ -66,13 +66,8 @@ func (s *Service) completeTurnFileChangeSummary(instanceID, threadID, turnID str
 		return nil
 	}
 	delete(s.turnFileChanges, key)
-
-	surface := s.turnSurface(instanceID, threadID, turnID)
-	if surface == nil {
-		return nil
-	}
 	inst := s.root.Instances[instanceID]
-	thread := (*state.ThreadRecord)(nil)
+	var thread *state.ThreadRecord
 	if inst != nil && threadID != "" {
 		thread = inst.Threads[threadID]
 	}
@@ -107,19 +102,14 @@ func (s *Service) completeTurnFileChangeSummary(instanceID, threadID, turnID str
 		return strings.Compare(left, right) < 0
 	})
 
-	return []control.UIEvent{{
-		Kind:             control.UIEventFileChangeSummary,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		FileChangeSummary: &control.FileChangeSummary{
-			ThreadID:     threadID,
-			ThreadTitle:  displayThreadTitle(inst, thread, threadID),
-			FileCount:    len(files),
-			AddedLines:   totalAdded,
-			RemovedLines: totalRemoved,
-			Files:        files,
-		},
-	}}
+	return &control.FileChangeSummary{
+		ThreadID:     threadID,
+		ThreadTitle:  displayThreadTitle(inst, thread, threadID),
+		FileCount:    len(files),
+		AddedLines:   totalAdded,
+		RemovedLines: totalRemoved,
+		Files:        files,
+	}
 }
 
 func normalizeFileChangeStatus(value string) string {

@@ -70,7 +70,7 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 
 	switch replay.Kind {
 	case state.ThreadReplayAssistantFinal:
-		return s.renderTextToSurface(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true)
+		return s.renderTextToSurface(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true, nil)
 	case state.ThreadReplayNotice:
 		notice := control.Notice{
 			Code:     replay.NoticeCode,
