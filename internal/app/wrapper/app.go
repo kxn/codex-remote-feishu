@@ -518,6 +518,26 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 
 func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(childStdout)
+	coalescer := newRelayEventCoalescer(nil, 0, 0)
+	sendRelayEvents := func(events []agentproto.Event) {
+		if len(events) == 0 {
+			return
+		}
+		if sendErr := client.SendEvents(events); sendErr != nil {
+			log.Printf("relay send server events failed: %v", sendErr)
+			if reportProblem != nil {
+				reportProblem(agentproto.ErrorInfoFromError(sendErr, agentproto.ErrorInfo{
+					Code:      "relay_send_server_events_failed",
+					Layer:     "wrapper",
+					Stage:     "forward_server_events",
+					Operation: "codex.stdout",
+					Message:   "wrapper 无法把 Codex 事件发送到 relay。",
+					Retryable: true,
+				}))
+			}
+		}
+	}
+	defer sendRelayEvents(coalescer.Flush())
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
@@ -536,19 +556,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 						result.Suppress,
 					)
 				}
-				if sendErr := client.SendEvents(result.Events); sendErr != nil {
-					log.Printf("relay send server events failed: %v", sendErr)
-					if reportProblem != nil {
-						reportProblem(agentproto.ErrorInfoFromError(sendErr, agentproto.ErrorInfo{
-							Code:      "relay_send_server_events_failed",
-							Layer:     "wrapper",
-							Stage:     "forward_server_events",
-							Operation: "codex.stdout",
-							Message:   "wrapper 无法把 Codex 事件发送到 relay。",
-							Retryable: true,
-						}))
-					}
-				}
+				sendRelayEvents(coalescer.Push(result.Events))
 				for _, followup := range result.OutboundToCodex {
 					select {
 					case writeCh <- followup:

@@ -140,11 +140,28 @@ Status-label rule for issues that cannot be started immediately:
   - evidence that explains why work cannot safely start yet
 - Do not use pre-implementation comments as a long-term archive dump; durable structure belongs in the issue body.
 
+## Staged Delivery Workflow
+
+For medium or large work that is intentionally split into multiple implementation stages:
+
+1. Before starting the first stage, write down the current staged plan in the active issue or design doc.
+2. Before starting each later stage, re-read the relevant issue, design doc, and current code state, then re-evaluate whether the remaining plan is still correct.
+3. If the best next step changed, update the staged plan in the relevant issue or design doc before coding that stage.
+4. Each stage must end with:
+   - implementation
+   - validation scoped to that stage
+   - a local commit
+5. Stage-end commits must not be pushed yet unless the user explicitly asks to push mid-rollout.
+6. After each stage-end commit, immediately reassess how that completed work affects the next stage before continuing.
+7. Continue through all planned stages in the same task without pausing for confirmation unless a major assumption collapsed and the remaining plan would likely be invalid.
+8. If implementation discovers a better stage split, update the plan first, then continue under the revised stages.
+
 ## Git Push Rule
 
 When a change is intentionally committed during task work:
 
 - Push it to GitHub in the same turn by default.
+- Exception: when the user explicitly requests staged local-only commits between phases, follow `Staged Delivery Workflow` and do not push until the staged rollout is complete or the user asks for a push.
 - Do not leave a local-only commit behind unless the user explicitly asks not to push yet.
 
 ## Proxy Environment

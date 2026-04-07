@@ -88,7 +88,9 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 	}
 
 	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventThreadsSnapshot && len(events[0].Threads) == 1
+		return batchHasEvent(events, func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventThreadsSnapshot && len(event.Threads) == 1
+		})
 	}, &stdout, &stderr, done)
 
 	if err := server.SendCommand("inst-wrapper", agentproto.Command{
@@ -101,18 +103,20 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 		t.Fatalf("send prompt: %v", err)
 	}
 
-	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventTurnStarted
-	}, &stdout, &stderr, done)
-	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventItemDelta && events[0].ItemKind == "agent_message"
-	}, &stdout, &stderr, done)
-	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventItemCompleted
-	}, &stdout, &stderr, done)
-	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventTurnCompleted
-	}, &stdout, &stderr, done)
+	waitForObservedEvents(t, eventsCh, 15*time.Second, &stdout, &stderr, done,
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventTurnStarted
+		},
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventItemDelta && event.ItemKind == "agent_message"
+		},
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventItemCompleted
+		},
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventTurnCompleted
+		},
+	)
 
 	if strings.Contains(stdout.String(), "relay-turn-start") {
 		t.Fatalf("internal relay request leaked to parent stdout: %s", stdout.String())
@@ -204,7 +208,9 @@ func TestWrapperHeadlessBootstrapsInitializeBeforeRelayCommands(t *testing.T) {
 	}
 
 	waitForEvent(t, eventsCh, 15*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 && events[0].Kind == agentproto.EventThreadsSnapshot && len(events[0].Threads) == 1
+		return batchHasEvent(events, func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventThreadsSnapshot && len(event.Threads) == 1
+		})
 	}, &stdout, &stderr, done)
 
 	cancel()
@@ -292,10 +298,11 @@ func TestWrapperKeepsEphemeralHelperTrafficOnStdoutAndAnnotatesRelay(t *testing.
 	})
 
 	waitForEvent(t, eventsCh, 5*time.Second, func(events []agentproto.Event) bool {
-		return len(events) == 1 &&
-			events[0].Kind == agentproto.EventThreadDiscovered &&
-			events[0].TrafficClass == agentproto.TrafficClassInternalHelper &&
-			events[0].Initiator.Kind == agentproto.InitiatorInternalHelper
+		return batchHasEvent(events, func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventThreadDiscovered &&
+				event.TrafficClass == agentproto.TrafficClassInternalHelper &&
+				event.Initiator.Kind == agentproto.InitiatorInternalHelper
+		})
 	}, &stdout, &stderr, done)
 
 	cancel()
@@ -463,6 +470,51 @@ func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time
 			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 		case <-deadline:
 			t.Fatalf("timed out waiting for matching event\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+		}
+	}
+}
+
+func batchHasEvent(events []agentproto.Event, match func(agentproto.Event) bool) bool {
+	for _, event := range events {
+		if match(event) {
+			return true
+		}
+	}
+	return false
+}
+
+func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, stdout, stderr *bytes.Buffer, done <-chan error, matchers ...func(agentproto.Event) bool) {
+	t.Helper()
+	if len(matchers) == 0 {
+		return
+	}
+	seen := make([]bool, len(matchers))
+	allSeen := func() bool {
+		for _, current := range seen {
+			if !current {
+				return false
+			}
+		}
+		return true
+	}
+	deadline := time.After(timeout)
+	for {
+		if allSeen() {
+			return
+		}
+		select {
+		case events := <-eventsCh:
+			for _, event := range events {
+				for i, match := range matchers {
+					if !seen[i] && match(event) {
+						seen[i] = true
+					}
+				}
+			}
+		case err := <-done:
+			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		case <-deadline:
+			t.Fatalf("timed out waiting for observed events\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 		}
 	}
 }

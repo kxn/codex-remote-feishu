@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-07`
-> Summary: 新增用户向使用说明书，并同步维护了管理页设计文档的索引状态。
+> Summary: 新增 relay 回压治理设计草案，并同步刷新文档索引。
 
 ## 1. 适用范围
 
@@ -137,6 +137,7 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
+- [relay-backpressure-hardening-design.md](./draft/relay-backpressure-hardening-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
