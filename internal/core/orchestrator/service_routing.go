@@ -123,6 +123,21 @@ func (s *Service) claimThread(surface *state.SurfaceConsoleRecord, inst *state.I
 	return true
 }
 
+func (s *Service) claimKnownThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string) bool {
+	if surface == nil || inst == nil || strings.TrimSpace(threadID) == "" {
+		return false
+	}
+	if owner := s.threadClaimSurface(threadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		return false
+	}
+	s.threadClaims[threadID] = &threadClaimRecord{
+		ThreadID:         threadID,
+		InstanceID:       inst.InstanceID,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	}
+	return true
+}
+
 func (s *Service) releaseSurfaceThreadClaim(surface *state.SurfaceConsoleRecord) {
 	if surface == nil {
 		return
@@ -216,6 +231,31 @@ func (s *Service) blockThreadSwitch(surface *state.SurfaceConsoleRecord) []contr
 	}
 	if len(surface.QueuedQueueItemIDs) != 0 {
 		return notice(surface, "thread_switch_queued", "当前还有排队消息，暂时不能切换会话。请等待队列清空、/stop，或 /detach。")
+	}
+	return nil
+}
+
+func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	if surface == nil || surface.AttachedInstanceID == "" {
+		return nil
+	}
+	if surface.ActiveRequestCapture != nil {
+		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+	}
+	if pending := activePendingRequest(surface); pending != nil {
+		_ = pending
+		return notice(surface, "request_pending", "当前有待确认请求。请先处理确认卡片，再切换到其他实例上的会话。")
+	}
+	if surface.RouteMode == state.RouteModeNewThreadReady {
+		if blocked := s.blockPreparedNewThreadRouteExit(surface); blocked != nil {
+			return blocked
+		}
+	} else if blocked := s.blockThreadSwitch(surface); blocked != nil {
+		return blocked
+	}
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	if s.surfaceNeedsDelayedDetach(surface, inst) {
+		return notice(surface, "thread_attach_requires_detach", "当前实例仍有执行中的请求或收尾中的 turn，暂时不能切换到其他实例上的会话。请等待完成，或先 /detach。")
 	}
 	return nil
 }

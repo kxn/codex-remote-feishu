@@ -734,6 +734,75 @@ func TestDaemonStartsHeadlessAndPromptsForResumeAfterRefresh(t *testing.T) {
 	}
 }
 
+func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: stateDir,
+		},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4321, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected pending preselected headless snapshot, got %#v", snapshot)
+	}
+	if captured.WorkDir != "/data/dl/droid" || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
+		t.Fatalf("unexpected preselected headless launch opts: %#v", captured)
+	}
+	if containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless") {
+		t.Fatalf("did not expect default headless display override when thread cwd is known, got %#v", captured.Env)
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    snapshot.PendingHeadless.InstanceID,
+			DisplayName:   "headless",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+
+	snapshot = app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID == "" || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected preselected headless hello to auto-attach target thread, got %#v", snapshot)
+	}
+}
+
 func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

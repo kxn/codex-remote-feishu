@@ -339,6 +339,27 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
+	if strings.TrimSpace(pending.ThreadID) != "" {
+		view := s.mergedThreadView(surface, pending.ThreadID)
+		if view == nil {
+			thread := s.ensureThread(inst, pending.ThreadID)
+			if strings.TrimSpace(thread.Name) == "" {
+				thread.Name = strings.TrimSpace(pending.ThreadName)
+			}
+			if strings.TrimSpace(thread.Preview) == "" {
+				thread.Preview = strings.TrimSpace(pending.ThreadPreview)
+			}
+			if strings.TrimSpace(thread.CWD) == "" {
+				thread.CWD = strings.TrimSpace(pending.ThreadCWD)
+			}
+			view = &mergedThreadView{
+				ThreadID: pending.ThreadID,
+				Inst:     inst,
+				Thread:   thread,
+			}
+		}
+		return s.attachSurfaceToKnownThread(surface, inst, view)
+	}
 	events := s.discardDrafts(surface)
 	clearSurfaceRequestCapture(surface)
 	s.releaseSurfaceThreadClaim(surface)
@@ -464,15 +485,10 @@ func (s *Service) completeHeadlessThreadSelection(surface *state.SurfaceConsoleR
 }
 
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		return notice(surface, "not_attached", "当前还没有接管任何实例。")
-	}
-	threads := visibleThreads(inst)
+	threads := s.mergedThreadViews(surface)
 	if len(threads) == 0 {
-		return notice(surface, "no_visible_threads", "当前还没有可用会话。")
+		return notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
 	}
-	sortVisibleThreads(threads)
 	limit := len(threads)
 	title := "全部会话"
 	hint := ""
@@ -485,23 +501,17 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	}
 	threads = threads[:limit]
 	options := make([]control.SelectionOption, 0, len(threads))
-	for i, thread := range threads {
-		label := displayThreadTitle(inst, thread, thread.ThreadID)
-		subtitle := s.threadSelectionSubtitle(surface, inst, thread)
-		buttonLabel := "切换"
-		if owner := s.threadClaimSurface(thread.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
-			buttonLabel = "查看"
-			if s.threadKickStatus(inst, owner, thread.ThreadID) == threadKickIdle {
-				buttonLabel = "强踢"
-			}
-		}
+	for i, view := range threads {
+		buttonStatus, buttonLabel, disabled := s.mergedThreadStatus(surface, view)
+		_ = buttonStatus
 		options = append(options, control.SelectionOption{
 			Index:       i + 1,
-			OptionID:    thread.ThreadID,
-			Label:       label,
-			Subtitle:    subtitle,
+			OptionID:    view.ThreadID,
+			Label:       displayThreadTitle(view.Inst, view.Thread, view.ThreadID),
+			Subtitle:    s.mergedThreadSubtitle(surface, view),
 			ButtonLabel: buttonLabel,
-			IsCurrent:   surface.SelectedThreadID == thread.ThreadID && s.surfaceOwnsThread(surface, thread.ThreadID),
+			IsCurrent:   surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
+			Disabled:    disabled,
 		})
 	}
 	return []control.UIEvent{{
@@ -517,6 +527,29 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 }
 
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
+	threadID = strings.TrimSpace(threadID)
+	target := s.resolveThreadTarget(surface, threadID)
+	switch target.Mode {
+	case threadAttachCurrentVisible:
+		return s.useAttachedVisibleThread(surface, threadID)
+	case threadAttachFreeVisible, threadAttachReuseHeadless:
+		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+			return blocked
+		}
+		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View)
+	case threadAttachCreateHeadless:
+		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+			return blocked
+		}
+		return s.startHeadlessForResolvedThread(surface, target.View)
+	default:
+		code := firstNonEmpty(target.NoticeCode, "thread_not_found")
+		text := firstNonEmpty(target.NoticeText, "目标会话不存在或当前不可见。")
+		return notice(surface, code, text)
+	}
+}
+
+func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")
@@ -570,6 +603,171 @@ func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string
 		return events
 	}
 	return notice(surface, "selection_unchanged", fmt.Sprintf("当前输入目标保持为：%s", title))
+}
+
+func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, view *mergedThreadView) []control.UIEvent {
+	if surface == nil || inst == nil || view == nil || strings.TrimSpace(view.ThreadID) == "" {
+		return nil
+	}
+	if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
+	}
+
+	events := []control.UIEvent{}
+	if surface.AttachedInstanceID != "" {
+		events = append(events, s.discardDrafts(surface)...)
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+	} else {
+		events = append(events, s.discardDrafts(surface)...)
+		clearSurfaceRequestCapture(surface)
+		clearSurfaceRequests(surface)
+		s.clearPreparedNewThread(surface)
+		surface.PromptOverride = state.ModelConfigRecord{}
+		surface.PendingHeadless = nil
+		surface.ActiveQueueItemID = ""
+		surface.DispatchMode = state.DispatchModeNormal
+		surface.Abandoning = false
+		delete(s.pausedUntil, surface.SurfaceSessionID)
+		delete(s.abandoningUntil, surface.SurfaceSessionID)
+	}
+
+	if !s.claimInstance(surface, inst.InstanceID) {
+		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
+	}
+	surface.AttachedInstanceID = inst.InstanceID
+	surface.PendingHeadless = nil
+	surface.ActiveQueueItemID = ""
+	surface.DispatchMode = state.DispatchModeNormal
+	surface.Abandoning = false
+	delete(s.pausedUntil, surface.SurfaceSessionID)
+	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	clearSurfaceRequests(surface)
+	s.clearPreparedNewThread(surface)
+	surface.PromptOverride = state.ModelConfigRecord{}
+
+	if isHeadlessInstance(inst) && strings.TrimSpace(threadCWD(view)) != "" {
+		s.retargetManagedHeadlessInstance(inst, threadCWD(view))
+	}
+
+	thread := s.ensureThread(inst, view.ThreadID)
+	if view.Thread != nil {
+		if strings.TrimSpace(view.Thread.Name) != "" {
+			thread.Name = strings.TrimSpace(view.Thread.Name)
+		}
+		if strings.TrimSpace(view.Thread.Preview) != "" {
+			thread.Preview = strings.TrimSpace(view.Thread.Preview)
+		}
+		if strings.TrimSpace(view.Thread.CWD) != "" {
+			thread.CWD = strings.TrimSpace(view.Thread.CWD)
+		}
+		if strings.TrimSpace(view.Thread.State) != "" {
+			thread.State = strings.TrimSpace(view.Thread.State)
+		}
+		if strings.TrimSpace(view.Thread.ExplicitModel) != "" {
+			thread.ExplicitModel = strings.TrimSpace(view.Thread.ExplicitModel)
+		}
+		if strings.TrimSpace(view.Thread.ExplicitReasoningEffort) != "" {
+			thread.ExplicitReasoningEffort = strings.TrimSpace(view.Thread.ExplicitReasoningEffort)
+		}
+		thread.Loaded = thread.Loaded || view.Thread.Loaded
+		thread.Archived = view.Thread.Archived
+		thread.LastUsedAt = view.Thread.LastUsedAt
+		thread.ListOrder = view.Thread.ListOrder
+	}
+	s.touchThread(thread)
+	s.releaseSurfaceThreadClaim(surface)
+	if !s.claimKnownThread(surface, inst, view.ThreadID) {
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
+	}
+	surface.SelectedThreadID = view.ThreadID
+	surface.RouteMode = state.RouteModePinned
+
+	title := displayThreadTitle(inst, thread, view.ThreadID)
+	preview := threadPreview(thread)
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code: "attached",
+			Text: fmt.Sprintf("已接管 %s。当前输入目标：%s", inst.DisplayName, title),
+		},
+	})
+	events = append(events, s.threadSelectionEvents(surface, view.ThreadID, string(surface.RouteMode), title, preview)...)
+	events = append(events, s.replayThreadUpdate(surface, inst, view.ThreadID)...)
+	events = append(events, s.maybeRequestThreadRefresh(surface, inst, view.ThreadID)...)
+	return events
+}
+
+func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRecord, view *mergedThreadView) []control.UIEvent {
+	if surface == nil || view == nil {
+		return nil
+	}
+	cwd := strings.TrimSpace(threadCWD(view))
+	if cwd == "" {
+		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法启动 headless 接管。")
+	}
+	s.nextHeadlessID++
+	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
+	threadTitle := displayThreadTitle(view.Inst, view.Thread, view.ThreadID)
+	threadPreview := ""
+	threadName := ""
+	sourceInstanceID := ""
+	if view.Thread != nil {
+		threadPreview = strings.TrimSpace(view.Thread.Preview)
+		threadName = strings.TrimSpace(view.Thread.Name)
+	}
+	if view.Inst != nil {
+		sourceInstanceID = view.Inst.InstanceID
+	}
+
+	events := []control.UIEvent{}
+	if surface.AttachedInstanceID != "" {
+		events = append(events, s.discardDrafts(surface)...)
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+	} else {
+		events = append(events, s.discardDrafts(surface)...)
+		clearSurfaceRequestCapture(surface)
+		clearSurfaceRequests(surface)
+		s.clearPreparedNewThread(surface)
+		surface.PromptOverride = state.ModelConfigRecord{}
+	}
+	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+		InstanceID:       instanceID,
+		ThreadID:         view.ThreadID,
+		ThreadTitle:      threadTitle,
+		ThreadName:       threadName,
+		ThreadPreview:    threadPreview,
+		ThreadCWD:        cwd,
+		RequestedAt:      s.now(),
+		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
+		Status:           state.HeadlessLaunchStarting,
+		SourceInstanceID: sourceInstanceID,
+	}
+	events = append(events,
+		control.UIEvent{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:  "headless_starting",
+				Title: "创建 Headless 实例",
+				Text:  fmt.Sprintf("正在创建 headless 实例并准备接管会话：%s", threadTitle),
+			},
+		},
+		control.UIEvent{
+			Kind:             control.UIEventDaemonCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			DaemonCommand: &control.DaemonCommand{
+				Kind:             control.DaemonCommandStartHeadless,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				InstanceID:       instanceID,
+				ThreadID:         view.ThreadID,
+				ThreadTitle:      threadTitle,
+				ThreadCWD:        cwd,
+			},
+		},
+	)
+	return events
 }
 
 func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []control.UIEvent {

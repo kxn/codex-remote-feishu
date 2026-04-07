@@ -4539,3 +4539,383 @@ func TestNewThreadRejectedDuringRequestCapture(t *testing.T) {
 		t.Fatalf("expected request capture gate to reject /new, got %#v", events)
 	}
 }
+
+func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", LastUsedAt: now.Add(1 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理样式", CWD: "/data/dl/web", LastUsedAt: now.Add(2 * time.Minute)},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected detached /use to show global thread prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "最近会话" || len(prompt.Options) != 2 {
+		t.Fatalf("unexpected prompt: %#v", prompt)
+	}
+	if prompt.Options[0].OptionID != "thread-2" || prompt.Options[0].ButtonLabel != "启动" {
+		t.Fatalf("expected newer offline thread to require headless start, got %#v", prompt.Options[0])
+	}
+	if prompt.Options[1].OptionID != "thread-1" || prompt.Options[1].ButtonLabel != "接管" {
+		t.Fatalf("expected online free thread to support direct attach, got %#v", prompt.Options[1])
+	}
+}
+
+func TestPresentGlobalThreadSelectionMarksBusyThreadDisabled(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-free": {ThreadID: "thread-free", Name: "空闲会话", CWD: "/data/dl/droid", LastUsedAt: now.Add(1 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "web",
+		WorkspaceRoot:           "/data/dl/web",
+		WorkspaceKey:            "/data/dl/web",
+		ShortName:               "web",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-busy",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-busy": {ThreadID: "thread-busy", Name: "忙碌会话", CWD: "/data/dl/web", LastUsedAt: now.Add(2 * time.Minute)},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-busy", ChatID: "chat-busy", ActorUserID: "user-busy", InstanceID: "inst-2"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	var busyOption *control.SelectionOption
+	for i := range prompt.Options {
+		option := prompt.Options[i]
+		if option.OptionID == "thread-busy" {
+			busyOption = &option
+			break
+		}
+	}
+	if busyOption == nil {
+		t.Fatalf("expected busy thread in global prompt, got %#v", prompt.Options)
+	}
+	if !busyOption.Disabled || busyOption.ButtonLabel != "已占用" || !strings.Contains(busyOption.Subtitle, "占用") {
+		t.Fatalf("expected busy thread to be disabled in global prompt, got %#v", busyOption)
+	}
+}
+
+func TestUseThreadDetachedAttachesFreeVisibleInstanceAndReplays(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-1", "item-1", "全局 /use 的 replay")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected detached /use to attach visible instance and thread, got %#v", snapshot)
+	}
+	var sawReplay bool
+	for _, event := range events {
+		if event.Block != nil && event.Block.Text == "全局 /use 的 replay" && event.Block.Final {
+			sawReplay = true
+		}
+	}
+	if !sawReplay {
+		t.Fatalf("expected global /use attach to replay stored final, got %#v", events)
+	}
+}
+
+func TestUseThreadCrossInstanceAttachesResolvedTargetAfterDetachSemantics(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionImageMessage, SurfaceSessionID: "surface-1", MessageID: "msg-img", LocalPath: "/tmp/img.png", MIMEType: "image/png"})
+	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-2",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-2" || surface.SelectedThreadID != "thread-2" || surface.RouteMode != state.RouteModePinned {
+		t.Fatalf("expected cross-instance /use to retarget attachment, got %#v", surface)
+	}
+	if surface.PromptOverride != (state.ModelConfigRecord{}) {
+		t.Fatalf("expected detach-style migration to clear prompt override, got %#v", surface.PromptOverride)
+	}
+	if len(surface.StagedImages) != 0 {
+		t.Fatalf("expected drafts to be discarded on cross-instance attach, got %#v", surface.StagedImages)
+	}
+	if svc.instanceClaimSurface("inst-1") != nil || svc.instanceClaimSurface("inst-2") == nil {
+		t.Fatalf("expected old instance claim released and new instance claimed")
+	}
+	var sawSelection bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-2" {
+			sawSelection = true
+		}
+	}
+	if !sawSelection {
+		t.Fatalf("expected thread selection event after cross-instance attach, got %#v", events)
+	}
+}
+
+func TestUseThreadCrossInstanceBlockedByPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 35, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-2",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_pending" {
+		t.Fatalf("expected pending request gate to block cross-instance attach, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected surface to remain on original attachment, got %#v", surface)
+	}
+}
+
+func TestUseThreadDetachedStartsPreselectedHeadlessWhenOnlyOfflineSnapshotAvailable(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 40, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", Preview: "修登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected detached /use to start preselected headless flow, got %#v", snapshot)
+	}
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected headless start flow, got %#v", events)
+	}
+	if events[1].DaemonCommand.ThreadID != "thread-1" || events[1].DaemonCommand.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected daemon command to carry preselected thread info, got %#v", events[1].DaemonCommand)
+	}
+}
+
+func TestApplyInstanceConnectedAttachesPreselectedHeadlessThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 45, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", Preview: "修登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	pending := svc.SurfaceSnapshot("surface-1").PendingHeadless
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    pending.InstanceID,
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp",
+		WorkspaceKey:  "/tmp",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplyInstanceConnected(pending.InstanceID)
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != pending.InstanceID || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected pending headless to auto-attach target thread, got %#v", snapshot)
+	}
+	if inst := svc.root.Instances[pending.InstanceID]; inst.WorkspaceRoot != "/data/dl/droid" {
+		t.Fatalf("expected managed headless metadata retargeted to thread cwd, got %#v", inst)
+	}
+	var sawSelection bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-1" {
+			sawSelection = true
+		}
+	}
+	if !sawSelection {
+		t.Fatalf("expected thread selection event when preselected headless connects, got %#v", events)
+	}
+}
+
+func TestUseThreadDetachedReusesManagedHeadlessForKnownThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 50, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", Preview: "修登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp/headless",
+		WorkspaceKey:  "/tmp/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-headless-1" || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected detached /use to reuse idle managed headless, got %#v", snapshot)
+	}
+	if inst := svc.root.Instances["inst-headless-1"]; inst.WorkspaceRoot != "/data/dl/droid" {
+		t.Fatalf("expected reused headless metadata to retarget to thread cwd, got %#v", inst)
+	}
+	var sawSelection bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-1" {
+			sawSelection = true
+		}
+	}
+	if !sawSelection {
+		t.Fatalf("expected thread selection when reusing headless, got %#v", events)
+	}
+}

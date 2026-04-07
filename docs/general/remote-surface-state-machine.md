@@ -127,8 +127,10 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 1. 一个 thread 同时只能被一个飞书 surface 占有。
 2. `/use` 命中已被他人占用的 thread 时：
-   1. 对方 idle 才会弹强踢确认。
-   2. 对方 queued/running 会直接拒绝。
+   1. 如果目标 thread 在**当前 attached instance 内可见**，仍保留现有强踢逻辑：
+      1. 对方 idle 才会弹强踢确认。
+      2. 对方 queued/running 会直接拒绝。
+   2. 如果目标 thread 走的是 global thread-first attach 路径，不提供强踢，只会在列表里显示 busy 并禁用。
 
 ### 4.3 `PendingHeadless` 仍是 dominant gate
 
@@ -141,7 +143,8 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 1. `starting` 时不能旁路 attach/use/follow/new。
 2. `selecting` 时也不能通过 `/use`、`/follow`、`/new`、普通文本去改路由。
-3. headless 选择的唯一正常逃生口是“恢复某个 thread”或“/killinstance”。
+3. 对 thread-first `/use` 触发的 preselected headless，`starting` 结束后会直接落到目标 thread，不会进入 `selecting`。
+4. 手工 `/newinstance` 的 headless 选择期，唯一正常逃生口仍是“恢复某个 thread”或“/killinstance”。
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
 
@@ -240,16 +243,20 @@ surface 不是单一枚举，而是四层正交状态叠加。
 R0 Detached
   -- /attach(instance，可拿默认 thread) --> R2 AttachedPinned
   -- /attach(instance，默认 thread 不可拿或不存在) --> R1 AttachedUnbound
+  -- /use(thread，可解析到当前可用实例) --> R2 AttachedPinned
+  -- /use(thread，需要新 headless) --> R0 + G1 PendingHeadlessStarting
   -- /newinstance --> R0 + G1 PendingHeadlessStarting
 
 R1 AttachedUnbound
-  -- /use(thread) --> R2 AttachedPinned
+  -- /use(thread，同 instance 可见) --> R2 AttachedPinned
+  -- /use(thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /follow --> R4 FollowBound 或 R3 FollowWaiting
   -- /detach --> R0 Detached
   -- instance offline --> R0 Detached
 
 R2 AttachedPinned
-  -- /use(other thread) --> R2 AttachedPinned
+  -- /use(other thread，同 instance 可见) --> R2 AttachedPinned
+  -- /use(other thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /follow --> R4 FollowBound 或 R3 FollowWaiting
   -- /new(无 live remote work，当前 thread 有 cwd) --> R5 NewThreadReady
   -- selected thread claim 丢失 --> R1 AttachedUnbound 或 R3 FollowWaiting
@@ -259,14 +266,16 @@ R2 AttachedPinned
 
 R3 FollowWaiting
   -- VS Code focus 到可接管 thread --> R4 FollowBound
-  -- /use(thread) --> R2 AttachedPinned
+  -- /use(thread，同 instance 可见) --> R2 AttachedPinned
+  -- /use(thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /detach --> R0 Detached
   -- instance offline --> R0 Detached
 
 R4 FollowBound
   -- VS Code focus 切到其他可接管 thread --> R4 FollowBound
   -- VS Code focus 消失或被别人占用 --> R3 FollowWaiting
-  -- /use(thread) --> R2 AttachedPinned
+  -- /use(thread，同 instance 可见) --> R2 AttachedPinned
+  -- /use(thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /new(无 live remote work，当前 thread 有 cwd) --> R5 NewThreadReady
   -- /detach(no live work) --> R0 Detached
   -- /detach(live work) --> E6 Abandoning -> R0 Detached
@@ -291,6 +300,15 @@ R5 NewThreadReady
 3. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
    1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
    2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
+4. global `/use` 的 resolver 顺序当前是：
+   1. 当前 attached instance 内可见 thread。
+   2. free existing visible instance。
+   3. reusable managed headless。
+   4. create managed headless。
+5. 当 `/use` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
+   1. queued / staged draft 会被清掉。
+   2. `PromptOverride`、pending request、request capture 会被清掉。
+   3. 当前 instance claim 会先释放，再 attach 到新目标。
 
 ### 5.2 远端队列生命周期
 
@@ -339,9 +357,11 @@ E5 HandoffWait
 ```text
 G0 None
   -- /newinstance --> G1 PendingHeadlessStarting
+  -- /use(thread，需要 create headless) --> G1 PendingHeadlessStarting
 
 G1 PendingHeadlessStarting
-  -- instance connected --> attach headless instance + G2 PendingHeadlessSelecting
+  -- instance connected 且 pending.ThreadID != "" --> R2 AttachedPinned + G0 None
+  -- instance connected 且 pending.ThreadID == "" --> attach headless instance + G2 PendingHeadlessSelecting
   -- /killinstance --> G0 None
   -- Tick timeout --> kill headless + clear pending + detach if needed
 
@@ -379,7 +399,7 @@ detach 时额外保证：
 | `/newinstance` | 允许 | 拒绝 | 拒绝 | 拒绝 | 拒绝 | 拒绝 |
 | `/new` | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 允许；若首条消息已 dispatching/running 则拒绝 |
 | `/killinstance` | 仅 pending headless 时有效 | 仅 headless attach/launch 时有效 | 同左 | 同左 | 同左 | 同左 |
-| `/use` `/useall` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许；若仅有 unsent draft 会先丢弃 |
+| `/use` `/useall` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许；若仅有 unsent draft 会先丢弃 |
 | `/follow` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许；若仅有 unsent draft 会先丢弃 |
 | 文本 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
 | 图片 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
@@ -394,8 +414,8 @@ detach 时额外保证：
 | 覆盖状态 | 当前行为 |
 | --- | --- |
 | `G1/G2 PendingHeadless` | 只允许 `/status`、`/killinstance`、`resume_headless_thread`、revoke/reaction；其余动作统一被 headless notice 挡住 |
-| `G3 PendingRequest` | 普通文本、图片、`/new` 被挡；用户必须先处理请求卡片 |
-| `G4 RequestCapture` | 下一条文本优先被当成反馈；`/new` 也会被 request-capture gate 拒绝 |
+| `G3 PendingRequest` | 普通文本、图片、`/new` 被挡；若 `/use` 需要切换到其他实例，也会先被挡住；用户必须先处理请求卡片 |
+| `G4 RequestCapture` | 下一条文本优先被当成反馈；`/new` 和需要切换实例的 `/use` 都会被 request-capture gate 拒绝 |
 | `E6 Abandoning` | 只允许 `/status`；再次 `/detach` 只回 `detach_pending`；其余动作统一拒绝 |
 
 ## 7. UI 动作协议
@@ -432,6 +452,9 @@ detach 时额外保证：
 8. **`/new` 的空 thread 归属靠 `ActiveThreadID` 猜**：已修复。现在改成显式 `remote_surface + SurfaceSessionID` 相关性。
 9. **`R5 NewThreadReady` 在 queued draft 时没有出口**：已修复。现在 `/use`、`/follow`、`/detach`、`/stop`、重复 `/new` 都有明确语义。
 10. **detach 期间最后一条 final / thread notice 会被完全吞掉**：已修复。当前会保留单条 thread 级 replay，并在后续 idle 的 `/attach` 或 `/use` 时一次性补发。
+11. **detached 状态下 `/use` 是死入口，只能先 attach instance**：已修复。现在 `/use` 会展示 global merged thread list，并按 resolver 自动 attach。
+12. **cross-instance `/use` 会绕过 detach 语义，保留旧 request/capture/override**：已修复。现在会先走 detach 风格清理与门禁，再 attach 新 thread。
+13. **thread-first create headless 仍然要先起空实例再选 thread**：已修复。global `/use` 触发的新 headless 会带 preselected thread 直接落到目标 thread。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
@@ -466,4 +489,6 @@ detach 时额外保证：
 
 ## 11. 待讨论取舍
 
-当前无。
+- 是否继续保留 `/newinstance` 这条“先起实例，再选恢复 thread”的旧路径，还是在后续阶段与 global `/use` 的 thread-first 语义完全统一。
+- 影响状态与迁移：`G1 PendingHeadlessStarting`、`G2 PendingHeadlessSelecting`、手工 headless 恢复卡片。
+- 当前最安全默认值：保留 `/newinstance` 作为显式手工入口，把默认 thread-first 工作流放在 `/use`，避免两条路径在同一轮里同时重写。

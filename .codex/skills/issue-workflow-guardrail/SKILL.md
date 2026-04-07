@@ -65,6 +65,8 @@ When picking up an issue:
    - Record only the current confirmed background.
    - Mark missing original context as `待补充` when needed.
 5. If the issue is still too broad, narrow it or split follow-up issues before implementation.
+6. If staged implementation is expected, write the current staged plan into the issue body before coding.
+7. If later investigation or implementation changes that staged plan materially, update the issue body before continuing.
 
 ## Status Labels
 
@@ -96,6 +98,9 @@ If the issue is implementable now:
 
 - do not leave a ritual “starting work” comment
 - implement against the refined issue
+- before each implementation stage, re-read the issue body, latest comments, and current code state
+- before each implementation stage, re-run any repository skills already required by the task so the next step is based on current guidance
+- if the best next stage changed materially, update the issue body first instead of leaving the new plan only in a comment
 - validate the result
 - update any affected design or state-machine document required by repo rules
 

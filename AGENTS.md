@@ -71,6 +71,8 @@ For medium or large follow-up work in this repository:
   2. implement against the issue
   3. validate the result
   4. close the issue after the requested acceptance criteria are satisfied
+- If the implementation plan changes materially after new code evidence, runtime evidence, or maintainer comments, update the active issue body before continuing.
+- Do not leave an outdated staged plan only in comments when the issue body can be refreshed cheaply and accurately.
 - Do not do a full open-issue sweep before every commit. Issue review happens when creating, picking up, or closing an issue, not as a mandatory pre-commit loop.
 
 For existing issues created before the standard, do not run a one-time bulk cleanup pass.
@@ -146,15 +148,17 @@ For medium or large work that is intentionally split into multiple implementatio
 
 1. Before starting the first stage, write down the current staged plan in the active issue or design doc.
 2. Before starting each later stage, re-read the relevant issue, design doc, and current code state, then re-evaluate whether the remaining plan is still correct.
-3. If the best next step changed, update the staged plan in the relevant issue or design doc before coding that stage.
-4. Each stage must end with:
+3. Before each stage, re-run the repository skills that match the work in that stage, including the issue skill and any domain skill already required by the task.
+4. If the best next step changed, update the staged plan in the relevant issue or design doc before coding that stage.
+5. If the plan change is material, update the active GitHub issue body rather than leaving the new plan only in comments.
+6. Each stage must end with:
    - implementation
    - validation scoped to that stage
    - a local commit
-5. Stage-end commits must not be pushed yet unless the user explicitly asks to push mid-rollout.
-6. After each stage-end commit, immediately reassess how that completed work affects the next stage before continuing.
-7. Continue through all planned stages in the same task without pausing for confirmation unless a major assumption collapsed and the remaining plan would likely be invalid.
-8. If implementation discovers a better stage split, update the plan first, then continue under the revised stages.
+7. Stage-end commits must not be pushed yet unless the user explicitly asks to push mid-rollout.
+8. After each stage-end commit, immediately reassess how that completed work affects the next stage before continuing.
+9. Continue through all planned stages in the same task without pausing for confirmation unless a major assumption collapsed and the remaining plan would likely be invalid.
+10. If implementation discovers a better stage split, update the plan first, then continue under the revised stages.
 
 ## Git Push Rule
 
