@@ -239,12 +239,8 @@ func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []
 	if surface == nil || surface.AttachedInstanceID == "" {
 		return nil
 	}
-	if surface.ActiveRequestCapture != nil {
-		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
-	}
-	if pending := activePendingRequest(surface); pending != nil {
-		_ = pending
-		return notice(surface, "request_pending", "当前有待确认请求。请先处理确认卡片，再切换到其他实例上的会话。")
+	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+		return blocked
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
 		if blocked := s.blockPreparedNewThreadRouteExit(surface); blocked != nil {
@@ -256,6 +252,27 @@ func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
 		return notice(surface, "thread_attach_requires_detach", "当前实例仍有执行中的请求或收尾中的 turn，暂时不能切换到其他实例上的会话。请等待完成，或先 /detach。")
+	}
+	return nil
+}
+
+func surfaceHasRouteMutationRequestState(surface *state.SurfaceConsoleRecord) bool {
+	if surface == nil {
+		return false
+	}
+	return surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil
+}
+
+func (s *Service) blockRouteMutationForRequestState(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	if surface == nil {
+		return nil
+	}
+	if surface.ActiveRequestCapture != nil {
+		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+	}
+	if pending := activePendingRequest(surface); pending != nil {
+		_ = pending
+		return notice(surface, "request_pending", "当前有待确认请求。请先处理确认卡片，再切换输入目标。")
 	}
 	return nil
 }
@@ -507,6 +524,11 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []control.UIE
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")
 	}
+	if surface.RouteMode != state.RouteModeFollowLocal && surfaceHasRouteMutationRequestState(surface) {
+		if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+			return blocked
+		}
+	}
 	events := []control.UIEvent{}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
 		if blocked := s.blockPreparedNewThreadRouteExit(surface); blocked != nil {
@@ -555,6 +577,9 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		return nil
 	}
 	if s.surfaceHasLiveRemoteWork(surface) {
+		return nil
+	}
+	if surfaceHasRouteMutationRequestState(surface) {
 		return nil
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]

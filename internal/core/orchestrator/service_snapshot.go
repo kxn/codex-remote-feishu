@@ -16,6 +16,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ActorUserID:      surface.ActorUserID,
 	}
+	snapshot.Gate = snapshotGateSummary(surface)
 	if pending := surface.PendingHeadless; pending != nil {
 		snapshot.PendingHeadless = control.PendingHeadlessSummary{
 			InstanceID:  pending.InstanceID,
@@ -51,6 +52,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			RouteMode:             string(surface.RouteMode),
 			Abandoning:            surface.Abandoning,
 		}
+		snapshot.Dispatch = snapshotDispatchSummary(surface, inst)
 		snapshot.NextPrompt = s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	}
 
@@ -90,6 +92,49 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		return snapshot.Instances[i].WorkspaceKey < snapshot.Instances[j].WorkspaceKey
 	})
 	return snapshot
+}
+
+func snapshotGateSummary(surface *state.SurfaceConsoleRecord) control.GateSummary {
+	if surface == nil {
+		return control.GateSummary{}
+	}
+	if surface.ActiveRequestCapture != nil {
+		return control.GateSummary{Kind: "request_capture"}
+	}
+	count := 0
+	for requestID, request := range surface.PendingRequests {
+		if request == nil {
+			delete(surface.PendingRequests, requestID)
+			continue
+		}
+		count++
+	}
+	if count != 0 {
+		return control.GateSummary{Kind: "pending_request", PendingRequestCount: count}
+	}
+	return control.GateSummary{}
+}
+
+func snapshotDispatchSummary(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) control.DispatchSummary {
+	if surface == nil {
+		return control.DispatchSummary{}
+	}
+	summary := control.DispatchSummary{
+		DispatchMode: string(surface.DispatchMode),
+		QueuedCount:  len(surface.QueuedQueueItemIDs),
+	}
+	if inst != nil {
+		summary.InstanceOnline = inst.Online
+	}
+	if surface.ActiveQueueItemID == "" {
+		return summary
+	}
+	item := surface.QueueItems[surface.ActiveQueueItemID]
+	if item == nil {
+		return summary
+	}
+	summary.ActiveItemStatus = string(item.Status)
+	return summary
 }
 
 func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, frozenThreadID, frozenCWD string, override state.ModelConfigRecord) control.PromptRouteSummary {

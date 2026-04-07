@@ -666,6 +666,12 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		if preview := strings.TrimSpace(snapshot.Attachment.SelectedThreadPreview); preview != "" {
 			lines = append(lines, snapshotField("最近信息", preview))
 		}
+		if dispatch := snapshotDispatchText(snapshot.Dispatch); dispatch != "" {
+			lines = append(lines, snapshotField("执行状态", dispatch))
+		}
+		if gate := snapshotGateText(snapshot.Gate); gate != "" {
+			lines = append(lines, snapshotField("输入门禁", gate))
+		}
 		if snapshot.Attachment.PID > 0 {
 			lines = append(lines, snapshotField("实例 PID", fmt.Sprintf("`%d`", snapshot.Attachment.PID)))
 		}
@@ -741,6 +747,60 @@ func displaySnapshotValue(value, source string) string {
 		return "未知"
 	}
 	return value
+}
+
+func snapshotGateText(summary control.GateSummary) string {
+	switch summary.Kind {
+	case "request_capture":
+		return "正在等待一条文字处理意见；下一条文本不会发到当前会话"
+	case "pending_request":
+		if summary.PendingRequestCount > 1 {
+			return fmt.Sprintf("有 %d 个待确认请求；普通文本和图片会先被拦住", summary.PendingRequestCount)
+		}
+		return "有 1 个待确认请求；普通文本和图片会先被拦住"
+	default:
+		return ""
+	}
+}
+
+func snapshotDispatchText(summary control.DispatchSummary) string {
+	if !summary.InstanceOnline && summary.DispatchMode == "" && summary.ActiveItemStatus == "" && summary.QueuedCount == 0 {
+		return ""
+	}
+	if !summary.InstanceOnline {
+		if summary.QueuedCount > 0 {
+			return fmt.Sprintf("实例离线，已保留接管关系；%d 条排队消息会在恢复后继续", summary.QueuedCount)
+		}
+		return "实例离线，已保留接管关系，等待恢复"
+	}
+	switch summary.DispatchMode {
+	case "paused_for_local":
+		if summary.QueuedCount > 0 {
+			return fmt.Sprintf("本地 VS Code 占用中；%d 条飞书消息继续排队", summary.QueuedCount)
+		}
+		return "本地 VS Code 占用中；新的飞书消息会先排队"
+	case "handoff_wait":
+		if summary.QueuedCount > 0 {
+			return fmt.Sprintf("等待本地 turn handoff；%d 条排队消息稍后继续派发", summary.QueuedCount)
+		}
+		return "等待本地 turn handoff；稍后自动恢复远端派发"
+	}
+	switch summary.ActiveItemStatus {
+	case "running":
+		if summary.QueuedCount > 0 {
+			return fmt.Sprintf("当前 1 条执行中，另有 %d 条排队", summary.QueuedCount)
+		}
+		return "当前 1 条执行中"
+	case "dispatching":
+		if summary.QueuedCount > 0 {
+			return fmt.Sprintf("当前 1 条派发中，另有 %d 条排队", summary.QueuedCount)
+		}
+		return "当前 1 条派发中"
+	}
+	if summary.QueuedCount > 0 {
+		return fmt.Sprintf("当前 %d 条排队", summary.QueuedCount)
+	}
+	return "空闲"
 }
 
 func snapshotConfigSourceLabel(source string) string {

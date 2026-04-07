@@ -215,7 +215,7 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 所以这两个状态不再依赖单一异步事件才能退出。
 
-### 4.9 thread 级未投递回放是单槽、内存态、一次性
+### 4.9 thread 级未投递回放是 thread-global 单槽、内存态、一次性
 
 当前 `ThreadRecord` 增加了 `UndeliveredReplay`，但它不是完整历史，只是 thread 级的单槽候选。
 
@@ -224,8 +224,10 @@ surface 不是单一枚举，而是四层正交状态叠加。
 1. 只记录两类内容：
    1. 没有任何 flybook surface 可投递时产生的 final assistant block。
    2. 没有任何目标 surface 时产生的 thread-scoped system/problem notice。
-2. 一条新候选会覆盖旧候选，不保留 backlog。
-3. 同一 thread 的内容一旦已经成功投递到当前 surface，就会清空旧 replay，避免后续重复补发。
+2. 同一 `threadID` 的 replay 当前按 relay 全局单槽处理：
+   1. 一条新候选会覆盖旧候选，不保留 backlog。
+   2. cross-instance attach / `/use` 时会先从其他 instance 迁移到当前目标 thread，再尝试补发。
+3. 同一 thread 的内容一旦已经成功投递到当前 surface，就会清空所有已知 instance 上的旧 replay，避免后续重复补发。
 4. 只有两条显式入口会尝试回放：
    1. `/attach` 成功后默认选中的 thread。
    2. `/use` 选中的 thread。
@@ -234,6 +236,29 @@ surface 不是单一枚举，而是四层正交状态叠加。
    2. 候选继续保留，等待后续 idle 的 `/attach` 或 `/use`。
 6. 回放成功后立即清空，因此同一条内容只会补发一次。
 7. 该状态仅保存在 relay 内存里；`relayd` 重启后丢失是当前已接受语义。
+
+### 4.10 `/status` 当前至少会显式投影 gate / dispatch / retained-offline
+
+当前 `Snapshot` 不再只展示 attachment 和 next prompt。
+
+现在至少会额外投影三类“决定下一条输入会发生什么”的状态：
+
+1. request gate：
+   1. `PendingRequest`
+   2. `RequestCapture`
+2. dispatch / queue：
+   1. `Dispatching`
+   2. `Running`
+   3. `PausedForLocal`
+   4. `HandoffWait`
+   5. queued count
+3. transport degraded 后“attachment 仍保留但实例已离线”的 retained-offline 状态。
+
+它仍然不是完整调试面板，但已经能回答最关键的问题：
+
+1. 下一条文本是不是会先被 request gate 吃掉。
+2. 现在是执行中、排队中，还是被本地 VS Code 暂停。
+3. attachment 还在不在，以及当前是不是在等实例恢复。
 
 ## 5. 主要状态迁移
 
@@ -252,7 +277,6 @@ R1 AttachedUnbound
   -- /use(thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /follow --> R4 FollowBound 或 R3 FollowWaiting
   -- /detach --> R0 Detached
-  -- instance offline --> R0 Detached
 
 R2 AttachedPinned
   -- /use(other thread，同 instance 可见) --> R2 AttachedPinned
@@ -262,14 +286,12 @@ R2 AttachedPinned
   -- selected thread claim 丢失 --> R1 AttachedUnbound 或 R3 FollowWaiting
   -- /detach(no live work) --> R0 Detached
   -- /detach(live work) --> E6 Abandoning -> R0 Detached
-  -- instance offline --> R0 Detached
 
 R3 FollowWaiting
   -- VS Code focus 到可接管 thread --> R4 FollowBound
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
   -- /use(thread，需要切换实例) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
   -- /detach --> R0 Detached
-  -- instance offline --> R0 Detached
 
 R4 FollowBound
   -- VS Code focus 切到其他可接管 thread --> R4 FollowBound
@@ -279,7 +301,6 @@ R4 FollowBound
   -- /new(无 live remote work，当前 thread 有 cwd) --> R5 NewThreadReady
   -- /detach(no live work) --> R0 Detached
   -- /detach(live work) --> E6 Abandoning -> R0 Detached
-  -- instance offline --> R0 Detached
 
 R5 NewThreadReady
   -- 第一条普通文本 --> R5 + E1/E2，等待新 thread 落地
@@ -309,6 +330,11 @@ R5 NewThreadReady
    1. queued / staged draft 会被清掉。
    2. `PromptOverride`、pending request、request capture 会被清掉。
    3. 当前 instance claim 会先释放，再 attach 到新目标。
+6. 当 surface 处于 `PendingRequest` 或 `RequestCapture` 时：
+   1. same-instance `/use`
+   2. `/follow`
+   3. follow-local 自动重绑定
+   当前都会被冻结，避免 UI 宣布的新目标和下一条普通输入的实际落点不一致。
 
 ### 5.2 远端队列生命周期
 
@@ -389,6 +415,32 @@ detach 时额外保证：
 2. staged image 会被丢弃。
 3. request prompt / request capture 会被清空。
 
+### 5.6 transport degraded / reconnect / hard disconnect
+
+```text
+R1/R2/R3/R4/R5 + inst.Online=true
+  -- ApplyInstanceTransportDegraded --> 保持当前 route state + inst.Online=false
+
+transport degraded retained attachment
+  -- 当前 active item 若在 dispatching/running --> fail 当前 active item
+  -- queued items --> 保留 queued
+  -- reconnect(ApplyInstanceConnected) --> 继续当前 route state，并重新 dispatchNext / reevaluateFollow
+  -- hard disconnect(ApplyInstanceDisconnected / RemoveInstance) --> R0 Detached
+```
+
+补充说明：
+
+1. `transport_degraded` 和真正离线不是同一路径。
+2. degraded 会保留：
+   1. `AttachedInstanceID`
+   2. `SelectedThreadID`
+   3. queued work
+3. degraded 会清掉：
+   1. 当前 active turn 归属
+   2. request prompt / request capture
+   3. surface-level prompt override
+4. 因为 attachment 仍在，所以 `/status` 必须明确显示“实例离线但接管关系保留”，否则用户会误以为已经 detach。
+
 ## 6. 命令矩阵
 
 ### 6.1 基础路由态
@@ -414,8 +466,8 @@ detach 时额外保证：
 | 覆盖状态 | 当前行为 |
 | --- | --- |
 | `G1/G2 PendingHeadless` | 只允许 `/status`、`/killinstance`、`resume_headless_thread`、revoke/reaction；其余动作统一被 headless notice 挡住 |
-| `G3 PendingRequest` | 普通文本、图片、`/new` 被挡；若 `/use` 需要切换到其他实例，也会先被挡住；用户必须先处理请求卡片 |
-| `G4 RequestCapture` | 下一条文本优先被当成反馈；`/new` 和需要切换实例的 `/use` 都会被 request-capture gate 拒绝 |
+| `G3 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；用户必须先处理请求卡片 |
+| `G4 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住 |
 | `E6 Abandoning` | 只允许 `/status`；再次 `/detach` 只回 `detach_pending`；其余动作统一拒绝 |
 
 ## 7. UI 动作协议
@@ -455,6 +507,9 @@ detach 时额外保证：
 11. **detached 状态下 `/use` 是死入口，只能先 attach instance**：已修复。现在 `/use` 会展示 global merged thread list，并按 resolver 自动 attach。
 12. **cross-instance `/use` 会绕过 detach 语义，保留旧 request/capture/override**：已修复。现在会先走 detach 风格清理与门禁，再 attach 新 thread。
 13. **thread-first create headless 仍然要先起空实例再选 thread**：已修复。global `/use` 触发的新 headless 会带 preselected thread 直接落到目标 thread。
+14. **same-instance `/use` / `/follow` / auto-follow 会在旧 request gate 还活着时静默改路由**：已修复。现在只要 request gate 仍在，所有会改路由的动作都会被冻结。
+15. **cross-instance attach 到复用/新建 headless 时会丢 thread replay**：已修复。当前 replay 会先按 `threadID` 全局迁移，再在目标 attach 上一次性补发。
+16. **transport degraded 后 attachment 仍保留，但文档和 `/status` 看起来像已 detached**：已修复。canonical 文档和 `/status` 现在都显式区分 retained-offline 与真正 detach。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

@@ -554,6 +554,11 @@ func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, 
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")
 	}
+	if (surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != threadID) && surfaceHasRouteMutationRequestState(surface) {
+		if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+			return blocked
+		}
+	}
 	events := []control.UIEvent{}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
 		if blocked := s.blockPreparedNewThreadRouteExit(surface); blocked != nil {
@@ -674,6 +679,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		thread.LastUsedAt = view.Thread.LastUsedAt
 		thread.ListOrder = view.Thread.ListOrder
 	}
+	s.adoptThreadReplay(inst, view.ThreadID)
 	s.touchThread(thread)
 	s.releaseSurfaceThreadClaim(surface)
 	if !s.claimKnownThread(surface, inst, view.ThreadID) {

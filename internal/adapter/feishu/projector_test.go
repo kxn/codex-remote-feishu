@@ -344,6 +344,50 @@ func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsGateAndRetainedOfflineAttachment(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			Attachment: control.AttachmentSummary{
+				InstanceID:          "inst-1",
+				DisplayName:         "droid",
+				SelectedThreadID:    "thread-1",
+				SelectedThreadTitle: "droid · 修复登录流程",
+				RouteMode:           "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				ThreadID:                       "thread-1",
+				ThreadTitle:                    "droid · 修复登录流程",
+				CWD:                            "/data/dl/droid",
+				EffectiveModel:                 "gpt-5.4",
+				EffectiveReasoningEffort:       "high",
+				EffectiveAccessMode:            "full_access",
+				EffectiveModelSource:           "surface_default",
+				EffectiveReasoningEffortSource: "surface_default",
+				EffectiveAccessModeSource:      "surface_default",
+			},
+			Gate: control.GateSummary{
+				Kind:                "pending_request",
+				PendingRequestCount: 2,
+			},
+			Dispatch: control.DispatchSummary{
+				InstanceOnline: false,
+				QueuedCount:    2,
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !containsAll(ops[0].CardBody,
+		"**执行状态：** 实例离线，已保留接管关系；2 条排队消息会在恢复后继续",
+		"**输入门禁：** 有 2 个待确认请求；普通文本和图片会先被拦住",
+	) {
+		t.Fatalf("expected snapshot body to show gate and retained offline attachment, got %#v", ops[0].CardBody)
+	}
+}
+
 func TestProjectFinalAssistantBlockAsThreadCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

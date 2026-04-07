@@ -693,6 +693,41 @@ func TestAccessCommandUpdatesSnapshotAndQueueFreeze(t *testing.T) {
 	}
 }
 
+func TestSurfaceSnapshotIncludesGateAndDispatchSummary(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
+	surface.ActiveQueueItemID = "queue-1"
+	surface.QueuedQueueItemIDs = []string{"queue-2"}
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{ID: "queue-1", Status: state.QueueItemRunning}
+	surface.QueueItems["queue-2"] = &state.QueueItemRecord{ID: "queue-2", Status: state.QueueItemQueued}
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.Gate.Kind != "pending_request" || snapshot.Gate.PendingRequestCount != 1 {
+		t.Fatalf("expected pending request summary, got %#v", snapshot.Gate)
+	}
+	if !snapshot.Dispatch.InstanceOnline || snapshot.Dispatch.DispatchMode != string(state.DispatchModeNormal) || snapshot.Dispatch.ActiveItemStatus != string(state.QueueItemRunning) || snapshot.Dispatch.QueuedCount != 1 {
+		t.Fatalf("expected dispatch summary to include active+queued work, got %#v", snapshot.Dispatch)
+	}
+}
+
 func TestQueuedMessageFreezesSurfaceOverrideAtEnqueue(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1294,6 +1329,68 @@ func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 	}
 	if !sawDiscard || !sawNotice || !sawSelection {
 		t.Fatalf("expected discard notice + follow_local selection, got %#v", events)
+	}
+}
+
+func TestFollowLocalBlockedByPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionFollowLocal,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_pending" {
+		t.Fatalf("expected request gate to block /follow, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected /follow block to keep prior route, got %#v", surface)
+	}
+}
+
+func TestFollowLocalBlockedByRequestCapture(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].ActiveRequestCapture = &state.RequestCaptureRecord{RequestID: "req-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionFollowLocal,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_capture_waiting_text" {
+		t.Fatalf("expected capture gate to block /follow, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected /follow block to keep prior route, got %#v", surface)
 	}
 }
 
@@ -2930,6 +3027,88 @@ func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *te
 	}
 }
 
+func TestFollowLocalAutoReevaluationBlockedByPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionFollowLocal, SurfaceSessionID: "surface-1"})
+	svc.root.Surfaces["surface-1"].PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-2",
+		CWD:      "/data/dl/droid",
+		Action:   "turn_start",
+	})
+
+	for _, event := range events {
+		if event.ThreadSelection != nil {
+			t.Fatalf("expected pending request to freeze follow-local retarget, got %#v", events)
+		}
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected follow-local selection to remain frozen on prior thread, got %#v", surface)
+	}
+	if inst := svc.root.Instances["inst-1"]; inst.ObservedFocusedThreadID != "thread-2" {
+		t.Fatalf("expected observed focus to still advance, got %q", inst.ObservedFocusedThreadID)
+	}
+}
+
+func TestFollowLocalAutoReevaluationBlockedByRequestCapture(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionFollowLocal, SurfaceSessionID: "surface-1"})
+	svc.root.Surfaces["surface-1"].ActiveRequestCapture = &state.RequestCaptureRecord{RequestID: "req-1"}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-2",
+		CWD:      "/data/dl/droid",
+		Action:   "turn_start",
+	})
+
+	for _, event := range events {
+		if event.ThreadSelection != nil {
+			t.Fatalf("expected request capture to freeze follow-local retarget, got %#v", events)
+		}
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected follow-local selection to remain frozen on prior thread, got %#v", surface)
+	}
+	if inst := svc.root.Instances["inst-1"]; inst.ObservedFocusedThreadID != "thread-2" {
+		t.Fatalf("expected observed focus to still advance, got %q", inst.ObservedFocusedThreadID)
+	}
+}
+
 func TestThreadsSnapshotDoesNotDropPreviouslyObservedThread(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -3790,6 +3969,10 @@ func TestApplyInstanceTransportDegradedKeepsAttachmentAndQueuedWork(t *testing.T
 	queued := surface.QueueItems["queue-2"]
 	if queued == nil || queued.Status != state.QueueItemQueued {
 		t.Fatalf("expected queued item to remain queued on transport degrade, got %#v", queued)
+	}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" || snapshot.Dispatch.InstanceOnline || snapshot.Dispatch.QueuedCount != 1 {
+		t.Fatalf("expected snapshot to retain offline attachment and queued work, got %#v", snapshot)
 	}
 
 	var sawTypingOff, sawNotice bool
@@ -4786,6 +4969,72 @@ func TestUseThreadCrossInstanceBlockedByPendingRequest(t *testing.T) {
 	}
 }
 
+func TestUseThreadSameInstanceBlockedByPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 37, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-2",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_pending" {
+		t.Fatalf("expected pending request gate to block same-instance /use, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModePinned {
+		t.Fatalf("expected same-instance /use block to keep prior route, got %#v", surface)
+	}
+}
+
+func TestUseThreadSameInstanceBlockedByRequestCapture(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 38, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].ActiveRequestCapture = &state.RequestCaptureRecord{RequestID: "req-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-2",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_capture_waiting_text" {
+		t.Fatalf("expected capture gate to block same-instance /use, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModePinned {
+		t.Fatalf("expected same-instance /use block to keep prior route, got %#v", surface)
+	}
+}
+
 func TestUseThreadDetachedStartsPreselectedHeadlessWhenOnlyOfflineSnapshotAvailable(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 40, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -4868,6 +5117,65 @@ func TestApplyInstanceConnectedAttachesPreselectedHeadlessThread(t *testing.T) {
 	}
 }
 
+func TestApplyInstanceConnectedAttachesPreselectedHeadlessThreadReplaysStoredNotice(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 47, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID: "thread-1",
+				Name:     "修复登录流程",
+				Preview:  "修登录",
+				CWD:      "/data/dl/droid",
+				Loaded:   true,
+				UndeliveredReplay: &state.ThreadReplayRecord{
+					Kind:           state.ThreadReplayNotice,
+					NoticeCode:     "problem_saved",
+					NoticeTitle:    "问题提示",
+					NoticeText:     "等待 headless 接手的 notice",
+					NoticeThemeKey: "warning",
+				},
+			},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	pending := svc.SurfaceSnapshot("surface-1").PendingHeadless
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    pending.InstanceID,
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp",
+		WorkspaceKey:  "/tmp",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplyInstanceConnected(pending.InstanceID)
+
+	var sawNotice bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "problem_saved" && event.Notice.Text == "等待 headless 接手的 notice" {
+			sawNotice = true
+		}
+	}
+	if !sawNotice {
+		t.Fatalf("expected preselected headless attach to replay stored notice, got %#v", events)
+	}
+	if replay := svc.root.Instances["inst-offline"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected source replay to be drained after attach, got %#v", replay)
+	}
+	if replay := svc.root.Instances[pending.InstanceID].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected adopted replay to be one-shot, got %#v", replay)
+	}
+}
+
 func TestUseThreadDetachedReusesManagedHeadlessForKnownThread(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 50, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -4917,5 +5225,68 @@ func TestUseThreadDetachedReusesManagedHeadlessForKnownThread(t *testing.T) {
 	}
 	if !sawSelection {
 		t.Fatalf("expected thread selection when reusing headless, got %#v", events)
+	}
+}
+
+func TestUseThreadDetachedReusesManagedHeadlessForKnownThreadReplaysStoredFinal(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 52, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID: "thread-1",
+				Name:     "修复登录流程",
+				Preview:  "修登录",
+				CWD:      "/data/dl/droid",
+				Loaded:   true,
+				UndeliveredReplay: &state.ThreadReplayRecord{
+					Kind:   state.ThreadReplayAssistantFinal,
+					TurnID: "turn-1",
+					ItemID: "item-1",
+					Text:   "等待复用 headless 的 final",
+				},
+			},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp/headless",
+		WorkspaceKey:  "/tmp/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	var sawReplay bool
+	for _, event := range events {
+		if event.Block != nil && event.Block.Text == "等待复用 headless 的 final" && event.Block.Final {
+			sawReplay = true
+		}
+	}
+	if !sawReplay {
+		t.Fatalf("expected reused managed headless attach to replay stored final, got %#v", events)
+	}
+	if replay := svc.root.Instances["inst-offline"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected source replay to be drained after reuse attach, got %#v", replay)
+	}
+	if replay := svc.root.Instances["inst-headless-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected adopted replay to be one-shot, got %#v", replay)
 	}
 }

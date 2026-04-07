@@ -93,6 +93,8 @@ type Snapshot struct {
 	Attachment       AttachmentSummary
 	PendingHeadless  PendingHeadlessSummary
 	NextPrompt       PromptRouteSummary
+	Gate             GateSummary
+	Dispatch         DispatchSummary
 	Instances        []InstanceSummary
 	Threads          []ThreadSummary
 }
@@ -140,6 +142,18 @@ type PromptRouteSummary struct {
 	EffectiveModelSource           string
 	EffectiveReasoningEffortSource string
 	EffectiveAccessModeSource      string
+}
+
+type GateSummary struct {
+	Kind                string
+	PendingRequestCount int
+}
+
+type DispatchSummary struct {
+	InstanceOnline   bool
+	DispatchMode     string
+	ActiveItemStatus string
+	QueuedCount      int
 }
 
 type InstanceSummary struct {
