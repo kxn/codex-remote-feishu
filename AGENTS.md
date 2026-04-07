@@ -50,6 +50,49 @@ For any change that modifies remote surface behavior or state transitions:
 5. Do not run this loop after every tiny edit; run it once near commit unless a major assumption changed mid-implementation.
 6. If a remaining issue needs product tradeoff input rather than an engineering fix, append it to the end of `docs/general/remote-surface-state-machine.md` under `待讨论取舍` before discussing it.
 
+## Issue Tracking Rule
+
+For medium or large follow-up work in this repository:
+
+- Track it in GitHub Issues instead of a local `TODO.md` or similar scratch file.
+- Tiny fixes that can be completed immediately in the same task do not need an issue; just implement them directly.
+- Default lifecycle is:
+  1. create or refine the issue
+  2. implement against the issue
+  3. validate the result
+  4. close the issue after the requested acceptance criteria are satisfied
+- Do not do a full open-issue sweep before every commit. Issue review happens when creating, picking up, or closing an issue, not as a mandatory pre-commit loop.
+
+When creating or refreshing an issue, use this structure:
+
+- Required sections:
+  - `背景`
+  - `目标`
+  - `完成标准`
+- Preferred sections when already known:
+  - `相关文档`
+  - `涉及文件`
+  - `建议范围`
+- If `相关文档` or `涉及文件` are not known yet, they may be omitted temporarily rather than guessed.
+
+Issue labeling rule:
+
+- Add at least one category label when applicable, for example:
+  - `enhancement`
+  - `bug`
+  - `maintainability`
+  - `testing`
+  - `documentation`
+- Add at least one scope label when applicable, for example:
+  - `area:web`
+  - `area:daemon`
+  - `area:feishu`
+  - `area:codex`
+  - `area:runtime`
+  - `area:wrapper`
+
+If implementation reveals another medium or large follow-up task, open a new issue for it instead of leaving a local TODO note behind.
+
 ## Git Push Rule
 
 When a change is intentionally committed during task work:
