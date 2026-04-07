@@ -1,5 +1,5 @@
 import { formatError, requestJSON } from "../../lib/api";
-import type { FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
+import type { AdminInstanceSummary, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
 import type { AppDraft, WizardRow } from "./types";
 import { newAppID } from "./types";
 
@@ -68,12 +68,12 @@ export async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetec
 export function buildWizardRows(app: FeishuAppSummary): WizardRow[] {
   return [
     { label: "凭证已保存", done: Boolean(app.wizard?.credentialsSavedAt), timestamp: app.wizard?.credentialsSavedAt },
-    { label: "连接已验证", done: Boolean(app.wizard?.connectionVerifiedAt), timestamp: app.wizard?.connectionVerifiedAt },
-    { label: "Scopes 已导出", done: Boolean(app.wizard?.scopesExportedAt), timestamp: app.wizard?.scopesExportedAt },
-    { label: "事件已确认", done: Boolean(app.wizard?.eventsConfirmedAt), timestamp: app.wizard?.eventsConfirmedAt },
-    { label: "回调长连接已确认", done: Boolean(app.wizard?.callbacksConfirmedAt), timestamp: app.wizard?.callbacksConfirmedAt },
+    { label: "连接测试已通过", done: Boolean(app.wizard?.connectionVerifiedAt), timestamp: app.wizard?.connectionVerifiedAt },
+    { label: "权限已导入", done: Boolean(app.wizard?.scopesExportedAt), timestamp: app.wizard?.scopesExportedAt },
+    { label: "事件订阅已确认", done: Boolean(app.wizard?.eventsConfirmedAt), timestamp: app.wizard?.eventsConfirmedAt },
+    { label: "长连接已确认", done: Boolean(app.wizard?.callbacksConfirmedAt), timestamp: app.wizard?.callbacksConfirmedAt },
     { label: "菜单已确认", done: Boolean(app.wizard?.menusConfirmedAt), timestamp: app.wizard?.menusConfirmedAt },
-    { label: "机器人已发布", done: Boolean(app.wizard?.publishedAt), timestamp: app.wizard?.publishedAt },
+    { label: "应用已发布", done: Boolean(app.wizard?.publishedAt), timestamp: app.wizard?.publishedAt },
   ];
 }
 
@@ -88,6 +88,123 @@ export function statusTone(state?: string): "neutral" | "good" | "warn" | "dange
       return "danger";
     default:
       return "neutral";
+  }
+}
+
+export function appConnectionTone(app: FeishuAppSummary): "neutral" | "good" | "warn" | "danger" {
+  if (!app.enabled) {
+    return "neutral";
+  }
+  if (app.status?.state === "auth_failed") {
+    return "danger";
+  }
+  if (app.status?.state === "degraded") {
+    return "warn";
+  }
+  if (app.status?.state === "connected") {
+    return "good";
+  }
+  if (app.status?.state === "connecting") {
+    return "warn";
+  }
+  if (app.wizard?.connectionVerifiedAt) {
+    return "warn";
+  }
+  return "neutral";
+}
+
+export function appConnectionLabel(app: FeishuAppSummary): string {
+  if (!app.enabled) {
+    return "已停用";
+  }
+  switch (app.status?.state) {
+    case "connected":
+      return "在线";
+    case "connecting":
+      return "连接中";
+    case "degraded":
+      return "需要关注";
+    case "auth_failed":
+      return "凭证异常";
+    default:
+      if (app.wizard?.connectionVerifiedAt) {
+        return "未连接";
+      }
+      if (app.appId || app.hasSecret) {
+        return "待测试";
+      }
+      return "待配置";
+  }
+}
+
+export function appSetupProgress(app: FeishuAppSummary): { completed: number; total: number; complete: boolean; remaining: number } {
+  const steps = [
+    Boolean(app.wizard?.connectionVerifiedAt),
+    Boolean(app.wizard?.scopesExportedAt),
+    Boolean(app.wizard?.eventsConfirmedAt),
+    Boolean(app.wizard?.callbacksConfirmedAt),
+    Boolean(app.wizard?.menusConfirmedAt),
+    Boolean(app.wizard?.publishedAt),
+  ];
+  const completed = steps.filter(Boolean).length;
+  const total = steps.length;
+  return {
+    completed,
+    total,
+    complete: completed === total,
+    remaining: total - completed,
+  };
+}
+
+export function instanceStatusTone(instance: AdminInstanceSummary): "neutral" | "good" | "warn" | "danger" {
+  if (instance.status === "error" || instance.lastError) {
+    return "danger";
+  }
+  if (instance.status === "starting") {
+    return "warn";
+  }
+  if (instance.online) {
+    return "good";
+  }
+  return "neutral";
+}
+
+export function instanceStatusLabel(instance: AdminInstanceSummary): string {
+  if (instance.status === "error" || instance.lastError) {
+    return "异常";
+  }
+  if (instance.status === "starting") {
+    return "启动中";
+  }
+  if (instance.online) {
+    return "在线";
+  }
+  return "离线";
+}
+
+export function instanceSourceLabel(instance: AdminInstanceSummary): string {
+  if (instance.source === "headless" && instance.managed) {
+    return "由管理页创建";
+  }
+  if (instance.source === "vscode") {
+    return "来自 VS Code";
+  }
+  if (instance.source === "headless") {
+    return "后台实例";
+  }
+  return "本机实例";
+}
+
+export function vscodeModeLabel(mode?: string): string {
+  switch (mode) {
+    case "all":
+      return "同时配置两处";
+    case "editor_settings":
+      return "只写入 settings";
+    case "managed_shim":
+      return "只处理扩展入口";
+    default:
+      return "未知";
   }
 }
 
@@ -139,16 +256,16 @@ export function vscodeReadinessText(vscode: VSCodeDetectResponse | null): string
     return "当前推荐模式已就绪。";
   }
   if (vscode.recommendedMode === "managed_shim" && !vscode.latestBundleEntrypoint) {
-    return "还没有检测到可替换的 VS Code 扩展 bundle。";
+    return "还没有检测到可处理的 VS Code 扩展安装。";
   }
   if (vscode.recommendedMode === "all" && !vscode.latestBundleEntrypoint) {
-    return "当前推荐的是 all，但还没有检测到可替换的 VS Code 扩展 bundle。";
+    return "还没有检测到可处理的 VS Code 扩展安装，暂时无法完成完整接入。";
   }
   if (vscode.needsShimReinstall) {
-    return "检测到扩展已升级，建议重新安装 shim。";
+    return "检测到 VS Code 扩展已升级，建议重新安装扩展入口。";
   }
   if (vscode.recommendedMode === "all") {
-    return "当前模式还没有同时覆盖 settings.json 和最新的 managed shim。";
+    return "当前还没有同时完成 settings.json 和扩展入口配置。";
   }
-  return "当前模式还没有指向最新的 wrapper binary。";
+  return "当前执行入口还没有指向本机 relay。";
 }

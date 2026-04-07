@@ -24,6 +24,7 @@ import {
   AdminInstancesPanel,
   AdminOverviewPanel,
   AdminStoragePanel,
+  AdminTechnicalPanel,
   AdminVSCodePanel,
 } from "./admin/AdminPanels";
 import {
@@ -112,6 +113,8 @@ export function AdminRoute() {
     const source = runtime?.gateways?.length ? runtime.gateways : bootstrap?.gateways ?? [];
     return source;
   }, [bootstrap?.gateways, runtime?.gateways]);
+  const setupURL = bootstrap?.admin.setupURL || "/setup";
+  const setupURLForApp = (appID: string) => buildAppSetupURL(setupURL, appID);
 
   async function runAction(label: string, work: () => Promise<void>) {
     setBusyAction(label);
@@ -153,7 +156,7 @@ export function AdminRoute() {
       const method = draft.isNew ? "POST" : "PUT";
       const response = await sendJSON<FeishuAppResponse>(path, method, payload);
       await loadAdminData(response.app.id);
-      setNotice({ tone: "good", message: draft.isNew ? "飞书 App 已创建。" : "飞书 App 配置已更新。" });
+      setNotice({ tone: "good", message: draft.isNew ? "飞书机器人已创建。" : "飞书机器人配置已更新。" });
     });
   }
 
@@ -167,12 +170,12 @@ export function AdminRoute() {
       });
       await loadAdminData(activeApp.id);
       if (response.ok) {
-        setNotice({ tone: "good", message: `验证成功，用时 ${(response.data.result.duration / 1_000_000_000).toFixed(1)}s。` });
+        setNotice({ tone: "good", message: `连接测试成功，用时 ${(response.data.result.duration / 1_000_000_000).toFixed(1)}s。` });
         return;
       }
       setNotice({
         tone: "danger",
-        message: `验证失败：${response.data.result.errorCode || "verify_failed"} ${response.data.result.errorMessage || ""}`.trim(),
+        message: `连接测试失败：${response.data.result.errorCode || "verify_failed"} ${response.data.result.errorMessage || ""}`.trim(),
       });
     });
   }
@@ -184,7 +187,7 @@ export function AdminRoute() {
     await runAction("reconnect-app", async () => {
       await sendJSON<FeishuAppResponse>(`/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/reconnect`, "POST");
       await loadAdminData(activeApp.id);
-      setNotice({ tone: "good", message: "飞书 App 已请求热重连。" });
+      setNotice({ tone: "good", message: "机器人已请求重新连接。" });
     });
   }
 
@@ -196,7 +199,7 @@ export function AdminRoute() {
       const endpoint = enabled ? "enable" : "disable";
       await sendJSON<FeishuAppResponse>(`/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/${endpoint}`, "POST");
       await loadAdminData(activeApp.id);
-      setNotice({ tone: enabled ? "good" : "warn", message: enabled ? "飞书 App 已启用。" : "飞书 App 已停用。" });
+      setNotice({ tone: enabled ? "good" : "warn", message: enabled ? "机器人已启用。" : "机器人已停用。" });
     });
   }
 
@@ -210,7 +213,7 @@ export function AdminRoute() {
     await runAction("delete-app", async () => {
       await requestVoid(`/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}`, { method: "DELETE" });
       await loadAdminData(newAppID);
-      setNotice({ tone: "good", message: "飞书 App 已删除。" });
+      setNotice({ tone: "good", message: "机器人已删除。" });
     });
   }
 
@@ -223,7 +226,7 @@ export function AdminRoute() {
       setWorkspaceRoot("");
       setDisplayName("");
       await loadAdminData(activeApp?.id);
-      setNotice({ tone: "good", message: "新的 managed headless instance 已启动。" });
+      setNotice({ tone: "good", message: "新的工作实例已启动。" });
     });
   }
 
@@ -270,7 +273,7 @@ export function AdminRoute() {
       const response = await sendJSON<PreviewDriveReconcileResponse>(`/api/admin/storage/preview-drive/${encodeURIComponent(gatewayID)}/reconcile`, "POST");
       setNotice({
         tone: response.result.rootMissing || response.result.permissionDriftCount > 0 ? "warn" : "good",
-        message: `${response.name || response.gatewayId} 对账完成：remote missing ${response.result.remoteMissingFileCount}，drift ${response.result.permissionDriftCount}。`,
+        message: `${response.name || response.gatewayId} 预览目录检查完成：远端缺失 ${response.result.remoteMissingFileCount}，权限不一致 ${response.result.permissionDriftCount}。`,
       });
       await loadAdminData(gatewayID);
     });
@@ -284,7 +287,7 @@ export function AdminRoute() {
       const response = await sendJSON<VSCodeDetectResponse>("/api/admin/vscode/apply", "POST", { mode });
       setVSCode(response);
       setVSCodeError("");
-      setNotice({ tone: "good", message: `VS Code 集成已切换到 ${mode}。` });
+      setNotice({ tone: "good", message: "VS Code 接入方式已更新。" });
     });
   }
 
@@ -296,21 +299,22 @@ export function AdminRoute() {
       const response = await sendJSON<VSCodeDetectResponse>("/api/admin/vscode/reinstall-shim", "POST");
       setVSCode(response);
       setVSCodeError("");
-      setNotice({ tone: "good", message: "已重新安装 managed shim。" });
+      setNotice({ tone: "good", message: "已重新安装 VS Code 扩展入口。" });
     });
   }
 
   return (
     <ShellFrame
-      routeLabel="Local Admin"
-      title="本地管理控制台"
-      subtitle="这里集中放运行状态、多飞书 App、实例、存储和 VS Code 集成。管理页默认按 localhost 管理模型工作。"
+      routeLabel="Admin"
+      title="本地管理页"
+      subtitle="在这里管理飞书机器人、工作实例、文档预览和 VS Code 接入。"
       nav={[
         { label: "总览", href: "#overview" },
-        { label: "飞书 App", href: "#feishu" },
-        { label: "实例", href: "#instances" },
-        { label: "存储", href: "#storage" },
+        { label: "飞书机器人", href: "#feishu" },
+        { label: "工作实例", href: "#instances" },
+        { label: "文档与图片", href: "#storage" },
         { label: "VS Code", href: "#vscode" },
+        { label: "技术详情", href: "#technical" },
       ]}
       actions={
         <button className="secondary-button" type="button" onClick={() => void loadAdminData(activeApp?.id)} disabled={busyAction !== ""}>
@@ -318,18 +322,33 @@ export function AdminRoute() {
         </button>
       }
     >
-      {!bootstrap && !error ? <LoadingState title="正在加载管理页" description="读取 admin 概览、Feishu、实例、存储和 VS Code 状态。" /> : null}
-      {error ? <ErrorState title="无法加载管理页状态" description="当前 admin shell 已接入，但页面数据读取失败。" detail={error} /> : null}
+      {!bootstrap && !error ? <LoadingState title="正在加载管理页" description="读取机器人、实例、文档预览和 VS Code 状态。" /> : null}
+      {error ? <ErrorState title="无法加载管理页状态" description="页面已经打开，但后台状态读取失败。" detail={error} /> : null}
       {bootstrap && runtime && manifest && imageStaging ? (
         <>
-          <AdminOverviewPanel bootstrap={bootstrap} runtime={runtime} apps={apps} instances={instances} gatewayRows={gatewayRows} notice={notice} />
+          <AdminOverviewPanel
+            bootstrap={bootstrap}
+            apps={apps}
+            instances={instances}
+            imageStaging={imageStaging}
+            previews={previews}
+            vscode={vscode}
+            vscodeError={vscodeError}
+            notice={notice}
+            setupURL={setupURL}
+            setupURLForApp={setupURLForApp}
+            onInspectApp={(app) => {
+              selectApp(app);
+              window.location.hash = "feishu";
+            }}
+          />
           <AdminFeishuPanel
             apps={apps}
             selectedAppID={selectedAppID}
             draft={draft}
             activeApp={activeApp}
-            scopesJSON={scopesJSON}
             busyAction={busyAction}
+            setupURLForApp={setupURLForApp}
             onBeginNewApp={beginNewApp}
             onSelectApp={selectApp}
             onDraftChange={setDraft}
@@ -366,8 +385,15 @@ export function AdminRoute() {
             onApplyVSCode={(mode) => void applyVSCode(mode)}
             onReinstallShim={() => void reinstallShim()}
           />
+          <AdminTechnicalPanel bootstrap={bootstrap} gatewayRows={gatewayRows} activeApp={activeApp} scopesJSON={scopesJSON} setupURL={setupURL} />
         </>
       ) : null}
     </ShellFrame>
   );
+}
+
+function buildAppSetupURL(baseURL: string, appID: string): string {
+  const url = new URL(baseURL, window.location.origin);
+  url.searchParams.set("app", appID);
+  return url.toString();
 }

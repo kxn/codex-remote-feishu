@@ -78,7 +78,7 @@ export function SetupRoute() {
   const [manifest, setManifest] = useState<FeishuManifestResponse["manifest"] | null>(null);
   const [vscode, setVSCode] = useState<VSCodeDetectResponse | null>(null);
   const [vscodeError, setVSCodeError] = useState<string>("");
-  const [selectedID, setSelectedID] = useState<string>(newAppID);
+  const [selectedID, setSelectedID] = useState<string>(() => preferredSetupAppFromLocation());
   const [draft, setDraft] = useState<SetupDraft>(emptyDraft());
   const [setupStarted, setSetupStarted] = useState(false);
   const [permissionsConfirmed, setPermissionsConfirmed] = useState(false);
@@ -885,6 +885,12 @@ function chooseAppID(apps: FeishuAppSummary[], preferredID: string): string {
     return apps[0].id;
   }
   return newAppID;
+}
+
+function preferredSetupAppFromLocation(): string {
+  const value = new URLSearchParams(window.location.search).get("app");
+  const normalized = value?.trim();
+  return normalized ? normalized : newAppID;
 }
 
 function appToDraft(app: FeishuAppSummary | null): SetupDraft {

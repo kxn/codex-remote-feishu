@@ -5,21 +5,38 @@ import type {
   GatewayStatus,
   ImageStagingStatusResponse,
   PreviewDriveStatusResponse,
-  RuntimeStatus,
   VSCodeDetectResponse,
 } from "../../lib/types";
 import { DefinitionList, Panel, StatCard, StatGrid, StatusBadge } from "../../components/ui";
-import { buildWizardRows, formatBytes, formatDateTime, statusTone } from "./helpers";
-import type { AppDraft, Notice } from "./types";
+import {
+  appConnectionLabel,
+  appConnectionTone,
+  appSetupProgress,
+  buildWizardRows,
+  formatBytes,
+  formatDateTime,
+  instanceSourceLabel,
+  instanceStatusLabel,
+  instanceStatusTone,
+  statusTone,
+  vscodeIsReady,
+  vscodeModeLabel,
+} from "./helpers";
+import type { AppDraft, Notice, PreviewMap } from "./types";
 import { newAppID } from "./types";
 
 type AdminOverviewPanelProps = {
   bootstrap: BootstrapState;
-  runtime: RuntimeStatus;
   apps: FeishuAppSummary[];
   instances: AdminInstanceSummary[];
-  gatewayRows: GatewayStatus[];
+  imageStaging: ImageStagingStatusResponse;
+  previews: PreviewMap;
+  vscode: VSCodeDetectResponse | null;
+  vscodeError: string;
   notice: Notice | null;
+  setupURL: string;
+  onInspectApp: (app: FeishuAppSummary) => void;
+  setupURLForApp: (appID: string) => string;
 };
 
 type AdminFeishuPanelProps = {
@@ -27,8 +44,8 @@ type AdminFeishuPanelProps = {
   selectedAppID: string;
   draft: AppDraft;
   activeApp: FeishuAppSummary | null;
-  scopesJSON: string;
   busyAction: string;
+  setupURLForApp: (appID: string) => string;
   onBeginNewApp: () => void;
   onSelectApp: (app: FeishuAppSummary) => void;
   onDraftChange: React.Dispatch<React.SetStateAction<AppDraft>>;
@@ -69,37 +86,94 @@ type AdminVSCodePanelProps = {
   onReinstallShim: () => void;
 };
 
-export function AdminOverviewPanel({ bootstrap, runtime, apps, instances, gatewayRows, notice }: AdminOverviewPanelProps) {
+type AdminTechnicalPanelProps = {
+  bootstrap: BootstrapState;
+  gatewayRows: GatewayStatus[];
+  activeApp: FeishuAppSummary | null;
+  scopesJSON: string;
+  setupURL: string;
+};
+
+type AttentionItem = {
+  key: string;
+  title: string;
+  detail: string;
+  tone: "warn" | "danger";
+  actionLabel: string;
+  href?: string;
+  onAction?: () => void;
+};
+
+export function AdminOverviewPanel({
+  bootstrap,
+  apps,
+  instances,
+  imageStaging,
+  previews,
+  vscode,
+  vscodeError,
+  notice,
+  setupURL,
+  onInspectApp,
+  setupURLForApp,
+}: AdminOverviewPanelProps) {
+  const enabledApps = apps.filter((app) => app.enabled).length;
+  const connectedApps = apps.filter((app) => app.enabled && app.status?.state === "connected").length;
+  const onlineInstances = instances.filter((instance) => instance.online).length;
+  const previewFileCount = apps.reduce((sum, app) => sum + (previews[app.id]?.summary.fileCount ?? 0), 0);
+  const staleImageCount = Math.max(imageStaging.fileCount - imageStaging.activeFileCount, 0);
+  const attentionItems = buildAttentionItems(apps, staleImageCount, vscode, vscodeError, onInspectApp, setupURL, setupURLForApp);
+
   return (
-    <Panel id="overview" title="运行总览" description="这部分用于确认 daemon、queue、surface 和 gateway 的整体健康状态。">
+    <Panel id="overview" title="总览" description="先看这里，确认现在是否有需要处理的事情。">
       <StatGrid>
-        <StatCard label="Phase" value={bootstrap.phase} tone={bootstrap.phase === "ready" ? "accent" : "warn"} detail={bootstrap.setupRequired ? "setup 未完成" : "setup 已完成"} />
-        <StatCard label="Instances" value={instances.length} detail={`${runtime.surfaces.length} surfaces`} />
-        <StatCard label="Remote Queue" value={runtime.pendingRemoteTurns.length} detail={`${runtime.activeRemoteTurns.length} active turns`} />
-        <StatCard label="Gateways" value={gatewayRows.length} detail={`${apps.length} configured apps`} />
+        <StatCard label="机器人" value={apps.length} tone="accent" detail={`在线 ${connectedApps} / 已启用 ${enabledApps}`} />
+        <StatCard label="需要处理" value={attentionItems.length} tone={attentionItems.length > 0 ? "warn" : "accent"} detail={attentionItems.length > 0 ? "建议先处理这些项目" : "当前没有明显待处理项"} />
+        <StatCard label="工作实例" value={instances.length} detail={`在线 ${onlineInstances}`} />
+        <StatCard label="文档与图片" value={imageStaging.fileCount + previewFileCount} detail={`图片 ${imageStaging.fileCount} · 预览 ${previewFileCount}`} />
       </StatGrid>
-      <DefinitionList
-        items={[
-          { label: "Config Path", value: bootstrap.config.path },
-          { label: "Admin URL", value: bootstrap.admin.url },
-          { label: "Admin Listen", value: `${bootstrap.admin.listenHost}:${bootstrap.admin.listenPort}` },
-          { label: "Relay Listen", value: `${bootstrap.relay.listenHost}:${bootstrap.relay.listenPort}` },
-          { label: "Session Scope", value: bootstrap.session.scope || "unknown" },
-          { label: "Session Access", value: bootstrap.session.trustedLoopback ? <StatusBadge value="trusted loopback" tone="good" /> : <StatusBadge value="session cookie" tone="neutral" /> },
-        ]}
-      />
-      <div className="wizard-progress">
-        {gatewayRows.map((gateway) => (
-          <div key={gateway.gatewayId} className="wizard-step">
-            <StatusBadge value={gateway.state} tone={statusTone(gateway.state)} />
-            <div>
-              <strong>{gateway.name || gateway.gatewayId}</strong>
-              <p>{gateway.lastError || (gateway.lastConnectedAt ? `最近连接于 ${formatDateTime(gateway.lastConnectedAt)}` : "当前没有额外错误。")}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+
       {notice ? <div className={`notice-banner ${notice.tone}`}>{notice.message}</div> : null}
+
+      <div className="section-block">
+        <div className="section-heading">
+          <div>
+            <h4>需要关注</h4>
+            <p>这里只列出建议优先处理的项目。</p>
+          </div>
+          <StatusBadge value={bootstrap.phase === "ready" ? "本机服务正常" : "本机服务未完成准备"} tone={bootstrap.phase === "ready" ? "good" : "warn"} />
+        </div>
+
+        {attentionItems.length > 0 ? (
+          <div className="attention-list">
+            {attentionItems.map((item) => (
+              <div key={item.key} className={`attention-row ${item.tone}`}>
+                <div className="attention-copy">
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </div>
+                <div className="attention-actions">
+                  <StatusBadge value={item.tone === "danger" ? "优先处理" : "建议处理"} tone={item.tone} />
+                  {item.href ? (
+                    <a className="secondary-button" href={item.href}>
+                      {item.actionLabel}
+                    </a>
+                  ) : (
+                    <button className="secondary-button" type="button" onClick={item.onAction}>
+                      {item.actionLabel}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="inline-note">
+            <StatusBadge value="已就绪" tone="good" />
+            <span>当前没有明显异常，可以直接去下面继续管理机器人、实例或文档预览。</span>
+          </div>
+        )}
+      </div>
     </Panel>
   );
 }
@@ -109,8 +183,8 @@ export function AdminFeishuPanel({
   selectedAppID,
   draft,
   activeApp,
-  scopesJSON,
   busyAction,
+  setupURLForApp,
   onBeginNewApp,
   onSelectApp,
   onDraftChange,
@@ -121,107 +195,158 @@ export function AdminFeishuPanel({
   onDeleteApp,
 }: AdminFeishuPanelProps) {
   const readOnly = Boolean(activeApp?.readOnly && !draft.isNew);
+  const setupProgress = activeApp ? appSetupProgress(activeApp) : null;
+  const needsSetup = Boolean(activeApp && setupProgress && !setupProgress.complete);
+  const canToggleEnabled = Boolean(activeApp && !activeApp.readOnly);
 
   return (
     <Panel
       id="feishu"
-      title="飞书 App 管理"
-      description="这里沿用 setup 的多 App 模型，但更偏运行管理：编辑凭证、verify、reconnect、enable/disable 和查看 wizard 进度。"
+      title="飞书机器人"
+      description="新增、编辑、停用和重连机器人。首次接入的机器人也可以从这里继续配置。"
       actions={
         <button className="secondary-button" type="button" onClick={onBeginNewApp} disabled={busyAction !== ""}>
-          新建 App
+          新增机器人
         </button>
       }
     >
       <div className="setup-two-column">
         <div className="app-list-grid">
-          {apps.map((app) => (
-            <button key={app.id} type="button" className={`app-card${selectedAppID === app.id ? " selected" : ""}`} onClick={() => onSelectApp(app)}>
-              <div className="app-card-head">
-                <strong>{app.name || app.id}</strong>
-                <StatusBadge value={app.status?.state || (app.enabled ? "configured" : "disabled")} tone={statusTone(app.status?.state)} />
-              </div>
-              <p>{app.id}</p>
-              <div className="app-card-flags">
-                <StatusBadge value={app.enabled ? "enabled" : "disabled"} tone={app.enabled ? "good" : "warn"} />
-                <StatusBadge value={app.wizard?.connectionVerifiedAt ? "verified" : "unverified"} tone={app.wizard?.connectionVerifiedAt ? "good" : "warn"} />
-              </div>
-            </button>
-          ))}
+          {apps.map((app) => {
+            const progress = appSetupProgress(app);
+            return (
+              <button key={app.id} type="button" className={`app-card${selectedAppID === app.id ? " selected" : ""}`} onClick={() => onSelectApp(app)}>
+                <div className="app-card-head">
+                  <strong>{app.name || app.appId || app.id}</strong>
+                  <StatusBadge value={appConnectionLabel(app)} tone={appConnectionTone(app)} />
+                </div>
+                <p>{app.appId || "还没有填写 App ID"}</p>
+                <div className="app-card-flags">
+                  <StatusBadge value={app.enabled ? "已启用" : "已停用"} tone={app.enabled ? "good" : "neutral"} />
+                  <StatusBadge value={progress.complete ? "已完成首次配置" : "需继续配置"} tone={progress.complete ? "good" : "warn"} />
+                  {app.readOnly ? <StatusBadge value="只读" tone="warn" /> : null}
+                </div>
+                <p>{buildAppCardDetail(app, progress.remaining)}</p>
+              </button>
+            );
+          })}
           <button type="button" className={`app-card app-card-create${selectedAppID === newAppID ? " selected" : ""}`} onClick={onBeginNewApp}>
-            <strong>创建新 App</strong>
-            <p>继续向未来多机器人并行在线的模型扩展。</p>
+            <strong>新增机器人</strong>
+            <p>添加一个新的飞书机器人，用于不同团队或不同入口。</p>
           </button>
         </div>
 
         <div className="wizard-editor">
+          {activeApp ? (
+            <StatGrid>
+              <StatCard label="连接状态" value={appConnectionLabel(activeApp)} tone={appConnectionTone(activeApp) === "good" ? "accent" : "warn"} detail={activeApp.status?.lastConnectedAt ? `最近连接 ${formatDateTime(activeApp.status.lastConnectedAt)}` : "还没有连接记录"} />
+              <StatCard label="最近验证" value={activeApp.verifiedAt ? formatDateTime(activeApp.verifiedAt) : "尚未验证"} detail={activeApp.wizard?.connectionVerifiedAt ? "已通过连接测试" : "建议先测试连接"} />
+              <StatCard label="首次配置" value={setupProgress?.complete ? "已完成" : "未完成"} tone={setupProgress?.complete ? "accent" : "warn"} detail={setupProgress ? `已完成 ${setupProgress.completed} / ${setupProgress.total}` : "创建后会显示"} />
+              <StatCard label="编辑权限" value={readOnly ? "只读" : "可编辑"} detail={readOnly ? "当前由启动参数接管" : "可在这里直接修改"} />
+            </StatGrid>
+          ) : (
+            <div className="wizard-callout">
+              <h4>先把机器人接进来</h4>
+              <p>这里先保存名称、App ID 和 App Secret。保存成功后，就能测试连接并进入首次配置流程。</p>
+            </div>
+          )}
+
+          {activeApp?.readOnly ? <div className="notice-banner warn">{activeApp.readOnlyReason || "这个机器人由当前启动参数接管，只能查看状态，不能在管理页修改。"}</div> : null}
+          {activeApp && needsSetup ? (
+            <div className="notice-banner warn">
+              这个机器人还没完成首次配置。完成后才能稳定接收消息、菜单和文档预览。
+              <div className="button-row">
+                <a className="secondary-button" href={setupURLForApp(activeApp.id)}>
+                  继续完成首次配置
+                </a>
+              </div>
+            </div>
+          ) : null}
+          {activeApp?.status?.lastError ? <div className="notice-banner danger">最近错误：{activeApp.status.lastError}</div> : null}
+
           <div className="form-grid">
             <label className="field">
-              <span>Gateway ID</span>
-              <input value={draft.id} placeholder="main-bot" disabled={!draft.isNew || readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, id: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>显示名称</span>
-              <input value={draft.name} placeholder="Main Bot" disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))} />
+              <span>机器人名称</span>
+              <input value={draft.name} placeholder="团队机器人" disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))} />
             </label>
             <label className="field">
               <span>App ID</span>
               <input value={draft.appId} placeholder="cli_xxx" disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, appId: event.target.value }))} />
             </label>
-            <label className="field">
+            <label className="field form-grid-span-2">
               <span>App Secret</span>
               <input
                 type="password"
                 value={draft.appSecret}
-                placeholder={activeApp?.hasSecret ? "留空表示保留现有 secret" : "secret_xxx"}
+                placeholder={activeApp?.hasSecret ? "留空表示保留当前 secret" : "secret_xxx"}
                 disabled={readOnly}
                 onChange={(event) => onDraftChange((current) => ({ ...current, appSecret: event.target.value }))}
               />
             </label>
           </div>
+
           <label className="checkbox-row">
             <input type="checkbox" checked={draft.enabled} disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, enabled: event.target.checked }))} />
-            <span>启用这个飞书 App</span>
+            <span>启用这个机器人</span>
           </label>
+
           <div className="button-row">
             <button className="primary-button" type="button" onClick={onSaveApp} disabled={busyAction !== "" || readOnly}>
-              {draft.isNew ? "创建 App" : "保存更改"}
+              {draft.isNew ? "保存机器人" : "保存更改"}
             </button>
             <button className="secondary-button" type="button" onClick={onVerifyApp} disabled={!activeApp || busyAction !== ""}>
-              验证长连接
+              测试连接
             </button>
             <button className="secondary-button" type="button" onClick={onReconnectApp} disabled={!activeApp || busyAction !== ""}>
-              热重连
+              重新连接
             </button>
-            <button className="ghost-button" type="button" onClick={() => onToggleAppEnabled(!activeApp?.enabled)} disabled={!activeApp || activeApp.readOnly || busyAction !== ""}>
-              {activeApp?.enabled ? "停用" : "启用"}
+            <button className="ghost-button" type="button" onClick={() => onToggleAppEnabled(!activeApp?.enabled)} disabled={!activeApp || !canToggleEnabled || busyAction !== ""}>
+              {activeApp?.enabled ? "停用机器人" : "启用机器人"}
             </button>
             <button className="danger-button" type="button" onClick={onDeleteApp} disabled={!activeApp || activeApp.readOnly || busyAction !== ""}>
-              删除 App
+              删除机器人
             </button>
           </div>
 
-          {activeApp ? (
-            <>
-              <div className="wizard-progress">
-                {buildWizardRows(activeApp).map((item) => (
-                  <div key={item.label} className="wizard-step">
-                    <StatusBadge value={item.done ? "done" : "pending"} tone={item.done ? "good" : "warn"} />
-                    <div>
-                      <strong>{item.label}</strong>
-                      <p>{item.timestamp ? formatDateTime(item.timestamp) : "尚未记录"}</p>
-                    </div>
-                  </div>
-                ))}
+          {draft.isNew ? (
+            <details className="wizard-tech-detail">
+              <summary>高级选项</summary>
+              <div className="detail-stack">
+                <label className="field">
+                  <span>内部标识（可选）</span>
+                  <input value={draft.id} placeholder="main-bot" onChange={(event) => onDraftChange((current) => ({ ...current, id: event.target.value }))} />
+                </label>
+                <p className="form-hint">一般保持留空即可。只有需要稳定区分多个机器人时，再手动指定这个值。</p>
               </div>
-              {activeApp.readOnly ? <div className="notice-banner warn">{activeApp.readOnlyReason || "当前 App 由运行时环境变量接管，不能从管理页修改。"}</div> : null}
-            </>
+            </details>
           ) : null}
 
-          <div className="manifest-block">
-            <h4>当前 Scopes JSON</h4>
-            <textarea className="code-textarea" readOnly value={scopesJSON} />
-          </div>
+          {activeApp ? (
+            <details className="wizard-tech-detail">
+              <summary>查看技术详情</summary>
+              <div className="detail-stack">
+                <DefinitionList
+                  items={[
+                    { label: "内部标识", value: activeApp.id },
+                    { label: "是否已保存 Secret", value: activeApp.hasSecret ? "是" : "否" },
+                    { label: "配置来源", value: describeAppStorage(activeApp) },
+                    { label: "最近验证时间", value: activeApp.verifiedAt ? formatDateTime(activeApp.verifiedAt) : "尚未记录" },
+                  ]}
+                />
+                <div className="wizard-progress">
+                  {buildWizardRows(activeApp).map((item) => (
+                    <div key={item.label} className="wizard-step">
+                      <StatusBadge value={item.done ? "已完成" : "未完成"} tone={item.done ? "good" : "warn"} />
+                      <div>
+                        <strong>{item.label}</strong>
+                        <p>{item.timestamp ? formatDateTime(item.timestamp) : "尚未记录"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          ) : null}
         </div>
       </div>
     </Panel>
@@ -239,45 +364,77 @@ export function AdminInstancesPanel({
   onDeleteInstance,
 }: AdminInstancesPanelProps) {
   return (
-    <Panel id="instances" title="实例管理" description="这里不复用飞书 `/newinstance` 的交互语义，直接走后台 managed headless instance 模型。">
-      <div className="form-grid">
-        <label className="field">
-          <span>Workspace Root</span>
-          <input value={workspaceRoot} placeholder="/data/dl/project" onChange={(event) => onWorkspaceRootChange(event.target.value)} />
-        </label>
-        <label className="field">
-          <span>显示名称</span>
-          <input value={displayName} placeholder="Alpha" onChange={(event) => onDisplayNameChange(event.target.value)} />
-        </label>
-      </div>
-      <div className="button-row">
-        <button className="primary-button" type="button" onClick={onCreateInstance} disabled={busyAction !== ""}>
-          新建 Managed Instance
-        </button>
-      </div>
-      <div className="app-list-grid">
-        {instances.map((instance) => (
-          <div key={instance.instanceId} className="app-card">
-            <div className="app-card-head">
-              <strong>{instance.displayName || instance.instanceId}</strong>
-              <StatusBadge value={instance.status} tone={instance.online ? "good" : instance.status === "error" ? "danger" : "neutral"} />
-            </div>
-            <p>{instance.workspaceRoot || "workspace unknown"}</p>
-            <div className="app-card-flags">
-              <StatusBadge value={instance.source || "unknown"} tone="neutral" />
-              {instance.pid ? <StatusBadge value={`pid ${instance.pid}`} tone="neutral" /> : null}
-              {instance.managed ? <StatusBadge value="managed" tone="good" /> : null}
-            </div>
-            {instance.lastError ? <p>{instance.lastError}</p> : null}
-            {instance.managed && instance.source === "headless" ? (
-              <div className="button-row">
-                <button className="danger-button" type="button" onClick={() => onDeleteInstance(instance.instanceId, instance.displayName || instance.instanceId)} disabled={busyAction !== ""}>
-                  删除实例
-                </button>
-              </div>
-            ) : null}
+    <Panel id="instances" title="工作实例" description="管理本机可接入的工作实例，也可以从这里直接启动新的后台实例。">
+      <div className="wizard-step-layout two-column">
+        <div className="manifest-block">
+          <h4>新增工作实例</h4>
+          <div className="form-grid">
+            <label className="field">
+              <span>工作目录</span>
+              <input value={workspaceRoot} placeholder="/data/dl/project" onChange={(event) => onWorkspaceRootChange(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>显示名称（可选）</span>
+              <input value={displayName} placeholder="Demo Project" onChange={(event) => onDisplayNameChange(event.target.value)} />
+            </label>
           </div>
-        ))}
+          <p className="form-hint">如果不填显示名称，系统会默认使用工作目录名。</p>
+          <div className="button-row">
+            <button className="primary-button" type="button" onClick={onCreateInstance} disabled={busyAction !== ""}>
+              新建实例
+            </button>
+          </div>
+        </div>
+
+        <div className="manifest-block">
+          <h4>什么时候适合新建实例</h4>
+          <ul className="wizard-bullet-list">
+            <li>你想提前准备一个后台工作区，稍后再从飞书附着进去。</li>
+            <li>你需要把不同项目拆成独立实例，避免上下文互相干扰。</li>
+            <li>你希望管理页主动启动一个可复用的工作入口。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="section-block">
+        <div className="section-heading">
+          <div>
+            <h4>当前实例</h4>
+            <p>这里只显示本机当前可见的实例，方便确认哪个在线、哪个由管理页创建。</p>
+          </div>
+        </div>
+
+        {instances.length > 0 ? (
+          <div className="card-grid">
+            {instances.map((instance) => (
+              <article key={instance.instanceId} className="info-card">
+                <div className="app-card-head">
+                  <strong>{instance.displayName || instance.instanceId}</strong>
+                  <StatusBadge value={instanceStatusLabel(instance)} tone={instanceStatusTone(instance)} />
+                </div>
+                <p>{instance.workspaceRoot || "当前没有工作目录信息"}</p>
+                <div className="app-card-flags">
+                  <StatusBadge value={instanceSourceLabel(instance)} tone="neutral" />
+                  {instance.pid ? <StatusBadge value={`PID ${instance.pid}`} tone="neutral" /> : null}
+                  {instance.managed ? <StatusBadge value="可由管理页删除" tone="good" /> : null}
+                </div>
+                <p>{buildInstanceDetail(instance)}</p>
+                {instance.managed && instance.source === "headless" ? (
+                  <div className="button-row">
+                    <button className="danger-button" type="button" onClick={() => onDeleteInstance(instance.instanceId, instance.displayName || instance.instanceId)} disabled={busyAction !== ""}>
+                      删除实例
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="inline-note">
+            <StatusBadge value="暂无实例" tone="neutral" />
+            <span>本机还没有可显示的工作实例。你可以先在这里新建一个，或从 VS Code 先启动 Codex。</span>
+          </div>
+        )}
       </div>
     </Panel>
   );
@@ -293,63 +450,93 @@ export function AdminStoragePanel({
   onReconcilePreview,
 }: AdminStoragePanelProps) {
   return (
-    <Panel id="storage" title="存储管理" description="图片暂存和 Markdown 预览飞书云盘分开管理；preview cleanup 会让旧消息里的预览链接失效。">
-      <div className="checklist-grid">
-        <div className="checklist-column">
-          <div className="manifest-block">
-            <h4>图片暂存区</h4>
-            <DefinitionList
-              items={[
-                { label: "Root Dir", value: imageStaging.rootDir || "not configured" },
-                { label: "Files", value: imageStaging.fileCount },
-                { label: "Total", value: formatBytes(imageStaging.totalBytes) },
-                { label: "Active Files", value: imageStaging.activeFileCount },
-                { label: "Active Bytes", value: formatBytes(imageStaging.activeBytes) },
-              ]}
-            />
-            <div className="button-row">
-              <button className="secondary-button" type="button" onClick={onCleanupImageStaging} disabled={busyAction !== ""}>
-                删除一天前未引用文件
-              </button>
-            </div>
+    <Panel id="storage" title="文档与图片" description="查看图片暂存和文档预览占用情况，并按需清理旧内容。">
+      <div className="card-grid card-grid-two-column">
+        <div className="manifest-block">
+          <h4>图片暂存</h4>
+          <DefinitionList
+            items={[
+              { label: "暂存文件", value: imageStaging.fileCount },
+              { label: "占用空间", value: formatBytes(imageStaging.totalBytes) },
+              { label: "仍在使用", value: imageStaging.activeFileCount },
+              { label: "活跃占用", value: formatBytes(imageStaging.activeBytes) },
+            ]}
+          />
+          <p className="form-hint">清理时会保留仍在发送流程中的图片，不会直接影响正在进行中的会话。</p>
+          <div className="button-row">
+            <button className="secondary-button" type="button" onClick={onCleanupImageStaging} disabled={busyAction !== ""}>
+              清理旧图片
+            </button>
           </div>
+          <details className="wizard-tech-detail">
+            <summary>查看技术详情</summary>
+            <DefinitionList items={[{ label: "暂存目录", value: imageStaging.rootDir || "未配置" }]} />
+          </details>
         </div>
 
-        <div className="checklist-column">
-          {apps.map((app) => {
-            const preview = previews[app.id];
-            return (
-              <div key={app.id} className="manifest-block">
-                <h4>{app.name || app.id} 预览云盘</h4>
-                {preview ? (
-                  <>
-                    <DefinitionList
-                      items={[
-                        { label: "Root URL", value: preview.summary.rootURL || "not created" },
-                        { label: "Files", value: preview.summary.fileCount },
-                        { label: "Scopes", value: preview.summary.scopeCount },
-                        { label: "Estimated", value: formatBytes(preview.summary.estimatedBytes) },
-                        { label: "Last Used", value: preview.summary.newestLastUsedAt ? formatDateTime(preview.summary.newestLastUsedAt) : "unknown" },
-                      ]}
-                    />
+        <div className="stack-list">
+          <div className="section-heading">
+            <div>
+              <h4>文档预览</h4>
+              <p>每个机器人各自维护自己的预览目录，互不混用。</p>
+            </div>
+          </div>
+
+          {apps.length > 0 ? (
+            <div className="card-grid">
+              {apps.map((app) => {
+                const preview = previews[app.id];
+                const summary = preview?.summary;
+                return (
+                  <article key={app.id} className="info-card">
+                    <div className="app-card-head">
+                      <strong>{app.name || app.appId || app.id}</strong>
+                      <StatusBadge value={summary?.rootURL ? "已启用预览" : "尚未生成预览目录"} tone={summary?.rootURL ? "good" : "warn"} />
+                    </div>
+                    <p>{buildPreviewDetail(summary)}</p>
+                    <div className="app-card-flags">
+                      <StatusBadge value={`${summary?.fileCount ?? 0} 个文件`} tone="neutral" />
+                      <StatusBadge value={formatBytes(summary?.estimatedBytes ?? 0)} tone="neutral" />
+                    </div>
                     <div className="button-row">
-                      <button className="secondary-button" type="button" onClick={() => onCleanupPreview(app.id)} disabled={busyAction !== ""}>
-                        清理一天前预览
-                      </button>
-                      <button className="ghost-button" type="button" onClick={() => onReconcilePreview(app.id)} disabled={busyAction !== ""}>
-                        对账 / Reconcile
+                      <button className="secondary-button" type="button" onClick={() => onCleanupPreview(app.id)} disabled={!preview || busyAction !== ""}>
+                        清理旧预览
                       </button>
                     </div>
-                  </>
-                ) : (
-                  <div className="inline-note">
-                    <StatusBadge value="Unavailable" tone="warn" />
-                    <span>当前没有拿到这个 App 的 preview drive 摘要。</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                    <details className="wizard-tech-detail">
+                      <summary>查看技术详情</summary>
+                      {preview ? (
+                        <div className="detail-stack">
+                          <DefinitionList
+                            items={[
+                              { label: "预览目录链接", value: summary?.rootURL || "尚未创建" },
+                              { label: "已授权对象", value: summary?.scopeCount ?? 0 },
+                              { label: "最近使用", value: summary?.newestLastUsedAt ? formatDateTime(summary.newestLastUsedAt) : "尚未记录" },
+                            ]}
+                          />
+                          <div className="button-row">
+                            <button className="ghost-button" type="button" onClick={() => onReconcilePreview(app.id)} disabled={busyAction !== ""}>
+                              检查目录一致性
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="inline-note">
+                          <StatusBadge value="未获取到状态" tone="warn" />
+                          <span>当前还没有拿到这个机器人的预览目录摘要。</span>
+                        </div>
+                      )}
+                    </details>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="inline-note">
+              <StatusBadge value="暂无机器人" tone="neutral" />
+              <span>先配置至少一个机器人，后续生成文档预览时才会出现对应的预览目录。</span>
+            </div>
+          )}
         </div>
       </div>
     </Panel>
@@ -357,39 +544,281 @@ export function AdminStoragePanel({
 }
 
 export function AdminVSCodePanel({ vscode, vscodeError, busyAction, readinessText, onApplyVSCode, onReinstallShim }: AdminVSCodePanelProps) {
+  const ready = vscodeIsReady(vscode);
+
   return (
-    <Panel id="vscode" title="VS Code 集成" description="这里重点关注推荐模式、当前模式以及 shim 是否跟上最新扩展 bundle。">
-      {vscodeError ? <div className="notice-banner warn">VS Code 检测暂时不可用：{vscodeError}</div> : null}
+    <Panel id="vscode" title="VS Code" description="确认桌面端是否已经接入本机 relay；如果检测到升级或模式不匹配，可以在这里修复。">
+      {vscodeError ? <div className="notice-banner warn">当前还没拿到 VS Code 检测结果：{vscodeError}</div> : null}
+
       <StatGrid>
-        <StatCard label="Recommended" value={vscode?.recommendedMode || "unavailable"} tone="accent" detail={vscode?.sshSession ? "ssh session" : "local session"} />
-        <StatCard label="Current Mode" value={vscode?.currentMode || "unknown"} detail={vscode?.currentBinary || "unavailable"} />
-        <StatCard label="Settings" value={vscode?.settings.matchesBinary ? "ready" : "pending"} detail={vscode?.settings.path || "unavailable"} />
-        <StatCard label="Managed Shim" value={vscode?.latestShim.matchesBinary ? "ready" : "pending"} detail={vscode?.latestBundleEntrypoint || "bundle not detected"} />
+        <StatCard label="推荐处理" value={vscodeModeLabel(vscode?.recommendedMode)} tone="accent" detail={vscode?.sshSession ? "当前是远程 VS Code 会话" : "当前是本机 VS Code 会话"} />
+        <StatCard label="当前状态" value={ready ? "已就绪" : "待处理"} tone={ready ? "accent" : "warn"} detail={readinessText} />
+        <StatCard label="当前接入方式" value={vscodeModeLabel(vscode?.currentMode)} detail={vscode?.currentMode ? "已检测到当前配置" : "尚未检测"} />
+        <StatCard label="扩展更新" value={vscode?.needsShimReinstall ? "需要重装" : "已同步"} detail={vscode?.latestBundleEntrypoint ? "已检测到 VS Code 扩展安装" : "还没检测到可处理的扩展安装"} />
       </StatGrid>
+
       <div className="button-row">
         <button className="primary-button" type="button" onClick={() => onApplyVSCode(vscode?.recommendedMode || "all")} disabled={!vscode || busyAction !== ""}>
-          应用推荐模式
+          按推荐方式处理
         </button>
         <button className="secondary-button" type="button" onClick={() => onApplyVSCode("editor_settings")} disabled={!vscode || busyAction !== ""}>
-          写入 settings.json
+          只写入 settings.json
         </button>
         <button className="secondary-button" type="button" onClick={() => onApplyVSCode("managed_shim")} disabled={!vscode || busyAction !== ""}>
-          安装 managed shim
+          只处理扩展入口
         </button>
         <button className="ghost-button" type="button" onClick={onReinstallShim} disabled={!vscode?.needsShimReinstall || busyAction !== ""}>
-          重新安装 shim
+          重新安装扩展入口
         </button>
       </div>
+
       <DefinitionList
         items={[
-          { label: "Current Binary", value: vscode?.currentBinary || "unavailable" },
-          { label: "Install State Path", value: vscode?.installStatePath || "unavailable" },
-          { label: "Latest Bundle", value: vscode?.latestBundleEntrypoint || "not detected" },
-          { label: "Recorded Bundle", value: vscode?.recordedBundleEntrypoint || "not recorded" },
-          { label: "Needs Reinstall", value: vscode?.needsShimReinstall ? "yes" : "no" },
-          { label: "Readiness", value: readinessText },
+          { label: "settings.json", value: vscode?.settings.matchesBinary ? "已指向当前 relay" : "还没有写入或还未生效" },
+          { label: "扩展入口", value: vscode?.latestShim.matchesBinary ? "已指向当前 relay" : vscode?.latestBundleEntrypoint ? "还没有同步到当前 relay" : "未检测到可处理的扩展安装" },
+          { label: "当前会话", value: vscode?.sshSession ? "远程 VS Code" : "本机 VS Code" },
+          { label: "建议", value: readinessText },
         ]}
       />
+
+      <details className="wizard-tech-detail">
+        <summary>查看技术详情</summary>
+        <DefinitionList
+          items={[
+            { label: "当前可执行文件", value: vscode?.currentBinary || "尚未检测" },
+            { label: "安装状态文件", value: vscode?.installStatePath || "尚未检测" },
+            { label: "settings.json 路径", value: vscode?.settings.path || "尚未检测" },
+            { label: "记录中的扩展入口", value: vscode?.recordedBundleEntrypoint || "尚未记录" },
+            { label: "最新检测到的扩展入口", value: vscode?.latestBundleEntrypoint || "尚未检测" },
+          ]}
+        />
+      </details>
     </Panel>
   );
+}
+
+export function AdminTechnicalPanel({ bootstrap, gatewayRows, activeApp, scopesJSON, setupURL }: AdminTechnicalPanelProps) {
+  return (
+    <Panel id="technical" title="技术详情" description="默认操作不需要看这里。排障时再展开查看即可。">
+      <div className="detail-stack">
+        <details className="wizard-tech-detail">
+          <summary>本机路径与地址</summary>
+          <DefinitionList
+            items={[
+              { label: "配置文件", value: bootstrap.config.path },
+              { label: "管理页地址", value: bootstrap.admin.url },
+              { label: "配置页地址", value: setupURL },
+              { label: "Relay 地址", value: bootstrap.relay.serverURL },
+              { label: "本机访问方式", value: bootstrap.session.trustedLoopback ? "可信本机访问" : "需要会话登录" },
+            ]}
+          />
+        </details>
+
+        {activeApp ? (
+          <details className="wizard-tech-detail">
+            <summary>当前选中机器人详情</summary>
+            <DefinitionList
+              items={[
+                { label: "内部标识", value: activeApp.id },
+                { label: "App ID", value: activeApp.appId || "未配置" },
+                { label: "状态来源", value: describeAppStorage(activeApp) },
+                { label: "只读原因", value: activeApp.readOnlyReason || "无" },
+              ]}
+            />
+          </details>
+        ) : null}
+
+        <details className="wizard-tech-detail">
+          <summary>权限导入 JSON</summary>
+          <textarea className="code-textarea" readOnly value={scopesJSON} />
+        </details>
+
+        <details className="wizard-tech-detail">
+          <summary>机器人连接原始状态</summary>
+          {gatewayRows.length > 0 ? (
+            <div className="wizard-progress">
+              {gatewayRows.map((gateway) => (
+                <div key={gateway.gatewayId} className="wizard-step">
+                  <StatusBadge value={gateway.state || "unknown"} tone={statusTone(gateway.state)} />
+                  <div>
+                    <strong>{gateway.name || gateway.gatewayId}</strong>
+                    <p>{gateway.lastError || (gateway.lastConnectedAt ? `最近连接于 ${formatDateTime(gateway.lastConnectedAt)}` : "当前没有额外错误。")}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="inline-note">
+              <StatusBadge value="暂无原始状态" tone="neutral" />
+              <span>当前没有可显示的机器人连接状态。</span>
+            </div>
+          )}
+        </details>
+      </div>
+    </Panel>
+  );
+}
+
+function buildAttentionItems(
+  apps: FeishuAppSummary[],
+  staleImageCount: number,
+  vscode: VSCodeDetectResponse | null,
+  vscodeError: string,
+  onInspectApp: (app: FeishuAppSummary) => void,
+  setupURL: string,
+  setupURLForApp: (appID: string) => string,
+): AttentionItem[] {
+  const items: AttentionItem[] = [];
+
+  if (apps.length === 0) {
+    items.push({
+      key: "no-apps",
+      title: "还没有配置任何飞书机器人",
+      detail: "先接入至少一个机器人，后续才能在飞书里附着实例、切换线程和发送文档预览。",
+      tone: "warn",
+      actionLabel: "打开配置页",
+      href: setupURL,
+    });
+  }
+
+  apps.forEach((app) => {
+    const progress = appSetupProgress(app);
+    if (app.enabled && app.status?.state === "auth_failed") {
+      items.push({
+        key: `app-auth-${app.id}`,
+        title: `${app.name || app.appId || app.id} 连接失败`,
+        detail: app.status.lastError || "请检查 App ID、App Secret，以及飞书平台上的机器人能力配置。",
+        tone: "danger",
+        actionLabel: "查看机器人",
+        onAction: () => onInspectApp(app),
+      });
+      return;
+    }
+    if (app.enabled && !app.wizard?.connectionVerifiedAt) {
+      items.push({
+        key: `app-verify-${app.id}`,
+        title: `${app.name || app.appId || app.id} 还没完成连接测试`,
+        detail: "建议先测试连接，确认机器人已经可以和本机服务建立连接。",
+        tone: "warn",
+        actionLabel: "查看机器人",
+        onAction: () => onInspectApp(app),
+      });
+      return;
+    }
+    if (app.enabled && !progress.complete) {
+      items.push({
+        key: `app-setup-${app.id}`,
+        title: `${app.name || app.appId || app.id} 还没完成首次配置`,
+        detail: `还差 ${progress.remaining} 步。建议继续完成权限、事件订阅、菜单和发布等设置。`,
+        tone: "warn",
+        actionLabel: "继续配置",
+        href: setupURLForApp(app.id),
+      });
+      return;
+    }
+    if (app.enabled && app.status?.state === "degraded") {
+      items.push({
+        key: `app-degraded-${app.id}`,
+        title: `${app.name || app.appId || app.id} 当前状态异常`,
+        detail: app.status.lastError || "最近连接状态不稳定，建议查看机器人详情并尝试重新连接。",
+        tone: "warn",
+        actionLabel: "查看机器人",
+        onAction: () => onInspectApp(app),
+      });
+    }
+  });
+
+  if (vscodeError) {
+    items.push({
+      key: "vscode-error",
+      title: "VS Code 状态暂时不可用",
+      detail: "当前还没拿到 VS Code 检测结果。如果你依赖 VS Code 共享实例，建议稍后检查一次。",
+      tone: "warn",
+      actionLabel: "查看 VS Code",
+      href: "#vscode",
+    });
+  } else if (vscode && !vscodeIsReady(vscode)) {
+    items.push({
+      key: "vscode-ready",
+      title: "VS Code 还没完全接入当前 relay",
+      detail: "如果你需要和 VS Code 共用实例或线程，建议先按推荐方式处理。",
+      tone: "warn",
+      actionLabel: "查看 VS Code",
+      href: "#vscode",
+    });
+  }
+
+  if (staleImageCount > 0) {
+    items.push({
+      key: "stale-images",
+      title: `有 ${staleImageCount} 个旧图片暂存文件可清理`,
+      detail: "这些文件已经不在活跃发送流程里，可以按需释放本地存储空间。",
+      tone: "warn",
+      actionLabel: "查看文档与图片",
+      href: "#storage",
+    });
+  }
+
+  return items;
+}
+
+function buildAppCardDetail(app: FeishuAppSummary, remainingSetupSteps: number): string {
+  if (app.status?.lastError) {
+    return app.status.lastError;
+  }
+  if (!app.enabled) {
+    return "当前已停用，不会继续接收飞书消息。";
+  }
+  if (!app.wizard?.connectionVerifiedAt) {
+    return "还没有完成连接测试。";
+  }
+  if (remainingSetupSteps > 0) {
+    return `首次配置还差 ${remainingSetupSteps} 步。`;
+  }
+  if (app.status?.lastConnectedAt) {
+    return `最近连接于 ${formatDateTime(app.status.lastConnectedAt)}。`;
+  }
+  return "当前没有额外问题。";
+}
+
+function buildInstanceDetail(instance: AdminInstanceSummary): string {
+  if (instance.lastError) {
+    return instance.lastError;
+  }
+  if (instance.idleSince) {
+    return `最近空闲于 ${formatDateTime(instance.idleSince)}。`;
+  }
+  if (instance.startedAt) {
+    return `启动于 ${formatDateTime(instance.startedAt)}。`;
+  }
+  if (instance.requestedAt) {
+    return `创建请求于 ${formatDateTime(instance.requestedAt)}。`;
+  }
+  return "当前没有额外状态信息。";
+}
+
+function buildPreviewDetail(summary: PreviewDriveStatusResponse["summary"] | undefined): string {
+  if (!summary) {
+    return "当前还没有拿到这个机器人的预览目录状态。";
+  }
+  if (!summary.rootURL) {
+    return "这个机器人还没有生成过可打开的文档预览。";
+  }
+  if (summary.newestLastUsedAt) {
+    return `最近使用于 ${formatDateTime(summary.newestLastUsedAt)}。`;
+  }
+  return "预览目录已建立，暂时还没有最近使用记录。";
+}
+
+function describeAppStorage(app: FeishuAppSummary): string {
+  if (app.runtimeOverride) {
+    return "启动参数覆盖";
+  }
+  if (app.runtimeOnly) {
+    return "仅运行时存在";
+  }
+  if (app.persisted) {
+    return "本地配置";
+  }
+  return "未说明";
 }

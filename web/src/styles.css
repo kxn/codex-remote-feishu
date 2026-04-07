@@ -440,6 +440,62 @@ button {
   background: rgba(192, 57, 43, 0.08);
 }
 
+.section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1.2rem;
+}
+
+.section-heading,
+.attention-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.section-heading h4,
+.section-heading p,
+.attention-copy strong,
+.attention-copy p {
+  margin: 0;
+}
+
+.section-heading p,
+.attention-copy p {
+  margin-top: 0.35rem;
+  color: var(--text-soft);
+}
+
+.attention-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.attention-row {
+  padding: 1rem 1.05rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(18, 34, 48, 0.08);
+  background: var(--surface-strong);
+}
+
+.attention-row.warn {
+  border-color: rgba(183, 121, 31, 0.16);
+}
+
+.attention-row.danger {
+  border-color: rgba(192, 57, 43, 0.18);
+}
+
+.attention-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .setup-two-column,
 .checklist-grid {
   display: grid;
@@ -450,7 +506,9 @@ button {
 
 .app-list-grid,
 .wizard-editor,
-.checklist-column {
+.checklist-column,
+.stack-list,
+.detail-stack {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -502,6 +560,10 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
+}
+
+.form-grid-span-2 {
+  grid-column: span 2;
 }
 
 .field {
@@ -566,6 +628,35 @@ button {
   border-radius: 1.1rem;
   background: var(--surface-strong);
   border: 1px solid rgba(18, 34, 48, 0.08);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.85rem;
+}
+
+.card-grid-two-column {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(18, 34, 48, 0.08);
+  background: var(--surface-strong);
+}
+
+.info-card p,
+.info-card strong {
+  margin: 0;
+}
+
+.info-card p {
+  color: var(--text-soft);
 }
 
 .manifest-block h4,
@@ -940,6 +1031,7 @@ button {
   .definition-list,
   .setup-two-column,
   .checklist-grid,
+  .card-grid-two-column,
   .form-grid,
   .wizard-step-layout.two-column,
   .wizard-tech-grid,
@@ -956,13 +1048,16 @@ button {
   .page-hero,
   .gateway-card,
   .data-row,
-  .panel-head {
+  .panel-head,
+  .section-heading,
+  .attention-row {
     flex-direction: column;
   }
 
   .hero-actions,
   .data-meta,
-  .panel-actions {
+  .panel-actions,
+  .attention-actions {
     align-items: flex-start;
   }
 
@@ -970,6 +1065,7 @@ button {
   .definition-list,
   .setup-two-column,
   .checklist-grid,
+  .card-grid-two-column,
   .form-grid,
   .wizard-step-layout.two-column,
   .wizard-tech-grid,

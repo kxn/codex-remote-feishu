@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-07`
-> Summary: 补充管理页重设计与工程审查报告，并将旧的安装/管理总设计稿归档到 obsoleted。
+> Summary: 管理页重设计已移入 implemented，并同步更新了文档索引与当前状态说明。
 
 ## 1. 适用范围
 
@@ -123,6 +123,7 @@
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)
+- [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
 
@@ -136,7 +137,6 @@
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
-- [web-admin-ui-redesign.md](./draft/web-admin-ui-redesign.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
 
