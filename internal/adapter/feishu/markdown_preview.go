@@ -15,9 +15,13 @@ import (
 const (
 	defaultPreviewRootFolderName = "Codex Remote Previews"
 	defaultPreviewMaxFileBytes   = 20 * 1024 * 1024
+	defaultPreviewLazyCleanupAge = 24 * time.Hour
+	defaultPreviewLazyCleanupGap = 5 * time.Hour
 	previewFileType              = "file"
 	previewFolderType            = "folder"
 	previewPermissionView        = "view"
+	previewManagedFilePrefix     = "__crp__"
+	previewRootMarkerPrefix      = "__codex_remote_gateway__"
 )
 
 var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
@@ -46,6 +50,7 @@ type MarkdownPreviewRequest struct {
 type MarkdownPreviewConfig struct {
 	StatePath      string
 	RootFolderName string
+	GatewayID      string
 	ProcessCWD     string
 	MaxFileBytes   int64
 }
@@ -57,6 +62,7 @@ type DriveMarkdownPreviewer struct {
 	mu     sync.Mutex
 	loaded bool
 	state  *previewState
+	nowFn  func() time.Time
 }
 
 type previewDriveAPI interface {
@@ -70,9 +76,12 @@ type previewDriveAPI interface {
 }
 
 type previewRemoteNode struct {
-	Token string
-	URL   string
-	Type  string
+	Token        string
+	URL          string
+	Type         string
+	Name         string
+	CreatedTime  time.Time
+	ModifiedTime time.Time
 }
 
 type previewPrincipal struct {
@@ -83,9 +92,10 @@ type previewPrincipal struct {
 }
 
 type previewState struct {
-	Root   *previewFolderRecord           `json:"root,omitempty"`
-	Scopes map[string]*previewScopeRecord `json:"scopes,omitempty"`
-	Files  map[string]*previewFileRecord  `json:"files,omitempty"`
+	Root          *previewFolderRecord           `json:"root,omitempty"`
+	Scopes        map[string]*previewScopeRecord `json:"scopes,omitempty"`
+	Files         map[string]*previewFileRecord  `json:"files,omitempty"`
+	LastCleanupAt time.Time                      `json:"lastCleanupAt,omitempty"`
 }
 
 type previewScopeRecord struct {
@@ -97,6 +107,7 @@ type previewFolderRecord struct {
 	Token            string          `json:"token,omitempty"`
 	URL              string          `json:"url,omitempty"`
 	Shared           map[string]bool `json:"shared,omitempty"`
+	MarkerReady      bool            `json:"markerReady,omitempty"`
 	LastReconciledAt time.Time       `json:"lastReconciledAt,omitempty"`
 }
 
@@ -160,6 +171,7 @@ func NewDriveMarkdownPreviewer(api previewDriveAPI, cfg MarkdownPreviewConfig) *
 	if cfg.RootFolderName == "" {
 		cfg.RootFolderName = defaultPreviewRootFolderName
 	}
+	cfg.GatewayID = normalizeGatewayID(cfg.GatewayID)
 	if cfg.MaxFileBytes <= 0 {
 		cfg.MaxFileBytes = defaultPreviewMaxFileBytes
 	}
@@ -171,5 +183,6 @@ func NewDriveMarkdownPreviewer(api previewDriveAPI, cfg MarkdownPreviewConfig) *
 	return &DriveMarkdownPreviewer{
 		api:    api,
 		config: cfg,
+		nowFn:  time.Now,
 	}
 }

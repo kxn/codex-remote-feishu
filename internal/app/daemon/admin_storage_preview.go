@@ -21,6 +21,7 @@ var newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) feishu.Previ
 	return feishu.NewDriveMarkdownPreviewer(api, feishu.MarkdownPreviewConfig{
 		StatePath:      cfg.PreviewStatePath,
 		RootFolderName: cfg.PreviewRootFolderName,
+		GatewayID:      cfg.GatewayID,
 	})
 }
 

@@ -41,6 +41,7 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		Token: stringValue(resp.Data.Token),
 		URL:   stringValue(resp.Data.Url),
 		Type:  previewFolderType,
+		Name:  name,
 	}, nil
 }
 
@@ -147,9 +148,12 @@ func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string)
 					continue
 				}
 				values = append(values, previewRemoteNode{
-					Token: stringValue(file.Token),
-					URL:   stringValue(file.Url),
-					Type:  strings.TrimSpace(stringValue(file.Type)),
+					Token:        stringValue(file.Token),
+					URL:          stringValue(file.Url),
+					Type:         strings.TrimSpace(stringValue(file.Type)),
+					Name:         strings.TrimSpace(stringValue(file.Name)),
+					CreatedTime:  parsePreviewRemoteTime(stringValue(file.CreatedTime)),
+					ModifiedTime: parsePreviewRemoteTime(stringValue(file.ModifiedTime)),
 				})
 			}
 			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(stringValue(resp.Data.NextPageToken)) != "" {

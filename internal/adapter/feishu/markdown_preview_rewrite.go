@@ -32,9 +32,12 @@ func (p *DriveMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req Mark
 	defer p.mu.Unlock()
 
 	state := p.loadStateLocked()
-	rewritten, changed, rewriteErr := p.rewriteMarkdownLinksLocked(ctx, state, req, principals)
+	runtime := &previewRewriteRuntime{}
+	rewritten, changed, dirty, rewriteErr := p.rewriteMarkdownLinksLocked(ctx, state, req, principals, runtime)
 	if changed {
 		block.Text = rewritten
+	}
+	if changed || dirty {
 		if err := p.saveStateLocked(); err != nil && rewriteErr == nil {
 			rewriteErr = err
 		}
@@ -42,11 +45,11 @@ func (p *DriveMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req Mark
 	return block, rewriteErr
 }
 
-func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksLocked(ctx context.Context, state *previewState, req MarkdownPreviewRequest, principals []previewPrincipal) (string, bool, error) {
+func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksLocked(ctx context.Context, state *previewState, req MarkdownPreviewRequest, principals []previewPrincipal, runtime *previewRewriteRuntime) (string, bool, bool, error) {
 	text := req.Block.Text
 	matches := markdownLinkPattern.FindAllStringSubmatchIndex(text, -1)
 	if len(matches) == 0 {
-		return text, false, nil
+		return text, false, false, nil
 	}
 
 	scopeKey := previewScopeKey(req.GatewayID, req.SurfaceSessionID, req.ChatID, req.ActorUserID)
@@ -72,7 +75,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksLocked(ctx context.Context,
 				changed = true
 			}
 		} else {
-			url, ok, err := p.materializeMarkdownTargetLocked(ctx, state, rawTarget, req, scopeKey, principals)
+			url, ok, err := p.materializeMarkdownTargetLocked(ctx, state, rawTarget, req, scopeKey, principals, runtime)
 			switch {
 			case err != nil:
 				errs = append(errs, err.Error())
@@ -93,10 +96,10 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksLocked(ctx context.Context,
 	if len(errs) > 0 {
 		rewriteErr = errors.New(strings.Join(errs, "; "))
 	}
-	return builder.String(), changed, rewriteErr
+	return builder.String(), changed, runtime != nil && runtime.dirty, rewriteErr
 }
 
-func (p *DriveMarkdownPreviewer) materializeMarkdownTargetLocked(ctx context.Context, state *previewState, rawTarget string, req MarkdownPreviewRequest, scopeKey string, principals []previewPrincipal) (string, bool, error) {
+func (p *DriveMarkdownPreviewer) materializeMarkdownTargetLocked(ctx context.Context, state *previewState, rawTarget string, req MarkdownPreviewRequest, scopeKey string, principals []previewPrincipal, runtime *previewRewriteRuntime) (string, bool, error) {
 	resolvedPath, ok, err := p.resolveMarkdownPath(rawTarget, req)
 	if err != nil || !ok {
 		return "", ok, err
@@ -149,6 +152,9 @@ func (p *DriveMarkdownPreviewer) materializeMarkdownTargetLocked(ctx context.Con
 	}
 
 	if record.Token == "" {
+		if err := p.maybeLazyCleanupBeforeUploadLocked(ctx, state, runtime); err != nil {
+			return "", true, err
+		}
 		if err := p.uploadPreviewFileLocked(ctx, record, scopeFolder.Token, resolvedPath, content, contentSHA); err != nil {
 			if isPreviewParentMissingError(err) {
 				clearPreviewScope(state, scopeKey)
@@ -181,6 +187,9 @@ func (p *DriveMarkdownPreviewer) materializeMarkdownTargetLocked(ctx context.Con
 			record.Token = ""
 			record.URL = ""
 			record.Shared = nil
+			if err := p.maybeLazyCleanupBeforeUploadLocked(ctx, state, runtime); err != nil {
+				return "", true, err
+			}
 			if err := p.uploadPreviewFileLocked(ctx, record, scopeFolder.Token, resolvedPath, content, contentSHA); err != nil {
 				return "", true, err
 			}
@@ -253,17 +262,43 @@ func (p *DriveMarkdownPreviewer) ensureRootFolderLocked(ctx context.Context, sta
 	if state.Root == nil {
 		state.Root = &previewFolderRecord{}
 	}
-	if state.Root.Token != "" {
+	for attempt := 0; attempt < 2; attempt++ {
+		if state.Root.Token == "" {
+			node, ok, err := p.discoverManagedRootLocked(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("discover markdown preview root folder: %w", err)
+			}
+			if ok {
+				state.Root.Token = node.Token
+				state.Root.URL = node.URL
+				state.Root.MarkerReady = true
+			}
+		}
+
+		if state.Root.Token == "" {
+			node, err := p.api.CreateFolder(ctx, p.config.RootFolderName, "")
+			if err != nil {
+				return nil, fmt.Errorf("create markdown preview root folder: %w", err)
+			}
+			state.Root.Token = node.Token
+			state.Root.URL = node.URL
+			state.Root.MarkerReady = false
+		}
+
+		if !state.Root.MarkerReady {
+			if err := p.ensureRootMarkerLocked(ctx, state.Root.Token); err != nil {
+				if isPreviewResourceMissingError(err) {
+					state.Root = &previewFolderRecord{}
+					continue
+				}
+				return nil, fmt.Errorf("ensure markdown preview root marker: %w", err)
+			}
+			state.Root.MarkerReady = true
+		}
 		return state.Root, nil
 	}
 
-	node, err := p.api.CreateFolder(ctx, p.config.RootFolderName, "")
-	if err != nil {
-		return nil, fmt.Errorf("create markdown preview root folder: %w", err)
-	}
-	state.Root.Token = node.Token
-	state.Root.URL = node.URL
-	return state.Root, nil
+	return nil, fmt.Errorf("create markdown preview root folder: exhausted retries")
 }
 
 func (p *DriveMarkdownPreviewer) resolveMarkdownPath(rawTarget string, req MarkdownPreviewRequest) (string, bool, error) {

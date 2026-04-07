@@ -83,6 +83,8 @@ func (f *fakePreviewAPI) CreateFolder(ctx context.Context, name, parentToken str
 	return previewRemoteNode{
 		Token: token,
 		URL:   "https://preview/" + token,
+		Type:  previewFolderType,
+		Name:  name,
 	}, nil
 }
 
@@ -172,16 +174,16 @@ func TestDriveMarkdownPreviewerPersistsCacheAndReusesUpload(t *testing.T) {
 	if want := "See [design](https://preview/file-1)."; block1.Text != want {
 		t.Fatalf("unexpected rewritten text: %q", block1.Text)
 	}
-	if len(api1.createFolderCalls) != 2 {
-		t.Fatalf("expected root + scope folder creation, got %#v", api1.createFolderCalls)
+	if len(api1.createFolderCalls) != 3 {
+		t.Fatalf("expected root + marker + scope folder creation, got %#v", api1.createFolderCalls)
 	}
 	if len(api1.uploadFileCalls) != 1 {
 		t.Fatalf("expected one upload, got %#v", api1.uploadFileCalls)
 	}
-	if api1.uploadFileCalls[0].ParentToken != "folder-2" {
+	if api1.uploadFileCalls[0].ParentToken != "folder-3" {
 		t.Fatalf("expected upload into scope folder, got %#v", api1.uploadFileCalls[0])
 	}
-	if !strings.HasPrefix(api1.uploadFileCalls[0].FileName, "design--") || !strings.HasSuffix(api1.uploadFileCalls[0].FileName, ".md") {
+	if !strings.HasPrefix(api1.uploadFileCalls[0].FileName, previewManagedFilePrefix+"design--") || !strings.HasSuffix(api1.uploadFileCalls[0].FileName, ".md") {
 		t.Fatalf("unexpected uploaded file name: %#v", api1.uploadFileCalls[0])
 	}
 	if api1.uploadFileCalls[0].Content != "# design\n" {
@@ -190,7 +192,7 @@ func TestDriveMarkdownPreviewerPersistsCacheAndReusesUpload(t *testing.T) {
 	if len(api1.grantPermissionCalls) != 2 {
 		t.Fatalf("expected folder + file grants, got %#v", api1.grantPermissionCalls)
 	}
-	if api1.grantPermissionCalls[0].Token != "folder-2" || api1.grantPermissionCalls[1].Token != "file-1" {
+	if api1.grantPermissionCalls[0].Token != "folder-3" || api1.grantPermissionCalls[1].Token != "file-1" {
 		t.Fatalf("unexpected grant targets: %#v", api1.grantPermissionCalls)
 	}
 	if api1.grantPermissionCalls[0].Principal.Key != "openid:ou_user" || api1.grantPermissionCalls[1].Principal.Key != "openid:ou_user" {
@@ -296,8 +298,8 @@ func TestDriveMarkdownPreviewerCreatesGroupAndActorPermissions(t *testing.T) {
 	}
 
 	wantKeys := map[string]bool{
-		"folder-2|openid:ou_user":   true,
-		"folder-2|openchat:oc_chat": true,
+		"folder-3|openid:ou_user":   true,
+		"folder-3|openchat:oc_chat": true,
 		"file-1|openid:ou_user":     true,
 		"file-1|openchat:oc_chat":   true,
 	}
@@ -320,8 +322,9 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
 	state := &previewState{
 		Root: &previewFolderRecord{
-			Token: "fld-root",
-			URL:   "https://preview/fld-root",
+			Token:       "fld-root",
+			URL:         "https://preview/fld-root",
+			MarkerReady: true,
 		},
 		Scopes: map[string]*previewScopeRecord{
 			"feishu:app-1:chat:oc_chat": {
@@ -362,6 +365,7 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{StatePath: filepath.Join(t.TempDir(), "preview.json")})
 	previewer.loaded = true
 	previewer.state = normalizePreviewState(state)
+	previewer.nowFn = func() time.Time { return now }
 
 	summary, err := previewer.Summary()
 	if err != nil {
@@ -392,8 +396,9 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 func TestDriveMarkdownPreviewerReconcileDetectsMissingRemoteNodesAndPermissionDrift(t *testing.T) {
 	state := &previewState{
 		Root: &previewFolderRecord{
-			Token: "fld-root",
-			URL:   "https://preview/fld-root",
+			Token:       "fld-root",
+			URL:         "https://preview/fld-root",
+			MarkerReady: true,
 		},
 		Scopes: map[string]*previewScopeRecord{
 			"feishu:app-1:chat:oc_main": {
@@ -482,7 +487,7 @@ func TestDriveMarkdownPreviewerRecreatesMissingScopeFolder(t *testing.T) {
 	statePath := filepath.Join(root, "state", "preview.json")
 
 	initialState := &previewState{
-		Root: &previewFolderRecord{Token: "fld-root", URL: "https://preview/fld-root"},
+		Root: &previewFolderRecord{Token: "fld-root", URL: "https://preview/fld-root", MarkerReady: true},
 		Scopes: map[string]*previewScopeRecord{
 			"feishu:user:ou_user": {
 				Folder: &previewFolderRecord{
@@ -535,6 +540,162 @@ func TestDriveMarkdownPreviewerRecreatesMissingScopeFolder(t *testing.T) {
 	}
 	if api.uploadFileCalls[0].ParentToken != "fld-scope-new" {
 		t.Fatalf("expected upload to use recreated scope folder, got %#v", api.uploadFileCalls[0])
+	}
+}
+
+func TestDriveMarkdownPreviewerCleanupBeforeDeletesManagedRemoteFilesWithoutLocalState(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
+	api := newFakePreviewAPI()
+	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
+		switch folderToken {
+		case "":
+			return []previewRemoteNode{
+				{
+					Token:       "fld-root",
+					Type:        previewFolderType,
+					Name:        defaultPreviewRootFolderName,
+					URL:         "https://preview/fld-root",
+					CreatedTime: now.Add(-72 * time.Hour),
+				},
+			}, nil
+		case "fld-root":
+			return []previewRemoteNode{
+				{Token: "fld-marker", Type: previewFolderType, Name: previewRootMarkerFolderName("main")},
+				{Token: "fld-scope", Type: previewFolderType, Name: "feishu-main-chat-oc_old"},
+			}, nil
+		case "fld-scope":
+			return []previewRemoteNode{
+				{
+					Token:       "file-old",
+					Type:        previewFileType,
+					Name:        previewManagedFilePrefix + "old--deadbeef.md",
+					CreatedTime: now.Add(-48 * time.Hour),
+				},
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		GatewayID: "main",
+		StatePath: filepath.Join(t.TempDir(), "preview.json"),
+	})
+	previewer.nowFn = func() time.Time { return now }
+
+	result, err := previewer.CleanupBefore(context.Background(), now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("CleanupBefore returned error: %v", err)
+	}
+	if result.DeletedFileCount != 1 {
+		t.Fatalf("expected one remote-managed deletion, got %#v", result)
+	}
+	if len(api.deleteFileCalls) != 1 || api.deleteFileCalls[0].Token != "file-old" {
+		t.Fatalf("unexpected delete calls: %#v", api.deleteFileCalls)
+	}
+	if previewer.state == nil || previewer.state.Root == nil || previewer.state.Root.Token != "fld-root" {
+		t.Fatalf("expected discovered root to be cached in state, got %#v", previewer.state)
+	}
+	if previewer.state.LastCleanupAt != now {
+		t.Fatalf("expected cleanup timestamp to be recorded, got %s", previewer.state.LastCleanupAt)
+	}
+}
+
+func TestDriveMarkdownPreviewerLazyCleanupRunsAtMostOncePerInterval(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
+	root := t.TempDir()
+	writeMarkdownFile(t, filepath.Join(root, "docs", "one.md"), "# one\n")
+	writeMarkdownFile(t, filepath.Join(root, "docs", "two.md"), "# two\n")
+
+	api := newFakePreviewAPI()
+	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
+		switch folderToken {
+		case "":
+			return []previewRemoteNode{
+				{
+					Token:       "fld-root",
+					Type:        previewFolderType,
+					Name:        defaultPreviewRootFolderName,
+					URL:         "https://preview/fld-root",
+					CreatedTime: now.Add(-72 * time.Hour),
+				},
+			}, nil
+		case "fld-root":
+			return []previewRemoteNode{
+				{Token: "fld-marker", Type: previewFolderType, Name: previewRootMarkerFolderName("main")},
+				{Token: "fld-old", Type: previewFolderType, Name: "feishu-main-chat-oc_old"},
+			}, nil
+		case "fld-old":
+			return []previewRemoteNode{
+				{
+					Token:       "file-old",
+					Type:        previewFileType,
+					Name:        previewManagedFilePrefix + "legacy--deadbeef.md",
+					CreatedTime: now.Add(-48 * time.Hour),
+				},
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		GatewayID:  "main",
+		StatePath:  filepath.Join(root, "state", "preview.json"),
+		ProcessCWD: root,
+	})
+	previewer.nowFn = func() time.Time { return now }
+
+	req1 := MarkdownPreviewRequest{
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:oc_chat",
+		ChatID:           "oc_chat",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Open [one](docs/one.md).",
+		},
+	}
+	block, err := previewer.RewriteFinalBlock(context.Background(), req1)
+	if err != nil {
+		t.Fatalf("first rewrite returned error: %v", err)
+	}
+	if block.Text != "Open [one](https://preview/file-1)." {
+		t.Fatalf("unexpected first rewrite: %q", block.Text)
+	}
+	if len(api.deleteFileCalls) != 1 || api.deleteFileCalls[0].Token != "file-old" {
+		t.Fatalf("expected first upload to cleanup one old managed file, got %#v", api.deleteFileCalls)
+	}
+
+	now = now.Add(1 * time.Hour)
+	req2 := MarkdownPreviewRequest{
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:oc_chat",
+		ChatID:           "oc_chat",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Open [two](docs/two.md).",
+		},
+	}
+	block, err = previewer.RewriteFinalBlock(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("second rewrite returned error: %v", err)
+	}
+	if block.Text != "Open [two](https://preview/file-2)." {
+		t.Fatalf("unexpected second rewrite: %q", block.Text)
+	}
+	if len(api.deleteFileCalls) != 1 {
+		t.Fatalf("expected lazy cleanup throttle to suppress a second cleanup run, got %#v", api.deleteFileCalls)
+	}
+	if len(api.uploadFileCalls) != 2 {
+		t.Fatalf("expected both rewrites to upload their own preview files, got %#v", api.uploadFileCalls)
 	}
 }
 

@@ -95,6 +95,7 @@ func NewMultiGatewayController() *MultiGatewayController {
 			MarkdownPreviewConfig{
 				StatePath:      cfg.PreviewStatePath,
 				RootFolderName: cfg.PreviewRootFolderName,
+				GatewayID:      cfg.GatewayID,
 			},
 		)
 	}

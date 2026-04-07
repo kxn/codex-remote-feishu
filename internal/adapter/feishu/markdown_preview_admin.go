@@ -3,7 +3,6 @@ package feishu
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -20,42 +19,14 @@ func (p *DriveMarkdownPreviewer) CleanupBefore(ctx context.Context, cutoff time.
 	defer p.mu.Unlock()
 
 	state := p.loadStateLocked()
-	result := PreviewDriveCleanupResult{}
-	keys := make([]string, 0, len(state.Files))
-	for key := range state.Files {
-		keys = append(keys, key)
+	result, err := p.cleanupManagedPreviewFilesLocked(ctx, state, cutoff)
+	if err != nil {
+		return PreviewDriveCleanupResult{}, err
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		record := state.Files[key]
-		if record == nil {
-			delete(state.Files, key)
-			continue
-		}
-		lastUsedAt, ok := previewRecordLastUsedAt(record)
-		if !ok {
-			result.SkippedUnknownLastUsedCount++
-			continue
-		}
-		if lastUsedAt.After(cutoff) {
-			continue
-		}
-		if strings.TrimSpace(record.Token) != "" {
-			err := p.api.DeleteFile(ctx, record.Token, previewFileType)
-			if err != nil && !isPreviewResourceMissingError(err) {
-				return PreviewDriveCleanupResult{}, err
-			}
-		}
-		result.DeletedFileCount++
-		if record.SizeBytes > 0 {
-			result.DeletedEstimatedBytes += record.SizeBytes
-		}
-		delete(state.Files, key)
-	}
+	state.LastCleanupAt = p.nowUTC()
 	if err := p.saveStateLocked(); err != nil {
 		return PreviewDriveCleanupResult{}, err
 	}
-	result.Summary = summarizePreviewState(state, strings.TrimSpace(p.config.StatePath))
 	return result, nil
 }
 

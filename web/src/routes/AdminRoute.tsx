@@ -263,7 +263,11 @@ export function AdminRoute() {
       const response = await sendJSON<PreviewDriveCleanupResponse>(`/api/admin/storage/preview-drive/${encodeURIComponent(gatewayID)}/cleanup`, "POST", {
         olderThanHours: 24,
       });
-      setNotice({ tone: "good", message: `${response.name || response.gatewayId} 预览文件已清理 ${response.result.deletedFileCount} 项。` });
+      if (response.result.deletedFileCount > 0) {
+        setNotice({ tone: "good", message: `${response.name || response.gatewayId} 预览文件已清理 ${response.result.deletedFileCount} 项。` });
+      } else {
+        setNotice({ tone: "warn", message: `${response.name || response.gatewayId} 本次未命中可清理的预览文件。` });
+      }
       await loadAdminData(gatewayID);
     });
   }
