@@ -731,6 +731,28 @@ func TestDriveMarkdownPreviewerSkipsMarkdownOutsideAllowedRoots(t *testing.T) {
 	}
 }
 
+func TestPreviewPathCandidatesTreatWindowsDrivePathAsAbsolute(t *testing.T) {
+	roots := []string{`D:\Work\GoDot\interview-simulator`}
+	target := `d:\Work\GoDot\interview-simulator\docs\characters.md`
+
+	candidates := previewPathCandidates(target, roots)
+
+	if len(candidates) != 1 || candidates[0] != target {
+		t.Fatalf("expected absolute windows path to bypass root join, got %#v", candidates)
+	}
+}
+
+func TestPreviewPathCandidatesTreatSlashPrefixedWindowsDrivePathAsAbsolute(t *testing.T) {
+	roots := []string{`D:\Work\GoDot\interview-simulator`}
+	target := `/d:/Work/GoDot/interview-simulator/docs/characters.md`
+
+	candidates := previewPathCandidates(target, roots)
+
+	if len(candidates) != 1 || candidates[0] != `d:/Work/GoDot/interview-simulator/docs/characters.md` {
+		t.Fatalf("expected slash-prefixed windows path to normalize as absolute, got %#v", candidates)
+	}
+}
+
 func TestPreviewScopeKeyIncludesGatewayID(t *testing.T) {
 	got := previewScopeKey("app-1", "", "oc_chat", "")
 	if got != "feishu:app-1:chat:oc_chat" {

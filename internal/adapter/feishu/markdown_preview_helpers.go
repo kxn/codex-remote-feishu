@@ -247,14 +247,35 @@ func previewAllowedRoots(values ...string) []string {
 }
 
 func previewPathCandidates(target string, roots []string) []string {
-	if filepath.IsAbs(target) {
-		return []string{target}
+	if absolute, ok := previewLexicalAbsolutePath(target); ok {
+		return []string{absolute}
 	}
 	candidates := make([]string, 0, len(roots))
 	for _, root := range roots {
 		candidates = append(candidates, filepath.Join(root, target))
 	}
 	return candidates
+}
+
+func previewLexicalAbsolutePath(target string) (string, bool) {
+	if len(target) >= 4 && isPreviewPathSeparator(target[0]) && isASCIILetter(target[1]) && target[2] == ':' && isPreviewPathSeparator(target[3]) {
+		return target[1:], true
+	}
+	if filepath.IsAbs(target) {
+		return target, true
+	}
+	if len(target) >= 3 && isASCIILetter(target[0]) && target[1] == ':' && isPreviewPathSeparator(target[2]) {
+		return target, true
+	}
+	return "", false
+}
+
+func isPreviewPathSeparator(ch byte) bool {
+	return ch == '/' || ch == '\\'
+}
+
+func isASCIILetter(ch byte) bool {
+	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z')
 }
 
 func previewCanonicalPath(path string) (string, error) {
