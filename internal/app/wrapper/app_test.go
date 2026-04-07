@@ -26,10 +26,10 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 	helloCh := make(chan agentproto.Hello, 1)
 	eventsCh := make(chan []agentproto.Event, 8)
 	server := relayws.NewServer(relayws.ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ relayws.ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+		OnEvents: func(_ context.Context, _ relayws.ConnectionMeta, _ string, events []agentproto.Event) {
 			eventsCh <- events
 		},
 	})
@@ -146,10 +146,10 @@ func TestWrapperHeadlessBootstrapsInitializeBeforeRelayCommands(t *testing.T) {
 	helloCh := make(chan agentproto.Hello, 1)
 	eventsCh := make(chan []agentproto.Event, 8)
 	server := relayws.NewServer(relayws.ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ relayws.ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+		OnEvents: func(_ context.Context, _ relayws.ConnectionMeta, _ string, events []agentproto.Event) {
 			eventsCh <- events
 		},
 	})
@@ -234,10 +234,10 @@ func TestWrapperKeepsEphemeralHelperTrafficOnStdoutAndAnnotatesRelay(t *testing.
 	helloCh := make(chan agentproto.Hello, 1)
 	eventsCh := make(chan []agentproto.Event, 8)
 	server := relayws.NewServer(relayws.ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ relayws.ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+		OnEvents: func(_ context.Context, _ relayws.ConnectionMeta, _ string, events []agentproto.Event) {
 			eventsCh <- events
 		},
 	})
@@ -325,7 +325,7 @@ func TestWrapperWritesRawFramesWhenEnabled(t *testing.T) {
 
 	helloCh := make(chan agentproto.Hello, 1)
 	server := relayws.NewServer(relayws.ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ relayws.ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
 	})

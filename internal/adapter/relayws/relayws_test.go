@@ -25,10 +25,10 @@ func TestClientServerCommandAndEventFlow(t *testing.T) {
 	commandCh := make(chan agentproto.Command, 1)
 
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+		OnEvents: func(_ context.Context, _ ConnectionMeta, _ string, events []agentproto.Event) {
 			eventsCh <- events
 		},
 	})
@@ -245,7 +245,7 @@ func TestMatchesConnectionEpoch(t *testing.T) {
 func TestClientNormalizesDefaultRelayPath(t *testing.T) {
 	helloCh := make(chan agentproto.Hello, 1)
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
 	})
@@ -287,7 +287,7 @@ func TestClientReceivesWelcomeServerIdentity(t *testing.T) {
 	helloCh := make(chan agentproto.Hello, 1)
 	welcomeCh := make(chan agentproto.Welcome, 1)
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
 	})
@@ -425,10 +425,10 @@ func TestClientSendsStructuredRejectedAckAndKeepsConnection(t *testing.T) {
 	commandCh := make(chan string, 2)
 
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnCommandAck: func(_ context.Context, _ string, ack agentproto.CommandAck) {
+		OnCommandAck: func(_ context.Context, _ ConnectionMeta, _ string, ack agentproto.CommandAck) {
 			ackCh <- ack
 		},
 	})
@@ -518,7 +518,7 @@ func TestServerSendsWelcomeBeforeOnHelloCommand(t *testing.T) {
 	commandErrCh := make(chan error, 1)
 	var server *Server
 	server = NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			commandErrCh <- server.SendCommand(hello.Instance.InstanceID, agentproto.Command{
 				CommandID: "cmd-1",
 				Kind:      agentproto.CommandThreadsRefresh,
@@ -593,10 +593,10 @@ func TestRelayWSRawLoggerCapturesIncomingAndOutgoingEnvelopes(t *testing.T) {
 	commandCh := make(chan agentproto.Command, 1)
 
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
-		OnEvents: func(_ context.Context, _ string, events []agentproto.Event) {
+		OnEvents: func(_ context.Context, _ ConnectionMeta, _ string, events []agentproto.Event) {
 			eventsCh <- events
 		},
 	})
@@ -694,7 +694,7 @@ func TestRelayWSRawLoggerCapturesIncomingAndOutgoingEnvelopes(t *testing.T) {
 func TestServerProbeHelloReturnsWelcomeWithoutRegisteringInstance(t *testing.T) {
 	helloCh := make(chan agentproto.Hello, 1)
 	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, hello agentproto.Hello) {
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
 			helloCh <- hello
 		},
 	})
@@ -753,13 +753,77 @@ func TestServerProbeHelloReturnsWelcomeWithoutRegisteringInstance(t *testing.T) 
 	}
 }
 
+func TestServerConnectionMetaAndTargetedClose(t *testing.T) {
+	helloMetaCh := make(chan ConnectionMeta, 1)
+	disconnectMetaCh := make(chan ConnectionMeta, 1)
+	server := NewServer(ServerCallbacks{
+		OnHello: func(_ context.Context, meta ConnectionMeta, _ agentproto.Hello) {
+			helloMetaCh <- meta
+		},
+		OnDisconnect: func(_ context.Context, meta ConnectionMeta, _ string) {
+			disconnectMetaCh <- meta
+		},
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+
+	helloPayload, err := agentproto.MarshalEnvelope(agentproto.Envelope{
+		Type: agentproto.EnvelopeHello,
+		Hello: &agentproto.Hello{
+			Protocol: agentproto.WireProtocol,
+			Instance: agentproto.InstanceHello{InstanceID: "inst-close"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal hello: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, helloPayload); err != nil {
+		t.Fatalf("write hello: %v", err)
+	}
+	if _, _, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("read welcome: %v", err)
+	}
+
+	var meta ConnectionMeta
+	select {
+	case meta = <-helloMetaCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for hello callback")
+	}
+	if meta.ConnectionID == 0 {
+		t.Fatalf("expected non-zero connection id, got %#v", meta)
+	}
+	if !server.CloseConnection("inst-close", meta.ConnectionID) {
+		t.Fatal("expected targeted close to succeed")
+	}
+	select {
+	case got := <-disconnectMetaCh:
+		if got.ConnectionID != meta.ConnectionID {
+			t.Fatalf("disconnect connection id = %d, want %d", got.ConnectionID, meta.ConnectionID)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for disconnect callback")
+	}
+}
+
 func TestServerCallbackContextSurvivesAfterUpgradeHandlerReturns(t *testing.T) {
 	callbackErrCh := make(chan error, 2)
 	server := NewServer(ServerCallbacks{
-		OnHello: func(ctx context.Context, _ agentproto.Hello) {
+		OnHello: func(ctx context.Context, _ ConnectionMeta, _ agentproto.Hello) {
 			callbackErrCh <- ctx.Err()
 		},
-		OnEvents: func(ctx context.Context, _ string, _ []agentproto.Event) {
+		OnEvents: func(ctx context.Context, _ ConnectionMeta, _ string, _ []agentproto.Event) {
 			callbackErrCh <- ctx.Err()
 		},
 	})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -14,10 +15,14 @@ import (
 )
 
 type ServerCallbacks struct {
-	OnHello      func(context.Context, agentproto.Hello)
-	OnEvents     func(context.Context, string, []agentproto.Event)
-	OnCommandAck func(context.Context, string, agentproto.CommandAck)
-	OnDisconnect func(context.Context, string)
+	OnHello      func(context.Context, ConnectionMeta, agentproto.Hello)
+	OnEvents     func(context.Context, ConnectionMeta, string, []agentproto.Event)
+	OnCommandAck func(context.Context, ConnectionMeta, string, agentproto.CommandAck)
+	OnDisconnect func(context.Context, ConnectionMeta, string)
+}
+
+type ConnectionMeta struct {
+	ConnectionID uint64
 }
 
 type Server struct {
@@ -28,11 +33,13 @@ type Server struct {
 	mu       sync.RWMutex
 	conns    map[string]*serverConn
 	shutdown chan struct{}
+	nextConn uint64
 
 	rawLogger *debuglog.RawLogger
 }
 
 type serverConn struct {
+	id   uint64
 	conn *websocket.Conn
 	mu   sync.Mutex
 }
@@ -97,9 +104,21 @@ func (s *Server) SendCommand(instanceID string, command agentproto.Command) erro
 	return current.conn.WriteMessage(websocket.TextMessage, payload)
 }
 
+func (s *Server) CloseConnection(instanceID string, connectionID uint64) bool {
+	s.mu.RLock()
+	current := s.conns[instanceID]
+	s.mu.RUnlock()
+	if current == nil || current.id != connectionID {
+		return false
+	}
+	_ = current.conn.Close()
+	return true
+}
+
 func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn) {
 	defer conn.Close()
 	defer cancel()
+	meta := ConnectionMeta{ConnectionID: atomic.AddUint64(&s.nextConn, 1)}
 	var instanceID string
 	defer func() {
 		if instanceID == "" {
@@ -111,7 +130,7 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 		}
 		s.mu.Unlock()
 		if s.callbacks.OnDisconnect != nil {
-			s.callbacks.OnDisconnect(ctx, instanceID)
+			s.callbacks.OnDisconnect(ctx, meta, instanceID)
 		}
 	}()
 
@@ -167,7 +186,7 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 			var current *serverConn
 			if !probeOnly {
 				instanceID = hello.Instance.InstanceID
-				current = &serverConn{conn: conn}
+				current = &serverConn{id: meta.ConnectionID, conn: conn}
 				s.mu.Lock()
 				if previous := s.conns[instanceID]; previous != nil && previous.conn != conn {
 					_ = previous.conn.Close()
@@ -197,14 +216,14 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 				continue
 			}
 			if s.callbacks.OnHello != nil {
-				s.callbacks.OnHello(ctx, hello)
+				s.callbacks.OnHello(ctx, meta, hello)
 			}
 		case agentproto.EnvelopeEventBatch:
 			if envelope.EventBatch == nil {
 				continue
 			}
 			if s.callbacks.OnEvents != nil {
-				s.callbacks.OnEvents(ctx, envelope.EventBatch.InstanceID, envelope.EventBatch.Events)
+				s.callbacks.OnEvents(ctx, meta, envelope.EventBatch.InstanceID, envelope.EventBatch.Events)
 			}
 		case agentproto.EnvelopeCommandAck:
 			if envelope.CommandAck == nil {
@@ -214,7 +233,7 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 				instanceID = envelope.CommandAck.InstanceID
 			}
 			if s.callbacks.OnCommandAck != nil {
-				s.callbacks.OnCommandAck(ctx, instanceID, *envelope.CommandAck)
+				s.callbacks.OnCommandAck(ctx, meta, instanceID, *envelope.CommandAck)
 			}
 		}
 	}

@@ -3034,6 +3034,109 @@ func TestApplyInstanceDisconnectedFailsActiveRemoteItem(t *testing.T) {
 	}
 }
 
+func TestApplyInstanceTransportDegradedKeepsAttachmentAndQueuedWork(t *testing.T) {
+	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "agent_message",
+		Delta:    "部分输出",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-2",
+		Text:             "第二条",
+	})
+
+	events := svc.ApplyInstanceTransportDegraded("inst-1", true)
+	if svc.activeRemote["inst-1"] != nil || svc.pendingRemote["inst-1"] != nil {
+		t.Fatalf("expected remote ownership to clear on transport degrade")
+	}
+	if svc.root.Instances["inst-1"].Online || svc.root.Instances["inst-1"].ActiveTurnID != "" {
+		t.Fatalf("expected instance to become offline without active turn, got %#v", svc.root.Instances["inst-1"])
+	}
+	if len(svc.itemBuffers) != 0 {
+		t.Fatalf("expected turn buffers to clear on transport degrade, got %#v", svc.itemBuffers)
+	}
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ActiveQueueItemID != "" {
+		t.Fatalf("expected active queue to clear on transport degrade")
+	}
+	if surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected attachment and selected thread to stay, got %+v", surface)
+	}
+	active := surface.QueueItems["queue-1"]
+	if active == nil || active.Status != state.QueueItemFailed {
+		t.Fatalf("expected active queue item to fail on transport degrade, got %#v", active)
+	}
+	queued := surface.QueueItems["queue-2"]
+	if queued == nil || queued.Status != state.QueueItemQueued {
+		t.Fatalf("expected queued item to remain queued on transport degrade, got %#v", queued)
+	}
+
+	var sawTypingOff, sawNotice bool
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.QueueItemID == "queue-1" && event.PendingInput.TypingOff {
+			sawTypingOff = true
+		}
+		if event.Notice != nil && event.Notice.Code == "attached_instance_transport_degraded" {
+			sawNotice = true
+		}
+	}
+	if !sawTypingOff || !sawNotice {
+		t.Fatalf("expected typing-off and degraded notice, got %#v", events)
+	}
+
+	recovery := svc.ApplyInstanceConnected("inst-1")
+	if surface.ActiveQueueItemID != "queue-2" {
+		t.Fatalf("expected queued work to resume after reconnect, got active=%s", surface.ActiveQueueItemID)
+	}
+	resumed := surface.QueueItems["queue-2"]
+	if resumed == nil || resumed.Status != state.QueueItemDispatching {
+		t.Fatalf("expected queued item to re-dispatch after reconnect, got %#v", resumed)
+	}
+	var sawCommand bool
+	for _, event := range recovery {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			sawCommand = true
+		}
+	}
+	if !sawCommand {
+		t.Fatalf("expected reconnect to resume queued work, got %#v", recovery)
+	}
+}
+
 func TestApplyInstanceConnectedDoesNotResumeDetachedSurfaceQueue(t *testing.T) {
 	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

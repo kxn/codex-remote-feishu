@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-07`
-> Summary: 新增 relay 回压治理设计草案，并同步刷新文档索引。
+> Summary: 将 relay 回压治理文档迁移到 implemented，并同步刷新索引。
 
 ## 1. 适用范围
 
@@ -124,6 +124,7 @@
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)
+- [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
@@ -137,7 +138,6 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
-- [relay-backpressure-hardening-design.md](./draft/relay-backpressure-hardening-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)

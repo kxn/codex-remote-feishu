@@ -66,6 +66,7 @@ type App struct {
 	adminConfigMu sync.Mutex
 	listenMu      sync.Mutex
 	ingressRunMu  sync.Mutex
+	relayConnMu   sync.Mutex
 
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig
@@ -76,6 +77,7 @@ type App struct {
 	ingressCancel         context.CancelFunc
 	ingressStarted        bool
 	ingressWG             sync.WaitGroup
+	relayConnections      map[string]*relayConnectionState
 
 	adminAuth *adminauth.Manager
 	admin     adminRuntimeState
@@ -101,6 +103,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		startHeadless:         relayruntime.StartDetachedWrapper,
 		stopProcess:           relayruntime.TerminateProcess,
 		ingress:               newIngressPump(),
+		relayConnections:      map[string]*relayConnectionState{},
 		adminAuth:             authManager,
 	}
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
@@ -295,43 +298,54 @@ func (a *App) stopIngressPump() {
 	}
 }
 
-func (a *App) enqueueHello(_ context.Context, hello agentproto.Hello) {
+func (a *App) enqueueHello(_ context.Context, meta relayws.ConnectionMeta, hello agentproto.Hello) {
+	a.rememberRelayConnection(hello.Instance.InstanceID, meta.ConnectionID)
 	item := ingressWorkItem{
-		instanceID: hello.Instance.InstanceID,
-		kind:       ingressWorkHello,
-		hello:      &hello,
+		instanceID:   hello.Instance.InstanceID,
+		connectionID: meta.ConnectionID,
+		kind:         ingressWorkHello,
+		hello:        &hello,
 	}
 	if err := a.ingress.Enqueue(item); err != nil && !errors.Is(err, errIngressPumpClosed) {
 		log.Printf("daemon ingress enqueue hello failed: instance=%s err=%v", hello.Instance.InstanceID, err)
 	}
 }
 
-func (a *App) enqueueEvents(_ context.Context, instanceID string, events []agentproto.Event) {
+func (a *App) enqueueEvents(_ context.Context, meta relayws.ConnectionMeta, instanceID string, events []agentproto.Event) {
 	item := ingressWorkItem{
-		instanceID: instanceID,
-		kind:       ingressWorkEvents,
-		events:     append([]agentproto.Event(nil), events...),
+		instanceID:   instanceID,
+		connectionID: meta.ConnectionID,
+		kind:         ingressWorkEvents,
+		events:       append([]agentproto.Event(nil), events...),
 	}
-	if err := a.ingress.Enqueue(item); err != nil && !errors.Is(err, errIngressPumpClosed) {
+	if err := a.ingress.Enqueue(item); errors.Is(err, errIngressQueueFull) {
+		go a.handleIngressOverload(instanceID, meta.ConnectionID)
+		return
+	} else if err != nil && !errors.Is(err, errIngressPumpClosed) {
 		log.Printf("daemon ingress enqueue events failed: instance=%s err=%v", instanceID, err)
 	}
 }
 
-func (a *App) enqueueCommandAck(_ context.Context, instanceID string, ack agentproto.CommandAck) {
+func (a *App) enqueueCommandAck(_ context.Context, meta relayws.ConnectionMeta, instanceID string, ack agentproto.CommandAck) {
 	item := ingressWorkItem{
-		instanceID: instanceID,
-		kind:       ingressWorkCommandAck,
-		ack:        &ack,
+		instanceID:   instanceID,
+		connectionID: meta.ConnectionID,
+		kind:         ingressWorkCommandAck,
+		ack:          &ack,
 	}
-	if err := a.ingress.Enqueue(item); err != nil && !errors.Is(err, errIngressPumpClosed) {
+	if err := a.ingress.Enqueue(item); errors.Is(err, errIngressQueueFull) {
+		go a.handleIngressOverload(instanceID, meta.ConnectionID)
+		return
+	} else if err != nil && !errors.Is(err, errIngressPumpClosed) {
 		log.Printf("daemon ingress enqueue command ack failed: instance=%s command=%s err=%v", instanceID, ack.CommandID, err)
 	}
 }
 
-func (a *App) enqueueDisconnect(_ context.Context, instanceID string) {
+func (a *App) enqueueDisconnect(_ context.Context, meta relayws.ConnectionMeta, instanceID string) {
 	item := ingressWorkItem{
-		instanceID: instanceID,
-		kind:       ingressWorkDisconnect,
+		instanceID:   instanceID,
+		connectionID: meta.ConnectionID,
+		kind:         ingressWorkDisconnect,
 	}
 	if err := a.ingress.Enqueue(item); err != nil && !errors.Is(err, errIngressPumpClosed) {
 		log.Printf("daemon ingress enqueue disconnect failed: instance=%s err=%v", instanceID, err)
@@ -341,19 +355,64 @@ func (a *App) enqueueDisconnect(_ context.Context, instanceID string) {
 func (a *App) processIngressWork(item ingressWorkItem) {
 	switch item.kind {
 	case ingressWorkHello:
-		if item.hello != nil {
+		if item.hello != nil && a.currentRelayConnection(item.instanceID) == item.connectionID {
 			a.onHello(context.Background(), *item.hello)
+			return
 		}
 	case ingressWorkEvents:
-		if len(item.events) != 0 {
+		if len(item.events) != 0 && a.currentRelayConnection(item.instanceID) == item.connectionID {
 			a.onEvents(context.Background(), item.instanceID, item.events)
+			return
 		}
 	case ingressWorkCommandAck:
-		if item.ack != nil {
+		if item.ack != nil && a.currentRelayConnection(item.instanceID) == item.connectionID {
 			a.onCommandAck(context.Background(), item.instanceID, *item.ack)
+			return
 		}
 	case ingressWorkDisconnect:
-		a.onDisconnect(context.Background(), item.instanceID)
+		current, degraded := a.markRelayConnectionDropped(item.instanceID, item.connectionID)
+		if degraded {
+			a.debugf("suppress disconnect after transport degraded: instance=%s connection=%d", item.instanceID, item.connectionID)
+			return
+		}
+		if current {
+			a.onDisconnect(context.Background(), item.instanceID)
+			return
+		}
+	}
+	stats := a.ingress.MarkStaleDrop(item.instanceID)
+	a.debugf(
+		"drop stale ingress item: instance=%s connection=%d current=%d kind=%s depth=%d peak=%d stale=%d",
+		item.instanceID,
+		item.connectionID,
+		a.currentRelayConnection(item.instanceID),
+		item.kind,
+		stats.CurrentDepth,
+		stats.PeakDepth,
+		stats.StaleDropCount,
+	)
+}
+
+func (a *App) handleIngressOverload(instanceID string, connectionID uint64) {
+	apply, emitNotice := a.beginRelayTransportDegrade(instanceID, connectionID, time.Now())
+	if !apply {
+		return
+	}
+	stats := a.ingress.Stats(instanceID)
+	log.Printf(
+		"daemon ingress overload: instance=%s connection=%d depth=%d peak=%d overloads=%d",
+		instanceID,
+		connectionID,
+		stats.CurrentDepth,
+		stats.PeakDepth,
+		stats.OverloadCount,
+	)
+	closed := a.relay.CloseConnection(instanceID, connectionID)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.handleUIEvents(context.Background(), a.service.ApplyInstanceTransportDegraded(instanceID, emitNotice))
+	if !closed {
+		a.debugf("transport degraded connection already replaced: instance=%s connection=%d", instanceID, connectionID)
 	}
 }
 

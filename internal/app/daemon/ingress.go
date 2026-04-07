@@ -10,6 +10,9 @@ import (
 )
 
 var errIngressPumpClosed = errors.New("daemon ingress pump closed")
+var errIngressQueueFull = errors.New("daemon ingress queue full")
+
+const defaultIngressMaxPerInstance = 256
 
 type ingressWorkKind string
 
@@ -21,30 +24,46 @@ const (
 )
 
 type ingressWorkItem struct {
-	instanceID string
-	kind       ingressWorkKind
-	hello      *agentproto.Hello
-	events     []agentproto.Event
-	ack        *agentproto.CommandAck
+	instanceID   string
+	connectionID uint64
+	kind         ingressWorkKind
+	hello        *agentproto.Hello
+	events       []agentproto.Event
+	ack          *agentproto.CommandAck
+}
+
+type ingressQueueStats struct {
+	CurrentDepth   int
+	PeakDepth      int
+	OverloadCount  int
+	StaleDropCount int
 }
 
 type ingressPump struct {
-	mu       sync.Mutex
-	queues   map[string][]ingressWorkItem
-	ready    []string
-	readySet map[string]bool
-	notify   chan struct{}
-	closed   chan struct{}
-	done     chan struct{}
+	mu             sync.Mutex
+	maxPerInstance int
+	queues         map[string][]ingressWorkItem
+	ready          []string
+	readySet       map[string]bool
+	peakDepth      map[string]int
+	overloadCount  map[string]int
+	staleDropCount map[string]int
+	notify         chan struct{}
+	closed         chan struct{}
+	done           chan struct{}
 }
 
 func newIngressPump() *ingressPump {
 	return &ingressPump{
-		queues:   map[string][]ingressWorkItem{},
-		readySet: map[string]bool{},
-		notify:   make(chan struct{}, 1),
-		closed:   make(chan struct{}),
-		done:     make(chan struct{}),
+		maxPerInstance: defaultIngressMaxPerInstance,
+		queues:         map[string][]ingressWorkItem{},
+		readySet:       map[string]bool{},
+		peakDepth:      map[string]int{},
+		overloadCount:  map[string]int{},
+		staleDropCount: map[string]int{},
+		notify:         make(chan struct{}, 1),
+		closed:         make(chan struct{}),
+		done:           make(chan struct{}),
 	}
 }
 
@@ -63,7 +82,16 @@ func (p *ingressPump) Enqueue(item ingressWorkItem) error {
 	default:
 	}
 
+	currentDepth := len(p.queues[instanceID])
+	if p.maxPerInstance > 0 && currentDepth >= p.maxPerInstance && item.kind != ingressWorkHello && item.kind != ingressWorkDisconnect {
+		p.overloadCount[instanceID]++
+		return errIngressQueueFull
+	}
 	p.queues[instanceID] = append(p.queues[instanceID], item)
+	nextDepth := currentDepth + 1
+	if nextDepth > p.peakDepth[instanceID] {
+		p.peakDepth[instanceID] = nextDepth
+	}
 	if !p.readySet[instanceID] {
 		p.ready = append(p.ready, instanceID)
 		p.readySet[instanceID] = true
@@ -105,6 +133,22 @@ func (p *ingressPump) Wait() {
 	<-p.done
 }
 
+func (p *ingressPump) Stats(instanceID string) ingressQueueStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.statsLocked(strings.TrimSpace(instanceID))
+}
+
+func (p *ingressPump) MarkStaleDrop(instanceID string) ingressQueueStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID != "" {
+		p.staleDropCount[instanceID]++
+	}
+	return p.statsLocked(instanceID)
+}
+
 func (p *ingressPump) dequeue() (ingressWorkItem, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -127,4 +171,13 @@ func (p *ingressPump) dequeue() (ingressWorkItem, bool) {
 		p.ready = append(p.ready, instanceID)
 	}
 	return item, true
+}
+
+func (p *ingressPump) statsLocked(instanceID string) ingressQueueStats {
+	return ingressQueueStats{
+		CurrentDepth:   len(p.queues[instanceID]),
+		PeakDepth:      p.peakDepth[instanceID],
+		OverloadCount:  p.overloadCount[instanceID],
+		StaleDropCount: p.staleDropCount[instanceID],
+	}
 }

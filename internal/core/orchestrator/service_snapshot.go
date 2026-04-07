@@ -604,6 +604,80 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 	return events
 }
 
+func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice bool) []control.UIEvent {
+	inst := s.root.Instances[instanceID]
+	if inst == nil {
+		return nil
+	}
+	inst.Online = false
+	inst.ActiveTurnID = ""
+
+	delete(s.threadRefreshes, instanceID)
+	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
+	for key, item := range s.pendingTurnText {
+		if item == nil || item.InstanceID != instanceID {
+			continue
+		}
+		delete(s.pendingTurnText, key)
+	}
+
+	surfaces := s.findAttachedSurfaces(instanceID)
+	if len(surfaces) == 0 {
+		delete(s.pendingRemote, instanceID)
+		delete(s.activeRemote, instanceID)
+		return nil
+	}
+
+	var events []control.UIEvent
+	noticeText := fmt.Sprintf("当前接管实例链路过载，已中断当前执行：%s。已保留接管关系，等待实例恢复。", inst.DisplayName)
+	for _, surface := range surfaces {
+		surface.PromptOverride = state.ModelConfigRecord{}
+		surface.ActiveTurnOrigin = ""
+		surface.DispatchMode = state.DispatchModeNormal
+		surface.Abandoning = false
+		delete(s.handoffUntil, surface.SurfaceSessionID)
+		clearSurfaceRequests(surface)
+
+		binding := s.remoteBindingForSurface(surface)
+		if binding != nil {
+			s.clearTurnArtifacts(binding.InstanceID, binding.ThreadID, binding.TurnID)
+		}
+
+		emitSurfaceNotice := emitNotice
+		if surface.ActiveQueueItemID != "" {
+			item := surface.QueueItems[surface.ActiveQueueItemID]
+			if item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
+				var noticePtr *control.Notice
+				if emitSurfaceNotice {
+					noticePtr = &control.Notice{
+						Code: "attached_instance_transport_degraded",
+						Text: noticeText,
+					}
+				}
+				events = append(events, s.failSurfaceActiveQueueItem(surface, item, noticePtr, true)...)
+				continue
+			}
+			surface.ActiveQueueItemID = ""
+		}
+
+		s.clearRemoteOwnership(surface)
+		events = append(events, s.finishSurfaceAfterWork(surface)...)
+		if emitSurfaceNotice {
+			events = append(events, control.UIEvent{
+				Kind:             control.UIEventNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code: "attached_instance_transport_degraded",
+					Text: noticeText,
+				},
+			})
+		}
+	}
+	delete(s.pendingRemote, instanceID)
+	delete(s.activeRemote, instanceID)
+	return events
+}
+
 func (s *Service) RemoveInstance(instanceID string) {
 	if strings.TrimSpace(instanceID) == "" {
 		return

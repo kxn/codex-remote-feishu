@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -152,8 +154,9 @@ func TestAppRelayCallbacksUseIngressPump(t *testing.T) {
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
+	app.rememberRelayConnection("inst-1", 1)
 
-	app.enqueueEvents(context.Background(), "inst-1", []agentproto.Event{{
+	app.enqueueEvents(context.Background(), relayws.ConnectionMeta{ConnectionID: 1}, "inst-1", []agentproto.Event{{
 		Kind: agentproto.EventThreadsSnapshot,
 		Threads: []agentproto.ThreadSnapshotRecord{{
 			ThreadID: "thread-1",
@@ -209,6 +212,38 @@ func TestIngressPumpCloseRejectsNewWork(t *testing.T) {
 		kind:       ingressWorkDisconnect,
 	}); !errors.Is(err, errIngressPumpClosed) {
 		t.Fatalf("expected closed pump error, got %v", err)
+	}
+}
+
+func TestIngressPumpRejectsDataWhenInstanceQueueFull(t *testing.T) {
+	pump := newIngressPump()
+	pump.maxPerInstance = 1
+
+	first := ingressWorkItem{
+		instanceID:   "inst-a",
+		connectionID: 1,
+		kind:         ingressWorkEvents,
+		events:       []agentproto.Event{{Kind: agentproto.EventItemDelta, ItemID: "a-1"}},
+	}
+	second := ingressWorkItem{
+		instanceID:   "inst-a",
+		connectionID: 1,
+		kind:         ingressWorkEvents,
+		events:       []agentproto.Event{{Kind: agentproto.EventItemDelta, ItemID: "a-2"}},
+	}
+	if err := pump.Enqueue(first); err != nil {
+		t.Fatalf("enqueue first item: %v", err)
+	}
+	if err := pump.Enqueue(second); !errors.Is(err, errIngressQueueFull) {
+		t.Fatalf("expected queue full error, got %v", err)
+	}
+	if err := pump.Enqueue(ingressWorkItem{
+		instanceID:   "inst-a",
+		connectionID: 2,
+		kind:         ingressWorkHello,
+		hello:        &agentproto.Hello{Instance: agentproto.InstanceHello{InstanceID: "inst-a"}},
+	}); err != nil {
+		t.Fatalf("expected hello to bypass full queue, got %v", err)
 	}
 }
 
@@ -291,4 +326,80 @@ func TestIngressPumpConcurrentEnqueueIsSafe(t *testing.T) {
 
 func (k ingressWorkKind) String() string {
 	return string(k)
+}
+
+func TestAppProcessIngressDropsStaleConnectionItems(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Threads:    map[string]*state.ThreadRecord{},
+	})
+	app.rememberRelayConnection("inst-1", 2)
+
+	app.processIngressWork(ingressWorkItem{
+		instanceID:   "inst-1",
+		connectionID: 1,
+		kind:         ingressWorkEvents,
+		events: []agentproto.Event{{
+			Kind: agentproto.EventThreadsSnapshot,
+			Threads: []agentproto.ThreadSnapshotRecord{{
+				ThreadID: "thread-stale",
+				Name:     "stale",
+				Loaded:   true,
+			}},
+		}},
+	})
+
+	stats := app.ingress.Stats("inst-1")
+	if stats.StaleDropCount != 1 {
+		t.Fatalf("expected stale drop count to increment, got %#v", stats)
+	}
+	if thread := app.service.Instance("inst-1").Threads["thread-stale"]; thread != nil {
+		t.Fatalf("expected stale ingress item to be dropped, got %#v", thread)
+	}
+}
+
+func TestAppHandleIngressOverloadKeepsAttachmentAfterDisconnect(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: "surface-1", MessageID: "msg-1", Text: "你好"})
+	app.service.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: "surface-1", MessageID: "msg-2", Text: "第二条"})
+
+	app.rememberRelayConnection("inst-1", 7)
+	app.handleIngressOverload("inst-1", 7)
+	app.processIngressWork(ingressWorkItem{
+		instanceID:   "inst-1",
+		connectionID: 7,
+		kind:         ingressWorkDisconnect,
+	})
+
+	surface := app.service.SurfaceSnapshot("surface-1")
+	if surface == nil || surface.Attachment.InstanceID != "inst-1" || surface.Attachment.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected transport degrade to keep attachment and selected thread, got %#v", surface)
+	}
+
+	app.service.ApplyInstanceConnected("inst-1")
+	pending := app.service.PendingRemoteTurns()
+	if len(pending) != 1 || pending[0].SourceMessageID != "msg-2" {
+		t.Fatalf("expected queued work to resume after reconnect, got %#v", pending)
+	}
 }

@@ -1,14 +1,14 @@
 # Relay 回压治理设计
 
-> Type: `draft`
+> Type: `implemented`
 > Updated: `2026-04-07`
-> Summary: 基于 2026-04-07 的 `wrapper.forward_server_events` 出站拥塞事故，新增 relay 回压治理与可靠性修复方案草案。
+> Summary: 完成 wrapper 削峰、transport 分级、daemon ingress 解耦、transport degraded 与错误抑制，实现 relay 回压治理第一轮闭环。
 
 ## 1. 文档定位
 
 这份文档描述的是 **`relay-wrapper -> relayd -> Feishu` 链路在高频事件场景下的回压治理方案**。
 
-当前代码还没有按本文方案完成实现，因此本文放在 `docs/draft/`。
+当前代码已经按本文方案完成第一轮实现，因此本文迁移到 `docs/implemented/`，用于记录当前已落地行为与设计边界。
 
 相关现状文档：
 
@@ -75,7 +75,7 @@
 
 ### 阶段 4：退化语义、错误抑制与可观测性收口
 
-状态：待开始
+状态：已完成
 
 目标：
 
@@ -98,6 +98,8 @@
 5. `2026-04-07` 阶段 2 结束后复评结论：当前阶段切分依然成立；下一阶段继续按原计划进入 daemon ingress pump，把 websocket read path 和 daemon 同步慢处理解耦。
 6. `2026-04-07` 阶段 3 开始前复评结论：当前最佳切面仍然是先在 `internal/app/daemon` 内引入本地 ingress pump，把 relay websocket callback 收窄成轻量入队，不提前改 overload 语义。`stale epoch work item` 与 inbound overload 处置依赖连接代次和 transport degraded 语义，应继续放在阶段 4 与退化收口一起落地。
 7. `2026-04-07` 阶段 3 结束后复评结论：当前切分仍然成立。已通过 daemon 本地 ingress pump 完成 websocket callback 与同步慢处理解耦，并保持现有 `onHello/onEvents/onCommandAck/onDisconnect` 业务逻辑不变；下一阶段继续聚焦 transport degraded、同类错误抑制和必要可观测性，不在阶段 4 之外额外扩散 `gateway.Apply` 慢路径重构。
+8. `2026-04-07` 阶段 4 开始前复评结论：当前最佳切面是把“连接身份、inbound overload、transport degraded、problemReporter 去重”一次性收在同一轮完成。具体做法是：`relayws.Server` 仅新增本地 `connectionID` 元数据与定向断链能力；daemon ingress item 带 `connectionID` 并引入有界 per-instance queue；orchestrator 新增非 detach 的 `transport degraded` 收口；wrapper `problemReporter` 做短窗去重和内存上限。`gateway.Apply` 慢路径拆分继续明确留在本轮之外。
+9. `2026-04-07` 阶段 4 结束后复评结论：本轮默认范围已全部落地。当前实现已经具备 wrapper `item.delta` 合并、control/data 出站分级、epoch-aware backlog 隔离、daemon ingress pump、有界 per-instance inbound queue、`transport degraded` 收口、stale ingress 丢弃，以及 wrapper 同类链路错误短窗去重。`gateway.Apply` / markdown preview 慢路径拆分仍保留为后续性能类工作，不属于本文完成条件。
 
 ## 2. 事故摘要
 
