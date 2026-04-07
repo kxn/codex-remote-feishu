@@ -11,7 +11,7 @@ import (
 type threadAttachMode string
 
 const (
-	threadAttachUnavailable   threadAttachMode = "unavailable"
+	threadAttachUnavailable    threadAttachMode = "unavailable"
 	threadAttachCurrentVisible threadAttachMode = "current_visible"
 	threadAttachFreeVisible    threadAttachMode = "free_visible"
 	threadAttachReuseHeadless  threadAttachMode = "reuse_headless"
