@@ -1,0 +1,324 @@
+package feishu
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+func previewRecordScopeKey(fileKey string) string {
+	fileKey = strings.TrimSpace(fileKey)
+	if fileKey == "" {
+		return ""
+	}
+	parts := strings.SplitN(fileKey, "|", 2)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
+}
+
+func previewPermissionDrift(ctx context.Context, api previewDriveAPI, token, docType string, expected map[string]bool) (bool, error) {
+	if api == nil || len(expected) == 0 {
+		return false, nil
+	}
+	actual, err := api.ListPermissionMembers(ctx, token, docType)
+	if err != nil {
+		return false, err
+	}
+	for key, wanted := range expected {
+		if !wanted {
+			continue
+		}
+		if !actual[key] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func clearPreviewScope(state *previewState, scopeKey string) {
+	if state == nil {
+		return
+	}
+	delete(state.Scopes, scopeKey)
+	for key, record := range state.Files {
+		if record == nil {
+			delete(state.Files, key)
+			continue
+		}
+		if strings.HasPrefix(key, scopeKey+"|") {
+			delete(state.Files, key)
+		}
+	}
+}
+
+func ensurePreviewPermissions(ctx context.Context, api previewDriveAPI, token, docType string, shared *map[string]bool, principals []previewPrincipal) error {
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("missing preview token for %s", docType)
+	}
+	if len(principals) == 0 {
+		return nil
+	}
+	if *shared == nil {
+		*shared = map[string]bool{}
+	}
+
+	available := 0
+	var errs []string
+	var firstErr error
+	for _, principal := range principals {
+		if principal.Key == "" || principal.MemberType == "" || principal.MemberID == "" || principal.Type == "" {
+			continue
+		}
+		if (*shared)[principal.Key] {
+			available++
+			continue
+		}
+		if err := api.GrantPermission(ctx, token, docType, principal); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			errs = append(errs, fmt.Sprintf("%s => %v", principal.Key, err))
+			continue
+		}
+		(*shared)[principal.Key] = true
+		available++
+	}
+	if available > 0 {
+		return nil
+	}
+	if firstErr != nil && isPreviewResourceMissingError(firstErr) {
+		return firstErr
+	}
+	if len(errs) == 0 {
+		return fmt.Errorf("no preview principals available")
+	}
+	return errors.New(strings.Join(errs, "; "))
+}
+
+func previewPrincipals(surfaceSessionID, chatID, actorUserID string) []previewPrincipal {
+	seen := map[string]bool{}
+	values := []previewPrincipal{}
+
+	if userPrincipal, ok := previewUserPrincipal(actorUserID); ok {
+		seen[userPrincipal.Key] = true
+		values = append(values, userPrincipal)
+	}
+	if ref, ok := ParseSurfaceRef(surfaceSessionID); ok && ref.ScopeKind == ScopeKindChat {
+		if chatPrincipal, ok := previewChatPrincipal(chatID); ok && !seen[chatPrincipal.Key] {
+			seen[chatPrincipal.Key] = true
+			values = append(values, chatPrincipal)
+		}
+	}
+	return values
+}
+
+func previewUserPrincipal(actorUserID string) (previewPrincipal, bool) {
+	actorUserID = strings.TrimSpace(actorUserID)
+	if actorUserID == "" {
+		return previewPrincipal{}, false
+	}
+	memberType := "userid"
+	switch {
+	case strings.HasPrefix(actorUserID, "ou_"):
+		memberType = "openid"
+	case strings.HasPrefix(actorUserID, "on_"):
+		memberType = "unionid"
+	}
+	return previewPrincipal{
+		Key:        memberType + ":" + actorUserID,
+		MemberType: memberType,
+		MemberID:   actorUserID,
+		Type:       "user",
+	}, true
+}
+
+func previewChatPrincipal(chatID string) (previewPrincipal, bool) {
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return previewPrincipal{}, false
+	}
+	return previewPrincipal{
+		Key:        "openchat:" + chatID,
+		MemberType: "openchat",
+		MemberID:   chatID,
+		Type:       "chat",
+	}, true
+}
+
+func previewScopeKey(gatewayID, surfaceSessionID, chatID, actorUserID string) string {
+	if strings.TrimSpace(surfaceSessionID) != "" {
+		return surfaceSessionID
+	}
+	gatewayID = normalizeGatewayID(gatewayID)
+	if strings.TrimSpace(chatID) != "" {
+		return SurfaceRef{
+			Platform:  PlatformFeishu,
+			GatewayID: gatewayID,
+			ScopeKind: ScopeKindChat,
+			ScopeID:   strings.TrimSpace(chatID),
+		}.SurfaceID()
+	}
+	return SurfaceRef{
+		Platform:  PlatformFeishu,
+		GatewayID: gatewayID,
+		ScopeKind: ScopeKindUser,
+		ScopeID:   strings.TrimSpace(actorUserID),
+	}.SurfaceID()
+}
+
+func previewScopeFolderName(scopeKey string) string {
+	name := strings.NewReplacer(":", "-", "/", "-", "\\", "-", " ", "-").Replace(strings.TrimSpace(scopeKey))
+	name = strings.Trim(name, "-")
+	if name == "" {
+		name = "feishu-preview-scope"
+	}
+	return limitNameBytes(name, 120)
+}
+
+func previewFileKey(scopeKey, resolvedPath, contentSHA string) string {
+	return scopeKey + "|" + resolvedPath + "|" + contentSHA
+}
+
+func previewFileName(resolvedPath, contentSHA string) string {
+	base := filepath.Base(resolvedPath)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	shortSHA := contentSHA
+	if len(shortSHA) > 8 {
+		shortSHA = shortSHA[:8]
+	}
+	name = limitNameBytes(name, 200-len(ext)-len(shortSHA)-2)
+	if name == "" {
+		name = "preview"
+	}
+	return name + "--" + shortSHA + ext
+}
+
+func limitNameBytes(value string, limit int) string {
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	for len(value) > limit {
+		value = value[:len(value)-1]
+	}
+	return strings.TrimRight(value, "-_.")
+}
+
+func stripMarkdownLocationSuffix(target string) (string, string) {
+	if idx := strings.Index(target, "#"); idx >= 0 {
+		base := target[:idx]
+		suffix := target[idx:]
+		if matched, _ := regexp.MatchString(`^#L\d+(?:C\d+)?$`, suffix); matched {
+			return base, suffix
+		}
+	}
+	if matched := markdownLineSuffixPattern.FindStringSubmatch(target); len(matched) == 3 {
+		return matched[1], matched[2]
+	}
+	return target, ""
+}
+
+func previewAllowedRoots(values ...string) []string {
+	seen := map[string]bool{}
+	roots := []string{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		resolved, err := filepath.Abs(value)
+		if err != nil {
+			continue
+		}
+		resolved = filepath.Clean(resolved)
+		if seen[resolved] {
+			continue
+		}
+		seen[resolved] = true
+		roots = append(roots, resolved)
+	}
+	return roots
+}
+
+func previewPathCandidates(target string, roots []string) []string {
+	if filepath.IsAbs(target) {
+		return []string{target}
+	}
+	candidates := make([]string, 0, len(roots))
+	for _, root := range roots {
+		candidates = append(candidates, filepath.Join(root, target))
+	}
+	return candidates
+}
+
+func previewCanonicalPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(absolute)
+	if err == nil {
+		return resolved, nil
+	}
+	if os.IsNotExist(err) {
+		return "", err
+	}
+	return absolute, nil
+}
+
+func previewPathWithinAnyRoot(path string, roots []string) bool {
+	if len(roots) == 0 {
+		return false
+	}
+	for _, root := range roots {
+		if previewPathWithinRoot(path, root) {
+			return true
+		}
+	}
+	return false
+}
+
+func previewPathWithinRoot(path, root string) bool {
+	path = filepath.Clean(path)
+	root = filepath.Clean(root)
+	if path == root {
+		return true
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func isPreviewResourceMissingError(err error) bool {
+	var apiErr *driveAPIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	switch apiErr.Code {
+	case 1061003, 1061007, 1061041, 1061044, 1063005:
+		return true
+	default:
+		return false
+	}
+}
+
+func isPreviewParentMissingError(err error) bool {
+	var apiErr *driveAPIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	switch apiErr.Code {
+	case 1061003, 1061007, 1061041, 1061044:
+		return true
+	default:
+		return false
+	}
+}
