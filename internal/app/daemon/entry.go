@@ -86,6 +86,7 @@ func RunMain(ctx context.Context, version string) error {
 		ConfigPath: cfg.ConfigPath,
 		BaseEnv:    baseEnv,
 		Paths:      paths,
+		MinIdle:    1,
 	})
 	app.SetMarkdownPreviewer(markdownPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)

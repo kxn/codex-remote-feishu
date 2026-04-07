@@ -31,6 +31,7 @@ type HeadlessRuntimeConfig struct {
 
 	IdleRefreshInterval time.Duration
 	IdleRefreshTimeout  time.Duration
+	MinIdle             int
 }
 
 type managedHeadlessProcess struct {
@@ -149,6 +150,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	}
 	if cfg.IdleRefreshTimeout <= 0 {
 		cfg.IdleRefreshTimeout = 30 * time.Second
+	}
+	if cfg.MinIdle < 0 {
+		cfg.MinIdle = 0
 	}
 	cfg.BaseEnv = append([]string{}, cfg.BaseEnv...)
 	cfg.LaunchArgs = append([]string{}, cfg.LaunchArgs...)

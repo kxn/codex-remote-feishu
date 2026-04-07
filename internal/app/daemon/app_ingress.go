@@ -329,4 +329,5 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.maybeRefreshIdleManagedHeadlessLocked(now)
 	a.reapIdleHeadless(now)
 	a.syncManagedHeadlessLocked(now)
+	a.ensureMinIdleManagedHeadlessLocked(now)
 }

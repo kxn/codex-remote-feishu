@@ -183,3 +183,66 @@ func (a *App) noteManagedRefreshAckLocked(instanceID string, ack agentproto.Comm
 	log.Printf("managed headless refresh rejected: instance=%s command=%s error=%s", instanceID, ack.CommandID, managed.LastError)
 	return true
 }
+
+func (a *App) ensureMinIdleManagedHeadlessLocked(now time.Time) {
+	if a.headlessRuntime.MinIdle <= 0 || strings.TrimSpace(a.headlessRuntime.BinaryPath) == "" {
+		return
+	}
+	missing := a.headlessRuntime.MinIdle - a.countWarmManagedHeadlessLocked(now)
+	for i := 0; i < missing; i++ {
+		if _, err := a.startPoolManagedHeadlessLocked(now, i+1); err != nil {
+			log.Printf("managed headless prewarm failed: err=%v", err)
+			return
+		}
+	}
+}
+
+func (a *App) countWarmManagedHeadlessLocked(now time.Time) int {
+	count := 0
+	for _, managed := range a.managedHeadless {
+		if managed == nil {
+			continue
+		}
+		switch strings.TrimSpace(managed.Status) {
+		case managedHeadlessStatusIdle:
+			count++
+		case managedHeadlessStatusStarting:
+			if managed.StartedAt.IsZero() || now.Sub(managed.StartedAt) < a.headlessRuntime.StartTTL {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func (a *App) startPoolManagedHeadlessLocked(now time.Time, seq int) (string, error) {
+	cfg := a.headlessRuntime
+	workDir := strings.TrimSpace(cfg.Paths.StateDir)
+	if workDir == "" {
+		workDir = "."
+	}
+	instanceID := fmt.Sprintf("inst-headless-pool-%d-%d", now.UnixNano(), seq)
+	env := append([]string{}, cfg.BaseEnv...)
+	env = append(env,
+		"CODEX_REMOTE_INSTANCE_ID="+instanceID,
+		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
+		"CODEX_REMOTE_INSTANCE_MANAGED=1",
+		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless",
+	)
+	pid, err := a.startHeadless(controlToHeadlessLaunch(cfg, env, workDir, instanceID))
+	if err != nil {
+		return "", err
+	}
+	a.managedHeadless[instanceID] = &managedHeadlessProcess{
+		InstanceID:    instanceID,
+		PID:           pid,
+		RequestedAt:   now,
+		StartedAt:     now,
+		ThreadCWD:     workDir,
+		WorkspaceRoot: workDir,
+		DisplayName:   "headless",
+		Status:        managedHeadlessStatusStarting,
+	}
+	log.Printf("managed headless prewarm start requested: instance=%s pid=%d", instanceID, pid)
+	return instanceID, nil
+}

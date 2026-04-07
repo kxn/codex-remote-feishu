@@ -1,8 +1,8 @@
 # Feishu Headless 实例设计
 
 > Type: `inprogress`
-> Updated: `2026-04-06`
-> Summary: 标记为进行中文档并迁移到 `docs/inprogress`，保留当前 headless 实例方案与未收尾部分。
+> Updated: `2026-04-07`
+> Summary: 标记为进行中文档并迁移到 `docs/inprogress`，保留当前 headless 实例方案与已落地的最小池化补充。
 
 ## 1. 文档定位
 
@@ -396,6 +396,13 @@ V1 必须有垃圾回收，否则 headless 很容易堆积。
 - `headless_launch_timeout`
 - `headless_idle_ttl`
 - `headless_kill_grace_period`
+
+当前已落地的最小池化补充：
+
+- daemon 会维护默认 `min-idle = 1` 的 managed headless 预热
+- 只有 `idle` 与启动窗口内的 `starting` 会计入这个最小池目标
+- `busy` 与 `offline` 不计入；如果实例离线，daemon 会补起 replacement
+- 这仍然只是最小预热，不等于完整的 workspace-aware pool policy 或多档容量管理
 
 ## 12. 异常与边界处理
 

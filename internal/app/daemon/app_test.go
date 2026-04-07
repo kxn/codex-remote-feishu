@@ -858,7 +858,7 @@ func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
 	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
-	app.SetHeadlessRuntime(HeadlessRuntimeConfig{IdleTTL: time.Minute, KillGrace: time.Second})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{IdleTTL: time.Minute, KillGrace: time.Second, MinIdle: 0})
 
 	stoppedPID := 0
 	app.stopProcess = func(pid int, _ time.Duration) error {
@@ -945,6 +945,98 @@ func TestDaemonIdleManagedHeadlessRefreshesOnInterval(t *testing.T) {
 	}
 	if managed := app.managedHeadless["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusIdle || !managed.RefreshInFlight {
 		t.Fatalf("expected idle managed headless to track in-flight refresh, got %#v", managed)
+	}
+}
+
+func TestDaemonPrewarmsManagedHeadlessToMinIdle(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	var launches []relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches = append(launches, opts)
+		return 5000 + len(launches), nil
+	}
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: stateDir,
+			LogsDir:  t.TempDir(),
+		},
+		MinIdle: 1,
+	})
+
+	now := time.Now().UTC()
+	app.onTick(context.Background(), now)
+	if len(launches) != 1 {
+		t.Fatalf("expected one prewarm launch, got %#v", launches)
+	}
+	if launches[0].WorkDir != stateDir {
+		t.Fatalf("expected prewarm workdir to use state dir, got %#v", launches[0])
+	}
+	if !containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") || !containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") {
+		t.Fatalf("expected managed headless prewarm env, got %#v", launches[0].Env)
+	}
+	if len(app.managedHeadless) != 1 {
+		t.Fatalf("expected one managed headless record, got %#v", app.managedHeadless)
+	}
+	for _, managed := range app.managedHeadless {
+		if managed.Status != managedHeadlessStatusStarting || managed.WorkspaceRoot != stateDir || managed.DisplayName != "headless" {
+			t.Fatalf("unexpected prewarmed managed headless record: %#v", managed)
+		}
+	}
+
+	app.onTick(context.Background(), now.Add(10*time.Second))
+	if len(launches) != 1 {
+		t.Fatalf("expected fresh starting instance to count toward min-idle, got %#v", launches)
+	}
+}
+
+func TestDaemonPrewarmsReplacementWhenOfflineManagedHeadlessDoesNotCount(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	var launches []relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches = append(launches, opts)
+		return 6000 + len(launches), nil
+	}
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: stateDir,
+			LogsDir:  t.TempDir(),
+		},
+		StartTTL: time.Minute,
+		MinIdle:  1,
+	})
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-headless-old",
+			DisplayName:   "old",
+			WorkspaceRoot: stateDir,
+			WorkspaceKey:  stateDir,
+			ShortName:     "old",
+			Source:        "headless",
+			Managed:       true,
+			PID:           2468,
+		},
+	})
+	app.onDisconnect(context.Background(), "inst-headless-old")
+
+	app.onTick(context.Background(), time.Now().UTC())
+	if len(launches) != 1 {
+		t.Fatalf("expected offline managed headless to trigger replacement prewarm, got %#v", launches)
+	}
+	if len(app.managedHeadless) != 2 {
+		t.Fatalf("expected offline member to remain visible alongside replacement, got %#v", app.managedHeadless)
+	}
+	if app.managedHeadless["inst-headless-old"] == nil || app.managedHeadless["inst-headless-old"].Status != managedHeadlessStatusOffline {
+		t.Fatalf("expected original member to stay offline, got %#v", app.managedHeadless["inst-headless-old"])
 	}
 }
 
