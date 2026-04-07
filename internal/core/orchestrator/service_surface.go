@@ -109,12 +109,12 @@ func (s *Service) ensureThread(inst *state.InstanceRecord, threadID string) *sta
 func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	instances := make([]*state.InstanceRecord, 0, len(s.root.Instances))
 	for _, inst := range s.root.Instances {
-		if inst.Online {
+		if inst.Online && isVSCodeInstance(inst) {
 			instances = append(instances, inst)
 		}
 	}
 	if len(instances) == 0 {
-		return notice(surface, "no_online_instances", "当前没有在线实例。请先在 VS Code 中打开 Codex 会话。")
+		return notice(surface, "no_online_instances", "当前没有在线 VS Code 实例。请先在 VS Code 中打开 Codex 会话。")
 	}
 	sort.Slice(instances, func(i, j int) bool {
 		if instances[i].WorkspaceKey == instances[j].WorkspaceKey {
@@ -160,7 +160,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SelectionPrompt: &control.SelectionPrompt{
 			Kind:    control.SelectionPromptAttachInstance,
-			Title:   "在线实例",
+			Title:   "在线 VS Code 实例",
 			Options: options,
 		},
 	}}

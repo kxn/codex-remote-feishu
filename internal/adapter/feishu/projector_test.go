@@ -23,7 +23,7 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if ops[0].CardTitle != "在线实例" {
+	if ops[0].CardTitle != "在线 VS Code 实例" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
 	if ops[0].CardBody != "" {

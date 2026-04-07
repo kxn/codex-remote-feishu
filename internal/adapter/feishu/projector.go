@@ -97,7 +97,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			title = "请选择"
 			switch event.SelectionPrompt.Kind {
 			case control.SelectionPromptAttachInstance:
-				title = "在线实例"
+				title = "在线 VS Code 实例"
 			case control.SelectionPromptUseThread:
 				title = "会话列表"
 			case control.SelectionPromptNewInstance:

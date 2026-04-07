@@ -210,6 +210,7 @@ func TestListInstancesMarksBusyClaimedInstanceDisabled(t *testing.T) {
 		WorkspaceRoot: "/data/dl/web",
 		WorkspaceKey:  "/data/dl/web",
 		ShortName:     "web",
+		Source:        "vscode",
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-2": {ThreadID: "thread-2", Name: "修样式", CWD: "/data/dl/web"},
@@ -230,6 +231,9 @@ func TestListInstancesMarksBusyClaimedInstanceDisabled(t *testing.T) {
 	prompt := events[0].SelectionPrompt
 	if prompt.Kind != control.SelectionPromptAttachInstance || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected instance prompt: %#v", prompt)
+	}
+	if prompt.Title != "在线 VS Code 实例" {
+		t.Fatalf("expected vscode attach prompt title, got %#v", prompt)
 	}
 	for _, option := range prompt.Options {
 		switch option.OptionID {
@@ -375,6 +379,80 @@ func TestListWithoutOnlineInstancesReturnsNotice(t *testing.T) {
 	}
 	if events[0].Notice == nil || events[0].Notice.Code != "no_online_instances" {
 		t.Fatalf("expected no_online_instances notice, got %#v", events[0])
+	}
+	if !strings.Contains(events[0].Notice.Text, "当前没有在线 VS Code 实例") {
+		t.Fatalf("expected vscode-specific empty state notice, got %#v", events[0].Notice)
+	}
+}
+
+func TestListHeadlessOnlyReturnsNoVSCodeNotice(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/runtime/headless",
+		WorkspaceKey:  "/data/dl/runtime/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "no_online_instances" {
+		t.Fatalf("expected no_online_instances notice for headless-only runtime, got %#v", events)
+	}
+	if !strings.Contains(events[0].Notice.Text, "当前没有在线 VS Code 实例") {
+		t.Fatalf("expected vscode-specific empty state notice, got %#v", events[0].Notice)
+	}
+}
+
+func TestListFiltersOutHeadlessInstances(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "vscode",
+		Online:        true,
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/runtime/headless",
+		WorkspaceKey:  "/data/dl/runtime/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected one selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "在线 VS Code 实例" {
+		t.Fatalf("expected vscode attach prompt title, got %#v", prompt)
+	}
+	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "inst-vscode-1" {
+		t.Fatalf("expected only vscode instance in list prompt, got %#v", prompt.Options)
 	}
 }
 

@@ -16,6 +16,13 @@ func isHeadlessInstance(inst *state.InstanceRecord) bool {
 	return inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed
 }
 
+func isVSCodeInstance(inst *state.InstanceRecord) bool {
+	if inst == nil {
+		return false
+	}
+	return strings.EqualFold(firstNonEmpty(inst.Source, "vscode"), "vscode")
+}
+
 func metadataString(metadata map[string]any, key string) string {
 	if len(metadata) == 0 {
 		return ""
