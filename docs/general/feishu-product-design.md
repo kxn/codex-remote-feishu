@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 补充消息撤回事件与当前飞书产品行为，保持安装清单与代码语义一致。
+> Updated: `2026-04-07`
+> Summary: 对齐当前 `/list`、global `/use`、按钮直达交互与 attached-unbound / request gate 等实际行为。
 
 ## 1. 文档定位
 
@@ -125,7 +125,13 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 ### 4.1 `attach(instance)`
 
-`/list` 或菜单列出在线实例后，用户通过数字回复 attach。
+`/list` 或菜单当前只列出**在线 VS Code 实例**，不再把 managed headless 暴露成手工 attach 入口。
+
+当前 attach 选择卡以按钮回调为主：
+
+- `attach_instance` 直达 `ActionAttachInstance`
+- 旧 `prompt_select` 兼容动作统一回 `selection_expired`
+- 普通数字文本不会再被解释成实例选择
 
 attach 成功后：
 
@@ -134,21 +140,36 @@ attach 成功后：
 2. 否则若 instance 有 `ActiveThreadID`
    - pin 到该 thread
 3. 否则
-   - 进入 `unbound`
+   - 进入 `attached_unbound`
+   - 若当前仍有可见会话，会主动补一张 `/use` 选择卡
 
 ### 4.2 `use-thread(thread)`
 
-`/threads` 或 `/use` 列出当前 instance 的可见 thread，用户通过数字回复切换。
+`/threads`、`/use`、`/sessions` 当前都走同一条主入口：展示**最近可见会话**。
+
+这里的会话列表不是“当前 instance 内 thread 列表”这么窄，而是 merged thread view：
+
+- 已 attach 时，会包含当前实例的可见会话
+- detached 时，也可以直接从这里继续已有会话
+- `/useall` / `/sessionsall` 展示全部可见会话
+
+当前会话选择同样走按钮回调：
+
+- `use_thread` 直达 `ActionUseThread`
+- 普通数字文本不会再被解释成会话选择
 
 切换后：
 
 - `SelectedThreadID` 更新
 - `RouteMode = pinned`
 
-实例选择和 thread 选择当前都会生成一个数字选择 prompt。
+选择目标会话时，当前实现会按 resolver 自动决定后续动作：
 
-- 默认有效期 10 分钟
-- 过期后继续回复数字，会提示重新发送 `/list` 或 `/use`
+- 当前实例可见：直接切到目标 thread
+- 目标会话在其他在线实例上可见：自动接管目标实例
+- 当前没有合适在线实例但会话带有可恢复 `cwd`：自动复用或启动 managed headless
+
+如果用户点到旧卡片上的 legacy `prompt_select`，会统一收到 `selection_expired` 提示，要求重新发送 `/list`、`/use` 或 `/useall`。
 
 ### 4.3 `follow`
 
@@ -158,12 +179,13 @@ attach 成功后：
 
 后续 prompt 会跟随 instance 当前观测到的 focused thread。
 
-### 4.4 `unbound`
+### 4.4 `attached_unbound`
 
-当没有可用 thread 且未显式绑定时：
+当 surface 已接管实例，但当前没有拿到可发送的 thread 时，会进入 `attached_unbound`：
 
-- 下一条飞书文本会以 `createThreadIfMissing=true` 形式发出
-- 由 wrapper 决定是否先做 `thread/start`
+- 系统会明确提示下一步应该走 `/use`、`/useall`、`/follow` 或 `/detach`
+- 若当前实例仍有可见会话，会主动补发 `/use` 选择卡
+- 普通文本不会再被当成“隐式创建 thread”来直接发出
 
 ## 5. Queue、Typing 与本地优先
 
@@ -222,7 +244,8 @@ attach 成功后：
 
 - 普通文本不会进入 queue，而是返回 notice，要求先处理卡片
 - 图片也不会进入 staged 队列，避免形成“当前 turn 等确认，后续消息又排在它后面”的死锁感
-- slash command 和 selection prompt 数字回复仍然照常处理
+- `/use`、`/useall`、`/follow`、`/new` 这类会改路由的动作也会被冻结
+- 用户需要先处理 request card；request response 按钮仍可用
 
 ### 5.6 `captureFeedback`
 
@@ -273,6 +296,18 @@ attach 成功后：
 - `request.prompt`
 - `thread.selection.changed`
 
+### 7.1.0 选择卡片
+
+当前选择卡片是按钮直达流，而不是“回复数字”交互：
+
+- `attach_instance`
+- `use_thread`
+- `resume_headless_thread`
+- `kick_thread_confirm`
+- `kick_thread_cancel`
+
+旧 `prompt_select` 只保留为兼容入口，统一回 `selection_expired`。
+
 ### 7.1.1 Approval Request 卡片
 
 当本地 Codex 发出 approval request 时：
@@ -319,7 +354,7 @@ final `block.committed`：
 
 ## 8. 当前已实现但值得注意的限制
 
-- attach/use 目前仍采用“列出选项 + 数字回复”的交互，不是按钮回调流
+- attach/use 当前已经收敛到按钮直达交互；普通数字文本会按普通消息处理
 - reaction deleted 事件未接入
 - Feishu 输出不是流式更新卡片，而是 append-only 文本/卡片
 - 当前主要按 P2P 场景测试，group chat 虽有 surface id 规则，但不是主要联调路径

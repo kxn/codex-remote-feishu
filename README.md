@@ -202,7 +202,7 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 命令：
 
 - `/list`：列出当前可手工接管的在线 VS Code 实例
-- 选择方式：优先点击卡片里的按钮；也兼容回复序号
+- 选择方式：当前通过卡片里的按钮直接触发；如果看到旧卡片，请重新发送命令
 - `/threads` 或 `/use`：列出最近可见会话；即使当前还没显式 attach，也可以直接从这里继续已有对话
 - `/useall`：列出全部可见会话
 - 会话选择后：系统会切到目标会话；必要时会自动接管在线实例，或复用/启动后台 headless 实例

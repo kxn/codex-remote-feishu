@@ -1,8 +1,8 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 迁移到 `docs/general` 并统一文档元信息头，内容未做实质改动。
+> Updated: `2026-04-07`
+> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，避免继续沿用旧的三二进制产品叙述。
 
 ## 1. 当前状态
 
@@ -10,18 +10,22 @@
 
 旧的 Node.js / Rust 版本已经不再随仓库发布，也不是当前文档和测试的讨论对象。
 
-## 2. 进程结构
+## 2. 运行角色与入口
 
-当前固定为三个二进制：
+当前产品入口已经收敛到统一二进制：
+
+1. `codex-remote`
+   - 无参数时默认进入 `daemon` role
+   - `install` role 负责 bootstrap、写配置和启动 WebSetup
+   - `app-server` / `wrapper` role 负责包装真实 `codex`
+
+仓库里仍保留三个兼容 launcher：
 
 1. `relayd`
-   - 统一承载状态编排、Feishu 接入、wrapper websocket hub、状态 API
 2. `relay-wrapper`
-   - 作为 Codex 可执行包装器运行
-   - 代理 VS Code / Codex 扩展和真实 `codex.real`
 3. `relay-install`
-   - 写配置
-   - 做编辑器集成
+
+它们都只是对同一套 `launcher` 的兼容入口，不再是 release 用户的主产品入口。
 
 逻辑上仍保留三层边界：
 
@@ -37,6 +41,7 @@
 
 ```text
 cmd/
+  codex-remote/
   relayd/
   relay-wrapper/
   relay-install/
@@ -46,11 +51,12 @@ internal/
     codex/
     editor/
     feishu/
-    process/
     relayws/
   app/
+    adminauth/
     daemon/
     install/
+    launcher/
     wrapper/
   config/
   core/
@@ -60,7 +66,9 @@ internal/
     render/
     renderer/
     state/
-  logging/
+  debuglog/
+  feishuapp/
+  runtime/
 
 testkit/
   harness/
@@ -74,7 +82,7 @@ testkit/
 
 统一定义：
 
-- wrapper <-> relayd wire envelope
+- wrapper <-> daemon wire envelope
 - canonical command
 - canonical event
 
@@ -129,7 +137,7 @@ Codex app-server 适配层，负责：
 
 ### 4.7 `internal/adapter/relayws`
 
-wrapper 和 relayd 之间的 websocket 传输层。
+wrapper 和 daemon 之间的 websocket 传输层。
 
 ### 4.8 `internal/adapter/feishu`
 
@@ -148,7 +156,7 @@ Feishu 平台适配层，负责：
 
 ### 4.10 `internal/app/daemon`
 
-把这些模块组装成 `relayd`：
+把这些模块组装成 daemon role：
 
 - relay websocket server
 - orchestrator
@@ -158,16 +166,16 @@ Feishu 平台适配层，负责：
 
 ### 4.11 `internal/app/wrapper`
 
-把这些模块组装成 `relay-wrapper`：
+把这些模块组装成 wrapper role：
 
 - 启动真实 Codex 子进程
 - 代理 stdio
-- 连接 relayd
+- 连接 daemon
 - 调用 Codex translator
 
 ### 4.12 `internal/app/install`
 
-安装器服务层，负责：
+安装器 role，负责：
 
 - 写统一配置 `config.json`
 - 写 `install-state.json`
@@ -212,7 +220,7 @@ Feishu inbound
   -> orchestrator enqueue / freeze route
   -> agentproto.Command(prompt.send)
   -> relayws
-  -> relay-wrapper
+  -> wrapper role
   -> codex translator
   -> native Codex app-server
   -> canonical Event

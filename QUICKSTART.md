@@ -71,5 +71,5 @@ Then in Feishu:
 
 - send `/list` if you want to explicitly attach one of the online VS Code instances
 - send `/use` or `/threads` if you want to jump straight into a recent visible session; use `/useall` for the full list
-- prefer the card buttons when they appear; number replies remain as a compatibility fallback
+- use the card buttons when they appear; if you are looking at an old card, resend the command instead of replying with a number
 - remote execution defaults to full access; if you need confirmation mode temporarily, send `/access confirm`
