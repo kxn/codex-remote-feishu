@@ -857,6 +857,7 @@ func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{IdleTTL: time.Minute, KillGrace: time.Second})
 
 	stoppedPID := 0
@@ -878,7 +879,7 @@ func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
 		},
 	})
 
-	base := time.Date(2026, 4, 5, 13, 0, 0, 0, time.UTC)
+	base := time.Now().UTC()
 	app.onTick(context.Background(), base)
 	app.onTick(context.Background(), base.Add(2*time.Minute))
 
@@ -887,6 +888,63 @@ func TestDaemonIdleHeadlessCleanupStopsDetachedManagedInstance(t *testing.T) {
 	}
 	if app.service.Instance("inst-headless-2") != nil {
 		t.Fatalf("expected idle managed headless instance to be removed, got %#v", app.service.Instance("inst-headless-2"))
+	}
+}
+
+func TestDaemonIdleManagedHeadlessRefreshesOnInterval(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:             time.Hour,
+		KillGrace:           time.Second,
+		IdleRefreshInterval: 5 * time.Minute,
+		IdleRefreshTimeout:  time.Minute,
+	})
+
+	var commands []agentproto.Command
+	app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
+		if instanceID != "inst-headless-2" {
+			t.Fatalf("unexpected command target: %s", instanceID)
+		}
+		commands = append(commands, command)
+		return nil
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-headless-2",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+			Source:        "headless",
+			Managed:       true,
+			PID:           2468,
+		},
+	})
+	if len(commands) != 1 || commands[0].Kind != agentproto.CommandThreadsRefresh {
+		t.Fatalf("expected initial hello refresh, got %#v", commands)
+	}
+
+	app.onEvents(context.Background(), "inst-headless-2", []agentproto.Event{{
+		Kind: agentproto.EventThreadsSnapshot,
+	}})
+	base := time.Now().UTC()
+	app.managedHeadless["inst-headless-2"].LastRefreshCompletedAt = base
+	app.managedHeadless["inst-headless-2"].RefreshInFlight = false
+	app.managedHeadless["inst-headless-2"].RefreshCommandID = ""
+
+	app.onTick(context.Background(), base.Add(2*time.Minute))
+	if len(commands) != 1 {
+		t.Fatalf("expected no idle refresh before interval, got %#v", commands)
+	}
+
+	app.onTick(context.Background(), base.Add(6*time.Minute))
+	if len(commands) != 2 || commands[1].Kind != agentproto.CommandThreadsRefresh {
+		t.Fatalf("expected scheduled idle refresh after interval, got %#v", commands)
+	}
+	if managed := app.managedHeadless["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusIdle || !managed.RefreshInFlight {
+		t.Fatalf("expected idle managed headless to track in-flight refresh, got %#v", managed)
 	}
 }
 

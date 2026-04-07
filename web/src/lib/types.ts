@@ -188,6 +188,10 @@ export interface AdminInstanceSummary {
   requestedAt?: string;
   startedAt?: string;
   idleSince?: string;
+  lastHelloAt?: string;
+  lastRefreshRequestedAt?: string;
+  lastRefreshCompletedAt?: string;
+  refreshInFlight: boolean;
   lastError?: string;
 }
 

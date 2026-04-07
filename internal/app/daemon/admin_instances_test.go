@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
@@ -81,7 +82,7 @@ func TestAdminInstancesCreateListAndDeleteManagedHeadless(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&listed); err != nil {
 		t.Fatalf("decode list after hello: %v", err)
 	}
-	if len(listed.Instances) != 1 || listed.Instances[0].Status != "online" || !listed.Instances[0].Online {
+	if len(listed.Instances) != 1 || listed.Instances[0].Status != managedHeadlessStatusIdle || !listed.Instances[0].Online {
 		t.Fatalf("unexpected list response after hello: %#v", listed.Instances)
 	}
 
@@ -170,11 +171,112 @@ func TestAdminInstancesListMarksManagedHeadlessOfflineAfterDisconnect(t *testing
 	}
 }
 
+func TestAdminInstancesListMarksManagedHeadlessBusyWhenAttached(t *testing.T) {
+	app := newManagedInstancesAdminTestApp(t)
+	workspaceRoot := t.TempDir()
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-headless-busy",
+			DisplayName:   "Busy Headless",
+			WorkspaceRoot: workspaceRoot,
+			WorkspaceKey:  workspaceRoot,
+			ShortName:     "busy-headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           2469,
+		},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-headless-busy",
+	})
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/instances", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var listed adminInstancesResponse
+	if err := json.NewDecoder(rec.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed.Instances) != 1 || listed.Instances[0].Status != managedHeadlessStatusBusy || !listed.Instances[0].Online {
+		t.Fatalf("unexpected busy list response: %#v", listed.Instances)
+	}
+}
+
+func TestAdminInstancesSnapshotUsesRetargetedManagedWorkspaceRoot(t *testing.T) {
+	app := newManagedInstancesAdminTestApp(t)
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", Preview: "修登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp/headless",
+		WorkspaceKey:  "/tmp/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	now := time.Now().UTC()
+	app.managedHeadless["inst-headless-1"] = &managedHeadlessProcess{
+		InstanceID:    "inst-headless-1",
+		PID:           4321,
+		RequestedAt:   now,
+		StartedAt:     now,
+		WorkspaceRoot: "/tmp/headless",
+		DisplayName:   "headless",
+		Status:        managedHeadlessStatusIdle,
+	}
+
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	summaries := app.adminInstancesSnapshot()
+	if len(summaries) != 2 {
+		t.Fatalf("expected two summaries, got %#v", summaries)
+	}
+	for _, summary := range summaries {
+		if summary.InstanceID != "inst-headless-1" {
+			continue
+		}
+		if summary.WorkspaceRoot != "/data/dl/droid" {
+			t.Fatalf("expected retargeted workspace root in admin summary, got %#v", summary)
+		}
+		if summary.Status != managedHeadlessStatusBusy {
+			t.Fatalf("expected reused headless to be busy while attached, got %#v", summary)
+		}
+		return
+	}
+	t.Fatalf("missing reused managed headless summary: %#v", summaries)
+}
+
 func newManagedInstancesAdminTestApp(t *testing.T) *App {
 	t.Helper()
 
 	cfg := config.DefaultAppConfig()
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),

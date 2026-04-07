@@ -785,8 +785,20 @@ function buildInstanceDetail(instance: AdminInstanceSummary): string {
   if (instance.lastError) {
     return instance.lastError;
   }
+  if (instance.refreshInFlight) {
+    if (instance.lastRefreshRequestedAt) {
+      return `后台线程目录正在刷新，最近请求于 ${formatDateTime(instance.lastRefreshRequestedAt)}。`;
+    }
+    return "后台线程目录正在刷新。";
+  }
+  if (instance.lastRefreshCompletedAt) {
+    return `最近完成线程目录刷新于 ${formatDateTime(instance.lastRefreshCompletedAt)}。`;
+  }
   if (instance.idleSince) {
     return `最近空闲于 ${formatDateTime(instance.idleSince)}。`;
+  }
+  if (instance.lastHelloAt) {
+    return `最近连回 relay 于 ${formatDateTime(instance.lastHelloAt)}。`;
   }
   if (instance.startedAt) {
     return `启动于 ${formatDateTime(instance.startedAt)}。`;

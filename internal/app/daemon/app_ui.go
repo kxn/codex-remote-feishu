@@ -72,7 +72,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 				a.handleUIEvents(context.Background(), rollback)
 				continue
 			}
-			if err := a.relay.SendCommand(instanceID, *event.Command); err != nil {
+			if err := a.sendAgentCommand(instanceID, *event.Command); err != nil {
 				log.Printf("relay send command failed: instance=%s kind=%s err=%v", instanceID, event.Command.Kind, err)
 				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 					Code:             "relay_send_command_failed",

@@ -27,6 +27,10 @@ type HeadlessRuntimeConfig struct {
 	LaunchArgs []string
 	IdleTTL    time.Duration
 	KillGrace  time.Duration
+	StartTTL   time.Duration
+
+	IdleRefreshInterval time.Duration
+	IdleRefreshTimeout  time.Duration
 }
 
 type managedHeadlessProcess struct {
@@ -41,6 +45,12 @@ type managedHeadlessProcess struct {
 	DisplayName   string
 	Status        string
 	LastError     string
+	LastHelloAt   time.Time
+
+	RefreshCommandID       string
+	RefreshInFlight        bool
+	LastRefreshRequestedAt time.Time
+	LastRefreshCompletedAt time.Time
 }
 
 type App struct {
@@ -67,6 +77,7 @@ type App struct {
 	managedHeadless       map[string]*managedHeadlessProcess
 	startHeadless         func(relayruntime.HeadlessLaunchOptions) (int, error)
 	stopProcess           func(int, time.Duration) error
+	sendAgentCommand      func(string, agentproto.Command) error
 	ingress               *ingressPump
 	ingressCancel         context.CancelFunc
 	ingressStarted        bool
@@ -106,6 +117,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		OnCommandAck: app.enqueueCommandAck,
 		OnDisconnect: app.enqueueDisconnect,
 	})
+	app.sendAgentCommand = app.relay.SendCommand
 	app.relay.SetServerIdentity(serverIdentity)
 
 	relayMux := http.NewServeMux()
@@ -128,6 +140,15 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	}
 	if cfg.KillGrace <= 0 {
 		cfg.KillGrace = 3 * time.Second
+	}
+	if cfg.StartTTL <= 0 {
+		cfg.StartTTL = 45 * time.Second
+	}
+	if cfg.IdleRefreshInterval <= 0 {
+		cfg.IdleRefreshInterval = 10 * time.Minute
+	}
+	if cfg.IdleRefreshTimeout <= 0 {
+		cfg.IdleRefreshTimeout = 30 * time.Second
 	}
 	cfg.BaseEnv = append([]string{}, cfg.BaseEnv...)
 	cfg.LaunchArgs = append([]string{}, cfg.LaunchArgs...)

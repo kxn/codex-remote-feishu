@@ -24,6 +24,7 @@ func (a *App) handleDaemonCommand(command control.DaemonCommand) []control.UIEve
 
 func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEvent {
 	cfg := a.headlessRuntime
+	now := time.Now().UTC()
 	if strings.TrimSpace(cfg.BinaryPath) == "" {
 		return a.service.HandleHeadlessLaunchFailed(
 			command.SurfaceSessionID,
@@ -79,13 +80,13 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 	a.managedHeadless[command.InstanceID] = &managedHeadlessProcess{
 		InstanceID:    command.InstanceID,
 		PID:           pid,
-		RequestedAt:   time.Now().UTC(),
-		StartedAt:     time.Now().UTC(),
+		RequestedAt:   now,
+		StartedAt:     now,
 		ThreadID:      command.ThreadID,
 		ThreadCWD:     workDir,
 		WorkspaceRoot: workDir,
 		DisplayName:   "headless",
-		Status:        "starting",
+		Status:        managedHeadlessStatusStarting,
 	}
 	log.Printf(
 		"headless start requested: surface=%s instance=%s pid=%d thread=%s cwd=%s",
@@ -155,13 +156,13 @@ func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
 	if inst == nil || !strings.EqualFold(strings.TrimSpace(inst.Source), "headless") || !inst.Managed {
 		return
 	}
+	now := time.Now().UTC()
 	managed := a.managedHeadless[inst.InstanceID]
 	if managed == nil {
 		managed = &managedHeadlessProcess{
 			InstanceID:  inst.InstanceID,
-			RequestedAt: time.Now().UTC(),
-			StartedAt:   time.Now().UTC(),
-			Status:      "online",
+			RequestedAt: now,
+			StartedAt:   now,
 		}
 		a.managedHeadless[inst.InstanceID] = managed
 	}
@@ -174,42 +175,28 @@ func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
 	if strings.TrimSpace(inst.WorkspaceRoot) != "" {
 		managed.WorkspaceRoot = inst.WorkspaceRoot
 	}
-	managed.Status = "online"
+	managed.LastHelloAt = now
+	managed.LastError = ""
+	a.syncManagedHeadlessLocked(now)
 }
 
 func (a *App) reapIdleHeadless(now time.Time) {
 	if a.headlessRuntime.IdleTTL <= 0 {
 		return
 	}
-	attached := map[string]bool{}
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil || surface.AttachedInstanceID == "" {
-			continue
-		}
-		attached[surface.AttachedInstanceID] = true
-	}
 	for instanceID, managed := range a.managedHeadless {
 		if managed == nil {
 			delete(a.managedHeadless, instanceID)
 			continue
 		}
-		inst := a.service.Instance(instanceID)
-		if inst == nil || !inst.Online || !strings.EqualFold(strings.TrimSpace(inst.Source), "headless") || !inst.Managed {
-			managed.IdleSince = time.Time{}
-			continue
-		}
-		if attached[instanceID] || inst.ActiveTurnID != "" {
-			managed.IdleSince = time.Time{}
-			continue
-		}
-		if managed.IdleSince.IsZero() {
-			managed.IdleSince = now
+		if strings.TrimSpace(managed.Status) != managedHeadlessStatusIdle || managed.IdleSince.IsZero() {
 			continue
 		}
 		if now.Sub(managed.IdleSince) < a.headlessRuntime.IdleTTL {
 			continue
 		}
-		if managed.PID == 0 && inst.PID > 0 {
+		inst := a.service.Instance(instanceID)
+		if inst != nil && inst.PID > 0 {
 			managed.PID = inst.PID
 		}
 		if managed.PID == 0 {

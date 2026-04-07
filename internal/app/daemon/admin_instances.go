@@ -19,18 +19,22 @@ type adminInstancesResponse struct {
 }
 
 type adminInstanceSummary struct {
-	InstanceID    string     `json:"instanceId"`
-	DisplayName   string     `json:"displayName,omitempty"`
-	WorkspaceRoot string     `json:"workspaceRoot,omitempty"`
-	Source        string     `json:"source,omitempty"`
-	Managed       bool       `json:"managed"`
-	Online        bool       `json:"online"`
-	PID           int        `json:"pid,omitempty"`
-	Status        string     `json:"status"`
-	RequestedAt   *time.Time `json:"requestedAt,omitempty"`
-	StartedAt     *time.Time `json:"startedAt,omitempty"`
-	IdleSince     *time.Time `json:"idleSince,omitempty"`
-	LastError     string     `json:"lastError,omitempty"`
+	InstanceID             string     `json:"instanceId"`
+	DisplayName            string     `json:"displayName,omitempty"`
+	WorkspaceRoot          string     `json:"workspaceRoot,omitempty"`
+	Source                 string     `json:"source,omitempty"`
+	Managed                bool       `json:"managed"`
+	Online                 bool       `json:"online"`
+	PID                    int        `json:"pid,omitempty"`
+	Status                 string     `json:"status"`
+	RequestedAt            *time.Time `json:"requestedAt,omitempty"`
+	StartedAt              *time.Time `json:"startedAt,omitempty"`
+	IdleSince              *time.Time `json:"idleSince,omitempty"`
+	LastHelloAt            *time.Time `json:"lastHelloAt,omitempty"`
+	LastRefreshRequestedAt *time.Time `json:"lastRefreshRequestedAt,omitempty"`
+	LastRefreshCompletedAt *time.Time `json:"lastRefreshCompletedAt,omitempty"`
+	RefreshInFlight        bool       `json:"refreshInFlight"`
+	LastError              string     `json:"lastError,omitempty"`
 }
 
 type adminInstanceCreateRequest struct {
@@ -136,6 +140,7 @@ func (a *App) handleAdminInstanceDelete(w http.ResponseWriter, r *http.Request) 
 func (a *App) adminInstancesSnapshot() []adminInstanceSummary {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.syncManagedHeadlessLocked(time.Now().UTC())
 
 	summaries := make([]adminInstanceSummary, 0, len(a.service.Instances())+len(a.managedHeadless))
 	seen := map[string]bool{}
@@ -155,6 +160,9 @@ func (a *App) adminInstancesSnapshot() []adminInstanceSummary {
 		}
 		if inst.Online {
 			summary.Status = "online"
+			if isManagedHeadlessInstance(inst) {
+				summary.Status = managedHeadlessStatusBusy
+			}
 		}
 		if managed := a.managedHeadless[inst.InstanceID]; managed != nil {
 			overlayManagedSummary(&summary, managed)
@@ -179,10 +187,12 @@ func (a *App) adminInstancesSnapshot() []adminInstanceSummary {
 		summaries = append(summaries, summary)
 	}
 	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Status == summaries[j].Status {
+		leftRank := adminInstanceStatusRank(summaries[i].Status)
+		rightRank := adminInstanceStatusRank(summaries[j].Status)
+		if leftRank == rightRank {
 			return summaries[i].InstanceID < summaries[j].InstanceID
 		}
-		return summaries[i].Status < summaries[j].Status
+		return leftRank < rightRank
 	})
 	return summaries
 }
@@ -225,7 +235,7 @@ func (a *App) createManagedHeadlessInstance(workspaceRoot, displayName string) (
 		StartedAt:     requestedAt,
 		WorkspaceRoot: normalizedRoot,
 		DisplayName:   displayName,
-		Status:        "starting",
+		Status:        managedHeadlessStatusStarting,
 	}
 	a.mu.Unlock()
 	return adminInstanceSummary{
@@ -235,7 +245,7 @@ func (a *App) createManagedHeadlessInstance(workspaceRoot, displayName string) (
 		Source:        "headless",
 		Managed:       true,
 		PID:           pid,
-		Status:        "starting",
+		Status:        managedHeadlessStatusStarting,
 		RequestedAt:   &requestedAt,
 		StartedAt:     &requestedAt,
 	}, nil
@@ -317,18 +327,32 @@ func overlayManagedSummary(summary *adminInstanceSummary, managed *managedHeadle
 		value := managed.IdleSince
 		summary.IdleSince = &value
 	}
+	if managed.LastHelloAt.After(time.Time{}) {
+		value := managed.LastHelloAt
+		summary.LastHelloAt = &value
+	}
+	if managed.LastRefreshRequestedAt.After(time.Time{}) {
+		value := managed.LastRefreshRequestedAt
+		summary.LastRefreshRequestedAt = &value
+	}
+	if managed.LastRefreshCompletedAt.After(time.Time{}) {
+		value := managed.LastRefreshCompletedAt
+		summary.LastRefreshCompletedAt = &value
+	}
+	summary.RefreshInFlight = managed.RefreshInFlight
 	if strings.TrimSpace(managed.LastError) != "" {
 		summary.LastError = managed.LastError
 	}
-	if summary.Status == "online" {
+	if summary.Status == managedHeadlessStatusBusy || summary.Status == managedHeadlessStatusIdle {
 		summary.Online = true
 	}
-	if summary.Status == "offline" || summary.Status == "stopped" || summary.Status == "deleted" {
+	if summary.Status == managedHeadlessStatusOffline || summary.Status == managedHeadlessStatusStarting || summary.Status == "stopped" || summary.Status == "deleted" {
 		summary.Online = false
 	}
 }
 
 func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanceSummary, bool) {
+	a.syncManagedHeadlessLocked(time.Now().UTC())
 	inst := a.service.Instance(instanceID)
 	if inst != nil {
 		summary := adminInstanceSummary{
@@ -343,6 +367,9 @@ func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanc
 		}
 		if inst.Online {
 			summary.Status = "online"
+			if isManagedHeadlessInstance(inst) {
+				summary.Status = managedHeadlessStatusBusy
+			}
 		}
 		if managed := a.managedHeadless[instanceID]; managed != nil {
 			overlayManagedSummary(&summary, managed)
@@ -357,7 +384,7 @@ func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanc
 			Source:        "headless",
 			Managed:       true,
 			PID:           managed.PID,
-			Status:        firstNonEmpty(strings.TrimSpace(managed.Status), "starting"),
+			Status:        firstNonEmpty(strings.TrimSpace(managed.Status), managedHeadlessStatusStarting),
 		}
 		overlayManagedSummary(&summary, managed)
 		return summary, true
@@ -377,6 +404,25 @@ func (a *App) managedInstancePIDLocked(instanceID string) int {
 
 func (a *App) noteManagedHeadlessDisconnectedLocked(instanceID string) {
 	if managed := a.managedHeadless[instanceID]; managed != nil {
-		managed.Status = "offline"
+		managed.Status = managedHeadlessStatusOffline
+		managed.RefreshInFlight = false
+		managed.RefreshCommandID = ""
+	}
+}
+
+func adminInstanceStatusRank(status string) int {
+	switch strings.TrimSpace(status) {
+	case managedHeadlessStatusBusy:
+		return 0
+	case "online":
+		return 1
+	case managedHeadlessStatusIdle:
+		return 2
+	case managedHeadlessStatusStarting:
+		return 3
+	case managedHeadlessStatusOffline:
+		return 4
+	default:
+		return 5
 	}
 }

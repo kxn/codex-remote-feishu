@@ -234,8 +234,11 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandThreadsRefresh,
 	}
-	if err := a.relay.SendCommand(hello.Instance.InstanceID, command); err != nil {
+	if err := a.sendAgentCommand(hello.Instance.InstanceID, command); err != nil {
 		log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
+		if managed := a.managedHeadless[hello.Instance.InstanceID]; managed != nil {
+			managed.LastError = "daemon 无法向本地 wrapper 发送初始化 threads.refresh。"
+		}
 		a.handleUIEvents(ctx, a.service.HandleProblem(hello.Instance.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 			Code:      "relay_send_command_failed",
 			Layer:     "daemon",
@@ -245,6 +248,8 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 			CommandID: command.CommandID,
 			Retryable: true,
 		})))
+	} else if a.managedHeadless[hello.Instance.InstanceID] != nil {
+		a.markManagedThreadsRefreshRequestedLocked(hello.Instance.InstanceID, command.CommandID, time.Now().UTC())
 	}
 }
 
@@ -264,6 +269,10 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 			event.Status,
 		)
 		uiEvents := a.service.ApplyAgentEvent(instanceID, event)
+		if event.Kind == agentproto.EventThreadsSnapshot {
+			a.noteManagedThreadsSnapshotLocked(instanceID, time.Now().UTC())
+			a.syncManagedHeadlessLocked(time.Now().UTC())
+		}
 		a.handleUIEvents(ctx, uiEvents)
 	}
 }
@@ -280,6 +289,9 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 		summarizeRemoteStatuses(a.service.PendingRemoteTurns()),
 		summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
 	)
+	if a.noteManagedRefreshAckLocked(instanceID, ack) {
+		return
+	}
 	if ack.Accepted {
 		return
 	}
@@ -313,5 +325,8 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	defer a.mu.Unlock()
 	uiEvents := a.service.Tick(now)
 	a.handleUIEvents(ctx, uiEvents)
+	a.syncManagedHeadlessLocked(now)
+	a.maybeRefreshIdleManagedHeadlessLocked(now)
 	a.reapIdleHeadless(now)
+	a.syncManagedHeadlessLocked(now)
 }

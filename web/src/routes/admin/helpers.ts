@@ -163,6 +163,9 @@ export function instanceStatusTone(instance: AdminInstanceSummary): "neutral" | 
   if (instance.status === "starting") {
     return "warn";
   }
+  if (instance.status === "busy" || instance.status === "idle" || instance.status === "online") {
+    return "good";
+  }
   if (instance.online) {
     return "good";
   }
@@ -176,6 +179,12 @@ export function instanceStatusLabel(instance: AdminInstanceSummary): string {
   if (instance.status === "starting") {
     return "启动中";
   }
+  if (instance.status === "busy") {
+    return "使用中";
+  }
+  if (instance.status === "idle") {
+    return "空闲";
+  }
   if (instance.online) {
     return "在线";
   }
@@ -184,7 +193,7 @@ export function instanceStatusLabel(instance: AdminInstanceSummary): string {
 
 export function instanceSourceLabel(instance: AdminInstanceSummary): string {
   if (instance.source === "headless" && instance.managed) {
-    return "由管理页创建";
+    return "受管 headless";
   }
   if (instance.source === "vscode") {
     return "来自 VS Code";
