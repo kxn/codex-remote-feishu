@@ -223,6 +223,9 @@ func (s *Service) completeRemoteTurn(instanceID, threadID, turnID, status, error
 		QueueOff:    true,
 	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, false)
 	if errorMessage != "" {
+		if inst := s.root.Instances[instanceID]; inst != nil {
+			s.clearThreadReplay(inst, threadID)
+		}
 		notice := &control.Notice{
 			Code: "turn_failed",
 			Text: errorMessage,
@@ -245,23 +248,42 @@ func (s *Service) completeRemoteTurn(instanceID, threadID, turnID, status, error
 }
 
 func (s *Service) renderTextItem(instanceID, threadID, turnID, itemID, text string, final bool) []control.UIEvent {
+	inst := s.root.Instances[instanceID]
 	surface := s.turnSurface(instanceID, threadID, turnID)
+	if surface == nil {
+		if final {
+			s.storeThreadReplayText(inst, threadID, turnID, itemID, text)
+		}
+		return nil
+	}
+	if final {
+		s.clearThreadReplay(inst, threadID)
+	}
+	return s.renderTextToSurface(surface, inst, threadID, turnID, itemID, text, final)
+}
+
+func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID, turnID, itemID, text string, final bool) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
-	inst := s.root.Instances[instanceID]
 	events := []control.UIEvent{}
 	if surface.ActiveTurnOrigin != agentproto.InitiatorLocalUI {
 		routeMode := surface.RouteMode
 		if routeMode != state.RouteModeFollowLocal {
 			routeMode = state.RouteModePinned
 		}
-		events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, routeMode)...)
+		if inst != nil {
+			events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, routeMode)...)
+		}
 	}
-	blocks := s.renderer.PlanAssistantBlocks(surface.SurfaceSessionID, instanceID, threadID, turnID, itemID, text)
+	instanceKey := ""
+	if inst != nil {
+		instanceKey = inst.InstanceID
+	}
+	blocks := s.renderer.PlanAssistantBlocks(surface.SurfaceSessionID, instanceKey, threadID, turnID, itemID, text)
 	thread := (*state.ThreadRecord)(nil)
 	if inst != nil {
-		thread = inst.Threads[threadID]
+		thread = s.ensureThread(inst, threadID)
 	}
 	title := displayThreadTitle(inst, thread, threadID)
 	themeKey := threadID

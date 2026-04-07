@@ -932,11 +932,17 @@ func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo)
 
 func (s *Service) handleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
 	problem = problem.Normalize()
+	notice := NoticeForProblem(problem)
 	surfaces := s.problemTargets(instanceID, problem)
 	if len(surfaces) == 0 {
+		if inst := s.root.Instances[instanceID]; inst != nil && strings.TrimSpace(problem.ThreadID) != "" {
+			s.storeThreadReplayNotice(inst, problem.ThreadID, notice)
+		}
 		return nil
 	}
-	notice := NoticeForProblem(problem)
+	if inst := s.root.Instances[instanceID]; inst != nil && strings.TrimSpace(problem.ThreadID) != "" {
+		s.clearThreadReplay(inst, problem.ThreadID)
+	}
 	events := make([]control.UIEvent, 0, len(surfaces))
 	for _, surface := range surfaces {
 		if surface == nil {

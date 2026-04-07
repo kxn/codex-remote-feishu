@@ -325,6 +325,9 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 			Text: text,
 		},
 	})
+	if surface.SelectedThreadID != "" {
+		events = append(events, s.replayThreadUpdate(surface, inst, surface.SelectedThreadID)...)
+	}
 	events = append(events, s.maybeRequestThreadRefresh(surface, inst, surface.SelectedThreadID)...)
 	if surface.SelectedThreadID == "" {
 		events = append(events, s.autoPromptUseThread(surface, inst)...)
@@ -562,6 +565,7 @@ func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string
 	title = displayThreadTitle(inst, thread, threadID)
 	preview = threadPreview(thread)
 	events = append(events, s.threadSelectionEvents(surface, threadID, string(surface.RouteMode), title, preview)...)
+	events = append(events, s.replayThreadUpdate(surface, inst, threadID)...)
 	if len(events) != 0 {
 		return events
 	}

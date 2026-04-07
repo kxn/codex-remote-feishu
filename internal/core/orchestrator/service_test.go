@@ -16,6 +16,36 @@ func newServiceForTest(now *time.Time) *Service {
 	return NewService(func() time.Time { return *now }, Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner())
 }
 
+func recordLocalFinalText(t *testing.T, svc *Service, instanceID, threadID, turnID, itemID, text string) []control.UIEvent {
+	t.Helper()
+	if events := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: threadID,
+		TurnID:   turnID,
+		ItemID:   itemID,
+		ItemKind: "agent_message",
+		Delta:    text,
+	}); len(events) != 0 {
+		t.Fatalf("expected no UI events while collecting local text, got %#v", events)
+	}
+	if events := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: threadID,
+		TurnID:   turnID,
+		ItemID:   itemID,
+		ItemKind: "agent_message",
+	}); len(events) != 0 {
+		t.Fatalf("expected no UI events before local turn completion, got %#v", events)
+	}
+	return svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  threadID,
+		TurnID:    turnID,
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+}
+
 func TestAttachPinsObservedFocusedThread(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1690,6 +1720,306 @@ func TestRenderTextItemDoesNotSwitchSurfaceToUnclaimedThread(t *testing.T) {
 	}
 	if len(events) != 0 {
 		t.Fatalf("expected no projection for unclaimed local thread output, got %#v", events)
+	}
+}
+
+func TestAttachReplaysUndeliveredFinalForIdleThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	finished := recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-1", "item-1", "这是离线期间的 final")
+	if len(finished) != 0 {
+		t.Fatalf("expected no UI events without attached surface, got %#v", finished)
+	}
+	thread := svc.root.Instances["inst-1"].Threads["thread-1"]
+	if thread.UndeliveredReplay == nil || thread.UndeliveredReplay.Kind != state.ThreadReplayAssistantFinal {
+		t.Fatalf("expected undelivered final replay to be stored, got %#v", thread.UndeliveredReplay)
+	}
+
+	attach := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	var sawBlock bool
+	for _, event := range attach {
+		if event.Block != nil && event.Block.Text == "这是离线期间的 final" && event.Block.Final {
+			sawBlock = true
+		}
+	}
+	if !sawBlock {
+		t.Fatalf("expected attach to replay stored final block, got %#v", attach)
+	}
+	if thread.UndeliveredReplay != nil {
+		t.Fatalf("expected replay to clear after attach, got %#v", thread.UndeliveredReplay)
+	}
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionDetach, SurfaceSessionID: "surface-1"})
+	again := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	for _, event := range again {
+		if event.Block != nil {
+			t.Fatalf("expected replay to be one-shot, got %#v", again)
+		}
+	}
+}
+
+func TestUseThreadReplaysUndeliveredFinalForIdleThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-1", "item-1", "等待 /use 的 final")
+	svc.root.Instances["inst-1"].ActiveThreadID = ""
+	attach := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	for _, event := range attach {
+		if event.Block != nil {
+			t.Fatalf("expected unbound attach not to replay immediately, got %#v", attach)
+		}
+	}
+	if surface := svc.root.Surfaces["surface-1"]; surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected attach without default thread to remain unbound, got selected=%q route=%q", surface.SelectedThreadID, surface.RouteMode)
+	}
+
+	use := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+	var sawBlock bool
+	for _, event := range use {
+		if event.Block != nil && event.Block.Text == "等待 /use 的 final" && event.Block.Final {
+			sawBlock = true
+		}
+	}
+	if !sawBlock {
+		t.Fatalf("expected /use to replay stored final block, got %#v", use)
+	}
+	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected replay to clear after /use, got %#v", replay)
+	}
+}
+
+func TestBusyAttachDefersReplayUntilThreadIsIdle(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		ActiveTurnID:            "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-0", "item-0", "旧 final")
+	svc.root.Instances["inst-1"].ActiveThreadID = "thread-1"
+	svc.root.Instances["inst-1"].ActiveTurnID = "turn-running"
+	attach := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	for _, event := range attach {
+		if event.Block != nil {
+			t.Fatalf("expected busy attach not to replay immediately, got %#v", attach)
+		}
+	}
+	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay == nil {
+		t.Fatalf("expected replay to remain queued while thread is busy")
+	}
+
+	svc.root.Instances["inst-1"].ActiveTurnID = ""
+	use := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+	var sawBlock bool
+	for _, event := range use {
+		if event.Block != nil && event.Block.Text == "旧 final" && event.Block.Final {
+			sawBlock = true
+		}
+	}
+	if !sawBlock {
+		t.Fatalf("expected replay after thread becomes idle, got %#v", use)
+	}
+}
+
+func TestAttachReplaysUndeliveredProblemNoticeForIdleThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+		Code:      "stdout_parse_failed",
+		Layer:     "wrapper",
+		Stage:     "observe_codex_stdout",
+		Operation: "codex.stdout",
+		ThreadID:  "thread-1",
+		Message:   "wrapper 无法解析 Codex 子进程输出的 JSON-RPC 帧。",
+		Details:   "invalid character 'x' looking for beginning of value",
+	}))
+	if len(events) != 0 {
+		t.Fatalf("expected no UI events without attached surface, got %#v", events)
+	}
+	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay == nil || replay.Kind != state.ThreadReplayNotice {
+		t.Fatalf("expected undelivered problem notice to be stored, got %#v", replay)
+	}
+
+	attach := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	var sawNotice bool
+	for _, event := range attach {
+		if event.Notice != nil && event.Notice.Code == debugErrorNoticeCode && strings.Contains(event.Notice.Text, "invalid character") {
+			sawNotice = true
+		}
+	}
+	if !sawNotice {
+		t.Fatalf("expected attach to replay stored problem notice, got %#v", attach)
+	}
+}
+
+func TestDeliveredLocalFinalDoesNotCreateUndeliveredReplay(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	finished := recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-1", "item-1", "已实时投递的 final")
+	var sawBlock bool
+	for _, event := range finished {
+		if event.Block != nil && event.Block.Text == "已实时投递的 final" && event.Block.Final {
+			sawBlock = true
+		}
+	}
+	if !sawBlock {
+		t.Fatalf("expected local final to render on attached surface, got %#v", finished)
+	}
+	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected delivered final not to be stored as replay, got %#v", replay)
+	}
+}
+
+func TestUndeliveredReplayDoesNotSurviveServiceRebuild(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 25, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	recordLocalFinalText(t, svc, "inst-1", "thread-1", "turn-1", "item-1", "重建前的 final")
+	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay == nil {
+		t.Fatal("expected replay to exist before rebuild")
+	}
+
+	rebuilt := newServiceForTest(&now)
+	rebuilt.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	attach := rebuilt.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	for _, event := range attach {
+		if event.Block != nil || (event.Notice != nil && event.Notice.Code == debugErrorNoticeCode) {
+			t.Fatalf("expected rebuilt service not to recover old replay, got %#v", attach)
+		}
 	}
 }
 

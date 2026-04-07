@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 记录当前已实现的 remote surface 状态机，包括多 app 全局仲裁、`/new` 的 `new_thread_ready`、空 thread 归属、watchdog 与死状态审计结论，作为提交前复审基线。
+> Updated: `2026-04-07`
+> Summary: 记录当前已实现的 remote surface 状态机，包括多 app 全局仲裁、`/new` 的 `new_thread_ready`、空 thread 归属、thread 级未投递回放、watchdog 与死状态审计结论，作为提交前复审基线。
 
 ## 1. 文档定位
 
@@ -212,6 +212,26 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 所以这两个状态不再依赖单一异步事件才能退出。
 
+### 4.9 thread 级未投递回放是单槽、内存态、一次性
+
+当前 `ThreadRecord` 增加了 `UndeliveredReplay`，但它不是完整历史，只是 thread 级的单槽候选。
+
+当前规则：
+
+1. 只记录两类内容：
+   1. 没有任何 flybook surface 可投递时产生的 final assistant block。
+   2. 没有任何目标 surface 时产生的 thread-scoped system/problem notice。
+2. 一条新候选会覆盖旧候选，不保留 backlog。
+3. 同一 thread 的内容一旦已经成功投递到当前 surface，就会清空旧 replay，避免后续重复补发。
+4. 只有两条显式入口会尝试回放：
+   1. `/attach` 成功后默认选中的 thread。
+   2. `/use` 选中的 thread。
+5. 回放前会检查该 thread 是否 idle：
+   1. 若 `inst.ActiveTurnID != ""` 且 `inst.ActiveThreadID == threadID`，则本次不补发。
+   2. 候选继续保留，等待后续 idle 的 `/attach` 或 `/use`。
+6. 回放成功后立即清空，因此同一条内容只会补发一次。
+7. 该状态仅保存在 relay 内存里；`relayd` 重启后丢失是当前已接受语义。
+
 ## 5. 主要状态迁移
 
 ### 5.1 attach / use / follow / new
@@ -268,6 +288,9 @@ R5 NewThreadReady
 
 1. `R5` 下首条文本 queued 后，第二条文本与新图片都会被拒绝，直到该新 thread 真正落地。
 2. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
+3. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
+   1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
+   2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
 
 ### 5.2 远端队列生命周期
 
@@ -408,6 +431,7 @@ detach 时额外保证：
 7. **`/follow` 切模式但 thread 不变时 UI 不知道 route mode 已变**：已修复。现在会补发 route-mode selection 投影。
 8. **`/new` 的空 thread 归属靠 `ActiveThreadID` 猜**：已修复。现在改成显式 `remote_surface + SurfaceSessionID` 相关性。
 9. **`R5 NewThreadReady` 在 queued draft 时没有出口**：已修复。现在 `/use`、`/follow`、`/detach`、`/stop`、重复 `/new` 都有明确语义。
+10. **detach 期间最后一条 final / thread notice 会被完全吞掉**：已修复。当前会保留单条 thread 级 replay，并在后续 idle 的 `/attach` 或 `/use` 时一次性补发。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

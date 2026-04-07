@@ -82,8 +82,27 @@ type ThreadRecord struct {
 	Loaded                  bool
 	Archived                bool
 	TrafficClass            agentproto.TrafficClass
+	UndeliveredReplay       *ThreadReplayRecord
 	LastUsedAt              time.Time
 	ListOrder               int
+}
+
+type ThreadReplayKind string
+
+const (
+	ThreadReplayAssistantFinal ThreadReplayKind = "assistant_final"
+	ThreadReplayNotice         ThreadReplayKind = "notice"
+)
+
+type ThreadReplayRecord struct {
+	Kind           ThreadReplayKind
+	TurnID         string
+	ItemID         string
+	Text           string
+	NoticeCode     string
+	NoticeTitle    string
+	NoticeText     string
+	NoticeThemeKey string
 }
 
 type SurfaceConsoleRecord struct {
