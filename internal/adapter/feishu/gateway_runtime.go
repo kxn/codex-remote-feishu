@@ -243,13 +243,12 @@ func ignoredMissingReactionError(_ int, msg string) bool {
 	if msg == "" {
 		return false
 	}
+	if strings.Contains(msg, "message") {
+		if strings.Contains(msg, "not found") || strings.Contains(msg, "recalled") || strings.Contains(msg, "deleted") {
+			return true
+		}
+	}
 	missingHints := []string{
-		"message not found",
-		"target message not found",
-		"message has been recalled",
-		"message recalled",
-		"message has been deleted",
-		"message deleted",
 		"目标消息不存在",
 		"消息不存在",
 		"消息已撤回",

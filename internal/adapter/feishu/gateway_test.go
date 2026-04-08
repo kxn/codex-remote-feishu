@@ -1175,6 +1175,8 @@ func TestIgnoredMissingReactionError(t *testing.T) {
 		want bool
 	}{
 		{name: "english missing message", msg: "message not found", want: true},
+		{name: "english missing message sentence", msg: "The message is not found", want: true},
+		{name: "english missing target sentence", msg: "The target message is not found", want: true},
 		{name: "english recalled message", msg: "target message has been recalled", want: true},
 		{name: "chinese missing message", msg: "目标消息不存在", want: true},
 		{name: "reaction id not found", msg: "reaction not found", want: false},
