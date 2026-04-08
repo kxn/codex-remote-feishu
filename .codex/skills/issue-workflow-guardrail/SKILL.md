@@ -24,6 +24,23 @@ Before making any issue decision:
 2. if local changes prevent a safe sync, resolve that first or treat it as a blocker
 3. do not assess or code against stale local code
 
+## Processing Label Claim
+
+After the local sync succeeds and before substantive issue assessment:
+
+1. check whether the issue already has the `processing` label
+2. if `processing` is already present, stop for this turn and do not continue handling that issue
+3. if `processing` is absent, add `processing` immediately before continuing
+
+Treat `processing` as a single-worker claim for the current turn.
+
+- Do not continue issue work once you have confirmed that another worker already claimed it with `processing`.
+- On every normal stop path in this turn, remove `processing` before you finish:
+  - stopping because the issue is not implementable yet
+  - stopping after a state-transition update
+  - stopping after implementation, validation, and close-out
+- If the session dies or the label is left behind accidentally, do not invent recovery rules inside this skill. A human may clear it manually.
+
 ## Read Order
 
 After syncing local files, read in this order:
@@ -83,8 +100,8 @@ After refining against the latest code, classify the issue into one of these sta
 
 Compare the reassessed state with the issue's previously recorded actionable state.
 
-- If the state changed in either direction, update the issue body, labels, and concise evidence as needed, then stop there for this turn.
-- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, then stop there for this turn.
+- If the state changed in either direction, update the issue body, labels, and concise evidence as needed, remove `processing`, then stop there for this turn.
+- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, remove `processing`, then stop there for this turn.
 - Only when the issue was already implementable and remains implementable after reassessment may coding start immediately.
 
 ## Status Labels
@@ -110,6 +127,7 @@ When work cannot start, leave one concise comment that contains:
 - what reply or action would unblock the issue
 
 Keep it short and actionable. Do not restate the full issue body.
+Before you stop on this path, remove `processing`.
 
 ## Implementation Rules
 
@@ -138,3 +156,5 @@ When closing the issue, leave a short completion note with:
 - how it was validated
 - commit or PR reference
 - follow-up issue reference if work was intentionally deferred
+
+Before finishing the turn, remove `processing`.

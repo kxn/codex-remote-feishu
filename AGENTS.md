@@ -78,6 +78,15 @@ For medium or large follow-up work in this repository:
 - Do not leave an outdated staged plan only in comments when the issue body can be refreshed cheaply and accurately.
 - Do not do a full open-issue sweep before every commit. Issue review happens when creating, picking up, or closing an issue, not as a mandatory pre-commit loop.
 - For existing issues created before the standard, do not run a one-time bulk cleanup pass. Normalize them only when they become active.
+- Use `processing` as a temporary single-worker claim while actively handling one issue in a turn:
+  - after syncing local tracked files and before substantive issue assessment, first check whether the issue already has `processing`
+  - if `processing` is already present, stop there and do not continue handling that issue in this turn
+  - if `processing` is absent, add it before continuing
+  - on every normal stop path for that issue in the current turn, remove `processing` before finishing:
+    - stopping because the issue is not implementable yet
+    - stopping after a state-transition update
+    - stopping after implementation, validation, and close-out
+  - if `processing` is accidentally left behind by an interrupted session, it may be cleared manually; do not add extra automatic recovery rules here
 
 When creating or refreshing an issue, use this structure:
 
@@ -119,8 +128,8 @@ After reassessment, classify the issue into one of these states:
 State-transition rule:
 
 - Compare the reassessed state with the issue's previously recorded actionable state.
-- If the state changed in either direction, update the issue body and labels, leave the necessary concise evidence if applicable, and stop there for this turn.
-- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence and stop there for this turn.
+- If the state changed in either direction, update the issue body and labels, remove `processing`, leave the necessary concise evidence if applicable, and stop there for this turn.
+- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, remove `processing`, and stop there for this turn.
 - Only when the issue was already implementable and remains implementable after reassessment may implementation start immediately.
 
 Issue labeling rule:
@@ -178,6 +187,7 @@ When closing an issue, leave a short completion note that includes:
 - how it was validated
 - the commit or PR reference
 - any follow-up issue if remaining work was intentionally deferred
+- Before finishing the turn, remove `processing`.
 
 ## Git Push Rule
 
