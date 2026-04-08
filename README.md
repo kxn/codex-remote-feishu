@@ -31,6 +31,9 @@
   - `QUICKSTART.md`
   - `deploy/`
 - 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
+- GitHub Releases 现在区分 `production / beta / alpha` 三条 track
+  - 默认在线安装入口始终指向最新 `production`
+  - 需要时可显式安装最新 `beta` / `alpha`
 - 正式 release 构建与发布全部在 GitHub Actions 的 `Release` workflow 上完成
 
 ## 功能
@@ -80,6 +83,12 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 - 安装稳定路径下的 `codex-remote`
 - 启动本地 daemon
 - 打开或打印 WebSetup 链接
+
+如果要安装某个 prerelease track 的最新版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
+```
 
 如果要安装指定版本：
 

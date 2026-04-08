@@ -32,9 +32,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-version="v0.0.0-smoke"
+version="v0.0.0"
+beta_version="v0.1.0-beta.1"
 dist_dir="${work_dir}/dist"
+prod_dist_dir="${work_dir}/dist-production"
+beta_dist_dir="${work_dir}/dist-beta"
 install_root="${work_dir}/install-root"
+track_install_root="${work_dir}/install-root-beta"
 home_dir="${work_dir}/home"
 port="${CODEX_REMOTE_SMOKE_PORT:-}"
 if [[ -z "${port}" ]]; then
@@ -94,7 +98,37 @@ cat > "${home_dir}/.config/codex-remote/config.json" <<EOF
 }
 EOF
 
-bash scripts/release/build-artifacts.sh "${version}" "${dist_dir}"
+bash scripts/release/build-artifacts.sh "${version}" "${prod_dist_dir}"
+bash scripts/release/build-artifacts.sh "${beta_version}" "${beta_dist_dir}"
+
+mkdir -p "${dist_dir}"
+cp "${prod_dist_dir}"/codex-remote-feishu_* "${dist_dir}/"
+cp "${beta_dist_dir}"/codex-remote-feishu_* "${dist_dir}/"
+
+cat > "${dist_dir}/releases.json" <<EOF
+[
+  {
+    "url": "https://api.github.com/repos/kxn/codex-remote-feishu/releases/2",
+    "assets_url": "https://api.github.com/repos/kxn/codex-remote-feishu/releases/2/assets",
+    "html_url": "https://github.com/kxn/codex-remote-feishu/releases/tag/${beta_version}",
+    "id": 2,
+    "tag_name": "${beta_version}",
+    "draft": false,
+    "prerelease": true,
+    "assets": []
+  },
+  {
+    "url": "https://api.github.com/repos/kxn/codex-remote-feishu/releases/1",
+    "assets_url": "https://api.github.com/repos/kxn/codex-remote-feishu/releases/1/assets",
+    "html_url": "https://github.com/kxn/codex-remote-feishu/releases/tag/${version}",
+    "id": 1,
+    "tag_name": "${version}",
+    "draft": false,
+    "prerelease": false,
+    "assets": []
+  }
+]
+EOF
 
 python3 -m http.server "${port}" --bind 127.0.0.1 --directory "${dist_dir}" >/dev/null 2>&1 &
 server_pid="$!"
@@ -126,6 +160,20 @@ expected_dir="${install_root}/${version}"
 
 installed_version="$("${expected_dir}/codex-remote" version)"
 [[ "${installed_version}" == "${version}" ]]
+
+HOME="${home_dir}" \
+CODEX_REMOTE_BASE_URL="http://127.0.0.1:${port}" \
+CODEX_REMOTE_RELEASES_API_URL="http://127.0.0.1:${port}/releases.json" \
+CODEX_REMOTE_INSTALL_ROOT="${track_install_root}" \
+bash ./install-release.sh --track beta --download-only
+
+beta_expected_dir="${track_install_root}/${beta_version}"
+[[ -d "${beta_expected_dir}" ]]
+[[ -x "${beta_expected_dir}/codex-remote" ]]
+[[ -L "${track_install_root}/current" ]]
+
+beta_installed_version="$("${beta_expected_dir}/codex-remote" version)"
+[[ "${beta_installed_version}" == "${beta_version}" ]]
 
 python3 - "${home_dir}" <<'PY'
 import json, sys

@@ -65,7 +65,8 @@ testkit/
 
 - `install-release.sh`
   - 面向最终用户的在线安装入口
-  - 下载 GitHub-built release 包
+  - 默认下载最新 `production` release 包
+  - 支持按 `--track production|beta|alpha` 拉取对应 track 的最新 release
   - 执行 `codex-remote install -bootstrap-only -start-daemon`
 - release archive 内的 `codex-remote`
   - 手动安装时执行 `./codex-remote install -bootstrap-only -start-daemon`
@@ -148,6 +149,12 @@ release 安装器 smoke test：
 bash scripts/check/smoke-install-release.sh
 ```
 
+release track 版本计算校验：
+
+```bash
+bash scripts/check/release-track-version.sh
+```
+
 本地仅做 release 打包预演：
 
 ```bash
@@ -159,6 +166,7 @@ make release-artifacts VERSION=v0.1.0
 ## 安装实现要点
 
 - release / online installer 默认只做 bootstrap，不再在 CLI 里采集飞书凭证或 VS Code 路径
+- 默认在线安装入口保持 production-first，beta / alpha 必须显式通过 `--track` 选择
 - 飞书配置、VS Code detect/apply、shim 重装统一在 WebSetup / Admin UI 中完成
 - `setup.sh` / `setup.ps1` 默认走 `-bootstrap-only -start-daemon`
 - `install.sh bootstrap` 仍适合仓库内联调和回归测试
@@ -260,6 +268,8 @@ bash scripts/check/smoke-install-release.sh
   - 跑 WebSetup release 安装器 smoke test
   - 构建并运行 `go test ./...`
 - `Release`
-  - 支持显式指定版本或自动决定下一个语义化版本
+  - 支持 `production / beta / alpha` track
+  - 支持显式指定版本或按 track 自动决定下一个语义化版本
   - 在 GitHub 上构建 admin UI 与多平台产物
+  - 对 `beta / alpha` 自动标记 GitHub prerelease
   - 生成 release notes、checksums 并创建 GitHub Release

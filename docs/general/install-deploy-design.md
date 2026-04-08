@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 将 release / 安装 / 部署文档统一更新为 WebSetup-first 发布模型，并明确 GitHub 端构建发布是唯一正式 release 路径。
+> Updated: `2026-04-08`
+> Summary: 统一记录 WebSetup-first 发布模型，并补充 production / beta / alpha release track 的安装与发布语义。
 
 ## 1. 范围
 
@@ -24,7 +24,8 @@
 职责：
 
 - 解析平台和架构
-- 下载 GitHub Releases 中最新或指定版本的平台包
+- 默认下载 GitHub Releases 中最新 `production` 平台包
+- 支持显式安装指定版本，或按 `--track production|beta|alpha` 解析该 track 的最新 release
 - 解压到本地 release cache
 - 执行：
 
@@ -41,6 +42,7 @@ codex-remote install -bootstrap-only -start-daemon
 
 - `curl | bash`
 - 指定版本安装
+- 指定 track 的最新 release 安装
 - CI 中通过本地 HTTP server 做 smoke test
 
 ### 2.2 手动解压 release 包
@@ -214,6 +216,8 @@ release 包内不再附带：
 正式 release 只走 GitHub Actions：
 
 - `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
+- workflow 显式区分 `production / beta / alpha` 三条 track
+- `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
 - GitHub 端生成 release notes 和 checksums
 - GitHub 端创建并发布 GitHub Release
 
@@ -282,6 +286,12 @@ Docker 只部署 `codex-remote daemon`。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+```
+
+安装最新 beta track：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
 ```
 
 固定版本在线安装：
