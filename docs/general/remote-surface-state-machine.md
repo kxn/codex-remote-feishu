@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-08`
-> Summary: 同步 queued 文本点赞 steering：新增 `turn.steer` 升级流、成功/失败回写规则，以及对应的 queue/reaction 状态说明。
+> Summary: 同步 headless 自动恢复：daemon 现在会 materialize latent surface，并在首轮 thread 视图就绪后延迟恢复；恢复成功/失败改为单条明确提示，且不会重放旧 replay。
 
 ## 1. 文档定位
 
@@ -24,7 +24,9 @@
 7. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 8. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
 9. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
-10. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
+10. [internal/app/daemon/app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
+11. [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
+12. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
 
 ## 2. 审计前提
 
@@ -62,6 +64,15 @@ surface 不是单一枚举，而是四层正交状态叠加。
 | `R3 FollowWaiting` | `AttachedInstanceID != ""`，`RouteMode=follow_local`，`SelectedThreadID == ""` | 已进入 follow，但当前没有可接管 thread |
 | `R4 FollowBound` | `AttachedInstanceID != ""`，`RouteMode=follow_local`，`SelectedThreadID != ""`，且持有 thread claim | 已跟随到一个 thread |
 | `R5 NewThreadReady` | `AttachedInstanceID != ""`，`RouteMode=new_thread_ready`，`SelectedThreadID == ""`，`PreparedThreadCWD != ""` | 已释放旧 thread；下一条普通文本会创建新 thread |
+
+补充说明：
+
+1. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
+   1. surface 有 `gateway/chat/user` 路由信息。
+   2. surface 当前仍是 detached。
+   3. surface 带有持久化的 headless restore hint。
+2. 这种 latent surface 在 route 维度上仍然是 `R0 Detached`，不是新的 route state。
+3. 是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，取决于 daemon 的恢复调度，而不是用户显式动作。
 
 ### 3.2 执行状态
 
@@ -156,6 +167,10 @@ surface 不是单一枚举，而是四层正交状态叠加。
 2. detached `/use` 触发的 preselected headless，在实例连上后会直接落到目标 thread，不会再进入手工 selecting。
 3. `/killinstance` 仍是当前 pending headless 的唯一主动取消入口；此外还有启动超时 watchdog。
 4. 旧 `/newinstance` 与旧 `resume_headless_thread` 卡片即使仍被用户触发，也只会返回迁移提示，不会改动当前 pending headless。
+5. 后台 auto-restore 触发的 pending headless 也复用同一个 `G1` gate：
+   1. 启动阶段默认静默，不额外发 “headless_starting”。
+   2. 成功后只发一条恢复成功 notice。
+   3. 失败或超时后只发一条恢复失败 notice，并回到 `R0 Detached`。
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
 
@@ -258,6 +273,10 @@ surface 不是单一枚举，而是四层正交状态叠加。
    2. 候选继续保留，等待后续 idle 的 `/attach` 或 `/use`。
 6. 回放成功后立即清空，因此同一条内容只会补发一次。
 7. 该状态仅保存在 relay 内存里；`relayd` 重启后丢失是当前已接受语义。
+8. 后台 headless auto-restore attach 是明确例外：
+   1. 不会补发旧 replay。
+   2. 会直接清空该 thread 的旧 replay。
+   3. 用户只会看到一条新的恢复成功提示。
 
 ### 4.11 `/status` 当前至少会显式投影 gate / dispatch / retained-offline
 
@@ -357,6 +376,10 @@ R5 NewThreadReady
    3. follow-local 自动重绑定
    当前都会被冻结，避免 UI 宣布的新目标和下一条普通输入的实际落点不一致。
 7. 旧 `/newinstance` 在所有 route state 下都只会回迁移提示，不会创建 headless，也不会改动当前 route。
+8. daemon 侧后台 auto-restore 使用的是 headless-only resolver：
+   1. 当前可见 thread 若只存在于 VS Code instance，不会被自动 attach 到 VS Code。
+   2. 它仍可复用该 thread 的 metadata / cwd。
+   3. 后续只允许落到 free visible headless、reusable managed headless，或 create managed headless。
 
 ### 5.2 远端队列生命周期
 
@@ -414,14 +437,51 @@ E5 HandoffWait
 ```text
 G0 None
   -- /use(thread，需要 create headless) --> G1 PendingHeadlessStarting
+  -- R0 Detached 且存在 restore hint --> 后台恢复判定
 
 G1 PendingHeadlessStarting
-  -- instance connected 且 pending.ThreadID != "" --> R2 AttachedPinned + G0 None
+  -- instance connected 且 pending.ThreadID != "" 且非 auto-restore --> R2 AttachedPinned + G0 None
+  -- instance connected 且 pending.ThreadID != "" 且 auto-restore --> R2 AttachedPinned + G0 None + 单条恢复成功 notice
   -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + migration notice + G0 None
   -- /killinstance --> G0 None
   -- /newinstance / 历史 resume_headless_thread --> migration notice，状态不变
   -- Tick timeout --> kill headless + clear pending + detach if needed
 ```
+
+后台 auto-restore 额外规则：
+
+1. 触发点：
+   1. daemon startup 后的 tick
+   2. `hello`
+   3. `threads.snapshot`
+   4. `thread.discovered`
+   5. `thread.focused`
+2. daemon 会先根据 restore hint materialize latent detached surface。
+3. 后台恢复前置条件：
+   1. surface 当前没有显式 attach
+   2. surface 当前没有 pending headless
+   3. restore hint 仍存在
+4. 解析顺序：
+   1. 先看当前 merged thread view
+   2. 若 thread 不可见但 hint 仍有 `threadID + threadCWD`，允许构造 synthetic view
+   3. 之后只允许落到 headless 目标，不会自动 attach 到 VS Code
+5. 若 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 还没走完，且当前又无法从 visible/synthetic view 判定恢复目标：
+   1. 保持 `R0 Detached`
+   2. 静默等待
+   3. 不给用户失败提示
+6. 若首轮 refresh 已完成，目标 thread 仍不可判定：
+   1. 保持 `R0 Detached`
+   2. 发一条 “暂时无法找到之前会话” 的恢复失败提示
+   3. 进入 daemon 内存态 backoff，避免重复重试噪音
+7. 后台恢复成功 attach 时：
+   1. 不补发 thread replay
+   2. 不补 thread selection changed 卡片
+   3. 只发一条恢复成功 notice
+8. headless launch 失败或超时时：
+   1. 清掉 pending
+   2. 保持 `R0 Detached`
+   3. 发恢复失败提示
+   4. 进入 backoff
 
 ### 5.5 detach / abandoning 生命周期
 
@@ -466,6 +526,7 @@ transport degraded retained attachment
    2. request prompt / request capture
    3. surface-level prompt override
 4. 因为 attachment 仍在，所以 `/status` 必须明确显示“实例离线但接管关系保留”，否则用户会误以为已经 detach。
+5. 如果该 surface 同时还保留 headless restore hint，hard disconnect 回到 `R0 Detached` 后会重新进入上面的后台 auto-restore 判定。
 
 ## 6. 命令矩阵
 
@@ -537,6 +598,7 @@ transport degraded retained attachment
 15. **cross-instance attach 到复用/新建 headless 时会丢 thread replay**：已修复。当前 replay 会先按 `threadID` 全局迁移，再在目标 attach 上一次性补发。
 16. **transport degraded 后 attachment 仍保留，但文档和 `/status` 看起来像已 detached**：已修复。canonical 文档和 `/status` 现在都显式区分 retained-offline 与真正 detach。
 17. **queued 点赞升级成 steering 后 item 会脱离普通 queue，若 ack 失败则可能丢失**：已修复。当前已强制恢复原 queue 位置，并补失败 notice。
+18. **headless 自动恢复在首轮 refresh 前过早报失败，或恢复成功后重放旧 replay / 额外补 attached 噪音**：已修复。当前会先静默等待首轮 refresh，恢复成功只发单条成功 notice，且会清空旧 replay 而不是补发。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

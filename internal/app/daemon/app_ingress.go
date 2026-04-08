@@ -211,6 +211,7 @@ func (a *App) Service() *orchestrator.Service {
 func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	now := time.Now().UTC()
 
 	inst := a.service.Instance(hello.Instance.InstanceID)
 	if inst == nil {
@@ -238,12 +239,15 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.Managed,
 		inst.PID,
 	)
-	a.handleUIEvents(ctx, a.service.ApplyInstanceConnected(inst.InstanceID))
+	connectEvents := a.service.ApplyInstanceConnected(inst.InstanceID)
+	a.recordHeadlessRestoreOutcomeEventsLocked(connectEvents, now)
+	a.handleUIEvents(ctx, connectEvents)
 
 	command := agentproto.Command{
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandThreadsRefresh,
 	}
+	refreshSent := false
 	if err := a.sendAgentCommand(hello.Instance.InstanceID, command); err != nil {
 		log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
 		if managed := a.managedHeadless[hello.Instance.InstanceID]; managed != nil {
@@ -258,16 +262,27 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 			CommandID: command.CommandID,
 			Retryable: true,
 		})))
-	} else if a.managedHeadless[hello.Instance.InstanceID] != nil {
-		a.markManagedThreadsRefreshRequestedLocked(hello.Instance.InstanceID, command.CommandID, time.Now().UTC())
+	} else {
+		refreshSent = true
+		if a.managedHeadless[hello.Instance.InstanceID] != nil {
+			a.markManagedThreadsRefreshRequestedLocked(hello.Instance.InstanceID, command.CommandID, now)
+		}
+	}
+	if refreshSent {
+		a.markStartupThreadsRefreshRequestedLocked(hello.Instance.InstanceID)
 	}
 	a.refreshHeadlessRestoreHintsLocked()
+	a.syncHeadlessRestoreStateLocked()
+	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
+	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
+	a.handleUIEvents(ctx, recoveryEvents)
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, event := range events {
+		now := time.Now().UTC()
 		log.Printf(
 			"agent event: instance=%s kind=%s thread=%s turn=%s item=%s initiator=%s traffic=%s status=%s",
 			instanceID,
@@ -281,12 +296,19 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		)
 		uiEvents := a.service.ApplyAgentEvent(instanceID, event)
 		if event.Kind == agentproto.EventThreadsSnapshot {
-			a.noteManagedThreadsSnapshotLocked(instanceID, time.Now().UTC())
-			a.syncManagedHeadlessLocked(time.Now().UTC())
+			a.markStartupThreadsRefreshSettledLocked(instanceID)
+			a.noteManagedThreadsSnapshotLocked(instanceID, now)
+			a.syncManagedHeadlessLocked(now)
 		}
+		switch event.Kind {
+		case agentproto.EventThreadsSnapshot, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused:
+			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
+		}
+		a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 		a.handleUIEvents(ctx, uiEvents)
 	}
 	a.refreshHeadlessRestoreHintsLocked()
+	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentproto.CommandAck) {
@@ -314,6 +336,7 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.markStartupThreadsRefreshSettledLocked(instanceID)
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
 		a.noteManagedHeadlessDisconnectedLocked(instanceID)
@@ -337,10 +360,14 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	uiEvents := a.service.Tick(now)
+	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 	a.handleUIEvents(ctx, uiEvents)
 	a.syncManagedHeadlessLocked(now)
 	a.maybeRefreshIdleManagedHeadlessLocked(now)
 	a.reapIdleHeadless(now)
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
+	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
+	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
+	a.handleUIEvents(ctx, recoveryEvents)
 }

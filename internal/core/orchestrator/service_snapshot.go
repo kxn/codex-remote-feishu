@@ -341,6 +341,19 @@ func (s *Service) SurfaceActorUserID(surfaceID string) string {
 	return surface.ActorUserID
 }
 
+func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID string) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return
+	}
+	s.ensureSurface(control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        gatewayID,
+		SurfaceSessionID: surfaceID,
+		ChatID:           chatID,
+		ActorUserID:      actorUserID,
+	})
+}
+
 func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	if commandID == "" {
 		return
@@ -581,6 +594,17 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	}
 	pending := surface.PendingHeadless
 	surface.PendingHeadless = nil
+	if pending.AutoRestore {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:  "headless_restore_start_failed",
+				Title: "恢复失败",
+				Text:  "之前的会话暂时无法恢复，请稍后重试或尝试其他会话。",
+			},
+		}}
+	}
 	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 		Code:             "headless_start_failed",
 		Layer:            "daemon",

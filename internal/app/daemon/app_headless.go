@@ -26,6 +26,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 	cfg := a.headlessRuntime
 	now := time.Now().UTC()
 	if strings.TrimSpace(cfg.BinaryPath) == "" {
+		if command.AutoRestore {
+			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+		}
 		return a.service.HandleHeadlessLaunchFailed(
 			command.SurfaceSessionID,
 			command.InstanceID,
@@ -74,6 +77,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 			command.ThreadCWD,
 			err,
 		)
+		if command.AutoRestore {
+			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+		}
 		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, err)
 	}
 

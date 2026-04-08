@@ -54,6 +54,13 @@ type managedHeadlessProcess struct {
 	LastRefreshCompletedAt time.Time
 }
 
+type headlessRestoreRecoveryState struct {
+	Hint            HeadlessRestoreHint
+	NextAttemptAt   time.Time
+	LastAttemptAt   time.Time
+	LastFailureCode string
+}
+
 type App struct {
 	service           *orchestrator.Service
 	projector         *feishu.Projector
@@ -79,6 +86,9 @@ type App struct {
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig
 	headlessRestoreHints  *headlessRestoreHintStore
+	headlessRestoreState  map[string]*headlessRestoreRecoveryState
+	startupRefreshPending map[string]bool
+	startupRefreshSeen    bool
 	managedHeadless       map[string]*managedHeadlessProcess
 	startHeadless         func(relayruntime.HeadlessLaunchOptions) (int, error)
 	stopProcess           func(int, time.Duration) error
@@ -115,6 +125,8 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonStartedAt:       daemonStartedAt,
 		daemonLifecycleID:     daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGatewayNotices: map[string][]control.UIEvent{},
+		headlessRestoreState:  map[string]*headlessRestoreRecoveryState{},
+		startupRefreshPending: map[string]bool{},
 		managedHeadless:       map[string]*managedHeadlessProcess{},
 		startHeadless:         relayruntime.StartDetachedWrapper,
 		stopProcess:           relayruntime.TerminateProcess,

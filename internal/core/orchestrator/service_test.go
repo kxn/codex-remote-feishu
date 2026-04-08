@@ -5409,6 +5409,131 @@ func TestApplyInstanceConnectedAttachesPreselectedHeadlessThreadReplaysStoredNot
 	}
 }
 
+func TestTryAutoRestoreHeadlessPrefersHeadlessOverVisibleVSCode(t *testing.T) {
+	now := time.Date(2026, 4, 8, 3, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "vscode",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
+		ThreadID:    "thread-1",
+		ThreadTitle: "修复登录流程",
+		ThreadCWD:   "/data/dl/droid",
+	}, true)
+
+	if result.Status != HeadlessRestoreStatusAttached {
+		t.Fatalf("expected headless restore to attach, got %#v", result)
+	}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-headless-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected auto restore to bind idle headless instead of vscode, got %#v", snapshot)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "headless_restore_attached" {
+		t.Fatalf("expected single recovery success notice, got %#v", events)
+	}
+}
+
+func TestApplyInstanceConnectedAutoRestoreHeadlessSuppressesReplayAndSelectionNoise(t *testing.T) {
+	now := time.Date(2026, 4, 8, 3, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "headless",
+		Managed:       true,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID: "thread-1",
+				Name:     "修复登录流程",
+				CWD:      "/data/dl/droid",
+				Loaded:   true,
+				UndeliveredReplay: &state.ThreadReplayRecord{
+					Kind:           state.ThreadReplayNotice,
+					NoticeCode:     "problem_saved",
+					NoticeTitle:    "问题提示",
+					NoticeText:     "等待 headless 接手的 notice",
+					NoticeThemeKey: "warning",
+				},
+			},
+		},
+	})
+
+	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
+		ThreadID:    "thread-1",
+		ThreadTitle: "修复登录流程",
+		ThreadCWD:   "/data/dl/droid",
+	}, true)
+	if result.Status != HeadlessRestoreStatusStarting {
+		t.Fatalf("expected auto restore to start pending headless flow, got %#v", result)
+	}
+	if len(events) != 1 || events[0].DaemonCommand == nil || !events[0].DaemonCommand.AutoRestore {
+		t.Fatalf("expected silent auto-restore headless start, got %#v", events)
+	}
+	pending := svc.SurfaceSnapshot("surface-1").PendingHeadless
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    pending.InstanceID,
+		DisplayName:   "headless",
+		WorkspaceRoot: "/tmp",
+		WorkspaceKey:  "/tmp",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	connectEvents := svc.ApplyInstanceConnected(pending.InstanceID)
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != pending.InstanceID || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected auto-restore headless connect to attach restored thread, got %#v", snapshot)
+	}
+	if len(connectEvents) != 1 || connectEvents[0].Notice == nil || connectEvents[0].Notice.Code != "headless_restore_attached" {
+		t.Fatalf("expected only recovery success notice, got %#v", connectEvents)
+	}
+	for _, event := range connectEvents {
+		if event.ThreadSelection != nil {
+			t.Fatalf("expected no extra selection event during auto-restore attach, got %#v", connectEvents)
+		}
+		if event.Notice != nil && event.Notice.Code == "problem_saved" {
+			t.Fatalf("expected no stale replay notice during auto-restore attach, got %#v", connectEvents)
+		}
+	}
+	if replay := svc.root.Instances["inst-offline"].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected source replay cleared during auto-restore attach, got %#v", replay)
+	}
+	if replay := svc.root.Instances[pending.InstanceID].Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected target replay cleared during auto-restore attach, got %#v", replay)
+	}
+}
+
 func TestUseThreadDetachedReusesManagedHeadlessForKnownThread(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 50, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

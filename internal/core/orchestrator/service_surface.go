@@ -10,6 +10,41 @@ import (
 	"strings"
 )
 
+type HeadlessRestoreAttempt struct {
+	ThreadID    string
+	ThreadTitle string
+	ThreadCWD   string
+}
+
+type HeadlessRestoreStatus string
+
+const (
+	HeadlessRestoreStatusSkipped  HeadlessRestoreStatus = "skipped"
+	HeadlessRestoreStatusWaiting  HeadlessRestoreStatus = "waiting"
+	HeadlessRestoreStatusAttached HeadlessRestoreStatus = "attached"
+	HeadlessRestoreStatusStarting HeadlessRestoreStatus = "starting"
+	HeadlessRestoreStatusFailed   HeadlessRestoreStatus = "failed"
+)
+
+type HeadlessRestoreResult struct {
+	Status      HeadlessRestoreStatus
+	FailureCode string
+}
+
+type attachSurfaceToKnownThreadMode string
+
+const (
+	attachSurfaceToKnownThreadDefault         attachSurfaceToKnownThreadMode = "default"
+	attachSurfaceToKnownThreadHeadlessRestore attachSurfaceToKnownThreadMode = "headless_restore"
+)
+
+type startHeadlessMode string
+
+const (
+	startHeadlessModeDefault         startHeadlessMode = "default"
+	startHeadlessModeHeadlessRestore startHeadlessMode = "headless_restore"
+)
+
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
 	surface := s.root.Surfaces[action.SurfaceSessionID]
 	if surface != nil {
@@ -84,13 +119,24 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 	events = append(events, control.UIEvent{
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: surface.SurfaceSessionID,
-		Notice: &control.Notice{
-			Code:  "headless_start_timeout",
-			Title: "Headless 实例超时",
-			Text:  "headless 实例启动超时，已自动取消，请重新发送 /use 或 /useall 选择要恢复的会话。",
-		},
+		Notice:           pendingHeadlessTimeoutNotice(pending),
 	})
 	return events
+}
+
+func pendingHeadlessTimeoutNotice(pending *state.HeadlessLaunchRecord) *control.Notice {
+	if pending != nil && pending.AutoRestore {
+		return &control.Notice{
+			Code:  "headless_restore_start_timeout",
+			Title: "恢复失败",
+			Text:  "之前的会话恢复超时，请稍后重试或尝试其他会话。",
+		}
+	}
+	return &control.Notice{
+		Code:  "headless_start_timeout",
+		Title: "Headless 实例超时",
+		Text:  "headless 实例启动超时，已自动取消，请重新发送 /use 或 /useall 选择要恢复的会话。",
+	}
 }
 
 func (s *Service) ensureThread(inst *state.InstanceRecord, threadID string) *state.ThreadRecord {
@@ -284,7 +330,11 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 				Thread:   thread,
 			}
 		}
-		return s.attachSurfaceToKnownThread(surface, inst, view)
+		mode := attachSurfaceToKnownThreadDefault
+		if pending.AutoRestore {
+			mode = attachSurfaceToKnownThreadHeadlessRestore
+		}
+		return s.attachSurfaceToKnownThread(surface, inst, view, mode)
 	}
 	surface.PendingHeadless = nil
 	events := []control.UIEvent{}
@@ -356,6 +406,116 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	}}
 }
 
+func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]control.UIEvent, HeadlessRestoreResult) {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
+	}
+	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
+	}
+	view := s.headlessRestoreView(surface, attempt)
+	if view == nil {
+		if !allowMissingThreadFailure {
+			return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusWaiting}
+		}
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice("thread_not_found"),
+		}}, HeadlessRestoreResult{Status: HeadlessRestoreStatusFailed, FailureCode: "thread_not_found"}
+	}
+	target := s.resolveHeadlessRestoreTargetFromView(surface, view)
+	switch target.Mode {
+	case threadAttachFreeVisible, threadAttachReuseHeadless:
+		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore), HeadlessRestoreResult{Status: HeadlessRestoreStatusAttached}
+	case threadAttachCreateHeadless:
+		return s.startHeadlessForResolvedThreadWithMode(surface, target.View, startHeadlessModeHeadlessRestore), HeadlessRestoreResult{Status: HeadlessRestoreStatusStarting}
+	case threadAttachUnavailable:
+		if target.NoticeCode == "thread_not_found" && !allowMissingThreadFailure {
+			return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusWaiting}
+		}
+		failureCode := firstNonEmpty(strings.TrimSpace(target.NoticeCode), "thread_not_found")
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice(failureCode),
+		}}, HeadlessRestoreResult{Status: HeadlessRestoreStatusFailed, FailureCode: failureCode}
+	default:
+		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
+	}
+}
+
+func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attempt HeadlessRestoreAttempt) *mergedThreadView {
+	threadID := strings.TrimSpace(attempt.ThreadID)
+	if threadID == "" {
+		return nil
+	}
+	view := s.mergedThreadView(surface, threadID)
+	if view == nil {
+		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD)
+	}
+	cloned := *view
+	thread := &state.ThreadRecord{ThreadID: threadID}
+	if view.Thread != nil {
+		copy := *view.Thread
+		thread = &copy
+	}
+	if strings.TrimSpace(thread.Name) == "" {
+		thread.Name = strings.TrimSpace(attempt.ThreadTitle)
+	}
+	if strings.TrimSpace(thread.CWD) == "" {
+		thread.CWD = strings.TrimSpace(attempt.ThreadCWD)
+	}
+	cloned.Thread = thread
+	return &cloned
+}
+
+func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, threadCWD string) *mergedThreadView {
+	threadID = strings.TrimSpace(threadID)
+	threadCWD = strings.TrimSpace(threadCWD)
+	threadTitle = strings.TrimSpace(threadTitle)
+	if threadID == "" || threadCWD == "" {
+		return nil
+	}
+	view := &mergedThreadView{
+		ThreadID: threadID,
+		Thread: &state.ThreadRecord{
+			ThreadID: threadID,
+			Name:     threadTitle,
+			CWD:      threadCWD,
+			Loaded:   true,
+		},
+	}
+	if owner := s.threadClaimSurface(threadID); owner != nil {
+		view.BusyOwner = owner
+	}
+	return view
+}
+
+func headlessRestoreFailureNotice(code string) *control.Notice {
+	switch strings.TrimSpace(code) {
+	case "thread_busy":
+		return &control.Notice{
+			Code:  "headless_restore_thread_busy",
+			Title: "恢复失败",
+			Text:  "之前的会话当前被其他窗口占用，暂时无法恢复，请稍后重试或尝试其他会话。",
+		}
+	case "thread_cwd_missing":
+		return &control.Notice{
+			Code:  "headless_restore_thread_cwd_missing",
+			Title: "恢复失败",
+			Text:  "之前的会话缺少可恢复的工作目录，暂时无法自动恢复，请稍后重试或尝试其他会话。",
+		}
+	default:
+		return &control.Notice{
+			Code:  "headless_restore_thread_not_found",
+			Title: "恢复失败",
+			Text:  "暂时无法找到之前会话，请稍后重试或尝试其他会话。",
+		}
+	}
+}
+
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
 	threadID = strings.TrimSpace(threadID)
 	target := s.resolveThreadTarget(surface, threadID)
@@ -366,7 +526,7 @@ func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string
 		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
 			return blocked
 		}
-		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View)
+		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadDefault)
 	case threadAttachCreateHeadless:
 		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
 			return blocked
@@ -440,12 +600,12 @@ func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, 
 	return notice(surface, "selection_unchanged", fmt.Sprintf("当前输入目标保持为：%s", title))
 }
 
-func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, view *mergedThreadView) []control.UIEvent {
+func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, view *mergedThreadView, mode attachSurfaceToKnownThreadMode) []control.UIEvent {
 	if surface == nil || inst == nil || view == nil || strings.TrimSpace(view.ThreadID) == "" {
 		return nil
 	}
 	if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
-		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
+		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)
 	}
 
 	events := []control.UIEvent{}
@@ -467,7 +627,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	}
 
 	if !s.claimInstance(surface, inst.InstanceID) {
-		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
+		return append(events, attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)...)
 	}
 	surface.AttachedInstanceID = inst.InstanceID
 	surface.PendingHeadless = nil
@@ -509,38 +669,93 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		thread.LastUsedAt = view.Thread.LastUsedAt
 		thread.ListOrder = view.Thread.ListOrder
 	}
-	s.adoptThreadReplay(inst, view.ThreadID)
+	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+		s.clearThreadReplay(inst, view.ThreadID)
+	} else {
+		s.adoptThreadReplay(inst, view.ThreadID)
+	}
 	s.touchThread(thread)
 	s.releaseSurfaceThreadClaim(surface)
 	if !s.claimKnownThread(surface, inst, view.ThreadID) {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
-		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
+		return append(events, attachSurfaceToKnownThreadThreadBusyNotice(surface, mode)...)
 	}
 	surface.SelectedThreadID = view.ThreadID
 	surface.RouteMode = state.RouteModePinned
 
 	title := displayThreadTitle(inst, thread, view.ThreadID)
 	preview := threadPreview(thread)
-	events = append(events, control.UIEvent{
-		Kind:             control.UIEventNotice,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Notice: &control.Notice{
-			Code: "attached",
-			Text: fmt.Sprintf("已接管 %s。当前输入目标：%s", inst.DisplayName, title),
-		},
-	})
-	events = append(events, s.threadSelectionEvents(surface, view.ThreadID, string(surface.RouteMode), title, preview)...)
-	events = append(events, s.replayThreadUpdate(surface, inst, view.ThreadID)...)
+	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+		surface.LastSelection = &state.SelectionAnnouncementRecord{
+			ThreadID:  view.ThreadID,
+			RouteMode: string(surface.RouteMode),
+			Title:     title,
+			Preview:   preview,
+		}
+		events = append(events, control.UIEvent{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:  "headless_restore_attached",
+				Title: "会话已恢复",
+				Text:  fmt.Sprintf("重连成功，已恢复到之前会话：%s", title),
+			},
+		})
+	} else {
+		events = append(events, control.UIEvent{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code: "attached",
+				Text: fmt.Sprintf("已接管 %s。当前输入目标：%s", inst.DisplayName, title),
+			},
+		})
+		events = append(events, s.threadSelectionEvents(surface, view.ThreadID, string(surface.RouteMode), title, preview)...)
+		events = append(events, s.replayThreadUpdate(surface, inst, view.ThreadID)...)
+	}
 	events = append(events, s.maybeRequestThreadRefresh(surface, inst, view.ThreadID)...)
 	return events
 }
 
 func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRecord, view *mergedThreadView) []control.UIEvent {
+	return s.startHeadlessForResolvedThreadWithMode(surface, view, startHeadlessModeDefault)
+}
+
+func attachSurfaceToKnownThreadInstanceBusyNotice(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, mode attachSurfaceToKnownThreadMode) []control.UIEvent {
+	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice("thread_busy"),
+		}}
+	}
+	return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
+}
+
+func attachSurfaceToKnownThreadThreadBusyNotice(surface *state.SurfaceConsoleRecord, mode attachSurfaceToKnownThreadMode) []control.UIEvent {
+	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice("thread_busy"),
+		}}
+	}
+	return notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")
+}
+
+func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode) []control.UIEvent {
 	if surface == nil || view == nil {
 		return nil
 	}
 	cwd := strings.TrimSpace(threadCWD(view))
 	if cwd == "" {
+		if mode == startHeadlessModeHeadlessRestore {
+			return []control.UIEvent{{
+				Kind:             control.UIEventNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice:           headlessRestoreFailureNotice("thread_cwd_missing"),
+			}}
+		}
 		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法启动 headless 接管。")
 	}
 	s.nextHeadlessID++
@@ -579,9 +794,10 @@ func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRe
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
 		Status:           state.HeadlessLaunchStarting,
 		SourceInstanceID: sourceInstanceID,
+		AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 	}
-	events = append(events,
-		control.UIEvent{
+	if mode == startHeadlessModeDefault {
+		events = append(events, control.UIEvent{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
@@ -589,20 +805,21 @@ func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRe
 				Title: "创建 Headless 实例",
 				Text:  fmt.Sprintf("正在创建 headless 实例并准备接管会话：%s", threadTitle),
 			},
-		},
-		control.UIEvent{
-			Kind:             control.UIEventDaemonCommand,
+		})
+	}
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventDaemonCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		DaemonCommand: &control.DaemonCommand{
+			Kind:             control.DaemonCommandStartHeadless,
 			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandStartHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       instanceID,
-				ThreadID:         view.ThreadID,
-				ThreadTitle:      threadTitle,
-				ThreadCWD:        cwd,
-			},
+			InstanceID:       instanceID,
+			ThreadID:         view.ThreadID,
+			ThreadTitle:      threadTitle,
+			ThreadCWD:        cwd,
+			AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 		},
-	)
+	})
 	return events
 }
 

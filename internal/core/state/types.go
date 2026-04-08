@@ -151,6 +151,7 @@ type HeadlessLaunchRecord struct {
 	Status           HeadlessLaunchStatus
 	PID              int
 	SourceInstanceID string
+	AutoRestore      bool
 }
 
 type SelectionAnnouncementRecord struct {

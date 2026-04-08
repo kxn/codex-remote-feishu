@@ -20,6 +20,7 @@ func (a *App) configureHeadlessRestoreHintsLocked(stateDir string) {
 	}
 	a.headlessRestoreHints = store
 	a.refreshHeadlessRestoreHintsLocked()
+	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) HeadlessRestoreHint(surfaceID string) *HeadlessRestoreHint {
@@ -59,11 +60,13 @@ func (a *App) syncHeadlessRestoreHintAfterActionLocked(action control.Action, be
 	hint, ok := a.currentHeadlessRestoreHintLocked(action.SurfaceSessionID)
 	if ok {
 		a.upsertHeadlessRestoreHintLocked(hint)
+		a.syncHeadlessRestoreStateLocked()
 		return
 	}
 	if a.shouldClearHeadlessRestoreHintLocked(action, before) {
 		a.clearHeadlessRestoreHintLocked(action.SurfaceSessionID)
 	}
+	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) shouldClearHeadlessRestoreHintLocked(action control.Action, before *control.Snapshot) bool {

@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -244,6 +246,234 @@ func TestDaemonKeepsHeadlessRestoreHintOnDisconnect(t *testing.T) {
 	}
 }
 
+func TestDaemonMaterializesLatentSurfaceFromRestoreHintOnRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	seedHeadlessInstance(app, "inst-headless-1", "thread-1")
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-headless-1",
+	})
+
+	restarted := newRestoreHintTestApp(stateDir)
+	snapshot := restarted.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected latent surface to materialize from restore hint")
+	}
+	if snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected materialized restore surface to stay detached, got %#v", snapshot)
+	}
+	if restarted.service.SurfaceGatewayID("surface-1") != "app-1" || restarted.service.SurfaceChatID("surface-1") != "chat-1" || restarted.service.SurfaceActorUserID("surface-1") != "user-1" {
+		t.Fatalf("unexpected materialized surface routing: gateway=%q chat=%q actor=%q", restarted.service.SurfaceGatewayID("surface-1"), restarted.service.SurfaceChatID("surface-1"), restarted.service.SurfaceActorUserID("surface-1"))
+	}
+	if len(restarted.headlessRestoreState) != 1 {
+		t.Fatalf("expected one recovery state entry after restart, got %#v", restarted.headlessRestoreState)
+	}
+}
+
+func TestDaemonAutoRestoreReconnectsWithRecoveryNoticeOnly(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	seedHeadlessInstance(app, "inst-headless-1", "thread-1")
+	app.service.Instance("inst-headless-1").Threads["thread-1"].UndeliveredReplay = &state.ThreadReplayRecord{
+		Kind:           state.ThreadReplayNotice,
+		NoticeCode:     "problem_saved",
+		NoticeTitle:    "问题提示",
+		NoticeText:     "等待 headless 接手的 notice",
+		NoticeThemeKey: "warning",
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-headless-1",
+	})
+	gateway.operations = nil
+	if hint := app.HeadlessRestoreHint("surface-1"); hint == nil || hint.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected persisted restore hint with cwd before disconnect, got %#v", hint)
+	}
+	if len(app.headlessRestoreState) != 1 {
+		t.Fatalf("expected one in-memory restore state before disconnect, got %#v", app.headlessRestoreState)
+	}
+
+	app.onDisconnect(context.Background(), "inst-headless-1")
+	gateway.operations = nil
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
+		t.Fatalf("expected surface to detach after disconnect while keeping restore state, got %#v", snapshot)
+	}
+
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 4321, nil
+	}
+	base := time.Date(2026, 4, 8, 3, 20, 0, 0, time.UTC)
+	app.onTick(context.Background(), base)
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected auto-restore headless start to stay silent, got %#v", gateway.operations)
+	}
+	pending := app.service.SurfaceSnapshot("surface-1").PendingHeadless
+	if pending.InstanceID == "" {
+		t.Fatalf("expected auto-restore pending headless after tick, got %#v", pending)
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    pending.InstanceID,
+			DisplayName:   "headless",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+
+	snapshot = app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != pending.InstanceID || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected recovery hello to attach restored thread, got %#v", snapshot)
+	}
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected exactly one recovery notice, got %#v", gateway.operations)
+	}
+	if !strings.Contains(gateway.operations[0].CardTitle, "恢复") || !strings.Contains(gateway.operations[0].CardBody, "重连成功，已恢复到之前会话") {
+		t.Fatalf("expected recovery success notice, got %#v", gateway.operations[0])
+	}
+	if strings.Contains(gateway.operations[0].CardBody, "等待 headless 接手的 notice") || strings.Contains(gateway.operations[0].CardBody, "当前输入目标已切换到") {
+		t.Fatalf("expected no stale replay or selection card on recovery, got %#v", gateway.operations[0])
+	}
+	if replay := app.service.Instance("inst-headless-1").Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected stale replay to be drained after recovery, got %#v", replay)
+	}
+	if replay := app.service.Instance(pending.InstanceID).Threads["thread-1"].UndeliveredReplay; replay != nil {
+		t.Fatalf("expected restored headless thread replay to stay empty, got %#v", replay)
+	}
+}
+
+func TestDaemonAutoRestoreWaitsForFirstRefreshBeforeMissingNotice(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-missing",
+		ThreadTitle:      "旧会话",
+	})
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+
+	base := time.Date(2026, 4, 8, 3, 30, 0, 0, time.UTC)
+	app.onTick(context.Background(), base)
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no recovery notice before first refresh round, got %#v", gateway.operations)
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-vscode-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+			Source:        "vscode",
+		},
+	})
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no recovery notice while first refresh is still pending, got %#v", gateway.operations)
+	}
+
+	app.onTick(context.Background(), base.Add(2*time.Second))
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no retry notice before first refresh snapshot, got %#v", gateway.operations)
+	}
+
+	app.onEvents(context.Background(), "inst-vscode-1", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{ThreadID: "thread-other", Name: "其他会话", CWD: "/data/dl/droid", Loaded: true}},
+	}})
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected single missing-thread notice after first refresh settles, got %#v", gateway.operations)
+	}
+	if !strings.Contains(gateway.operations[0].CardBody, "暂时无法找到之前会话") {
+		t.Fatalf("expected missing-thread recovery notice, got %#v", gateway.operations[0])
+	}
+
+	app.onTick(context.Background(), base.Add(5*time.Second))
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected backoff to suppress repeated recovery notice, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonAutoRestoreLaunchFailureUsesBackoff(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+		ThreadTitle:      "修复登录流程",
+		ThreadCWD:        "/data/dl/droid",
+	})
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 0, errors.New("spawn failed")
+	}
+
+	base := time.Date(2026, 4, 8, 3, 40, 0, 0, time.UTC)
+	app.onTick(context.Background(), base)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected one launch failure notice, got %#v", gateway.operations)
+	}
+	if !strings.Contains(gateway.operations[0].CardBody, "暂时无法恢复") {
+		t.Fatalf("expected recovery launch failure notice, got %#v", gateway.operations[0])
+	}
+
+	app.onTick(context.Background(), base.Add(5*time.Second))
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected launch failure backoff to suppress retry noise, got %#v", gateway.operations)
+	}
+}
+
 func newRestoreHintTestApp(stateDir string) *App {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
@@ -270,4 +500,15 @@ func seedHeadlessInstance(app *App, instanceID, threadID string) {
 			threadID: {ThreadID: threadID, Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
 		},
 	})
+}
+
+func putRestoreHintForTest(t *testing.T, stateDir string, hint HeadlessRestoreHint) {
+	t.Helper()
+	store, err := loadHeadlessRestoreHintStore(headlessRestoreHintsStatePath(stateDir))
+	if err != nil {
+		t.Fatalf("load restore hint store: %v", err)
+	}
+	if err := store.Put(hint); err != nil {
+		t.Fatalf("put restore hint: %v", err)
+	}
 }

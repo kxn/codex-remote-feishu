@@ -307,6 +307,50 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 	}
 }
 
+func (s *Service) resolveHeadlessRestoreTargetFromView(surface *state.SurfaceConsoleRecord, view *mergedThreadView) resolvedThreadTarget {
+	if view == nil {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			NoticeCode: "thread_not_found",
+			NoticeText: "目标会话不存在或当前不可见。",
+		}
+	}
+	if view.BusyOwner != nil {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			View:       view,
+			NoticeCode: "thread_busy",
+			NoticeText: "目标会话当前已被其他飞书会话占用。",
+		}
+	}
+	if view.FreeVisibleInst != nil && isHeadlessInstance(view.FreeVisibleInst) {
+		return resolvedThreadTarget{
+			Mode:     threadAttachFreeVisible,
+			View:     view,
+			Instance: view.FreeVisibleInst,
+		}
+	}
+	if headless := s.reusableManagedHeadless(surface, threadCWD(view)); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+		return resolvedThreadTarget{
+			Mode:     threadAttachReuseHeadless,
+			View:     view,
+			Instance: headless,
+		}
+	}
+	if strings.TrimSpace(threadCWD(view)) == "" {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			View:       view,
+			NoticeCode: "thread_cwd_missing",
+			NoticeText: "目标会话缺少可恢复的工作目录，当前无法直接接管。",
+		}
+	}
+	return resolvedThreadTarget{
+		Mode: threadAttachCreateHeadless,
+		View: view,
+	}
+}
+
 func threadCWD(view *mergedThreadView) string {
 	if view == nil || view.Thread == nil {
 		return ""

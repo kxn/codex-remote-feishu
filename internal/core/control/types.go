@@ -319,6 +319,7 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	AutoRestore      bool
 }
 
 type UIEvent struct {
