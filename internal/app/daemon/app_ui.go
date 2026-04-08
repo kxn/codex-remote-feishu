@@ -108,6 +108,12 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 }
 
 func (a *App) deliverUIEvent(event control.UIEvent) error {
+	applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return a.deliverUIEventWithContext(applyCtx, event)
+}
+
+func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEvent) error {
 	chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 	actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
 	gatewayID := firstNonEmpty(event.GatewayID, a.service.SurfaceGatewayID(event.SurfaceSessionID))
@@ -117,8 +123,7 @@ func (a *App) deliverUIEvent(event control.UIEvent) error {
 	}
 	log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
 	if a.markdownPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
-		rewriteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		rewrittenBlock, err := a.markdownPreviewer.RewriteFinalBlock(rewriteCtx, feishu.MarkdownPreviewRequest{
+		rewrittenBlock, err := a.markdownPreviewer.RewriteFinalBlock(ctx, feishu.MarkdownPreviewRequest{
 			GatewayID:        gatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
@@ -127,7 +132,6 @@ func (a *App) deliverUIEvent(event control.UIEvent) error {
 			ThreadCWD:        a.previewThreadCWD(event.SurfaceSessionID, *event.Block),
 			Block:            *event.Block,
 		})
-		cancel()
 		event.Block = &rewrittenBlock
 		if err != nil {
 			log.Printf(
@@ -156,10 +160,7 @@ func (a *App) deliverUIEvent(event control.UIEvent) error {
 			operations[i].ReceiveIDType = receiveIDType
 		}
 	}
-	applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	err := a.gateway.Apply(applyCtx, operations)
-	cancel()
-	return err
+	return a.gateway.Apply(ctx, operations)
 }
 
 func (a *App) flushPendingGatewayNotices(surfaceID string) {

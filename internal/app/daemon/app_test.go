@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -70,6 +71,85 @@ func (s *stubMarkdownPreviewer) RewriteFinalBlock(_ context.Context, req feishu.
 		block.Text = s.text
 	}
 	return block, s.err
+}
+
+type lifecycleGateway struct {
+	startedCh chan struct{}
+	stoppedCh chan struct{}
+
+	mu         sync.Mutex
+	operations []feishu.Operation
+}
+
+func newLifecycleGateway() *lifecycleGateway {
+	return &lifecycleGateway{
+		startedCh: make(chan struct{}, 1),
+		stoppedCh: make(chan struct{}, 1),
+	}
+}
+
+func (g *lifecycleGateway) Start(ctx context.Context, _ feishu.ActionHandler) error {
+	select {
+	case g.startedCh <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	select {
+	case g.stoppedCh <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (g *lifecycleGateway) Apply(_ context.Context, operations []feishu.Operation) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.operations = append(g.operations, operations...)
+	return nil
+}
+
+func (g *lifecycleGateway) snapshotOperations() []feishu.Operation {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]feishu.Operation(nil), g.operations...)
+}
+
+type timeoutThenRecordGateway struct {
+	mu         sync.Mutex
+	calls      int
+	ctxErrs    []error
+	operations []feishu.Operation
+}
+
+func (g *timeoutThenRecordGateway) Start(context.Context, feishu.ActionHandler) error { return nil }
+
+func (g *timeoutThenRecordGateway) Apply(ctx context.Context, operations []feishu.Operation) error {
+	g.mu.Lock()
+	call := g.calls
+	g.calls++
+	g.mu.Unlock()
+
+	if call == 0 {
+		<-ctx.Done()
+		g.mu.Lock()
+		g.ctxErrs = append(g.ctxErrs, ctx.Err())
+		g.mu.Unlock()
+		return ctx.Err()
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.ctxErrs = append(g.ctxErrs, ctx.Err())
+	g.operations = append(g.operations, operations...)
+	return nil
+}
+
+func (g *timeoutThenRecordGateway) snapshot() ([]error, []feishu.Operation) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	errs := append([]error(nil), g.ctxErrs...)
+	ops := append([]feishu.Operation(nil), g.operations...)
+	return errs, ops
 }
 
 func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
@@ -256,6 +336,105 @@ func TestDaemonDecouplesGatewayApplyFromCanceledParentContext(t *testing.T) {
 	}
 	if len(gateway.operations) == 0 {
 		t.Fatalf("expected gateway operations, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonRunGracefulShutdownDeliversFinalNoticeBeforeGatewayStops(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app := New("127.0.0.1:0", "127.0.0.1:0", gateway, agentproto.ServerIdentity{})
+	app.service.MaterializeSurface("surface-1", "", "chat-1", "user-1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- app.Run(ctx)
+	}()
+
+	select {
+	case <-gateway.startedCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for gateway start")
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for daemon shutdown")
+	}
+
+	select {
+	case <-gateway.stoppedCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for gateway stop")
+	}
+
+	operations := gateway.snapshotOperations()
+	if len(operations) != 1 {
+		t.Fatalf("expected one final notice operation, got %#v", operations)
+	}
+	if operations[0].Kind != feishu.OperationSendCard || operations[0].CardTitle != "系统提示" || operations[0].CardBody != daemonShutdownNoticeText {
+		t.Fatalf("unexpected final notice operation: %#v", operations[0])
+	}
+	if operations[0].ReceiveID != "chat-1" || operations[0].ReceiveIDType != "chat_id" {
+		t.Fatalf("unexpected final notice target: %#v", operations[0])
+	}
+}
+
+func TestDaemonShutdownContinuesFinalNoticeFanoutAfterTimeout(t *testing.T) {
+	gateway := &timeoutThenRecordGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.shutdownGracePeriod = 80 * time.Millisecond
+	app.shutdownNoticeTimeout = 25 * time.Millisecond
+	app.service.MaterializeSurface("surface-1", "", "chat-1", "user-1")
+	app.service.MaterializeSurface("surface-2", "", "chat-2", "user-2")
+
+	start := time.Now()
+	if err := app.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown returned error: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("expected bounded shutdown notice fanout, elapsed=%s", elapsed)
+	}
+
+	errs, operations := gateway.snapshot()
+	if len(errs) != 2 || !errors.Is(errs[0], context.DeadlineExceeded) || errs[1] != nil {
+		t.Fatalf("unexpected shutdown notice errors: %#v", errs)
+	}
+	if len(operations) != 1 {
+		t.Fatalf("expected second surface notice to still be delivered, got %#v", operations)
+	}
+	if operations[0].ReceiveID != "chat-2" || operations[0].CardBody != daemonShutdownNoticeText {
+		t.Fatalf("unexpected shutdown notice delivery: %#v", operations[0])
+	}
+}
+
+func TestDaemonIgnoresActionsAfterShutdownStarts(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.service.MaterializeSurface("surface-1", "", "chat-1", "user-1")
+
+	if err := app.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown returned error: %v", err)
+	}
+	before := len(gateway.operations)
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(gateway.operations) != before {
+		t.Fatalf("expected shutdown gate to suppress new actions, got %#v", gateway.operations[before:])
 	}
 }
 

@@ -75,9 +75,12 @@ type App struct {
 
 	daemonStartedAt   time.Time
 	daemonLifecycleID string
+	shutdownStarted   bool
+	shuttingDown      bool
 
 	commandSeq    uint64
 	mu            sync.Mutex
+	shutdownMu    sync.Mutex
 	adminConfigMu sync.Mutex
 	listenMu      sync.Mutex
 	ingressRunMu  sync.Mutex
@@ -97,6 +100,8 @@ type App struct {
 	ingressCancel         context.CancelFunc
 	ingressStarted        bool
 	ingressWG             sync.WaitGroup
+	gatewayRunCancel      context.CancelFunc
+	gatewayRunDone        chan struct{}
 	relayConnections      map[string]*relayConnectionState
 
 	adminAuth *adminauth.Manager
@@ -104,6 +109,10 @@ type App struct {
 
 	relayListener net.Listener
 	apiListener   net.Listener
+
+	shutdownGracePeriod   time.Duration
+	shutdownNoticeTimeout time.Duration
+	gatewayStopTimeout    time.Duration
 }
 
 func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agentproto.ServerIdentity) *App {
@@ -133,6 +142,9 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		ingress:               newIngressPump(),
 		relayConnections:      map[string]*relayConnectionState{},
 		adminAuth:             authManager,
+		shutdownGracePeriod:   5 * time.Second,
+		shutdownNoticeTimeout: 2 * time.Second,
+		gatewayStopTimeout:    3 * time.Second,
 	}
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,
@@ -249,8 +261,12 @@ func (a *App) Run(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+	gatewayCtx, gatewayCancel := context.WithCancel(context.Background())
+	gatewayDone := make(chan struct{})
+	a.setGatewayRuntime(gatewayCancel, gatewayDone)
 	go func() {
-		if err := a.gateway.Start(ctx, a.HandleAction); err != nil && err != context.Canceled {
+		defer close(gatewayDone)
+		if err := a.gateway.Start(gatewayCtx, a.HandleAction); err != nil && err != context.Canceled {
 			errCh <- err
 		}
 	}()
@@ -275,29 +291,4 @@ func (a *App) Run(ctx context.Context) error {
 		_ = a.Shutdown(context.Background())
 		return err
 	}
-}
-
-func (a *App) Shutdown(ctx context.Context) error {
-	_ = a.relay.Close()
-	a.stopIngressPump()
-	cleanupErr := a.shutdownManagedHeadless()
-	_ = a.relayServer.Shutdown(ctx)
-	_ = a.apiServer.Shutdown(ctx)
-	a.listenMu.Lock()
-	if a.relayListener != nil {
-		_ = a.relayListener.Close()
-		a.relayListener = nil
-	}
-	if a.apiListener != nil {
-		_ = a.apiListener.Close()
-		a.apiListener = nil
-	}
-	a.listenMu.Unlock()
-	if a.rawLogger != nil {
-		_ = a.rawLogger.Close()
-	}
-	if cleanupErr != nil {
-		return cleanupErr
-	}
-	return nil
 }

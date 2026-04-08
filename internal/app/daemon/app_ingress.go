@@ -179,6 +179,17 @@ func (a *App) handleIngressOverload(instanceID string, connectionID uint64) {
 func (a *App) HandleAction(ctx context.Context, action control.Action) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		log.Printf(
+			"surface action ignored during shutdown: surface=%s chat=%s actor=%s kind=%s message=%s",
+			action.SurfaceSessionID,
+			action.ChatID,
+			action.ActorUserID,
+			action.Kind,
+			action.MessageID,
+		)
+		return
+	}
 	action = a.classifyInboundAction(action)
 	before := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 	log.Printf(
@@ -211,6 +222,9 @@ func (a *App) Service() *orchestrator.Service {
 func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
 	now := time.Now().UTC()
 
 	inst := a.service.Instance(hello.Instance.InstanceID)
@@ -281,6 +295,9 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
 	for _, event := range events {
 		now := time.Now().UTC()
 		log.Printf(
@@ -314,6 +331,9 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentproto.CommandAck) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
 	log.Printf("relay command ack: instance=%s command=%s accepted=%t error=%s", instanceID, ack.CommandID, ack.Accepted, ack.Error)
 	a.debugf(
 		"command ack state: instance=%s command=%s accepted=%t pending=%s active=%s",
@@ -336,6 +356,9 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
 	a.markStartupThreadsRefreshSettledLocked(instanceID)
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
@@ -359,6 +382,9 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
 	uiEvents := a.service.Tick(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 	a.handleUIEvents(ctx, uiEvents)
