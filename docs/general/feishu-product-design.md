@@ -147,7 +147,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 ### 4.1 `attach(instance)`
 
-`/list` 或菜单当前只列出**在线 VS Code 实例**，不再把 managed headless 暴露成手工 attach 入口。
+`/list` 或菜单当前只列出**在线 VS Code 实例**，不再把后台恢复实例暴露成手工 attach 入口。
 
 当前 attach 选择卡以按钮回调为主：
 
@@ -189,7 +189,7 @@ attach 成功后：
 
 - 当前实例可见：直接切到目标 thread
 - 目标会话在其他在线实例上可见：自动接管目标实例
-- 当前没有合适在线实例但会话带有可恢复 `cwd`：自动复用或启动 managed headless
+- 当前没有合适在线实例但会话带有可恢复 `cwd`：自动复用现有恢复链路，或在后台准备恢复
 
 如果用户点到旧卡片上的 legacy `prompt_select`，会统一收到 `selection_expired` 提示，要求重新发送 `/list`、`/use` 或 `/useall`。
 

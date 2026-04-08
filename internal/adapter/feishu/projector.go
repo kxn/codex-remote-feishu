@@ -1050,7 +1050,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 	}
 	if snapshot.PendingHeadless.InstanceID != "" {
 		lines = append(lines, "")
-		lines = append(lines, "**Headless 创建中：**")
+		lines = append(lines, "**后台恢复中：**")
 		if snapshot.PendingHeadless.ThreadTitle != "" {
 			lines = append(lines, fmt.Sprintf("- %s", snapshotField("目标会话", snapshot.PendingHeadless.ThreadTitle)))
 		}
@@ -1153,10 +1153,8 @@ func formatInstanceLabel(displayName, source string, managed bool) string {
 		label = "未知实例"
 	}
 	if strings.EqualFold(strings.TrimSpace(source), "headless") {
-		if managed {
-			return label + " (Headless)"
-		}
-		return label + " (Headless, unmanaged)"
+		_ = managed
+		return label
 	}
 	return label
 }

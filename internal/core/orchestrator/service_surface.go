@@ -138,8 +138,8 @@ func pendingHeadlessTimeoutNotice(pending *state.HeadlessLaunchRecord) *control.
 	}
 	return &control.Notice{
 		Code:  "headless_start_timeout",
-		Title: "Headless 实例超时",
-		Text:  "headless 实例启动超时，已自动取消，请重新发送 /use 或 /useall 选择要恢复的会话。",
+		Title: "恢复超时",
+		Text:  "后台恢复启动超时，已自动取消，请重新发送 /use 或 /useall 选择要恢复的会话。",
 	}
 }
 
@@ -160,11 +160,11 @@ func (s *Service) handleRemovedCommand(surface *state.SurfaceConsoleRecord, acti
 	command := control.LegacyActionCommand(action.Text)
 	switch control.LegacyActionKey(action.Text) {
 	case "newinstance":
-		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用或启动 headless。")
+		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用现有恢复链路，或在后台准备恢复。")
 	case "killinstance":
 		return notice(surface, "command_removed_killinstance", "`/killinstance` 已移除。请改用 `/detach` 取消当前恢复流程，或断开当前接管。")
 	case "resume_headless_thread":
-		return notice(surface, "selection_expired", "这个旧恢复卡片（来自已移除的 `/newinstance` 流程）已失效，请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用或启动 headless。")
+		return notice(surface, "selection_expired", "这个旧恢复卡片（来自已移除的 `/newinstance` 流程）已失效，请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用现有恢复链路，或在后台准备恢复。")
 	default:
 		if command == "" {
 			return notice(surface, "command_removed", "这个旧命令已移除。请发送 `/help` 查看当前可用命令。")
@@ -366,7 +366,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 			Notice: &control.Notice{
 				Code:  "command_removed_newinstance",
 				Title: "旧恢复流程已移除",
-				Text:  "旧版 `/newinstance` 恢复流程已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；当前 headless 实例已自动结束。",
+				Text:  "旧版 `/newinstance` 恢复流程已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；当前后台恢复流程已自动结束。",
 			},
 		},
 	)
@@ -765,7 +765,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 				Notice:           headlessRestoreFailureNotice("thread_cwd_missing"),
 			}}
 		}
-		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法启动 headless 接管。")
+		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法在后台恢复该会话。")
 	}
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
@@ -811,8 +811,8 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
 				Code:  "headless_starting",
-				Title: "创建 Headless 实例",
-				Text:  fmt.Sprintf("正在创建 headless 实例并准备接管会话：%s", threadTitle),
+				Title: "准备恢复会话",
+				Text:  fmt.Sprintf("正在后台准备恢复会话：%s", threadTitle),
 			},
 		})
 	}
@@ -1293,10 +1293,10 @@ func (s *Service) killHeadlessInstance(surface *state.SurfaceConsoleRecord) []co
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
-		return notice(surface, "headless_not_found", "当前没有可结束的 headless 实例。")
+		return notice(surface, "headless_not_found", "当前没有可结束的后台恢复流程。")
 	}
 	if !isHeadlessInstance(inst) {
-		return notice(surface, "headless_kill_forbidden", "当前接管的是 VS Code 实例，不能使用 /killinstance。")
+		return notice(surface, "headless_kill_forbidden", "当前接管的是 VS Code 实例，不需要结束后台恢复。")
 	}
 	instanceID := inst.InstanceID
 	threadID := surface.SelectedThreadID
@@ -1326,8 +1326,8 @@ func (s *Service) killHeadlessInstance(surface *state.SurfaceConsoleRecord) []co
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
 				Code:  "headless_kill_requested",
-				Title: "结束 Headless 实例",
-				Text:  "已请求结束当前 headless 实例，并断开当前接管。",
+				Title: "结束后台恢复",
+				Text:  "已请求结束当前后台恢复，并断开当前接管。",
 			},
 		},
 	)

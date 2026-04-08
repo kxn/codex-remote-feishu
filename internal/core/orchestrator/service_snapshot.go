@@ -610,14 +610,14 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 		Layer:            "daemon",
 		Stage:            "headless_start",
 		Operation:        "start_headless",
-		Message:          "无法创建 headless 实例。",
+		Message:          "无法准备恢复会话。",
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ThreadID:         pending.ThreadID,
 		Retryable:        true,
 	})
 	notice := NoticeForProblem(problem)
 	notice.Code = "headless_start_failed"
-	notice.Title = "Headless 实例创建失败"
+	notice.Title = "恢复准备失败"
 	return []control.UIEvent{{
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: surface.SurfaceSessionID,

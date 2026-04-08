@@ -5203,8 +5203,8 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 	if prompt.Title != "最近会话" || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected prompt: %#v", prompt)
 	}
-	if prompt.Options[0].OptionID != "thread-2" || prompt.Options[0].ButtonLabel != "启动" {
-		t.Fatalf("expected newer offline thread to require headless start, got %#v", prompt.Options[0])
+	if prompt.Options[0].OptionID != "thread-2" || prompt.Options[0].ButtonLabel != "恢复" {
+		t.Fatalf("expected newer offline thread to require background restore, got %#v", prompt.Options[0])
 	}
 	if prompt.Options[1].OptionID != "thread-1" || prompt.Options[1].ButtonLabel != "接管" {
 		t.Fatalf("expected online free thread to support direct attach, got %#v", prompt.Options[1])

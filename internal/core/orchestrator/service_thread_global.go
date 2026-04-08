@@ -378,9 +378,9 @@ func (s *Service) mergedThreadStatus(surface *state.SurfaceConsoleRecord, view *
 	case threadAttachFreeVisible:
 		return "可接管已在线实例", "接管", false
 	case threadAttachReuseHeadless:
-		return "将复用空闲 headless", "恢复", false
+		return "将复用现有后台恢复", "恢复", false
 	case threadAttachCreateHeadless:
-		return "将启动新的 headless", "启动", false
+		return "将启动新的后台恢复", "恢复", false
 	default:
 		if target.NoticeText != "" {
 			return target.NoticeText, "不可用", true

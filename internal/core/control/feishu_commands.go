@@ -115,7 +115,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/useall", "/sessionsall", "/sessions/all"},
-		description:  "展示全部可见会话，用于切回旧会话或恢复 headless 线程。",
+		description:  "展示全部可见会话，用于切回旧会话或恢复之前的会话。",
 		buttons: []CommandCatalogButton{
 			{Label: "全部会话", CommandText: "/useall"},
 		},

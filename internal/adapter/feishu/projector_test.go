@@ -909,7 +909,7 @@ func TestProjectSnapshotDisplaysSurfaceDefaultModel(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshotIncludesHeadlessAttachmentAndPendingLaunch(t *testing.T) {
+func TestProjectSnapshotIncludesBackgroundRestoreAttachmentAndPendingLaunch(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSnapshot,
@@ -951,12 +951,15 @@ func TestProjectSnapshotIncludesHeadlessAttachmentAndPendingLaunch(t *testing.T)
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**已接管：** droid (Headless)",
+		"**已接管：** droid",
 		"**实例 PID：** <text_tag color='neutral'>4321</text_tag>",
-		"Headless 创建中：",
+		"后台恢复中：",
 		"**进程 PID：** <text_tag color='neutral'>5678</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)
+	}
+	if strings.Contains(ops[0].CardBody, "Headless") {
+		t.Fatalf("snapshot body should not expose headless label, got %#v", ops[0].CardBody)
 	}
 	if strings.Contains(ops[0].CardBody, "在线实例：") {
 		t.Fatalf("status card should not include online instance list, got %#v", ops[0].CardBody)
