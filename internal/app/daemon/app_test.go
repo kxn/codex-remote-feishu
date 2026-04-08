@@ -981,6 +981,183 @@ func TestDaemonRemovedNewInstanceCommandShowsMigrationNotice(t *testing.T) {
 	}
 }
 
+func TestDaemonRejectsOldStopMenuBeforeHandling(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	seedAttachedSurfaceForInboundTests(app)
+	inst := app.service.Instance("inst-1")
+	inst.ActiveThreadID = "thread-1"
+	inst.ActiveTurnID = "turn-1"
+
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+
+	before := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStop,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Inbound: &control.ActionInboundMeta{
+			MenuClickTime: startedAt.Add(-3 * time.Minute),
+		},
+	})
+
+	if len(sent) != 0 {
+		t.Fatalf("expected old stop not to send interrupt command, got %#v", sent)
+	}
+	if inst.ActiveTurnID != "turn-1" {
+		t.Fatalf("expected old stop not to mutate active turn, got %#v", inst)
+	}
+	assertSingleRejectedNotice(t, gateway.operations[before:], "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+}
+
+func TestDaemonRejectsOldTextDetachCommandAndKeepsAttachment(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	seedAttachedSurfaceForInboundTests(app)
+
+	before := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionDetach,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/detach",
+		Inbound: &control.ActionInboundMeta{
+			MessageCreateTime: startedAt.Add(-3 * time.Minute),
+		},
+	})
+
+	snapshot := app.service.SurfaceSnapshot("feishu:chat:1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" {
+		t.Fatalf("expected old detach command not to detach surface, got %#v", snapshot)
+	}
+	assertSingleRejectedNotice(t, gateway.operations[before:], "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+}
+
+func TestDaemonRejectsOldTextMessageBeforeQueueing(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	seedSelectedThreadSurfaceForInboundTests(app)
+
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+
+	before := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-old",
+		Text:             "这是一条重启前的旧消息",
+		Inbound: &control.ActionInboundMeta{
+			MessageCreateTime: startedAt.Add(-3 * time.Minute),
+		},
+	})
+
+	if len(sent) != 0 {
+		t.Fatalf("expected old text message not to dispatch commands, got %#v", sent)
+	}
+	snapshot := app.service.SurfaceSnapshot("feishu:chat:1")
+	if snapshot == nil || snapshot.Dispatch.QueuedCount != 0 || snapshot.Dispatch.ActiveItemStatus != "" {
+		t.Fatalf("expected old text message not to queue input, got %#v", snapshot)
+	}
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+	if delta[0].Kind != feishu.OperationSendCard {
+		t.Fatalf("expected old text rejection to send only notice card, got %#v", delta)
+	}
+}
+
+func TestDaemonRejectsOldCardDetachAndShowsExpiredNotice(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	seedAttachedSurfaceForInboundTests(app)
+
+	before := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionDetach,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "older-life",
+		},
+	})
+
+	snapshot := app.service.SurfaceSnapshot("feishu:chat:1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" {
+		t.Fatalf("expected old card callback not to detach surface, got %#v", snapshot)
+	}
+	assertSingleRejectedNotice(t, gateway.operations[before:], "旧卡片已过期", "重新发送对应命令获取新卡片")
+}
+
+func seedAttachedSurfaceForInboundTests(app *App) {
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+		},
+	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true}},
+	}})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:        agentproto.EventThreadFocused,
+		ThreadID:    "thread-1",
+		CWD:         "/data/dl/droid",
+		FocusSource: "local_ui",
+	}})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+}
+
+func seedSelectedThreadSurfaceForInboundTests(app *App) {
+	seedAttachedSurfaceForInboundTests(app)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+}
+
+func assertSingleRejectedNotice(t *testing.T, ops []feishu.Operation, title, bodySubstring string) {
+	t.Helper()
+	if len(ops) != 1 {
+		t.Fatalf("expected one rejection notice operation, got %#v", ops)
+	}
+	if ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != title || !strings.Contains(ops[0].CardBody, bodySubstring) {
+		t.Fatalf("unexpected rejection notice operation: %#v", ops[0])
+	}
+}
+
 func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

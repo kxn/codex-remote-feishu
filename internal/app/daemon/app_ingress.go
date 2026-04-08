@@ -210,9 +210,32 @@ func (a *App) HandleAction(ctx context.Context, action control.Action) {
 		strings.TrimSpace(action.Inbound.CardDaemonLifecycleID),
 		actionTextPreview(action.Text),
 	)
+	if notice := rejectedInboundNotice(action); notice != nil {
+		a.ensureSurfaceRouteForNotice(action)
+		a.handleUIEvents(ctx, []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			GatewayID:        action.GatewayID,
+			SurfaceSessionID: action.SurfaceSessionID,
+			Notice:           notice,
+		}})
+		return
+	}
 	events := a.service.ApplySurfaceAction(action)
 	a.handleUIEvents(ctx, events)
 	a.syncHeadlessRestoreHintAfterActionLocked(action, before)
+}
+
+func (a *App) ensureSurfaceRouteForNotice(action control.Action) {
+	if strings.TrimSpace(action.SurfaceSessionID) == "" {
+		return
+	}
+	_ = a.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        action.GatewayID,
+		SurfaceSessionID: action.SurfaceSessionID,
+		ChatID:           action.ChatID,
+		ActorUserID:      action.ActorUserID,
+	})
 }
 
 func (a *App) Service() *orchestrator.Service {

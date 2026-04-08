@@ -81,3 +81,24 @@ func inboundTimeValue(ts time.Time) string {
 	}
 	return ts.UTC().Format(time.RFC3339Nano)
 }
+
+func rejectedInboundNotice(action control.Action) *control.Notice {
+	switch inboundVerdict(action) {
+	case control.InboundLifecycleOld:
+		return &control.Notice{
+			Code:     "old_inbound_ignored",
+			Title:    "旧动作已忽略",
+			Text:     "检测到这是 daemon 上一个生命周期里的旧消息、旧命令或旧菜单动作，已忽略。请重新发送消息、命令或重新点击菜单。",
+			ThemeKey: "error",
+		}
+	case control.InboundLifecycleOldCard:
+		return &control.Notice{
+			Code:     "old_card_expired",
+			Title:    "旧卡片已过期",
+			Text:     "这张卡片来自 daemon 上一个生命周期，已过期。请重新发送对应命令获取新卡片。",
+			ThemeKey: "error",
+		}
+	default:
+		return nil
+	}
+}
