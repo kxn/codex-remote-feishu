@@ -116,6 +116,14 @@ type App struct {
 	shutdownGracePeriod   time.Duration
 	shutdownNoticeTimeout time.Duration
 	gatewayStopTimeout    time.Duration
+
+	upgradeLookup          releaseLookupFunc
+	upgradeCheckInterval   time.Duration
+	upgradeStartupDelay    time.Duration
+	upgradePromptScanEvery time.Duration
+	upgradeCheckInFlight   bool
+	upgradeNextCheckAt     time.Time
+	upgradeNextPromptScan  time.Time
 }
 
 func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agentproto.ServerIdentity) *App {
@@ -131,26 +139,30 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		panic(err)
 	}
 	app := &App{
-		service:               orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
-		projector:             feishu.NewProjector(),
-		gateway:               gateway,
-		serverIdentity:        serverIdentity,
-		daemonStartedAt:       daemonStartedAt,
-		daemonLifecycleID:     daemonLifecycleID(serverIdentity, daemonStartedAt),
-		pendingGatewayNotices: map[string][]control.UIEvent{},
-		headlessRestoreState:  map[string]*headlessRestoreRecoveryState{},
-		startupRefreshPending: map[string]bool{},
-		managedHeadless:       map[string]*managedHeadlessProcess{},
-		startHeadless:         relayruntime.StartDetachedWrapper,
-		stopProcess:           relayruntime.TerminateProcess,
-		ingress:               newIngressPump(),
-		relayConnections:      map[string]*relayConnectionState{},
-		feishuRuntimeApply:    map[string]feishuRuntimeApplyPendingState{},
-		adminAuth:             authManager,
-		shutdownGracePeriod:   5 * time.Second,
-		shutdownNoticeTimeout: 2 * time.Second,
-		gatewayStopTimeout:    3 * time.Second,
+		service:                orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
+		projector:              feishu.NewProjector(),
+		gateway:                gateway,
+		serverIdentity:         serverIdentity,
+		daemonStartedAt:        daemonStartedAt,
+		daemonLifecycleID:      daemonLifecycleID(serverIdentity, daemonStartedAt),
+		pendingGatewayNotices:  map[string][]control.UIEvent{},
+		headlessRestoreState:   map[string]*headlessRestoreRecoveryState{},
+		startupRefreshPending:  map[string]bool{},
+		managedHeadless:        map[string]*managedHeadlessProcess{},
+		startHeadless:          relayruntime.StartDetachedWrapper,
+		stopProcess:            relayruntime.TerminateProcess,
+		ingress:                newIngressPump(),
+		relayConnections:       map[string]*relayConnectionState{},
+		feishuRuntimeApply:     map[string]feishuRuntimeApplyPendingState{},
+		adminAuth:              authManager,
+		shutdownGracePeriod:    5 * time.Second,
+		shutdownNoticeTimeout:  2 * time.Second,
+		gatewayStopTimeout:     3 * time.Second,
+		upgradeCheckInterval:   3 * time.Hour,
+		upgradeStartupDelay:    1 * time.Minute,
+		upgradePromptScanEvery: 5 * time.Second,
 	}
+	app.upgradeLookup = app.defaultReleaseLookup
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,
 		OnEvents:     app.enqueueEvents,

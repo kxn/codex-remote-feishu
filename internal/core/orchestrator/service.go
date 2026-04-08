@@ -186,6 +186,20 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandHelpCatalog())}
 	case control.ActionShowCommandMenu:
 		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandMenuCatalog())}
+	case control.ActionDebugCommand:
+		return []control.UIEvent{{
+			Kind:             control.UIEventDaemonCommand,
+			GatewayID:        surface.GatewayID,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			SourceMessageID:  action.MessageID,
+			DaemonCommand: &control.DaemonCommand{
+				Kind:             control.DaemonCommandDebug,
+				GatewayID:        surface.GatewayID,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				SourceMessageID:  action.MessageID,
+				Text:             action.Text,
+			},
+		}}
 	case control.ActionModelCommand:
 		return s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:

@@ -18,6 +18,7 @@ const (
 	ActionRemovedCommand    ActionKind = "surface.command.removed"
 	ActionShowCommandHelp   ActionKind = "surface.command.help"
 	ActionShowCommandMenu   ActionKind = "surface.command.menu"
+	ActionDebugCommand      ActionKind = "surface.command.debug"
 	ActionModelCommand      ActionKind = "surface.command.model"
 	ActionReasoningCommand  ActionKind = "surface.command.reasoning"
 	ActionAccessCommand     ActionKind = "surface.command.access"
@@ -309,17 +310,20 @@ type DaemonCommandKind string
 const (
 	DaemonCommandStartHeadless DaemonCommandKind = "headless.start"
 	DaemonCommandKillHeadless  DaemonCommandKind = "headless.kill"
+	DaemonCommandDebug         DaemonCommandKind = "debug.command"
 )
 
 type DaemonCommand struct {
 	Kind             DaemonCommandKind
 	GatewayID        string
 	SurfaceSessionID string
+	SourceMessageID  string
 	InstanceID       string
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
 	AutoRestore      bool
+	Text             string
 }
 
 type UIEvent struct {

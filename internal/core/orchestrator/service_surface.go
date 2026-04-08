@@ -60,6 +60,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		if surface.PendingRequests == nil {
 			surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 		}
+		surface.LastInboundAt = s.now()
 		return surface
 	}
 
@@ -71,6 +72,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		ActorUserID:      action.ActorUserID,
 		RouteMode:        state.RouteModeUnbound,
 		DispatchMode:     state.DispatchModeNormal,
+		LastInboundAt:    s.now(),
 		QueueItems:       map[string]*state.QueueItemRecord{},
 		StagedImages:     map[string]*state.StagedImageRecord{},
 		PendingRequests:  map[string]*state.RequestPromptRecord{},
@@ -85,6 +87,7 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	}
 	switch action.Kind {
 	case control.ActionStatus,
+		control.ActionDebugCommand,
 		control.ActionKillInstance,
 		control.ActionRemovedCommand,
 		control.ActionReactionCreated,

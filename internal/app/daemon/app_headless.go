@@ -19,6 +19,8 @@ func (a *App) handleDaemonCommand(command control.DaemonCommand) []control.UIEve
 		return a.startManagedHeadless(command)
 	case control.DaemonCommandKillHeadless:
 		return a.killManagedHeadless(command)
+	case control.DaemonCommandDebug:
+		return a.handleDebugDaemonCommand(command)
 	default:
 		return nil
 	}

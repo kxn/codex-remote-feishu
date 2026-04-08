@@ -409,6 +409,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 		return
 	}
 	uiEvents := a.service.Tick(now)
+	uiEvents = append(uiEvents, a.maybePromptPendingUpgradeLocked(now)...)
 	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 	a.handleUIEvents(ctx, uiEvents)
 	a.syncManagedHeadlessLocked(now)
@@ -416,6 +417,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.reapIdleHeadless(now)
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
+	a.maybeStartAutoUpgradeCheckLocked(now)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)

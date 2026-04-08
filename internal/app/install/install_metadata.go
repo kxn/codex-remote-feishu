@@ -41,6 +41,17 @@ type PendingUpgrade struct {
 	RequestedAt      *time.Time   `json:"requestedAt,omitempty"`
 }
 
+const (
+	PendingUpgradePhaseAvailable  = "available"
+	PendingUpgradePhasePrompted   = "prompted"
+	PendingUpgradePhasePrepared   = "prepared"
+	PendingUpgradePhaseSwitching  = "switching"
+	PendingUpgradePhaseObserving  = "observing"
+	PendingUpgradePhaseCommitted  = "committed"
+	PendingUpgradePhaseRolledBack = "rolled_back"
+	PendingUpgradePhaseFailed     = "failed"
+)
+
 type StateMetadataOptions struct {
 	StatePath       string
 	SourceBinary    string
@@ -222,4 +233,8 @@ func normalizeReleaseTrack(track ReleaseTrack) ReleaseTrack {
 	default:
 		return ""
 	}
+}
+
+func ParseReleaseTrack(value string) ReleaseTrack {
+	return normalizeReleaseTrack(ReleaseTrack(value))
 }

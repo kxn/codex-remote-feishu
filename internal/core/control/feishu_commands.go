@@ -259,6 +259,16 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	},
 	{
 		section:      "帮助",
+		helpCommands: []string{"/debug", "/debug upgrade", "/debug track", "/debug track alpha|beta|production"},
+		description:  "查看升级状态、手动检查更新，或切换当前 release track。",
+		examples:     []string{"/debug", "/debug upgrade", "/debug track beta"},
+		showInHelp:   true,
+		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/debug", kind: ActionDebugCommand},
+		},
+	},
+	{
+		section:      "帮助",
 		helpCommands: []string{"/help"},
 		description:  "查看当前支持的 slash command 和说明。",
 		buttons: []CommandCatalogButton{

@@ -115,6 +115,7 @@ type SurfaceConsoleRecord struct {
 	ActorUserID          string
 	AttachedInstanceID   string
 	SelectedThreadID     string
+	LastInboundAt        time.Time
 	RouteMode            RouteMode
 	Abandoning           bool
 	DispatchMode         DispatchMode
