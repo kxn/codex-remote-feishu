@@ -151,24 +151,19 @@ VS Code 两种接管方式的区别：
 
 它们是仓库 helper，不是 release 包产品入口。
 
-## 仓库内开发脚本
+## 仓库内联调入口
 
-`install.sh` 仍保留为 Linux 仓库内联调脚本，不是 release 用户入口：
+源码仓库里不再保留单独的 `install.sh` 生命周期脚本。现在统一使用现有单 binary 入口：
 
-```bash
-./install.sh bootstrap
-./install.sh start
-./install.sh restart
-./install.sh refresh
-./install.sh status
-./install.sh logs
-./install.sh stop
-```
-
-建议区分两种场景：
-
-- 只想重启当前 relay 服务链路，或回收“pid 文件丢了但 daemon 还活着”的残留状态：`./install.sh restart`
-- 刚改过 Go 代码，且启用了 `managed_shim`，需要把 `~/.local/bin` 和 VS Code 扩展 bundle 一起刷新到新版本：`./install.sh refresh`
+- `./setup.sh`
+  - 构建本地 `./bin/codex-remote`
+  - 默认执行 `codex-remote install -bootstrap-only -start-daemon`
+- `./setup.ps1`
+  - Windows 上的同等辅助脚本
+- `./bin/codex-remote install -bootstrap-only -start-daemon`
+  - 已经构建过二进制时，可直接重新 bootstrap 并确保本地 daemon 就绪
+- `./bin/codex-remote daemon`
+  - 需要前台直接观察 daemon 启动过程和日志时使用
 
 默认会写入：
 
@@ -255,12 +250,6 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 3. `config.json` 里的 `relay.serverURL`、`wrapper.codexRealBinary`、飞书凭证和监听地址
 4. VS Code 是否真的已经通过 wrapper 启动 Codex
 5. `~/.local/share/codex-remote/logs/codex-remote-relayd.log`
-
-如果你是在仓库内调试 `install.sh` 流程，再额外看：
-
-```bash
-./install.sh status
-```
 
 ## 文档
 

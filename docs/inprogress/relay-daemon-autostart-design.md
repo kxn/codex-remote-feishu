@@ -1,7 +1,7 @@
 # Relay Daemon Autostart Design
 
 > Type: `inprogress`
-> Updated: `2026-04-06`
+> Updated: `2026-04-09`
 > Summary: 迁移到 `docs/inprogress` 并统一文档元信息头，保留待实现的 relay 自动拉起设计。
 
 ## 1. 背景
@@ -51,7 +51,7 @@
 当前代码中的关键现状：
 
 - `relay-wrapper` 只会创建 `relayws.Client` 并无限重连
-- `relayd` 只能通过 `install.sh start` 或手工 `codex-remote daemon` 启动
+- 仓库里已经没有单独的 `install.sh` 生命周期脚本；当前 `relayd` 只能通过 `codex-remote install -start-daemon` 或手工 `codex-remote daemon` 启动
 - `relay.agent.v1` 的 `welcome` 只有：
   - `protocol`
   - `serverTime`
@@ -59,7 +59,7 @@
   - 版本
   - 指纹
   - pid
-- `install.sh` 的 pid 文件是脚本行为，daemon 自身并不会写自己的 runtime state
+- 当前仍缺少由 daemon 自身维护的完整 pid / identity runtime state
 
 这意味着 wrapper 目前缺少三样关键能力：
 

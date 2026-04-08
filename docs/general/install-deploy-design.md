@@ -1,7 +1,7 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-08`
+> Updated: `2026-04-09`
 > Summary: 统一记录 WebSetup-first 发布模型，并补充 production / beta / alpha release track 的安装与发布语义。
 
 ## 1. 范围
@@ -86,14 +86,17 @@ Windows PowerShell:
 
 ### 2.4 仓库 helper
 
-仓库中仍保留两个辅助入口，但它们不再是 release 包产品路径：
+仓库中保留的联调入口已经收敛到现有单 binary 路径，它们不再是 release 包产品路径：
 
 - `setup.sh` / `setup.ps1`
   - 源码仓库 helper
   - 默认执行本地构建后再跑 `-bootstrap-only -start-daemon`
-- `install.sh`
-  - Linux 仓库内运维 / 联调 helper
-  - 提供 `bootstrap/start/stop/restart/refresh/status/logs/build`
+- `./bin/codex-remote install -bootstrap-only -start-daemon`
+  - 已经构建过本地二进制时，可直接重复 bootstrap
+- `./bin/codex-remote daemon`
+  - 需要前台观察 daemon 启动或日志时使用
+
+仓库中不再保留单独的 `install.sh` 生命周期脚本。
 
 ## 3. `codex-remote install` 的当前语义
 
@@ -204,7 +207,7 @@ release 包中的归档目录只是版本缓存位置，不是长期运行路径
 对仓库联调：
 
 - `setup.sh`
-- `install.sh bootstrap`
+- `./bin/codex-remote install -bootstrap-only -start-daemon`
 - `codex-remote install -interactive`
 
 仍然可以直接在 CLI 里触发接管。
@@ -330,6 +333,6 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 
 ```bash
 ./setup.sh
-./install.sh bootstrap
-./install.sh start
+./bin/codex-remote install -bootstrap-only -start-daemon
+./bin/codex-remote daemon
 ```

@@ -1,7 +1,7 @@
 # 单一二进制设计
 
 > Type: `inprogress`
-> Updated: `2026-04-06`
+> Updated: `2026-04-09`
 > Summary: 迁移到 `docs/inprogress` 并统一文档元信息头，保留统一二进制方案设计。
 
 ## 1. 目标
@@ -452,13 +452,18 @@ wrapper 需要保留这个特殊语义，因为它本质上仍然是 `codex.real
 
 ## 9. 脚本与发布变化
 
-### 9.1 `install.sh`
+### 9.1 仓库 helper
 
-应改为：
+仓库 helper 现在应继续收敛为：
 
-- 构建一个 binary
-- `start` 时执行：`codex-remote daemon`
-- `bootstrap` 时执行：`codex-remote install ...`
+- `setup.sh` / `setup.ps1`
+  - 负责本地构建统一 binary
+  - 默认执行：`codex-remote install ...`
+- 直接运行统一 binary
+  - `codex-remote daemon`
+  - `codex-remote install ...`
+
+不再保留单独的 `install.sh` 生命周期脚本。
 
 ### 9.2 `install-release.sh`
 
@@ -506,7 +511,7 @@ codex-remote install -bootstrap-only -start-daemon
 - release 只产出 `codex-remote`
 - release script 直接驱动单一 binary 的 bootstrap 路径
 - `setup.sh` / `setup.ps1` 降级为源码仓库 helper
-- `install.sh` 保留为仓库联调 helper
+- 删除 `install.sh`
 - 删除旧 binary 资产
 
 等这一阶段稳定后，再考虑是否删除旧 `cmd/*` 源码入口。
@@ -571,7 +576,7 @@ codex-remote install -bootstrap-only -start-daemon
 2. 把现有三个 `main.go` 下沉为 role entry
 3. 为 launcher 补 role 识别测试
 4. 修改安装器数据模型，从双 binary 收敛成单 binary
-5. 修改 `install.sh` / `setup.sh` / release 脚本，并把产品配置入口切到 WebSetup
+5. 修改 `setup.sh` / release 脚本，并把产品配置入口切到 WebSetup，同时删除 `install.sh`
 6. 最后再移除旧二进制发布形态
 
 这样风险最低，也最容易定位问题。

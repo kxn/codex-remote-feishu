@@ -57,8 +57,10 @@ If you are working from a source checkout instead of a release archive:
   - builds a local binary
   - bootstraps the daemon
   - opens or prints the same WebSetup flow
-- `./install.sh`
-  - repo-local lifecycle helper for `bootstrap/start/stop/restart/refresh/status/logs`
+- `./bin/codex-remote install -bootstrap-only -start-daemon`
+  - reruns repo-local bootstrap directly from the built binary
+- `./bin/codex-remote daemon`
+  - runs the daemon in the foreground for targeted debugging
 
 These repo helpers are not part of the released product package.
 
