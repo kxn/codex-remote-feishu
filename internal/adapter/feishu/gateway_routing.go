@@ -138,6 +138,21 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			RequestOptionID:  optionID,
 			Approved:         boolMapValue(value, "approved"),
 		}, true
+	case "run_command":
+		commandText := strings.TrimSpace(stringMapValue(value, "command_text"))
+		if commandText == "" {
+			commandText = strings.TrimSpace(stringMapValue(value, "command"))
+		}
+		action, ok := parseTextAction(commandText)
+		if !ok {
+			return control.Action{}, false
+		}
+		action.GatewayID = g.config.GatewayID
+		action.SurfaceSessionID = surfaceSessionID
+		action.ChatID = chatID
+		action.ActorUserID = operatorID
+		action.MessageID = messageID
+		return action, true
 	default:
 		return control.Action{}, false
 	}

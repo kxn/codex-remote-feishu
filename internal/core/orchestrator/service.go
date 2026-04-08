@@ -168,6 +168,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.handleRemovedCommand(surface, action)
 	case control.ActionAttachInstance:
 		return s.attachInstance(surface, action.InstanceID)
+	case control.ActionShowCommandHelp:
+		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandHelpCatalog())}
+	case control.ActionShowCommandMenu:
+		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandMenuCatalog())}
 	case control.ActionModelCommand:
 		return s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:

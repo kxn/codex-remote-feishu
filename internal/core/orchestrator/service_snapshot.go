@@ -971,6 +971,15 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 	}}
 }
 
+func commandCatalogEvent(surface *state.SurfaceConsoleRecord, catalog control.CommandCatalog) control.UIEvent {
+	return control.UIEvent{
+		Kind:             control.UIEventCommandCatalog,
+		GatewayID:        surface.GatewayID,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		CommandCatalog:   &catalog,
+	}
+}
+
 func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
 	return s.handleProblem(instanceID, problem)
 }

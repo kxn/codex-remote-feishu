@@ -524,6 +524,38 @@ func TestParseCardActionTriggerEventBuildsDirectUseThreadAction(t *testing.T) {
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":         "run_command",
+					"command_text": "/help",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-5",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected run_command callback to be parsed")
+	}
+	if action.Kind != control.ActionShowCommandHelp {
+		t.Fatalf("unexpected action kind: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
+		t.Fatalf("unexpected action routing: %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsDirectAttachInstanceAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-4", "feishu:app-1:user:user-1")

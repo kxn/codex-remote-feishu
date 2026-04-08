@@ -2732,6 +2732,55 @@ func TestLegacyPromptSelectionActionShowsExpiredNotice(t *testing.T) {
 	}
 }
 
+func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandHelp,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+
+	if len(events) != 1 || events[0].CommandCatalog == nil {
+		t.Fatalf("expected command catalog event, got %#v", events)
+	}
+	if events[0].Kind != control.UIEventCommandCatalog {
+		t.Fatalf("unexpected event kind: %#v", events[0])
+	}
+	if events[0].CommandCatalog.Interactive {
+		t.Fatalf("help catalog should be non-interactive: %#v", events[0].CommandCatalog)
+	}
+	if events[0].CommandCatalog.Title != "Slash 命令帮助" {
+		t.Fatalf("unexpected help catalog title: %#v", events[0].CommandCatalog)
+	}
+}
+
+func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+
+	if len(events) != 1 || events[0].CommandCatalog == nil {
+		t.Fatalf("expected interactive command catalog event, got %#v", events)
+	}
+	if !events[0].CommandCatalog.Interactive {
+		t.Fatalf("menu catalog should be interactive: %#v", events[0].CommandCatalog)
+	}
+	if events[0].CommandCatalog.Title != "命令菜单" {
+		t.Fatalf("unexpected menu catalog title: %#v", events[0].CommandCatalog)
+	}
+}
+
 func TestConfirmKickThreadActionRequiresThreadID(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

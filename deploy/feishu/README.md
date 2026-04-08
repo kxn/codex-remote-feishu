@@ -33,21 +33,27 @@
    - `access_full`
    - `access_confirm`
 
-`card.action.trigger` 现在不仅用于 attach / 切换会话，也用于 approval request 卡片按钮交互；如果这个回调没配，飞书里的确认卡片会点了没反应。
+`card.action.trigger` 现在不仅用于 attach / 切换会话，也用于命令菜单卡片和 approval request 卡片按钮交互；如果这个回调没配，飞书里的按钮卡片会点了没反应。
 
 文本命令不需要在飞书控制台单独注册，直接给机器人发消息即可。当前建议保留这些命令：
 
 - `/list`
 - `/status`
+- `/new`
 - `/threads`
 - `/use`
+- `/useall`
 - `/follow`
 - `/detach`
 - `/stop`
+- `/killinstance`
 - `/model`
 - `/reasoning`
 - `/access`
 - `/approval`
+- `/help`
+- `menu`
+- `/menu`
 
 ## 当前实现必需能力
 

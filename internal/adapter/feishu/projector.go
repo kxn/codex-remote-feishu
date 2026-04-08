@@ -116,6 +116,24 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			CardThemeKey:     cardThemeInfo,
 			CardElements:     selectionPromptElements(*event.SelectionPrompt),
 		}}
+	case control.UIEventCommandCatalog:
+		if event.CommandCatalog == nil {
+			return nil
+		}
+		title := strings.TrimSpace(event.CommandCatalog.Title)
+		if title == "" {
+			title = "命令菜单"
+		}
+		return []Operation{{
+			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			CardTitle:        title,
+			CardBody:         commandCatalogBody(*event.CommandCatalog),
+			CardThemeKey:     cardThemeInfo,
+			CardElements:     commandCatalogElements(*event.CommandCatalog),
+		}}
 	case control.UIEventRequestPrompt:
 		if event.RequestPrompt == nil {
 			return nil
@@ -370,6 +388,109 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		"disabled": disabled,
 		"value":    value,
 	}
+}
+
+func commandCatalogBody(catalog control.CommandCatalog) string {
+	return renderSystemInlineTags(strings.TrimSpace(catalog.Summary))
+}
+
+func commandCatalogElements(catalog control.CommandCatalog) []map[string]any {
+	elements := make([]map[string]any, 0, len(catalog.Sections)*2)
+	for _, section := range catalog.Sections {
+		title := strings.TrimSpace(section.Title)
+		if title != "" {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": "**" + title + "**",
+			})
+		}
+		for _, entry := range section.Entries {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": commandCatalogEntryMarkdown(entry),
+			})
+			if catalog.Interactive && len(entry.Buttons) > 0 {
+				elements = append(elements, map[string]any{
+					"tag":     "action",
+					"actions": commandCatalogButtons(entry.Buttons),
+				})
+			}
+		}
+	}
+	return elements
+}
+
+func commandCatalogEntryMarkdown(entry control.CommandCatalogEntry) string {
+	parts := []string{}
+	if commands := formatCommandTags(entry.Commands); commands != "" {
+		parts = append(parts, commands)
+	}
+	if desc := strings.TrimSpace(entry.Description); desc != "" {
+		parts = append(parts, desc)
+	}
+	line := strings.Join(parts, " ")
+	if examples := formatCommandExamples(entry.Examples); examples != "" {
+		if line == "" {
+			return "例如：" + examples
+		}
+		return line + "\n例如：" + examples
+	}
+	return line
+}
+
+func formatCommandTags(commands []string) string {
+	tags := make([]string, 0, len(commands))
+	for _, command := range commands {
+		command = strings.TrimSpace(command)
+		if command == "" {
+			continue
+		}
+		tags = append(tags, formatNeutralTextTag(command))
+	}
+	return strings.Join(tags, " / ")
+}
+
+func formatCommandExamples(examples []string) string {
+	tags := make([]string, 0, len(examples))
+	for _, example := range examples {
+		example = strings.TrimSpace(example)
+		if example == "" {
+			continue
+		}
+		tags = append(tags, formatNeutralTextTag(example))
+	}
+	return strings.Join(tags, "，")
+}
+
+func commandCatalogButtons(buttons []control.CommandCatalogButton) []map[string]any {
+	actions := make([]map[string]any, 0, len(buttons))
+	buttonType := "default"
+	if len(buttons) == 1 {
+		buttonType = "primary"
+	}
+	for _, button := range buttons {
+		commandText := strings.TrimSpace(button.CommandText)
+		if commandText == "" {
+			continue
+		}
+		label := strings.TrimSpace(button.Label)
+		if label == "" {
+			label = commandText
+		}
+		actions = append(actions, map[string]any{
+			"tag":  "button",
+			"type": buttonType,
+			"text": map[string]any{
+				"tag":     "plain_text",
+				"content": label,
+			},
+			"value": map[string]any{
+				"kind":         "run_command",
+				"command_text": commandText,
+			},
+		})
+	}
+	return actions
 }
 
 func requestPromptBody(prompt control.RequestPrompt) string {

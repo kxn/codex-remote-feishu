@@ -83,6 +83,84 @@ func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
 	}
 }
 
+func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		CommandCatalog: &control.CommandCatalog{
+			Title:   "Slash 命令帮助",
+			Summary: "当前支持的 slash command 如下。",
+			Sections: []control.CommandCatalogSection{{
+				Title: "帮助",
+				Entries: []control.CommandCatalogEntry{{
+					Commands:    []string{"/help", "menu"},
+					Description: "查看帮助或再次打开命令菜单。",
+					Examples:    []string{"/menu"},
+				}},
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "Slash 命令帮助" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if ops[0].CardBody != "当前支持的 slash command 如下。" {
+		t.Fatalf("unexpected card body: %#v", ops[0])
+	}
+	if len(ops[0].CardElements) != 2 {
+		t.Fatalf("expected section header and entry markdown, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "**帮助**" {
+		t.Fatalf("unexpected section element: %#v", ops[0].CardElements[0])
+	}
+	content, _ := ops[0].CardElements[1]["content"].(string)
+	if !containsAll(content, "<text_tag color='neutral'>/help</text_tag>", "<text_tag color='neutral'>menu</text_tag>", "查看帮助或再次打开命令菜单。", "<text_tag color='neutral'>/menu</text_tag>") {
+		t.Fatalf("unexpected entry markdown: %#v", ops[0].CardElements[1])
+	}
+}
+
+func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		CommandCatalog: &control.CommandCatalog{
+			Title:       "命令菜单",
+			Summary:     "固定动作可直接点击。",
+			Interactive: true,
+			Sections: []control.CommandCatalogSection{{
+				Title: "实例与会话",
+				Entries: []control.CommandCatalogEntry{{
+					Commands:    []string{"/list"},
+					Description: "列出当前在线实例。",
+					Buttons: []control.CommandCatalogButton{
+						{Label: "查看实例", CommandText: "/list"},
+					},
+				}},
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if len(ops[0].CardElements) != 3 {
+		t.Fatalf("expected section + entry + action row, got %#v", ops[0].CardElements)
+	}
+	actionRow, _ := ops[0].CardElements[2]["actions"].([]map[string]any)
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[2])
+	}
+	textValue, _ := actionRow[0]["text"].(map[string]any)
+	if textValue["content"] != "查看实例" {
+		t.Fatalf("unexpected button label: %#v", actionRow[0])
+	}
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["kind"] != "run_command" || value["command_text"] != "/list" {
+		t.Fatalf("unexpected run command payload: %#v", value)
+	}
+}
+
 func TestProjectRequestPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

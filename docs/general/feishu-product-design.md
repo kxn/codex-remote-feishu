@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-08`
-> Summary: 去掉已废弃的 `resume_headless_thread` 作为当前选择卡片动作，只保留历史兼容说明。
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、菜单事件、卡片交互和状态提示。
 
 ## 1. 文档定位
 
@@ -37,14 +37,18 @@
 
 - `/list`
 - `/status`
+- `/new`
+- `/killinstance`
 - `/stop`
 - `/threads` / `/use` / `/sessions`
-- `/useall` / `/sessionsall`
+- `/useall` / `/sessionsall` / `/sessions/all`
 - `/follow`
 - `/detach`
 - `/model`
 - `/reasoning` / `/effort`
 - `/access` / `/approval`
+- `/help`
+- `menu` / `/menu`
 
 ### 3.2 菜单事件
 
@@ -109,6 +113,7 @@
 
 当前支持两类卡片按钮：
 
+- command menu 快捷动作
 - selection prompt 选择
 - approval request 确认
 
