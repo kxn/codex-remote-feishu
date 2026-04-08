@@ -527,6 +527,7 @@ transport degraded retained attachment
    3. surface-level prompt override
 4. 因为 attachment 仍在，所以 `/status` 必须明确显示“实例离线但接管关系保留”，否则用户会误以为已经 detach。
 5. 如果该 surface 同时还保留 headless restore hint，hard disconnect 回到 `R0 Detached` 后会重新进入上面的后台 auto-restore 判定。
+6. daemon graceful shutdown 也不是 `transport_degraded`。当前实现会在真正停掉 Feishu gateway 前，对内存里已知的 surface best-effort 广播单条 `daemon_shutting_down` notice；如果某个 surface 或 gateway 发送失败，只记录日志，不阻塞最终退出。
 
 ## 6. 命令矩阵
 
