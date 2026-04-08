@@ -23,10 +23,17 @@ const (
 )
 
 type RollbackCandidate struct {
-	Version     string        `json:"version,omitempty"`
-	BinaryPath  string        `json:"binaryPath,omitempty"`
-	Source      InstallSource `json:"source,omitempty"`
-	Fingerprint string        `json:"fingerprint,omitempty"`
+	Version         string           `json:"version,omitempty"`
+	BinaryPath      string           `json:"binaryPath,omitempty"`
+	Source          InstallSource    `json:"source,omitempty"`
+	Fingerprint     string           `json:"fingerprint,omitempty"`
+	ConfigSnapshots []ConfigSnapshot `json:"configSnapshots,omitempty"`
+}
+
+type ConfigSnapshot struct {
+	Path       string `json:"path,omitempty"`
+	BackupPath string `json:"backupPath,omitempty"`
+	Existed    bool   `json:"existed,omitempty"`
 }
 
 type PendingUpgrade struct {

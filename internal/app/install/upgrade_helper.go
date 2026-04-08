@@ -256,6 +256,13 @@ func startUpgradeDaemon(cfg config.LoadedAppConfig, stateValue InstallState, pat
 
 func rollbackUpgradeState(ctx context.Context, statePath string, stateValue InstallState, cfg config.LoadedAppConfig, paths relayruntime.Paths, cause error) error {
 	stopErr := stopCurrentDaemon(paths)
+	if stateValue.RollbackCandidate != nil {
+		if err := restoreConfigSnapshots(stateValue.RollbackCandidate.ConfigSnapshots); err != nil {
+			stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed
+			_ = WriteState(statePath, stateValue)
+			return fmt.Errorf("rollback config restore failed after %v: %w", cause, err)
+		}
+	}
 	if stateValue.RollbackCandidate != nil && strings.TrimSpace(stateValue.RollbackCandidate.BinaryPath) != "" {
 		if err := copyFile(stateValue.RollbackCandidate.BinaryPath, stateValue.CurrentBinaryPath); err != nil {
 			stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed

@@ -64,7 +64,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		return
 	}
 
-	backupPath, err := a.prepareRollbackCandidate(stateValue, targetVersion)
+	rollbackCandidate, err := install.PrepareRollbackCandidate(stateValue, targetVersion)
 	if err != nil {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("准备回滚候选失败：%w", err))
 		return
@@ -74,12 +74,8 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("读取当前版本指纹失败：%w", err))
 		return
 	}
-	stateValue.RollbackCandidate = &install.RollbackCandidate{
-		Version:     stateValue.CurrentVersion,
-		BinaryPath:  backupPath,
-		Source:      stateValue.InstallSource,
-		Fingerprint: identity.BuildFingerprint,
-	}
+	rollbackCandidate.Fingerprint = identity.BuildFingerprint
+	stateValue.RollbackCandidate = rollbackCandidate
 	stateValue.PendingUpgrade.Phase = install.PendingUpgradePhasePrepared
 
 	a.mu.Lock()
@@ -131,18 +127,6 @@ func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) 
 			debugNoticeEvent(request.SurfaceSessionID, "debug_upgrade_prepare_failed", err.Error()),
 		})
 	}
-}
-
-func (a *App) prepareRollbackCandidate(stateValue install.InstallState, targetVersion string) (string, error) {
-	backupDir := filepath.Join(filepath.Dir(stateValue.StatePath), "upgrade-backups", targetVersion)
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
-		return "", err
-	}
-	backupPath := filepath.Join(backupDir, filepath.Base(stateValue.CurrentBinaryPath))
-	if err := copyFileLocal(stateValue.CurrentBinaryPath, backupPath); err != nil {
-		return "", err
-	}
-	return backupPath, nil
 }
 
 func (a *App) copyUpgradeHelperBinaryLocked() (string, error) {
