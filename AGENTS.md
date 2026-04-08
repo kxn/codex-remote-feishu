@@ -242,6 +242,23 @@ For bugs that involve multiple layers or state machines (for example VS Code <->
 
 This rule exists because partial fixes on stateful flows often leave the visible behavior unchanged and waste debugging cycles.
 
+## Structural Gap Rule
+
+When the right fix depends on metadata, correlation handles, or lifecycle identity that current structs or APIs do not carry:
+
+- Missing capability in the current structure is not, by itself, a reason to deny the direction or stop the work.
+- Default first question: how should the structure change so the requirement can be expressed correctly?
+- Treat that as evidence that the next step is usually a bounded structural change:
+  - capture the metadata at the ingress/translation boundary
+  - preserve it through the transport or control structs
+  - apply policy at the owning product/runtime layer
+- Prefer explicit metadata plumbing over heuristic reconstruction when the protocol or SDK already exposes an exact field.
+- Prefer extending the structure to match the real requirement over forcing the requirement into today's narrower shape.
+- When a medium-sized infrastructure stage is implementable but the final policy is still undecided, split the work:
+  - stage 1: metadata, observability, stamping, correlation, tests
+  - later stage: accept/drop/retry UX or policy decisions
+- In issue triage, do not leave this kind of plan only in comments when it can be stated cleanly in the issue body or a follow-up issue.
+
 ## Config Preservation Rule
 
 For installers, bootstrap commands, and config migration code:
