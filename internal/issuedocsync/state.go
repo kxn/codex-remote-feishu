@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 )
 
 func LoadState(path string, repo string) (StateFile, error) {
@@ -18,9 +19,32 @@ func LoadState(path string, repo string) (StateFile, error) {
 		return StateFile{}, fmt.Errorf("read state file: %w", err)
 	}
 
-	var state StateFile
-	if err := json.Unmarshal(payload, &state); err != nil {
+	var raw struct {
+		Version int             `json:"version"`
+		Repo    string          `json:"repo"`
+		Issues  json.RawMessage `json:"issues"`
+	}
+	if err := json.Unmarshal(payload, &raw); err != nil {
 		return StateFile{}, fmt.Errorf("decode state file: %w", err)
+	}
+	state := StateFile{
+		Version: raw.Version,
+		Repo:    raw.Repo,
+		Issues:  map[string]IssueRecord{},
+	}
+	if len(raw.Issues) != 0 && string(raw.Issues) != "null" {
+		var issueMap map[string]IssueRecord
+		if err := json.Unmarshal(raw.Issues, &issueMap); err == nil {
+			state.Issues = issueMap
+		} else {
+			var issueList []IssueRecord
+			if err := json.Unmarshal(raw.Issues, &issueList); err != nil {
+				return StateFile{}, fmt.Errorf("decode issues payload: %w", err)
+			}
+			for _, record := range issueList {
+				state.Issues[strconv.Itoa(record.Number)] = record
+			}
+		}
 	}
 	if state.Version == 0 {
 		state.Version = 1
@@ -44,9 +68,9 @@ func SaveState(path string, state StateFile) error {
 
 	sorted := sortedIssues(state.Issues)
 	payload, err := json.MarshalIndent(struct {
-		Version int            `json:"version"`
-		Repo    string         `json:"repo"`
-		Issues  []sortedRecord `json:"issues"`
+		Version int           `json:"version"`
+		Repo    string        `json:"repo"`
+		Issues  []IssueRecord `json:"issues"`
 	}{Version: state.Version, Repo: state.Repo, Issues: sorted}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode state file: %w", err)
@@ -70,11 +94,10 @@ func NewState(repo string) StateFile {
 }
 
 type sortedRecord struct {
-	Key string `json:"key"`
 	IssueRecord
 }
 
-func sortedIssues(input map[string]IssueRecord) []sortedRecord {
+func sortedIssues(input map[string]IssueRecord) []IssueRecord {
 	keys := make([]int, 0, len(input))
 	for key := range input {
 		number, err := strconv.Atoi(key)
@@ -84,13 +107,23 @@ func sortedIssues(input map[string]IssueRecord) []sortedRecord {
 		keys = append(keys, number)
 	}
 	sort.Ints(keys)
-	out := make([]sortedRecord, 0, len(keys))
+	out := make([]IssueRecord, 0, len(keys))
 	for _, key := range keys {
 		record := input[strconv.Itoa(key)]
-		out = append(out, sortedRecord{
-			Key:         strconv.Itoa(key),
-			IssueRecord: record,
-		})
+		out = append(out, record)
 	}
 	return out
+}
+
+func UpsertRecord(state *StateFile, record IssueRecord) {
+	if state.Version == 0 {
+		state.Version = 1
+	}
+	if state.Issues == nil {
+		state.Issues = map[string]IssueRecord{}
+	}
+	if record.RecordedAt == "" {
+		record.RecordedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	state.Issues[strconv.Itoa(record.Number)] = record
 }

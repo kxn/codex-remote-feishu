@@ -36,6 +36,25 @@ type StateFile struct {
 	Issues  map[string]IssueRecord `json:"issues"`
 }
 
+type IssueDetails struct {
+	Number    int            `json:"number"`
+	Title     string         `json:"title"`
+	Body      string         `json:"body"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	ClosedAt  time.Time      `json:"closedAt,omitempty"`
+	URL       string         `json:"url,omitempty"`
+	Labels    []string       `json:"labels,omitempty"`
+	Comments  []IssueComment `json:"comments,omitempty"`
+}
+
+type IssueComment struct {
+	Author      string    `json:"author,omitempty"`
+	Body        string    `json:"body"`
+	PublishedAt time.Time `json:"publishedAt"`
+	UpdatedAt   time.Time `json:"updatedAt,omitempty"`
+	URL         string    `json:"url,omitempty"`
+}
+
 type PlanCandidate struct {
 	Number            int    `json:"number"`
 	Title             string `json:"title"`
@@ -51,4 +70,13 @@ type PlanReport struct {
 	CandidateCount   int             `json:"candidateCount"`
 	CachedIssueCount int             `json:"cachedIssueCount"`
 	Candidates       []PlanCandidate `json:"candidates"`
+}
+
+func ValidDecision(value string) bool {
+	switch value {
+	case "skip", "merge", "new-doc":
+		return true
+	default:
+		return false
+	}
 }

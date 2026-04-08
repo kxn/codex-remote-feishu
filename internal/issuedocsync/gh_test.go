@@ -63,3 +63,81 @@ func TestListClosedIssueSummariesPaginates(t *testing.T) {
 		t.Fatalf("unexpected summaries: %#v", summaries)
 	}
 }
+
+func TestFetchIssueDetailsPaginatesComments(t *testing.T) {
+	client := &ghCLI{
+		runner: fakeRunner{
+			payloads: map[string]string{
+				"": `{
+  "data": {
+    "repository": {
+      "issue": {
+        "number": 22,
+        "title": "Headless instance 改用 pool 管理",
+        "body": "issue body",
+        "updatedAt": "2026-04-08T02:29:31Z",
+        "closedAt": "2026-04-08T02:29:31Z",
+        "url": "https://example.com/22",
+        "labels": {
+          "nodes": [{"name": "enhancement"}, {"name": "area:daemon"}]
+        },
+        "comments": {
+          "pageInfo": {"hasNextPage": true, "endCursor": "cursor-1"},
+          "nodes": [
+            {
+              "body": "first comment",
+              "publishedAt": "2026-04-07T12:54:29Z",
+              "updatedAt": "2026-04-07T12:54:29Z",
+              "url": "https://example.com/comment-1",
+              "author": {"login": "kxn"}
+            }
+          ]
+        }
+      }
+    }
+  }
+}`,
+				"cursor-1": `{
+  "data": {
+    "repository": {
+      "issue": {
+        "number": 22,
+        "title": "Headless instance 改用 pool 管理",
+        "body": "issue body",
+        "updatedAt": "2026-04-08T02:29:31Z",
+        "closedAt": "2026-04-08T02:29:31Z",
+        "url": "https://example.com/22",
+        "labels": {
+          "nodes": [{"name": "enhancement"}, {"name": "area:daemon"}]
+        },
+        "comments": {
+          "pageInfo": {"hasNextPage": false, "endCursor": ""},
+          "nodes": [
+            {
+              "body": "second comment",
+              "publishedAt": "2026-04-08T02:29:22Z",
+              "updatedAt": "2026-04-08T02:29:22Z",
+              "url": "https://example.com/comment-2",
+              "author": {"login": "kxn"}
+            }
+          ]
+        }
+      }
+    }
+  }
+}`,
+			},
+		},
+	}
+
+	details, err := client.FetchIssueDetails(context.Background(), Repo{Owner: "kxn", Name: "codex-remote-feishu"}, 22)
+	if err != nil {
+		t.Fatalf("FetchIssueDetails error = %v", err)
+	}
+	if details.Number != 22 || len(details.Comments) != 2 {
+		t.Fatalf("unexpected details: %#v", details)
+	}
+	if details.Labels[0] != "area:daemon" || details.Labels[1] != "enhancement" {
+		t.Fatalf("unexpected labels: %#v", details.Labels)
+	}
+}

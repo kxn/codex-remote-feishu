@@ -21,6 +21,7 @@ Use this skill when the user asks to:
    - Run `go run ./cmd/issue-doc-sync plan --repo kxn/codex-remote-feishu`.
    - This compares GitHub `updatedAt` against `.codex/state/issue-doc-sync/state.json`.
 3. Review each candidate issue.
+   - Run `go run ./cmd/issue-doc-sync inspect --repo kxn/codex-remote-feishu --issue <number> --format markdown`.
    - If current docs already cover the durable result, skip it and record why.
    - If an existing canonical doc is the right home, merge into that doc.
    - If no suitable doc exists, create a new doc under the correct lifecycle directory.
@@ -32,6 +33,12 @@ Use this skill when the user asks to:
    - If you add or move a lifecycle doc, update `docs/README.md` in the same change.
 5. Record the decision in the tracked state cache.
    - Use `go run ./cmd/issue-doc-sync record ...` after each reviewed issue.
+   - Required fields:
+     - `--issue`
+     - `--updated-at`
+     - `--decision skip|merge|new-doc`
+     - `--reason`
+   - Add `--target-doc` once per touched doc path when the decision is `merge` or `new-doc`.
 6. Validate.
    - Re-run `go run ./cmd/issue-doc-sync plan --repo kxn/codex-remote-feishu` and confirm unchanged issues disappear from the candidate set.
 
@@ -50,6 +57,13 @@ Use this skill when the user asks to:
 - Cache path: `.codex/state/issue-doc-sync/state.json`
 - The cache is tracked in git on purpose.
 - Each decision should be committed together with the matching doc change.
+- Expected tracked state fields:
+  - issue number
+  - GitHub `updatedAt`
+  - decision
+  - reason
+  - target doc paths
+  - source issue URL
 
 ## References
 

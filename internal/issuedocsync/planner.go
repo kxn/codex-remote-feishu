@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -41,7 +42,7 @@ func BuildPlanReport(repo string, summaries []IssueSummary, state StateFile) Pla
 		}
 	}
 	sort.Slice(report.Candidates, func(i, j int) bool {
-		return report.Candidates[i].Number > report.Candidates[j].Number
+		return report.Candidates[i].UpdatedAt > report.Candidates[j].UpdatedAt
 	})
 	report.CandidateCount = len(report.Candidates)
 	return report
@@ -77,6 +78,75 @@ func WritePlanReport(w io.Writer, report PlanReport, format string) error {
 				if _, err := fmt.Fprintf(w, "  url: %s\n", candidate.URL); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported format %q", format)
+	}
+}
+
+func WriteIssueDetails(w io.Writer, details IssueDetails, format string) error {
+	switch format {
+	case "json":
+		payload, err := json.MarshalIndent(details, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(w, string(payload))
+		return err
+	case "markdown":
+		if _, err := fmt.Fprintf(w, "# Issue #%d %s\n\n", details.Number, details.Title); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "- updatedAt: %s\n", details.UpdatedAt.UTC().Format(time.RFC3339)); err != nil {
+			return err
+		}
+		if !details.ClosedAt.IsZero() {
+			if _, err := fmt.Fprintf(w, "- closedAt: %s\n", details.ClosedAt.UTC().Format(time.RFC3339)); err != nil {
+				return err
+			}
+		}
+		if details.URL != "" {
+			if _, err := fmt.Fprintf(w, "- url: %s\n", details.URL); err != nil {
+				return err
+			}
+		}
+		if len(details.Labels) > 0 {
+			if _, err := fmt.Fprintf(w, "- labels: %s\n", strings.Join(details.Labels, ", ")); err != nil {
+				return err
+			}
+		}
+		if _, err := io.WriteString(w, "\n## Body\n\n"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, details.Body); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, "\n## Comments\n\n"); err != nil {
+			return err
+		}
+		if len(details.Comments) == 0 {
+			_, err := fmt.Fprintln(w, "_No comments_")
+			return err
+		}
+		for _, comment := range details.Comments {
+			author := comment.Author
+			if author == "" {
+				author = "unknown"
+			}
+			if _, err := fmt.Fprintf(w, "### %s @%s\n\n", comment.PublishedAt.UTC().Format(time.RFC3339), author); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintln(w, comment.Body); err != nil {
+				return err
+			}
+			if comment.URL != "" {
+				if _, err := fmt.Fprintf(w, "\nsource: %s\n\n", comment.URL); err != nil {
+					return err
+				}
+			} else if _, err := fmt.Fprintln(w); err != nil {
+				return err
 			}
 		}
 		return nil
