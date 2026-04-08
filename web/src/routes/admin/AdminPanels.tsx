@@ -9,7 +9,7 @@ import type {
 } from "../../lib/types";
 import { DefinitionList, Panel, StatCard, StatGrid, StatusBadge } from "../../components/ui";
 import { FeishuAppFields } from "../shared/FeishuAppFields";
-import { vscodeIsReady } from "../shared/helpers";
+import { type VSCodeUsageScenario, vscodeHasDetectedBundle, vscodeIsReady } from "../shared/helpers";
 import {
   appConnectionLabel,
   appConnectionTone,
@@ -84,6 +84,11 @@ type AdminVSCodePanelProps = {
   vscodeError: string;
   busyAction: string;
   readinessText: string;
+  scenario: VSCodeUsageScenario | null;
+  primaryActionLabel: string;
+  canContinueVSCode: boolean;
+  onScenarioChange: (value: VSCodeUsageScenario) => void;
+  onContinueVSCode: () => void;
   onApplyVSCode: (mode: string) => void;
   onReinstallShim: () => void;
 };
@@ -556,34 +561,115 @@ export function AdminStoragePanel({
   );
 }
 
-export function AdminVSCodePanel({ vscode, vscodeError, busyAction, readinessText, onApplyVSCode, onReinstallShim }: AdminVSCodePanelProps) {
+export function AdminVSCodePanel({
+  vscode,
+  vscodeError,
+  busyAction,
+  readinessText,
+  scenario,
+  primaryActionLabel,
+  canContinueVSCode,
+  onScenarioChange,
+  onContinueVSCode,
+  onApplyVSCode,
+  onReinstallShim,
+}: AdminVSCodePanelProps) {
   const ready = vscodeIsReady(vscode);
+  const bundleDetected = vscodeHasDetectedBundle(vscode);
+  const currentModeLabel = vscode?.settings.matchesBinary && vscode?.latestShim.matchesBinary
+    ? "settings.json + 扩展入口"
+    : vscode?.settings.matchesBinary
+      ? "settings.json"
+      : vscode?.latestShim.matchesBinary
+        ? "扩展入口"
+        : "尚未接入";
+  const showPrimaryAction = Boolean(vscode?.sshSession || scenario);
 
   return (
-    <Panel id="vscode" title="VS Code" description="确认桌面端是否已经接入本机 relay；如果检测到升级或模式不匹配，可以在这里修复。">
+    <Panel id="vscode" title="VS Code" description="先确认你会怎么使用 VS Code 里的 Codex，再决定当前这台机器应该怎么接入。">
       {vscodeError ? <div className="notice-banner warn">当前还没拿到 VS Code 检测结果：{vscodeError}</div> : null}
 
       <StatGrid>
-        <StatCard label="推荐处理" value={vscodeModeLabel(vscode?.recommendedMode)} tone="accent" detail={vscode?.sshSession ? "当前是远程 VS Code 会话" : "当前是本机 VS Code 会话"} />
-        <StatCard label="当前状态" value={ready ? "已就绪" : "待处理"} tone={ready ? "accent" : "warn"} detail={readinessText} />
-        <StatCard label="当前接入方式" value={vscodeModeLabel(vscode?.currentMode)} detail={vscode?.currentMode ? "已检测到当前配置" : "尚未检测"} />
+        <StatCard label="当前环境" value={vscode?.sshSession ? "远程 SSH 机器" : "本机"} tone="accent" detail={vscode?.sshSession ? "当前是被 VS Code Remote SSH 连接的机器" : "当前是本机桌面 VS Code 场景"} />
+        <StatCard label="当前状态" value={ready ? "已接入" : "待处理"} tone={ready ? "accent" : "warn"} detail={readinessText} />
+        <StatCard label="当前接入方式" value={currentModeLabel} detail={vscode?.currentMode ? `当前记录模式：${vscodeModeLabel(vscode.currentMode)}` : "尚未检测"} />
         <StatCard label="扩展更新" value={vscode?.needsShimReinstall ? "需要重装" : "已同步"} detail={vscode?.latestBundleEntrypoint ? "已检测到 VS Code 扩展安装" : "还没检测到可处理的扩展安装"} />
       </StatGrid>
 
-      <div className="button-row">
-        <button className="primary-button" type="button" onClick={() => onApplyVSCode(vscode?.recommendedMode || "all")} disabled={!vscode || busyAction !== ""}>
-          按推荐方式处理
-        </button>
-        <button className="secondary-button" type="button" onClick={() => onApplyVSCode("editor_settings")} disabled={!vscode || busyAction !== ""}>
-          只写入 settings.json
-        </button>
-        <button className="secondary-button" type="button" onClick={() => onApplyVSCode("managed_shim")} disabled={!vscode || busyAction !== ""}>
-          只处理扩展入口
-        </button>
-        <button className="ghost-button" type="button" onClick={onReinstallShim} disabled={!vscode?.needsShimReinstall || busyAction !== ""}>
-          重新安装扩展入口
-        </button>
+      <div className="detail-stack">
+        {vscode?.sshSession ? (
+          <>
+            <div className="manifest-block">
+              <h4>检测到当前是远程 SSH 机器</h4>
+              <p>你现在是在被 VS Code Remote SSH 连接的机器上处理 VS Code 接入。这个场景下，只需要处理这台机器上的扩展入口。</p>
+            </div>
+            <div className="manifest-block">
+              <h4>推荐操作</h4>
+              <p>我们会把这台远程机器上的 VS Code 扩展入口接到 codex-remote。这不会去写 host 机器的 settings.json。</p>
+            </div>
+            {!bundleDetected ? <div className="notice-banner warn">还没检测到这台远程机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装。</div> : null}
+          </>
+        ) : vscode ? (
+          <>
+            <div className="manifest-block">
+              <h4>你以后主要怎么使用 VS Code 里的 Codex？</h4>
+              <p>先选你的使用场景。主操作区会根据这个选择，只给当前这台机器提供一条更安全的接入路径。</p>
+            </div>
+            <div className="choice-card-list" role="radiogroup" aria-label="Admin VS Code 使用场景">
+              <label className={`choice-card${scenario === "local_only" ? " selected" : ""}`}>
+                <input type="radio" name="admin-vscode-usage-scenario" checked={scenario === "local_only"} onChange={() => onScenarioChange("local_only")} />
+                <div>
+                  <strong>只在这台机器本地使用</strong>
+                  <p>适合桌面 VS Code。会写入这台机器的 settings.json。</p>
+                </div>
+              </label>
+              <label className={`choice-card${scenario === "remote_only" ? " selected" : ""}`}>
+                <input type="radio" name="admin-vscode-usage-scenario" checked={scenario === "remote_only"} onChange={() => onScenarioChange("remote_only")} />
+                <div>
+                  <strong>主要去别的 SSH 机器上使用</strong>
+                  <p>当前机器先不做 VS Code 接入，避免 host 设置影响远端。</p>
+                </div>
+              </label>
+              <label className={`choice-card${scenario === "local_and_remote" ? " selected" : ""}`}>
+                <input type="radio" name="admin-vscode-usage-scenario" checked={scenario === "local_and_remote"} onChange={() => onScenarioChange("local_and_remote")} />
+                <div>
+                  <strong>这台机器本地要用，也会 SSH 到别的机器</strong>
+                  <p>当前机器只处理扩展入口，不写 settings.json。</p>
+                </div>
+              </label>
+            </div>
+            {scenario === "local_only" ? (
+              <div className="manifest-block">
+                <h4>推荐：写入这台机器的 settings.json</h4>
+                <p>这是最适合本机桌面 VS Code 的接入方式。我们会把这台机器上的 Codex 执行入口指向 codex-remote。</p>
+              </div>
+            ) : null}
+            {scenario === "remote_only" ? (
+              <div className="manifest-block">
+                <h4>当前这台机器先不用接入</h4>
+                <p>如果你主要是在别的 SSH 机器上使用 VS Code Codex，真正需要安装和接入的是目标远程机器，而不是当前这台本机。</p>
+              </div>
+            ) : null}
+            {scenario === "local_and_remote" ? (
+              <>
+                <div className="manifest-block">
+                  <h4>推荐：只处理这台机器的扩展入口</h4>
+                  <p>这个场景下，不建议写这台机器的 settings.json。我们只接管当前机器的扩展入口，避免 host 设置影响以后连接到远程机器。</p>
+                </div>
+                {!bundleDetected ? <div className="notice-banner warn">还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装。</div> : null}
+              </>
+            ) : null}
+          </>
+        ) : null}
       </div>
+
+      {showPrimaryAction ? (
+        <div className="button-row">
+          <button className="primary-button" type="button" onClick={onContinueVSCode} disabled={!vscode || !canContinueVSCode || busyAction !== ""}>
+            {primaryActionLabel}
+          </button>
+        </div>
+      ) : null}
 
       <DefinitionList
         items={[
@@ -595,7 +681,18 @@ export function AdminVSCodePanel({ vscode, vscodeError, busyAction, readinessTex
       />
 
       <details className="wizard-tech-detail">
-        <summary>查看技术详情</summary>
+        <summary>高级处理</summary>
+        <div className="button-row">
+          <button className="secondary-button" type="button" onClick={() => onApplyVSCode("editor_settings")} disabled={!vscode || busyAction !== ""}>
+            只写入 settings.json
+          </button>
+          <button className="secondary-button" type="button" onClick={() => onApplyVSCode("managed_shim")} disabled={!vscode || busyAction !== ""}>
+            只处理扩展入口
+          </button>
+          <button className="ghost-button" type="button" onClick={onReinstallShim} disabled={!vscode?.needsShimReinstall || busyAction !== ""}>
+            重新安装扩展入口
+          </button>
+        </div>
         <DefinitionList
           items={[
             { label: "当前可执行文件", value: vscode?.currentBinary || "尚未检测" },
@@ -754,7 +851,7 @@ function buildAttentionItems(
     items.push({
       key: "vscode-ready",
       title: "VS Code 还没完全接入当前 relay",
-      detail: "如果你需要和 VS Code 共用实例或线程，建议先按推荐方式处理。",
+      detail: "如果你需要和 VS Code 共用实例或线程，建议先选择使用场景，再完成当前机器上的接入。",
       tone: "warn",
       actionLabel: "查看 VS Code",
       href: "#vscode",

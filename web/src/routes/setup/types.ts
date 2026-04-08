@@ -46,6 +46,6 @@ export const wizardSteps: WizardStep[] = [
   { id: "longConnection", label: "配置回调订阅方式", summary: "把“回调订阅方式”设为长连接，并完成卡片回调配置。" },
   { id: "menus", label: "配置机器人菜单", summary: "按 key 创建真正会生效的机器人菜单。" },
   { id: "publish", label: "发布应用", summary: "发版后执行一次服务端验收检查。" },
-  { id: "vscode", label: "VS Code（可选）", summary: "SSH 推荐 managed_shim，其他情况推荐 all。", optional: true },
+  { id: "vscode", label: "VS Code（可选）", summary: "先判断你以后怎么使用 VS Code，再给出当前机器上的安全接入方式。", optional: true },
   { id: "finish", label: "完成", summary: "提示首次对话路径，并进入本地管理页。" },
 ];

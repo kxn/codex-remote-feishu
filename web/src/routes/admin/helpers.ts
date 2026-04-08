@@ -1,5 +1,5 @@
 import type { AdminInstanceSummary, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
-import { vscodeIsReady } from "../shared/helpers";
+import { vscodeHasDetectedBundle, vscodeIsReady } from "../shared/helpers";
 import type { AppDraft, WizardRow } from "./types";
 import { newAppID } from "./types";
 
@@ -239,19 +239,25 @@ export function vscodeReadinessText(vscode: VSCodeDetectResponse | null): string
     return "尚未检测";
   }
   if (vscodeIsReady(vscode)) {
-    return "当前推荐模式已就绪。";
+    if (vscode.settings.matchesBinary && vscode.latestShim.matchesBinary && !vscode.sshSession) {
+      return "这台机器已经通过 settings.json 和扩展入口接入 VS Code。";
+    }
+    if (vscode.settings.matchesBinary) {
+      return "这台机器已经通过 settings.json 接入 VS Code。";
+    }
+    return vscode.sshSession ? "这台远程机器已经通过扩展入口接入 VS Code。" : "这台机器已经通过扩展入口接入 VS Code。";
   }
-  if (vscode.recommendedMode === "managed_shim" && !vscode.latestBundleEntrypoint) {
-    return "还没有检测到可处理的 VS Code 扩展安装。";
+  if (vscode.sshSession && !vscodeHasDetectedBundle(vscode)) {
+    return "还没检测到这台远程机器上的 VS Code 扩展安装。";
   }
-  if (vscode.recommendedMode === "all" && !vscode.latestBundleEntrypoint) {
-    return "还没有检测到可处理的 VS Code 扩展安装，暂时无法完成完整接入。";
+  if (!vscode.sshSession && !vscodeHasDetectedBundle(vscode)) {
+    return "这台机器还没检测到可处理的 VS Code 扩展安装。";
   }
   if (vscode.needsShimReinstall) {
     return "检测到 VS Code 扩展已升级，建议重新安装扩展入口。";
   }
-  if (vscode.recommendedMode === "all") {
-    return "当前还没有同时完成 settings.json 和扩展入口配置。";
+  if (vscode.sshSession) {
+    return "这台远程机器还没接入 VS Code，请先处理扩展入口。";
   }
-  return "当前执行入口还没有指向本机 relay。";
+  return "这台机器还没接入 VS Code。先选择你的使用场景，再决定写 settings.json 还是只处理扩展入口。";
 }

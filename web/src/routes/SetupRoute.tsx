@@ -35,7 +35,14 @@ import { newAppID, wizardSteps } from "./setup/types";
 import {
   blankToUndefined,
   buildSetupFeishuVerifySuccessMessage,
+  type VSCodeSetupOutcome,
+  type VSCodeUsageScenario,
   loadVSCodeState,
+  vscodeApplyModeForScenario,
+  vscodeHasDetectedBundle,
+  vscodeOutcomeSummary,
+  vscodePrimaryActionLabel,
+  vscodeRequiresBundle,
   vscodeIsReady,
 } from "./shared/helpers";
 
@@ -52,7 +59,8 @@ export function SetupRoute() {
   const [eventsConfirmed, setEventsConfirmed] = useState(false);
   const [longConnectionConfirmed, setLongConnectionConfirmed] = useState(false);
   const [menusConfirmed, setMenusConfirmed] = useState(false);
-  const [vscodeDeferred, setVSCodeDeferred] = useState(false);
+  const [vscodeScenario, setVSCodeScenario] = useState<VSCodeUsageScenario | null>(null);
+  const [vscodeOutcome, setVSCodeOutcome] = useState<VSCodeSetupOutcome | null>(null);
   const [currentStepHint, setCurrentStepHint] = useState<StepID>("start");
   const [error, setError] = useState<string>("");
   const [notice, setNotice] = useState<SetupNotice | null>(null);
@@ -78,7 +86,7 @@ export function SetupRoute() {
     setSelectedID(nextSelectedID);
     setDraft(appToDraft(nextActiveApp));
     setCurrentStepHint((current) => {
-      const fallback = defaultStepFor(bootstrapState, appList.apps, nextActiveApp, vscodeState.data, vscodeDeferred, setupStarted);
+      const fallback = defaultStepFor(bootstrapState, appList.apps, nextActiveApp, Boolean(vscodeOutcome) || vscodeIsReady(vscodeState.data), setupStarted);
       if (current === "start" && fallback !== "start") {
         return fallback;
       }
@@ -130,9 +138,22 @@ export function SetupRoute() {
     activeApp?.wizard?.menusConfirmedAt,
   ]);
 
+  useEffect(() => {
+    if (vscode?.sshSession) {
+      setVSCodeScenario(null);
+    }
+  }, [vscode?.sshSession]);
+
+  const vscodeComplete = Boolean(vscodeOutcome) || vscodeIsReady(vscode);
+  const vscodeSummary = vscodeOutcomeSummary(vscode, vscodeOutcome);
+  const vscodeBundleDetected = vscodeHasDetectedBundle(vscode);
+  const vscodeNeedsBundle = vscodeRequiresBundle(vscode, vscodeScenario);
+  const vscodePrimaryLabel = vscodePrimaryActionLabel(vscode, vscodeScenario);
+  const vscodeCanContinue = Boolean(vscode) && (vscode?.sshSession ? vscodeBundleDetected : vscodeScenario !== null && (!vscodeNeedsBundle || vscodeBundleDetected));
+
   const resolvedCurrentStep = useMemo(
-    () => (isStepReachable(currentStepHint, bootstrap, activeApp) ? currentStepHint : defaultStepFor(bootstrap, apps, activeApp, vscode, vscodeDeferred, setupStarted)),
-    [activeApp, apps, bootstrap, currentStepHint, setupStarted, vscode, vscodeDeferred],
+    () => (isStepReachable(currentStepHint, bootstrap, activeApp) ? currentStepHint : defaultStepFor(bootstrap, apps, activeApp, vscodeComplete, setupStarted)),
+    [activeApp, apps, bootstrap, currentStepHint, setupStarted, vscodeComplete],
   );
   const currentStepIndex = wizardSteps.findIndex((step) => step.id === resolvedCurrentStep);
   const currentStepMeta = wizardSteps[currentStepIndex >= 0 ? currentStepIndex : 0];
@@ -144,7 +165,7 @@ export function SetupRoute() {
     longConnection: Boolean(activeApp?.wizard?.callbacksConfirmedAt),
     menus: Boolean(activeApp?.wizard?.menusConfirmedAt),
     publish: Boolean(activeApp?.wizard?.publishedAt),
-    vscode: vscodeDeferred || vscodeIsReady(vscode),
+    vscode: vscodeComplete,
   };
 
   useEffect(() => {
@@ -319,17 +340,72 @@ export function SetupRoute() {
     });
   }
 
-  async function applyRecommendedVSCode() {
+  function missingBundleMessage(remoteMachine: boolean): string {
+    if (remoteMachine) {
+      return "还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装，然后再回来继续。";
+    }
+    return "还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装，然后再回来继续。";
+  }
+
+  async function applyVSCodeMode(mode: string, outcome: Extract<VSCodeSetupOutcome, "settings" | "managed_shim">, message: string) {
     await runAction("vscode-apply", async () => {
       const response = await sendJSON<VSCodeDetectResponse>("/api/setup/vscode/apply", "POST", {
-        mode: vscode?.recommendedMode || "all",
+        mode,
       });
       setVSCode(response);
       setVSCodeError("");
-      setVSCodeDeferred(false);
-      setNotice({ tone: "good", message: `VS Code 推荐模式已应用：${response.recommendedMode}。` });
+      setVSCodeOutcome(outcome);
+      setNotice({ tone: "good", message });
       setCurrentStepHint("finish");
     });
+  }
+
+  async function continueVSCode() {
+    if (!vscode) {
+      showBlockingError("这一步还没有完成", "当前还没拿到 VS Code 检测结果。请先刷新状态后再继续。");
+      return;
+    }
+    if (vscode.sshSession) {
+      if (!vscodeBundleDetected) {
+        showBlockingError("这一步还没有完成", missingBundleMessage(true));
+        return;
+      }
+      await applyVSCodeMode(
+        "managed_shim",
+        "managed_shim",
+        "已接管这台远程机器上的 VS Code 扩展入口。以后如果扩展升级，回到管理页重新安装扩展入口即可。",
+      );
+      return;
+    }
+    if (!vscodeScenario) {
+      showBlockingError("这一步还没有完成", "请先选择你以后主要怎么使用 VS Code 里的 Codex。");
+      return;
+    }
+    if (vscodeScenario === "remote_only") {
+      setVSCodeOutcome("remote_only_skip");
+      setNotice({ tone: "warn", message: "已跳过当前机器的 VS Code 接入。等你在目标 SSH 机器上安装 codex-remote 后，再在那里完成 VS Code 接入即可。" });
+      setCurrentStepHint("finish");
+      return;
+    }
+
+    const mode = vscodeApplyModeForScenario(vscode, vscodeScenario);
+    if (!mode) {
+      showBlockingError("这一步还没有完成", "当前选择还不能映射到可执行的 VS Code 接入方式。");
+      return;
+    }
+    if (mode === "managed_shim" && !vscodeBundleDetected) {
+      showBlockingError("这一步还没有完成", missingBundleMessage(false));
+      return;
+    }
+    if (mode === "editor_settings") {
+      await applyVSCodeMode("editor_settings", "settings", "已写入这台机器的 VS Code settings.json，现在可以在本机 VS Code 里使用 Codex。");
+      return;
+    }
+    await applyVSCodeMode(
+      "managed_shim",
+      "managed_shim",
+      "已接管这台机器上的 VS Code 扩展入口。本机可以继续使用；以后如果要在其他 SSH 机器上使用，需要去那些机器分别完成接入。",
+    );
   }
 
   async function finishSetup() {
@@ -442,7 +518,8 @@ export function SetupRoute() {
                 eventsConfirmed={eventsConfirmed}
                 longConnectionConfirmed={longConnectionConfirmed}
                 menusConfirmed={menusConfirmed}
-                vscodeComplete={stepCompletion.vscode}
+                vscodeScenario={vscodeScenario}
+                vscodeSummary={vscodeSummary}
                 vscode={vscode}
                 vscodeError={vscodeError}
                 onDraftChange={setDraft}
@@ -450,6 +527,7 @@ export function SetupRoute() {
                 onEventsConfirmedChange={setEventsConfirmed}
                 onLongConnectionConfirmedChange={setLongConnectionConfirmed}
                 onMenusConfirmedChange={setMenusConfirmed}
+                onVSCodeScenarioChange={setVSCodeScenario}
                 onCopyScopes={() => void copyText(scopesJSON, "权限配置 JSON 已复制。")}
                 busyAction={busyAction}
               />
@@ -467,7 +545,7 @@ export function SetupRoute() {
                     busyAction={busyAction}
                     onCopyScopes={() => void copyText(scopesJSON, "权限配置 JSON 已复制。")}
                     onDeferVSCode={() => {
-                      setVSCodeDeferred(true);
+                      setVSCodeOutcome("deferred");
                       setNotice({ tone: "warn", message: "VS Code 集成已留到本地管理页继续处理。" });
                       setCurrentStepHint("finish");
                     }}
@@ -475,7 +553,8 @@ export function SetupRoute() {
                   <SetupStepPrimaryAction
                     currentStep={resolvedCurrentStep}
                     busyAction={busyAction}
-                    canApplyVSCode={Boolean(vscode)}
+                    canContinueVSCode={vscodeCanContinue}
+                    vscodePrimaryLabel={vscodePrimaryLabel}
                     onStart={() => {
                       setSetupStarted(true);
                       setCurrentStepHint("connect");
@@ -486,7 +565,7 @@ export function SetupRoute() {
                     onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
                     onConfirmMenus={() => void confirmMenusAndContinue()}
                     onCheckPublish={() => void checkPublishAndContinue()}
-                    onApplyRecommendedVSCode={() => void applyRecommendedVSCode()}
+                    onContinueVSCode={() => void continueVSCode()}
                     onFinishSetup={() => void finishSetup()}
                   />
                 </div>

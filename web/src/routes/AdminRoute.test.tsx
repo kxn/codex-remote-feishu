@@ -128,4 +128,74 @@ describe("AdminRoute", () => {
     expect(screen.getAllByText("未生效").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "重试应用" })).toBeInTheDocument();
   });
+
+  it("applies managed shim for local plus remote ssh usage from the admin panel", async () => {
+    const user = userEvent.setup();
+    installMockFetch({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
+      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
+      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/api/admin/vscode/detect": {
+        body: makeVSCodeDetect({
+          latestBundleEntrypoint: "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
+          recordedBundleEntrypoint: "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
+          candidateBundleEntrypoints: ["/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js"],
+          settings: {
+            path: "/tmp/settings.json",
+            exists: true,
+            cliExecutable: "/usr/local/bin/codex",
+            matchesBinary: false,
+          },
+          latestShim: {
+            entrypoint: "/tmp/codex-shim.js",
+            exists: true,
+            realBinaryPath: "/usr/local/bin/codex",
+            realBinaryExists: true,
+            installed: true,
+            matchesBinary: false,
+          },
+        }),
+      },
+      "/api/admin/instances": { body: { instances: [] } },
+      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      },
+      "/api/admin/vscode/apply": (call) => {
+        expect(JSON.parse(String(call.init?.body))).toEqual({ mode: "managed_shim" });
+        return {
+          body: makeVSCodeDetect({
+            currentMode: "managed_shim",
+            latestBundleEntrypoint: "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
+            recordedBundleEntrypoint: "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
+            candidateBundleEntrypoints: ["/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js"],
+            settings: {
+              path: "/tmp/settings.json",
+              exists: true,
+              cliExecutable: "/usr/local/bin/codex",
+              matchesBinary: false,
+            },
+            latestShim: {
+              entrypoint: "/tmp/codex-shim.js",
+              exists: true,
+              realBinaryPath: "/usr/local/bin/codex",
+              realBinaryExists: true,
+              installed: true,
+              matchesBinary: true,
+            },
+          }),
+        };
+      },
+    });
+
+    render(<AdminRoute />);
+
+    expect(await screen.findByText("你以后主要怎么使用 VS Code 里的 Codex？")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /这台机器本地要用，也会 SSH 到别的机器/ }));
+    await user.click(screen.getByRole("button", { name: "在这台机器上启用 VS Code" }));
+
+    expect(await screen.findByText(/已接管这台机器上的 VS Code 扩展入口/)).toBeInTheDocument();
+  });
 });

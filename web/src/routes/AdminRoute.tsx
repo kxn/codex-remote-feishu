@@ -39,6 +39,10 @@ import {
   blankToUndefined,
   buildAdminFeishuVerifySuccessMessage,
   loadVSCodeState,
+  type VSCodeUsageScenario,
+  vscodeApplyModeForScenario,
+  vscodeHasDetectedBundle,
+  vscodePrimaryActionLabel,
 } from "./shared/helpers";
 import type { AppDraft, Notice, PreviewMap } from "./admin/types";
 import { newAppID } from "./admin/types";
@@ -50,6 +54,7 @@ export function AdminRoute() {
   const [manifest, setManifest] = useState<FeishuManifestResponse["manifest"] | null>(null);
   const [vscode, setVSCode] = useState<VSCodeDetectResponse | null>(null);
   const [vscodeError, setVSCodeError] = useState<string>("");
+  const [vscodeScenario, setVSCodeScenario] = useState<VSCodeUsageScenario | null>(null);
   const [instances, setInstances] = useState<AdminInstanceSummary[]>([]);
   const [imageStaging, setImageStaging] = useState<ImageStagingStatusResponse | null>(null);
   const [previews, setPreviews] = useState<PreviewMap>({});
@@ -120,6 +125,14 @@ export function AdminRoute() {
   }, [bootstrap?.gateways, runtime?.gateways]);
   const setupURL = bootstrap?.admin.setupURL || "/setup";
   const setupURLForApp = (appID: string) => buildAppSetupURL(setupURL, appID);
+  const vscodePrimaryLabel = vscodePrimaryActionLabel(vscode, vscodeScenario);
+  const vscodeCanContinue = Boolean(vscode) && (vscode?.sshSession ? vscodeHasDetectedBundle(vscode) : vscodeScenario !== null && (vscodeScenario === "remote_only" || vscodeScenario === "local_only" || vscodeHasDetectedBundle(vscode)));
+
+  useEffect(() => {
+    if (vscode?.sshSession) {
+      setVSCodeScenario(null);
+    }
+  }, [vscode?.sshSession]);
 
   async function runAction(label: string, work: () => Promise<void>, onError?: (err: unknown) => Promise<boolean>) {
     setBusyAction(label);
@@ -338,7 +351,7 @@ export function AdminRoute() {
     });
   }
 
-  async function applyVSCode(mode: string) {
+  async function applyVSCode(mode: string, successMessage = "VS Code 接入方式已更新。") {
     if (!vscode) {
       return;
     }
@@ -346,8 +359,44 @@ export function AdminRoute() {
       const response = await sendJSON<VSCodeDetectResponse>("/api/admin/vscode/apply", "POST", { mode });
       setVSCode(response);
       setVSCodeError("");
-      setNotice({ tone: "good", message: "VS Code 接入方式已更新。" });
+      setNotice({ tone: "good", message: successMessage });
     });
+  }
+
+  async function continueVSCode() {
+    if (!vscode) {
+      return;
+    }
+    if (vscode.sshSession) {
+      if (!vscodeHasDetectedBundle(vscode)) {
+        setNotice({ tone: "warn", message: "还没检测到这台远程机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装。" });
+        return;
+      }
+      await applyVSCode("managed_shim", "已接管这台远程机器上的 VS Code 扩展入口。以后如果扩展升级，回到管理页重新安装扩展入口即可。");
+      return;
+    }
+    if (!vscodeScenario) {
+      setNotice({ tone: "warn", message: "请先选择你以后主要怎么使用 VS Code 里的 Codex。" });
+      return;
+    }
+    if (vscodeScenario === "remote_only") {
+      setNotice({ tone: "warn", message: "当前机器先不做 VS Code 接入。等你在目标 SSH 机器上安装 codex-remote 后，再在那里完成 VS Code 接入即可。" });
+      return;
+    }
+    const mode = vscodeApplyModeForScenario(vscode, vscodeScenario);
+    if (!mode) {
+      setNotice({ tone: "danger", message: "当前选择还不能映射到可执行的 VS Code 接入方式。" });
+      return;
+    }
+    if (mode === "managed_shim" && !vscodeHasDetectedBundle(vscode)) {
+      setNotice({ tone: "warn", message: "还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装。" });
+      return;
+    }
+    if (mode === "editor_settings") {
+      await applyVSCode("editor_settings", "已写入这台机器的 VS Code settings.json，现在可以在本机 VS Code 里使用 Codex。");
+      return;
+    }
+    await applyVSCode("managed_shim", "已接管这台机器上的 VS Code 扩展入口。本机可以继续使用；以后如果要在其他 SSH 机器上使用，需要去那些机器分别完成接入。");
   }
 
   async function reinstallShim() {
@@ -442,6 +491,11 @@ export function AdminRoute() {
             vscodeError={vscodeError}
             busyAction={busyAction}
             readinessText={vscodeReadinessText(vscode)}
+            scenario={vscodeScenario}
+            primaryActionLabel={vscodePrimaryLabel}
+            canContinueVSCode={vscodeCanContinue}
+            onScenarioChange={setVSCodeScenario}
+            onContinueVSCode={() => void continueVSCode()}
             onApplyVSCode={(mode) => void applyVSCode(mode)}
             onReinstallShim={() => void reinstallShim()}
           />

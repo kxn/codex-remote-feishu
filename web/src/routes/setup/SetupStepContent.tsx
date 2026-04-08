@@ -3,6 +3,7 @@ import type { FeishuAppSummary, FeishuManifest, VSCodeDetectResponse } from "../
 import { FeishuAppFields } from "../shared/FeishuAppFields";
 import type { SetupDraft, StepID } from "./types";
 import { feishuAppConsoleURL } from "./helpers";
+import type { VSCodeUsageScenario } from "../shared/helpers";
 
 type SetupStepContentProps = {
   currentStep: StepID;
@@ -15,7 +16,8 @@ type SetupStepContentProps = {
   eventsConfirmed: boolean;
   longConnectionConfirmed: boolean;
   menusConfirmed: boolean;
-  vscodeComplete: boolean;
+  vscodeScenario: VSCodeUsageScenario | null;
+  vscodeSummary: string;
   vscode: VSCodeDetectResponse | null;
   vscodeError: string;
   onDraftChange: Dispatch<SetStateAction<SetupDraft>>;
@@ -23,6 +25,7 @@ type SetupStepContentProps = {
   onEventsConfirmedChange: (value: boolean) => void;
   onLongConnectionConfirmedChange: (value: boolean) => void;
   onMenusConfirmedChange: (value: boolean) => void;
+  onVSCodeScenarioChange: (value: VSCodeUsageScenario) => void;
   onCopyScopes: () => void;
   busyAction: string;
 };
@@ -30,7 +33,8 @@ type SetupStepContentProps = {
 type SetupStepPrimaryActionProps = {
   currentStep: StepID;
   busyAction: string;
-  canApplyVSCode: boolean;
+  canContinueVSCode: boolean;
+  vscodePrimaryLabel: string;
   onStart: () => void;
   onTestAndContinue: () => void;
   onConfirmPermissions: () => void;
@@ -38,7 +42,7 @@ type SetupStepPrimaryActionProps = {
   onConfirmLongConnection: () => void;
   onConfirmMenus: () => void;
   onCheckPublish: () => void;
-  onApplyRecommendedVSCode: () => void;
+  onContinueVSCode: () => void;
   onFinishSetup: () => void;
 };
 
@@ -60,7 +64,8 @@ export function SetupStepContent({
   eventsConfirmed,
   longConnectionConfirmed,
   menusConfirmed,
-  vscodeComplete,
+  vscodeScenario,
+  vscodeSummary,
   vscode,
   vscodeError,
   onDraftChange,
@@ -68,9 +73,12 @@ export function SetupStepContent({
   onEventsConfirmedChange,
   onLongConnectionConfirmedChange,
   onMenusConfirmedChange,
+  onVSCodeScenarioChange,
   onCopyScopes,
   busyAction,
 }: SetupStepContentProps) {
+  const vscodeBundleDetected = Boolean(vscode?.latestBundleEntrypoint || vscode?.recordedBundleEntrypoint || vscode?.candidateBundleEntrypoints?.length);
+
   switch (currentStep) {
     case "start":
       return (
@@ -303,15 +311,87 @@ export function SetupStepContent({
     case "vscode":
       return (
         <div className="wizard-step-layout">
-          <div className="manifest-block">
-            <h4>推荐模式</h4>
-            <ul className="wizard-bullet-list">
-              <li>SSH / Remote：推荐 <code>managed_shim</code>。</li>
-              <li>其他情况：推荐 <code>all</code>。</li>
-            </ul>
-            <p>当前页面只给出推荐结论。需要排查 bundle、shim、settings 等细节时，再展开技术信息。</p>
-          </div>
+          {vscode?.sshSession ? (
+            <>
+              <div className="manifest-block">
+                <h4>检测到当前是远程 SSH 机器</h4>
+                <p>你现在是在被 VS Code Remote SSH 连接的机器上完成设置。这个场景下，需要直接接管这台机器上的 VS Code 扩展入口。</p>
+              </div>
+              <div className="manifest-block">
+                <h4>推荐操作</h4>
+                <p>我们会把这台机器上的 VS Code 扩展入口接到 codex-remote。这不会去写 host 机器的 settings.json。</p>
+                <ul className="wizard-bullet-list">
+                  <li>适合当前远程 VS Code 场景。</li>
+                  <li>后续如果扩展升级，回到管理页重新安装扩展入口即可。</li>
+                </ul>
+              </div>
+              {!vscodeBundleDetected ? (
+                <div className="notice-banner warn">还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装，然后再回来继续。</div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="manifest-block">
+                <h4>你以后主要怎么使用 VS Code 里的 Codex？</h4>
+                <p>先选你的使用场景。页面会根据这个选择，只给当前这台机器提供一条更安全的接入路径。</p>
+              </div>
+              <div className="choice-card-list" role="radiogroup" aria-label="VS Code 使用场景">
+                <label className={`choice-card${vscodeScenario === "local_only" ? " selected" : ""}`}>
+                  <input type="radio" name="vscode-usage-scenario" checked={vscodeScenario === "local_only"} onChange={() => onVSCodeScenarioChange("local_only")} />
+                  <div>
+                    <strong>只在这台机器本地使用</strong>
+                    <p>适合桌面 VS Code。会写入这台机器的 settings.json。</p>
+                  </div>
+                </label>
+                <label className={`choice-card${vscodeScenario === "remote_only" ? " selected" : ""}`}>
+                  <input type="radio" name="vscode-usage-scenario" checked={vscodeScenario === "remote_only"} onChange={() => onVSCodeScenarioChange("remote_only")} />
+                  <div>
+                    <strong>主要去别的 SSH 机器上使用</strong>
+                    <p>当前机器先不做 VS Code 接入，避免 host 设置影响远端。</p>
+                  </div>
+                </label>
+                <label className={`choice-card${vscodeScenario === "local_and_remote" ? " selected" : ""}`}>
+                  <input type="radio" name="vscode-usage-scenario" checked={vscodeScenario === "local_and_remote"} onChange={() => onVSCodeScenarioChange("local_and_remote")} />
+                  <div>
+                    <strong>这台机器本地要用，也会 SSH 到别的机器</strong>
+                    <p>当前机器只处理扩展入口，不写 settings.json。</p>
+                  </div>
+                </label>
+              </div>
+              {vscodeScenario === "local_only" ? (
+                <div className="manifest-block">
+                  <h4>推荐：写入这台机器的 settings.json</h4>
+                  <p>这是最适合本机桌面 VS Code 的接入方式。我们会把这台机器上的 Codex 执行入口指向 codex-remote。</p>
+                  <p>如果你以后改成主要通过 Remote SSH 去别的机器上使用，需要回到管理页重新调整策略。</p>
+                </div>
+              ) : null}
+              {vscodeScenario === "remote_only" ? (
+                <div className="manifest-block">
+                  <h4>当前这台机器先不用接入</h4>
+                  <p>如果你主要是在别的 SSH 机器上使用 VS Code Codex，真正需要安装和接入的是目标远程机器，而不是当前这台本机。</p>
+                  <ul className="wizard-bullet-list">
+                    <li>当前机器不写 settings.json。</li>
+                    <li>避免 host 设置影响以后连接到远程机器。</li>
+                    <li>去目标机器安装 codex-remote 后，再在目标机器上完成这一步。</li>
+                  </ul>
+                </div>
+              ) : null}
+              {vscodeScenario === "local_and_remote" ? (
+                <>
+                  <div className="manifest-block">
+                    <h4>推荐：只处理这台机器的扩展入口</h4>
+                    <p>这个场景下，不建议写这台机器的 settings.json。我们只接管当前机器的 VS Code 扩展入口，避免 host 设置影响以后连接到远程机器。</p>
+                    <p>以后每台真正要通过 Remote SSH 使用的目标机器，仍然要各自安装并完成一次接入。</p>
+                  </div>
+                  {!vscodeBundleDetected ? (
+                    <div className="notice-banner warn">还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装，然后再回来继续。</div>
+                  ) : null}
+                </>
+              ) : null}
+            </>
+          )}
           {vscodeError ? <div className="notice-banner warn">VS Code 检测暂时不可用：{vscodeError}</div> : null}
+          {!vscode && !vscodeError ? <div className="notice-banner warn">当前还没拿到 VS Code 检测结果，请先刷新状态后再继续。</div> : null}
           {vscode ? (
             <details className="wizard-tech-detail">
               <summary>查看技术详情</summary>
@@ -368,7 +448,7 @@ export function SetupStepContent({
             </div>
             <div className="wizard-summary-card">
               <strong>VS Code</strong>
-              <p>{vscodeComplete ? "已配置或已明确稍后处理" : "暂未处理"}</p>
+              <p>{vscodeSummary}</p>
             </div>
           </div>
         </div>
@@ -381,7 +461,8 @@ export function SetupStepContent({
 export function SetupStepPrimaryAction({
   currentStep,
   busyAction,
-  canApplyVSCode,
+  canContinueVSCode,
+  vscodePrimaryLabel,
   onStart,
   onTestAndContinue,
   onConfirmPermissions,
@@ -389,7 +470,7 @@ export function SetupStepPrimaryAction({
   onConfirmLongConnection,
   onConfirmMenus,
   onCheckPublish,
-  onApplyRecommendedVSCode,
+  onContinueVSCode,
   onFinishSetup,
 }: SetupStepPrimaryActionProps) {
   switch (currentStep) {
@@ -437,8 +518,8 @@ export function SetupStepPrimaryAction({
       );
     case "vscode":
       return (
-        <button className="primary-button" type="button" onClick={onApplyRecommendedVSCode} disabled={busyAction !== "" || !canApplyVSCode}>
-          应用推荐配置
+        <button className="primary-button" type="button" onClick={onContinueVSCode} disabled={busyAction !== "" || !canContinueVSCode}>
+          {vscodePrimaryLabel}
         </button>
       );
     case "finish":

@@ -89,11 +89,10 @@ export function stepStateTone(state: StepState): "neutral" | "good" | "warn" | "
 }
 
 export function defaultStepFor(
-  bootstrap: BootstrapState | null,
+  _bootstrap: BootstrapState | null,
   apps: FeishuAppSummary[],
   activeApp: FeishuAppSummary | null,
-  vscode: VSCodeDetectResponse | null,
-  vscodeDeferred: boolean,
+  vscodeComplete: boolean,
   setupStarted: boolean,
 ): StepID {
   const started = setupStarted || apps.length > 0;
@@ -118,11 +117,8 @@ export function defaultStepFor(
   if (!activeApp.wizard?.publishedAt) {
     return "publish";
   }
-  if (!(vscodeDeferred || vscodeIsReady(vscode))) {
+  if (!vscodeComplete) {
     return "vscode";
-  }
-  if (bootstrap?.setupRequired) {
-    return "connect";
   }
   return "finish";
 }
@@ -146,7 +142,7 @@ export function isStepReachable(stepID: StepID, bootstrap: BootstrapState | null
     case "vscode":
       return Boolean(activeApp?.wizard?.publishedAt);
     case "finish":
-      return Boolean(activeApp?.wizard?.publishedAt) && !bootstrap?.setupRequired;
+      return Boolean(activeApp?.wizard?.publishedAt);
     default:
       return false;
   }
