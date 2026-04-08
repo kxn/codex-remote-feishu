@@ -7,52 +7,52 @@
       {
         "key": "list",
         "name": "列出实例",
-        "description": "列出当前在线的 Codex 实例，并等待回复序号进行 attach。"
+        "description": "列出当前在线的 VS Code 实例，并提供接管入口。"
       },
       {
         "key": "status",
         "name": "当前状态",
-        "description": "查看当前接管实例、会话、模型和排队状态。"
+        "description": "查看当前接管状态、输入目标和飞书侧临时覆盖。"
       },
       {
         "key": "threads",
         "name": "切换会话",
-        "description": "列出当前实例的已知会话，并等待回复序号切换。"
+        "description": "展示最近可见会话，并切换后续输入目标。"
       },
       {
         "key": "stop",
         "name": "停止当前执行",
-        "description": "向当前 turn 发送 stop，并丢弃尚未发出的飞书队列。"
+        "description": "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"
       },
       {
         "key": "reason_low",
         "name": "推理 Low",
-        "description": "把之后飞书发出的消息推理强度切到 low。"
+        "description": "只覆盖下一条消息的推理强度为 low。"
       },
       {
         "key": "reason_medium",
         "name": "推理 Medium",
-        "description": "把之后飞书发出的消息推理强度切到 medium。"
+        "description": "只覆盖下一条消息的推理强度为 medium。"
       },
       {
         "key": "reason_high",
         "name": "推理 High",
-        "description": "把之后飞书发出的消息推理强度切到 high。"
+        "description": "只覆盖下一条消息的推理强度为 high。"
       },
       {
         "key": "reason_xhigh",
         "name": "推理 XHigh",
-        "description": "把之后飞书发出的消息推理强度切到 xhigh。"
+        "description": "只覆盖下一条消息的推理强度为 xhigh。"
       },
       {
         "key": "access_full",
         "name": "执行权限 Full",
-        "description": "把之后飞书发出的消息执行权限切到 full access，不再要求飞书确认卡片。"
+        "description": "只覆盖下一条消息的执行权限为 full。"
       },
       {
         "key": "access_confirm",
         "name": "执行权限 Confirm",
-        "description": "把之后飞书发出的消息执行权限切到 confirm，需要时在飞书里弹确认卡片。"
+        "description": "只覆盖下一条消息的执行权限为 confirm。"
       }
     ]
   },

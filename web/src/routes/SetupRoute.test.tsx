@@ -67,6 +67,48 @@ describe("SetupRoute", () => {
     expect(calls.some((call) => call.method === "PATCH" && call.path.includes("/wizard"))).toBe(false);
   });
 
+  it("renders the current manifest menu requirements in the menus step", async () => {
+    window.history.replaceState({}, "", "/setup");
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({
+              wizard: {
+                connectionVerifiedAt: "2026-04-08T00:00:00Z",
+                scopesExportedAt: "2026-04-08T00:01:00Z",
+                eventsConfirmedAt: "2026-04-08T00:02:00Z",
+                callbacksConfirmedAt: "2026-04-08T00:03:00Z",
+              },
+            }),
+          ],
+        },
+      },
+      "/api/setup/feishu/manifest": {
+        body: {
+          manifest: makeManifest({
+            menus: [
+              { key: "threads", name: "切换会话", description: "展示最近可见会话，并切换后续输入目标。" },
+              { key: "reason_high", name: "推理 High", description: "只覆盖下一条消息的推理强度为 high。" },
+            ],
+          }),
+        },
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("这些菜单 key 会真正生效")).toBeInTheDocument();
+    expect(screen.getByText("threads")).toBeInTheDocument();
+    expect(screen.getByText("切换会话")).toBeInTheDocument();
+    expect(screen.getByText("展示最近可见会话，并切换后续输入目标。")).toBeInTheDocument();
+    expect(screen.getByText("reason_high")).toBeInTheDocument();
+    expect(screen.getByText("只覆盖下一条消息的推理强度为 high。")).toBeInTheDocument();
+  });
+
   it("supports skipping current machine when user mainly uses remote ssh targets", async () => {
     window.history.replaceState({}, "", "/setup");
     const { calls } = installMockFetch({

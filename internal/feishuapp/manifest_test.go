@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
@@ -32,7 +34,9 @@ func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
 		} `json:"callback_subscriptions"`
 		Bot struct {
 			Menus []struct {
-				Key string `json:"key"`
+				Key         string `json:"key"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
 			} `json:"menus"`
 		} `json:"bot"`
 	}
@@ -78,5 +82,25 @@ func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotMenus, wantMenus) {
 		t.Fatalf("menu keys mismatch: %#v vs %#v", gotMenus, wantMenus)
+	}
+
+	if len(manifest.Menus) != len(control.FeishuRecommendedMenus()) {
+		t.Fatalf("manifest menus count = %d, want %d", len(manifest.Menus), len(control.FeishuRecommendedMenus()))
+	}
+	for index, item := range manifest.Menus {
+		want := control.FeishuRecommendedMenus()[index]
+		if item.Key != want.Key || item.Name != want.Name || item.Description != want.Description {
+			t.Fatalf("manifest menu[%d] = %#v, want %#v", index, item, want)
+		}
+		if parsed.Bot.Menus[index].Key != want.Key {
+			t.Fatalf("template menu[%d] key = %q, want %q", index, parsed.Bot.Menus[index].Key, want.Key)
+		}
+	}
+
+	for index, item := range parsed.Bot.Menus {
+		want := manifest.Menus[index]
+		if item.Key != want.Key || item.Name != want.Name || item.Description != want.Description {
+			t.Fatalf("template menu[%d] = %#v, want %#v", index, item, want)
+		}
 	}
 }

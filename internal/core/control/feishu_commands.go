@@ -19,17 +19,24 @@ type feishuCommandDynamicMenuMatch struct {
 }
 
 type feishuCommandSpec struct {
-	section      string
-	helpCommands []string
-	description  string
-	examples     []string
-	buttons      []CommandCatalogButton
-	showInHelp   bool
-	showInMenu   bool
-	textExact    []feishuCommandMatch
-	textPrefixes []feishuCommandPrefixMatch
-	menuExact    []feishuCommandMatch
-	menuDynamic  []feishuCommandDynamicMenuMatch
+	section          string
+	helpCommands     []string
+	description      string
+	examples         []string
+	buttons          []CommandCatalogButton
+	recommendedMenus []FeishuRecommendedMenu
+	showInHelp       bool
+	showInMenu       bool
+	textExact        []feishuCommandMatch
+	textPrefixes     []feishuCommandPrefixMatch
+	menuExact        []feishuCommandMatch
+	menuDynamic      []feishuCommandDynamicMenuMatch
+}
+
+type FeishuRecommendedMenu struct {
+	Key         string
+	Name        string
+	Description string
 }
 
 var feishuCommandSections = []string{
@@ -46,6 +53,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		buttons: []CommandCatalogButton{
 			{Label: "查看实例", CommandText: "/list"},
 		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "list", Name: "列出实例", Description: "列出当前在线的 VS Code 实例，并提供接管入口。"},
+		},
 		showInHelp: true,
 		showInMenu: true,
 		textExact: []feishuCommandMatch{
@@ -61,6 +71,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		description:  "查看当前接管状态、输入目标和飞书侧临时覆盖。",
 		buttons: []CommandCatalogButton{
 			{Label: "当前状态", CommandText: "/status"},
+		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "status", Name: "当前状态", Description: "查看当前接管状态、输入目标和飞书侧临时覆盖。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -96,6 +109,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		description:  "展示最近可见会话，并切换后续输入目标。",
 		buttons: []CommandCatalogButton{
 			{Label: "最近会话", CommandText: "/use"},
+		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "threads", Name: "切换会话", Description: "展示最近可见会话，并切换后续输入目标。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -167,6 +183,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		buttons: []CommandCatalogButton{
 			{Label: "停止", CommandText: "/stop"},
 		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "stop", Name: "停止当前执行", Description: "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"},
+		},
 		showInHelp: true,
 		showInMenu: true,
 		textExact: []feishuCommandMatch{
@@ -215,6 +234,12 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{Label: "high", CommandText: "/reasoning high"},
 			{Label: "xhigh", CommandText: "/reasoning xhigh"},
 		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "reason_low", Name: "推理 Low", Description: "只覆盖下一条消息的推理强度为 low。"},
+			{Key: "reason_medium", Name: "推理 Medium", Description: "只覆盖下一条消息的推理强度为 medium。"},
+			{Key: "reason_high", Name: "推理 High", Description: "只覆盖下一条消息的推理强度为 high。"},
+			{Key: "reason_xhigh", Name: "推理 XHigh", Description: "只覆盖下一条消息的推理强度为 xhigh。"},
+		},
 		showInHelp: true,
 		showInMenu: true,
 		textPrefixes: []feishuCommandPrefixMatch{
@@ -240,6 +265,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		buttons: []CommandCatalogButton{
 			{Label: "全部允许", CommandText: "/access full"},
 			{Label: "逐次确认", CommandText: "/access confirm"},
+		},
+		recommendedMenus: []FeishuRecommendedMenu{
+			{Key: "access_full", Name: "执行权限 Full", Description: "只覆盖下一条消息的执行权限为 full。"},
+			{Key: "access_confirm", Name: "执行权限 Confirm", Description: "只覆盖下一条消息的执行权限为 confirm。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -372,6 +401,29 @@ func FeishuCommandMenuCatalog() CommandCatalog {
 		"固定动作可直接点击。需要自定义参数的命令请参考说明中的示例后，直接给机器人发送文字。",
 		true,
 	)
+}
+
+func FeishuRecommendedMenus() []FeishuRecommendedMenu {
+	menus := make([]FeishuRecommendedMenu, 0, len(feishuCommandSpecs))
+	seen := make(map[string]struct{}, len(feishuCommandSpecs))
+	for _, spec := range feishuCommandSpecs {
+		for _, menu := range spec.recommendedMenus {
+			key := strings.TrimSpace(menu.Key)
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			menus = append(menus, FeishuRecommendedMenu{
+				Key:         key,
+				Name:        strings.TrimSpace(menu.Name),
+				Description: strings.TrimSpace(menu.Description),
+			})
+		}
+	}
+	return menus
 }
 
 func buildFeishuCommandCatalog(title, summary string, interactive bool) CommandCatalog {

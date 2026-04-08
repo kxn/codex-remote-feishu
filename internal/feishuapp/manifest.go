@@ -1,5 +1,7 @@
 package feishuapp
 
+import "github.com/kxn/codex-remote-feishu/internal/core/control"
+
 type Manifest struct {
 	Scopes    ScopesImport          `json:"scopesImport"`
 	Events    []EventRequirement    `json:"events"`
@@ -39,6 +41,15 @@ type ChecklistSection struct {
 }
 
 func DefaultManifest() Manifest {
+	menus := control.FeishuRecommendedMenus()
+	manifestMenus := make([]MenuRequirement, 0, len(menus))
+	for _, menu := range menus {
+		manifestMenus = append(manifestMenus, MenuRequirement{
+			Key:         menu.Key,
+			Name:        menu.Name,
+			Description: menu.Description,
+		})
+	}
 	return Manifest{
 		Scopes: ScopesImport{
 			Scopes: PermissionScopes{
@@ -64,18 +75,7 @@ func DefaultManifest() Manifest {
 		Callbacks: []CallbackRequirement{
 			{Callback: "card.action.trigger", Purpose: "通过飞书回调长连接处理选择卡片、approval request 卡片和其他交互点击。"},
 		},
-		Menus: []MenuRequirement{
-			{Key: "list", Name: "列出实例", Description: "列出当前在线的 Codex 实例，并等待回复序号进行 attach。"},
-			{Key: "status", Name: "当前状态", Description: "查看当前接管实例、会话、模型和排队状态。"},
-			{Key: "threads", Name: "切换会话", Description: "列出当前实例的已知会话，并等待回复序号切换。"},
-			{Key: "stop", Name: "停止当前执行", Description: "向当前 turn 发送 stop，并丢弃尚未发出的飞书队列。"},
-			{Key: "reason_low", Name: "推理 Low", Description: "把之后飞书发出的消息推理强度切到 low。"},
-			{Key: "reason_medium", Name: "推理 Medium", Description: "把之后飞书发出的消息推理强度切到 medium。"},
-			{Key: "reason_high", Name: "推理 High", Description: "把之后飞书发出的消息推理强度切到 high。"},
-			{Key: "reason_xhigh", Name: "推理 XHigh", Description: "把之后飞书发出的消息推理强度切到 xhigh。"},
-			{Key: "access_full", Name: "执行权限 Full", Description: "把之后飞书发出的消息执行权限切到 full access。"},
-			{Key: "access_confirm", Name: "执行权限 Confirm", Description: "把之后飞书发出的消息执行权限切到 confirm。"},
-		},
+		Menus: manifestMenus,
 		Checklist: []ChecklistSection{
 			{
 				Area: "凭证与基础信息",
