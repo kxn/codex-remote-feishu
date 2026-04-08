@@ -280,6 +280,7 @@ func (a *App) Run(ctx context.Context) error {
 func (a *App) Shutdown(ctx context.Context) error {
 	_ = a.relay.Close()
 	a.stopIngressPump()
+	cleanupErr := a.shutdownManagedHeadless()
 	_ = a.relayServer.Shutdown(ctx)
 	_ = a.apiServer.Shutdown(ctx)
 	a.listenMu.Lock()
@@ -294,6 +295,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	a.listenMu.Unlock()
 	if a.rawLogger != nil {
 		_ = a.rawLogger.Close()
+	}
+	if cleanupErr != nil {
+		return cleanupErr
 	}
 	return nil
 }

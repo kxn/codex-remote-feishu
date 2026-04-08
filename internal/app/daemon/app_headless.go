@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -217,4 +219,80 @@ func (a *App) reapIdleHeadless(now time.Time) {
 		delete(a.managedHeadless, instanceID)
 		a.service.RemoveInstance(instanceID)
 	}
+}
+
+type managedHeadlessShutdownTarget struct {
+	InstanceID string
+	PID        int
+}
+
+func (a *App) shutdownManagedHeadless() error {
+	a.mu.Lock()
+	targets := a.collectManagedHeadlessShutdownTargetsLocked()
+	a.mu.Unlock()
+
+	if len(targets) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, target := range targets {
+		if target.PID > 0 {
+			if err := a.stopProcess(target.PID, a.headlessRuntime.KillGrace); err != nil {
+				log.Printf("managed headless shutdown cleanup failed: instance=%s pid=%d err=%v", target.InstanceID, target.PID, err)
+				errs = append(errs, fmt.Errorf("stop managed headless %s (pid %d): %w", target.InstanceID, target.PID, err))
+			} else {
+				log.Printf("managed headless shutdown cleanup: instance=%s pid=%d", target.InstanceID, target.PID)
+			}
+		} else {
+			log.Printf("managed headless shutdown cleanup: instance=%s pid=unknown", target.InstanceID)
+		}
+
+		a.mu.Lock()
+		delete(a.managedHeadless, target.InstanceID)
+		a.service.RemoveInstance(target.InstanceID)
+		a.mu.Unlock()
+	}
+
+	return errors.Join(errs...)
+}
+
+func (a *App) collectManagedHeadlessShutdownTargetsLocked() []managedHeadlessShutdownTarget {
+	targets := make([]managedHeadlessShutdownTarget, 0, len(a.managedHeadless))
+	seen := make(map[string]bool, len(a.managedHeadless))
+
+	appendTarget := func(instanceID string, pid int) {
+		instanceID = strings.TrimSpace(instanceID)
+		if instanceID == "" || seen[instanceID] {
+			return
+		}
+		seen[instanceID] = true
+		targets = append(targets, managedHeadlessShutdownTarget{
+			InstanceID: instanceID,
+			PID:        pid,
+		})
+	}
+
+	for instanceID, managed := range a.managedHeadless {
+		if managed == nil {
+			appendTarget(instanceID, 0)
+			continue
+		}
+		pid := managed.PID
+		if pid == 0 {
+			if inst := a.service.Instance(instanceID); isManagedHeadlessInstance(inst) {
+				pid = inst.PID
+			}
+		}
+		appendTarget(instanceID, pid)
+	}
+
+	for _, inst := range a.service.Instances() {
+		if !isManagedHeadlessInstance(inst) {
+			continue
+		}
+		appendTarget(inst.InstanceID, inst.PID)
+	}
+
+	return targets
 }

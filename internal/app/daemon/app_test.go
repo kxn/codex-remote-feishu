@@ -1016,6 +1016,106 @@ func TestDaemonIdleManagedHeadlessRefreshesOnInterval(t *testing.T) {
 	}
 }
 
+func TestDaemonShutdownStopsManagedHeadlessAndRemovesRuntimeState(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{KillGrace: time.Second})
+
+	var stopped []int
+	app.stopProcess = func(pid int, _ time.Duration) error {
+		stopped = append(stopped, pid)
+		return nil
+	}
+
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Source:        "headless",
+		Managed:       true,
+		PID:           4321,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.managedHeadless["inst-headless-1"] = &managedHeadlessProcess{
+		InstanceID:    "inst-headless-1",
+		PID:           4321,
+		WorkspaceRoot: "/data/dl/droid",
+		DisplayName:   "headless",
+		Status:        managedHeadlessStatusBusy,
+	}
+
+	if err := app.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	if len(stopped) != 1 || stopped[0] != 4321 {
+		t.Fatalf("expected managed headless pid 4321 to stop, got %#v", stopped)
+	}
+	if len(app.managedHeadless) != 0 {
+		t.Fatalf("expected managed headless map cleared, got %#v", app.managedHeadless)
+	}
+	if app.service.Instance("inst-headless-1") != nil {
+		t.Fatalf("expected managed headless instance removed from service, got %#v", app.service.Instance("inst-headless-1"))
+	}
+}
+
+func TestDaemonShutdownContinuesManagedHeadlessCleanupAfterStopError(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{KillGrace: time.Second})
+
+	var stopped []int
+	app.stopProcess = func(pid int, _ time.Duration) error {
+		stopped = append(stopped, pid)
+		if pid == 1111 {
+			return errors.New("terminate failed")
+		}
+		return nil
+	}
+
+	for _, inst := range []*state.InstanceRecord{
+		{
+			InstanceID:    "inst-headless-1",
+			DisplayName:   "headless-1",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			Source:        "headless",
+			Managed:       true,
+			PID:           1111,
+			Threads:       map[string]*state.ThreadRecord{},
+		},
+		{
+			InstanceID:    "inst-headless-2",
+			DisplayName:   "headless-2",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			Source:        "headless",
+			Managed:       true,
+			PID:           2222,
+			Threads:       map[string]*state.ThreadRecord{},
+		},
+	} {
+		app.service.UpsertInstance(inst)
+	}
+	app.managedHeadless["inst-headless-1"] = &managedHeadlessProcess{InstanceID: "inst-headless-1", PID: 1111}
+	app.managedHeadless["inst-headless-2"] = &managedHeadlessProcess{InstanceID: "inst-headless-2", PID: 2222}
+
+	err := app.Shutdown(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "inst-headless-1") {
+		t.Fatalf("expected shutdown cleanup error for first managed headless, got %v", err)
+	}
+	if len(stopped) != 2 {
+		t.Fatalf("expected both managed headless processes to be attempted, got %#v", stopped)
+	}
+	if len(app.managedHeadless) != 0 {
+		t.Fatalf("expected managed headless map cleared after cleanup, got %#v", app.managedHeadless)
+	}
+	if app.service.Instance("inst-headless-1") != nil || app.service.Instance("inst-headless-2") != nil {
+		t.Fatalf("expected managed headless service state removed after cleanup, got %#v %#v", app.service.Instance("inst-headless-1"), app.service.Instance("inst-headless-2"))
+	}
+}
+
 func TestDaemonPrewarmsManagedHeadlessToMinIdle(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
