@@ -16,6 +16,8 @@ const (
 	ActionNewThread         ActionKind = "surface.menu.new_thread"
 	ActionKillInstance      ActionKind = "surface.menu.kill_instance"
 	ActionRemovedCommand    ActionKind = "surface.command.removed"
+	ActionShowCommandHelp   ActionKind = "surface.command.help"
+	ActionShowCommandMenu   ActionKind = "surface.command.menu"
 	ActionModelCommand      ActionKind = "surface.command.model"
 	ActionReasoningCommand  ActionKind = "surface.command.reasoning"
 	ActionAccessCommand     ActionKind = "surface.command.access"
@@ -223,6 +225,30 @@ type RequestPrompt struct {
 	Options     []RequestPromptOption
 }
 
+type CommandCatalogButton struct {
+	Label       string
+	CommandText string
+}
+
+type CommandCatalogEntry struct {
+	Commands    []string
+	Description string
+	Examples    []string
+	Buttons     []CommandCatalogButton
+}
+
+type CommandCatalogSection struct {
+	Title   string
+	Entries []CommandCatalogEntry
+}
+
+type CommandCatalog struct {
+	Title       string
+	Summary     string
+	Interactive bool
+	Sections    []CommandCatalogSection
+}
+
 type FileChangeSummaryEntry struct {
 	Path         string
 	MovePath     string
@@ -244,6 +270,7 @@ type UIEventKind string
 const (
 	UIEventSnapshot              UIEventKind = "snapshot.updated"
 	UIEventSelectionPrompt       UIEventKind = "selection.prompt"
+	UIEventCommandCatalog        UIEventKind = "command.catalog"
 	UIEventRequestPrompt         UIEventKind = "request.prompt"
 	UIEventPendingInput          UIEventKind = "pending.input.state"
 	UIEventNotice                UIEventKind = "notice"
@@ -277,6 +304,7 @@ type UIEvent struct {
 	SourceMessageID   string
 	Snapshot          *Snapshot
 	SelectionPrompt   *SelectionPrompt
+	CommandCatalog    *CommandCatalog
 	RequestPrompt     *RequestPrompt
 	PendingInput      *PendingInputState
 	Notice            *Notice

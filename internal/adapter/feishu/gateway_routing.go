@@ -162,128 +162,15 @@ func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string)
 }
 
 func parseTextAction(text string) (control.Action, bool) {
-	trimmed := strings.TrimSpace(text)
-	fields := strings.Fields(trimmed)
-	if len(fields) > 0 {
-		switch strings.ToLower(fields[0]) {
-		case "/model":
-			return control.Action{Kind: control.ActionModelCommand, Text: trimmed}, true
-		case "/reasoning", "/effort":
-			return control.Action{Kind: control.ActionReasoningCommand, Text: trimmed}, true
-		case "/access", "/approval":
-			return control.Action{Kind: control.ActionAccessCommand, Text: trimmed}, true
-		}
-	}
-	switch trimmed {
-	case "/list":
-		return control.Action{Kind: control.ActionListInstances}, true
-	case "/status":
-		return control.Action{Kind: control.ActionStatus}, true
-	case "/stop":
-		return control.Action{Kind: control.ActionStop}, true
-	case "/new":
-		return control.Action{Kind: control.ActionNewThread}, true
-	case "/newinstance":
-		return control.Action{Kind: control.ActionRemovedCommand, Text: "/newinstance"}, true
-	case "/killinstance":
-		return control.Action{Kind: control.ActionKillInstance}, true
-	case "/threads", "/use", "/sessions":
-		return control.Action{Kind: control.ActionShowThreads}, true
-	case "/useall", "/sessionsall", "/sessions/all":
-		return control.Action{Kind: control.ActionShowAllThreads}, true
-	case "/follow":
-		return control.Action{Kind: control.ActionFollowLocal}, true
-	case "/detach":
-		return control.Action{Kind: control.ActionDetach}, true
-	default:
-		return control.Action{}, false
-	}
+	return control.ParseFeishuTextAction(text)
 }
 
 func menuAction(eventKey string) (control.Action, bool) {
-	if action, ok := dynamicMenuAction(eventKey); ok {
-		return action, true
-	}
-	switch normalizeMenuEventKey(eventKey) {
-	case "list":
-		return control.Action{Kind: control.ActionListInstances}, true
-	case "status":
-		return control.Action{Kind: control.ActionStatus}, true
-	case "stop":
-		return control.Action{Kind: control.ActionStop}, true
-	case "new", "newthread":
-		return control.Action{Kind: control.ActionNewThread}, true
-	case "newinstance":
-		return control.Action{Kind: control.ActionRemovedCommand, Text: "new_instance"}, true
-	case "killinstance":
-		return control.Action{Kind: control.ActionKillInstance}, true
-	case "threads", "use", "sessions", "showthreads", "showsessions":
-		return control.Action{Kind: control.ActionShowThreads}, true
-	case "threadsall", "useall", "sessionsall", "showallthreads", "showallsessions":
-		return control.Action{Kind: control.ActionShowAllThreads}, true
-	case "reasonlow", "reason_low", "reason-low":
-		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning low"}, true
-	case "reasonmedium", "reason_medium", "reason-medium":
-		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning medium"}, true
-	case "reasonhigh", "reason_high", "reason-high":
-		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning high"}, true
-	case "reasonxhigh", "reason_xhigh", "reason-xhigh":
-		return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning xhigh"}, true
-	case "accessfull", "approvalfull":
-		return control.Action{Kind: control.ActionAccessCommand, Text: "/access full"}, true
-	case "accessconfirm", "approvalconfirm":
-		return control.Action{Kind: control.ActionAccessCommand, Text: "/access confirm"}, true
-	default:
-		return control.Action{}, false
-	}
-}
-
-func dynamicMenuAction(eventKey string) (control.Action, bool) {
-	trimmed := strings.TrimSpace(eventKey)
-	lower := strings.ToLower(trimmed)
-	for _, prefix := range []string{"model_", "model-"} {
-		if strings.HasPrefix(lower, prefix) {
-			model := strings.TrimSpace(trimmed[len(prefix):])
-			if model == "" {
-				return control.Action{}, false
-			}
-			return control.Action{Kind: control.ActionModelCommand, Text: "/model " + model}, true
-		}
-	}
-	for _, prefix := range []string{"reason_", "reason-"} {
-		if strings.HasPrefix(lower, prefix) {
-			effort := strings.ToLower(strings.TrimSpace(trimmed[len(prefix):]))
-			if !menuReasoningEffort(effort) {
-				return control.Action{}, false
-			}
-			return control.Action{Kind: control.ActionReasoningCommand, Text: "/reasoning " + effort}, true
-		}
-	}
-	return control.Action{}, false
-}
-
-func menuReasoningEffort(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "low", "medium", "high", "xhigh":
-		return true
-	default:
-		return false
-	}
+	return control.ParseFeishuMenuAction(eventKey)
 }
 
 func normalizeMenuEventKey(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" {
-		return ""
-	}
-	var b strings.Builder
-	b.Grow(len(value))
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return control.NormalizeFeishuMenuEventKey(value)
 }
 
 func menuActionKind(eventKey string) (control.ActionKind, bool) {

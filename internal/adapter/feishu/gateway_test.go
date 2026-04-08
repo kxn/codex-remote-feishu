@@ -360,6 +360,23 @@ func TestParseTextActionRecognizesSessionCommands(t *testing.T) {
 	}
 }
 
+func TestParseTextActionRecognizesHelpAndMenuCommands(t *testing.T) {
+	tests := map[string]control.ActionKind{
+		"/help": control.ActionShowCommandHelp,
+		"menu":  control.ActionShowCommandMenu,
+		"/menu": control.ActionShowCommandMenu,
+	}
+	for input, want := range tests {
+		action, handled := parseTextAction(input)
+		if !handled {
+			t.Fatalf("expected %q to be handled", input)
+		}
+		if action.Kind != want {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, want)
+		}
+	}
+}
+
 func TestRemovedNewInstanceCommandPreservesCommandText(t *testing.T) {
 	action, handled := parseTextAction("/newinstance")
 	if !handled {
