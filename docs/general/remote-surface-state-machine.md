@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-07`
-> Summary: 记录当前已实现的 remote surface 状态机，包括多 app 全局仲裁、`/new` 的 `new_thread_ready`、空 thread 归属、thread 级未投递回放、watchdog 与死状态审计结论，作为提交前复审基线。
+> Updated: `2026-04-08`
+> Summary: 去掉 `/newinstance` 手工 headless 恢复分支，收敛 `PendingHeadless` 只剩 thread-first `/use` 的预选启动流，并同步兼容入口说明。
 
 ## 1. 文档定位
 
@@ -16,12 +16,15 @@
 审计基线覆盖：
 
 1. [internal/core/orchestrator/service.go](../../internal/core/orchestrator/service.go)
-2. [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
-3. [internal/core/state/types.go](../../internal/core/state/types.go)
-4. [internal/core/control/types.go](../../internal/core/control/types.go)
-5. [internal/adapter/feishu/gateway.go](../../internal/adapter/feishu/gateway.go)
-6. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-7. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
+2. [internal/core/orchestrator/service_surface.go](../../internal/core/orchestrator/service_surface.go)
+3. [internal/core/orchestrator/service_snapshot.go](../../internal/core/orchestrator/service_snapshot.go)
+4. [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
+5. [internal/core/state/types.go](../../internal/core/state/types.go)
+6. [internal/core/control/types.go](../../internal/core/control/types.go)
+7. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
+8. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
+9. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
+10. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
 
 ## 2. 审计前提
 
@@ -78,10 +81,9 @@ surface 不是单一枚举，而是四层正交状态叠加。
 | --- | --- | --- |
 | `G0 None` | 无附加门禁 | 普通输入按主路由走 |
 | `G1 PendingHeadlessStarting` | `PendingHeadless.Status=starting` | headless 仍在启动 |
-| `G2 PendingHeadlessSelecting` | `PendingHeadless.Status=selecting` | headless 已 attach，但等待用户选恢复 thread |
-| `G3 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片会被确认卡片门禁挡住 |
-| `G4 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
-| `G5 AbandoningGate` | `Abandoning=true` | 只有 `/status` 继续正常，其余动作被挡 |
+| `G2 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片会被确认卡片门禁挡住 |
+| `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
+| `G4 AbandoningGate` | `Abandoning=true` | 只有 `/status` 继续正常，其余动作被挡 |
 
 ### 3.4 草稿状态
 
@@ -136,15 +138,15 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/killinstance`、`resume_headless_thread`、消息撤回、reaction。
+1. 允许：`/status`、`/killinstance`、旧 `/newinstance` / 历史 `resume_headless_thread` 的兼容提示、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
 
 1. `starting` 时不能旁路 attach/use/follow/new。
-2. `selecting` 时也不能通过 `/use`、`/follow`、`/new`、普通文本去改路由。
-3. 对 thread-first `/use` 触发的 preselected headless，`starting` 结束后会直接落到目标 thread，不会进入 `selecting`。
-4. 手工 `/newinstance` 的 headless 选择期，唯一正常逃生口仍是“恢复某个 thread”或“/killinstance”。
+2. detached `/use` 触发的 preselected headless，在实例连上后会直接落到目标 thread，不会再进入手工 selecting。
+3. `/killinstance` 仍是当前 pending headless 的唯一主动取消入口；此外还有启动超时 watchdog。
+4. 旧 `/newinstance` 与旧 `resume_headless_thread` 卡片即使仍被用户触发，也只会返回迁移提示，不会改动当前 pending headless。
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
 
@@ -152,15 +154,15 @@ surface 不是单一枚举，而是四层正交状态叠加。
 
 当前行为：
 
-1. attach/use/headless resume/kick confirm 都改成**直达动作**。
+1. attach/use/kick confirm 都改成**直达动作**。
 2. Feishu 卡片按钮直接携带：
    1. `attach_instance`
    2. `use_thread`
-   3. `resume_headless_thread`
-   4. `kick_thread_confirm`
-   5. `kick_thread_cancel`
-3. 旧 `prompt_select` 只保留兼容解析，服务端统一返回 `selection_expired`。
-4. `"1"`、`"2"` 这类纯数字文本现在就是普通文本。
+   3. `kick_thread_confirm`
+   4. `kick_thread_cancel`
+3. 旧 `resume_headless_thread` 只保留兼容解析，服务端统一返回迁移提示。
+4. 旧 `prompt_select` 只保留兼容解析，服务端统一返回 `selection_expired`。
+5. `"1"`、`"2"` 这类纯数字文本现在就是普通文本。
 
 ### 4.5 route change 与 `/new` 都会显式处理未发送草稿
 
@@ -270,7 +272,6 @@ R0 Detached
   -- /attach(instance，默认 thread 不可拿或不存在) --> R1 AttachedUnbound
   -- /use(thread，可解析到当前可用实例) --> R2 AttachedPinned
   -- /use(thread，需要新 headless) --> R0 + G1 PendingHeadlessStarting
-  -- /newinstance --> R0 + G1 PendingHeadlessStarting
 
 R1 AttachedUnbound
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
@@ -335,6 +336,7 @@ R5 NewThreadReady
    2. `/follow`
    3. follow-local 自动重绑定
    当前都会被冻结，避免 UI 宣布的新目标和下一条普通输入的实际落点不一致。
+7. 旧 `/newinstance` 在所有 route state 下都只会回迁移提示，不会创建 headless，也不会改动当前 route。
 
 ### 5.2 远端队列生命周期
 
@@ -382,19 +384,14 @@ E5 HandoffWait
 
 ```text
 G0 None
-  -- /newinstance --> G1 PendingHeadlessStarting
   -- /use(thread，需要 create headless) --> G1 PendingHeadlessStarting
 
 G1 PendingHeadlessStarting
   -- instance connected 且 pending.ThreadID != "" --> R2 AttachedPinned + G0 None
-  -- instance connected 且 pending.ThreadID == "" --> attach headless instance + G2 PendingHeadlessSelecting
+  -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + migration notice + G0 None
   -- /killinstance --> G0 None
+  -- /newinstance / 历史 resume_headless_thread --> migration notice，状态不变
   -- Tick timeout --> kill headless + clear pending + detach if needed
-
-G2 PendingHeadlessSelecting
-  -- resume_headless_thread(thread) --> R2 AttachedPinned + G0 None
-  -- /killinstance --> G0 None
-  -- 无 recoverable threads --> kill headless + R0 Detached + G0 None
 ```
 
 ### 5.5 detach / abandoning 生命周期
@@ -448,7 +445,7 @@ transport degraded retained attachment
 | 命令 | `R0 Detached` | `R1 AttachedUnbound` | `R2 AttachedPinned` | `R3 FollowWaiting` | `R4 FollowBound` | `R5 NewThreadReady` |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/list` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
-| `/newinstance` | 允许 | 拒绝 | 拒绝 | 拒绝 | 拒绝 | 拒绝 |
+| `/newinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/new` | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 允许；若首条消息已 dispatching/running 则拒绝 |
 | `/killinstance` | 仅 pending headless 时有效 | 仅 headless attach/launch 时有效 | 同左 | 同左 | 同左 | 同左 |
 | `/use` `/useall` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许；若仅有 unsent draft 会先丢弃 |
@@ -465,9 +462,9 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1/G2 PendingHeadless` | 只允许 `/status`、`/killinstance`、`resume_headless_thread`、revoke/reaction；其余动作统一被 headless notice 挡住 |
-| `G3 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；用户必须先处理请求卡片 |
-| `G4 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/killinstance`、旧 `/newinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其余动作统一被 headless notice 挡住 |
+| `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；用户必须先处理请求卡片 |
+| `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住 |
 | `E6 Abandoning` | 只允许 `/status`；再次 `/detach` 只回 `detach_pending`；其余动作统一拒绝 |
 
 ## 7. UI 动作协议
@@ -478,7 +475,7 @@ transport degraded retained attachment
 | --- | --- | --- |
 | `attach_instance` | `ActionAttachInstance` | 直达 attach |
 | `use_thread` | `ActionUseThread` | 直达 thread 切换 |
-| `resume_headless_thread` | `ActionResumeHeadless` | 直达 headless 恢复 |
+| `resume_headless_thread` | `ActionRemovedCommand` | 历史兼容入口，统一回迁移提示 |
 | `kick_thread_confirm` | `ActionConfirmKickThread` | 强踢前再次校验实时状态 |
 | `kick_thread_cancel` | `ActionCancelKickThread` | 仅回 notice |
 | `prompt_select` | `ActionSelectPrompt` | 旧兼容入口，统一回 `selection_expired` |
@@ -506,7 +503,7 @@ transport degraded retained attachment
 10. **detach 期间最后一条 final / thread notice 会被完全吞掉**：已修复。当前会保留单条 thread 级 replay，并在后续 idle 的 `/attach` 或 `/use` 时一次性补发。
 11. **detached 状态下 `/use` 是死入口，只能先 attach instance**：已修复。现在 `/use` 会展示 global merged thread list，并按 resolver 自动 attach。
 12. **cross-instance `/use` 会绕过 detach 语义，保留旧 request/capture/override**：已修复。现在会先走 detach 风格清理与门禁，再 attach 新 thread。
-13. **thread-first create headless 仍然要先起空实例再选 thread**：已修复。global `/use` 触发的新 headless 会带 preselected thread 直接落到目标 thread。
+13. **旧 `/newinstance` 手工 headless 选择分支仍能把用户带进过时状态**：已修复。当前只保留 thread-first `/use` 的 preselected headless；旧命令和旧 `resume_headless_thread` 卡片统一回迁移提示。
 14. **same-instance `/use` / `/follow` / auto-follow 会在旧 request gate 还活着时静默改路由**：已修复。现在只要 request gate 仍在，所有会改路由的动作都会被冻结。
 15. **cross-instance attach 到复用/新建 headless 时会丢 thread replay**：已修复。当前 replay 会先按 `threadID` 全局迁移，再在目标 attach 上一次性补发。
 16. **transport degraded 后 attachment 仍保留，但文档和 `/status` 看起来像已 detached**：已修复。canonical 文档和 `/status` 现在都显式区分 retained-offline 与真正 detach。
@@ -544,6 +541,4 @@ transport degraded retained attachment
 
 ## 11. 待讨论取舍
 
-- 是否继续保留 `/newinstance` 这条“先起实例，再选恢复 thread”的旧路径，还是在后续阶段与 global `/use` 的 thread-first 语义完全统一。
-- 影响状态与迁移：`G1 PendingHeadlessStarting`、`G2 PendingHeadlessSelecting`、手工 headless 恢复卡片。
-- 当前最安全默认值：保留 `/newinstance` 作为显式手工入口，把默认 thread-first 工作流放在 `/use`，避免两条路径在同一轮里同时重写。
+当前无。

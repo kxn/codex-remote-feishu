@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-07`
-> Summary: 将 Feishu IM 消息研究迁移到 `docs/general` 并同步刷新索引。
+> Updated: `2026-04-08`
+> Summary: 将已废弃的 Feishu headless 手工恢复设计稿迁移到 `docs/obsoleted` 并刷新索引。
 
 ## 1. 适用范围
 
@@ -130,7 +130,6 @@
 
 ### 6.3 `inprogress`
 
-- [feishu-headless-instance-design.md](./inprogress/feishu-headless-instance-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
@@ -146,4 +145,5 @@
 ### 6.5 `obsoleted`
 
 - [app-server-redesign.md](./obsoleted/app-server-redesign.md)
+- [feishu-headless-instance-design.md](./obsoleted/feishu-headless-instance-design.md)
 - [web-install-admin-ui-design.md](./obsoleted/web-install-admin-ui-design.md)

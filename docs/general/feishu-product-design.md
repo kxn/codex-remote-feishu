@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-07`
-> Summary: 对齐当前 `/list`、global `/use`、按钮直达交互与 attached-unbound / request gate 等实际行为。
+> Updated: `2026-04-08`
+> Summary: 去掉已废弃的 `resume_headless_thread` 作为当前选择卡片动作，只保留历史兼容说明。
 
 ## 1. 文档定位
 
@@ -302,10 +302,10 @@ attach 成功后：
 
 - `attach_instance`
 - `use_thread`
-- `resume_headless_thread`
 - `kick_thread_confirm`
 - `kick_thread_cancel`
 
+旧 `resume_headless_thread` 只保留为历史兼容入口，统一回迁移提示。
 旧 `prompt_select` 只保留为兼容入口，统一回 `selection_expired`。
 
 ### 7.1.1 Approval Request 卡片

@@ -1,8 +1,20 @@
 # Feishu Headless 实例设计
 
-> Type: `inprogress`
-> Updated: `2026-04-07`
-> Summary: 标记为进行中文档并迁移到 `docs/inprogress`，保留当前 headless 实例方案与已落地的最小池化补充。
+> Type: `obsoleted`
+> Updated: `2026-04-08`
+> Summary: 标记为已废弃，保留 `/newinstance` 手工 headless 恢复方案的历史设计背景；当前实现已改为 thread-first `/use` 自动恢复。
+> Superseded By: `docs/general/remote-surface-state-machine.md`
+
+## 0. 废弃说明
+
+这份文档描述的 `/newinstance` / `new_instance` / `resume_headless_thread` 手工恢复链已在 `2026-04-08` 从当前实现移除。
+
+当前 source of truth：
+
+- `docs/general/remote-surface-state-machine.md`
+- `docs/general/feishu-product-design.md`
+
+以下内容仅保留为历史设计记录，不再作为当前实现依据。
 
 ## 1. 文档定位
 
