@@ -20,6 +20,12 @@ To pin a specific version:
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
 ```
 
+To install the latest beta track instead of the latest production build:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
+```
+
 ## Option 2: Download a release archive
 
 1. Download the archive matching your platform from GitHub Releases
@@ -71,7 +77,11 @@ These repo helpers are not part of the released product package.
 
 Then in Feishu:
 
+- send `/help` or `menu` first if you want to see the current command set without guessing
 - send `/list` if you want to explicitly attach one of the online VS Code instances
 - send `/use` or `/threads` if you want to jump straight into a recent visible session; use `/useall` for the full list
-- use the card buttons when they appear; if you are looking at an old card, resend the command instead of replying with a number
+- use the card buttons when they appear; if a card says it is stale or expired, resend the command instead of replying with a number
+- final replies will show up under the source message that triggered them, which makes group chat context easier to follow
+- if a text is still queued while another reply is running, add a `ThumbsUp` to that queued text to turn it into a follow-up for the current turn
+- `/detach` drops the current attachment and also cancels a pending background recovery if one is in progress
 - remote execution defaults to full access; if you need confirmation mode temporarily, send `/access confirm`

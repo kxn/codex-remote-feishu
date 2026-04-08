@@ -33,6 +33,8 @@
    - `access_full`
    - `access_confirm`
 
+WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞书里的 `/help` / `menu` 现在都来自同一套命令定义；按当前列表配置即可，不需要自己再推测一份菜单组合。
+
 `card.action.trigger` 现在不仅用于 attach / 切换会话，也用于命令菜单卡片和 approval request 卡片按钮交互；如果这个回调没配，飞书里的按钮卡片会点了没反应。
 
 文本命令不需要在飞书控制台单独注册，直接给机器人发消息即可。当前建议保留这些命令：
@@ -96,6 +98,7 @@
 
 其中：
 
+- `im.message.reaction.created_v1` 负责 queued 文本的 `ThumbsUp` steering
 - `im.message.recalled_v1` 负责撤回尚未发送的排队输入，或取消 staged image
 - `application.bot.menu_v6` 负责实例列表、状态、推理强度和执行权限快捷菜单
 

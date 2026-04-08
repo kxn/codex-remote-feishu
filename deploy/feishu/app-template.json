@@ -86,7 +86,7 @@
     },
     {
       "event": "im.message.reaction.created_v1",
-      "purpose": "用户对待发送图片或排队消息加 reaction 时，表示取消。"
+      "purpose": "用户给 queued 文本加 ThumbsUp 时，可把它升级成对当前执行回复的跟进。"
     },
     {
       "event": "application.bot.menu_v6",
@@ -146,6 +146,7 @@
   "notes": [
     "此文件是项目模板，不保证可直接导入飞书控制台。",
     "请按 deploy/feishu/README.md 的说明，把这里的菜单、事件和权限逐项配置到你的自建应用。",
+    "WebSetup 页面里的推荐菜单和飞书里的 /help 使用同一套命令定义。",
     "当前 .md 预览默认上传到应用云空间目录 Codex Remote Previews/，并按会话给用户或群授权。"
   ]
 }

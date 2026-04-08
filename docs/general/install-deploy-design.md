@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 统一记录 WebSetup-first 发布模型，并补充 production / beta / alpha release track 与升级停机收敛语义。
+> Updated: `2026-04-08`
+> Summary: 同步 release archive 附带 CHANGELOG，并对齐 changelog-first 的 GitHub release notes 生成方式。
 
 ## 1. 范围
 
@@ -223,6 +223,7 @@ release 包中的归档目录只是版本缓存位置，不是长期运行路径
 - 一个带版本号的 `codex-remote`
 - `README.md`
 - `QUICKSTART.md`
+- `CHANGELOG.md`
 - `deploy/`
 
 另外单独生成：
@@ -244,6 +245,7 @@ release 包内不再附带：
 - workflow 显式区分 `production / beta / alpha` 三条 track
 - `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
 - GitHub 端生成 release notes 和 checksums
+- release notes 优先引用 `CHANGELOG.md` 中当前版本的人类整理摘要，再附带按提交分组的明细
 - GitHub 端创建并发布 GitHub Release
 
 本地 `make release-artifacts VERSION=...` 仅用于打包预演，不是正式发布路径。

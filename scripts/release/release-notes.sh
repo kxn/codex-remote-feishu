@@ -27,6 +27,24 @@ else
   mapfile -t commits < <(git log --reverse --format='%h%x09%s')
 fi
 
+changelog_section=""
+if [[ -f CHANGELOG.md ]]; then
+  changelog_section="$(
+    awk -v version="${version}" '
+      $0 ~ "^##[[:space:]]+" version "([[:space:]]|\\(|$)" {
+        in_section=1
+        next
+      }
+      in_section && $0 ~ "^##[[:space:]]+" {
+        exit
+      }
+      in_section {
+        print
+      }
+    ' CHANGELOG.md | sed '/./,$!d'
+  )"
+fi
+
 breaking=()
 features=()
 fixes=()
@@ -54,7 +72,7 @@ print_section() {
   if [[ "$#" -eq 0 ]]; then
     return
   fi
-  echo "## ${title}"
+  echo "### ${title}"
   printf '%s\n' "$@"
   echo
 }
@@ -69,6 +87,12 @@ else
   echo "Initial release."
 fi
 echo
+if [[ -n "${changelog_section//[[:space:]]/}" ]]; then
+  echo "## Highlights"
+  echo
+  printf '%s\n' "${changelog_section}"
+  echo
+fi
 echo "## Install"
 echo
 echo "Latest production install:"
@@ -99,7 +123,8 @@ echo '```bash'
 echo "./codex-remote install -bootstrap-only -start-daemon"
 echo '```'
 echo
-
+echo "## Detailed Changes"
+echo
 print_section "Breaking Changes" "${breaking[@]}"
 print_section "Features" "${features[@]}"
 print_section "Fixes" "${fixes[@]}"

@@ -42,7 +42,7 @@ for platform in "${platforms[@]}"; do
     go build -trimpath -ldflags "-X main.version=${version}" \
     -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
 
-  cp README.md QUICKSTART.md "${staging_dir}/"
+  cp README.md QUICKSTART.md CHANGELOG.md "${staging_dir}/"
   cp -R deploy "${staging_dir}/"
 
   if [[ "${goos}" == "windows" ]]; then

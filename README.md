@@ -29,6 +29,7 @@
   - `codex-remote` / `codex-remote.exe`
   - `README.md`
   - `QUICKSTART.md`
+  - `CHANGELOG.md`
   - `deploy/`
 - 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
 - GitHub Releases 现在区分 `production / beta / alpha` 三条 track
@@ -41,9 +42,12 @@
 - 在飞书里列出在线 VS Code 实例并显式接管
 - 直接从最近或全部会话列表继续已有对话
 - 文本消息排队、typing reaction、stop 中断
+- 排队中的文字消息支持用点赞升级成对当前执行的跟进
 - 支持暂存图片，并在下一条文本里一起发给 Codex
 - 查看当前生效的模型和推理强度，并做飞书侧临时覆盖
 - 区分系统提示、过程消息和最终回复
+- 最终回复会直接回在触发它的那条消息下方
+- 旧卡片、旧按钮和旧命令会明确提示已过期或已移除
 - 最终回复中的本地 `.md` Markdown 链接可自动替换成飞书云空间预览链接
 
 ## 安装前准备
@@ -184,6 +188,7 @@ VS Code 两种接管方式的区别：
 release 包内会附带：
 
 - [QUICKSTART.md](./QUICKSTART.md)
+- [CHANGELOG.md](./CHANGELOG.md)
 - [deploy/docker/Dockerfile](./deploy/docker/Dockerfile)
 - [deploy/docker/compose.yml](./deploy/docker/compose.yml)
 - [deploy/feishu/app-template.json](./deploy/feishu/app-template.json)
@@ -205,19 +210,27 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 
 命令：
 
+- `/help`：查看当前可用命令、示例和说明
+- `menu` 或 `/menu`：再次打开命令菜单卡片
 - `/list`：列出当前可手工接管的在线 VS Code 实例
 - 选择方式：当前通过卡片里的按钮直接触发；如果看到旧卡片，请重新发送命令
 - `/threads` 或 `/use`：列出最近可见会话；即使当前还没显式 attach，也可以直接从这里继续已有对话
 - `/useall`：列出全部可见会话
-- 会话选择后：系统会切到目标会话；必要时会自动接管在线实例，或复用/启动后台 headless 实例
+- 会话选择后：系统会切到目标会话；必要时会自动接管在线实例，或在后台恢复目标会话
 - `/status`：查看当前接管状态、队列和模型配置
 - `/follow`：切回跟随当前 VS Code thread
 - `/stop`：中断当前 turn，并清空尚未发出的飞书队列
-- `/detach`：断开当前实例接管
+- 排队中的文字消息如果还没发出，也可以给这条消息点 `ThumbsUp`，把它升级成对当前执行的跟进
+- `/detach`：断开当前实例接管；如果当前正在后台恢复，也会一并取消
 - `/model`：查看或设置飞书侧模型覆盖
 - `/reasoning`：查看或设置飞书侧推理强度覆盖
 - `/access`：查看或设置飞书侧执行权限覆盖，支持 `full`、`confirm`、`clear`
 - `/approval`：`/access` 的别名
+
+另外：
+
+- 最终回复现在会直接回在你触发它的原始消息下面，群聊里更容易看懂上下文
+- 旧卡片、旧按钮或旧菜单动作如果已经过期，会收到明确提示；直接重发对应命令即可
 
 机器人菜单：
 
@@ -225,8 +238,14 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 - `status`
 - `threads`
 - `stop`
+- `reason_low`
+- `reason_medium`
+- `reason_high`
+- `reason_xhigh`
 - `access_full`
 - `access_confirm`
+
+WebSetup 里的推荐菜单、飞书模板和 `/help` 当前都来自同一套命令定义；按当前列表配置即可。
 
 关于 `.md` 预览：
 
@@ -253,6 +272,7 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
 ## 文档
 
+- [变更记录](./CHANGELOG.md)
 - [用户使用说明书](./docs/general/user-guide.md)
 - [文档索引](./docs/README.md)
 - [架构说明](./docs/general/architecture.md)
