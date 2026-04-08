@@ -1,5 +1,45 @@
 {
   "version": 1,
   "repo": "kxn/codex-remote-feishu",
-  "issues": []
+  "issues": [
+    {
+      "number": 22,
+      "title": "[Work] Headless instance 改用 pool 管理",
+      "updatedAt": "2026-04-08T02:29:31Z",
+      "decision": "new-doc",
+      "reason": "current docs did not have a dedicated lifecycle document for the managed headless pool implementation",
+      "targetDocs": [
+        "docs/implemented/managed-headless-pool-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/22",
+      "recordedAt": "2026-04-08T04:20:34Z"
+    },
+    {
+      "number": 35,
+      "title": "[Work] 去掉newinstance相关的命令",
+      "updatedAt": "2026-04-08T01:49:46Z",
+      "decision": "skip",
+      "reason": "current docs already cover the durable result in docs/general/remote-surface-state-machine.md and docs/obsoleted/feishu-headless-instance-design.md",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/35",
+      "recordedAt": "2026-04-08T04:20:34Z"
+    },
+    {
+      "number": 37,
+      "title": "[Work] websetup 文本修订",
+      "updatedAt": "2026-04-08T01:50:15Z",
+      "decision": "skip",
+      "reason": "the durable result already lives in the current Feishu setup docs and WebSetup guidance, so a new lifecycle doc would be redundant",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/37",
+      "recordedAt": "2026-04-08T04:20:34Z"
+    },
+    {
+      "number": 38,
+      "title": "[Work] 支持 steering",
+      "updatedAt": "2026-04-08T03:36:27Z",
+      "decision": "skip",
+      "reason": "current docs already cover steering across relay protocol, Feishu product behavior, and the canonical remote surface state machine",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/38",
+      "recordedAt": "2026-04-08T04:20:35Z"
+    }
+  ]
 }

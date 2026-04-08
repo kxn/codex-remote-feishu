@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-08`
-> Summary: 将已废弃的 Feishu headless 手工恢复设计稿迁移到 `docs/obsoleted` 并刷新索引。
+> Summary: 新增 managed headless pool 已实现文档并刷新索引。
 
 ## 1. 适用范围
 
@@ -124,6 +124,7 @@
 
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
+- [managed-headless-pool-design.md](./implemented/managed-headless-pool-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)
 - [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
