@@ -8,6 +8,8 @@ import type {
   VSCodeDetectResponse,
 } from "../../lib/types";
 import { DefinitionList, Panel, StatCard, StatGrid, StatusBadge } from "../../components/ui";
+import { FeishuAppFields } from "../shared/FeishuAppFields";
+import { vscodeIsReady } from "../shared/helpers";
 import {
   appConnectionLabel,
   appConnectionTone,
@@ -19,7 +21,6 @@ import {
   instanceStatusLabel,
   instanceStatusTone,
   statusTone,
-  vscodeIsReady,
   vscodeModeLabel,
 } from "./helpers";
 import type { AppDraft, Notice, PreviewMap } from "./types";
@@ -264,27 +265,21 @@ export function AdminFeishuPanel({
           ) : null}
           {activeApp?.status?.lastError ? <div className="notice-banner danger">最近错误：{activeApp.status.lastError}</div> : null}
 
-          <div className="form-grid">
-            <label className="field">
-              <span>机器人名称</span>
-              <input value={draft.name} placeholder="团队机器人" disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>App ID</span>
-              <input value={draft.appId} placeholder="cli_xxx" disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, appId: event.target.value }))} />
-            </label>
-            <p className="form-hint form-grid-span-2">改成另一个 App ID 等于切换到另一个机器人身份，旧飞书会话不会自动迁移。</p>
-            <label className="field form-grid-span-2">
-              <span>App Secret</span>
-              <input
-                type="password"
-                value={draft.appSecret}
-                placeholder={activeApp?.hasSecret ? "留空表示保留当前 secret" : "secret_xxx"}
-                disabled={readOnly}
-                onChange={(event) => onDraftChange((current) => ({ ...current, appSecret: event.target.value }))}
-              />
-            </label>
-          </div>
+          <FeishuAppFields
+            className="form-grid"
+            values={draft}
+            readOnly={readOnly}
+            hasSecret={activeApp?.hasSecret}
+            nameLabel="机器人名称"
+            namePlaceholder="团队机器人"
+            nameFieldClassName="field"
+            appIDFieldClassName="field"
+            appIDHintClassName="form-hint form-grid-span-2"
+            secretFieldClassName="field form-grid-span-2"
+            onNameChange={(value) => onDraftChange((current) => ({ ...current, name: value }))}
+            onAppIDChange={(value) => onDraftChange((current) => ({ ...current, appId: value }))}
+            onAppSecretChange={(value) => onDraftChange((current) => ({ ...current, appSecret: value }))}
+          />
 
           <label className="checkbox-row">
             <input type="checkbox" checked={draft.enabled} disabled={readOnly} onChange={(event) => onDraftChange((current) => ({ ...current, enabled: event.target.checked }))} />

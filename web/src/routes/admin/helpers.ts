@@ -1,5 +1,5 @@
-import { formatError, requestJSON } from "../../lib/api";
 import type { AdminInstanceSummary, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
+import { vscodeIsReady } from "../shared/helpers";
 import type { AppDraft, WizardRow } from "./types";
 import { newAppID } from "./types";
 
@@ -44,25 +44,6 @@ export function syncDraftSelection(
   }
   setSelectedID(newAppID);
   setDraft(emptyDraft());
-}
-
-export function blankToUndefined(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-export async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetectResponse | null; error: string }> {
-  try {
-    return {
-      data: await requestJSON<VSCodeDetectResponse>(path),
-      error: "",
-    };
-  } catch (err: unknown) {
-    return {
-      data: null,
-      error: formatError(err),
-    };
-  }
 }
 
 export function buildWizardRows(app: FeishuAppSummary): WizardRow[] {
@@ -242,19 +223,6 @@ export function formatBytes(value: number): string {
     unitIndex += 1;
   }
   return `${current.toFixed(current >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-export function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  if (vscode.recommendedMode === "managed_shim") {
-    return vscode.latestShim.matchesBinary;
-  }
-  if (vscode.recommendedMode === "all") {
-    return vscode.settings.matchesBinary && vscode.latestShim.matchesBinary;
-  }
-  return vscode.settings.matchesBinary;
 }
 
 export function vscodeReadinessText(vscode: VSCodeDetectResponse | null): string {

@@ -13,6 +13,13 @@ import type {
   VSCodeDetectResponse,
 } from "../lib/types";
 import { BlockingModal, ErrorState, LoadingState, Panel, StatusBadge } from "../components/ui";
+import { FeishuAppFields } from "./shared/FeishuAppFields";
+import {
+  blankToUndefined,
+  buildSetupFeishuVerifySuccessMessage,
+  loadVSCodeState,
+  vscodeIsReady,
+} from "./shared/helpers";
 
 const newAppID = "__new__";
 
@@ -255,7 +262,7 @@ export function SetupRoute() {
       }
       setNotice({
         tone: mutation?.kind === "identity_changed" || response.data.app.status?.state !== "connected" ? "warn" : "good",
-        message: buildSetupVerifySuccessMessage(response.data.app, mutation),
+        message: buildSetupFeishuVerifySuccessMessage(response.data.app, mutation),
       });
       setSetupStarted(true);
       setCurrentStepHint("permissions");
@@ -410,29 +417,24 @@ export function SetupRoute() {
       case "connect":
         return (
           <div className="wizard-step-layout two-column">
-            <div className="wizard-form-stack">
-              {apps.length > 1 ? <div className="notice-banner warn">当前 setup 只继续处理一个应用。更多应用的新增、切换和运行管理请到本地管理页进行。</div> : null}
-              {activeApp?.readOnly ? <div className="notice-banner warn">当前应用由运行时环境变量接管，setup 页面会直接对它做连接测试，但不会修改本地配置。</div> : null}
-              <label className="field">
-                <span>显示名称</span>
-                <input value={draft.name} placeholder="Main Bot" disabled={Boolean(activeApp?.readOnly)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-              </label>
-              <label className="field">
-                <span>App ID</span>
-                <input value={draft.appId} placeholder="cli_xxx" disabled={Boolean(activeApp?.readOnly)} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))} />
-              </label>
-              <p className="form-hint">改成另一个 App ID 等于切换到另一个机器人身份，旧飞书会话不会自动迁移。</p>
-              <label className="field">
-                <span>App Secret</span>
-                <input
-                  type="password"
-                  value={draft.appSecret}
-                  placeholder={activeApp?.hasSecret ? "留空表示保留现有 App Secret" : "secret_xxx"}
-                  disabled={Boolean(activeApp?.readOnly)}
-                  onChange={(event) => setDraft((current) => ({ ...current, appSecret: event.target.value }))}
-                />
-              </label>
-            </div>
+            <FeishuAppFields
+              className="wizard-form-stack"
+              notices={[
+                ...(apps.length > 1 ? [{ tone: "warn" as const, message: "当前 setup 只继续处理一个应用。更多应用的新增、切换和运行管理请到本地管理页进行。" }] : []),
+                ...(activeApp?.readOnly
+                  ? [{ tone: "warn" as const, message: "当前应用由运行时环境变量接管，setup 页面会直接对它做连接测试，但不会修改本地配置。" }]
+                  : []),
+              ]}
+              values={draft}
+              readOnly={Boolean(activeApp?.readOnly)}
+              hasSecret={activeApp?.hasSecret}
+              nameLabel="显示名称"
+              namePlaceholder="Main Bot"
+              secretPlaceholderWithExisting="留空表示保留现有 App Secret"
+              onNameChange={(value) => setDraft((current) => ({ ...current, name: value }))}
+              onAppIDChange={(value) => setDraft((current) => ({ ...current, appId: value }))}
+              onAppSecretChange={(value) => setDraft((current) => ({ ...current, appSecret: value }))}
+            />
 
             <div className="wizard-info-stack">
               <div className="manifest-block">
@@ -893,22 +895,6 @@ export function SetupRoute() {
   );
 }
 
-function buildSetupVerifySuccessMessage(app: FeishuAppSummary, mutation?: FeishuAppMutation): string {
-  const parts: string[] = [];
-  if (mutation?.message) {
-    parts.push(mutation.message);
-  }
-  parts.push("飞书应用连接成功，已进入下一步。");
-  parts.push("这一步只验证当前凭证可连接。");
-  if (app.status?.state !== "connected") {
-    parts.push("运行态仍在重连，后续实际使用请以连接状态恢复为准。");
-  }
-  if (mutation?.requiresNewChat) {
-    parts.push("请到新机器人侧重新开始会话，再继续后面的联调。");
-  }
-  return parts.join("");
-}
-
 function chooseAppID(apps: FeishuAppSummary[], preferredID: string): string {
   const preferred = apps.find((app) => app.id === preferredID);
   if (preferred) {
@@ -936,19 +922,6 @@ function appToDraft(app: FeishuAppSummary | null): SetupDraft {
     appId: app.appId || "",
     appSecret: "",
   };
-}
-
-function blankToUndefined(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetectResponse | null; error: string }> {
-  try {
-    return { data: await requestJSON<VSCodeDetectResponse>(path), error: "" };
-  } catch (err: unknown) {
-    return { data: null, error: formatError(err) };
-  }
 }
 
 function stepState(
@@ -1081,19 +1054,6 @@ function previousStepFor(stepID: StepID): StepID | null {
     default:
       return null;
   }
-}
-
-function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  if (vscode.recommendedMode === "managed_shim") {
-    return vscode.latestShim.matchesBinary;
-  }
-  if (vscode.recommendedMode === "all") {
-    return vscode.settings.matchesBinary && vscode.latestShim.matchesBinary;
-  }
-  return vscode.settings.matchesBinary;
 }
 
 function feishuAppConsoleURL(appId?: string): string {
