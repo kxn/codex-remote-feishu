@@ -127,6 +127,10 @@ export interface FeishuManifest {
     event: string;
     purpose?: string;
   }>;
+  callbacks: Array<{
+    callback: string;
+    purpose?: string;
+  }>;
   menus: Array<{
     key: string;
     name: string;

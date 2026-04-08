@@ -56,8 +56,8 @@ const wizardSteps: WizardStep[] = [
   { id: "start", label: "开始", summary: "说明安装向导会做什么。" },
   { id: "connect", label: "创建并连接飞书应用", summary: "创建应用、添加机器人能力，并完成连接测试。" },
   { id: "permissions", label: "配置应用权限", summary: "复制 scopes JSON，并在“批量导入/导出权限”里保存申请。" },
-  { id: "events", label: "配置事件订阅", summary: "按 manifest 订阅需要的飞书事件，并在“订阅方式”里保存长连接。" },
-  { id: "longConnection", label: "配置回调订阅方式", summary: "把“回调订阅方式”设为长连接，不填写 HTTP 回调 URL。" },
+  { id: "events", label: "配置事件订阅", summary: "按 manifest 订阅需要的飞书事件；卡片回调放到下一步配置。" },
+  { id: "longConnection", label: "配置回调订阅方式", summary: "把“回调订阅方式”设为长连接，并完成卡片回调配置。" },
   { id: "menus", label: "配置机器人菜单", summary: "按 key 创建真正会生效的机器人菜单。" },
   { id: "publish", label: "发布应用", summary: "发版后执行一次服务端验收检查。" },
   { id: "vscode", label: "VS Code（可选）", summary: "SSH 推荐 managed_shim，其他情况推荐 all。", optional: true },
@@ -510,7 +510,7 @@ export function SetupRoute() {
             </div>
             <div className="manifest-block">
               <h4>按下面的事件列表完成订阅</h4>
-              <p>保存订阅方式后，再把下面这些事件全部订阅进去并保存。完成后，再去下一页配置回调订阅方式。</p>
+              <p>保存订阅方式后，再把下面这些事件全部订阅进去并保存。卡片回调不在这里，完成后再去下一页配置回调订阅方式。</p>
             </div>
             <ul className="token-list">
               {manifest.events.map((item) => (
@@ -545,9 +545,21 @@ export function SetupRoute() {
                 <li>点击“回调订阅方式”。</li>
                 <li>选择“长连接”，然后点击“保存”。</li>
                 <li>这里不需要填写 HTTP 回调 URL。</li>
-                <li>同时确认上一页里已经订阅了 <code>card.action.trigger</code>。</li>
+                <li>再把下面这些回调项按页面说明配置完成。</li>
               </ul>
             </div>
+            <div className="manifest-block">
+              <h4>当前需要的回调项</h4>
+              <p>这些回调项走回调 / 长连接配置语义，不和上一页的普通事件订阅混在一起。</p>
+            </div>
+            <ul className="token-list">
+              {manifest.callbacks.map((item) => (
+                <li key={item.callback}>
+                  <code>{item.callback}</code>
+                  <span>{item.purpose || "需要手工配置回调。"}</span>
+                </li>
+              ))}
+            </ul>
             <div className="manifest-block">
               <h4>这一步为什么重要</h4>
               <ul className="wizard-bullet-list">
