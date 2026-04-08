@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
@@ -47,7 +45,11 @@ func Main(opts Options) int {
 		return 0
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop, err := newMainContext(context.Background())
+	if err != nil {
+		_, _ = fmt.Fprintf(opts.Stderr, "signal setup error: %v\n", err)
+		return 1
+	}
 	defer stop()
 
 	switch decision.Role {

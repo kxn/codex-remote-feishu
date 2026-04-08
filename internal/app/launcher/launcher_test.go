@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDetect(t *testing.T) {
@@ -218,5 +219,85 @@ func TestMainRunsDaemonForEmptyArgs(t *testing.T) {
 	}
 	if !ran {
 		t.Fatal("expected daemon runner to be called")
+	}
+}
+
+func TestNewMainContextCancelsWhenPlatformBridgeFires(t *testing.T) {
+	original := registerPlatformShutdownBridge
+	defer func() {
+		registerPlatformShutdownBridge = original
+	}()
+
+	var bridgeCancel context.CancelFunc
+	registerPlatformShutdownBridge = func(cancel context.CancelFunc) (func(), error) {
+		bridgeCancel = cancel
+		return nil, nil
+	}
+
+	ctx, stop, err := newMainContext(context.Background())
+	if err != nil {
+		t.Fatalf("newMainContext() error = %v", err)
+	}
+	defer stop()
+	if bridgeCancel == nil {
+		t.Fatal("expected platform bridge to receive cancel function")
+	}
+
+	bridgeCancel()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for context cancellation")
+	}
+	if err := ctx.Err(); err == nil {
+		t.Fatal("expected context to be canceled by platform bridge")
+	}
+}
+
+func TestNewMainContextRunsBridgeCleanupOnStop(t *testing.T) {
+	original := registerPlatformShutdownBridge
+	defer func() {
+		registerPlatformShutdownBridge = original
+	}()
+
+	cleanupCalled := false
+	registerPlatformShutdownBridge = func(context.CancelFunc) (func(), error) {
+		return func() {
+			cleanupCalled = true
+		}, nil
+	}
+
+	_, stop, err := newMainContext(context.Background())
+	if err != nil {
+		t.Fatalf("newMainContext() error = %v", err)
+	}
+	stop()
+	if !cleanupCalled {
+		t.Fatal("expected stop to unregister platform bridge")
+	}
+}
+
+func TestMainReportsSignalSetupError(t *testing.T) {
+	original := registerPlatformShutdownBridge
+	defer func() {
+		registerPlatformShutdownBridge = original
+	}()
+
+	registerPlatformShutdownBridge = func(context.CancelFunc) (func(), error) {
+		return nil, errors.New("bridge setup failed")
+	}
+
+	var stderr bytes.Buffer
+	exitCode := Main(Options{
+		Args:   []string{"daemon"},
+		Stdout: &bytes.Buffer{},
+		Stderr: &stderr,
+	})
+	if exitCode != 1 {
+		t.Fatalf("Main exitCode = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "signal setup error: bridge setup failed") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
