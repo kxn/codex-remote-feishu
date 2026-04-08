@@ -140,6 +140,42 @@ func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 	}
 }
 
+func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstance(t *testing.T) {
+	projector := NewProjector()
+	catalog := control.FeishuCommandHelpCatalog()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:           control.UIEventCommandCatalog,
+		CommandCatalog: &catalog,
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	var rendered strings.Builder
+	rendered.WriteString(ops[0].CardBody)
+	for _, element := range ops[0].CardElements {
+		content, _ := element["content"].(string)
+		if content == "" {
+			continue
+		}
+		rendered.WriteByte('\n')
+		rendered.WriteString(content)
+	}
+	body := rendered.String()
+	if strings.Contains(body, "/killinstance") {
+		t.Fatalf("expected builtin help catalog to hide /killinstance, got %q", body)
+	}
+	if strings.Contains(body, "&lt;") || strings.Contains(body, "&gt;") {
+		t.Fatalf("expected command placeholders to preserve angle brackets, got %q", body)
+	}
+	if !containsAll(body,
+		"<text_tag color='neutral'>/model <模型名></text_tag>",
+		"<text_tag color='neutral'>/reasoning <low|medium|high|xhigh></text_tag>",
+		"<text_tag color='neutral'>/access <full|confirm></text_tag>",
+	) {
+		t.Fatalf("unexpected builtin help catalog body: %q", body)
+	}
+}
+
 func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -619,8 +655,8 @@ func TestProjectFinalAssistantBlockKeepsFencedCodeWhileRenderingInlineTags(t *te
 		Kind:            control.UIEventBlockCommitted,
 		SourceMessageID: "msg-mixed",
 		Block: &render.Block{
-			Kind: render.BlockAssistantMarkdown,
-			Text: "已处理 `#47`。\n\n```text\n`old`\n/use\n```\n\n外面还有 `done`。",
+			Kind:        render.BlockAssistantMarkdown,
+			Text:        "已处理 `#47`。\n\n```text\n`old`\n/use\n```\n\n外面还有 `done`。",
 			ThreadID:    "thread-1",
 			ThreadTitle: "droid · 修复登录流程",
 			ThemeKey:    "thread-1",

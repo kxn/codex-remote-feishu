@@ -46,7 +46,6 @@
 - `/follow`
 - `/detach`
 - `/stop`
-- `/killinstance`
 - `/model`
 - `/reasoning`
 - `/access`

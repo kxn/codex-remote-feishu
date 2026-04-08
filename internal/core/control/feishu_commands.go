@@ -183,8 +183,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		buttons: []CommandCatalogButton{
 			{Label: "结束 headless", CommandText: "/killinstance"},
 		},
-		showInHelp: true,
-		showInMenu: true,
+		showInHelp: false,
+		showInMenu: false,
 		textExact: []feishuCommandMatch{
 			{alias: "/killinstance", action: Action{Kind: ActionKillInstance}},
 		},

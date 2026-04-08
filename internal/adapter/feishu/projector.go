@@ -587,7 +587,7 @@ func formatCommandTags(commands []string) string {
 		if command == "" {
 			continue
 		}
-		tags = append(tags, formatNeutralTextTag(command))
+		tags = append(tags, formatCommandTextTag(command))
 	}
 	return strings.Join(tags, " / ")
 }
@@ -599,7 +599,7 @@ func formatCommandExamples(examples []string) string {
 		if example == "" {
 			continue
 		}
-		tags = append(tags, formatNeutralTextTag(example))
+		tags = append(tags, formatCommandTextTag(example))
 	}
 	return strings.Join(tags, "，")
 }
@@ -785,6 +785,13 @@ func formatFileChangePath(file control.FileChangeSummaryEntry, labels map[string
 
 func formatNeutralTextTag(text string) string {
 	return "<text_tag color='neutral'>" + html.EscapeString(strings.TrimSpace(text)) + "</text_tag>"
+}
+
+func formatCommandTextTag(text string) string {
+	text = html.EscapeString(strings.TrimSpace(text))
+	text = strings.ReplaceAll(text, "&lt;", "<")
+	text = strings.ReplaceAll(text, "&gt;", ">")
+	return "<text_tag color='neutral'>" + text + "</text_tag>"
 }
 
 func projectNoticeBody(notice control.Notice) string {
