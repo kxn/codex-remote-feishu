@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -37,6 +38,8 @@ type LiveGateway struct {
 
 	downloadImageFn func(context.Context, string, string) (string, string, error)
 	fetchMessageFn  func(context.Context, string) (*gatewayMessage, error)
+	createMessageFn func(context.Context, string, string, string, string) (*larkim.CreateMessageResp, error)
+	replyMessageFn  func(context.Context, string, string, string) (*larkim.ReplyMessageResp, error)
 
 	mu        sync.Mutex
 	stateHook func(GatewayState, error)
@@ -83,6 +86,8 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	}
 	gateway.downloadImageFn = gateway.downloadImage
 	gateway.fetchMessageFn = gateway.fetchMessage
+	gateway.createMessageFn = gateway.createMessage
+	gateway.replyMessageFn = gateway.replyMessage
 	return gateway
 }
 

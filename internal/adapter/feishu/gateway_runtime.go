@@ -97,14 +97,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send text failed: missing receive target")
 		}
-		resp, err := g.client.Im.V1.Message.Create(ctx, larkim.NewCreateMessageReqBuilder().
-			ReceiveIdType(receiveIDType).
-			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(receiveID).
-				MsgType("text").
-				Content(string(body)).
-				Build()).
-			Build())
+		resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, "text", string(body))
 		if err != nil {
 			return err
 		}
@@ -127,14 +120,24 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send card failed: missing receive target")
 		}
-		resp, err := g.client.Im.V1.Message.Create(ctx, larkim.NewCreateMessageReqBuilder().
-			ReceiveIdType(receiveIDType).
-			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(receiveID).
-				MsgType("interactive").
-				Content(string(card)).
-				Build()).
-			Build())
+		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "interactive", string(card))
+			if err == nil && resp != nil && resp.Success() {
+				if resp.Data != nil {
+					g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+				}
+				return nil
+			}
+			log.Printf(
+				"feishu reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
+				operation.SurfaceSessionID,
+				operation.ReplyToMessageID,
+				err,
+				replyRespCode(resp),
+				replyRespMsg(resp),
+			)
+		}
+		resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, "interactive", string(card))
 		if err != nil {
 			return err
 		}
@@ -200,6 +203,41 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 	default:
 		return nil
 	}
+}
+
+func (g *LiveGateway) createMessage(ctx context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
+	return g.client.Im.V1.Message.Create(ctx, larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(receiveIDType).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(receiveID).
+			MsgType(msgType).
+			Content(content).
+			Build()).
+		Build())
+}
+
+func (g *LiveGateway) replyMessage(ctx context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	return g.client.Im.V1.Message.Reply(ctx, larkim.NewReplyMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType(msgType).
+			Content(content).
+			Build()).
+		Build())
+}
+
+func replyRespCode(resp *larkim.ReplyMessageResp) int {
+	if resp == nil {
+		return 0
+	}
+	return resp.Code
+}
+
+func replyRespMsg(resp *larkim.ReplyMessageResp) string {
+	if resp == nil {
+		return ""
+	}
+	return resp.Msg
 }
 
 func ignoredMissingReactionError(_ int, msg string) bool {
