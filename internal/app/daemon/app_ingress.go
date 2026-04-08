@@ -179,6 +179,7 @@ func (a *App) handleIngressOverload(instanceID string, connectionID uint64) {
 func (a *App) HandleAction(ctx context.Context, action control.Action) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	before := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 	log.Printf(
 		"surface action: surface=%s chat=%s actor=%s kind=%s message=%s instance=%s thread=%s text=%q",
 		action.SurfaceSessionID,
@@ -192,6 +193,7 @@ func (a *App) HandleAction(ctx context.Context, action control.Action) {
 	)
 	events := a.service.ApplySurfaceAction(action)
 	a.handleUIEvents(ctx, events)
+	a.syncHeadlessRestoreHintAfterActionLocked(action, before)
 }
 
 func (a *App) Service() *orchestrator.Service {
@@ -251,6 +253,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	} else if a.managedHeadless[hello.Instance.InstanceID] != nil {
 		a.markManagedThreadsRefreshRequestedLocked(hello.Instance.InstanceID, command.CommandID, time.Now().UTC())
 	}
+	a.refreshHeadlessRestoreHintsLocked()
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
@@ -275,6 +278,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		a.handleUIEvents(ctx, uiEvents)
 	}
+	a.refreshHeadlessRestoreHintsLocked()
 }
 
 func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentproto.CommandAck) {

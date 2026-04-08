@@ -75,6 +75,7 @@ type App struct {
 
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig
+	headlessRestoreHints  *headlessRestoreHintStore
 	managedHeadless       map[string]*managedHeadlessProcess
 	startHeadless         func(relayruntime.HeadlessLaunchOptions) (int, error)
 	stopProcess           func(int, time.Duration) error
@@ -157,6 +158,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	cfg.BaseEnv = append([]string{}, cfg.BaseEnv...)
 	cfg.LaunchArgs = append([]string{}, cfg.LaunchArgs...)
 	a.headlessRuntime = cfg
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.configureHeadlessRestoreHintsLocked(cfg.Paths.StateDir)
 }
 
 func (a *App) SetMarkdownPreviewer(previewer feishu.MarkdownPreviewService) {
