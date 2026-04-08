@@ -1111,7 +1111,11 @@ func TestDaemonRejectsOldStopMenuBeforeHandling(t *testing.T) {
 	if inst.ActiveTurnID != "turn-1" {
 		t.Fatalf("expected old stop not to mutate active turn, got %#v", inst)
 	}
-	assertSingleRejectedNotice(t, gateway.operations[before:], "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+	if !strings.Contains(delta[0].CardBody, "/stop") {
+		t.Fatalf("expected old stop notice to mention /stop, got %#v", delta)
+	}
 }
 
 func TestDaemonRejectsOldTextDetachCommandAndKeepsAttachment(t *testing.T) {
@@ -1137,7 +1141,11 @@ func TestDaemonRejectsOldTextDetachCommandAndKeepsAttachment(t *testing.T) {
 	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" {
 		t.Fatalf("expected old detach command not to detach surface, got %#v", snapshot)
 	}
-	assertSingleRejectedNotice(t, gateway.operations[before:], "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧动作已忽略", "重新发送消息、命令或重新点击菜单")
+	if !strings.Contains(delta[0].CardBody, "/detach") {
+		t.Fatalf("expected old detach notice to mention /detach, got %#v", delta)
+	}
 }
 
 func TestDaemonRejectsOldTextMessageBeforeQueueing(t *testing.T) {
@@ -1178,6 +1186,9 @@ func TestDaemonRejectsOldTextMessageBeforeQueueing(t *testing.T) {
 	if delta[0].Kind != feishu.OperationSendCard {
 		t.Fatalf("expected old text rejection to send only notice card, got %#v", delta)
 	}
+	if !strings.Contains(delta[0].CardBody, "这是一条重启前的旧消息") {
+		t.Fatalf("expected old text rejection to mention message preview, got %#v", delta)
+	}
 }
 
 func TestDaemonRejectsOldCardDetachAndShowsExpiredNotice(t *testing.T) {
@@ -1202,7 +1213,11 @@ func TestDaemonRejectsOldCardDetachAndShowsExpiredNotice(t *testing.T) {
 	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" {
 		t.Fatalf("expected old card callback not to detach surface, got %#v", snapshot)
 	}
-	assertSingleRejectedNotice(t, gateway.operations[before:], "旧卡片已过期", "重新发送对应命令获取新卡片")
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "重新发送对应命令获取新卡片")
+	if !strings.Contains(delta[0].CardBody, "/detach") {
+		t.Fatalf("expected expired card notice to mention /detach, got %#v", delta)
+	}
 }
 
 func seedAttachedSurfaceForInboundTests(app *App) {

@@ -67,3 +67,32 @@ func TestClassifyInboundActionMarksOldCard(t *testing.T) {
 		t.Fatalf("expected old card verdict, got %#v", action.Inbound)
 	}
 }
+
+func TestRejectedInboundActionDetailShowsCommandText(t *testing.T) {
+	got := rejectedInboundActionDetail(control.Action{
+		Kind: control.ActionDetach,
+		Text: "/detach",
+	})
+	if got != "命令“/detach”" {
+		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "命令“/detach”")
+	}
+}
+
+func TestRejectedInboundActionDetailShowsMenuFallback(t *testing.T) {
+	got := rejectedInboundActionDetail(control.Action{
+		Kind: control.ActionStop,
+	})
+	if got != "停止（对应 /stop）" {
+		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "停止（对应 /stop）")
+	}
+}
+
+func TestRejectedInboundActionDetailShowsMessagePreview(t *testing.T) {
+	got := rejectedInboundActionDetail(control.Action{
+		Kind: control.ActionTextMessage,
+		Text: "  这是  一条\n重启前的旧消息  ",
+	})
+	if got != "消息“这是 一条 重启前的旧消息”" {
+		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "消息“这是 一条 重启前的旧消息”")
+	}
+}
