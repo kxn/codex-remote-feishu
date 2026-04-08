@@ -460,7 +460,7 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 		Code:             "headless_start_failed",
 		Layer:            "daemon",
 		Stage:            "headless_start",
-		Operation:        "new_instance",
+		Operation:        "start_headless",
 		Message:          "无法创建 headless 实例。",
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ThreadID:         pending.ThreadID,

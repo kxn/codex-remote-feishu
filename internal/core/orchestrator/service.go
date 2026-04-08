@@ -162,8 +162,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.presentInstanceSelection(surface)
 	case control.ActionNewThread:
 		return s.prepareNewThread(surface)
-	case control.ActionNewInstance:
-		return s.startHeadlessInstance(surface)
 	case control.ActionKillInstance:
 		return s.killHeadlessInstance(surface)
 	case control.ActionRemovedCommand:
@@ -184,8 +182,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.presentThreadSelection(surface, true)
 	case control.ActionUseThread:
 		return s.useThread(surface, action.ThreadID)
-	case control.ActionResumeHeadless:
-		return s.resumeHeadlessThread(surface, action.ThreadID)
 	case control.ActionConfirmKickThread:
 		return s.confirmKickThread(surface, action.ThreadID)
 	case control.ActionCancelKickThread:
@@ -304,8 +300,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		}
 		inst.Threads = nextThreads
 		events := append(preface, s.reconcileInstanceSurfaceThreads(instanceID)...)
-		events = append(events, s.threadFocusEvents(instanceID, "")...)
-		return append(events, s.handlePendingHeadlessThreadSnapshot(instanceID)...)
+		return append(events, s.threadFocusEvents(instanceID, "")...)
 	case agentproto.EventLocalInteractionObserved:
 		if event.ThreadID != "" {
 			inst.ObservedFocusedThreadID = event.ThreadID

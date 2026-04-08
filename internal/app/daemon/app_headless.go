@@ -33,7 +33,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 				Code:             "headless_binary_missing",
 				Layer:            "daemon",
 				Stage:            "headless_start",
-				Operation:        "new_instance",
+				Operation:        "start_headless",
 				Message:          "headless 启动器未配置可执行文件。",
 				SurfaceSessionID: command.SurfaceSessionID,
 				ThreadID:         command.ThreadID,

@@ -649,88 +649,35 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	}
 }
 
-func TestDaemonStartsHeadlessAndPromptsForResumeAfterRefresh(t *testing.T) {
+func TestDaemonRemovedNewInstanceCommandShowsMigrationNotice(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
-	stateDir := t.TempDir()
-	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
-		BinaryPath: "/tmp/codex-remote",
-		ConfigPath: "/tmp/config.json",
-		BaseEnv:    []string{"PATH=/usr/bin"},
-		Paths: relayruntime.Paths{
-			LogsDir:  t.TempDir(),
-			StateDir: stateDir,
-		},
-	})
-
-	var captured relayruntime.HeadlessLaunchOptions
+	started := false
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
-		captured = opts
-		return 4321, nil
+		started = true
+		return 0, nil
 	}
 
 	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionNewInstance,
+		Kind:             control.ActionRemovedCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
+		Text:             "/newinstance",
 	})
 
 	snapshot := app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
-		t.Fatalf("expected pending headless snapshot, got %#v", snapshot)
+	if started {
+		t.Fatal("expected removed command not to start headless")
 	}
-	if captured.WorkDir != stateDir || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
-		t.Fatalf("unexpected headless launch opts: %#v", captured)
+	if snapshot == nil || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected no pending headless snapshot, got %#v", snapshot)
 	}
-	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") || !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") {
-		t.Fatalf("expected headless env overrides, got %#v", captured.Env)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected one migration notice operation, got %#v", gateway.operations)
 	}
-	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless") {
-		t.Fatalf("expected headless display name override, got %#v", captured.Env)
-	}
-
-	app.onHello(context.Background(), agentproto.Hello{
-		Instance: agentproto.InstanceHello{
-			InstanceID:    snapshot.PendingHeadless.InstanceID,
-			DisplayName:   "headless",
-			WorkspaceRoot: stateDir,
-			WorkspaceKey:  stateDir,
-			ShortName:     "headless",
-			Source:        "headless",
-			Managed:       true,
-			PID:           4321,
-		},
-	})
-
-	snapshot = app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.Attachment.InstanceID == "" || snapshot.Attachment.Source != "headless" || !snapshot.Attachment.Managed || snapshot.Attachment.SelectedThreadID != "" {
-		t.Fatalf("expected auto-attached headless snapshot, got %#v", snapshot)
-	}
-	if snapshot.PendingHeadless.Status != string(state.HeadlessLaunchSelecting) {
-		t.Fatalf("expected pending selection state, got %#v", snapshot.PendingHeadless)
-	}
-
-	app.onEvents(context.Background(), snapshot.Attachment.InstanceID, []agentproto.Event{{
-		Kind: agentproto.EventThreadsSnapshot,
-		Threads: []agentproto.ThreadSnapshotRecord{{
-			ThreadID:  "thread-1",
-			Name:      "修复登录流程",
-			Preview:   "修登录",
-			CWD:       "/data/dl/droid",
-			Loaded:    true,
-			ListOrder: 1,
-		}},
-	}})
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionResumeHeadless,
-		SurfaceSessionID: "surface-1",
-		ThreadID:         "thread-1",
-	})
-
-	snapshot = app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.PendingHeadless.InstanceID != "" {
-		t.Fatalf("expected selected headless thread after prompt resolution, got %#v", snapshot)
+	if gateway.operations[0].Kind != feishu.OperationSendCard || !strings.Contains(gateway.operations[0].CardBody, "/use") {
+		t.Fatalf("expected migration notice card, got %#v", gateway.operations[0])
 	}
 }
 

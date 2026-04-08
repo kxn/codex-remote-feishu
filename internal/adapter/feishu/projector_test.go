@@ -139,37 +139,6 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	}
 }
 
-func TestProjectNewInstanceSelectionPromptUsesRecoverAction(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
-			Kind: control.SelectionPromptNewInstance,
-			Options: []control.SelectionOption{
-				{Index: 1, OptionID: "thread-1", Label: "droid · 修复登录流程", Subtitle: "/data/dl/droid"},
-			},
-		},
-	})
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if ops[0].CardTitle != "选择要恢复的会话" {
-		t.Fatalf("unexpected card title: %#v", ops[0])
-	}
-	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
-	if len(actionRow) != 1 {
-		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
-	}
-	textValue, _ := actionRow[0]["text"].(map[string]any)
-	if textValue["content"] != "恢复" {
-		t.Fatalf("expected recover button label, got %#v", actionRow[0])
-	}
-	value, _ := actionRow[0]["value"].(map[string]any)
-	if value["kind"] != "resume_headless_thread" || value["thread_id"] != "thread-1" {
-		t.Fatalf("unexpected recover payload: %#v", value)
-	}
-}
-
 func TestProjectKickThreadPromptUsesCustomButtonLabels(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

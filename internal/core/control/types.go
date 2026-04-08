@@ -14,7 +14,6 @@ const (
 	ActionStatus            ActionKind = "surface.menu.status"
 	ActionStop              ActionKind = "surface.menu.stop"
 	ActionNewThread         ActionKind = "surface.menu.new_thread"
-	ActionNewInstance       ActionKind = "surface.menu.new_instance"
 	ActionKillInstance      ActionKind = "surface.menu.kill_instance"
 	ActionRemovedCommand    ActionKind = "surface.command.removed"
 	ActionModelCommand      ActionKind = "surface.command.model"
@@ -30,7 +29,6 @@ const (
 	ActionShowThreads       ActionKind = "surface.button.show_threads"
 	ActionShowAllThreads    ActionKind = "surface.button.show_all_threads"
 	ActionUseThread         ActionKind = "surface.button.use_thread"
-	ActionResumeHeadless    ActionKind = "surface.button.resume_headless_thread"
 	ActionConfirmKickThread ActionKind = "surface.button.confirm_kick_thread"
 	ActionCancelKickThread  ActionKind = "surface.button.cancel_kick_thread"
 	ActionFollowLocal       ActionKind = "surface.button.follow_local"
@@ -64,7 +62,6 @@ type SelectionPromptKind string
 const (
 	SelectionPromptAttachInstance SelectionPromptKind = "attach_instance"
 	SelectionPromptUseThread      SelectionPromptKind = "use_thread"
-	SelectionPromptNewInstance    SelectionPromptKind = "new_instance_thread"
 	SelectionPromptKickThread     SelectionPromptKind = "kick_thread"
 )
 

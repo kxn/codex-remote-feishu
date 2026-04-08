@@ -580,16 +580,12 @@ func threadSelectionSubtitle(thread *state.ThreadRecord, threadID string) string
 }
 
 func headlessPendingNoticeCode(pending *state.HeadlessLaunchRecord) string {
-	if pending != nil && pending.Status == state.HeadlessLaunchSelecting {
-		return "headless_selection_waiting"
-	}
+	_ = pending
 	return "headless_starting"
 }
 
 func headlessPendingNoticeText(pending *state.HeadlessLaunchRecord) string {
-	if pending != nil && pending.Status == state.HeadlessLaunchSelecting {
-		return "请先选择一个要恢复的会话，或执行 /killinstance 取消。"
-	}
+	_ = pending
 	return "headless 实例仍在创建中，请等待完成或执行 /killinstance 取消。"
 }
 

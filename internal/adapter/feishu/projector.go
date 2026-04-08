@@ -102,8 +102,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				title = "在线 VS Code 实例"
 			case control.SelectionPromptUseThread:
 				title = "会话列表"
-			case control.SelectionPromptNewInstance:
-				title = "选择要恢复的会话"
 			case control.SelectionPromptKickThread:
 				title = "强踢当前会话？"
 			}
@@ -336,14 +334,6 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		}
 		value = map[string]any{
 			"kind":      "use_thread",
-			"thread_id": strings.TrimSpace(option.OptionID),
-		}
-	case control.SelectionPromptNewInstance:
-		if text == "选择" {
-			text = "恢复"
-		}
-		value = map[string]any{
-			"kind":      "resume_headless_thread",
 			"thread_id": strings.TrimSpace(option.OptionID),
 		}
 	case control.SelectionPromptKickThread:

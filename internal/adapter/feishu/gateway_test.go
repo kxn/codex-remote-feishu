@@ -539,7 +539,7 @@ func TestParseCardActionTriggerEventBuildsDirectAttachInstanceAction(t *testing.
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsResumeHeadlessAction(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsRemovedResumeHeadlessAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -563,8 +563,8 @@ func TestParseCardActionTriggerEventBuildsResumeHeadlessAction(t *testing.T) {
 	if !ok {
 		t.Fatal("expected card callback to be parsed")
 	}
-	if action.Kind != control.ActionResumeHeadless || action.ThreadID != "thread-1" {
-		t.Fatalf("unexpected headless resume action: %#v", action)
+	if action.Kind != control.ActionRemovedCommand || action.Text != "resume_headless_thread" {
+		t.Fatalf("unexpected removed-command action: %#v", action)
 	}
 	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
 		t.Fatalf("unexpected action routing: %#v", action)

@@ -63,18 +63,14 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ThreadID:         threadID,
 		}, true
 	case "resume_headless_thread":
-		threadID := strings.TrimSpace(stringMapValue(value, "thread_id"))
-		if threadID == "" {
-			return control.Action{}, false
-		}
 		return control.Action{
-			Kind:             control.ActionResumeHeadless,
+			Kind:             control.ActionRemovedCommand,
 			GatewayID:        g.config.GatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			ThreadID:         threadID,
+			Text:             "resume_headless_thread",
 		}, true
 	case "kick_thread_confirm":
 		threadID := strings.TrimSpace(stringMapValue(value, "thread_id"))

@@ -51,7 +51,7 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	switch action.Kind {
 	case control.ActionStatus,
 		control.ActionKillInstance,
-		control.ActionResumeHeadless,
+		control.ActionRemovedCommand,
 		control.ActionReactionCreated,
 		control.ActionMessageRecalled:
 		return nil
@@ -87,7 +87,7 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 		Notice: &control.Notice{
 			Code:  "headless_start_timeout",
 			Title: "Headless 实例超时",
-			Text:  "headless 实例启动超时，已自动取消，请重新发送 /newinstance。",
+			Text:  "headless 实例启动超时，已自动取消，请重新发送 /use 或 /useall 选择要恢复的会话。",
 		},
 	})
 	return events
@@ -111,6 +111,8 @@ func (s *Service) handleRemovedCommand(surface *state.SurfaceConsoleRecord, acti
 	switch command {
 	case "/newinstance", "new_instance":
 		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用或启动 headless。")
+	case "resume_headless_thread":
+		return notice(surface, "selection_expired", "这个旧恢复卡片已失效，请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用或启动 headless。")
 	default:
 		return notice(surface, "command_removed", "这个旧命令已移除。")
 	}
@@ -174,92 +176,6 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 			Options: options,
 		},
 	}}
-}
-
-func (s *Service) startHeadlessInstance(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	if surface.AttachedInstanceID != "" {
-		return notice(surface, "headless_requires_detach", "当前会话已接管实例，请先 /detach 再创建 headless 实例。")
-	}
-	if surface.PendingHeadless != nil {
-		return notice(surface, "headless_already_starting", "当前会话已有 headless 实例创建中，请等待完成或执行 /killinstance 取消。")
-	}
-	s.nextHeadlessID++
-	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	surface.PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:  instanceID,
-		RequestedAt: s.now(),
-		ExpiresAt:   s.now().Add(s.config.HeadlessLaunchWait),
-		Status:      state.HeadlessLaunchStarting,
-	}
-	return []control.UIEvent{
-		{
-			Kind:             control.UIEventNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:  "headless_starting",
-				Title: "创建 Headless 实例",
-				Text:  "正在创建 headless 实例，稍后会自动加载可恢复会话。",
-			},
-		},
-		{
-			Kind:             control.UIEventDaemonCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandStartHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       instanceID,
-			},
-		},
-	}
-}
-
-func (s *Service) presentHeadlessResumeSelection(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []control.UIEvent {
-	if surface == nil || inst == nil {
-		return nil
-	}
-	threads := visibleThreads(inst)
-	if len(threads) == 0 {
-		return nil
-	}
-	limit := len(threads)
-	hint := ""
-	if limit > 5 {
-		limit = 5
-		hint = "只显示最近 5 个已知会话。"
-	}
-	threads = threads[:limit]
-	options := make([]control.SelectionOption, 0, len(threads))
-	for i, thread := range threads {
-		label := displayThreadTitle(inst, thread, thread.ThreadID)
-		subtitle := threadSelectionSubtitle(thread, thread.ThreadID)
-		options = append(options, control.SelectionOption{
-			Index:    i + 1,
-			OptionID: thread.ThreadID,
-			Label:    label,
-			Subtitle: subtitle,
-		})
-	}
-	return []control.UIEvent{
-		{
-			Kind:             control.UIEventNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:  "headless_ready_select_thread",
-				Title: "Headless 实例已就绪",
-				Text:  "请选择一个要恢复的会话；选定后下一条消息会在该会话继续。",
-			},
-		},
-		{
-			Kind:             control.UIEventSelectionPrompt,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			SelectionPrompt: &control.SelectionPrompt{
-				Kind:    control.SelectionPromptNewInstance,
-				Title:   "选择要恢复的会话",
-				Hint:    hint,
-				Options: options,
-			},
-		},
-	}
 }
 
 func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID string) []control.UIEvent {
@@ -370,81 +286,11 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		}
 		return s.attachSurfaceToKnownThread(surface, inst, view)
 	}
-	events := s.discardDrafts(surface)
-	clearSurfaceRequestCapture(surface)
-	s.releaseSurfaceThreadClaim(surface)
-	s.clearPreparedNewThread(surface)
-	surface.PromptOverride = state.ModelConfigRecord{}
-	if !s.claimInstance(surface, inst.InstanceID) {
-		surface.PendingHeadless = nil
-		return append(events, notice(surface, "instance_busy", "新创建的 headless 实例已被其他飞书会话接管。")...)
-	}
-	surface.AttachedInstanceID = inst.InstanceID
-	surface.ActiveQueueItemID = ""
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.Abandoning = false
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
-	surface.SelectedThreadID = ""
-	surface.RouteMode = state.RouteModeUnbound
-	surface.LastSelection = &state.SelectionAnnouncementRecord{
-		ThreadID:  "",
-		RouteMode: string(surface.RouteMode),
-		Title:     "",
-		Preview:   "",
-	}
-	pending.Status = state.HeadlessLaunchSelecting
-	events = append(events, control.UIEvent{
-		Kind:             control.UIEventNotice,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Notice: &control.Notice{
-			Code:  "headless_attached",
-			Title: "Headless 实例已就绪",
-			Text:  "已创建并接管 headless 实例，正在加载可恢复会话列表。",
-		},
-	})
-	events = append(events, control.UIEvent{
-		Kind:             control.UIEventAgentCommand,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Command: &agentproto.Command{
-			Kind: agentproto.CommandThreadsRefresh,
-			Origin: agentproto.Origin{
-				Surface: surface.SurfaceSessionID,
-				UserID:  surface.ActorUserID,
-				ChatID:  surface.ChatID,
-			},
-		},
-	})
-	return events
-}
-
-func (s *Service) handlePendingHeadlessThreadSnapshot(instanceID string) []control.UIEvent {
-	inst := s.root.Instances[instanceID]
-	if inst == nil {
-		return nil
-	}
-	var events []control.UIEvent
-	for _, surface := range s.findAttachedSurfaces(instanceID) {
-		pending := surface.PendingHeadless
-		if pending == nil || pending.InstanceID != instanceID || pending.Status != state.HeadlessLaunchSelecting {
-			continue
-		}
-		if len(visibleThreads(inst)) == 0 {
-			events = append(events, s.failPendingHeadlessSelection(surface, pending)...)
-			continue
-		}
-		events = append(events, s.presentHeadlessResumeSelection(surface, inst)...)
-	}
-	return events
-}
-
-func (s *Service) failPendingHeadlessSelection(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord) []control.UIEvent {
-	if surface == nil || pending == nil {
-		return nil
-	}
-	events := s.discardDrafts(surface)
 	surface.PendingHeadless = nil
-	events = append(events, s.finalizeDetachedSurface(surface)...)
+	events := []control.UIEvent{}
+	if surface.AttachedInstanceID == pending.InstanceID {
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+	}
 	events = append(events,
 		control.UIEvent{
 			Kind:             control.UIEventDaemonCommand,
@@ -459,39 +305,13 @@ func (s *Service) failPendingHeadlessSelection(surface *state.SurfaceConsoleReco
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
-				Code:  "no_recoverable_threads",
-				Title: "没有可恢复会话",
-				Text:  "headless 实例已启动，但没有发现可恢复的会话，已自动结束该实例。",
+				Code:  "command_removed_newinstance",
+				Title: "旧恢复流程已移除",
+				Text:  "旧版 `/newinstance` 恢复流程已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；当前 headless 实例已自动结束。",
 			},
 		},
 	)
 	return events
-}
-
-func (s *Service) resumeHeadlessThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
-	return s.completeHeadlessThreadSelection(surface, threadID)
-}
-
-func (s *Service) completeHeadlessThreadSelection(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
-	if surface == nil {
-		return nil
-	}
-	pending := surface.PendingHeadless
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if pending == nil || inst == nil || pending.InstanceID != inst.InstanceID || !isHeadlessInstance(inst) {
-		return notice(surface, "selection_expired", "之前的 headless 会话选择已过期，请重新发送 /newinstance。")
-	}
-	threadID = strings.TrimSpace(threadID)
-	thread := inst.Threads[threadID]
-	if !threadVisible(thread) || strings.TrimSpace(thread.CWD) == "" {
-		return notice(surface, "headless_selection_invalid", "这个会话缺少可恢复的工作目录，无法恢复。")
-	}
-	thread = s.ensureThread(inst, threadID)
-	thread.Loaded = true
-	s.touchThread(thread)
-	s.retargetManagedHeadlessInstance(inst, thread.CWD)
-	surface.PendingHeadless = nil
-	return s.useThread(surface, threadID)
 }
 
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
