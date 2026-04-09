@@ -90,3 +90,38 @@ func TestRunServiceStartRejectsDetachedManager(t *testing.T) {
 		t.Fatalf("RunService start error = %v, want install-user guidance", err)
 	}
 }
+
+func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "linux"
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+	}()
+
+	state := InstallState{
+		BaseDir:         filepath.Join(string(filepath.Separator), "tmp", "codex remote"),
+		StatePath:       filepath.Join(string(filepath.Separator), "tmp", "codex remote", ".local", "share", "codex-remote", "install-state.json"),
+		ConfigPath:      filepath.Join(string(filepath.Separator), "tmp", "codex remote", ".config", "codex-remote", "config.json"),
+		InstalledBinary: filepath.Join(string(filepath.Separator), "tmp", "codex remote", "bin", "codex-remote"),
+		ServiceManager:  ServiceManagerSystemdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	unitText, err := renderSystemdUserUnit(state)
+	if err != nil {
+		t.Fatalf("renderSystemdUserUnit: %v", err)
+	}
+	if strings.Contains(unitText, `WorkingDirectory="`) {
+		t.Fatalf("unit should not quote WorkingDirectory assignment: %s", unitText)
+	}
+	if !strings.Contains(unitText, `WorkingDirectory=/tmp/codex\\x20remote`) {
+		t.Fatalf("unit missing escaped WorkingDirectory: %s", unitText)
+	}
+	if !strings.Contains(unitText, `ExecStart=/tmp/codex\\x20remote/bin/codex-remote daemon`) {
+		t.Fatalf("unit missing escaped ExecStart path: %s", unitText)
+	}
+}

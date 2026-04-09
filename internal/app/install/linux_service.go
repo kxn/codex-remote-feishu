@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -97,11 +96,11 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		"",
 		"[Service]",
 		"Type=simple",
-		"WorkingDirectory=" + strconv.Quote(state.BaseDir),
-		"ExecStart=" + strconv.Quote(binaryPath) + " daemon",
-		"Environment=" + strconv.Quote("XDG_CONFIG_HOME="+configHome),
-		"Environment=" + strconv.Quote("XDG_DATA_HOME="+dataHome),
-		"Environment=" + strconv.Quote("XDG_STATE_HOME="+stateHome),
+		"WorkingDirectory=" + systemdEscapeValue(state.BaseDir),
+		"ExecStart=" + systemdEscapeExecWord(binaryPath) + " daemon",
+		"Environment=XDG_CONFIG_HOME=" + systemdEscapeValue(configHome),
+		"Environment=XDG_DATA_HOME=" + systemdEscapeValue(dataHome),
+		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(stateHome),
 		"Restart=on-failure",
 		"RestartSec=2s",
 		"",
@@ -173,4 +172,18 @@ func systemdUserRestart(ctx context.Context) error {
 
 func systemdUserStatus(ctx context.Context) (string, error) {
 	return systemctlUserRunner(ctx, "status", "--no-pager", "--full", systemdUserServiceName)
+}
+
+func systemdEscapeValue(value string) string {
+	replacer := strings.NewReplacer(
+		`\\`, `\\\\`,
+		` `, `\\x20`,
+		"\t", `\\x09`,
+		"\n", `\\x0a`,
+	)
+	return replacer.Replace(strings.TrimSpace(value))
+}
+
+func systemdEscapeExecWord(value string) string {
+	return systemdEscapeValue(value)
 }
