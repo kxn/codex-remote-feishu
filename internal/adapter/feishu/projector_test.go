@@ -468,6 +468,29 @@ func TestProjectUsageNoticeRendersInlineTags(t *testing.T) {
 	}
 }
 
+func TestProjectUsageNoticePreservesGreaterThanInInlineTags(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventNotice,
+		Notice: &control.Notice{
+			Code: "surface_override_usage",
+			Text: "核心证据很简单：`section -> entry -> button`，动作键：`run_command`。",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if strings.Contains(ops[0].CardBody, "&gt;") {
+		t.Fatalf("expected inline code to preserve >, got %#v", ops[0].CardBody)
+	}
+	if !containsAll(ops[0].CardBody,
+		"<text_tag color='neutral'>section -> entry -> button</text_tag>",
+		"<text_tag color='neutral'>run_command</text_tag>",
+	) {
+		t.Fatalf("unexpected usage notice body: %#v", ops[0].CardBody)
+	}
+}
+
 func TestProjectTurnFailedNoticeUsesErrorTheme(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

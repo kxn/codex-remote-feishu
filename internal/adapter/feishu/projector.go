@@ -794,6 +794,15 @@ func formatCommandTextTag(text string) string {
 	return "<text_tag color='neutral'>" + text + "</text_tag>"
 }
 
+func formatInlineCodeTextTag(text string) string {
+	trimmed := strings.TrimSpace(text)
+	escaped := html.EscapeString(trimmed)
+	if !strings.Contains(trimmed, "<") {
+		escaped = strings.ReplaceAll(escaped, "&gt;", ">")
+	}
+	return "<text_tag color='neutral'>" + escaped + "</text_tag>"
+}
+
 func projectNoticeBody(notice control.Notice) string {
 	if strings.HasPrefix(strings.TrimSpace(notice.Title), "链路错误") {
 		return renderSystemInlineTags(notice.Text)
@@ -846,7 +855,7 @@ func renderInlineTagsInLine(line string) string {
 		if token == "" {
 			out.WriteString("``")
 		} else {
-			out.WriteString(formatNeutralTextTag(token))
+			out.WriteString(formatInlineCodeTextTag(token))
 		}
 		line = line[end+1:]
 	}
