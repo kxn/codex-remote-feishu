@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -537,6 +538,97 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 		default:
 			t.Fatalf("unexpected workspace option: %#v", option)
 		}
+	}
+}
+
+func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
+	now := time.Date(2026, 4, 9, 19, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	for i := 1; i <= 2; i++ {
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-headless-%d", i),
+			DisplayName:   fmt.Sprintf("headless-%d", i),
+			WorkspaceRoot: "/data/dl",
+			WorkspaceKey:  "/data/dl",
+			ShortName:     "dl",
+			Source:        "headless",
+			Managed:       true,
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-fs-%d", i): {ThreadID: fmt.Sprintf("thread-fs-%d", i), Name: "fschannel", CWD: "/data/dl/fschannel", Loaded: true},
+				fmt.Sprintf("thread-sf-%d", i): {ThreadID: fmt.Sprintf("thread-sf-%d", i), Name: "simplefq", CWD: "/data/dl/simplefq", Loaded: true},
+			},
+		})
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected one workspace selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Kind != control.SelectionPromptAttachWorkspace || prompt.Title != "工作区列表" {
+		t.Fatalf("unexpected workspace prompt: %#v", prompt)
+	}
+	if len(prompt.Options) != 2 {
+		t.Fatalf("expected two real workspaces instead of broad instance root, got %#v", prompt.Options)
+	}
+	got := map[string]bool{}
+	for _, option := range prompt.Options {
+		got[option.OptionID] = true
+	}
+	if !got["/data/dl/fschannel"] || !got["/data/dl/simplefq"] || got["/data/dl"] {
+		t.Fatalf("expected thread cwd workspaces only, got %#v", prompt.Options)
+	}
+}
+
+func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
+	now := time.Date(2026, 4, 9, 19, 35, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless-1",
+		WorkspaceRoot: "/data/dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-fs": {ThreadID: "thread-fs", Name: "修复 relay", CWD: "/data/dl/fschannel", Loaded: true},
+			"thread-sf": {ThreadID: "thread-sf", Name: "整理 simplefq", CWD: "/data/dl/simplefq", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/fschannel",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-headless-1" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel" {
+		t.Fatalf("expected workspace attach to resolve via thread cwd, got %#v", surface)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected broad-pool workspace attach to remain unbound, got %#v", surface)
+	}
+	var threadPrompt *control.SelectionPrompt
+	for _, event := range events {
+		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+			threadPrompt = event.SelectionPrompt
+			break
+		}
+	}
+	if threadPrompt == nil || len(threadPrompt.Options) != 1 || threadPrompt.Options[0].OptionID != "thread-fs" {
+		t.Fatalf("expected /use prompt to be scoped to selected workspace, got %#v", events)
 	}
 }
 
@@ -6162,6 +6254,27 @@ func TestApplyInstanceConnectedDoesNotResumeDetachedSurfaceQueue(t *testing.T) {
 	}
 }
 
+func TestTextMessageDetachedNormalUsesWorkspaceWording(t *testing.T) {
+	now := time.Date(2026, 4, 9, 19, 40, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "not_attached" {
+		t.Fatalf("expected detached normal text to reject with not_attached, got %#v", events)
+	}
+	if !strings.Contains(events[0].Notice.Text, "您没有接管任何工作区") || strings.Contains(events[0].Notice.Text, "实例") {
+		t.Fatalf("expected workspace-first detached wording, got %#v", events[0].Notice)
+	}
+}
+
 func TestRemovedNewInstanceCommandShowsMigrationNotice(t *testing.T) {
 	now := time.Date(2026, 4, 8, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -7275,11 +7388,17 @@ func TestUseThreadDetachedAttachesFreeVisibleInstanceAndReplays(t *testing.T) {
 	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
 		t.Fatalf("expected detached /use to attach visible instance and thread, got %#v", snapshot)
 	}
-	var sawReplay bool
+	var sawAttached, sawReplay bool
 	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "attached" && strings.Contains(event.Notice.Text, "已接管工作区 /data/dl/droid") && !strings.Contains(event.Notice.Text, "已接管 droid") {
+			sawAttached = true
+		}
 		if event.Block != nil && event.Block.Text == "全局 /use 的 replay" && event.Block.Final {
 			sawReplay = true
 		}
+	}
+	if !sawAttached {
+		t.Fatalf("expected global /use attach notice to stay workspace-first, got %#v", events)
 	}
 	if !sawReplay {
 		t.Fatalf("expected global /use attach to replay stored final, got %#v", events)

@@ -815,7 +815,7 @@ func TestDaemonNotifiesAttachedSurfaceWhenInstanceDisconnects(t *testing.T) {
 	var hasOfflineNotice bool
 	for _, operation := range gateway.operations[before:] {
 		switch {
-		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "系统提示" && operation.CardBody == "当前接管实例已离线：droid":
+		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "系统提示" && operation.CardBody == "当前接管的工作区已离线：/data/dl/droid":
 			hasOfflineNotice = true
 		}
 	}

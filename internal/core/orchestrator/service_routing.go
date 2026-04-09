@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -88,6 +89,134 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 		}
 	}
 	return ""
+}
+
+func (s *Service) surfaceAttachmentDisplayName(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		if key := s.surfaceCurrentWorkspaceKey(surface); key != "" {
+			return key
+		}
+		if key := instanceWorkspaceClaimKey(inst); key != "" {
+			return key
+		}
+		if inst != nil {
+			for _, thread := range visibleThreads(inst) {
+				if key := state.ResolveWorkspaceKey(thread.CWD); key != "" {
+					return key
+				}
+			}
+		}
+		return ""
+	}
+	if inst == nil {
+		return ""
+	}
+	return strings.TrimSpace(inst.DisplayName)
+}
+
+func (s *Service) attachedLeadText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+			return fmt.Sprintf("已接管工作区 %s。", name)
+		}
+		return "已接管当前工作区。"
+	}
+	if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+		return fmt.Sprintf("已接管 %s。", name)
+	}
+	return "已接管当前实例。"
+}
+
+func (s *Service) notAttachedText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "您没有接管任何工作区。请先 /list 选择工作区。"
+	}
+	return "当前还没有接管任何实例。"
+}
+
+func (s *Service) attachedTargetUnavailableText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "当前接管的工作区暂时不可用，请重新 /list 选择工作区后再发送消息。"
+	}
+	return "当前接管实例不可用，请重新接管后再发送消息。"
+}
+
+func (s *Service) detachedText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "已断开当前工作区接管。"
+	}
+	return "已断开当前实例接管。"
+}
+
+func (s *Service) detachedNoneText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "当前没有接管中的工作区。"
+	}
+	return "当前没有接管中的实例。"
+}
+
+func (s *Service) detachPendingText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "已放弃当前工作区接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
+	}
+	return "已放弃当前实例接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
+}
+
+func (s *Service) detachTimeoutText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "等待当前 turn 收尾超时，已强制断开当前工作区接管。"
+	}
+	return "等待当前 turn 收尾超时，已强制断开当前实例接管。"
+}
+
+func (s *Service) attachmentOfflineText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+			return fmt.Sprintf("当前接管的工作区已离线：%s", name)
+		}
+		return "当前接管的工作区已离线。"
+	}
+	if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+		return fmt.Sprintf("当前接管实例已离线：%s", name)
+	}
+	return "当前接管实例已离线。"
+}
+
+func (s *Service) attachmentTransportDegradedText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+			return fmt.Sprintf("当前接管的工作区链路过载，正在等待恢复：%s。当前 turn 可能继续执行，但实时输出可能延迟或丢失；如需放弃请 /detach。", name)
+		}
+		return "当前接管的工作区链路过载，正在等待恢复。当前 turn 可能继续执行，但实时输出可能延迟或丢失；如需放弃请 /detach。"
+	}
+	if name := s.surfaceAttachmentDisplayName(surface, inst); name != "" {
+		return fmt.Sprintf("当前接管实例链路过载，正在等待实例恢复：%s。当前 turn 可能继续执行，但实时输出可能延迟或丢失；如需放弃请 /detach。", name)
+	}
+	return "当前接管实例链路过载，正在等待实例恢复。当前 turn 可能继续执行，但实时输出可能延迟或丢失；如需放弃请 /detach。"
+}
+
+func (s *Service) threadAttachRequiresDetachText(surface *state.SurfaceConsoleRecord) string {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return "当前工作区仍有执行中的请求或收尾中的 turn，暂时不能切换到其他工作区的会话。请等待完成，或先 /detach。"
+	}
+	return "当前实例仍有执行中的请求或收尾中的 turn，暂时不能切换到其他实例上的会话。请等待完成，或先 /detach。"
+}
+
+func (s *Service) stopOfflineNotice(surface *state.SurfaceConsoleRecord) control.Notice {
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		return control.Notice{
+			Code:     "stop_instance_offline",
+			Title:    "工作区暂时离线",
+			Text:     "当前工作区链路正在恢复，暂时无法发送停止请求。你可以等待恢复后再 `/stop`，或直接 `/detach` 放弃接管。",
+			ThemeKey: "system",
+		}
+	}
+	return control.Notice{
+		Code:     "stop_instance_offline",
+		Title:    "实例暂时离线",
+		Text:     "当前实例链路正在恢复，暂时无法发送停止请求。你可以等待实例恢复后再 `/stop`，或直接 `/detach` 放弃接管。",
+		ThemeKey: "system",
+	}
 }
 
 func (s *Service) workspaceClaimSurface(workspaceKey string) *state.SurfaceConsoleRecord {
@@ -399,7 +528,7 @@ func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
-		return notice(surface, "thread_attach_requires_detach", "当前实例仍有执行中的请求或收尾中的 turn，暂时不能切换到其他实例上的会话。请等待完成，或先 /detach。")
+		return notice(surface, "thread_attach_requires_detach", s.threadAttachRequiresDetachText(surface))
 	}
 	return nil
 }
@@ -669,7 +798,7 @@ func (s *Service) finishSurfaceAfterWork(surface *state.SurfaceConsoleRecord) []
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if surface.Abandoning && !s.surfaceNeedsDelayedDetach(surface, inst) {
 		events := s.finalizeDetachedSurface(surface)
-		return append(events, notice(surface, "detached", "已断开当前实例接管。")...)
+		return append(events, notice(surface, "detached", s.detachedText(surface))...)
 	}
 	if surface.RouteMode == state.RouteModeFollowLocal && !s.surfaceHasLiveRemoteWork(surface) {
 		return s.reevaluateFollowSurface(surface)
@@ -686,7 +815,7 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []control.UIE
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
-		return notice(surface, "not_attached", "当前还没有接管任何实例。")
+		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
 	if surfaceHasRouteMutationRequestState(surface) &&
 		(surface.RouteMode != state.RouteModeFollowLocal || s.followLocalWouldRetarget(surface, inst)) {
@@ -834,7 +963,7 @@ func (s *Service) presentKickThreadPrompt(surface *state.SurfaceConsoleRecord, i
 func (s *Service) confirmKickThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
-		return notice(surface, "not_attached", "当前还没有接管任何实例。")
+		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
 	events := []control.UIEvent{}
 	if surface.RouteMode == state.RouteModeNewThreadReady {

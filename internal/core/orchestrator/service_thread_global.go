@@ -667,6 +667,9 @@ func (s *Service) mergedThreadStatus(surface *state.SurfaceConsoleRecord, view *
 	case threadAttachCurrentVisible:
 		return "可切换", "切换", false
 	case threadAttachFreeVisible:
+		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+			return "可直接接管", "接管", false
+		}
 		return "可接管已在线实例", "接管", false
 	case threadAttachReuseHeadless:
 		return "将复用现有后台恢复", "恢复", false

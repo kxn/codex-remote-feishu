@@ -937,7 +937,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 			if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
 				events = append(events, s.failSurfaceActiveQueueItem(surface, item, &control.Notice{
 					Code: "attached_instance_offline",
-					Text: fmt.Sprintf("当前接管实例已离线：%s", inst.DisplayName),
+					Text: s.attachmentOfflineText(surface, inst),
 				}, false)...)
 			} else {
 				surface.ActiveQueueItemID = ""
@@ -950,7 +950,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
 				Code: "attached_instance_offline",
-				Text: fmt.Sprintf("当前接管实例已离线：%s", inst.DisplayName),
+				Text: s.attachmentOfflineText(surface, inst),
 			},
 		})
 	}
@@ -979,9 +979,10 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 
 	var events []control.UIEvent
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
-	noticeText := fmt.Sprintf("当前接管实例链路过载，正在等待实例恢复：%s。当前 turn 可能继续执行，但实时输出可能延迟或丢失；如需放弃请 /detach。", inst.DisplayName)
+	noticeText := s.attachmentTransportDegradedText(nil, inst)
 	preserveRemoteOwnership := false
 	for _, surface := range surfaces {
+		noticeText = s.attachmentTransportDegradedText(surface, inst)
 		surface.PromptOverride = state.ModelConfigRecord{}
 		surface.ActiveTurnOrigin = ""
 		surface.DispatchMode = state.DispatchModeNormal

@@ -613,7 +613,7 @@ func (s *Service) Tick(now time.Time) []control.UIEvent {
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
 				Code: "detach_timeout_forced",
-				Text: "等待当前 turn 收尾超时，已强制断开当前实例接管。",
+				Text: s.detachTimeoutText(surface),
 			},
 		})
 	}

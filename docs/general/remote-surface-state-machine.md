@@ -93,7 +93,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 | 代号 | 条件 | 用户语义 |
 | --- | --- | --- |
-| `R0 Detached` | `AttachedInstanceID == ""` | 当前没有接管任何实例 |
+| `R0 Detached` | `AttachedInstanceID == ""` | 当前没有接管任何目标；normal mode 下表现为“未接管工作区”，vscode mode 下表现为“未接管实例” |
 | `R1 AttachedUnbound` | `AttachedInstanceID != ""`，`RouteMode=unbound`，`SelectedThreadID == ""` | 已接管目标但当前没有可发送 thread；normal mode 下通常表示“已接管 workspace、未选 thread” |
 | `R2 AttachedPinned` | `AttachedInstanceID != ""`，`RouteMode=pinned`，`SelectedThreadID != ""`，且持有 thread claim | 当前输入固定发到该 thread |
 | `R3 FollowWaiting` | `AttachedInstanceID != ""`，`RouteMode=follow_local`，`SelectedThreadID == ""` | 仅 `vscode mode` 合法：已进入 follow，但当前没有可接管 thread |
@@ -186,9 +186,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 对应实现里：
 
-1. `presentWorkspaceSelection()` 聚合所有在线 instance 的 `WorkspaceKey/WorkspaceRoot`。
+1. `presentWorkspaceSelection()` 优先按所有在线 instance 的可见 thread `CWD` 归并 workspace。
+   1. 只有当某个 instance 当前完全没有可见 thread 时，才回退到该 instance 的 `WorkspaceKey/WorkspaceRoot`。
+   2. 这样 broad headless pool 不会再把多个真实 workspace 压扁成一个实例级根目录。
 2. 卡片按钮走 `attach_workspace -> ActionAttachWorkspace`。
-3. `attachWorkspace()` 在 normal mode 下先做 `workspaceClaims`，再选一个当前可接管的 online instance 落到该 workspace。
+3. `attachWorkspace()` 在 normal mode 下先做 `workspaceClaims`，再按“当前 instance / free instance / 当前 workspace 可见 thread 数 / exact workspace match”选择一个可接管的 online instance 落到该 workspace。
 4. attach / switch 成功后，统一进入 `R1 AttachedUnbound`，不再复用默认 thread 自动 pin。
 
 同时，`attachInstance()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 normal mode 下仍然会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
@@ -783,6 +785,8 @@ retained-offline overlay 额外规则：
 22. **normal mode 仍然只按 instance/thread 仲裁，导致同 workspace 多 surface 并存**：已修复。当前 normal mode 的 attach/use/headless 恢复都会先经过 workspace claim；只有显式切到 `vscode` mode 才绕过这层仲裁。
 23. **normal mode 还能长期停留在 follow 路径，导致 workspace-first 叙事失真**：已修复。当前新 `/follow` 会直接回迁移提示；历史 normal follow route 也会在读取 surface 时落回 pinned/unbound。
 24. **旧版本残留的 `vscode + new_thread_ready` 会在升级后继续活着，等价绕回被设计移除的 `/new` 路径**：已修复。现在 surface 读取时会自动归一化回 `follow_local`，并尽量复用当前 observed focus。
+25. **normal `/list` 仍按 instance root 聚合，broad headless pool 会把多个 thread `cwd` workspace 压成一个选项**：已修复。当前 workspace 列表先看可见 thread `CWD`，只有无可见 thread 时才回退到实例级 workspace metadata。
+26. **normal detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 normal mode 的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

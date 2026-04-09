@@ -172,7 +172,7 @@ func (s *Service) consumeCapturedRequestFeedback(surface *state.SurfaceConsoleRe
 	inst := s.root.Instances[request.InstanceID]
 	if inst == nil {
 		clearSurfaceRequestCapture(surface)
-		return notice(surface, "not_attached", "当前接管实例不可用，请重新接管后再发送消息。")
+		return notice(surface, "not_attached", s.attachedTargetUnavailableText(surface))
 	}
 
 	threadID := request.ThreadID
