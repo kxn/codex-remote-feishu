@@ -526,9 +526,16 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	if inst == nil {
 		return notice(surface, "instance_not_found", "实例不存在。")
 	}
+	productMode := s.normalizeSurfaceProductMode(surface)
 	workspaceKey := instanceWorkspaceClaimKey(inst)
-	if surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID {
+	switchingInstance := surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID
+	if switchingInstance && productMode != state.ProductModeVSCode {
 		return notice(surface, "attach_requires_detach", "当前会话已接管其他实例，请先 /detach。")
+	}
+	if switchingInstance {
+		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+			return blocked
+		}
 	}
 	if surface.AttachedInstanceID == instanceID {
 		return notice(surface, "already_attached", fmt.Sprintf("当前已接管 %s。", inst.DisplayName))
@@ -544,11 +551,15 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	}
 
 	events := s.discardDrafts(surface)
-	clearSurfaceRequestCapture(surface)
-	clearSurfaceRequests(surface)
-	s.releaseSurfaceThreadClaim(surface)
-	s.clearPreparedNewThread(surface)
-	surface.PromptOverride = state.ModelConfigRecord{}
+	if surface.AttachedInstanceID != "" {
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+	} else {
+		clearSurfaceRequestCapture(surface)
+		clearSurfaceRequests(surface)
+		s.releaseSurfaceThreadClaim(surface)
+		s.clearPreparedNewThread(surface)
+		surface.PromptOverride = state.ModelConfigRecord{}
+	}
 	if !s.claimWorkspace(surface, workspaceKey) {
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
@@ -567,6 +578,10 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	surface.Abandoning = false
 	delete(s.pausedUntil, surface.SurfaceSessionID)
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
+
+	if productMode == state.ProductModeVSCode {
+		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance)...)
+	}
 
 	initialThreadID := s.defaultAttachThread(inst)
 	if initialThreadID != "" && s.claimThread(surface, inst, initialThreadID) {
@@ -617,6 +632,49 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 		events = append(events, s.autoPromptUseThread(surface, inst)...)
 	}
 	return events
+}
+
+func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, switched bool) []control.UIEvent {
+	if surface == nil || inst == nil {
+		return nil
+	}
+	surface.SelectedThreadID = ""
+	s.clearPreparedNewThread(surface)
+	surface.RouteMode = state.RouteModeFollowLocal
+
+	events := s.reevaluateFollowSurface(surface)
+	if len(events) == 0 && surface.SelectedThreadID == "" {
+		events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）", "")...)
+	}
+
+	verb := "已接管"
+	if switched {
+		verb = "已切换到"
+	}
+	text := fmt.Sprintf("%s %s。", verb, inst.DisplayName)
+	if surface.SelectedThreadID != "" {
+		thread := s.ensureThread(inst, surface.SelectedThreadID)
+		text = fmt.Sprintf("%s 当前跟随会话：%s", text, displayThreadTitle(inst, thread, surface.SelectedThreadID))
+	} else if len(visibleThreads(inst)) != 0 {
+		text = fmt.Sprintf("%s 已进入跟随模式；当前还没有可接管的 VS Code 焦点。请先在 VS Code 里实际操作一次会话，或发送 /use 选择当前实例已知会话。", text)
+	} else {
+		text = fmt.Sprintf("%s 已进入跟随模式；当前还没有观测到会话。请先在 VS Code 里实际操作一次会话，或稍后重试。", text)
+	}
+
+	result := []control.UIEvent{{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code: "attached",
+			Text: text,
+		},
+	}}
+	result = append(result, events...)
+	if surface.SelectedThreadID != "" {
+		result = append(result, s.replayThreadUpdate(surface, inst, surface.SelectedThreadID)...)
+	}
+	result = append(result, s.maybeRequestThreadRefresh(surface, inst, surface.SelectedThreadID)...)
+	return result
 }
 
 func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, pending *state.HeadlessLaunchRecord) []control.UIEvent {
@@ -679,6 +737,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
 	threads := s.scopedMergedThreadViews(surface)
 	if len(threads) == 0 {
+		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
+			return notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
+		}
 		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
 			return notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。请稍后发送 /use，或先 /list 切换工作区。", workspaceKey))
 		}

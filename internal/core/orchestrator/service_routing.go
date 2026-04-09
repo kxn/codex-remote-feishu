@@ -527,7 +527,7 @@ func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []con
 		if surface.SelectedThreadID != "" && s.surfaceOwnsThread(surface, surface.SelectedThreadID) {
 			return nil
 		}
-		return notice(surface, "follow_waiting", "当前已进入跟随模式，但还没有可接管的 VS Code 会话。请等待本地切到空闲会话，或通过 /use 手动选择。")
+		return notice(surface, "follow_waiting", "当前已进入跟随模式，但还没有可接管的 VS Code 会话。请先在 VS Code 里实际操作一次会话，或通过 /use 选择当前实例已知会话。")
 	case state.RouteModeNewThreadReady:
 		if strings.TrimSpace(surface.PreparedThreadCWD) != "" {
 			return nil

@@ -988,8 +988,146 @@ func TestVSCodeModeDoesNotUseWorkspaceClaimForAttach(t *testing.T) {
 	if surface.AttachedInstanceID != "inst-2" || surface.ClaimedWorkspaceKey != "" {
 		t.Fatalf("expected vscode attach without workspace claim, got %#v", surface)
 	}
+	if surface.SelectedThreadID != "thread-2" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected vscode attach to land in follow-local on observed thread, got %#v", surface)
+	}
 	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != "attached" {
 		t.Fatalf("expected attach success, got %#v", events)
+	}
+}
+
+func TestVSCodeAttachWaitsWithoutObservedFocusedThread(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 12, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "已知会话", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected vscode attach to enter follow waiting, got %#v", surface)
+	}
+	var sawWaitingSelection bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "" && event.ThreadSelection.RouteMode == string(state.RouteModeFollowLocal) {
+			sawWaitingSelection = true
+		}
+	}
+	if !sawWaitingSelection {
+		t.Fatalf("expected attach to publish follow waiting selection, got %#v", events)
+	}
+	if len(events) == 0 || events[0].Notice == nil || !strings.Contains(events[0].Notice.Text, "已进入跟随模式") {
+		t.Fatalf("expected attach waiting notice, got %#v", events)
+	}
+}
+
+func TestVSCodeFollowWaitingTextGuidesVSCodeOrUse(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 12, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "直接发消息",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "follow_waiting" {
+		t.Fatalf("expected follow waiting notice, got %#v", events)
+	}
+	if !strings.Contains(events[0].Notice.Text, "VS Code") || !strings.Contains(events[0].Notice.Text, "/use") {
+		t.Fatalf("expected follow waiting guidance to mention VS Code and /use, got %#v", events[0].Notice)
+	}
+}
+
+func TestVSCodeAttachCanSwitchInstanceWithoutDetach(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 13, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "web",
+		WorkspaceRoot:           "/data/dl/web",
+		WorkspaceKey:            "/data/dl/web",
+		ShortName:               "web",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionImageMessage, SurfaceSessionID: "surface-1", MessageID: "msg-img", LocalPath: "/tmp/img.png", MIMEType: "image/png"})
+	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-2",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-2" || surface.SelectedThreadID != "thread-2" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected vscode attach switch to rebind follow-local on new instance, got %#v", surface)
+	}
+	if surface.PromptOverride != (state.ModelConfigRecord{}) {
+		t.Fatalf("expected attach switch to clear prompt override, got %#v", surface.PromptOverride)
+	}
+	if len(surface.StagedImages) != 0 {
+		t.Fatalf("expected attach switch to discard staged images, got %#v", surface.StagedImages)
+	}
+	if svc.instanceClaimSurface("inst-1") != nil || svc.instanceClaimSurface("inst-2") == nil {
+		t.Fatalf("expected instance claim to move to switched target")
+	}
+	var sawSwitchNotice bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "attached" && strings.Contains(event.Notice.Text, "已切换到") {
+			sawSwitchNotice = true
+		}
+	}
+	if !sawSwitchNotice {
+		t.Fatalf("expected switch notice, got %#v", events)
 	}
 }
 
