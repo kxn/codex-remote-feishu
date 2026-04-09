@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 新增 workspace 模型重构草案文档并刷新索引。
+> Summary: 新增非 Linux 用户自动启动调研文档并刷新索引。
 
 ## 1. 适用范围
 
@@ -139,6 +139,7 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
+- [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
