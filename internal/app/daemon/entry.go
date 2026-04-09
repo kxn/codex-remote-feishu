@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -90,6 +91,11 @@ func RunMain(ctx context.Context, version string) error {
 	})
 	app.SetFinalBlockPreviewer(finalBlockPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)
+	if catalog, err := codexstate.NewDefaultSQLiteThreadCatalog(codexstate.SQLiteThreadCatalogOptions{Logf: log.Printf}); err != nil {
+		log.Printf("codex sqlite thread catalog disabled: %v", err)
+	} else if catalog != nil {
+		app.service.SetPersistedThreadCatalog(catalog)
+	}
 	app.ConfigureAdmin(AdminRuntimeOptions{
 		ConfigPath:           loadedConfig.Path,
 		Services:             cfg,

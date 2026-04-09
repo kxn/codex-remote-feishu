@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步 auto-continue surface runtime：补充 `/autocontinue` 的门禁与状态投影、remote turn 完成后的 backoff 调度，以及 auto-continue queue item 的 reply-anchor / pending-projection 拆分。
+> Summary: 同步 `/use` 的 detached/global thread source：候选列表现在会 merge runtime visible thread 与 Codex sqlite recent persisted thread，同时保持现有 runtime resolver / headless attach 语义不变。
 
 ## 1. 文档定位
 
@@ -17,17 +17,19 @@
 
 1. [internal/core/orchestrator/service.go](../../internal/core/orchestrator/service.go)
 2. [internal/core/orchestrator/service_surface.go](../../internal/core/orchestrator/service_surface.go)
-3. [internal/core/orchestrator/service_snapshot.go](../../internal/core/orchestrator/service_snapshot.go)
-4. [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
-5. [internal/core/state/types.go](../../internal/core/state/types.go)
-6. [internal/core/control/types.go](../../internal/core/control/types.go)
-7. [internal/core/orchestrator/service_autocontinue.go](../../internal/core/orchestrator/service_autocontinue.go)
-8. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
-9. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-10. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
-11. [internal/app/daemon/app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
-12. [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
-13. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
+3. [internal/core/orchestrator/service_thread_global.go](../../internal/core/orchestrator/service_thread_global.go)
+4. [internal/core/orchestrator/service_snapshot.go](../../internal/core/orchestrator/service_snapshot.go)
+5. [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
+6. [internal/core/state/types.go](../../internal/core/state/types.go)
+7. [internal/core/control/types.go](../../internal/core/control/types.go)
+8. [internal/core/orchestrator/service_autocontinue.go](../../internal/core/orchestrator/service_autocontinue.go)
+9. [internal/codexstate/sqlite_threads.go](../../internal/codexstate/sqlite_threads.go)
+10. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
+11. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
+12. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
+13. [internal/app/daemon/app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
+14. [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
+15. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
 
 ## 2. 审计前提
 
@@ -422,17 +424,23 @@ R5 NewThreadReady
    2. free existing visible instance。
    3. reusable managed headless。
    4. create managed headless。
-5. 当 `/use` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
+5. detached/global `/use` 的**候选 thread 列表**当前先 merge 两类来源：
+   1. runtime/catalog 已可见 thread。
+   2. Codex sqlite 中最近 persisted 的非 archived thread metadata。
+6. sqlite 只负责补 freshness，不旁路 resolver：
+   1. busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
+   2. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。
+7. 当 `/use` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
    1. queued / staged draft 会被清掉。
    2. `PromptOverride`、pending request、request capture 会被清掉。
    3. 当前 instance claim 会先释放，再 attach 到新目标。
-6. 当 surface 处于 `PendingRequest` 或 `RequestCapture` 时：
+8. 当 surface 处于 `PendingRequest` 或 `RequestCapture` 时：
    1. same-instance `/use`
    2. `/follow`
    3. follow-local 自动重绑定
    当前都会被冻结，避免 UI 宣布的新目标和下一条普通输入的实际落点不一致。
-7. 旧 `/newinstance` 在所有 route state 下都只会回迁移提示，不会创建 headless，也不会改动当前 route。
-8. daemon 侧后台 auto-restore 使用的是 headless-only resolver：
+9. 旧 `/newinstance` 在所有 route state 下都只会回迁移提示，不会创建 headless，也不会改动当前 route。
+10. daemon 侧后台 auto-restore 使用的是 headless-only resolver：
    1. 当前可见 thread 若只存在于 VS Code instance，不会被自动 attach 到 VS Code。
    2. 它仍可复用该 thread 的 metadata / cwd。
    3. 后续只允许落到 free visible headless、reusable managed headless，或 create managed headless。

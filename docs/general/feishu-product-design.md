@@ -206,13 +206,15 @@ attach 成功后：
 
 ### 4.2 `use-thread(thread)`
 
-`/threads`、`/use`、`/sessions` 当前都走同一条主入口：展示**最近可见会话**。
+`/threads`、`/use`、`/sessions` 当前都走同一条主入口：展示**最近会话**。
 
 这里的会话列表不是“当前 instance 内 thread 列表”这么窄，而是 merged thread view：
 
 - 已 attach 时，会包含当前实例的可见会话
-- detached 时，也可以直接从这里继续已有会话
-- `/useall` / `/sessionsall` 展示全部可见会话
+- detached 时，也会 merge Codex sqlite 中最近 persisted 的非 archived thread metadata，降低对 `threads.refresh -> thread/list` 时机的依赖
+- `/useall` / `/sessionsall` 仍走同一套 merged source，只是展示范围更大
+- sqlite 只负责补 freshness；最终 attach/reuse/create/busy 判定仍走现有 runtime resolver
+- sqlite read 失败或 schema 不兼容时，会安全回退到当前 runtime/catalog-only 行为
 
 当前会话选择同样走按钮回调：
 

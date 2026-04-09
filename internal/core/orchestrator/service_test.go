@@ -16,6 +16,41 @@ func newServiceForTest(now *time.Time) *Service {
 	return NewService(func() time.Time { return *now }, Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner())
 }
 
+type fakePersistedThreadCatalog struct {
+	recent    []state.ThreadRecord
+	byID      map[string]state.ThreadRecord
+	recentErr error
+	byIDErr   error
+}
+
+func (f *fakePersistedThreadCatalog) RecentThreads(limit int) ([]state.ThreadRecord, error) {
+	if f == nil {
+		return nil, nil
+	}
+	if f.recentErr != nil {
+		return nil, f.recentErr
+	}
+	if limit <= 0 || limit >= len(f.recent) {
+		return append([]state.ThreadRecord(nil), f.recent...), nil
+	}
+	return append([]state.ThreadRecord(nil), f.recent[:limit]...), nil
+}
+
+func (f *fakePersistedThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, error) {
+	if f == nil {
+		return nil, nil
+	}
+	if f.byIDErr != nil {
+		return nil, f.byIDErr
+	}
+	thread, ok := f.byID[threadID]
+	if !ok {
+		return nil, nil
+	}
+	threadCopy := thread
+	return &threadCopy, nil
+}
+
 func recordLocalFinalText(t *testing.T, svc *Service, instanceID, threadID, turnID, itemID, text string) []control.UIEvent {
 	t.Helper()
 	if events := svc.ApplyAgentEvent(instanceID, agentproto.Event{
@@ -5628,6 +5663,113 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 	}
 }
 
+func TestShowThreadsDetachedMergesPersistedRecentThreads(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recent: []state.ThreadRecord{
+			{ThreadID: "thread-persisted", Name: "数据库里的新会话", Preview: "sqlite freshness", CWD: "/data/dl/sqlite", Loaded: true, LastUsedAt: now.Add(2 * time.Minute)},
+			{ThreadID: "thread-older", Name: "更旧的会话", CWD: "/data/dl/older", Loaded: true, LastUsedAt: now.Add(1 * time.Minute)},
+		},
+		byID: map[string]state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected detached /use prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 2 {
+		t.Fatalf("expected persisted threads to appear in prompt, got %#v", prompt.Options)
+	}
+	if prompt.Options[0].OptionID != "thread-persisted" || prompt.Options[0].ButtonLabel != "恢复" {
+		t.Fatalf("expected newest persisted thread first, got %#v", prompt.Options[0])
+	}
+	if prompt.Options[0].Label != "sqlite · 数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
+		t.Fatalf("expected persisted metadata to render in prompt, got %#v", prompt.Options[0])
+	}
+}
+
+func TestShowThreadsDetachedFallsBackWhenPersistedReaderFails(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 7, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recentErr: errors.New("sqlite unavailable"),
+		byID:      map[string]state.ThreadRecord{},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true, LastUsedAt: now.Add(1 * time.Minute)},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected fallback prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "thread-1" {
+		t.Fatalf("expected catalog-only fallback prompt, got %#v", prompt.Options)
+	}
+}
+
+func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 8, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recent: []state.ThreadRecord{
+			{ThreadID: "thread-1", Name: "数据库里的新标题", Preview: "数据库里的摘要", CWD: "/data/dl/droid", Loaded: true, LastUsedAt: now.Add(3 * time.Minute)},
+		},
+		byID: map[string]state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "数据库里的新标题", Preview: "数据库里的摘要", CWD: "/data/dl/droid", Loaded: true, LastUsedAt: now.Add(3 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧标题", CWD: "/data/dl/droid", Loaded: true, LastUsedAt: now.Add(1 * time.Minute)},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected prompt, got %#v", events)
+	}
+	option := events[0].SelectionPrompt.Options[0]
+	if option.Label != "droid · 数据库里的新标题" || option.ButtonLabel != "接管" {
+		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
+	}
+}
+
 func TestPresentGlobalThreadSelectionMarksBusyThreadDisabled(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -5924,6 +6066,39 @@ func TestUseThreadDetachedStartsPreselectedHeadlessWhenOnlyOfflineSnapshotAvaila
 	}
 	if events[1].DaemonCommand.ThreadID != "thread-1" || events[1].DaemonCommand.ThreadCWD != "/data/dl/droid" {
 		t.Fatalf("expected daemon command to carry preselected thread info, got %#v", events[1].DaemonCommand)
+	}
+}
+
+func TestUseThreadDetachedFallsBackToPersistedThreadLookupByID(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 41, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		byID: map[string]state.ThreadRecord{
+			"thread-1": {
+				ThreadID:   "thread-1",
+				Name:       "sqlite only thread",
+				Preview:    "来自 sqlite 的会话",
+				CWD:        "/data/dl/droid",
+				Loaded:     true,
+				LastUsedAt: now.Add(2 * time.Minute),
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected detached /use to resolve thread through persisted lookup, got %#v", snapshot)
+	}
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected persisted by-id lookup to reuse existing headless-start path, got %#v", events)
 	}
 }
 

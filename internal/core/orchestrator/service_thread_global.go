@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ const (
 	threadAttachReuseHeadless  threadAttachMode = "reuse_headless"
 	threadAttachCreateHeadless threadAttachMode = "create_headless"
 )
+
+const persistedRecentThreadLimit = 200
 
 type mergedThreadView struct {
 	ThreadID string
@@ -73,6 +76,7 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			}
 		}
 	}
+	s.mergePersistedRecentThreads(viewsByID)
 
 	views := make([]*mergedThreadView, 0, len(viewsByID))
 	for _, view := range viewsByID {
@@ -98,7 +102,52 @@ func (s *Service) mergedThreadView(surface *state.SurfaceConsoleRecord, threadID
 			return view
 		}
 	}
-	return nil
+	return s.persistedThreadView(surface, threadID)
+}
+
+func (s *Service) mergePersistedRecentThreads(viewsByID map[string]*mergedThreadView) {
+	if s == nil || s.persistedThreads == nil {
+		return
+	}
+	threads, err := s.persistedThreads.RecentThreads(persistedRecentThreadLimit)
+	if err != nil {
+		return
+	}
+	for i := range threads {
+		thread := threads[i]
+		if strings.TrimSpace(thread.ThreadID) == "" || !threadVisible(&thread) {
+			continue
+		}
+		view := viewsByID[thread.ThreadID]
+		if view == nil {
+			viewsByID[thread.ThreadID] = &mergedThreadView{
+				ThreadID: thread.ThreadID,
+				Inst:     syntheticPersistedThreadInstance(&thread),
+				Thread:   cloneThreadRecord(&thread),
+			}
+			continue
+		}
+		view.Thread = mergeThreadMetadata(view.Thread, &thread)
+	}
+}
+
+func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {
+	if s == nil || s.persistedThreads == nil {
+		return nil
+	}
+	thread, err := s.persistedThreads.ThreadByID(strings.TrimSpace(threadID))
+	if err != nil || !threadVisible(thread) {
+		return nil
+	}
+	view := &mergedThreadView{
+		ThreadID: thread.ThreadID,
+		Inst:     syntheticPersistedThreadInstance(thread),
+		Thread:   cloneThreadRecord(thread),
+	}
+	if owner := s.threadClaimSurface(view.ThreadID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
+		view.BusyOwner = owner
+	}
+	return view
 }
 
 func shouldPromoteMergedThread(currentInst *state.InstanceRecord, currentThread *state.ThreadRecord, nextInst *state.InstanceRecord, nextThread *state.ThreadRecord) bool {
@@ -135,6 +184,108 @@ func shouldPromoteMergedThread(currentInst *state.InstanceRecord, currentThread 
 		return false
 	}
 	return nextInst.InstanceID < currentInst.InstanceID
+}
+
+func shouldPromoteMergedThreadMetadata(currentThread, nextThread *state.ThreadRecord) bool {
+	if nextThread == nil {
+		return false
+	}
+	if currentThread == nil {
+		return true
+	}
+	switch {
+	case nextThread.LastUsedAt.After(currentThread.LastUsedAt):
+		return true
+	case currentThread.LastUsedAt.After(nextThread.LastUsedAt):
+		return false
+	}
+	return mergedThreadMetadataScore(nextThread) > mergedThreadMetadataScore(currentThread)
+}
+
+func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.ThreadRecord {
+	if currentThread == nil {
+		return cloneThreadRecord(nextThread)
+	}
+	if nextThread == nil {
+		return cloneThreadRecord(currentThread)
+	}
+	primary := currentThread
+	secondary := nextThread
+	if shouldPromoteMergedThreadMetadata(currentThread, nextThread) {
+		primary = nextThread
+		secondary = currentThread
+	}
+	merged := cloneThreadRecord(primary)
+	if merged == nil {
+		return cloneThreadRecord(secondary)
+	}
+	if strings.TrimSpace(merged.Name) == "" {
+		merged.Name = strings.TrimSpace(secondary.Name)
+	}
+	if strings.TrimSpace(merged.Preview) == "" {
+		merged.Preview = strings.TrimSpace(secondary.Preview)
+	}
+	if strings.TrimSpace(merged.CWD) == "" {
+		merged.CWD = strings.TrimSpace(secondary.CWD)
+	}
+	if strings.TrimSpace(merged.State) == "" {
+		merged.State = strings.TrimSpace(secondary.State)
+	}
+	if strings.TrimSpace(merged.ExplicitModel) == "" {
+		merged.ExplicitModel = strings.TrimSpace(secondary.ExplicitModel)
+	}
+	if strings.TrimSpace(merged.ExplicitReasoningEffort) == "" {
+		merged.ExplicitReasoningEffort = strings.TrimSpace(secondary.ExplicitReasoningEffort)
+	}
+	if !merged.Loaded {
+		merged.Loaded = secondary.Loaded
+	}
+	if merged.LastUsedAt.IsZero() {
+		merged.LastUsedAt = secondary.LastUsedAt
+	}
+	if merged.ListOrder == 0 {
+		merged.ListOrder = secondary.ListOrder
+	}
+	if merged.TrafficClass == "" {
+		merged.TrafficClass = secondary.TrafficClass
+	}
+	if merged.UndeliveredReplay == nil && secondary.UndeliveredReplay != nil {
+		replayCopy := *secondary.UndeliveredReplay
+		merged.UndeliveredReplay = &replayCopy
+	}
+	merged.Archived = merged.Archived || secondary.Archived
+	return merged
+}
+
+func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
+	if thread == nil {
+		return nil
+	}
+	threadCopy := *thread
+	if thread.UndeliveredReplay != nil {
+		replayCopy := *thread.UndeliveredReplay
+		threadCopy.UndeliveredReplay = &replayCopy
+	}
+	return &threadCopy
+}
+
+func syntheticPersistedThreadInstance(thread *state.ThreadRecord) *state.InstanceRecord {
+	if thread == nil {
+		return nil
+	}
+	cwd := strings.TrimSpace(thread.CWD)
+	if cwd == "" {
+		return nil
+	}
+	short := filepath.Base(cwd)
+	if short == "" || short == "." || short == string(filepath.Separator) {
+		short = cwd
+	}
+	return &state.InstanceRecord{
+		WorkspaceRoot: cwd,
+		WorkspaceKey:  cwd,
+		ShortName:     short,
+	}
 }
 
 func mergedThreadMetadataScore(thread *state.ThreadRecord) int {

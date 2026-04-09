@@ -17,26 +17,27 @@ type Config struct {
 }
 
 type Service struct {
-	now             func() time.Time
-	config          Config
-	root            *state.Root
-	renderer        *renderer.Planner
-	nextQueueItemID int
-	nextImageID     int
-	nextPromptID    int
-	nextHeadlessID  int
-	handoffUntil    map[string]time.Time
-	pausedUntil     map[string]time.Time
-	abandoningUntil map[string]time.Time
-	itemBuffers     map[string]*itemBuffer
-	threadRefreshes map[string]bool
-	pendingTurnText map[string]*completedTextItem
-	turnFileChanges map[string]*turnFileChangeSummary
-	pendingRemote   map[string]*remoteTurnBinding
-	activeRemote    map[string]*remoteTurnBinding
-	pendingSteers   map[string]*pendingSteerBinding
-	instanceClaims  map[string]*instanceClaimRecord
-	threadClaims    map[string]*threadClaimRecord
+	now              func() time.Time
+	config           Config
+	root             *state.Root
+	renderer         *renderer.Planner
+	nextQueueItemID  int
+	nextImageID      int
+	nextPromptID     int
+	nextHeadlessID   int
+	handoffUntil     map[string]time.Time
+	pausedUntil      map[string]time.Time
+	abandoningUntil  map[string]time.Time
+	itemBuffers      map[string]*itemBuffer
+	threadRefreshes  map[string]bool
+	pendingTurnText  map[string]*completedTextItem
+	turnFileChanges  map[string]*turnFileChangeSummary
+	pendingRemote    map[string]*remoteTurnBinding
+	activeRemote     map[string]*remoteTurnBinding
+	pendingSteers    map[string]*pendingSteerBinding
+	instanceClaims   map[string]*instanceClaimRecord
+	threadClaims     map[string]*threadClaimRecord
+	persistedThreads PersistedThreadCatalog
 }
 
 type itemBuffer struct {
@@ -105,6 +106,11 @@ type threadClaimRecord struct {
 	SurfaceSessionID string
 }
 
+type PersistedThreadCatalog interface {
+	RecentThreads(limit int) ([]state.ThreadRecord, error)
+	ThreadByID(threadID string) (*state.ThreadRecord, error)
+}
+
 const (
 	requestCaptureModeDeclineWithFeedback = "decline_with_feedback"
 	defaultModel                          = "gpt-5.4"
@@ -158,6 +164,10 @@ func (s *Service) UpsertInstance(inst *state.InstanceRecord) {
 		inst.CWDDefaults = map[string]state.ModelConfigRecord{}
 	}
 	s.root.Instances[inst.InstanceID] = inst
+}
+
+func (s *Service) SetPersistedThreadCatalog(catalog PersistedThreadCatalog) {
+	s.persistedThreads = catalog
 }
 
 func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
