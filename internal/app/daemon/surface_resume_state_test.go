@@ -149,7 +149,7 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 	}
 }
 
-func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetButRestartStaysDetached(t *testing.T) {
+func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetAndRecoversOnReconnect(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -188,7 +188,15 @@ func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetButRestartStaysDetached(
 		t.Fatalf("unexpected persisted vscode resume target: %#v", entry)
 	}
 
-	restarted := newRestoreHintTestApp(stateDir)
+	gateway := &recordingGateway{}
+	restarted := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	restarted.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	restarted.sendAgentCommand = func(string, agentproto.Command) error { return nil }
 	snapshot := restarted.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil {
 		t.Fatal("expected surface after restart")
@@ -199,6 +207,106 @@ func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetButRestartStaysDetached(
 	reloaded := restarted.SurfaceResumeState("surface-1")
 	if reloaded == nil || !sameSurfaceResumeEntryContent(*entry, *reloaded) {
 		t.Fatalf("expected restart to preserve stored resume target: want=%#v got=%#v", entry, reloaded)
+	}
+
+	restarted.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-vscode-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+			Source:        "vscode",
+		},
+	})
+
+	snapshot = restarted.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "inst-vscode-1" {
+		t.Fatalf("expected vscode resume to reattach target instance, got %#v", snapshot)
+	}
+	if snapshot.Attachment.SelectedThreadID != "" || snapshot.Attachment.RouteMode != "follow_local" {
+		t.Fatalf("expected vscode resume to re-enter follow waiting, got %#v", snapshot)
+	}
+	sawResumeNotice := false
+	for _, operation := range gateway.operations {
+		if strings.Contains(operation.CardBody, "已恢复到 VS Code 实例") && strings.Contains(operation.CardBody, "再说一句话") {
+			sawResumeNotice = true
+			break
+		}
+	}
+	if !sawResumeNotice {
+		t.Fatalf("expected vscode resume guidance notice, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonVSCodeResumeWaitsForExactInstanceAndNeverUsesHeadless(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, SurfaceResumeEntry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "vscode",
+		ResumeInstanceID:   "inst-vscode-1",
+		ResumeThreadID:     "thread-1",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "follow_local",
+	})
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+		ThreadTitle:      "旧 headless 会话",
+		ThreadCWD:        "/data/dl/droid",
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	headlessStarted := false
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		headlessStarted = true
+		return 1, nil
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
+		t.Fatalf("expected vscode resume path to clear stale headless hint, got %#v", hint)
+	}
+	if headlessStarted {
+		t.Fatal("expected vscode resume path to avoid starting headless")
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-other-1",
+			DisplayName:   "other",
+			WorkspaceRoot: "/data/dl/other",
+			WorkspaceKey:  "/data/dl/other",
+			ShortName:     "other",
+			Source:        "vscode",
+		},
+	})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
+		t.Fatalf("expected vscode resume to wait for exact instance, got %#v", snapshot)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no notice before exact instance reconnects, got %#v", gateway.operations)
+	}
+	if headlessStarted {
+		t.Fatal("expected unrelated instance hello to keep headless disabled")
 	}
 }
 

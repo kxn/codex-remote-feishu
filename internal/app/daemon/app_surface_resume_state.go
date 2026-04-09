@@ -220,8 +220,14 @@ func (a *App) syncSurfaceResumeRecoveryStateLocked() {
 }
 
 func surfaceResumeEntryNeedsRecovery(entry SurfaceResumeEntry) bool {
-	return state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeNormal &&
-		(strings.TrimSpace(entry.ResumeThreadID) != "" || state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) != "")
+	switch state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) {
+	case state.ProductModeNormal:
+		return strings.TrimSpace(entry.ResumeThreadID) != "" || state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) != ""
+	case state.ProductModeVSCode:
+		return strings.TrimSpace(entry.ResumeInstanceID) != ""
+	default:
+		return false
+	}
 }
 
 func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent {
@@ -267,6 +273,54 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent 
 				continue
 			}
 			notice := orchestrator.NoticeForSurfaceResumeFailure(result.FailureCode)
+			if notice != nil {
+				events = append(events, control.UIEvent{
+					Kind:             control.UIEventNotice,
+					SurfaceSessionID: surfaceID,
+					Notice:           notice,
+				})
+			}
+		}
+	}
+	if clearedHeadlessHint {
+		a.syncHeadlessRestoreStateLocked()
+	}
+	return events
+}
+
+func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []control.UIEvent {
+	if len(a.surfaceResumeRecovery) == 0 {
+		return nil
+	}
+	surfaceIDs := make([]string, 0, len(a.surfaceResumeRecovery))
+	for surfaceID := range a.surfaceResumeRecovery {
+		surfaceIDs = append(surfaceIDs, surfaceID)
+	}
+	sort.Strings(surfaceIDs)
+	events := []control.UIEvent{}
+	clearedHeadlessHint := false
+	for _, surfaceID := range surfaceIDs {
+		recovery := a.surfaceResumeRecovery[surfaceID]
+		if recovery == nil || state.NormalizeProductMode(state.ProductMode(recovery.Entry.ProductMode)) != state.ProductModeVSCode {
+			continue
+		}
+		if a.headlessRestoreHints != nil {
+			if _, ok := a.headlessRestoreHints.Get(surfaceID); ok {
+				a.clearHeadlessRestoreHintLocked(surfaceID)
+				clearedHeadlessHint = true
+			}
+		}
+		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
+			continue
+		}
+		restoreEvents, result := a.service.TryAutoResumeVSCodeSurface(surfaceID, recovery.Entry.ResumeInstanceID)
+		switch result.Status {
+		case orchestrator.SurfaceResumeStatusInstanceAttached:
+			a.clearSurfaceResumeBackoffLocked(surfaceID)
+			events = append(events, restoreEvents...)
+		case orchestrator.SurfaceResumeStatusFailed:
+			a.setSurfaceResumeBackoffLocked(surfaceID, result.FailureCode, now)
+			notice := orchestrator.NoticeForVSCodeSurfaceResumeFailure(result.FailureCode)
 			if notice != nil {
 				events = append(events, control.UIEvent{
 					Kind:             control.UIEventNotice,

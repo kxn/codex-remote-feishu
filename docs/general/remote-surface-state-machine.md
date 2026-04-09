@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；daemon 重启后会恢复 latent surface 与 mode，其中 normal mode 会继续按 persisted target 尝试 visible/workspace 恢复，vscode mode 当前仍保持 detached。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；daemon 重启后会恢复 latent surface 与 mode，其中 normal mode 会继续按 persisted target 尝试 visible/workspace 恢复，vscode mode 会按 exact instance 恢复并回到 follow-local 语义。
 
 ## 1. 文档定位
 
@@ -79,7 +79,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
       2. visible thread 当前不可见时，可降级回原 workspace 的 attached-unbound 语义。
       3. 若还带有 headless restore hint，则只有在 visible/workspace 路径没有恢复成功时，才继续交给 headless auto-restore。
       4. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
-   4. `vscode` mode 当前仍只恢复 latent surface + mode，不自动恢复 visible attach；因此重启后的 vscode surface 仍先落在 detached 态。
+   4. `vscode` mode surface 会按 persisted `ResumeInstanceID` 继续尝试恢复：
+      1. 只允许恢复到 exact VS Code instance，不做 workspace fallback。
+      2. 恢复成功后直接回到现有 vscode attach/follow-local 路径。
+      3. 若当前还没有新的 VS Code 活动可继续 follow，会保留 follow waiting，并明确提示用户去 VS Code 再说一句话或手动 `/use`。
+      4. stale headless restore hint 会被主动清理，恢复链路不会 attach/start headless。
 3. `/mode` 当前只在没有 live remote work 的 surface 上执行切换：
    1. 会先走 detach-like 清理。
    2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
@@ -122,7 +126,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
       1. exact visible thread 恢复成功后会进入 `R2 AttachedPinned`。
       2. visible thread 不可见但 workspace 仍可接管时，会进入 `R1 AttachedUnbound`。
       3. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待。
-   5. 若该 surface 还带有持久化的 headless restore hint，daemon 会在 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore。
+   5. 对 `vscode` mode 来说，这个 latent detached 也可能是短暂中间态：
+      1. exact instance 恢复成功后会进入 `R3 FollowWaiting` 或 `R4 FollowBound`。
+      2. 若目标 instance 还没重新连回，会保持 `R0 Detached` 并静默等待。
+      3. 不做 workspace fallback，也不会进入 headless 恢复。
+   6. 若该 surface 还带有持久化的 headless restore hint，daemon 只会在 `normal` mode 的 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore；`vscode` mode 会主动清理这类 stale hint。
 2. 这种 latent surface 在 route 维度上仍然是 `R0 Detached`，不是新的 route state。
 3. 当前 startup 阶段不会因为 resume target 元数据而在 materialize 当下直接进入 `R1~R5`；是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，仍取决于 daemon 后续恢复调度，而不是 materialize 本身。
 
@@ -341,7 +349,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 当前规则：
 
 1. 只记录两类内容：
-   1. 没有任何 flybook surface 可投递时产生的 final assistant block。
+   1. 没有任何飞书 surface 可投递时产生的 final assistant block。
    2. 没有任何目标 surface 时产生的 thread-scoped system/problem notice。
 2. 同一 `threadID` 的 replay 当前按 relay 全局单槽处理：
    1. 一条新候选会覆盖旧候选，不保留 backlog。
@@ -414,7 +422,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. startup 会先恢复 latent surface 与 `ProductMode`
    2. `normal` mode 会继续按 persisted target 尝试自动恢复：exact visible thread > workspace attach fallback > 与 headless restore 协同
    3. 若存在 `ResumeThreadID`，在首轮 `threads.refresh -> threads.snapshot` 完成前会先静默等待，不会过早降级或直接报失败
-   4. `vscode` mode 当前不会自动恢复 visible attach；用户看到的仍是目标 mode 下的 detached surface
+   4. `vscode` mode 会按 exact `ResumeInstanceID` 尝试恢复：恢复成功后回到 `follow_local`，若暂时缺少新的 VS Code 活动则明确提示用户去 VS Code 再说一句话或手动 `/use`
 7. 切换当前已经会改变 `/list` 的主交互语义：
    1. `normal` 下 `/list` 是 workspace chooser。
    2. `vscode` 下 `/list` 是 instance chooser。
@@ -462,6 +470,7 @@ R0 Detached
   -- daemon startup latent normal surface + exact visible thread restore --> R2 AttachedPinned
   -- daemon startup latent normal surface + workspace fallback --> R1 AttachedUnbound
   -- daemon startup latent normal surface + waiting first refresh --> 保持 R0 Detached
+  -- daemon startup latent vscode surface + exact instance resume --> R3 FollowWaiting 或 R4 FollowBound
 
 R1 AttachedUnbound
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
@@ -664,6 +673,39 @@ daemon startup 的 normal resume 额外规则：
    1. 若不存在 headless restore hint：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
    2. 若仍存在 headless restore hint：继续交给 headless auto-restore 链路；normal resume 自己不额外发失败提示
 
+daemon startup 的 vscode resume 额外规则：
+
+1. 触发点：
+   1. daemon startup 后的 tick
+   2. `hello`
+   3. `threads.snapshot`
+   4. `thread.discovered`
+   5. `thread.focused`
+   6. `disconnect`
+2. 前置条件：
+   1. surface 当前是 `vscode` mode
+   2. surface 当前没有显式 attach
+   3. surface 当前没有 pending headless
+   4. `surface resume state` 里仍有 `ResumeInstanceID`
+3. 恢复规则：
+   1. 只认 exact `ResumeInstanceID`
+   2. unrelated instance 的 `hello` 不会触发 attach
+   3. 不做 workspace fallback，也不走 headless
+   4. 若仍有 stale headless restore hint，会先主动清理
+4. exact instance 当前在线且可接管时：
+   1. 复用现有 vscode attach/follow-local 路径
+   2. 若已有可跟随焦点，则进入 `R4 FollowBound`
+   3. 若还没有新的 VS Code 活动，则进入 `R3 FollowWaiting`
+   4. 只发一条“已恢复到 VS Code 实例”的 notice，并明确提示去 VS Code 再说一句话或手动 `/use`
+5. 若 exact instance 还没连回：
+   1. 保持 `R0 Detached`
+   2. 静默等待
+   3. 不给失败提示
+6. 若 exact instance 当前已被其他飞书 surface 接管：
+   1. 保持 `R0 Detached`
+   2. 发一条恢复失败提示
+   3. 进入 daemon 内存态 backoff
+
 后台 auto-restore 额外规则：
 
 1. 触发点：
@@ -857,6 +899,7 @@ retained-offline overlay 额外规则：
 27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 restore hint，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。
 28. **daemon 重启后 latent surface 会丢 mode，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由与 `ProductMode`。
 29. **normal mode daemon 重启后会静默掉回 detached、过早报失败，或与 headless restore 优先级互相打架**：已修复。当前恢复顺序已收敛为 exact visible thread > workspace fallback > headless restore；首轮 refresh 前会静默等待，成功后会清理 stale headless hint，失败路径也只保留单条 notice + backoff。
+30. **vscode mode daemon 重启后只保留 mode、不恢复实例，或者恢复链路误走 headless**：已修复。当前会按 exact `ResumeInstanceID` 恢复到原 VS Code 实例，回到 follow-local 语义；若还没有新的 VS Code 活动，会明确提示去 VS Code 再说一句话或手动 `/use`，并且会主动清理 stale headless hint。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

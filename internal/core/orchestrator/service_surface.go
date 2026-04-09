@@ -42,6 +42,7 @@ type SurfaceResumeStatus string
 const (
 	SurfaceResumeStatusSkipped           SurfaceResumeStatus = "skipped"
 	SurfaceResumeStatusWaiting           SurfaceResumeStatus = "waiting"
+	SurfaceResumeStatusInstanceAttached  SurfaceResumeStatus = "instance_attached"
 	SurfaceResumeStatusThreadAttached    SurfaceResumeStatus = "thread_attached"
 	SurfaceResumeStatusWorkspaceAttached SurfaceResumeStatus = "workspace_attached"
 	SurfaceResumeStatusFailed            SurfaceResumeStatus = "failed"
@@ -72,6 +73,13 @@ type attachWorkspaceMode string
 const (
 	attachWorkspaceModeDefault       attachWorkspaceMode = "default"
 	attachWorkspaceModeSurfaceResume attachWorkspaceMode = "surface_resume"
+)
+
+type attachInstanceMode string
+
+const (
+	attachInstanceModeDefault       attachInstanceMode = "default"
+	attachInstanceModeSurfaceResume attachInstanceMode = "surface_resume"
 )
 
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
@@ -617,6 +625,10 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 }
 
 func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID string) []control.UIEvent {
+	return s.attachInstanceWithMode(surface, instanceID, attachInstanceModeDefault)
+}
+
+func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, instanceID string, mode attachInstanceMode) []control.UIEvent {
 	inst := s.root.Instances[instanceID]
 	if inst == nil {
 		return notice(surface, "instance_not_found", "实例不存在。")
@@ -678,7 +690,7 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
 
 	if productMode == state.ProductModeVSCode {
-		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance)...)
+		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance, mode)...)
 	}
 
 	initialThreadID := s.defaultAttachThread(inst)
@@ -736,7 +748,7 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	return events
 }
 
-func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, switched bool) []control.UIEvent {
+func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, switched bool, mode attachInstanceMode) []control.UIEvent {
 	if surface == nil || inst == nil {
 		return nil
 	}
@@ -753,21 +765,34 @@ func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst
 	if switched {
 		verb = "已切换到"
 	}
+	noticeCode := "attached"
 	text := fmt.Sprintf("%s %s。", verb, inst.DisplayName)
+	if mode == attachInstanceModeSurfaceResume {
+		noticeCode = "surface_resume_instance_attached"
+		text = fmt.Sprintf("已恢复到 VS Code 实例 %s。", inst.DisplayName)
+	}
 	if surface.SelectedThreadID != "" {
 		thread := s.ensureThread(inst, surface.SelectedThreadID)
 		text = fmt.Sprintf("%s 当前跟随会话：%s", text, displayThreadTitle(inst, thread, surface.SelectedThreadID))
 	} else if len(visibleThreads(inst)) != 0 {
-		text = fmt.Sprintf("%s 已进入跟随模式；当前还没有可接管的 VS Code 焦点。请先在 VS Code 里实际操作一次会话，或发送 /use 选择当前实例已知会话。", text)
+		if mode == attachInstanceModeSurfaceResume {
+			text = fmt.Sprintf("%s 当前还没有新的 VS Code 焦点；请先在 VS Code 里再说一句话，或发送 /use 选择当前实例已知会话。", text)
+		} else {
+			text = fmt.Sprintf("%s 已进入跟随模式；当前还没有可接管的 VS Code 焦点。请先在 VS Code 里实际操作一次会话，或发送 /use 选择当前实例已知会话。", text)
+		}
 	} else {
-		text = fmt.Sprintf("%s 已进入跟随模式；当前还没有观测到会话。请先在 VS Code 里实际操作一次会话，或稍后重试。", text)
+		if mode == attachInstanceModeSurfaceResume {
+			text = fmt.Sprintf("%s 当前还没有观测到新的 VS Code 活动；请先在 VS Code 里再说一句话，或稍后重试。", text)
+		} else {
+			text = fmt.Sprintf("%s 已进入跟随模式；当前还没有观测到会话。请先在 VS Code 里实际操作一次会话，或稍后重试。", text)
+		}
 	}
 
 	result := []control.UIEvent{{
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Notice: &control.Notice{
-			Code: "attached",
+			Code: noticeCode,
 			Text: text,
 		},
 	}}
@@ -982,6 +1007,32 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 	return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: failureCode}
 }
 
+func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]control.UIEvent, SurfaceResumeResult) {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeVSCode {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+	inst := s.root.Instances[instanceID]
+	if inst == nil || !inst.Online || !isVSCodeInstance(inst) {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+	}
+	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "instance_busy"}
+	}
+	return s.attachInstanceWithMode(surface, instanceID, attachInstanceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusInstanceAttached}
+}
+
 func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attempt HeadlessRestoreAttempt) *mergedThreadView {
 	threadID := strings.TrimSpace(attempt.ThreadID)
 	if threadID == "" {
@@ -1089,6 +1140,27 @@ func surfaceResumeFailureNotice(code string) *control.Notice {
 
 func NoticeForSurfaceResumeFailure(code string) *control.Notice {
 	return surfaceResumeFailureNotice(code)
+}
+
+func vscodeSurfaceResumeFailureNotice(code string) *control.Notice {
+	switch strings.TrimSpace(code) {
+	case "instance_busy":
+		return &control.Notice{
+			Code:  "surface_resume_instance_busy",
+			Title: "恢复失败",
+			Text:  "之前的 VS Code 实例当前已被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择实例。",
+		}
+	default:
+		return &control.Notice{
+			Code:  "surface_resume_instance_not_found",
+			Title: "恢复失败",
+			Text:  "暂时无法恢复到之前的 VS Code 实例。请稍后重试，或发送 /list 重新选择实例。",
+		}
+	}
+}
+
+func NoticeForVSCodeSurfaceResumeFailure(code string) *control.Notice {
+	return vscodeSurfaceResumeFailureNotice(code)
 }
 
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {

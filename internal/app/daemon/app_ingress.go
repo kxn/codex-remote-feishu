@@ -319,6 +319,8 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	a.refreshHeadlessRestoreHintsLocked()
 	a.syncHeadlessRestoreStateLocked()
+	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
+	a.handleUIEvents(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEvents(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
@@ -354,6 +356,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		switch event.Kind {
 		case agentproto.EventThreadsSnapshot, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused:
+			uiEvents = append(uiEvents, a.maybeRecoverVSCodeSurfacesLocked(now)...)
 			uiEvents = append(uiEvents, a.maybeRecoverNormalSurfacesLocked(now)...)
 			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
 		}
@@ -415,6 +418,8 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.PID,
 	)
 	a.handleUIEvents(ctx, uiEvents)
+	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
+	a.handleUIEvents(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEvents(ctx, normalRecoveryEvents)
 	a.syncSurfaceResumeStateLocked(nil)
@@ -437,6 +442,8 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.maybeStartAutoUpgradeCheckLocked(now)
+	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
+	a.handleUIEvents(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEvents(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
