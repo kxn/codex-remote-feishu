@@ -347,7 +347,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		s.touchThread(thread)
 		return append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...)
 	case agentproto.EventConfigObserved:
-		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort)
+		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort, event.AccessMode)
 		return preface
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)

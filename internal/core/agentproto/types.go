@@ -74,6 +74,7 @@ type Event struct {
 	Preview         string                 `json:"preview,omitempty"`
 	Model           string                 `json:"model,omitempty"`
 	ReasoningEffort string                 `json:"reasoningEffort,omitempty"`
+	AccessMode      string                 `json:"accessMode,omitempty"`
 	ConfigScope     string                 `json:"configScope,omitempty"`
 	Loaded          bool                   `json:"loaded,omitempty"`
 	Archived        bool                   `json:"archived,omitempty"`

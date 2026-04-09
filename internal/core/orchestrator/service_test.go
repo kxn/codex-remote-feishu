@@ -1520,7 +1520,10 @@ func TestStatusReflectsObservedDefaultConfigAndSurfaceOverride(t *testing.T) {
 		t.Fatalf("expected unbound surface to stay blocked in workspace root, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.BaseModel != "gpt-5.3-codex" || snapshot.NextPrompt.BaseReasoningEffort != "medium" {
-		t.Fatalf("expected base config from cwd default, got %#v", snapshot.NextPrompt)
+		t.Fatalf("expected base config from workspace default, got %#v", snapshot.NextPrompt)
+	}
+	if snapshot.NextPrompt.BaseModelSource != "workspace_default" || snapshot.NextPrompt.BaseReasoningEffortSource != "workspace_default" {
+		t.Fatalf("expected workspace default sources, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveModel != "gpt-5.4" || snapshot.NextPrompt.EffectiveReasoningEffort != "high" {
 		t.Fatalf("expected effective config to use surface override, got %#v", snapshot.NextPrompt)
@@ -1530,6 +1533,59 @@ func TestStatusReflectsObservedDefaultConfigAndSurfaceOverride(t *testing.T) {
 	}
 	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeFullAccess || snapshot.NextPrompt.EffectiveAccessModeSource != "surface_default" {
 		t.Fatalf("expected default full access in snapshot, got %#v", snapshot.NextPrompt)
+	}
+}
+
+func TestStatusUsesObservedWorkspaceDefaultAccessMode(t *testing.T) {
+	now := time.Date(2026, 4, 9, 13, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:        agentproto.EventConfigObserved,
+		ThreadID:    "thread-1",
+		CWD:         "/data/dl/droid",
+		ConfigScope: "cwd_default",
+		AccessMode:  agentproto.AccessModeConfirm,
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected surface snapshot")
+	}
+	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeConfirm || snapshot.NextPrompt.EffectiveAccessModeSource != "workspace_default" {
+		t.Fatalf("expected workspace default confirm access in snapshot, got %#v", snapshot.NextPrompt)
+	}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queue item")
+	}
+	if item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected queue item to freeze workspace default access, got %#v", item.FrozenOverride)
 	}
 }
 

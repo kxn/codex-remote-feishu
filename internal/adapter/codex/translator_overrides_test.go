@@ -140,6 +140,29 @@ func TestTranslatePromptSendConfirmAccessModeOverridesPolicies(t *testing.T) {
 	}
 }
 
+func TestObserveClientTurnStartReportsObservedAccessMode(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	result, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","approvalPolicy":"on-request","sandboxPolicy":{"type":"workspaceWrite"}}}`))
+	if err != nil {
+		t.Fatalf("observe client turn/start: %v", err)
+	}
+
+	var observed *agentproto.Event
+	for i := range result.Events {
+		if result.Events[i].Kind == agentproto.EventConfigObserved {
+			observed = &result.Events[i]
+			break
+		}
+	}
+	if observed == nil {
+		t.Fatalf("expected config observed event, got %#v", result.Events)
+	}
+	if observed.AccessMode != agentproto.AccessModeConfirm || observed.ConfigScope != "thread" {
+		t.Fatalf("expected confirm access in config observed event, got %#v", observed)
+	}
+}
+
 func TestStructuredLocalTurnStartDoesNotOverwriteReusableTurnTemplate(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.3-codex","reasoning_effort":"medium"}}}}`)); err != nil {

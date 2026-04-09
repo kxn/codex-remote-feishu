@@ -733,6 +733,8 @@ func configSourceLabel(value string) string {
 	switch value {
 	case "thread":
 		return "会话配置"
+	case "workspace_default":
+		return "工作区默认配置"
 	case "cwd_default":
 		return "工作目录默认配置"
 	case "surface_override":

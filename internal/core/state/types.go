@@ -76,8 +76,9 @@ const (
 )
 
 type Root struct {
-	Instances map[string]*InstanceRecord
-	Surfaces  map[string]*SurfaceConsoleRecord
+	Instances         map[string]*InstanceRecord
+	Surfaces          map[string]*SurfaceConsoleRecord
+	WorkspaceDefaults map[string]ModelConfigRecord
 }
 
 type ModelConfigRecord struct {
@@ -265,7 +266,8 @@ type StagedImageRecord struct {
 
 func NewRoot() *Root {
 	return &Root{
-		Instances: map[string]*InstanceRecord{},
-		Surfaces:  map[string]*SurfaceConsoleRecord{},
+		Instances:         map[string]*InstanceRecord{},
+		Surfaces:          map[string]*SurfaceConsoleRecord{},
+		WorkspaceDefaults: map[string]ModelConfigRecord{},
 	}
 }

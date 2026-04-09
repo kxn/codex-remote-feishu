@@ -9,9 +9,11 @@ const (
 
 func NormalizeAccessMode(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "full", "fullaccess", "full_access", "full-access":
+	case "full", "full access", "fullaccess", "full_access", "full-access", "never",
+		"danger-full-access", "danger_full_access", "dangerfullaccess":
 		return AccessModeFullAccess
-	case "confirm", "approval", "approve", "ask", "on-request", "on_request":
+	case "confirm", "approval", "approve", "ask", "on-request", "on_request",
+		"workspace-write", "workspace_write", "workspacewrite":
 		return AccessModeConfirm
 	default:
 		return ""

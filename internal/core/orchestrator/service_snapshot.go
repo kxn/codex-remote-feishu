@@ -212,17 +212,25 @@ type promptConfigResolution struct {
 }
 
 func promptOverrideIsEmpty(value state.ModelConfigRecord) bool {
+	return modelConfigRecordEmpty(value)
+}
+
+func modelConfigRecordEmpty(value state.ModelConfigRecord) bool {
 	return strings.TrimSpace(value.Model) == "" &&
 		strings.TrimSpace(value.ReasoningEffort) == "" &&
 		strings.TrimSpace(value.AccessMode) == ""
 }
 
-func compactPromptOverride(value state.ModelConfigRecord) state.ModelConfigRecord {
+func compactModelConfig(value state.ModelConfigRecord) state.ModelConfigRecord {
 	value.AccessMode = agentproto.NormalizeAccessMode(value.AccessMode)
-	if promptOverrideIsEmpty(value) {
+	if modelConfigRecordEmpty(value) {
 		return state.ModelConfigRecord{}
 	}
 	return value
+}
+
+func compactPromptOverride(value state.ModelConfigRecord) state.ModelConfigRecord {
+	return compactModelConfig(value)
 }
 
 func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, override state.ModelConfigRecord) state.ModelConfigRecord {
@@ -239,7 +247,7 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 		override = surface.PromptOverride
 	}
 	override = compactPromptOverride(override)
-	baseModel, baseEffort := resolveBasePromptConfig(inst, threadID, cwd)
+	baseModel, baseEffort, baseAccess := s.resolveBasePromptConfig(inst, surface, threadID, cwd)
 	effectiveModel := baseModel
 	if override.Model != "" {
 		effectiveModel = configValue{Value: override.Model, Source: "surface_override"}
@@ -252,10 +260,14 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	} else if effectiveEffort.Value == "" {
 		effectiveEffort = configValue{Value: defaultReasoningEffort, Source: "surface_default"}
 	}
-	effectiveAccessMode := agentproto.EffectiveAccessMode(override.AccessMode)
 	effectiveAccessModeSource := "surface_default"
+	effectiveAccessMode := agentproto.AccessModeFullAccess
 	if agentproto.NormalizeAccessMode(override.AccessMode) != "" {
+		effectiveAccessMode = override.AccessMode
 		effectiveAccessModeSource = "surface_override"
+	} else if agentproto.NormalizeAccessMode(baseAccess.Value) != "" {
+		effectiveAccessMode = baseAccess.Value
+		effectiveAccessModeSource = baseAccess.Source
 	}
 	return promptConfigResolution{
 		Override:                  override,
@@ -268,11 +280,12 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	}
 }
 
-func resolveBasePromptConfig(inst *state.InstanceRecord, threadID, cwd string) (configValue, configValue) {
+func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string) (configValue, configValue, configValue) {
 	model := configValue{Source: "unknown"}
 	effort := configValue{Source: "unknown"}
+	access := configValue{Source: "unknown"}
 	if inst == nil {
-		return model, effort
+		return model, effort, access
 	}
 	if thread := inst.Threads[threadID]; thread != nil {
 		if cwd == "" {
@@ -285,6 +298,18 @@ func resolveBasePromptConfig(inst *state.InstanceRecord, threadID, cwd string) (
 			effort = configValue{Value: thread.ExplicitReasoningEffort, Source: "thread"}
 		}
 	}
+	if defaults, ok := s.resolveWorkspaceDefaults(inst, surface, cwd); ok {
+		if model.Value == "" && defaults.Model != "" {
+			model = configValue{Value: defaults.Model, Source: "workspace_default"}
+		}
+		if effort.Value == "" && defaults.ReasoningEffort != "" {
+			effort = configValue{Value: defaults.ReasoningEffort, Source: "workspace_default"}
+		}
+		if defaults.AccessMode != "" {
+			access = configValue{Value: defaults.AccessMode, Source: "workspace_default"}
+		}
+	}
+	cwd = state.NormalizeWorkspaceKey(cwd)
 	if cwd != "" {
 		if defaults, ok := inst.CWDDefaults[cwd]; ok {
 			if model.Value == "" && defaults.Model != "" {
@@ -295,7 +320,44 @@ func resolveBasePromptConfig(inst *state.InstanceRecord, threadID, cwd string) (
 			}
 		}
 	}
-	return model, effort
+	return model, effort, access
+}
+
+func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, cwd string) (state.ModelConfigRecord, bool) {
+	if inst == nil || surface == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		return state.ModelConfigRecord{}, false
+	}
+	workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
+	if workspaceKey == "" {
+		workspaceKey = state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot, cwd)
+	}
+	if workspaceKey == "" || s.root == nil || len(s.root.WorkspaceDefaults) == 0 {
+		return state.ModelConfigRecord{}, false
+	}
+	defaults, ok := s.root.WorkspaceDefaults[workspaceKey]
+	defaults = compactModelConfig(defaults)
+	if !ok || modelConfigRecordEmpty(defaults) {
+		return state.ModelConfigRecord{}, false
+	}
+	return defaults, true
+}
+
+func (s *Service) updateWorkspaceDefaults(workspaceKey string, apply func(*state.ModelConfigRecord)) {
+	workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
+	if workspaceKey == "" || apply == nil || s.root == nil {
+		return
+	}
+	if s.root.WorkspaceDefaults == nil {
+		s.root.WorkspaceDefaults = map[string]state.ModelConfigRecord{}
+	}
+	current := compactModelConfig(s.root.WorkspaceDefaults[workspaceKey])
+	apply(&current)
+	current = compactModelConfig(current)
+	if modelConfigRecordEmpty(current) {
+		delete(s.root.WorkspaceDefaults, workspaceKey)
+		return
+	}
+	s.root.WorkspaceDefaults[workspaceKey] = current
 }
 
 func (s *Service) findAttachedSurface(instanceID string) *state.SurfaceConsoleRecord {
@@ -950,39 +1012,49 @@ func (s *Service) RemoveInstance(instanceID string) {
 	}
 }
 
-func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope, model, effort string) {
+func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope, model, effort, access string) {
 	if inst == nil {
 		return
 	}
+	cwd = state.NormalizeWorkspaceKey(cwd)
+	workspaceKey := state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot, cwd)
+	access = agentproto.NormalizeAccessMode(access)
 	switch scope {
 	case "cwd_default":
-		if cwd == "" {
+		if workspaceKey == "" {
 			return
 		}
-		if inst.CWDDefaults == nil {
-			inst.CWDDefaults = map[string]state.ModelConfigRecord{}
-		}
-		current := inst.CWDDefaults[cwd]
-		if model != "" {
-			current.Model = model
-		}
-		if effort != "" {
-			current.ReasoningEffort = effort
-		}
-		inst.CWDDefaults[cwd] = current
+		s.updateWorkspaceDefaults(workspaceKey, func(current *state.ModelConfigRecord) {
+			if model != "" {
+				current.Model = model
+			}
+			if effort != "" {
+				current.ReasoningEffort = effort
+			}
+			if access != "" {
+				current.AccessMode = access
+			}
+		})
 	default:
-		if threadID == "" {
+		if threadID == "" && access == "" {
 			return
 		}
-		thread := s.ensureThread(inst, threadID)
-		if cwd != "" {
-			thread.CWD = cwd
+		if threadID != "" {
+			thread := s.ensureThread(inst, threadID)
+			if cwd != "" {
+				thread.CWD = cwd
+			}
+			if model != "" {
+				thread.ExplicitModel = model
+			}
+			if effort != "" {
+				thread.ExplicitReasoningEffort = effort
+			}
 		}
-		if model != "" {
-			thread.ExplicitModel = model
-		}
-		if effort != "" {
-			thread.ExplicitReasoningEffort = effort
+		if access != "" && workspaceKey != "" {
+			s.updateWorkspaceDefaults(workspaceKey, func(current *state.ModelConfigRecord) {
+				current.AccessMode = access
+			})
 		}
 	}
 }

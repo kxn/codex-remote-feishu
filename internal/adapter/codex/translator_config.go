@@ -3,8 +3,8 @@ package codex
 import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 
 func configObservedEvents(threadID, cwd string, params map[string]any, treatAsDefault bool) []agentproto.Event {
-	model, effort := extractObservedConfig(params)
-	if model == "" && effort == "" {
+	model, effort, access := extractObservedConfig(params)
+	if model == "" && effort == "" && access == "" {
 		return nil
 	}
 	scope := "thread"
@@ -17,11 +17,12 @@ func configObservedEvents(threadID, cwd string, params map[string]any, treatAsDe
 		CWD:             cwd,
 		Model:           model,
 		ReasoningEffort: effort,
+		AccessMode:      access,
 		ConfigScope:     scope,
 	}}
 }
 
-func extractObservedConfig(params map[string]any) (model, effort string) {
+func extractObservedConfig(params map[string]any) (model, effort, access string) {
 	model = choose(
 		lookupString(params, "collaborationMode", "settings", "model"),
 		lookupStringFromAny(params["model"]),
@@ -33,7 +34,23 @@ func extractObservedConfig(params map[string]any) (model, effort string) {
 		lookupString(params, "config", "reasoning_effort"),
 		lookupStringFromAny(params["effort"]),
 	)
-	return model, effort
+	access = chooseObservedAccessMode(
+		lookupStringFromAny(params["approvalPolicy"]),
+		lookupStringFromAny(params["sandbox"]),
+		lookupString(params, "sandboxPolicy", "type"),
+		lookupString(params, "config", "approval_policy"),
+		lookupString(params, "config", "sandbox"),
+	)
+	return model, effort, access
+}
+
+func chooseObservedAccessMode(values ...string) string {
+	for _, value := range values {
+		if normalized := agentproto.NormalizeAccessMode(value); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func applyPromptOverridesToThreadStart(params map[string]any, overrides agentproto.PromptOverrides) {
