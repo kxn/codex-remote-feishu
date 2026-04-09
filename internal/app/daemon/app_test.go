@@ -76,6 +76,29 @@ func (s *stubMarkdownPreviewer) RewriteFinalBlock(_ context.Context, req feishu.
 	}, s.err
 }
 
+type timeoutMarkdownPreviewer struct {
+	mu       sync.Mutex
+	requests []feishu.FinalBlockPreviewRequest
+	ctxErr   error
+}
+
+func (s *timeoutMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
+	s.mu.Lock()
+	s.requests = append(s.requests, req)
+	s.mu.Unlock()
+	<-ctx.Done()
+	s.mu.Lock()
+	s.ctxErr = ctx.Err()
+	s.mu.Unlock()
+	return feishu.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
+}
+
+func (s *timeoutMarkdownPreviewer) snapshot() ([]feishu.FinalBlockPreviewRequest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]feishu.FinalBlockPreviewRequest(nil), s.requests...), s.ctxErr
+}
+
 type lifecycleGateway struct {
 	startedCh chan struct{}
 	stoppedCh chan struct{}
@@ -612,6 +635,92 @@ func TestDaemonProjectsPreviewSupplementsAfterFinalReply(t *testing.T) {
 	}
 	if supplementBody != "这里预留后续的下载按钮或内嵌内容。" {
 		t.Fatalf("expected preview supplement card to be projected, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonContinuesFinalReplyAfterPreviewTimeout(t *testing.T) {
+	gateway := &ctxCheckingGateway{}
+	previewer := &timeoutMarkdownPreviewer{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetFinalBlockPreviewer(previewer)
+	app.finalPreviewTimeout = 10 * time.Millisecond
+	app.gatewayApplyTimeout = 200 * time.Millisecond
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+		},
+	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true}},
+	}})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:        agentproto.EventThreadFocused,
+		ThreadID:    "thread-1",
+		CWD:         "/data/dl/droid",
+		FocusSource: "local_ui",
+	}})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "ou_user",
+		InstanceID:       "inst-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "ou_user",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "feishu:chat:1"},
+	}})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		Metadata: map[string]any{"text": "查看 [设计文档](/data/dl/droid/docs/design.md)"},
+	}})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "feishu:chat:1"},
+	}})
+
+	requests, previewCtxErr := previewer.snapshot()
+	if len(requests) != 1 {
+		t.Fatalf("expected one preview request, got %#v", requests)
+	}
+	if !errors.Is(previewCtxErr, context.DeadlineExceeded) {
+		t.Fatalf("expected preview timeout, got %v", previewCtxErr)
+	}
+	if gateway.ctxErr != nil {
+		t.Fatalf("expected final gateway apply to use a fresh context, got %v", gateway.ctxErr)
+	}
+
+	var finalBody string
+	for _, operation := range gateway.operations {
+		if operation.Kind == feishu.OperationSendCard && strings.HasPrefix(operation.CardTitle, "最后答复") {
+			finalBody = operation.CardBody
+		}
+	}
+	if finalBody != "查看 [设计文档](/data/dl/droid/docs/design.md)" {
+		t.Fatalf("expected original final body after preview timeout, got %#v", gateway.operations)
 	}
 }
 

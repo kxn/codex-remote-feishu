@@ -121,6 +121,8 @@ type App struct {
 	shutdownDrainTimeout   time.Duration
 	shutdownDrainPoll      time.Duration
 	shutdownForceKillGrace time.Duration
+	gatewayApplyTimeout    time.Duration
+	finalPreviewTimeout    time.Duration
 
 	upgradeLookup          releaseLookupFunc
 	upgradeCheckInterval   time.Duration
@@ -171,6 +173,8 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		shutdownDrainTimeout:   3 * time.Second,
 		shutdownDrainPoll:      50 * time.Millisecond,
 		shutdownForceKillGrace: 0,
+		gatewayApplyTimeout:    30 * time.Second,
+		finalPreviewTimeout:    90 * time.Second,
 		upgradeCheckInterval:   3 * time.Hour,
 		upgradeStartupDelay:    1 * time.Minute,
 		upgradePromptScanEvery: 5 * time.Second,

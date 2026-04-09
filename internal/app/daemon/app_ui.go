@@ -108,9 +108,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 }
 
 func (a *App) deliverUIEvent(event control.UIEvent) error {
-	applyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return a.deliverUIEventWithContext(applyCtx, event)
+	return a.deliverUIEventWithContext(context.Background(), event)
 }
 
 func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEvent) error {
@@ -124,7 +122,8 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 	log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
 	var previewSupplementOps []feishu.Operation
 	if a.finalBlockPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
-		previewResult, err := a.finalBlockPreviewer.RewriteFinalBlock(ctx, feishu.FinalBlockPreviewRequest{
+		previewCtx, previewCancel := a.newTimeoutContext(ctx, a.finalPreviewTimeout)
+		previewResult, err := a.finalBlockPreviewer.RewriteFinalBlock(previewCtx, feishu.FinalBlockPreviewRequest{
 			GatewayID:        gatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
@@ -133,11 +132,12 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 			ThreadCWD:        a.previewThreadCWD(event.SurfaceSessionID, *event.Block),
 			Block:            *event.Block,
 		})
+		previewCancel()
 		event.Block = &previewResult.Block
 		previewSupplementOps = a.projector.ProjectPreviewSupplements(gatewayID, event.SurfaceSessionID, chatID, event.SourceMessageID, previewResult.Supplements)
 		if err != nil {
 			log.Printf(
-				"final block preview rewrite failed: surface=%s instance=%s thread=%s item=%s err=%v",
+				"final block preview rewrite failed (continuing without preview rewrite or supplements): surface=%s instance=%s thread=%s item=%s err=%v",
 				event.SurfaceSessionID,
 				previewResult.Block.InstanceID,
 				previewResult.Block.ThreadID,
@@ -163,7 +163,20 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 			operations[i].ReceiveIDType = receiveIDType
 		}
 	}
-	return a.gateway.Apply(ctx, operations)
+	applyCtx, applyCancel := a.newTimeoutContext(ctx, a.gatewayApplyTimeout)
+	defer applyCancel()
+	return a.gateway.Apply(applyCtx, operations)
+}
+
+func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	base := context.Background()
+	if parent != nil {
+		base = parent
+	}
+	if timeout <= 0 {
+		return context.WithCancel(base)
+	}
+	return context.WithTimeout(base, timeout)
 }
 
 func (a *App) flushPendingGatewayNotices(surfaceID string) {
