@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、auto-continue、菜单事件、卡片交互、queued 点赞 steering 和状态提示。
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、最终回复 reply 与状态提示。
 
 ## 1. 文档定位
 
@@ -49,6 +49,15 @@
 - `/access` / `/approval`
 - `/help`
 - `menu` / `/menu`
+
+除了纯文本外，当前还支持两类更完整的入站整理：
+
+- `post`
+  - 单条图文混合消息会把文本和图片一起整理进同一次 prompt
+- reply / quote
+  - 会补查被引用消息
+  - 引用文本会作为额外提示文本带入
+  - 引用图文混合消息时，会把其中的文本和图片一起带入
 
 ### 3.2 菜单事件
 
@@ -143,6 +152,35 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - `captureFeedback`
 
 不再支持靠文本回复 `yes/no` 处理确认。
+
+### 3.7 旧生命周期动作判定
+
+每条飞书入站 action 在进入业务处理前，都会先统一产出 lifecycle verdict：
+
+- `current`
+- `old`
+- `old_card`
+
+当前判定规则：
+
+- 文本消息 / 文本命令：
+  - 以消息创建时间对比当前 daemon 生命周期
+- 菜单事件：
+  - 以菜单点击时间对比当前 daemon 生命周期
+- 卡片回调：
+  - 依赖发卡时写入按钮 value 的 `daemon_lifecycle_id`
+  - 若回调带回的 lifecycle id 与当前 daemon 不一致，则判为 `old_card`
+
+当前产品策略：
+
+- `old`
+  - 不执行原动作
+  - 给用户返回“旧动作已忽略，请重发或重新点击”
+- `old_card`
+  - 不执行按钮逻辑
+  - 给用户返回“旧卡片已过期，请重新触发对应命令”
+
+同一 daemon 生命周期内的精确 `event_id` 去重当前不是这条产品规则的一部分。
 
 ## 4. Attachment 与 thread 路由
 
@@ -423,6 +461,8 @@ final `block.committed`：
 - 发卡片
 - 标题固定前缀为 `最后答复`
 - 若能拿到 reply anchor 对应的原用户消息预览，则标题会变成 `最后答复：<原消息预览>`
+- 若当前 turn 带有可用的飞书源消息 `SourceMessageID`，会优先 reply 到触发消息
+- 若 reply 失败、目标消息已不存在或不可回复，则回退到独立发卡
 - 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
 - 预览物化失败时不会阻塞主回复，正文保持原样
 

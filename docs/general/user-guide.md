@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 补充 release track、`/help`/`menu`、旧卡片过期、点赞 steering、后台恢复，以及文档预览 fixed-root inventory 的当前语义。
+> Summary: 同步 VS Code 场景化接入路径，并保留 release track、命令帮助、旧卡片、后台恢复与文档预览 fixed-root inventory 的当前用户语义。
 
 ## 1. 这是什么
 
@@ -142,18 +142,27 @@ Windows PowerShell：
 2. 测试连接
 3. 按页面指引完成飞书平台里的权限、事件订阅、菜单和发布
 4. 让页面检测当前 VS Code 环境
-5. 按推荐方式接入 VS Code
+5. 按你的实际使用场景完成 VS Code 接入
 
-VS Code 接入目前有两种常用方式：
+当前 setup 不再直接让你面对 `editor_settings` / `managed_shim` 这些内部模式名，而是先按场景引导：
 
-- `editor_settings`
-  - 适合本机桌面 VS Code
-  - 通过写入 `settings.json` 接管 Codex 可执行入口
-- `managed_shim`
-  - 更适合 VS Code Remote 场景
-  - 通过扩展入口接管 Codex
+- 如果当前就是远程 SSH 机器：
+  - 页面只会提供“在这台远程机器上启用 VS Code”
+  - 这条路径只接管扩展入口，不去写 host 机器的 `settings.json`
+- 如果当前不是 SSH 机器：
+  - 页面会先问你以后主要怎么使用 VS Code 里的 Codex
+  - `只在这台机器本地使用`
+    - 会写当前机器的 `settings.json`
+  - `主要去别的 SSH 机器上使用`
+    - 当前机器先跳过，不做接入
+    - 等你在目标 SSH 机器上安装 `codex-remote` 后，再去那台机器完成这一步
+  - `这台机器本地要用，也会 SSH 到别的机器`
+    - 当前机器只接管扩展入口
+    - 不写当前机器的 `settings.json`，避免 host 设置影响后续 Remote SSH
 
 如果你后续升级了 VS Code 扩展，页面可能会提示重新安装扩展入口。按提示处理即可。
+
+管理页里的 VS Code 区域也沿用同一套场景心智；只有在 `高级处理` 里，才会再看到更底层的接入方式。
 
 首次在飞书里验证时，建议先发一次 `/help` 或 `menu`，先确认当前可用命令和快捷入口。
 
