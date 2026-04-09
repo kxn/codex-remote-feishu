@@ -218,11 +218,17 @@ func (a *App) HandleAction(ctx context.Context, action control.Action) {
 			SurfaceSessionID: action.SurfaceSessionID,
 			Notice:           notice,
 		}})
+		a.syncSurfaceResumeStateLocked(nil)
 		return
 	}
 	events := a.service.ApplySurfaceAction(action)
 	a.handleUIEvents(ctx, events)
 	a.syncHeadlessRestoreHintAfterActionLocked(action, before)
+	var clearTargets map[string]bool
+	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
+		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
+	}
+	a.syncSurfaceResumeStateLocked(clearTargets)
 }
 
 func (a *App) ensureSurfaceRouteForNotice(action control.Action) {
@@ -316,6 +322,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.syncSurfaceResumeStateLocked(nil)
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
@@ -352,6 +359,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	}
 	a.refreshHeadlessRestoreHintsLocked()
 	a.syncHeadlessRestoreStateLocked()
+	a.syncSurfaceResumeStateLocked(nil)
 }
 
 func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentproto.CommandAck) {
@@ -403,6 +411,7 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.PID,
 	)
 	a.handleUIEvents(ctx, uiEvents)
+	a.syncSurfaceResumeStateLocked(nil)
 }
 
 func (a *App) onTick(ctx context.Context, now time.Time) {
@@ -425,4 +434,5 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.syncSurfaceResumeStateLocked(nil)
 }

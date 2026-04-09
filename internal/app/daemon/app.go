@@ -90,6 +90,7 @@ type App struct {
 
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig
+	surfaceResumeState    *surfaceResumeStore
 	headlessRestoreHints  *headlessRestoreHintStore
 	headlessRestoreState  map[string]*headlessRestoreRecoveryState
 	startupRefreshPending map[string]bool
@@ -228,7 +229,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.headlessRuntime = cfg
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
 	a.configureHeadlessRestoreHintsLocked(cfg.Paths.StateDir)
+	a.syncSurfaceResumeStateLocked(nil)
 }
 
 func (a *App) SetFinalBlockPreviewer(previewer feishu.FinalBlockPreviewService) {
