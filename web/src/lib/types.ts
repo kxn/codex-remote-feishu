@@ -216,6 +216,21 @@ export interface VSCodeDetectResponse {
   needsShimReinstall: boolean;
 }
 
+export interface AutostartDetectResponse {
+  platform: string;
+  supported: boolean;
+  manager?: string;
+  currentManager?: string;
+  status: string;
+  configured: boolean;
+  enabled: boolean;
+  installStatePath?: string;
+  serviceUnitPath?: string;
+  canApply: boolean;
+  warning?: string;
+  lingerHint?: string;
+}
+
 export interface SetupCompleteResponse {
   setupRequired: boolean;
   adminURL: string;

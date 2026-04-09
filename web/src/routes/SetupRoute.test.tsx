@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { SetupRoute } from "./SetupRoute";
-import { makeApp, makeBootstrap, makeManifest, makeVSCodeDetect } from "../test/fixtures";
+import { makeApp, makeAutostartDetect, makeBootstrap, makeManifest, makeVSCodeDetect } from "../test/fixtures";
 import { installMockFetch } from "../test/http";
 
 describe("SetupRoute", () => {
@@ -214,6 +214,116 @@ describe("SetupRoute", () => {
     expect(screen.getByText("展示最近可见会话，并切换后续输入目标。")).toBeInTheDocument();
     expect(screen.getByText("reason_high")).toBeInTheDocument();
     expect(screen.getByText("只覆盖下一条消息的推理强度为 high。")).toBeInTheDocument();
+  });
+
+  it("shows the autostart step after publish on linux and applies systemd user autostart", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({
+              wizard: {
+                connectionVerifiedAt: "2026-04-08T00:00:00Z",
+                scopesExportedAt: "2026-04-08T00:01:00Z",
+                eventsConfirmedAt: "2026-04-08T00:02:00Z",
+                callbacksConfirmedAt: "2026-04-08T00:03:00Z",
+                menusConfirmedAt: "2026-04-08T00:04:00Z",
+                publishedAt: "2026-04-08T00:05:00Z",
+              },
+            }),
+          ],
+        },
+      },
+      "/api/setup/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/api/setup/autostart/detect": {
+        body: makeAutostartDetect({
+          platform: "linux",
+          supported: true,
+          manager: "systemd_user",
+          currentManager: "detached",
+          status: "disabled",
+          configured: false,
+          enabled: false,
+          canApply: true,
+          installStatePath: "/tmp/install-state.json",
+          serviceUnitPath: "/tmp/.config/systemd/user/codex-remote.service",
+        }),
+      },
+      "/api/setup/autostart/apply": {
+        body: makeAutostartDetect({
+          platform: "linux",
+          supported: true,
+          manager: "systemd_user",
+          currentManager: "systemd_user",
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+          installStatePath: "/tmp/install-state.json",
+          serviceUnitPath: "/tmp/.config/systemd/user/codex-remote.service",
+        }),
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("当前平台支持自动启动")).toBeInTheDocument();
+    expect(screen.getByText("当前未启用")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "启用自动启动" }));
+
+    expect(await screen.findByText("已为当前用户启用登录后自动启动。")).toBeInTheDocument();
+    expect(await screen.findByText("不使用 VS Code 可以直接跳过")).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/setup/autostart/apply")).toBe(true);
+  });
+
+  it("shows unsupported autostart copy on non-linux platforms and lets the user continue", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({
+              wizard: {
+                connectionVerifiedAt: "2026-04-08T00:00:00Z",
+                scopesExportedAt: "2026-04-08T00:01:00Z",
+                eventsConfirmedAt: "2026-04-08T00:02:00Z",
+                callbacksConfirmedAt: "2026-04-08T00:03:00Z",
+                menusConfirmedAt: "2026-04-08T00:04:00Z",
+                publishedAt: "2026-04-08T00:05:00Z",
+              },
+            }),
+          ],
+        },
+      },
+      "/api/setup/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/api/setup/autostart/detect": {
+        body: makeAutostartDetect({
+          platform: "darwin",
+          supported: false,
+          status: "unsupported",
+          configured: false,
+          enabled: false,
+          canApply: false,
+        }),
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("当前平台暂不支持自动启动")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "继续" }));
+
+    expect(await screen.findByText("不使用 VS Code 可以直接跳过")).toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/setup/autostart/apply")).toBe(false);
   });
 
   it("supports skipping current machine when user mainly uses remote ssh targets", async () => {

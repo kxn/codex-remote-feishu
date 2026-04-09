@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { FeishuAppSummary, FeishuManifest, FeishuOnboardingSession, VSCodeDetectResponse } from "../../lib/types";
+import type { AutostartDetectResponse, FeishuAppSummary, FeishuManifest, FeishuOnboardingSession, VSCodeDetectResponse } from "../../lib/types";
 import type { FeishuConnectMode, FeishuConnectStage, SetupDraft, StepID } from "./types";
 import { feishuAppConsoleURL } from "./helpers";
 import type { VSCodeUsageScenario } from "../shared/helpers";
@@ -20,6 +20,9 @@ type SetupStepContentProps = {
   eventsConfirmed: boolean;
   longConnectionConfirmed: boolean;
   menusConfirmed: boolean;
+  autostart: AutostartDetectResponse | null;
+  autostartError: string;
+  autostartSummary: string;
   vscodeScenario: VSCodeUsageScenario | null;
   vscodeSummary: string;
   vscode: VSCodeDetectResponse | null;
@@ -45,6 +48,7 @@ type SetupStepContentProps = {
 type SetupStepPrimaryActionProps = {
   currentStep: StepID;
   busyAction: string;
+  autostart: AutostartDetectResponse | null;
   canContinueVSCode: boolean;
   vscodePrimaryLabel: string;
   onStart: () => void;
@@ -54,6 +58,7 @@ type SetupStepPrimaryActionProps = {
   onConfirmLongConnection: () => void;
   onConfirmMenus: () => void;
   onCheckPublish: () => void;
+  onContinueAutostart: () => void;
   onContinueVSCode: () => void;
   onFinishSetup: () => void;
 };
@@ -62,6 +67,7 @@ type SetupStepSecondaryActionProps = {
   currentStep: StepID;
   busyAction: string;
   onCopyScopes: () => void;
+  onSkipAutostart: () => void;
   onDeferVSCode: () => void;
 };
 
@@ -80,6 +86,9 @@ export function SetupStepContent({
   eventsConfirmed,
   longConnectionConfirmed,
   menusConfirmed,
+  autostart,
+  autostartError,
+  autostartSummary,
   vscodeScenario,
   vscodeSummary,
   vscode,
@@ -113,7 +122,7 @@ export function SetupStepContent({
             <ul className="wizard-bullet-list">
               <li>先创建并连接飞书应用。</li>
               <li>再完成权限、事件、回调长连接、菜单和发布。</li>
-              <li>最后按需配置 VS Code 集成。</li>
+              <li>发布后可选配置自动启动，再按需处理 VS Code 集成。</li>
             </ul>
           </div>
         </div>
@@ -309,9 +318,76 @@ export function SetupStepContent({
           </div>
         </div>
       );
+    case "autostart":
+      return (
+        <div className="wizard-step-layout">
+          {autostartError ? <div className="notice-banner warn">自动启动状态暂时不可用：{autostartError}</div> : null}
+          {!autostart && !autostartError ? <div className="notice-banner warn">当前还没拿到自动启动检测结果，请先刷新状态后再继续。</div> : null}
+          {autostart ? (
+            <>
+              {autostart.supported ? (
+                <>
+                  <div className="manifest-block">
+                    <h4>当前平台支持自动启动</h4>
+                    <p>Linux 侧当前已接入的是 <code>systemd --user</code> 这条路径。启用后，会在当前用户登录后自动拉起 codex-remote。</p>
+                  </div>
+                  <div className="manifest-block">
+                    <h4>当前状态</h4>
+                    <p>{autostartSummary}</p>
+                    <ul className="wizard-bullet-list">
+                      <li>这一步只处理当前登录用户的自动启动。</li>
+                      <li>当前 issue 不会把未登录恢复建模成第二种 service manager。</li>
+                    </ul>
+                  </div>
+                  {autostart.warning ? <div className="notice-banner warn">自动启动检测提示：{autostart.warning}</div> : null}
+                  {autostart.lingerHint ? <div className="notice-banner neutral">{autostart.lingerHint}</div> : null}
+                </>
+              ) : (
+                <div className="manifest-block">
+                  <h4>当前平台暂不支持自动启动</h4>
+                  <p>当前 setup 只接入 Linux 的 <code>systemd --user</code> 路径。macOS 和 Windows 先只展示状态，不提供可操作入口。</p>
+                </div>
+              )}
+              <details className="wizard-tech-detail">
+                <summary>查看技术详情</summary>
+                <div className="wizard-tech-grid">
+                  <div>
+                    <strong>Platform</strong>
+                    <p>{autostart.platform}</p>
+                  </div>
+                  <div>
+                    <strong>Manager</strong>
+                    <p>{autostart.manager || "not available"}</p>
+                  </div>
+                  <div>
+                    <strong>Current Manager</strong>
+                    <p>{autostart.currentManager || "detached"}</p>
+                  </div>
+                  <div>
+                    <strong>Status</strong>
+                    <p>{autostart.status}</p>
+                  </div>
+                  <div>
+                    <strong>State Path</strong>
+                    <p>{autostart.installStatePath || "not recorded"}</p>
+                  </div>
+                  <div>
+                    <strong>Unit Path</strong>
+                    <p>{autostart.serviceUnitPath || "not configured"}</p>
+                  </div>
+                </div>
+              </details>
+            </>
+          ) : null}
+        </div>
+      );
     case "vscode":
       return (
         <div className="wizard-step-layout">
+          <div className="manifest-block">
+            <h4>不使用 VS Code 可以直接跳过</h4>
+            <p>这一步只在你准备使用 VS Code 里的 Codex 时才需要处理。不用 VS Code 的话，可以直接点底部的“跳过 VS Code”。</p>
+          </div>
           {vscode?.sshSession ? (
             <>
               <div className="manifest-block">
@@ -448,6 +524,10 @@ export function SetupStepContent({
               <p>权限、事件、回调长连接、菜单、发布均已完成。</p>
             </div>
             <div className="wizard-summary-card">
+              <strong>自动启动</strong>
+              <p>{autostartSummary}</p>
+            </div>
+            <div className="wizard-summary-card">
               <strong>VS Code</strong>
               <p>{vscodeSummary}</p>
             </div>
@@ -462,6 +542,7 @@ export function SetupStepContent({
 export function SetupStepPrimaryAction({
   currentStep,
   busyAction,
+  autostart,
   canContinueVSCode,
   vscodePrimaryLabel,
   onStart,
@@ -471,6 +552,7 @@ export function SetupStepPrimaryAction({
   onConfirmLongConnection,
   onConfirmMenus,
   onCheckPublish,
+  onContinueAutostart,
   onContinueVSCode,
   onFinishSetup,
 }: SetupStepPrimaryActionProps) {
@@ -513,6 +595,16 @@ export function SetupStepPrimaryAction({
           检查并继续
         </button>
       );
+    case "autostart":
+      return (
+        <button className="primary-button" type="button" onClick={onContinueAutostart} disabled={busyAction !== ""}>
+          {busyAction === "autostart-apply"
+            ? "正在启用..."
+            : !autostart?.supported || autostart.status === "enabled"
+              ? "继续"
+              : "启用自动启动"}
+        </button>
+      );
     case "vscode":
       return (
         <button className="primary-button" type="button" onClick={onContinueVSCode} disabled={busyAction !== "" || !canContinueVSCode}>
@@ -530,14 +622,21 @@ export function SetupStepPrimaryAction({
   }
 }
 
-export function SetupStepSecondaryAction({ currentStep, busyAction, onCopyScopes, onDeferVSCode }: SetupStepSecondaryActionProps) {
+export function SetupStepSecondaryAction({ currentStep, busyAction, onCopyScopes, onSkipAutostart, onDeferVSCode }: SetupStepSecondaryActionProps) {
   if (currentStep === "connect") {
     return null;
+  }
+  if (currentStep === "autostart") {
+    return (
+      <button className="secondary-button" type="button" onClick={onSkipAutostart} disabled={busyAction !== ""}>
+        跳过这一步
+      </button>
+    );
   }
   if (currentStep === "vscode") {
     return (
       <button className="secondary-button" type="button" onClick={onDeferVSCode} disabled={busyAction !== ""}>
-        稍后在管理页处理
+        跳过 VS Code
       </button>
     );
   }

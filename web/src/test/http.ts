@@ -28,6 +28,23 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
     calls.push(call);
 
     const handler = routes[path] ?? routes[url.pathname];
+    if (!handler && (url.pathname === "/api/setup/autostart/detect" || url.pathname === "/api/admin/autostart/detect")) {
+      return new Response(JSON.stringify({
+        platform: "linux",
+        supported: true,
+        manager: "systemd_user",
+        currentManager: "systemd_user",
+        status: "enabled",
+        configured: true,
+        enabled: true,
+        canApply: true,
+      }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    }
     if (!handler) {
       throw new Error(`Unhandled fetch for ${method} ${path}`);
     }

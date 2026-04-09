@@ -204,3 +204,19 @@ func exchangeSetupSessionCookie(t *testing.T, app *App, token string) *http.Cook
 	}
 	return cookies[0]
 }
+
+func performSetupRequestWithCookie(method, path, body string, cookie *http.Cookie) *http.Request {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.RemoteAddr = "198.51.100.20:23456"
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.AddCookie(cookie)
+	return req
+}
+
+func performSetupRequestRecorder(app *App, req *http.Request) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	return rec
+}

@@ -1,5 +1,6 @@
 import type {
   AdminInstanceSummary,
+  AutostartDetectResponse,
   BootstrapState,
   FeishuAppSummary,
   FeishuManifest,
@@ -114,6 +115,18 @@ export function makeVSCodeDetect(overrides: Partial<VSCodeDetectResponse> = {}):
       matchesBinary: true,
     },
     needsShimReinstall: false,
+    ...overrides,
+  };
+}
+
+export function makeAutostartDetect(overrides: Partial<AutostartDetectResponse> = {}): AutostartDetectResponse {
+  return {
+    platform: "darwin",
+    supported: false,
+    status: "unsupported",
+    configured: false,
+    enabled: false,
+    canApply: false,
     ...overrides,
   };
 }

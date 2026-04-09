@@ -1,5 +1,4 @@
-import type { BootstrapState, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
-import { vscodeIsReady } from "../shared/helpers";
+import type { AutostartDetectResponse, BootstrapState, FeishuAppSummary } from "../../lib/types";
 import type { SetupDraft, StepCompletion, StepID } from "./types";
 import { newAppID } from "./types";
 
@@ -92,6 +91,7 @@ export function defaultStepFor(
   _bootstrap: BootstrapState | null,
   apps: FeishuAppSummary[],
   activeApp: FeishuAppSummary | null,
+  autostartComplete: boolean,
   vscodeComplete: boolean,
   setupStarted: boolean,
 ): StepID {
@@ -117,6 +117,9 @@ export function defaultStepFor(
   if (!activeApp.wizard?.publishedAt) {
     return "publish";
   }
+  if (!autostartComplete) {
+    return "autostart";
+  }
   if (!vscodeComplete) {
     return "vscode";
   }
@@ -139,6 +142,8 @@ export function isStepReachable(stepID: StepID, bootstrap: BootstrapState | null
       return Boolean(activeApp?.wizard?.callbacksConfirmedAt);
     case "publish":
       return Boolean(activeApp?.wizard?.menusConfirmedAt);
+    case "autostart":
+      return Boolean(activeApp?.wizard?.publishedAt);
     case "vscode":
       return Boolean(activeApp?.wizard?.publishedAt);
     case "finish":
@@ -162,13 +167,25 @@ export function previousStepFor(stepID: StepID): StepID | null {
       return "longConnection";
     case "publish":
       return "menus";
-    case "vscode":
+    case "autostart":
       return "publish";
+    case "vscode":
+      return "autostart";
     case "finish":
       return "vscode";
     default:
       return null;
   }
+}
+
+export function autostartIsComplete(autostart: AutostartDetectResponse | null, skipped: boolean): boolean {
+  if (skipped) {
+    return true;
+  }
+  if (!autostart) {
+    return false;
+  }
+  return autostart.status === "enabled";
 }
 
 export function feishuAppConsoleURL(appId?: string): string {

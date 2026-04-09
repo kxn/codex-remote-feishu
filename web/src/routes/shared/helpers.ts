@@ -1,5 +1,5 @@
 import { formatError, requestJSON } from "../../lib/api";
-import type { FeishuAppMutation, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
+import type { AutostartDetectResponse, FeishuAppMutation, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
 
 export type VSCodeUsageScenario = "local_only" | "remote_only" | "local_and_remote";
 
@@ -14,6 +14,20 @@ export async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetec
   try {
     return {
       data: await requestJSON<VSCodeDetectResponse>(path),
+      error: "",
+    };
+  } catch (err: unknown) {
+    return {
+      data: null,
+      error: formatError(err),
+    };
+  }
+}
+
+export async function loadAutostartState(path: string): Promise<{ data: AutostartDetectResponse | null; error: string }> {
+  try {
+    return {
+      data: await requestJSON<AutostartDetectResponse>(path),
       error: "",
     };
   } catch (err: unknown) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatError, requestJSON, requestJSONAllowHTTPError, sendJSON } from "../lib/api";
 import type {
+  AutostartDetectResponse,
   BootstrapState,
   FeishuAppMutation,
   FeishuOnboardingCompleteResponse,
@@ -23,6 +24,7 @@ import {
 } from "./setup/SetupStepContent";
 import {
   appToDraft,
+  autostartIsComplete,
   chooseAppID,
   defaultStepFor,
   emptyDraft,
@@ -38,6 +40,7 @@ import { newAppID, wizardSteps } from "./setup/types";
 import {
   blankToUndefined,
   buildSetupFeishuVerifySuccessMessage,
+  loadAutostartState,
   type VSCodeSetupOutcome,
   type VSCodeUsageScenario,
   loadVSCodeState,
@@ -53,6 +56,8 @@ export function SetupRoute() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [manifest, setManifest] = useState<FeishuManifestResponse["manifest"] | null>(null);
+  const [autostart, setAutostart] = useState<AutostartDetectResponse | null>(null);
+  const [autostartError, setAutostartError] = useState<string>("");
   const [vscode, setVSCode] = useState<VSCodeDetectResponse | null>(null);
   const [vscodeError, setVSCodeError] = useState<string>("");
   const [selectedID, setSelectedID] = useState<string>(() => preferredSetupAppFromLocation());
@@ -62,6 +67,7 @@ export function SetupRoute() {
   const [eventsConfirmed, setEventsConfirmed] = useState(false);
   const [longConnectionConfirmed, setLongConnectionConfirmed] = useState(false);
   const [menusConfirmed, setMenusConfirmed] = useState(false);
+  const [autostartSkipped, setAutostartSkipped] = useState(false);
   const [vscodeScenario, setVSCodeScenario] = useState<VSCodeUsageScenario | null>(null);
   const [vscodeOutcome, setVSCodeOutcome] = useState<VSCodeSetupOutcome | null>(null);
   const [currentStepHint, setCurrentStepHint] = useState<StepID>("start");
@@ -76,10 +82,11 @@ export function SetupRoute() {
   const [onboardingNeedsManualRetry, setOnboardingNeedsManualRetry] = useState(false);
 
   async function loadData(preferredID?: string) {
-    const [bootstrapState, appList, manifestResponse, vscodeState] = await Promise.all([
+    const [bootstrapState, appList, manifestResponse, autostartState, vscodeState] = await Promise.all([
       requestJSON<BootstrapState>("/api/setup/bootstrap-state"),
       requestJSON<FeishuAppsResponse>("/api/setup/feishu/apps"),
       requestJSON<FeishuManifestResponse>("/api/setup/feishu/manifest"),
+      loadAutostartState("/api/setup/autostart/detect"),
       loadVSCodeState("/api/setup/vscode/detect"),
     ]);
     const nextSelectedID = chooseAppID(appList.apps, preferredID ?? selectedID);
@@ -88,12 +95,21 @@ export function SetupRoute() {
     setBootstrap(bootstrapState);
     setApps(appList.apps);
     setManifest(manifestResponse.manifest);
+    setAutostart(autostartState.data);
+    setAutostartError(autostartState.error);
     setVSCode(vscodeState.data);
     setVSCodeError(vscodeState.error);
     setSelectedID(nextSelectedID);
     setDraft(appToDraft(nextActiveApp));
     setCurrentStepHint((current) => {
-      const fallback = defaultStepFor(bootstrapState, appList.apps, nextActiveApp, Boolean(vscodeOutcome) || vscodeIsReady(vscodeState.data), setupStarted);
+      const fallback = defaultStepFor(
+        bootstrapState,
+        appList.apps,
+        nextActiveApp,
+        autostartIsComplete(autostartState.data, autostartSkipped),
+        Boolean(vscodeOutcome) || vscodeIsReady(vscodeState.data),
+        setupStarted,
+      );
       if (current === "start" && fallback !== "start") {
         return fallback;
       }
@@ -159,6 +175,25 @@ export function SetupRoute() {
   }, [vscode?.sshSession]);
 
   const vscodeComplete = Boolean(vscodeOutcome) || vscodeIsReady(vscode);
+  const autostartComplete = autostartIsComplete(autostart, autostartSkipped);
+  const autostartSummary = useMemo(() => {
+    if (autostartSkipped) {
+      if (autostart && !autostart.supported) {
+        return "当前平台暂不支持";
+      }
+      return "已跳过，可稍后在管理页启用";
+    }
+    if (!autostart) {
+      return "暂未处理";
+    }
+    if (!autostart.supported) {
+      return "当前平台暂不支持";
+    }
+    if (autostart.status === "enabled") {
+      return "已为当前用户启用登录后自动启动";
+    }
+    return "当前未启用";
+  }, [autostart, autostartSkipped]);
   const vscodeSummary = vscodeOutcomeSummary(vscode, vscodeOutcome);
   const vscodeBundleDetected = vscodeHasDetectedBundle(vscode);
   const vscodeNeedsBundle = vscodeRequiresBundle(vscode, vscodeScenario);
@@ -166,8 +201,11 @@ export function SetupRoute() {
   const vscodeCanContinue = Boolean(vscode) && (vscode?.sshSession ? vscodeBundleDetected : vscodeScenario !== null && (!vscodeNeedsBundle || vscodeBundleDetected));
 
   const resolvedCurrentStep = useMemo(
-    () => (isStepReachable(currentStepHint, bootstrap, activeApp) ? currentStepHint : defaultStepFor(bootstrap, apps, activeApp, vscodeComplete, setupStarted)),
-    [activeApp, apps, bootstrap, currentStepHint, setupStarted, vscodeComplete],
+    () =>
+      isStepReachable(currentStepHint, bootstrap, activeApp)
+        ? currentStepHint
+        : defaultStepFor(bootstrap, apps, activeApp, autostartComplete, vscodeComplete, setupStarted),
+    [activeApp, apps, autostartComplete, bootstrap, currentStepHint, setupStarted, vscodeComplete],
   );
   const currentStepIndex = wizardSteps.findIndex((step) => step.id === resolvedCurrentStep);
   const currentStepMeta = wizardSteps[currentStepIndex >= 0 ? currentStepIndex : 0];
@@ -179,6 +217,7 @@ export function SetupRoute() {
     longConnection: Boolean(activeApp?.wizard?.callbacksConfirmedAt),
     menus: Boolean(activeApp?.wizard?.menusConfirmedAt),
     publish: Boolean(activeApp?.wizard?.publishedAt),
+    autostart: autostartComplete,
     vscode: vscodeComplete,
   };
 
@@ -455,6 +494,30 @@ export function SetupRoute() {
         return;
       }
       setNotice({ tone: "good", message: "发布验收通过，继续下一步。" });
+      setCurrentStepHint("autostart");
+    });
+  }
+
+  async function continueAutostart() {
+    if (!autostart) {
+      showBlockingError("这一步还没有完成", "当前还没拿到自动启动检测结果。请先刷新状态后再继续。");
+      return;
+    }
+    if (!autostart.supported) {
+      setAutostartSkipped(true);
+      setCurrentStepHint("vscode");
+      return;
+    }
+    if (autostart.status === "enabled") {
+      setCurrentStepHint("vscode");
+      return;
+    }
+    await runAction("autostart-apply", async () => {
+      const response = await sendJSON<AutostartDetectResponse>("/api/setup/autostart/apply", "POST");
+      setAutostart(response);
+      setAutostartError("");
+      setAutostartSkipped(false);
+      setNotice({ tone: "good", message: "已为当前用户启用登录后自动启动。" });
       setCurrentStepHint("vscode");
     });
   }
@@ -641,6 +704,9 @@ export function SetupRoute() {
                 eventsConfirmed={eventsConfirmed}
                 longConnectionConfirmed={longConnectionConfirmed}
                 menusConfirmed={menusConfirmed}
+                autostart={autostart}
+                autostartError={autostartError}
+                autostartSummary={autostartSummary}
                 vscodeScenario={vscodeScenario}
                 vscodeSummary={vscodeSummary}
                 vscode={vscode}
@@ -680,15 +746,21 @@ export function SetupRoute() {
                     currentStep={resolvedCurrentStep}
                     busyAction={busyAction}
                     onCopyScopes={() => void copyText(scopesJSON, "权限配置 JSON 已复制。")}
+                    onSkipAutostart={() => {
+                      setAutostartSkipped(true);
+                      setNotice({ tone: "warn", message: "自动启动已跳过，可稍后在管理页再启用。" });
+                      setCurrentStepHint("vscode");
+                    }}
                     onDeferVSCode={() => {
                       setVSCodeOutcome("deferred");
-                      setNotice({ tone: "warn", message: "VS Code 集成已留到本地管理页继续处理。" });
+                      setNotice({ tone: "warn", message: "VS Code 已跳过；如果以后要用，可以随时在管理页继续处理。" });
                       setCurrentStepHint("finish");
                     }}
                   />
                   <SetupStepPrimaryAction
                     currentStep={resolvedCurrentStep}
                     busyAction={busyAction}
+                    autostart={autostart}
                     canContinueVSCode={vscodeCanContinue}
                     vscodePrimaryLabel={vscodePrimaryLabel}
                     onStart={() => {
@@ -701,6 +773,7 @@ export function SetupRoute() {
                     onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
                     onConfirmMenus={() => void confirmMenusAndContinue()}
                     onCheckPublish={() => void checkPublishAndContinue()}
+                    onContinueAutostart={() => void continueAutostart()}
                     onContinueVSCode={() => void continueVSCode()}
                     onFinishSetup={() => void finishSetup()}
                   />
