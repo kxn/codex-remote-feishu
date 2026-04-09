@@ -83,7 +83,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.debugf("observe server thread/start result: request=%s thread=%s followup=%s", requestID, threadID, followupID)
 			return Result{
 				Suppress:        true,
-				OutboundToCodex: [][]byte{followup},
+				OutboundToAgent: [][]byte{followup},
 			}, nil
 		}
 		if pending, exists := t.pendingThreadResume[requestID]; exists {
@@ -108,7 +108,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.debugf("observe server thread/resume result: request=%s thread=%s followup=%s", requestID, pending.ThreadID, followupID)
 			return Result{
 				Suppress:        true,
-				OutboundToCodex: [][]byte{followup},
+				OutboundToAgent: [][]byte{followup},
 			}, nil
 		}
 		if pending, exists := t.pendingThreadNameSet[requestID]; exists {
@@ -167,7 +167,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				outbound = append(outbound, append(bytes, '\n'))
 			}
-			return Result{Suppress: true, OutboundToCodex: outbound}, nil
+			return Result{Suppress: true, OutboundToAgent: outbound}, nil
 		}
 		if threadID, exists := t.pendingThreadReads[requestID]; exists {
 			record := t.threadRefreshRecords[threadID]

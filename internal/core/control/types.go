@@ -332,6 +332,7 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	AgentType        string
 	AutoRestore      bool
 	Text             string
 }

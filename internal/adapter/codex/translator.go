@@ -1,6 +1,15 @@
 package codex
 
-import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+import (
+	"encoding/json"
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/translator"
+)
+
+// Compile-time check that *Translator satisfies the translator.Translator interface.
+var _ translator.Translator = (*Translator)(nil)
 
 type Translator struct {
 	instanceID                string
@@ -52,11 +61,8 @@ type suppressedResponseContext struct {
 	ThreadID string
 }
 
-type Result struct {
-	Events          []agentproto.Event
-	OutboundToCodex [][]byte
-	Suppress        bool
-}
+// Result is an alias for the canonical translator.Result type.
+type Result = translator.Result
 
 func NewTranslator(instanceID string) *Translator {
 	return &Translator{
@@ -88,4 +94,34 @@ func (t *Translator) debugf(format string, args ...any) {
 	if t.debugLog != nil {
 		t.debugLog(format, args...)
 	}
+}
+
+// BootstrapFrames returns synthetic frames to send to the Codex child process
+// on startup. For headless sources, this sends a JSON-RPC initialize request.
+func (t *Translator) BootstrapFrames(source string, version string) ([][]byte, error) {
+	if !strings.EqualFold(strings.TrimSpace(source), "headless") {
+		return nil, nil
+	}
+	if version == "" {
+		version = "dev"
+	}
+	payload := map[string]any{
+		"id":     "relay-bootstrap-initialize",
+		"method": "initialize",
+		"params": map[string]any{
+			"clientInfo": map[string]any{
+				"name":    "Codex Remote Headless",
+				"title":   "Codex Remote Headless",
+				"version": version,
+			},
+			"capabilities": map[string]any{
+				"experimentalApi": true,
+			},
+		},
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{append(bytes, '\n')}, nil
 }

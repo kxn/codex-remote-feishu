@@ -12,6 +12,8 @@ import (
 type WrapperConfig struct {
 	RelayServerURL  string
 	CodexRealBinary string
+	AgentType       string
+	AgentBinary     string
 	NameMode        string
 	IntegrationMode string
 	ConfigPath      string
@@ -112,6 +114,15 @@ func LoadWrapperConfig() (WrapperConfig, error) {
 		return WrapperConfig{}, err
 	}
 	relayPort := chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)
+	agentType := chooseNonEmpty(
+		os.Getenv("CODEX_REMOTE_AGENT_TYPE"),
+		loaded.Config.Wrapper.AgentType,
+		"codex",
+	)
+	defaultBinary := "codex"
+	if agentType == "claude" {
+		defaultBinary = "claude"
+	}
 	cfg := WrapperConfig{
 		RelayServerURL: chooseNonEmpty(
 			os.Getenv("RELAY_SERVER_URL"),
@@ -122,6 +133,12 @@ func LoadWrapperConfig() (WrapperConfig, error) {
 			os.Getenv("CODEX_REAL_BINARY"),
 			loaded.Config.Wrapper.CodexRealBinary,
 			"codex",
+		),
+		AgentType: agentType,
+		AgentBinary: chooseNonEmpty(
+			os.Getenv("CODEX_REMOTE_AGENT_BINARY"),
+			loaded.Config.Wrapper.AgentBinary,
+			defaultBinary,
 		),
 		NameMode: chooseNonEmpty(
 			os.Getenv("CODEX_REMOTE_WRAPPER_NAME_MODE"),

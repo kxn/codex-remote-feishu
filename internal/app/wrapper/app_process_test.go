@@ -54,8 +54,8 @@ func TestCodexChildLaunchOptions(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := codexChildLaunchOptions(tt.cfg); got != tt.want {
-				t.Fatalf("codexChildLaunchOptions() = %#v, want %#v", got, tt.want)
+			if got := childLaunchOptionsForAgent(tt.cfg); got != tt.want {
+				t.Fatalf("childLaunchOptionsForAgent() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

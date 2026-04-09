@@ -135,11 +135,11 @@ func TestTranslatePromptSendToNewThreadAndFollowupTurnStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("observe server response: %v", err)
 	}
-	if !result.Suppress || len(result.OutboundToCodex) != 1 {
+	if !result.Suppress || len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected suppressed followup turn/start, got %#v", result)
 	}
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal turn/start: %v", err)
 	}
 	if turnStart["method"] != "turn/start" {
@@ -240,7 +240,7 @@ func TestRemoteNewThreadStartClearsStaleLocalNewThreadMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("observe server response: %v", err)
 	}
-	if !result.Suppress || len(result.OutboundToCodex) != 1 {
+	if !result.Suppress || len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected suppressed followup turn/start, got %#v", result)
 	}
 	started, err := tr.ObserveServer([]byte(`{"method":"turn/started","params":{"threadId":"thread-created","turn":{"id":"turn-1"}}}`))
@@ -283,12 +283,12 @@ func TestTranslatePromptSendToExistingThreadResumesWhenTargetDiffersFromCurrent(
 	if err != nil {
 		t.Fatalf("observe resume response: %v", err)
 	}
-	if !result.Suppress || len(result.OutboundToCodex) != 1 {
+	if !result.Suppress || len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected suppressed followup turn/start, got %#v", result)
 	}
 
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal turn/start: %v", err)
 	}
 	if turnStart["method"] != "turn/start" {
@@ -317,12 +317,12 @@ func TestTranslatePromptSendReasoningOnlyDoesNotCreateInvalidCollaborationMode(t
 	if err != nil {
 		t.Fatalf("observe resume response: %v", err)
 	}
-	if !result.Suppress || len(result.OutboundToCodex) != 1 {
+	if !result.Suppress || len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected suppressed followup turn/start, got %#v", result)
 	}
 
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal turn/start: %v", err)
 	}
 	params, _ := turnStart["params"].(map[string]any)
@@ -350,7 +350,7 @@ func TestObserveServerThreadResumeErrorEmitsFailedTurnCompleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("observe resume error: %v", err)
 	}
-	if len(result.OutboundToCodex) != 0 || len(result.Events) != 1 {
+	if len(result.OutboundToAgent) != 0 || len(result.Events) != 1 {
 		t.Fatalf("expected failed event without followup, got %#v", result)
 	}
 	if result.Events[0].Kind != agentproto.EventTurnCompleted || result.Events[0].Status != "failed" || result.Events[0].ThreadID != "thread-2" {
@@ -377,12 +377,12 @@ func TestObserveServerSuppressedTurnStartErrorEmitsFailedTurnCompleted(t *testin
 	if err != nil {
 		t.Fatalf("observe resume response: %v", err)
 	}
-	if len(result.OutboundToCodex) != 1 {
+	if len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected followup turn/start, got %#v", result)
 	}
 
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal turn/start: %v", err)
 	}
 	requestID, _ := turnStart["id"].(string)
@@ -394,7 +394,7 @@ func TestObserveServerSuppressedTurnStartErrorEmitsFailedTurnCompleted(t *testin
 	if err != nil {
 		t.Fatalf("observe turn/start error: %v", err)
 	}
-	if len(failed.OutboundToCodex) != 0 || len(failed.Events) != 1 {
+	if len(failed.OutboundToAgent) != 0 || len(failed.Events) != 1 {
 		t.Fatalf("expected failed event without suppression, got %#v", failed)
 	}
 	if failed.Events[0].Kind != agentproto.EventTurnCompleted || failed.Events[0].Status != "failed" || failed.Events[0].ThreadID != "thread-2" {

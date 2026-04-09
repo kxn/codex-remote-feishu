@@ -115,7 +115,7 @@ func (h *Harness) processServerOutput(raw []byte) error {
 	if err := h.applyAgentEvents(result.Events); err != nil {
 		return err
 	}
-	for _, followup := range result.OutboundToCodex {
+	for _, followup := range result.OutboundToAgent {
 		outputs, err := h.Codex.HandleRemoteCommand(followup)
 		if err != nil {
 			return err

@@ -49,6 +49,8 @@ type AdminSettings struct {
 
 type WrapperSettings struct {
 	CodexRealBinary string `json:"codexRealBinary,omitempty"`
+	AgentType       string `json:"agentType,omitempty"`
+	AgentBinary     string `json:"agentBinary,omitempty"`
 	NameMode        string `json:"nameMode,omitempty"`
 	IntegrationMode string `json:"integrationMode,omitempty"`
 }
@@ -554,6 +556,9 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 	if strings.TrimSpace(cfg.Wrapper.IntegrationMode) == "" {
 		cfg.Wrapper.IntegrationMode = defaults.Wrapper.IntegrationMode
+	}
+	if strings.TrimSpace(cfg.Wrapper.AgentType) == "" {
+		cfg.Wrapper.AgentType = "codex"
 	}
 
 	if strings.TrimSpace(cfg.Storage.PreviewRootFolderName) == "" {
