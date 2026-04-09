@@ -6,8 +6,8 @@
     "menus": [
       {
         "key": "list",
-        "name": "列出实例",
-        "description": "列出当前在线的 VS Code 实例，并提供接管入口。"
+        "name": "查看列表",
+        "description": "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"
       },
       {
         "key": "status",

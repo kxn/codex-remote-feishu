@@ -184,25 +184,33 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 ## 4. Attachment 与 thread 路由
 
-### 4.1 `attach(instance)`
+### 4.1 `attach(workspace|instance)`
 
-`/list` 或菜单当前只列出**在线 VS Code 实例**，不再把后台恢复实例暴露成手工 attach 入口。
+`/list` 当前已经按 `ProductMode` 分流：
 
-当前 attach 选择卡以按钮回调为主：
+1. normal mode
+   - 列出**可用工作区**
+   - 选择卡按钮走 `attach_workspace -> ActionAttachWorkspace`
+   - detached 与 attached 都可以通过 `/list` attach / switch workspace
+   - attach / switch 成功后统一进入 `attached_unbound`
+   - 不再静默自动 pin 默认 thread
+   - 若当前实例仍有可见会话，会主动补一张 `/use` 选择卡
+2. vscode mode
+   - 继续只列出**在线 VS Code 实例**
+   - 按钮走 `attach_instance -> ActionAttachInstance`
+   - attach 成功后：
+     1. 若 instance 有 `ObservedFocusedThreadID`
+        - 立即 pin 到该 thread
+     2. 否则若 instance 有 `ActiveThreadID`
+        - pin 到该 thread
+     3. 否则
+        - 进入 `attached_unbound`
+        - 若当前仍有可见会话，会主动补一张 `/use` 选择卡
 
-- `attach_instance` 直达 `ActionAttachInstance`
+无论哪种 mode：
+
 - 旧 `prompt_select` 兼容动作统一回 `selection_expired`
-- 普通数字文本不会再被解释成实例选择
-
-attach 成功后：
-
-1. 若 instance 有 `ObservedFocusedThreadID`
-   - 立即 pin 到该 thread
-2. 否则若 instance 有 `ActiveThreadID`
-   - pin 到该 thread
-3. 否则
-   - 进入 `attached_unbound`
-   - 若当前仍有可见会话，会主动补一张 `/use` 选择卡
+- 普通数字文本不会再被解释成实例或工作区选择
 
 ### 4.2 `use-thread(thread)`
 
@@ -418,6 +426,7 @@ attach 成功后：
 
 当前选择卡片是按钮直达流，而不是“回复数字”交互：
 
+- `attach_workspace`
 - `attach_instance`
 - `use_thread`
 - `kick_thread_confirm`

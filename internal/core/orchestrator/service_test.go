@@ -307,7 +307,173 @@ func TestAttachWithoutDefaultThreadEntersUnboundAndPromptsUse(t *testing.T) {
 	}
 }
 
-func TestListInstancesMarksBusyClaimedInstanceDisabled(t *testing.T) {
+func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
+	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-1" || surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected workspace attach to claim droid, got %#v", surface)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected workspace attach to land unbound, got selected=%q route=%q", surface.SelectedThreadID, surface.RouteMode)
+	}
+	var sawNotice, sawPrompt bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "workspace_attached" && strings.Contains(event.Notice.Text, "/use") {
+			sawNotice = true
+		}
+		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+			sawPrompt = true
+		}
+	}
+	if !sawNotice || !sawPrompt {
+		t.Fatalf("expected workspace attach notice plus /use prompt, got %#v", events)
+	}
+}
+
+func TestAttachWorkspaceSwitchClearsPinnedThread(t *testing.T) {
+	now := time.Date(2026, 4, 9, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "web",
+		WorkspaceRoot:           "/data/dl/web",
+		WorkspaceKey:            "/data/dl/web",
+		ShortName:               "web",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "修样式", CWD: "/data/dl/web"},
+		},
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/web",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-2" || surface.ClaimedWorkspaceKey != "/data/dl/web" {
+		t.Fatalf("expected workspace switch to move to web, got %#v", surface)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected workspace switch to clear pinned thread, got selected=%q route=%q", surface.SelectedThreadID, surface.RouteMode)
+	}
+	var sawNotice, sawPrompt bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "workspace_switched" && strings.Contains(event.Notice.Text, "/use") {
+			sawNotice = true
+		}
+		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+			sawPrompt = true
+		}
+	}
+	if !sawNotice || !sawPrompt {
+		t.Fatalf("expected workspace switch notice plus /use prompt, got %#v", events)
+	}
+}
+
+func TestAttachWorkspaceSwitchBlockedByQueuedWork(t *testing.T) {
+	now := time.Date(2026, 4, 9, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.QueueItems["item-1"] = &state.QueueItemRecord{ID: "item-1", Status: state.QueueItemQueued}
+	surface.QueuedQueueItemIDs = []string{"item-1"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/web",
+	})
+
+	if surface.AttachedInstanceID != "inst-1" || surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected blocked switch to keep current workspace, got %#v", surface)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_switch_queued" {
+		t.Fatalf("expected queued switch block notice, got %#v", events)
+	}
+}
+
+func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -347,24 +513,24 @@ func TestListInstancesMarksBusyClaimedInstanceDisabled(t *testing.T) {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if prompt.Kind != control.SelectionPromptAttachInstance || len(prompt.Options) != 2 {
-		t.Fatalf("unexpected instance prompt: %#v", prompt)
+	if prompt.Kind != control.SelectionPromptAttachWorkspace || len(prompt.Options) != 2 {
+		t.Fatalf("unexpected workspace prompt: %#v", prompt)
 	}
-	if prompt.Title != "在线 VS Code 实例" {
-		t.Fatalf("expected vscode attach prompt title, got %#v", prompt)
+	if prompt.Title != "工作区列表" {
+		t.Fatalf("expected workspace prompt title, got %#v", prompt)
 	}
 	for _, option := range prompt.Options {
 		switch option.OptionID {
-		case "inst-1":
-			if !option.Disabled || option.ButtonLabel != "已占用" || !strings.Contains(option.Subtitle, "已被其他飞书会话接管") {
-				t.Fatalf("expected busy instance to be disabled, got %#v", option)
+		case "/data/dl/droid":
+			if !option.Disabled || option.ButtonLabel != "已占用" || !strings.Contains(option.Subtitle, "该工作区已被其他飞书会话接管") {
+				t.Fatalf("expected busy workspace to be disabled, got %#v", option)
 			}
-		case "inst-2":
+		case "/data/dl/web":
 			if option.Disabled {
-				t.Fatalf("expected free instance to remain selectable, got %#v", option)
+				t.Fatalf("expected free workspace to remain selectable, got %#v", option)
 			}
 		default:
-			t.Fatalf("unexpected instance option: %#v", option)
+			t.Fatalf("unexpected workspace option: %#v", option)
 		}
 	}
 }
@@ -483,7 +649,7 @@ func TestUseBusyRunningThreadRejectsKick(t *testing.T) {
 	}
 }
 
-func TestListWithoutOnlineInstancesReturnsNotice(t *testing.T) {
+func TestNormalModeListWithoutOnlineWorkspacesReturnsNotice(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -497,8 +663,34 @@ func TestListWithoutOnlineInstancesReturnsNotice(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected one notice event, got %#v", events)
 	}
-	if events[0].Notice == nil || events[0].Notice.Code != "no_online_instances" {
-		t.Fatalf("expected no_online_instances notice, got %#v", events[0])
+	if events[0].Notice == nil || events[0].Notice.Code != "no_available_workspaces" {
+		t.Fatalf("expected no_available_workspaces notice, got %#v", events[0])
+	}
+	if !strings.Contains(events[0].Notice.Text, "当前没有可接管的工作区") {
+		t.Fatalf("expected workspace empty state notice, got %#v", events[0].Notice)
+	}
+}
+
+func TestVSCodeModeListWithoutOnlineInstancesReturnsNotice(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "no_online_instances" {
+		t.Fatalf("expected no_online_instances notice, got %#v", events)
 	}
 	if !strings.Contains(events[0].Notice.Text, "当前没有在线 VS Code 实例") {
 		t.Fatalf("expected vscode-specific empty state notice, got %#v", events[0].Notice)
@@ -662,6 +854,42 @@ func TestNormalModeAttachClaimsWorkspaceAndProjectsSnapshot(t *testing.T) {
 	snapshot := svc.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.WorkspaceKey != "/data/dl/droid" {
 		t.Fatalf("expected snapshot workspace key, got %#v", snapshot)
+	}
+}
+
+func TestWorkspaceAttachProjectsUnboundSnapshot(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.ProductMode != "normal" || snapshot.WorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected normal-mode workspace snapshot, got %#v", snapshot)
+	}
+	if snapshot.Attachment.InstanceID != "inst-1" || snapshot.Attachment.SelectedThreadID != "" || snapshot.Attachment.RouteMode != string(state.RouteModeUnbound) {
+		t.Fatalf("expected attached-unbound snapshot, got %#v", snapshot.Attachment)
 	}
 }
 
@@ -861,7 +1089,7 @@ func TestDetachReleasesWorkspaceClaim(t *testing.T) {
 	}
 }
 
-func TestListHeadlessOnlyReturnsNoVSCodeNotice(t *testing.T) {
+func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -882,6 +1110,46 @@ func TestListHeadlessOnlyReturnsNoVSCodeNotice(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected one workspace selection prompt for headless-only runtime, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Kind != control.SelectionPromptAttachWorkspace || prompt.Title != "工作区列表" {
+		t.Fatalf("unexpected workspace prompt: %#v", prompt)
+	}
+	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "/data/dl/runtime/headless" {
+		t.Fatalf("expected only headless workspace in list prompt, got %#v", prompt.Options)
+	}
+}
+
+func TestVSCodeModeListHeadlessOnlyReturnsNoVSCodeNotice(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/runtime/headless",
+		WorkspaceKey:  "/data/dl/runtime/headless",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "no_online_instances" {
 		t.Fatalf("expected no_online_instances notice for headless-only runtime, got %#v", events)
 	}
@@ -890,7 +1158,7 @@ func TestListHeadlessOnlyReturnsNoVSCodeNotice(t *testing.T) {
 	}
 }
 
-func TestListFiltersOutHeadlessInstances(t *testing.T) {
+func TestVSCodeModeListFiltersOutHeadlessInstances(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -911,6 +1179,13 @@ func TestListFiltersOutHeadlessInstances(t *testing.T) {
 		Source:        "headless",
 		Managed:       true,
 		Online:        true,
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
 	})
 
 	events := svc.ApplySurfaceAction(control.Action{

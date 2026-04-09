@@ -49,12 +49,12 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/list"},
-		description:  "列出当前在线的 VS Code 实例，并提供接管入口。",
+		description:  "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。",
 		buttons: []CommandCatalogButton{
-			{Label: "查看实例", CommandText: "/list"},
+			{Label: "查看列表", CommandText: "/list"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "list", Name: "列出实例", Description: "列出当前在线的 VS Code 实例，并提供接管入口。"},
+			{Key: "list", Name: "查看列表", Description: "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"},
 		},
 		showInHelp: true,
 		showInMenu: true,

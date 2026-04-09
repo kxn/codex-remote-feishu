@@ -31,6 +31,7 @@ const (
 	ActionMessageRecalled     ActionKind = "surface.message.recalled"
 	ActionSelectPrompt        ActionKind = "surface.selection.prompt"
 	ActionAttachInstance      ActionKind = "surface.button.attach_instance"
+	ActionAttachWorkspace     ActionKind = "surface.button.attach_workspace"
 	ActionShowThreads         ActionKind = "surface.button.show_threads"
 	ActionShowAllThreads      ActionKind = "surface.button.show_all_threads"
 	ActionUseThread           ActionKind = "surface.button.use_thread"
@@ -77,6 +78,7 @@ type Action struct {
 	RequestOptionID  string
 	Approved         bool
 	InstanceID       string
+	WorkspaceKey     string
 	ThreadID         string
 	LocalPath        string
 	MIMEType         string
@@ -88,9 +90,10 @@ type Action struct {
 type SelectionPromptKind string
 
 const (
-	SelectionPromptAttachInstance SelectionPromptKind = "attach_instance"
-	SelectionPromptUseThread      SelectionPromptKind = "use_thread"
-	SelectionPromptKickThread     SelectionPromptKind = "kick_thread"
+	SelectionPromptAttachInstance  SelectionPromptKind = "attach_instance"
+	SelectionPromptAttachWorkspace SelectionPromptKind = "attach_workspace"
+	SelectionPromptUseThread       SelectionPromptKind = "use_thread"
+	SelectionPromptKickThread      SelectionPromptKind = "kick_thread"
 )
 
 type SelectionOption struct {

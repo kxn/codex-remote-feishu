@@ -250,7 +250,7 @@ func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
 	var hasFinalReplyCard bool
 	for _, operation := range gateway.operations {
 		switch {
-		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "在线 VS Code 实例":
+		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "工作区列表":
 			hasListCard = true
 		case operation.Kind == feishu.OperationAddReaction && operation.MessageID == "msg-1":
 			hasTyping = true
@@ -259,7 +259,7 @@ func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
 		}
 	}
 	if !hasListCard {
-		t.Fatalf("expected online instance card, got %#v", gateway.operations)
+		t.Fatalf("expected workspace list card, got %#v", gateway.operations)
 	}
 	if !hasTyping {
 		t.Fatalf("expected typing reaction, got %#v", gateway.operations)
@@ -748,7 +748,7 @@ func TestDaemonFallsBackToActorRouteForColdStartMenuActions(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", gateway.operations)
 	}
 	got := gateway.operations[0]
-	if got.Kind != feishu.OperationSendCard || got.CardTitle != "在线 VS Code 实例" {
+	if got.Kind != feishu.OperationSendCard || got.CardTitle != "工作区列表" {
 		t.Fatalf("unexpected operation: %#v", got)
 	}
 	if got.ReceiveID != "ou_1" || got.ReceiveIDType != "open_id" {
@@ -1150,7 +1150,7 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	if !strings.Contains(gateway.operations[0].CardTitle, "链路错误") || !strings.Contains(gateway.operations[0].CardBody, "位置：<text_tag color='neutral'>gateway_apply</text_tag>") {
 		t.Fatalf("expected queued gateway failure notice first, got %#v", gateway.operations[0])
 	}
-	if gateway.operations[1].CardTitle == "" || !strings.Contains(gateway.operations[1].CardBody, "当前没有在线 VS Code 实例") {
+	if gateway.operations[1].CardTitle == "" || !strings.Contains(gateway.operations[1].CardBody, "当前没有可接管的工作区") {
 		t.Fatalf("expected current response card after queued notice, got %#v", gateway.operations[1])
 	}
 }

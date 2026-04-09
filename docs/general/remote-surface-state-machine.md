@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步显式 `ProductMode` + normal-mode `workspace claim` 基座：surface 现在默认 `normal`、支持 `/mode normal|vscode`、normal mode 的 attach/use/headless 恢复会先经过 workspace 仲裁，`/status` 也会展示当前 mode 与已占用 workspace。
+> Summary: 同步 normal-mode `/list` workspace chooser：surface 现在默认 `normal`，`/list` 会按 mode 分流；normal mode 走 workspace attach/switch 并统一落到 no-thread，vscode mode 继续走 instance attach。
 
 ## 1. 文档定位
 
@@ -74,7 +74,10 @@ surface 不是单一枚举，而是五层正交状态叠加。
    2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
 4. 若当前仍有 live remote work，则 `/mode` 直接拒绝，并明确提示用户 `/stop` 或 `/detach`。
 5. `PendingHeadless` 与 `Abandoning` 仍是更高优先级 gate，所以这两类状态下 `/mode` 不会放行。
-6. 当前 mode 还没有彻底重写 `/list` / `/use` / `/follow` 的产品主语义；但 normal mode 已经会改变 attach/use/headless 恢复的仲裁层。
+6. 当前 `/list` 已按 mode 分流：
+   1. normal mode 列 workspace，并走 workspace attach/switch。
+   2. vscode mode 继续列在线 VS Code instance。
+7. `/use` / `/follow` 的最终产品收窄仍未全部完成；但 normal mode 已经会改变 attach/use/headless 恢复的仲裁层。
 
 ### 3.2 路由主状态
 
@@ -167,25 +170,26 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 ## 4. 当前已实现的不变量
 
-### 4.1 normal mode 先做 workspace claim，instance claim 退回下一层
+### 4.1 normal mode `/list` 先选 workspace，再落到 `R1 AttachedUnbound`
 
-当前 `attachInstance()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 normal mode 下都会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
+当前 normal mode 的 `/list` 已经不再列 instance，而是列 workspace。
+
+对应实现里：
+
+1. `presentWorkspaceSelection()` 聚合所有在线 instance 的 `WorkspaceKey/WorkspaceRoot`。
+2. 卡片按钮走 `attach_workspace -> ActionAttachWorkspace`。
+3. `attachWorkspace()` 在 normal mode 下先做 `workspaceClaims`，再选一个当前可接管的 online instance 落到该 workspace。
+4. attach / switch 成功后，统一进入 `R1 AttachedUnbound`，不再复用默认 thread 自动 pin。
+
+同时，`attachInstance()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 normal mode 下仍然会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
 
 结果：
 
 1. 同一个 workspace 当前最多只允许一个 normal-mode surface 占有。
-2. 第二个 normal-mode surface 如果试图 attach 同 workspace 的另一实例，或 `/use` / headless 恢复到该 workspace，会直接收到 `workspace_busy`。
+2. 第二个 normal-mode surface 如果试图通过 `/list` attach/switch 到同 workspace，或 `/use` / headless 恢复到该 workspace，会直接收到 `workspace_busy`。
 3. 同一个 instance 仍然只能被一个飞书 surface attach；也就是说 instance claim 还在，只是已经退回到 workspace claim 之后。
 4. 不会进入“workspace 仲裁层已经冲突，但仍然 attach 成功”的半 attach 状态。
-
-唯一保留的显式可恢复状态是 `R1 AttachedUnbound`：
-
-1. attach instance 成功。
-2. 默认 thread 当前拿不到 claim 或没有默认 thread。
-3. surface 进入 `R1`。
-4. 服务端会主动发 thread 选择卡片。
-
-这不是死状态，因为用户仍然只有一条明确下一步：`/use` 或点 thread 卡片。
+5. normal mode 的 `/list` attach/switch 不会自动抢默认 thread；用户会明确落到 `R1`，然后继续 `/use` 或点 thread 卡片。
 
 ### 4.2 thread claim 仍是全局的，但在 normal mode 下退回 workspace 内仲裁
 
@@ -227,10 +231,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 1. attach/use/kick confirm 都改成**直达动作**。
 2. Feishu 卡片按钮直接携带：
-   1. `attach_instance`
-   2. `use_thread`
-   3. `kick_thread_confirm`
-   4. `kick_thread_cancel`
+   1. `attach_workspace`
+   2. `attach_instance`
+   3. `use_thread`
+   4. `kick_thread_confirm`
+   5. `kick_thread_cancel`
 3. 旧 `resume_headless_thread` 只保留兼容解析，服务端统一返回迁移提示。
 4. 旧 `prompt_select` 只保留兼容解析，服务端统一返回 `selection_expired`。
 5. `"1"`、`"2"` 这类纯数字文本现在就是普通文本。
@@ -367,8 +372,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
 1. `/mode` 无参数时，直接回当前 `Snapshot`。
 2. `/mode normal` / `/mode vscode` 允许在 detached 或 idle attached surface 上切换。
 3. 切换时一定先做 detach-like 清理，再进入目标 mode 的 detached 态；workspace claim 也会一起释放。
-4. 切换当前不会彻底重写 `/list`、`/use`、`/follow` 的主交互语义，但会改变 normal/vscode 两种 mode 是否参与 workspace claim 仲裁。
-5. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
+4. 切换当前已经会改变 `/list` 的主交互语义：
+   1. `normal` 下 `/list` 是 workspace chooser。
+   2. `vscode` 下 `/list` 是 instance chooser。
+5. `/use`、`/follow` 的最终产品收窄仍在后续 issue 中继续推进。
+6. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
 
 ### 4.13 `/autocontinue` 是 surface 级、内存态、跨 route 可查询的 overlay 开关
 
@@ -697,6 +705,7 @@ retained-offline overlay 额外规则：
 
 | 卡片动作 | 服务端 action | 说明 |
 | --- | --- | --- |
+| `attach_workspace` | `ActionAttachWorkspace` | normal mode `/list` 的 workspace attach/switch 入口 |
 | `attach_instance` | `ActionAttachInstance` | 直达 attach |
 | `use_thread` | `ActionUseThread` | 直达 thread 切换 |
 | `resume_headless_thread` | `ActionRemovedCommand` | 历史兼容入口，统一回迁移提示 |

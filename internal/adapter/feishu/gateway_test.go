@@ -660,6 +660,38 @@ func TestParseCardActionTriggerEventBuildsDirectAttachInstanceAction(t *testing.
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsAttachWorkspaceAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-4", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":          "attach_workspace",
+					"workspace_key": "/data/dl/droid",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-4",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected card callback to be parsed")
+	}
+	if action.Kind != control.ActionAttachWorkspace || action.WorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("unexpected attach-workspace action: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
+		t.Fatalf("unexpected action routing: %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsRemovedResumeHeadlessAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")

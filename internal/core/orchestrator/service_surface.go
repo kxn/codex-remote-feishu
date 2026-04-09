@@ -245,6 +245,282 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 	}}
 }
 
+func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	grouped := map[string][]*state.InstanceRecord{}
+	for _, inst := range s.root.Instances {
+		if inst == nil || !inst.Online {
+			continue
+		}
+		workspaceKey := instanceWorkspaceClaimKey(inst)
+		if workspaceKey == "" {
+			continue
+		}
+		grouped[workspaceKey] = append(grouped[workspaceKey], inst)
+	}
+	if len(grouped) == 0 {
+		return notice(surface, "no_available_workspaces", "当前没有可接管的工作区。请先连接一个 VS Code 会话，或等待可用实例上线。")
+	}
+
+	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
+	keys := make([]string, 0, len(grouped))
+	for workspaceKey := range grouped {
+		keys = append(keys, workspaceKey)
+	}
+	sort.Strings(keys)
+
+	options := make([]control.SelectionOption, 0, len(keys))
+	for i, workspaceKey := range keys {
+		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
+		s.sortWorkspaceAttachInstances(surface, instances)
+
+		subtitleLines := []string{workspaceKey}
+		if s.workspaceHasVSCodeActivity(instances) {
+			subtitleLines = append(subtitleLines, "检测到 VS Code 当前有活动会话")
+		}
+
+		buttonLabel := ""
+		disabled := false
+		isCurrent := surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace == workspaceKey
+		switch {
+		case isCurrent:
+			buttonLabel = "当前"
+			disabled = true
+		case s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil:
+			buttonLabel = "已占用"
+			disabled = true
+			subtitleLines = append(subtitleLines, "该工作区已被其他飞书会话接管")
+		case s.resolveWorkspaceAttachInstanceFromCandidates(surface, instances) == nil:
+			buttonLabel = "不可用"
+			disabled = true
+			subtitleLines = append(subtitleLines, "当前工作区没有可接管的实例")
+		case surface.AttachedInstanceID != "":
+			buttonLabel = "切换"
+		}
+
+		options = append(options, control.SelectionOption{
+			Index:       i + 1,
+			OptionID:    workspaceKey,
+			Label:       workspaceSelectionLabel(workspaceKey, instances),
+			Subtitle:    strings.Join(subtitleLines, "\n"),
+			ButtonLabel: buttonLabel,
+			IsCurrent:   isCurrent,
+			Disabled:    disabled,
+		})
+	}
+
+	return []control.UIEvent{{
+		Kind:             control.UIEventSelectionPrompt,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		SelectionPrompt: &control.SelectionPrompt{
+			Kind:    control.SelectionPromptAttachWorkspace,
+			Title:   "工作区列表",
+			Options: options,
+		},
+	}}
+}
+
+func (s *Service) workspaceOnlineInstances(workspaceKey string) []*state.InstanceRecord {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return nil
+	}
+	instances := []*state.InstanceRecord{}
+	for _, inst := range s.root.Instances {
+		if inst == nil || !inst.Online || instanceWorkspaceClaimKey(inst) != workspaceKey {
+			continue
+		}
+		instances = append(instances, inst)
+	}
+	return instances
+}
+
+func (s *Service) sortWorkspaceAttachInstances(surface *state.SurfaceConsoleRecord, instances []*state.InstanceRecord) {
+	sort.Slice(instances, func(i, j int) bool {
+		left := instances[i]
+		right := instances[j]
+
+		leftCurrent := surface != nil && left != nil && left.InstanceID == surface.AttachedInstanceID
+		rightCurrent := surface != nil && right != nil && right.InstanceID == surface.AttachedInstanceID
+		if leftCurrent != rightCurrent {
+			return leftCurrent
+		}
+
+		leftOwner := s.instanceClaimSurface(left.InstanceID)
+		rightOwner := s.instanceClaimSurface(right.InstanceID)
+		leftFree := leftOwner == nil || (surface != nil && leftOwner.SurfaceSessionID == surface.SurfaceSessionID)
+		rightFree := rightOwner == nil || (surface != nil && rightOwner.SurfaceSessionID == surface.SurfaceSessionID)
+		if leftFree != rightFree {
+			return leftFree
+		}
+
+		leftVisible := len(visibleThreads(left)) != 0
+		rightVisible := len(visibleThreads(right)) != 0
+		if leftVisible != rightVisible {
+			return leftVisible
+		}
+
+		leftHeadless := isHeadlessInstance(left)
+		rightHeadless := isHeadlessInstance(right)
+		if leftHeadless != rightHeadless {
+			return leftHeadless
+		}
+
+		leftVSCode := isVSCodeInstance(left)
+		rightVSCode := isVSCodeInstance(right)
+		if leftVSCode != rightVSCode {
+			return leftVSCode
+		}
+
+		return left.InstanceID < right.InstanceID
+	})
+}
+
+func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.SurfaceConsoleRecord, instances []*state.InstanceRecord) *state.InstanceRecord {
+	if len(instances) == 0 {
+		return nil
+	}
+	s.sortWorkspaceAttachInstances(surface, instances)
+	for _, inst := range instances {
+		owner := s.instanceClaimSurface(inst.InstanceID)
+		if owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID) {
+			return inst
+		}
+	}
+	return nil
+}
+
+func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
+	instances := s.workspaceOnlineInstances(workspaceKey)
+	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, instances)
+}
+
+func (s *Service) workspaceHasVSCodeActivity(instances []*state.InstanceRecord) bool {
+	for _, inst := range instances {
+		if inst == nil || !isVSCodeInstance(inst) {
+			continue
+		}
+		if strings.TrimSpace(inst.ObservedFocusedThreadID) != "" || strings.TrimSpace(inst.ActiveThreadID) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func workspaceSelectionLabel(workspaceKey string, instances []*state.InstanceRecord) string {
+	for _, inst := range instances {
+		if inst == nil {
+			continue
+		}
+		if label := strings.TrimSpace(inst.ShortName); label != "" {
+			return label
+		}
+		if label := strings.TrimSpace(inst.DisplayName); label != "" {
+			return label
+		}
+	}
+	if label := strings.TrimSpace(filepath.Base(workspaceKey)); label != "" && label != "." && label != string(filepath.Separator) {
+		return label
+	}
+	return workspaceKey
+}
+
+func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspaceKey string) []control.UIEvent {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /list。")
+	}
+	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
+	if surface.AttachedInstanceID != "" && currentWorkspace == workspaceKey {
+		return notice(surface, "workspace_already_attached", fmt.Sprintf("当前已接管工作区：%s。", workspaceKey))
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
+	}
+	if surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace != workspaceKey {
+		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+			return blocked
+		}
+	}
+
+	inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey)
+	if inst == nil {
+		if len(s.workspaceOnlineInstances(workspaceKey)) == 0 {
+			return notice(surface, "workspace_not_found", "目标工作区已失效，请重新发送 /list。")
+		}
+		return notice(surface, "workspace_instance_busy", "目标工作区当前没有可接管的实例，请稍后重试。")
+	}
+
+	events := []control.UIEvent{}
+	if surface.AttachedInstanceID != "" {
+		events = append(events, s.discardDrafts(surface)...)
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+	} else {
+		events = append(events, s.discardDrafts(surface)...)
+		clearSurfaceRequestCapture(surface)
+		clearSurfaceRequests(surface)
+		s.releaseSurfaceThreadClaim(surface)
+		s.clearPreparedNewThread(surface)
+		surface.PromptOverride = state.ModelConfigRecord{}
+		surface.PendingHeadless = nil
+		surface.ActiveQueueItemID = ""
+		surface.DispatchMode = state.DispatchModeNormal
+		surface.Abandoning = false
+		delete(s.pausedUntil, surface.SurfaceSessionID)
+		delete(s.abandoningUntil, surface.SurfaceSessionID)
+	}
+
+	if !s.claimWorkspace(surface, workspaceKey) {
+		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
+	}
+	if !s.claimInstance(surface, inst.InstanceID) {
+		s.releaseSurfaceWorkspaceClaim(surface)
+		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前没有可接管的实例，请稍后重试。")...)
+	}
+
+	surface.AttachedInstanceID = inst.InstanceID
+	s.surfaceCurrentWorkspaceKey(surface)
+	surface.PendingHeadless = nil
+	surface.ActiveQueueItemID = ""
+	surface.DispatchMode = state.DispatchModeNormal
+	surface.Abandoning = false
+	delete(s.pausedUntil, surface.SurfaceSessionID)
+	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	clearSurfaceRequests(surface)
+	s.clearPreparedNewThread(surface)
+	s.releaseSurfaceThreadClaim(surface)
+	surface.PromptOverride = state.ModelConfigRecord{}
+	surface.SelectedThreadID = ""
+	surface.RouteMode = state.RouteModeUnbound
+	surface.LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "",
+		RouteMode: string(state.RouteModeUnbound),
+		Title:     "未绑定会话",
+		Preview:   "",
+	}
+
+	noticeCode := "workspace_attached"
+	noticeText := fmt.Sprintf("已接管工作区 %s。请继续 /use 选择一个会话。", workspaceKey)
+	if currentWorkspace != "" && currentWorkspace != workspaceKey {
+		noticeCode = "workspace_switched"
+		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话。", workspaceKey)
+	}
+	if len(visibleThreads(inst)) == 0 {
+		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话，请稍后发送 /use，或直接 /detach。", workspaceKey)
+	}
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code: noticeCode,
+			Text: noticeText,
+		},
+	})
+	if len(visibleThreads(inst)) != 0 {
+		events = append(events, s.autoPromptUseThread(surface, inst)...)
+	}
+	return events
+}
+
 func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID string) []control.UIEvent {
 	inst := s.root.Instances[instanceID]
 	if inst == nil {

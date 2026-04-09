@@ -45,6 +45,49 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	}
 }
 
+func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Kind: control.SelectionPromptAttachWorkspace,
+			Options: []control.SelectionOption{
+				{
+					Index:       1,
+					OptionID:    "/data/dl/droid",
+					Label:       "droid",
+					Subtitle:    "/data/dl/droid\n检测到 VS Code 当前有活动会话",
+					ButtonLabel: "切换",
+				},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "工作区列表" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if len(ops[0].CardElements) != 2 {
+		t.Fatalf("expected markdown + action button elements, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "1. droid - 工作区 <text_tag color='neutral'>/data/dl/droid</text_tag>\n检测到 VS Code 当前有活动会话" {
+		t.Fatalf("unexpected first element: %#v", ops[0].CardElements[0])
+	}
+	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
+	}
+	textValue, _ := actionRow[0]["text"].(map[string]any)
+	if textValue["content"] != "切换" {
+		t.Fatalf("unexpected button label: %#v", actionRow[0])
+	}
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["kind"] != "attach_workspace" || value["workspace_key"] != "/data/dl/droid" {
+		t.Fatalf("unexpected action payload: %#v", value)
+	}
+}
+
 func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -967,6 +1010,32 @@ func TestProjectSnapshotShowsClaimedWorkspace(t *testing.T) {
 		"**已接管：** 无",
 	) {
 		t.Fatalf("unexpected snapshot body with workspace claim: %#v", ops[0].CardBody)
+	}
+}
+
+func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode:  "normal",
+			WorkspaceKey: "/data/dl/droid",
+			Attachment: control.AttachmentSummary{
+				InstanceID:  "inst-1",
+				DisplayName: "droid",
+				RouteMode:   "unbound",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !containsAll(ops[0].CardBody,
+		"**当前 workspace：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
+		"**已接管：** droid",
+		"**当前输入目标：** 未绑定会话",
+	) {
+		t.Fatalf("unexpected snapshot body with attached workspace: %#v", ops[0].CardBody)
 	}
 }
 

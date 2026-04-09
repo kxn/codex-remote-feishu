@@ -117,6 +117,8 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			switch event.SelectionPrompt.Kind {
 			case control.SelectionPromptAttachInstance:
 				title = "在线 VS Code 实例"
+			case control.SelectionPromptAttachWorkspace:
+				title = "工作区列表"
 			case control.SelectionPromptUseThread:
 				title = "会话列表"
 			case control.SelectionPromptKickThread:
@@ -457,6 +459,15 @@ func selectionOptionBody(kind control.SelectionPromptKind, option control.Select
 			}
 			return line
 		}
+	case control.SelectionPromptAttachWorkspace:
+		if option.Subtitle != "" {
+			parts := strings.Split(option.Subtitle, "\n")
+			line := fmt.Sprintf("%d. %s - 工作区 %s%s", option.Index, option.Label, formatNeutralTextTag(parts[0]), current)
+			if len(parts) > 1 {
+				line += "\n" + strings.Join(parts[1:], "\n")
+			}
+			return line
+		}
 	default:
 		if option.Subtitle != "" {
 			parts := strings.Split(option.Subtitle, "\n")
@@ -487,6 +498,14 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		value = map[string]any{
 			"kind":        "attach_instance",
 			"instance_id": strings.TrimSpace(option.OptionID),
+		}
+	case control.SelectionPromptAttachWorkspace:
+		if text == "选择" {
+			text = "接管"
+		}
+		value = map[string]any{
+			"kind":          "attach_workspace",
+			"workspace_key": strings.TrimSpace(option.OptionID),
 		}
 	case control.SelectionPromptUseThread:
 		if text == "选择" {

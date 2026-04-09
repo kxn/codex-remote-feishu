@@ -205,6 +205,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	s.noteAutoContinueAction(surface, action)
 	switch action.Kind {
 	case control.ActionListInstances:
+		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+			return s.presentWorkspaceSelection(surface)
+		}
 		return s.presentInstanceSelection(surface)
 	case control.ActionNewThread:
 		return s.prepareNewThread(surface)
@@ -214,6 +217,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.handleRemovedCommand(surface, action)
 	case control.ActionAttachInstance:
 		return s.attachInstance(surface, action.InstanceID)
+	case control.ActionAttachWorkspace:
+		return s.attachWorkspace(surface, action.WorkspaceKey)
 	case control.ActionShowCommandHelp:
 		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandHelpCatalog())}
 	case control.ActionShowCommandMenu:
