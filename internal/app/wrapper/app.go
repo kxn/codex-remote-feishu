@@ -182,7 +182,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Dir = a.config.WorkspaceRoot
-	cmd.Env = childEnvWithProxy(a.config.ChildProxyEnv)
+	cmd.Env = childEnvWithProxy(a.config.ChildProxyEnv, a.config.Args)
 	configureCodexChildProcess(cmd, a.config)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)

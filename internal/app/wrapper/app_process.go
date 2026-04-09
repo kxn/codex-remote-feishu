@@ -69,10 +69,8 @@ func codexChildLaunchOptions(cfg Config) childLaunchOptions {
 	}
 }
 
-func childEnvWithProxy(proxyEnv []string) []string {
-	filtered := config.FilterEnvWithoutProxy(os.Environ())
-	filtered = append(filtered, proxyEnv...)
-	return filtered
+func childEnvWithProxy(proxyEnv, args []string) []string {
+	return config.BuildCodexChildEnv(os.Environ(), proxyEnv, args)
 }
 
 func generateInstanceID() (string, error) {

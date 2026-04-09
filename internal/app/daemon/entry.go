@@ -80,8 +80,7 @@ func RunMain(ctx context.Context, version string) error {
 		gateway,
 		identity,
 	)
-	baseEnv := config.FilterEnvWithoutProxy(os.Environ())
-	baseEnv = append(baseEnv, capturedProxyEnv...)
+	baseEnv := config.BuildCodexChildEnv(os.Environ(), capturedProxyEnv, nil)
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: identity.BinaryPath,
 		ConfigPath: cfg.ConfigPath,
