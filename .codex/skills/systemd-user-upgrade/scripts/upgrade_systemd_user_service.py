@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import fcntl
 import ipaddress
@@ -10,10 +11,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import time
-from typing import Iterable
+from typing import Iterable, Iterator
 
 
 DEFAULT_SERVICE_NAME = "codex-remote.service"
@@ -27,6 +29,13 @@ PROXY_ENV_KEYS = (
     "ALL_PROXY",
     "all_proxy",
 )
+
+
+ROLLBACK_SIGNAL_NAMES = ("SIGINT", "SIGTERM")
+
+
+class UpgradeInterrupted(Exception):
+    """Raised when the upgrade transaction is interrupted and should roll back."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,11 +92,13 @@ def main() -> int:
             print(f"backup dir: {snapshot.backup_dir}")
 
             try:
-                run_upgrade(layout, snapshot.staged_artifact, args)
-                verify_runtime(layout, args.timeout_seconds, args)
-            except Exception as exc:
+                with rollback_signal_guard():
+                    run_upgrade(layout, snapshot.staged_artifact, args)
+                    verify_runtime(layout, args.timeout_seconds, args)
+            except (Exception, KeyboardInterrupt) as exc:
                 print(f"upgrade failed: {exc}", file=sys.stderr)
-                rollback(layout, snapshot, args)
+                with suppress_rollback_interrupts():
+                    rollback(layout, snapshot, args)
                 try:
                     verify_runtime(layout, args.timeout_seconds, args)
                 except Exception as rollback_exc:
@@ -101,6 +112,9 @@ def main() -> int:
             print("upgrade: success")
             print(f"backup retained at: {snapshot.backup_dir}")
             return 0
+    except KeyboardInterrupt as exc:
+        print(str(exc) or "upgrade interrupted", file=sys.stderr)
+        return 1
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -221,6 +235,43 @@ def normalize_local_host(host: str) -> str:
     if ip.is_loopback or ip.is_unspecified:
         return "127.0.0.1"
     return host
+
+
+@contextlib.contextmanager
+def rollback_signal_guard() -> Iterator[None]:
+    previous: dict[int, object] = {}
+
+    def handler(signum: int, _frame: object) -> None:
+        signal_name = signal.Signals(signum).name
+        raise UpgradeInterrupted(f"received {signal_name}")
+
+    try:
+        for signal_name in ROLLBACK_SIGNAL_NAMES:
+            signum = getattr(signal, signal_name, None)
+            if signum is None:
+                continue
+            previous[signum] = signal.getsignal(signum)
+            signal.signal(signum, handler)
+        yield
+    finally:
+        for signum, previous_handler in previous.items():
+            signal.signal(signum, previous_handler)
+
+
+@contextlib.contextmanager
+def suppress_rollback_interrupts() -> Iterator[None]:
+    previous: dict[int, object] = {}
+    try:
+        for signal_name in ROLLBACK_SIGNAL_NAMES:
+            signum = getattr(signal, signal_name, None)
+            if signum is None:
+                continue
+            previous[signum] = signal.getsignal(signum)
+            signal.signal(signum, signal.SIG_IGN)
+        yield
+    finally:
+        for signum, previous_handler in previous.items():
+            signal.signal(signum, previous_handler)
 
 
 def clean_local_env() -> dict[str, str]:
