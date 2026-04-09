@@ -507,11 +507,11 @@ func TestWrapperWritesRawFramesWhenEnabled(t *testing.T) {
 	if !strings.Contains(text, `"channel":"parent.stdin"`) {
 		t.Fatalf("expected parent.stdin raw frame, got %s", text)
 	}
-	if !strings.Contains(text, `"channel":"codex.stdin"`) {
-		t.Fatalf("expected codex.stdin raw frame, got %s", text)
+	if !strings.Contains(text, `"channel":"agent.stdin"`) {
+		t.Fatalf("expected agent.stdin raw frame, got %s", text)
 	}
-	if !strings.Contains(text, `"channel":"codex.stdout"`) {
-		t.Fatalf("expected codex.stdout raw frame, got %s", text)
+	if !strings.Contains(text, `"channel":"agent.stdout"`) {
+		t.Fatalf("expected agent.stdout raw frame, got %s", text)
 	}
 	if !strings.Contains(text, `"channel":"relay.ws"`) {
 		t.Fatalf("expected relay.ws raw frame, got %s", text)

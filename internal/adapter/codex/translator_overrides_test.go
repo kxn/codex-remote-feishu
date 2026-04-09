@@ -81,11 +81,11 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 	if err != nil {
 		t.Fatalf("observe server response: %v", err)
 	}
-	if len(result.OutboundToCodex) != 1 {
+	if len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected followup turn/start, got %#v", result)
 	}
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal followup turn/start: %v", err)
 	}
 	turnParams, _ := turnStart["params"].(map[string]any)
@@ -127,11 +127,11 @@ func TestTranslatePromptSendConfirmAccessModeOverridesPolicies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("observe server response: %v", err)
 	}
-	if len(result.OutboundToCodex) != 1 {
+	if len(result.OutboundToAgent) != 1 {
 		t.Fatalf("expected followup turn/start, got %#v", result)
 	}
 	var turnStart map[string]any
-	if err := json.Unmarshal(result.OutboundToCodex[0], &turnStart); err != nil {
+	if err := json.Unmarshal(result.OutboundToAgent[0], &turnStart); err != nil {
 		t.Fatalf("unmarshal followup turn/start: %v", err)
 	}
 	turnParams, _ := turnStart["params"].(map[string]any)

@@ -55,11 +55,27 @@ func startChild(cmd *exec.Cmd) (io.WriteCloser, io.ReadCloser, io.ReadCloser, er
 	return stdin, stdout, stderr, nil
 }
 
-func configureCodexChildProcess(cmd *exec.Cmd, cfg Config) {
-	applyChildLaunchOptions(cmd, codexChildLaunchOptions(cfg))
+func configureChildProcess(cmd *exec.Cmd, cfg Config) {
+	applyChildLaunchOptions(cmd, childLaunchOptionsForAgent(cfg))
+	if strings.EqualFold(strings.TrimSpace(cfg.AgentType), "claude") {
+		configureClaudeChildEnv(cmd)
+	}
 }
 
-func codexChildLaunchOptions(cfg Config) childLaunchOptions {
+func configureClaudeChildEnv(cmd *exec.Cmd) {
+	// Set required env for Claude CLI SDK mode
+	cmd.Env = append(cmd.Env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+	// Strip CLAUDECODE nesting guard so SDK subprocess works
+	filtered := make([]string, 0, len(cmd.Env))
+	for _, e := range cmd.Env {
+		if !strings.HasPrefix(e, "CLAUDECODE=") {
+			filtered = append(filtered, e)
+		}
+	}
+	cmd.Env = filtered
+}
+
+func childLaunchOptionsForAgent(cfg Config) childLaunchOptions {
 	if !cfg.Managed || !strings.EqualFold(strings.TrimSpace(cfg.Source), "headless") {
 		return childLaunchOptions{}
 	}

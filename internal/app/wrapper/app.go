@@ -11,17 +11,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/translator"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 type App struct {
 	config     Config
-	translator *codex.Translator
+	translator translator.Translator
 }
 
 const (
@@ -37,6 +39,8 @@ type shutdownRequest struct {
 type Config struct {
 	RelayServerURL  string
 	CodexRealBinary string
+	AgentType       string
+	AgentBinary     string
 	NameMode        string
 	Args            []string
 	ConfigPath      string
@@ -104,6 +108,8 @@ func LoadConfig(args []string) (Config, error) {
 	return Config{
 		RelayServerURL:       loaded.RelayServerURL,
 		CodexRealBinary:      loaded.CodexRealBinary,
+		AgentType:            loaded.AgentType,
+		AgentBinary:          loaded.AgentBinary,
 		NameMode:             loaded.NameMode,
 		Args:                 args,
 		ConfigPath:           firstNonEmpty(services.ConfigPath, loaded.ConfigPath, paths.ConfigFile),
@@ -128,15 +134,21 @@ func LoadConfig(args []string) (Config, error) {
 }
 
 func New(cfg Config) *App {
-	translator := codex.NewTranslator(cfg.InstanceID)
+	var t translator.Translator
+	switch strings.TrimSpace(strings.ToLower(cfg.AgentType)) {
+	case "claude":
+		t = claude.NewTranslator(cfg.InstanceID)
+	default:
+		t = codex.NewTranslator(cfg.InstanceID)
+	}
 	if cfg.DebugRelayFlow {
-		translator.SetDebugLogger(func(format string, args ...any) {
+		t.SetDebugLogger(func(format string, args ...any) {
 			log.Printf("relay flow translator: "+format, args...)
 		})
 	}
 	return &App{
 		config:     cfg,
-		translator: translator,
+		translator: t,
 	}
 }
 
@@ -177,19 +189,23 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	childCtx, childCancel := context.WithCancel(ctx)
 	defer childCancel()
 
-	cmd := exec.CommandContext(childCtx, a.config.CodexRealBinary, a.config.Args...)
+	agentBinary := a.config.CodexRealBinary
+	if a.config.AgentBinary != "" {
+		agentBinary = a.config.AgentBinary
+	}
+	cmd := exec.CommandContext(childCtx, agentBinary, a.config.Args...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Dir = a.config.WorkspaceRoot
 	cmd.Env = childEnvWithProxy(a.config.ChildProxyEnv)
-	configureCodexChildProcess(cmd, a.config)
+	configureChildProcess(cmd, a.config)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
 	if err != nil {
 		return 1, err
 	}
-	a.debugf("child started: binary=%s pid=%d cwd=%s", a.config.CodexRealBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
+	a.debugf("child started: binary=%s pid=%d cwd=%s agent=%s", agentBinary, cmd.Process.Pid, a.config.WorkspaceRoot, a.config.AgentType)
 
 	writeCh := make(chan []byte, 128)
 	errCh := make(chan error, 8)
@@ -197,7 +213,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	commandResponses := newCommandResponseTracker()
 	shutdownCh := make(chan shutdownRequest, 1)
 
-	if err := a.bootstrapHeadlessCodex(childStdin, rawLogger, problems.Emit); err != nil {
+	if err := a.bootstrapAgent(childStdin, rawLogger, problems.Emit); err != nil {
 		childCancel()
 		_ = cmd.Wait()
 		return 1, err

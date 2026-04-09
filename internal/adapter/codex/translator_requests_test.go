@@ -288,7 +288,7 @@ func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("observe thread/list response: %v", err)
 	}
-	if !refreshed.Suppress || len(refreshed.OutboundToCodex) != 2 {
+	if !refreshed.Suppress || len(refreshed.OutboundToAgent) != 2 {
 		t.Fatalf("expected suppressed thread/read followups, got %#v", refreshed)
 	}
 
