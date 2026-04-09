@@ -31,15 +31,15 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 		t.Fatalf("WriteState: %v", err)
 	}
 
-	originalStart := localUpgradeStartDetachedCommandFunc
+	originalStart := upgradeHelperStartDetachedCommandFunc
 	var startedBinary string
 	var startedArgs []string
-	localUpgradeStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
+	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
 		startedBinary = opts.BinaryPath
 		startedArgs = append([]string(nil), opts.Args...)
 		return 123, nil
 	}
-	defer func() { localUpgradeStartDetachedCommandFunc = originalStart }()
+	defer func() { upgradeHelperStartDetachedCommandFunc = originalStart }()
 
 	slot, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
 		StatePath:    statePath,
@@ -146,16 +146,16 @@ func TestRunMainUpgradeSourceBinaryStartsLocalUpgradeTransaction(t *testing.T) {
 
 	originalValidator := sourceBinaryValidator
 	originalExec := executablePath
-	originalStart := localUpgradeStartDetachedCommandFunc
+	originalStart := upgradeHelperStartDetachedCommandFunc
 	sourceBinaryValidator = func(string) error { return nil }
 	executablePath = func() (string, error) { return helperBinary, nil }
-	localUpgradeStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
+	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
 		return 321, nil
 	}
 	defer func() {
 		sourceBinaryValidator = originalValidator
 		executablePath = originalExec
-		localUpgradeStartDetachedCommandFunc = originalStart
+		upgradeHelperStartDetachedCommandFunc = originalStart
 	}()
 
 	var stdout bytes.Buffer

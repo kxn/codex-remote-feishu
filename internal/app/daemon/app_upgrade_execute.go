@@ -95,12 +95,12 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	}
 	a.mu.Unlock()
 
-	if _, err := relayruntime.StartDetachedCommand(relayruntime.DetachedCommandOptions{
-		BinaryPath: helperPath,
-		Args:       []string{"upgrade-helper", "-state-path", stateValue.StatePath},
-		Env:        append([]string{}, os.Environ()...),
-		StdoutPath: logPath,
-		StderrPath: logPath,
+	if err := install.StartUpgradeHelperProcess(context.Background(), install.UpgradeHelperLaunchOptions{
+		State:        stateValue,
+		HelperBinary: helperPath,
+		StatePath:    stateValue.StatePath,
+		LogPath:      logPath,
+		Env:          append([]string{}, os.Environ()...),
 	}); err != nil {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("启动 upgrade helper 失败：%w", err))
 		return

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,6 @@ type LocalBinaryUpgradeOptions struct {
 	Slot         string
 	HelperBinary string
 }
-
-var localUpgradeStartDetachedCommandFunc = relayruntime.StartDetachedCommand
 
 func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string, error) {
 	statePath := strings.TrimSpace(opts.StatePath)
@@ -90,12 +89,12 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		return "", err
 	}
 	logPath := localUpgradeLogPath(stateValue)
-	if _, err := localUpgradeStartDetachedCommandFunc(relayruntime.DetachedCommandOptions{
-		BinaryPath: helperPath,
-		Args:       []string{"upgrade-helper", "-state-path", statePath},
-		Env:        append([]string{}, os.Environ()...),
-		StdoutPath: logPath,
-		StderrPath: logPath,
+	if err := StartUpgradeHelperProcess(context.Background(), UpgradeHelperLaunchOptions{
+		State:        stateValue,
+		HelperBinary: helperPath,
+		StatePath:    statePath,
+		LogPath:      logPath,
+		Env:          append([]string{}, os.Environ()...),
 	}); err != nil {
 		stateValue.PendingUpgrade = nil
 		stateValue.RollbackCandidate = nil
