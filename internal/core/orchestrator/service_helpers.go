@@ -148,6 +148,13 @@ func requestCaptureExpired(now time.Time, capture *state.RequestCaptureRecord) b
 	return !now.Before(capture.ExpiresAt)
 }
 
+func commandCaptureExpired(now time.Time, capture *state.CommandCaptureRecord) bool {
+	if capture == nil || capture.ExpiresAt.IsZero() {
+		return false
+	}
+	return !now.Before(capture.ExpiresAt)
+}
+
 func requestPromptOptionsToControl(options []state.RequestPromptOptionRecord) []control.RequestPromptOption {
 	if len(options) == 0 {
 		return nil

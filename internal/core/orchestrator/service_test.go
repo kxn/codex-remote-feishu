@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,17 @@ func newServiceForTest(now *time.Time) *Service {
 func materializeVSCodeSurfaceForTest(svc *Service, surfaceID string) {
 	svc.MaterializeSurface(surfaceID, "app-1", "chat-1", "user-1")
 	svc.root.Surfaces[surfaceID].ProductMode = state.ProductModeVSCode
+}
+
+func firstCommands(entries []control.CommandCatalogEntry) []string {
+	commands := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if len(entry.Commands) == 0 {
+			continue
+		}
+		commands = append(commands, entry.Commands[0])
+	}
+	return commands
 }
 
 type fakePersistedThreadCatalog struct {
@@ -4661,6 +4673,157 @@ func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 	}
 	if events[0].CommandCatalog.Title != "命令菜单" {
 		t.Fatalf("unexpected menu catalog title: %#v", events[0].CommandCatalog)
+	}
+}
+
+func TestMenuActionDetachedHomepagePrioritizesListUseStatus(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+	if len(events) != 1 || events[0].CommandCatalog == nil {
+		t.Fatalf("expected command catalog, got %#v", events)
+	}
+	catalog := events[0].CommandCatalog
+	if len(catalog.Sections) < 2 || catalog.Sections[0].Title != "现在最常用" {
+		t.Fatalf("unexpected detached home catalog: %#v", catalog)
+	}
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/list", "/use", "/status"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("detached home commands = %#v, want %#v", got, want)
+	}
+}
+
+func TestMenuActionNormalHomepageHidesFollow(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+	catalog := events[0].CommandCatalog
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/stop", "/new", "/reasoning", "/model", "/access"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normal home commands = %#v, want %#v", got, want)
+	}
+	for _, command := range got {
+		if command == "/follow" {
+			t.Fatalf("normal home should not expose /follow: %#v", got)
+		}
+	}
+}
+
+func TestMenuActionVSCodeHomepageKeepsFollowBehindSettings(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+	catalog := events[0].CommandCatalog
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/stop", "/reasoning", "/model", "/access", "/follow"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("vscode home commands = %#v, want %#v", got, want)
+	}
+}
+
+func TestBareReasoningCommandBuildsParameterCard(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning",
+	})
+	if len(events) != 1 || events[0].CommandCatalog == nil {
+		t.Fatalf("expected reasoning command catalog, got %#v", events)
+	}
+	catalog := events[0].CommandCatalog
+	if catalog.Title != "推理强度" {
+		t.Fatalf("unexpected reasoning catalog title: %#v", catalog)
+	}
+	if len(catalog.Breadcrumbs) != 3 || catalog.Breadcrumbs[1].Label != "发送设置" {
+		t.Fatalf("unexpected breadcrumbs: %#v", catalog.Breadcrumbs)
+	}
+	buttons := catalog.Sections[0].Entries[0].Buttons
+	if len(buttons) != 5 || buttons[0].CommandText != "/reasoning low" || buttons[4].CommandText != "/reasoning clear" {
+		t.Fatalf("unexpected reasoning buttons: %#v", buttons)
+	}
+}
+
+func TestModelCaptureFlowBuildsWaitingAndApplyCards(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	start := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStartCommandCapture,
+		SurfaceSessionID: "surface-1",
+		CommandID:        control.FeishuCommandModel,
+	})
+	if len(start) != 1 || start[0].CommandCatalog == nil {
+		t.Fatalf("expected waiting catalog, got %#v", start)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveCommandCapture == nil {
+		t.Fatalf("expected active command capture to be created")
+	}
+	if !strings.Contains(start[0].CommandCatalog.Summary, "接下来一条普通文本会先被捕获为模型名") {
+		t.Fatalf("unexpected waiting summary: %#v", start[0].CommandCatalog)
+	}
+
+	apply := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		Text:             "gpt-5.4",
+	})
+	if len(apply) != 1 || apply[0].CommandCatalog == nil {
+		t.Fatalf("expected apply catalog, got %#v", apply)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveCommandCapture != nil {
+		t.Fatalf("expected command capture to be cleared after text input")
+	}
+	buttons := apply[0].CommandCatalog.Sections[0].Entries[0].Buttons
+	if len(buttons) == 0 || buttons[0].CommandText != "/model gpt-5.4" {
+		t.Fatalf("unexpected apply buttons: %#v", buttons)
 	}
 }
 

@@ -164,6 +164,7 @@ type SurfaceConsoleRecord struct {
 	PendingHeadless      *HeadlessLaunchRecord
 	PendingRequests      map[string]*RequestPromptRecord
 	ActiveRequestCapture *RequestCaptureRecord
+	ActiveCommandCapture *CommandCaptureRecord
 	LastSelection        *SelectionAnnouncementRecord
 	AutoContinue         AutoContinueRuntimeRecord
 }
@@ -236,6 +237,12 @@ type RequestCaptureRecord struct {
 	Mode        string
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
+}
+
+type CommandCaptureRecord struct {
+	CommandID string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 type QueueItemRecord struct {

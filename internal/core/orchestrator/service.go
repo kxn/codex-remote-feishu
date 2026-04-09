@@ -275,6 +275,13 @@ func (s *Service) SetPersistedThreadCatalog(catalog PersistedThreadCatalog) {
 
 func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	surface := s.ensureSurface(action)
+	if surface.ActiveCommandCapture != nil {
+		switch action.Kind {
+		case control.ActionTextMessage, control.ActionStartCommandCapture, control.ActionCancelCommandCapture:
+		default:
+			clearSurfaceCommandCapture(surface)
+		}
+	}
 	if surface.Abandoning {
 		switch action.Kind {
 		case control.ActionStatus:
@@ -310,7 +317,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionShowCommandHelp:
 		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandHelpCatalog())}
 	case control.ActionShowCommandMenu:
-		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandMenuCatalog())}
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildCommandMenuCatalog(surface, action.Text))}
 	case control.ActionDebugCommand:
 		return []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,
@@ -325,6 +332,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 				Text:             action.Text,
 			},
 		}}
+	case control.ActionStartCommandCapture:
+		return s.startCommandCapture(surface, action)
+	case control.ActionCancelCommandCapture:
+		return s.cancelCommandCapture(surface, action)
 	case control.ActionModelCommand:
 		return s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:
@@ -642,6 +653,17 @@ func (s *Service) Tick(now time.Time) []control.UIEvent {
 				Notice: &control.Notice{
 					Code: "request_capture_expired",
 					Text: "上一条确认反馈已过期，请重新点击卡片按钮后再发送处理意见。",
+				},
+			})
+		}
+		if commandCaptureExpired(now, surface.ActiveCommandCapture) {
+			clearSurfaceCommandCapture(surface)
+			events = append(events, control.UIEvent{
+				Kind:             control.UIEventNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code: "command_capture_expired",
+					Text: "上一条命令输入已过期，请重新点击卡片按钮后再发送文本。",
 				},
 			})
 		}

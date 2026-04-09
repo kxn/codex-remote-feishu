@@ -10,36 +10,38 @@ import (
 type ActionKind string
 
 const (
-	ActionListInstances       ActionKind = "surface.menu.list_instances"
-	ActionStatus              ActionKind = "surface.menu.status"
-	ActionStop                ActionKind = "surface.menu.stop"
-	ActionNewThread           ActionKind = "surface.menu.new_thread"
-	ActionKillInstance        ActionKind = "surface.menu.kill_instance"
-	ActionRemovedCommand      ActionKind = "surface.command.removed"
-	ActionShowCommandHelp     ActionKind = "surface.command.help"
-	ActionShowCommandMenu     ActionKind = "surface.command.menu"
-	ActionDebugCommand        ActionKind = "surface.command.debug"
-	ActionModelCommand        ActionKind = "surface.command.model"
-	ActionReasoningCommand    ActionKind = "surface.command.reasoning"
-	ActionAccessCommand       ActionKind = "surface.command.access"
-	ActionAutoContinueCommand ActionKind = "surface.command.auto_continue"
-	ActionModeCommand         ActionKind = "surface.command.mode"
-	ActionRespondRequest      ActionKind = "surface.request.respond"
-	ActionTextMessage         ActionKind = "surface.message.text"
-	ActionImageMessage        ActionKind = "surface.message.image"
-	ActionReactionCreated     ActionKind = "surface.message.reaction.created"
-	ActionMessageRecalled     ActionKind = "surface.message.recalled"
-	ActionSelectPrompt        ActionKind = "surface.selection.prompt"
-	ActionAttachInstance      ActionKind = "surface.button.attach_instance"
-	ActionAttachWorkspace     ActionKind = "surface.button.attach_workspace"
-	ActionShowThreads         ActionKind = "surface.button.show_threads"
-	ActionShowAllThreads      ActionKind = "surface.button.show_all_threads"
-	ActionUseThread           ActionKind = "surface.button.use_thread"
-	ActionConfirmKickThread   ActionKind = "surface.button.confirm_kick_thread"
-	ActionCancelKickThread    ActionKind = "surface.button.cancel_kick_thread"
-	ActionFollowLocal         ActionKind = "surface.button.follow_local"
-	ActionDetach              ActionKind = "surface.button.detach"
-	ActionVSCodeMigrate       ActionKind = "surface.button.vscode_migrate"
+	ActionListInstances        ActionKind = "surface.menu.list_instances"
+	ActionStatus               ActionKind = "surface.menu.status"
+	ActionStop                 ActionKind = "surface.menu.stop"
+	ActionNewThread            ActionKind = "surface.menu.new_thread"
+	ActionKillInstance         ActionKind = "surface.menu.kill_instance"
+	ActionRemovedCommand       ActionKind = "surface.command.removed"
+	ActionShowCommandHelp      ActionKind = "surface.command.help"
+	ActionShowCommandMenu      ActionKind = "surface.command.menu"
+	ActionDebugCommand         ActionKind = "surface.command.debug"
+	ActionStartCommandCapture  ActionKind = "surface.command.capture.start"
+	ActionCancelCommandCapture ActionKind = "surface.command.capture.cancel"
+	ActionModelCommand         ActionKind = "surface.command.model"
+	ActionReasoningCommand     ActionKind = "surface.command.reasoning"
+	ActionAccessCommand        ActionKind = "surface.command.access"
+	ActionAutoContinueCommand  ActionKind = "surface.command.auto_continue"
+	ActionModeCommand          ActionKind = "surface.command.mode"
+	ActionRespondRequest       ActionKind = "surface.request.respond"
+	ActionTextMessage          ActionKind = "surface.message.text"
+	ActionImageMessage         ActionKind = "surface.message.image"
+	ActionReactionCreated      ActionKind = "surface.message.reaction.created"
+	ActionMessageRecalled      ActionKind = "surface.message.recalled"
+	ActionSelectPrompt         ActionKind = "surface.selection.prompt"
+	ActionAttachInstance       ActionKind = "surface.button.attach_instance"
+	ActionAttachWorkspace      ActionKind = "surface.button.attach_workspace"
+	ActionShowThreads          ActionKind = "surface.button.show_threads"
+	ActionShowAllThreads       ActionKind = "surface.button.show_all_threads"
+	ActionUseThread            ActionKind = "surface.button.use_thread"
+	ActionConfirmKickThread    ActionKind = "surface.button.confirm_kick_thread"
+	ActionCancelKickThread     ActionKind = "surface.button.cancel_kick_thread"
+	ActionFollowLocal          ActionKind = "surface.button.follow_local"
+	ActionDetach               ActionKind = "surface.button.detach"
+	ActionVSCodeMigrate        ActionKind = "surface.button.vscode_migrate"
 )
 
 type InboundLifecycleVerdict string
@@ -78,6 +80,7 @@ type Action struct {
 	RequestType      string
 	RequestOptionID  string
 	Approved         bool
+	CommandID        string
 	InstanceID       string
 	WorkspaceKey     string
 	ThreadID         string
@@ -268,12 +271,29 @@ type RequestPrompt struct {
 	Options     []RequestPromptOption
 }
 
+type CommandCatalogButtonKind string
+
+const (
+	CommandCatalogButtonRunCommand           CommandCatalogButtonKind = "run_command"
+	CommandCatalogButtonStartCommandCapture  CommandCatalogButtonKind = "start_command_capture"
+	CommandCatalogButtonCancelCommandCapture CommandCatalogButtonKind = "cancel_command_capture"
+)
+
+type CommandCatalogBreadcrumb struct {
+	Label string
+}
+
 type CommandCatalogButton struct {
 	Label       string
+	Kind        CommandCatalogButtonKind
 	CommandText string
+	CommandID   string
+	Style       string
+	Disabled    bool
 }
 
 type CommandCatalogEntry struct {
+	Title       string
 	Commands    []string
 	Description string
 	Examples    []string
@@ -286,10 +306,12 @@ type CommandCatalogSection struct {
 }
 
 type CommandCatalog struct {
-	Title       string
-	Summary     string
-	Interactive bool
-	Sections    []CommandCatalogSection
+	Title          string
+	Summary        string
+	Interactive    bool
+	Breadcrumbs    []CommandCatalogBreadcrumb
+	Sections       []CommandCatalogSection
+	RelatedButtons []CommandCatalogButton
 }
 
 type FileChangeSummaryEntry struct {

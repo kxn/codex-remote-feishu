@@ -177,6 +177,36 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		action.MessageID = messageID
 		action.Inbound = meta
 		return action, true
+	case "start_command_capture":
+		commandID := strings.TrimSpace(stringMapValue(value, "command_id"))
+		if commandID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionStartCommandCapture,
+			GatewayID:        g.config.GatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			CommandID:        commandID,
+			Inbound:          meta,
+		}, true
+	case "cancel_command_capture":
+		commandID := strings.TrimSpace(stringMapValue(value, "command_id"))
+		if commandID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionCancelCommandCapture,
+			GatewayID:        g.config.GatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			CommandID:        commandID,
+			Inbound:          meta,
+		}, true
 	default:
 		return control.Action{}, false
 	}

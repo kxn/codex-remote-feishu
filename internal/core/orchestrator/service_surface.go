@@ -1703,11 +1703,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	current := s.normalizeSurfaceProductMode(surface)
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{{
-			Kind:             control.UIEventSnapshot,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Snapshot:         s.buildSnapshot(surface),
-		}}
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildModeCatalog(surface))}
 	}
 	if len(parts) != 2 {
 		return notice(surface, "surface_mode_usage", "用法：/mode 查看当前状态；/mode normal；/mode vscode。")
@@ -1748,11 +1744,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{{
-			Kind:             control.UIEventSnapshot,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Snapshot:         s.buildSnapshot(surface),
-		}}
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildAutoContinueCatalog(surface))}
 	}
 	if len(parts) != 2 {
 		return notice(surface, "auto_continue_usage", "用法：`/autocontinue` 查看当前状态；`/autocontinue on`；`/autocontinue off`。")
@@ -1775,17 +1767,13 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 }
 
 func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	parts := strings.Fields(strings.TrimSpace(action.Text))
+	if len(parts) <= 1 {
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildModelCatalog(surface))}
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
-	}
-	parts := strings.Fields(strings.TrimSpace(action.Text))
-	if len(parts) <= 1 {
-		return []control.UIEvent{{
-			Kind:             control.UIEventSnapshot,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Snapshot:         s.buildSnapshot(surface),
-		}}
 	}
 	if len(parts) == 2 && isClearCommand(parts[1]) {
 		surface.PromptOverride.Model = ""
@@ -1810,17 +1798,13 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 }
 
 func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	parts := strings.Fields(strings.TrimSpace(action.Text))
+	if len(parts) <= 1 {
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildReasoningCatalog(surface))}
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
-	}
-	parts := strings.Fields(strings.TrimSpace(action.Text))
-	if len(parts) <= 1 {
-		return []control.UIEvent{{
-			Kind:             control.UIEventSnapshot,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Snapshot:         s.buildSnapshot(surface),
-		}}
 	}
 	if len(parts) == 2 && isClearCommand(parts[1]) {
 		surface.PromptOverride.ReasoningEffort = ""
@@ -1836,17 +1820,13 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 }
 
 func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	parts := strings.Fields(strings.TrimSpace(action.Text))
+	if len(parts) <= 1 {
+		return []control.UIEvent{commandCatalogEvent(surface, s.buildAccessCatalog(surface))}
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
-	}
-	parts := strings.Fields(strings.TrimSpace(action.Text))
-	if len(parts) <= 1 {
-		return []control.UIEvent{{
-			Kind:             control.UIEventSnapshot,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Snapshot:         s.buildSnapshot(surface),
-		}}
 	}
 	if len(parts) != 2 {
 		return notice(surface, "surface_access_usage", "用法：`/access` 查看当前配置；`/access full`；`/access confirm`；`/access clear`。")
@@ -1881,6 +1861,12 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	}
 	if pending := activePendingRequest(surface); pending != nil {
 		return notice(surface, "request_pending", "当前有待确认请求。请先点击卡片上的“允许一次”、“拒绝”或“告诉 Codex 怎么改”。")
+	}
+	if surface.ActiveCommandCapture != nil {
+		if text == "" {
+			return notice(surface, "command_capture_waiting_text", "当前输入模式只接受文本，请发送一条模型名，或先点击卡片上的取消。")
+		}
+		return s.consumeCapturedCommandInput(surface, text)
 	}
 
 	inst := s.root.Instances[surface.AttachedInstanceID]
@@ -1922,6 +1908,9 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 	}
 	if surface.ActiveRequestCapture != nil {
 		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+	}
+	if surface.ActiveCommandCapture != nil {
+		return notice(surface, "command_capture_waiting_text", "当前正在等待你发送一条模型名，请先发送文本或取消这次输入。")
 	}
 	if pending := activePendingRequest(surface); pending != nil {
 		_ = pending

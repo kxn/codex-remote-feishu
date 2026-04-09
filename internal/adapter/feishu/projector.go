@@ -557,7 +557,13 @@ func commandCatalogBody(catalog control.CommandCatalog) string {
 }
 
 func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, len(catalog.Sections)*2)
+	elements := make([]map[string]any, 0, len(catalog.Sections)*3+2)
+	if breadcrumb := commandCatalogBreadcrumbMarkdown(catalog.Breadcrumbs); breadcrumb != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": breadcrumb,
+		})
+	}
 	for _, section := range catalog.Sections {
 		title := strings.TrimSpace(section.Title)
 		if title != "" {
@@ -579,11 +585,20 @@ func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID st
 			}
 		}
 	}
+	if len(catalog.RelatedButtons) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "action",
+			"actions": commandCatalogButtons(catalog.RelatedButtons, daemonLifecycleID),
+		})
+	}
 	return elements
 }
 
 func commandCatalogEntryMarkdown(entry control.CommandCatalogEntry) string {
 	parts := []string{}
+	if title := strings.TrimSpace(entry.Title); title != "" {
+		parts = append(parts, "**"+title+"**")
+	}
 	if commands := formatCommandTags(entry.Commands); commands != "" {
 		parts = append(parts, commands)
 	}
@@ -624,20 +639,70 @@ func formatCommandExamples(examples []string) string {
 	return strings.Join(tags, "，")
 }
 
-func commandCatalogButtons(buttons []control.CommandCatalogButton, daemonLifecycleID string) []map[string]any {
-	actions := make([]map[string]any, 0, len(buttons))
-	buttonType := "default"
-	if len(buttons) == 1 {
-		buttonType = "primary"
-	}
-	for _, button := range buttons {
-		commandText := strings.TrimSpace(button.CommandText)
-		if commandText == "" {
+func commandCatalogBreadcrumbMarkdown(items []control.CommandCatalogBreadcrumb) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
 			continue
 		}
+		parts = append(parts, label)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " / ")
+}
+
+func commandCatalogButtons(buttons []control.CommandCatalogButton, daemonLifecycleID string) []map[string]any {
+	actions := make([]map[string]any, 0, len(buttons))
+	defaultType := "default"
+	if len(buttons) == 1 {
+		defaultType = "primary"
+	}
+	for _, button := range buttons {
 		label := strings.TrimSpace(button.Label)
+		payload := map[string]any{}
+		switch button.Kind {
+		case "", control.CommandCatalogButtonRunCommand:
+			commandText := strings.TrimSpace(button.CommandText)
+			if commandText == "" {
+				continue
+			}
+			if label == "" {
+				label = commandText
+			}
+			payload = map[string]any{
+				"kind":         "run_command",
+				"command_text": commandText,
+			}
+		case control.CommandCatalogButtonStartCommandCapture:
+			commandID := strings.TrimSpace(button.CommandID)
+			if commandID == "" {
+				continue
+			}
+			payload = map[string]any{
+				"kind":       "start_command_capture",
+				"command_id": commandID,
+			}
+		case control.CommandCatalogButtonCancelCommandCapture:
+			commandID := strings.TrimSpace(button.CommandID)
+			if commandID == "" {
+				continue
+			}
+			payload = map[string]any{
+				"kind":       "cancel_command_capture",
+				"command_id": commandID,
+			}
+		default:
+			continue
+		}
 		if label == "" {
-			label = commandText
+			continue
+		}
+		buttonType := defaultType
+		if style := strings.TrimSpace(button.Style); style != "" {
+			buttonType = style
 		}
 		actions = append(actions, map[string]any{
 			"tag":  "button",
@@ -646,10 +711,8 @@ func commandCatalogButtons(buttons []control.CommandCatalogButton, daemonLifecyc
 				"tag":     "plain_text",
 				"content": label,
 			},
-			"value": stampActionValue(map[string]any{
-				"kind":         "run_command",
-				"command_text": commandText,
-			}, daemonLifecycleID),
+			"disabled": button.Disabled,
+			"value":    stampActionValue(payload, daemonLifecycleID),
 		})
 	}
 	return actions

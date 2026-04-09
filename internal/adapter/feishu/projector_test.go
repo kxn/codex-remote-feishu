@@ -211,9 +211,11 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 		t.Fatalf("expected command placeholders to preserve angle brackets, got %q", body)
 	}
 	if !containsAll(body,
-		"<text_tag color='neutral'>/model <模型名></text_tag>",
-		"<text_tag color='neutral'>/reasoning <low|medium|high|xhigh></text_tag>",
-		"<text_tag color='neutral'>/access <full|confirm></text_tag>",
+		"<text_tag color='neutral'>/model</text_tag>",
+		"<text_tag color='neutral'>/reasoning</text_tag>",
+		"<text_tag color='neutral'>/access</text_tag>",
+		"<text_tag color='neutral'>/use</text_tag>",
+		"<text_tag color='neutral'>/menu</text_tag>",
 	) {
 		t.Fatalf("unexpected builtin help catalog body: %q", body)
 	}
@@ -256,6 +258,55 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	value, _ := actionRow[0]["value"].(map[string]any)
 	if value["kind"] != "run_command" || value["command_text"] != "/list" {
 		t.Fatalf("unexpected run command payload: %#v", value)
+	}
+}
+
+func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCaptureButtons(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		CommandCatalog: &control.CommandCatalog{
+			Title:       "模型",
+			Summary:     "等待输入模型名。",
+			Interactive: true,
+			Breadcrumbs: []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
+			Sections: []control.CommandCatalogSection{{
+				Title: "手动输入",
+				Entries: []control.CommandCatalogEntry{{
+					Title:       "capture/apply fallback",
+					Description: "下一条普通文本会先被捕获。",
+					Buttons: []control.CommandCatalogButton{{
+						Label:     "开始输入",
+						Kind:      control.CommandCatalogButtonStartCommandCapture,
+						CommandID: control.FeishuCommandModel,
+					}},
+				}},
+			}},
+			RelatedButtons: []control.CommandCatalogButton{{
+				Label:     "取消",
+				Kind:      control.CommandCatalogButtonCancelCommandCapture,
+				CommandID: control.FeishuCommandModel,
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if len(ops[0].CardElements) != 5 {
+		t.Fatalf("expected breadcrumb + section + entry + action + related action, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
+		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
+	}
+	actionRow, _ := ops[0].CardElements[3]["actions"].([]map[string]any)
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["kind"] != "start_command_capture" || value["command_id"] != control.FeishuCommandModel {
+		t.Fatalf("unexpected start capture payload: %#v", value)
+	}
+	relatedRow, _ := ops[0].CardElements[4]["actions"].([]map[string]any)
+	relatedValue, _ := relatedRow[0]["value"].(map[string]any)
+	if relatedValue["kind"] != "cancel_command_capture" || relatedValue["command_id"] != control.FeishuCommandModel {
+		t.Fatalf("unexpected cancel capture payload: %#v", relatedValue)
 	}
 }
 

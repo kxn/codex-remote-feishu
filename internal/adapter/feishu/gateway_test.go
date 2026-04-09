@@ -151,26 +151,35 @@ func TestApplySendCardFallsBackToCreateWhenReplyFails(t *testing.T) {
 
 func TestMenuActionKindKnownValues(t *testing.T) {
 	tests := map[string]control.ActionKind{
-		"list":           control.ActionListInstances,
-		"status":         control.ActionStatus,
-		"stop":           control.ActionStop,
-		"new":            control.ActionNewThread,
-		"new_thread":     control.ActionNewThread,
-		"newinstance":    control.ActionRemovedCommand,
-		"new_instance":   control.ActionRemovedCommand,
-		"killinstance":   control.ActionRemovedCommand,
-		"kill_instance":  control.ActionRemovedCommand,
-		"threads":        control.ActionShowThreads,
-		"sessions":       control.ActionShowThreads,
-		"use":            control.ActionShowThreads,
-		"show_threads":   control.ActionShowThreads,
-		"show_sessions":  control.ActionShowThreads,
-		"useall":         control.ActionShowAllThreads,
-		"threads_all":    control.ActionShowAllThreads,
-		"accessfull":     control.ActionAccessCommand,
-		"access_full":    control.ActionAccessCommand,
-		"accessconfirm":  control.ActionAccessCommand,
-		"access_confirm": control.ActionAccessCommand,
+		"menu":             control.ActionShowCommandMenu,
+		"list":             control.ActionListInstances,
+		"status":           control.ActionStatus,
+		"stop":             control.ActionStop,
+		"new":              control.ActionNewThread,
+		"new_thread":       control.ActionNewThread,
+		"newinstance":      control.ActionRemovedCommand,
+		"new_instance":     control.ActionRemovedCommand,
+		"killinstance":     control.ActionRemovedCommand,
+		"kill_instance":    control.ActionRemovedCommand,
+		"threads":          control.ActionShowThreads,
+		"sessions":         control.ActionShowThreads,
+		"use":              control.ActionShowThreads,
+		"show_threads":     control.ActionShowThreads,
+		"show_sessions":    control.ActionShowThreads,
+		"useall":           control.ActionShowAllThreads,
+		"threads_all":      control.ActionShowAllThreads,
+		"reasoning":        control.ActionReasoningCommand,
+		"model":            control.ActionModelCommand,
+		"access":           control.ActionAccessCommand,
+		"mode":             control.ActionModeCommand,
+		"autocontinue":     control.ActionAutoContinueCommand,
+		"help":             control.ActionShowCommandHelp,
+		"debug":            control.ActionDebugCommand,
+		"accessfull":       control.ActionAccessCommand,
+		"access_full":      control.ActionAccessCommand,
+		"accessconfirm":    control.ActionAccessCommand,
+		"access_confirm":   control.ActionAccessCommand,
+		"approval_confirm": control.ActionAccessCommand,
 	}
 	for key, want := range tests {
 		got, ok := menuActionKind(key)
@@ -182,14 +191,19 @@ func TestMenuActionKindKnownValues(t *testing.T) {
 
 func TestMenuActionReasoningPresets(t *testing.T) {
 	tests := map[string]string{
-		"reason_low":    "/reasoning low",
-		"reasonlow":     "/reasoning low",
-		"reason_medium": "/reasoning medium",
-		"reasonmedium":  "/reasoning medium",
-		"reason_high":   "/reasoning high",
-		"reasonhigh":    "/reasoning high",
-		"reason_xhigh":  "/reasoning xhigh",
-		"reasonxhigh":   "/reasoning xhigh",
+		"reasoning_low":    "/reasoning low",
+		"reason_low":       "/reasoning low",
+		"reasonlow":        "/reasoning low",
+		"reasoning_medium": "/reasoning medium",
+		"reason_medium":    "/reasoning medium",
+		"reasonmedium":     "/reasoning medium",
+		"reasoning_high":   "/reasoning high",
+		"reason_high":      "/reasoning high",
+		"reasonhigh":       "/reasoning high",
+		"reasoning_xhigh":  "/reasoning xhigh",
+		"reason_xhigh":     "/reasoning xhigh",
+		"reasonxhigh":      "/reasoning xhigh",
+		"reasoning_clear":  "/reasoning clear",
 	}
 	for key, wantText := range tests {
 		got, ok := menuAction(key)
@@ -247,7 +261,7 @@ func TestNormalizeMenuEventKey(t *testing.T) {
 		" accessFull \n":   "accessfull",
 		"show_all_threads": "showallthreads",
 		"approval_confirm": "approvalconfirm",
-		"reason_high":      "reasonhigh",
+		"reasoning_high":   "reasoninghigh",
 		"reason_xhigh":     "reasonxhigh",
 	}
 	for input, want := range tests {
@@ -625,6 +639,44 @@ func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 	}
 	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
 		t.Fatalf("unexpected action routing: %#v", action)
+	}
+}
+
+func TestParseCardActionTriggerEventBuildsCommandCaptureActions(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-6", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	tests := []struct {
+		name string
+		kind string
+		want control.ActionKind
+	}{
+		{name: "start", kind: "start_command_capture", want: control.ActionStartCommandCapture},
+		{name: "cancel", kind: "cancel_command_capture", want: control.ActionCancelCommandCapture},
+	}
+	for _, tc := range tests {
+		event := &larkcallback.CardActionTriggerEvent{
+			Event: &larkcallback.CardActionTriggerRequest{
+				Operator: &larkcallback.Operator{UserID: &userID},
+				Action: &larkcallback.CallBackAction{
+					Value: map[string]interface{}{
+						"kind":       tc.kind,
+						"command_id": control.FeishuCommandModel,
+					},
+				},
+				Context: &larkcallback.Context{
+					OpenChatID:    "oc_1",
+					OpenMessageID: "om-card-6",
+				},
+			},
+		}
+		action, ok := gateway.parseCardActionTriggerEvent(event)
+		if !ok {
+			t.Fatalf("%s: expected card callback to be parsed", tc.name)
+		}
+		if action.Kind != tc.want || action.CommandID != control.FeishuCommandModel {
+			t.Fatalf("%s: unexpected action %#v", tc.name, action)
+		}
 	}
 }
 
