@@ -164,11 +164,11 @@ func (s *Service) handleRemovedCommand(surface *state.SurfaceConsoleRecord, acti
 	command := control.LegacyActionCommand(action.Text)
 	switch control.LegacyActionKey(action.Text) {
 	case "newinstance":
-		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用现有恢复链路，或在后台准备恢复。")
+		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；在默认 normal 模式下，系统会自动复用在线工作区，必要时在后台恢复。")
 	case "killinstance":
 		return notice(surface, "command_removed_killinstance", "`/killinstance` 已移除。请改用 `/detach` 取消当前恢复流程，或断开当前接管。")
 	case "resume_headless_thread":
-		return notice(surface, "selection_expired", "这个旧恢复卡片（来自已移除的 `/newinstance` 流程）已失效，请改用 `/use` 或 `/useall` 选择要恢复的会话；系统会按 thread-first 路径自动复用现有恢复链路，或在后台准备恢复。")
+		return notice(surface, "selection_expired", "这个旧恢复卡片（来自已移除的 `/newinstance` 流程）已失效，请改用 `/use` 或 `/useall` 选择要恢复的会话；在默认 normal 模式下，系统会自动复用在线工作区，必要时在后台恢复。")
 	default:
 		if command == "" {
 			return notice(surface, "command_removed", "这个旧命令已移除。请发送 `/help` 查看当前可用命令。")
@@ -1581,7 +1581,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	inputs = append(inputs, messageInputs...)
 	if !createThread && threadID == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
-		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use，或执行 /follow 进入跟随模式。")
+		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；normal 模式可 /new，如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
 	if createThread && strings.TrimSpace(cwd) == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)

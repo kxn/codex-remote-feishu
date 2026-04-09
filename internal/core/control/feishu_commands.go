@@ -49,12 +49,12 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/list"},
-		description:  "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。",
+		description:  "默认列出可用工作区；切到 `vscode` 模式后列出在线实例，并从 follow-first 路径接管。",
 		buttons: []CommandCatalogButton{
 			{Label: "查看列表", CommandText: "/list"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "list", Name: "查看列表", Description: "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"},
+			{Key: "list", Name: "查看列表", Description: "默认列出可用工作区；切到 vscode 模式后列出在线实例。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -113,7 +113,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/new"},
-		description:  "在当前工作区或当前会话上下文里准备一个新会话，下一条消息会作为新会话首条输入。",
+		description:  "准备一个新会话；normal 模式用当前工作区，vscode 模式用当前会话目录，下一条消息会作为首条输入。",
 		buttons: []CommandCatalogButton{
 			{Label: "新建会话", CommandText: "/new"},
 		},
@@ -132,12 +132,12 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/threads", "/use", "/sessions"},
-		description:  "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。",
+		description:  "展示最近可见会话；normal 模式可全局继续或限制到当前工作区，vscode detached 时需先 `/list`。",
 		buttons: []CommandCatalogButton{
 			{Label: "最近会话", CommandText: "/use"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"},
+			{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式可全局继续，vscode detached 时需先 list。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -157,7 +157,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/useall", "/sessionsall", "/sessions/all"},
-		description:  "展示全部可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。",
+		description:  "展示全部可见会话；normal 模式可全局继续或限制到当前工作区，vscode detached 时需先 `/list`。",
 		buttons: []CommandCatalogButton{
 			{Label: "全部会话", CommandText: "/useall"},
 		},
@@ -179,7 +179,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/follow"},
-		description:  "跟随当前 VS Code 聚焦会话。仅 VS Code 模式可用；normal 模式会提示迁移到 /use、/new 或 /mode vscode。",
+		description:  "仅 `vscode` 模式可用：跟随当前 VS Code 聚焦会话；normal 模式会提示改走 `/use`、`/new` 或 `/mode vscode`。",
 		buttons: []CommandCatalogButton{
 			{Label: "跟随当前", CommandText: "/follow"},
 		},
@@ -237,7 +237,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "发送前覆盖",
 		helpCommands: []string{"/model <模型名>"},
-		description:  "只覆盖下一条消息使用的模型。",
+		description:  "覆盖后续飞书消息使用的模型，直到 `clear` 或接管清理。",
 		examples:     []string{"/model gpt-5.4"},
 		showInHelp:   true,
 		showInMenu:   true,
@@ -252,7 +252,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "发送前覆盖",
 		helpCommands: []string{"/reasoning <low|medium|high|xhigh>", "/effort <low|medium|high|xhigh>"},
-		description:  "只覆盖下一条消息的推理强度。",
+		description:  "覆盖后续飞书消息的推理强度，直到 `clear` 或接管清理。",
 		examples:     []string{"/reasoning high"},
 		buttons: []CommandCatalogButton{
 			{Label: "low", CommandText: "/reasoning low"},
@@ -261,10 +261,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{Label: "xhigh", CommandText: "/reasoning xhigh"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "reason_low", Name: "推理 Low", Description: "只覆盖下一条消息的推理强度为 low。"},
-			{Key: "reason_medium", Name: "推理 Medium", Description: "只覆盖下一条消息的推理强度为 medium。"},
-			{Key: "reason_high", Name: "推理 High", Description: "只覆盖下一条消息的推理强度为 high。"},
-			{Key: "reason_xhigh", Name: "推理 XHigh", Description: "只覆盖下一条消息的推理强度为 xhigh。"},
+			{Key: "reason_low", Name: "推理 Low", Description: "把后续飞书消息切到 low 推理，直到 clear 或接管清理。"},
+			{Key: "reason_medium", Name: "推理 Medium", Description: "把后续飞书消息切到 medium 推理，直到 clear 或接管清理。"},
+			{Key: "reason_high", Name: "推理 High", Description: "把后续飞书消息切到 high 推理，直到 clear 或接管清理。"},
+			{Key: "reason_xhigh", Name: "推理 XHigh", Description: "把后续飞书消息切到 xhigh 推理，直到 clear 或接管清理。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -286,15 +286,15 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "发送前覆盖",
 		helpCommands: []string{"/access <full|confirm>", "/approval <full|confirm>"},
-		description:  "只覆盖下一条消息的执行权限。",
+		description:  "覆盖后续飞书消息的执行权限，直到 `clear` 或接管清理。",
 		examples:     []string{"/access confirm"},
 		buttons: []CommandCatalogButton{
 			{Label: "全部允许", CommandText: "/access full"},
 			{Label: "逐次确认", CommandText: "/access confirm"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "access_full", Name: "执行权限 Full", Description: "只覆盖下一条消息的执行权限为 full。"},
-			{Key: "access_confirm", Name: "执行权限 Confirm", Description: "只覆盖下一条消息的执行权限为 confirm。"},
+			{Key: "access_full", Name: "执行权限 Full", Description: "把后续飞书消息切到 full 权限，直到 clear 或接管清理。"},
+			{Key: "access_confirm", Name: "执行权限 Confirm", Description: "把后续飞书消息切到 confirm 权限，直到 clear 或接管清理。"},
 		},
 		showInHelp: true,
 		showInMenu: true,

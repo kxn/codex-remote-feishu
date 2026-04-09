@@ -7,7 +7,7 @@
       {
         "key": "list",
         "name": "查看列表",
-        "description": "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"
+        "description": "默认列出可用工作区；切到 vscode 模式后列出在线实例。"
       },
       {
         "key": "status",
@@ -17,7 +17,7 @@
       {
         "key": "threads",
         "name": "切换会话",
-        "description": "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"
+        "description": "展示最近可见会话；normal 模式可全局继续，vscode detached 时需先 list。"
       },
       {
         "key": "stop",
@@ -27,32 +27,32 @@
       {
         "key": "reason_low",
         "name": "推理 Low",
-        "description": "只覆盖下一条消息的推理强度为 low。"
+        "description": "把后续飞书消息切到 low 推理，直到 clear 或接管清理。"
       },
       {
         "key": "reason_medium",
         "name": "推理 Medium",
-        "description": "只覆盖下一条消息的推理强度为 medium。"
+        "description": "把后续飞书消息切到 medium 推理，直到 clear 或接管清理。"
       },
       {
         "key": "reason_high",
         "name": "推理 High",
-        "description": "只覆盖下一条消息的推理强度为 high。"
+        "description": "把后续飞书消息切到 high 推理，直到 clear 或接管清理。"
       },
       {
         "key": "reason_xhigh",
         "name": "推理 XHigh",
-        "description": "只覆盖下一条消息的推理强度为 xhigh。"
+        "description": "把后续飞书消息切到 xhigh 推理，直到 clear 或接管清理。"
       },
       {
         "key": "access_full",
         "name": "执行权限 Full",
-        "description": "只覆盖下一条消息的执行权限为 full。"
+        "description": "把后续飞书消息切到 full 权限，直到 clear 或接管清理。"
       },
       {
         "key": "access_confirm",
         "name": "执行权限 Confirm",
-        "description": "只覆盖下一条消息的执行权限为 confirm。"
+        "description": "把后续飞书消息切到 confirm 权限，直到 clear 或接管清理。"
       }
     ]
   },

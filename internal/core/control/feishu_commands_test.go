@@ -108,16 +108,16 @@ func TestParseFeishuLegacyKillInstanceCommandsAsRemoved(t *testing.T) {
 func TestFeishuRecommendedMenusStayInSuggestedOrder(t *testing.T) {
 	got := FeishuRecommendedMenus()
 	want := []FeishuRecommendedMenu{
-		{Key: "list", Name: "查看列表", Description: "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"},
+		{Key: "list", Name: "查看列表", Description: "默认列出可用工作区；切到 vscode 模式后列出在线实例。"},
 		{Key: "status", Name: "当前状态", Description: "查看当前接管状态、输入目标和飞书侧临时覆盖。"},
-		{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"},
+		{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式可全局继续，vscode detached 时需先 list。"},
 		{Key: "stop", Name: "停止当前执行", Description: "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"},
-		{Key: "reason_low", Name: "推理 Low", Description: "只覆盖下一条消息的推理强度为 low。"},
-		{Key: "reason_medium", Name: "推理 Medium", Description: "只覆盖下一条消息的推理强度为 medium。"},
-		{Key: "reason_high", Name: "推理 High", Description: "只覆盖下一条消息的推理强度为 high。"},
-		{Key: "reason_xhigh", Name: "推理 XHigh", Description: "只覆盖下一条消息的推理强度为 xhigh。"},
-		{Key: "access_full", Name: "执行权限 Full", Description: "只覆盖下一条消息的执行权限为 full。"},
-		{Key: "access_confirm", Name: "执行权限 Confirm", Description: "只覆盖下一条消息的执行权限为 confirm。"},
+		{Key: "reason_low", Name: "推理 Low", Description: "把后续飞书消息切到 low 推理，直到 clear 或接管清理。"},
+		{Key: "reason_medium", Name: "推理 Medium", Description: "把后续飞书消息切到 medium 推理，直到 clear 或接管清理。"},
+		{Key: "reason_high", Name: "推理 High", Description: "把后续飞书消息切到 high 推理，直到 clear 或接管清理。"},
+		{Key: "reason_xhigh", Name: "推理 XHigh", Description: "把后续飞书消息切到 xhigh 推理，直到 clear 或接管清理。"},
+		{Key: "access_full", Name: "执行权限 Full", Description: "把后续飞书消息切到 full 权限，直到 clear 或接管清理。"},
+		{Key: "access_confirm", Name: "执行权限 Confirm", Description: "把后续飞书消息切到 confirm 权限，直到 clear 或接管清理。"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("recommended menus mismatch:\n got: %#v\nwant: %#v", got, want)
