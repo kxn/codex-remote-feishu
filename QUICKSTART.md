@@ -104,11 +104,11 @@ This imports the local binary into `versionsRoot/<slot>`, runs the same upgrade 
 
 Then in Feishu:
 
-- send `/help` or `menu` first if you want to see the current command set without guessing
+- send `/help` or `menu` first if you want to see the current command set without guessing; `/menu` now reorders its homepage by stage
 - send `/list` if you want to explicitly attach one of the online VS Code instances
-- send `/use` or `/threads` if you want to jump straight into a recent visible session; use `/useall` for the full list
+- send `/use` if you want to jump straight into a recent visible session; `/threads` is still accepted as a legacy alias; use `/useall` for the full list
 - use the card buttons when they appear; if a card says it is stale or expired, resend the command instead of replying with a number
 - final replies will show up under the source message that triggered them, which makes group chat context easier to follow
 - if a text is still queued while another reply is running, add a `ThumbsUp` to that queued text to turn it into a follow-up for the current turn
 - `/detach` drops the current attachment and also cancels a pending background recovery if one is in progress
-- remote execution defaults to full access; if you need confirmation mode temporarily, send `/access confirm`
+- remote execution defaults to full access; if you need confirmation mode temporarily, send `/access confirm`; bare `/access` and bare `/reasoning` will both return parameter cards

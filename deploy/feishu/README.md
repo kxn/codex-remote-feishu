@@ -22,39 +22,42 @@
    - 粘贴模板中的 `scopes_import`
    - 点击“保存并申请开通”
 6. 打开“机器人菜单”，创建以下菜单 key：
-   - `list`
-   - `status`
-   - `threads`（展示“切换会话”即可）
+   - `menu`
    - `stop`
-   - `reason_low`
-   - `reason_medium`
-   - `reason_high`
-   - `reason_xhigh`
-   - `access_full`
-   - `access_confirm`
+   - `new`
+   - `reasoning`
+   - `model`
+   - `access`
 
 WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞书里的 `/help` / `menu` 现在都来自同一套命令定义；按当前列表配置即可，不需要自己再推测一份菜单组合。
 
-`card.action.trigger` 现在不仅用于 attach / 切换会话，也用于命令菜单卡片和 approval request 卡片按钮交互；如果这个回调没配，飞书里的按钮卡片会点了没反应。
+`card.action.trigger` 现在不仅用于 attach / 切换会话，也用于 `/menu` 面包屑/子菜单、参数卡和 `model` capture/apply fallback；如果这个回调没配，飞书里的按钮卡片会点了没反应。
 
 文本命令不需要在飞书控制台单独注册，直接给机器人发消息即可。当前建议保留这些命令：
 
 - `/list`
 - `/status`
 - `/new`
-- `/threads`
 - `/use`
 - `/useall`
 - `/follow`
 - `/detach`
 - `/stop`
+- `/mode`
+- `/autocontinue`
 - `/model`
 - `/reasoning`
 - `/access`
-- `/approval`
+- `/debug`
 - `/help`
-- `menu`
 - `/menu`
+
+alias 仍兼容，但不建议继续当成新的主展示入口：
+
+- `/threads`、`/sessions` -> `/use`
+- `/approval` -> `/access`
+- `/effort` -> `/reasoning`
+- `menu` -> `/menu`
 
 ## 当前实现必需能力
 
@@ -100,7 +103,7 @@ WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞
 
 - `im.message.reaction.created_v1` 负责 queued 文本的 `ThumbsUp` steering
 - `im.message.recalled_v1` 负责撤回尚未发送的排队输入，或取消 staged image
-- `application.bot.menu_v6` 负责实例列表、状态、推理强度和执行权限快捷菜单
+- `application.bot.menu_v6` 负责静态 bot 菜单里的 `menu/stop/new/reasoning/model/access`
 
 ### 3. 回调配置
 
@@ -114,7 +117,7 @@ WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞
 
 其中：
 
-- `card.action.trigger` 负责 selection prompt 和 approval request 两类卡片交互
+- `card.action.trigger` 负责 selection prompt、`/menu` 导航、参数卡和 approval request 四类卡片交互
 
 ### 4. 单聊额外权限
 

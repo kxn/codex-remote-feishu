@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；daemon 重启后会恢复 latent surface 与 mode，其中 normal mode 会继续按 persisted target 尝试 visible/workspace 恢复，vscode mode 会先做本机 VS Code 兼容性检查，再决定是恢复 exact instance 还是发迁移/修复卡片。
+> Updated: `2026-04-10`
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、bare `/mode` `/autocontinue` `/reasoning` `/access` 参数卡，以及 bare `/model` 的 capture/apply fallback。
 
 ## 1. 文档定位
 
@@ -27,16 +27,17 @@
 10. [internal/codexstate/sqlite_threads.go](../../internal/codexstate/sqlite_threads.go)
 11. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 12. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-13. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
-14. [internal/app/daemon/app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
-15. [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
-16. [internal/app/daemon/app_surface_resume_state.go](../../internal/app/daemon/app_surface_resume_state.go)
-17. [internal/app/daemon/surface_resume_state.go](../../internal/app/daemon/surface_resume_state.go)
-18. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
-19. [internal/app/daemon/surface_resume_state_test.go](../../internal/app/daemon/surface_resume_state_test.go)
-20. [internal/app/daemon/admin_vscode.go](../../internal/app/daemon/admin_vscode.go)
-21. [internal/app/daemon/app_vscode_migration.go](../../internal/app/daemon/app_vscode_migration.go)
-22. [internal/app/daemon/app_vscode_migration_test.go](../../internal/app/daemon/app_vscode_migration_test.go)
+13. [internal/core/orchestrator/service_command_menu.go](../../internal/core/orchestrator/service_command_menu.go)
+14. [internal/app/daemon/app_headless.go](../../internal/app/daemon/app_headless.go)
+15. [internal/app/daemon/app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
+16. [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
+17. [internal/app/daemon/app_surface_resume_state.go](../../internal/app/daemon/app_surface_resume_state.go)
+18. [internal/app/daemon/surface_resume_state.go](../../internal/app/daemon/surface_resume_state.go)
+19. [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
+20. [internal/app/daemon/surface_resume_state_test.go](../../internal/app/daemon/surface_resume_state_test.go)
+21. [internal/app/daemon/admin_vscode.go](../../internal/app/daemon/admin_vscode.go)
+22. [internal/app/daemon/app_vscode_migration.go](../../internal/app/daemon/app_vscode_migration.go)
+23. [internal/app/daemon/app_vscode_migration_test.go](../../internal/app/daemon/app_vscode_migration_test.go)
 
 ## 2. 审计前提
 
@@ -170,8 +171,9 @@ surface 不是单一枚举，而是五层正交状态叠加。
 | `G1 PendingHeadlessStarting` | `PendingHeadless.Status=starting` | headless 仍在启动 |
 | `G2 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片会被确认卡片门禁挡住 |
 | `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
-| `G4 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autocontinue` 继续正常，其余动作被挡 |
-| `G5 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
+| `G4 CommandCapture` | `ActiveCommandCapture != nil` | 当前只用于 `/model` capture/apply fallback：下一条普通文本会先被当成模型名候选，不进入普通消息队列 |
+| `G5 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autocontinue` 继续正常，其余动作被挡 |
+| `G6 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
 
 ### 3.5 草稿状态
 
@@ -413,15 +415,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. 当前接管的是工作区、VS Code 实例，还是 headless/其他实例。
 3. 当前到底占着哪个 workspace。
 4. 下一条文本是不是会先被 request gate 吃掉。
-5. 现在是执行中、排队中，还是被本地 VS Code 暂停。
-6. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
-7. attachment 还在不在，以及当前是不是在等实例恢复。
+5. 下一条文本是不是会先被 `/model` capture/apply fallback 吃掉。
+6. 现在是执行中、排队中，还是被本地 VS Code 暂停。
+7. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
+8. attachment 还在不在，以及当前是不是在等实例恢复。
 
 ### 4.12 `/mode` 是 surface 级 overlay，当前只负责记忆与清理切换
 
 当前 `/mode` 的实现边界已经固定为：
 
-1. `/mode` 无参数时，直接回当前 `Snapshot`。
+1. bare `/mode` 当前不再直接回 `Snapshot`，而是返回当前模式 + normal/vscode 切换卡。
 2. `/mode normal` / `/mode vscode` 允许在 detached、idle attached、或 `PendingHeadless` 尚未进入 live remote work 的 surface 上切换。
 3. 切换时一定先做 detach-like 清理，再进入目标 mode 的 detached 态；workspace claim 也会一起释放。
 4. 若切换前存在 `PendingHeadless` 或已持久化的 headless restore hint，会一并 kill / clear，避免 mode 切完以后又被后台恢复拉回 headless。
@@ -441,12 +444,42 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 当前 `/autocontinue` 不要求 surface 已 attach：
 
-1. detached surface 也可以直接 `/autocontinue` 查询、开启、关闭。
+1. detached surface 也可以直接 bare `/autocontinue` 查询并打开 on/off 参数卡；带参数时可直接切换。
 2. `PendingHeadless` 期间 `/autocontinue` 仍然允许，不会被顶层 gate 挡住。
 3. `Abandoning` 期间 `/autocontinue` 也仍然允许，用户可以查看或关闭当前 surface 的 auto-continue。
 4. daemon 重启后不恢复该开关；当前已接受这是内存态语义。
 
-### 4.14 auto-continue 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
+### 4.14 `/menu` 现在是阶段感知首页，不再是静态平铺目录
+
+当前 `/menu`、静态 bot 菜单和 slash parser 已经统一到同一套 canonical command metadata。
+
+当前行为：
+
+1. `/menu` 首页按当前阶段重排，但二级分组保持稳定：
+   1. `当前工作`
+   2. `发送设置`
+   3. `切换目标`
+   4. `低频与维护`
+2. detached 首页前排固定为：
+   1. `/list`
+   2. `/use`
+   3. `/status`
+3. `normal` working 首页前排固定为：
+   1. `/stop`
+   2. `/new`
+   3. `/reasoning`
+   4. `/model`
+   5. `/access`
+4. `vscode` working 首页前排固定为：
+   1. `/stop`
+   2. `/reasoning`
+   3. `/model`
+   4. `/access`
+   5. `/follow`
+5. `normal` working 首页与主路径里不再暴露 `/follow`。
+6. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
+
+### 4.15 auto-continue 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
 
 当前 auto-continue queue item 增加了显式来源类型：
 
@@ -821,13 +854,16 @@ transport degraded retained attachment
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许 | 允许 | 允许 | 拒绝并提示迁移 |
 | `/mode` | 允许 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 |
 | `/autocontinue` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| `/help` `/menu` `/debug` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | 文本 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
 | 图片 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
 | 请求按钮 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 理论上通常不会出现；若出现仍按 attached surface 处理 |
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/detach` | 允许但通常只提示已 detached | 允许 | 允许 | 允许 | 允许 | 允许；dispatching/running 时走 abandoning |
-| `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| bare `/mode` / bare `/autocontinue` | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 |
+| bare `/model` `/reasoning` `/access` | 允许，但当前只回恢复/参数卡，不直接执行 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 | 允许，返回参数卡 |
+| 带参数 `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
 
 ### 6.2 覆盖门禁
 
@@ -836,8 +872,9 @@ transport degraded retained attachment
 | `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autocontinue`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
 | `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片 |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
+| `G4 CommandCapture` | 下一条普通文本优先被当成模型名候选，不进入普通消息队列；图片会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` |
 | `E6 Abandoning` | 只允许 `/status`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
-| `G5 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
+| `G6 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
 
 retained-offline overlay 额外规则：
 

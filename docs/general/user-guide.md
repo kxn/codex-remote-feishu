@@ -184,11 +184,15 @@ Windows PowerShell：
 
 管理页里的 VS Code 区域也沿用同一套场景心智；高级处理只保留重新安装扩展入口和技术详情，不再提供 `settings.json` 模式。
 
-首次在飞书里验证时，建议先发一次 `/help` 或 `menu`，先确认当前可用命令和快捷入口。
+首次在飞书里验证时，建议先发一次 `/help` 或 `menu`。当前 `/menu` 会按阶段重排首页：
+
+- 还没接管时优先给 `/list`、`/use`、`/status`
+- 已进入 normal 工作态后优先给 `/stop`、`/new` 和发送设置
+- 已进入 vscode 工作态后优先给 `/stop`、发送设置，再把 `/follow` 放到相关动作里
 
 ## 7. 日常使用
 
-如果你一时忘了命令名，先发 `/help` 或 `menu` 看当前帮助，再决定是 `/list`、`/use` 还是 `/new`。
+如果你一时忘了命令名，先发 `/help` 或 `menu` 看当前帮助或阶段首页，再决定是 `/list`、`/use` 还是 `/new`。
 
 ### 7.1 选择工作区或 VS Code 实例
 
@@ -218,19 +222,21 @@ Windows PowerShell：
 
 ### 7.2 选择当前对话
 
-可以发送：
-
-```text
-/threads
-```
-
-或者：
+当前主入口是：
 
 ```text
 /use
 ```
 
-`/threads` 和 `/use` 当前是同一条主入口，但展示范围取决于当前模式和是否已经 attach：
+旧 `/threads` 仍兼容，但它现在只是 `/use` 的别名。
+
+如果你更习惯旧命令，也仍然可以发送：
+
+```text
+/threads
+```
+
+`/use` 的展示范围取决于当前模式和是否已经 attach：
 
 - 默认 `normal` 模式：
   - detached 时会列出最近可见会话，你可以直接继续已有会话
@@ -358,6 +364,14 @@ Windows PowerShell：
 /model clear
 ```
 
+当前 bare `/model` 不再只回 usage 文本，而是会给一张模型卡：
+
+- 展示当前 effective model / 当前飞书 override
+- 给出几个常见直达示例
+- 提供“开始输入”入口
+
+点击“开始输入”后，下一条普通文本会先被捕获为模型名，再给你一张带 `Apply` 按钮的确认卡片；不会直接生效。
+
 ### 8.2 推理强度
 
 ```text
@@ -366,6 +380,8 @@ Windows PowerShell：
 /effort xhigh
 /reasoning clear
 ```
+
+bare `/reasoning` 当前会返回当前状态 + `low/medium/high/xhigh/clear` 参数卡。
 
 ### 8.3 执行权限
 
@@ -377,6 +393,8 @@ Windows PowerShell：
 ```
 
 `/approval` 是 `/access` 的别名。
+
+bare `/access` 当前会返回 `full/confirm/clear` 参数卡；bare `/mode` 和 bare `/autocontinue` 也都会返回对应的参数卡，而不是只给 snapshot。
 
 这些覆盖会一直保留到你 `clear`、`/detach`、`/mode` 切换，或系统因切换工作区/恢复链路而执行接管清理为止；已经进入队列的请求不受影响。
 

@@ -244,10 +244,11 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 命令：
 
 - `/help`：查看当前可用命令、示例和说明
-- `menu` 或 `/menu`：再次打开命令菜单卡片
-- `/list`：列出当前可手工接管的在线 VS Code 实例
+- `menu` 或 `/menu`：打开阶段感知的命令菜单首页；未接管时优先 `/list`、`/use`、`/status`，工作态优先 `/stop`、`/new` 和发送设置
+- `/list`：列出当前可手工接管的目标；`normal` 模式下是工作区，`vscode` 模式下是在线 VS Code 实例
 - 选择方式：当前通过卡片里的按钮直接触发；如果看到旧卡片，请重新发送命令
-- `/threads` 或 `/use`：列出最近可见会话；即使当前还没显式 attach，也可以直接从这里继续已有对话
+- `/use`：列出最近可见会话；即使当前还没显式 attach，也可以直接从这里继续已有对话
+- `/threads`：`/use` 的兼容别名
 - `/useall`：列出全部可见会话
 - 会话选择后：系统会切到目标会话；必要时会自动接管在线实例，或在后台恢复目标会话
 - `/status`：查看当前接管状态、队列和模型配置
@@ -255,8 +256,8 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 - `/stop`：中断当前 turn，并清空尚未发出的飞书队列
 - 排队中的文字消息如果还没发出，也可以给这条消息点 `ThumbsUp`，把它升级成对当前执行的跟进
 - `/detach`：断开当前实例接管；如果当前正在后台恢复，也会一并取消
-- `/model`：查看或设置飞书侧模型覆盖
-- `/reasoning`：查看或设置飞书侧推理强度覆盖
+- `/model`：查看或设置飞书侧模型覆盖；bare `/model` 会返回模型卡与 capture/apply fallback
+- `/reasoning`：查看或设置飞书侧推理强度覆盖；bare `/reasoning` 会返回参数卡
 - `/access`：查看或设置飞书侧执行权限覆盖，支持 `full`、`confirm`、`clear`
 - `/approval`：`/access` 的别名
 
@@ -267,16 +268,12 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 
 机器人菜单：
 
-- `list`
-- `status`
-- `threads`
+- `menu`
 - `stop`
-- `reason_low`
-- `reason_medium`
-- `reason_high`
-- `reason_xhigh`
-- `access_full`
-- `access_confirm`
+- `new`
+- `reasoning`
+- `model`
+- `access`
 
 WebSetup 里的推荐菜单、飞书模板和 `/help` 当前都来自同一套命令定义；按当前列表配置即可。
 

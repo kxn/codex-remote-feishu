@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-10`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、turn 失败红卡、最终回复 reply 与文件修改摘要。
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、参数卡与 `model` capture/apply fallback、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、turn 失败红卡、最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -33,23 +33,38 @@
 
 - `surface.message.text`
 
-文本命令当前支持：
+当前主展示的 canonical 文本命令：
 
+- `/help`
+- `/menu`
 - `/list`
 - `/status`
-- `/mode`
-- `/autocontinue`
+- `/use`
+- `/useall`
 - `/new`
-- `/stop`
-- `/threads` / `/use` / `/sessions`
-- `/useall` / `/sessionsall` / `/sessions/all`
 - `/follow`
 - `/detach`
+- `/stop`
+- `/mode`
+- `/autocontinue`
 - `/model`
-- `/reasoning` / `/effort`
-- `/access` / `/approval`
-- `/help`
-- `menu` / `/menu`
+- `/reasoning`
+- `/access`
+- `/debug`
+
+alias 仍继续兼容，但不再作为主展示入口：
+
+- `/threads`、`/sessions` -> `/use`
+- `/approval` -> `/access`
+- `/effort` -> `/reasoning`
+- `menu` -> `/menu`
+- 旧 `/newinstance`、`/killinstance` -> 显式迁移提示
+
+其中：
+
+- `/menu` 当前会打开阶段感知的命令首页，而不是静态平铺目录
+- bare `/reasoning`、`/access`、`/mode`、`/autocontinue` 会返回当前状态 + 参数选择卡
+- bare `/model` 会返回当前状态 + 常见示例 + 手动输入入口；手动输入走 capture/apply fallback，而不是只回 usage 文本
 
 除了纯文本外，当前还支持两类更完整的入站整理：
 
@@ -62,22 +77,36 @@
 
 ### 3.2 菜单事件
 
-当前默认模板使用的机器人菜单 key：
+当前静态推荐机器人菜单 key：
 
-- `list`
-- `status`
+- `menu`
 - `stop`
-- `threads` / `use` / `sessions` / `show_threads` / `show_sessions`
-- `threads_all` / `useall` / `sessions_all` / `show_all_threads` / `show_all_sessions`
-- `reason_low` / `reason_medium` / `reason_high` / `reason_xhigh`
-- `access_full` / `approval_full`
-- `access_confirm` / `approval_confirm`
+- `new`
+- `reasoning`
+- `model`
+- `access`
 
-推理强度菜单仍兼容历史 alias：
+canonical menu key 语法当前固定为：
 
-- `reasonlow` / `reasonmedium` / `reasonhigh` / `reasonxhigh`
+- 去掉前导 `/`
+- 参数使用 `_` 连接
+- 完整 slash command 与完整 menu key 一一对应
 
-默认模板当前只预置其中常用的一组菜单项；其余 alias 属于兼容输入。
+例子：
+
+- `/list` <-> `list`
+- `/use` <-> `use`
+- `/reasoning high` <-> `reasoning_high`
+- `/access confirm` <-> `access_confirm`
+- `/mode vscode` <-> `mode_vscode`
+- `/autocontinue on` <-> `autocontinue_on`
+- `/model gpt-5.4` <-> `model_gpt-5.4`
+
+旧 menu key alias 仍兼容：
+
+- `threads` / `sessions` -> `/use`
+- `approval_confirm` -> `/access confirm`
+- `reason_high` -> `/reasoning high`
 
 ### 3.3 图片消息
 
@@ -141,7 +170,9 @@
 
 当前支持两类卡片按钮：
 
-- command menu 快捷动作
+- command menu 首页 / 面包屑 / submenu 导航
+- 参数卡 apply 按钮
+- `model` capture / cancel / apply fallback
 - selection prompt 选择
 - approval request 确认
 
