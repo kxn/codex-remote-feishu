@@ -3,6 +3,165 @@
   "repo": "kxn/codex-remote-feishu",
   "issues": [
     {
+      "number": 1,
+      "title": "Implement the web admin UI redesign for daily operations and multi-bot management",
+      "updatedAt": "2026-04-07T03:25:46Z",
+      "decision": "skip",
+      "reason": "current docs already capture the durable result in docs/implemented/web-admin-ui-redesign.md, so another sync doc entry would be redundant",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/1",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 2,
+      "updatedAt": "2026-04-08T06:28:29Z",
+      "decision": "skip",
+      "reason": "maintainability-only SetupRoute refactor with no new durable user-facing behavior to sync into docs",
+      "recordedAt": "2026-04-09T16:31:49Z"
+    },
+    {
+      "number": 3,
+      "title": "Refactor codex translator.go into smaller translation units",
+      "updatedAt": "2026-04-07T01:11:17Z",
+      "decision": "skip",
+      "reason": "maintainability-only translator refactor with no new durable product behavior; current protocol and architecture docs already describe the live system surface",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/3",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 4,
+      "title": "Refactor daemon app.go startup and admin wiring by concern",
+      "updatedAt": "2026-04-07T11:27:32Z",
+      "decision": "skip",
+      "reason": "maintainability-only daemon wiring refactor with no user-visible lifecycle change requiring doc updates",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/4",
+      "recordedAt": "2026-04-09T16:24:00Z"
+    },
+    {
+      "number": 5,
+      "title": "Refactor feishu gateway.go by inbound, routing, and runtime concerns",
+      "updatedAt": "2026-04-07T11:27:32Z",
+      "decision": "skip",
+      "reason": "maintainability-only gateway split with no new durable product behavior beyond what current Feishu docs already cover",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/5",
+      "recordedAt": "2026-04-09T16:24:00Z"
+    },
+    {
+      "number": 6,
+      "title": "Refactor markdown_preview.go into focused preview pipeline modules",
+      "updatedAt": "2026-04-07T11:02:08Z",
+      "decision": "skip",
+      "reason": "maintainability-only preview refactor with no new durable product behavior; existing preview docs already describe the live feature surface",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/6",
+      "recordedAt": "2026-04-09T16:24:00Z"
+    },
+    {
+      "number": 7,
+      "updatedAt": "2026-04-08T08:12:03Z",
+      "decision": "skip",
+      "reason": "current web-admin docs already cover pending runtime apply, retry, and saved-but-not-applied Feishu app states",
+      "recordedAt": "2026-04-09T16:33:22Z"
+    },
+    {
+      "number": 8,
+      "updatedAt": "2026-04-08T05:57:50Z",
+      "decision": "skip",
+      "reason": "testing-only frontend coverage expansion; no additional durable product or lifecycle doc update is needed",
+      "recordedAt": "2026-04-09T16:31:49Z"
+    },
+    {
+      "number": 9,
+      "title": "Increase internal/runtime failure-path test coverage",
+      "updatedAt": "2026-04-07T02:32:57Z",
+      "decision": "skip",
+      "reason": "testing-only coverage expansion; docs/general/go-test-strategy.md already owns the durable testing guidance and no new runtime behavior needed doc changes",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/9",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 10,
+      "updatedAt": "2026-04-07T12:11:59Z",
+      "decision": "skip",
+      "reason": "maintainability-only wrapper refactor with no new durable user-facing behavior; existing architecture and install docs already own the stable rules",
+      "recordedAt": "2026-04-09T16:28:32Z"
+    },
+    {
+      "number": 11,
+      "updatedAt": "2026-04-07T04:28:37Z",
+      "decision": "merge",
+      "reason": "current feishu product doc was missing the durable turn-failure red-card behavior, so the issue is merged into the canonical product surface doc",
+      "targetDocs": [
+        "docs/general/feishu-product-design.md"
+      ],
+      "recordedAt": "2026-04-09T16:26:58Z"
+    },
+    {
+      "number": 13,
+      "updatedAt": "2026-04-07T10:51:53Z",
+      "decision": "merge",
+      "reason": "current feishu product doc was missing the durable final-card file-change summary behavior, so the issue is merged into the canonical product surface doc",
+      "targetDocs": [
+        "docs/general/feishu-product-design.md"
+      ],
+      "recordedAt": "2026-04-09T16:26:58Z"
+    },
+    {
+      "number": 14,
+      "updatedAt": "2026-04-08T06:56:39Z",
+      "decision": "skip",
+      "reason": "this investigation conclusion is already represented by the current old-action product docs and the later #41/#47 behavior; keeping the investigation separately would be redundant",
+      "recordedAt": "2026-04-09T16:32:04Z"
+    },
+    {
+      "number": 15,
+      "title": "[Work] Implement relay backpressure hardening for wrapper/relayd pipeline",
+      "updatedAt": "2026-04-07T07:03:03Z",
+      "decision": "skip",
+      "reason": "the durable design and landed behavior already live in docs/implemented/relay-backpressure-hardening-design.md and the canonical remote surface state machine",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/15",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 16,
+      "title": "[Work] 在 queue 里面的消息被撤回以后，实际执行的时候会返回一个错误",
+      "updatedAt": "2026-04-07T09:12:09Z",
+      "decision": "skip",
+      "reason": "narrow reaction-tolerance bugfix with no additional durable doc surface beyond current behavior; not worth creating or changing lifecycle docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/16",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 17,
+      "title": "[Work] 支持更细致的图文消息处理和回复消息处理",
+      "updatedAt": "2026-04-07T09:12:09Z",
+      "decision": "skip",
+      "reason": "current docs already cover the durable result in docs/general/feishu-im-message-research.md and docs/general/feishu-product-design.md",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/17",
+      "recordedAt": "2026-04-09T16:23:59Z"
+    },
+    {
+      "number": 18,
+      "updatedAt": "2026-04-08T06:04:13Z",
+      "decision": "skip",
+      "reason": "the original reconnect-greeting idea was superseded by the later headless auto-restore path in #42, so preserving it separately would misrepresent the current product design",
+      "recordedAt": "2026-04-09T16:31:49Z"
+    },
+    {
+      "number": 19,
+      "updatedAt": "2026-04-07T12:03:57Z",
+      "decision": "skip",
+      "reason": "the durable thread-first routing result already lives in the canonical remote surface state machine and current Feishu product docs, and parts of the original shape were later superseded by the mode/workspace design",
+      "recordedAt": "2026-04-09T16:40:03Z"
+    },
+    {
+      "number": 20,
+      "title": "[Work] 飞书 attach 上 thread 以后，应该被发送尚未投递的 final message 或者最后一条系统提示/错误",
+      "updatedAt": "2026-04-07T09:48:33Z",
+      "decision": "skip",
+      "reason": "current docs already cover the durable replay behavior in docs/general/remote-surface-state-machine.md",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/20",
+      "recordedAt": "2026-04-09T16:24:00Z"
+    },
+    {
       "number": 22,
       "title": "[Work] Headless instance 改用 pool 管理",
       "updatedAt": "2026-04-08T02:29:31Z",
@@ -15,6 +174,65 @@
       "recordedAt": "2026-04-08T04:20:34Z"
     },
     {
+      "number": 24,
+      "updatedAt": "2026-04-07T11:59:00Z",
+      "decision": "skip",
+      "reason": "preview cleanup is already captured in docs/implemented/feishu-md-preview-design.md, including remote-first inventory and cleanup boundaries",
+      "recordedAt": "2026-04-09T16:28:32Z"
+    },
+    {
+      "number": 26,
+      "updatedAt": "2026-04-07T13:29:03Z",
+      "decision": "skip",
+      "reason": "narrow Windows markdown-preview path bugfix with no additional durable doc surface beyond the existing preview feature docs",
+      "recordedAt": "2026-04-09T16:28:32Z"
+    },
+    {
+      "number": 27,
+      "updatedAt": "2026-04-07T13:36:55Z",
+      "decision": "merge",
+      "reason": "current user guidance was missing the durable app-switch semantics that test connection does not migrate old chats and a new App ID requires starting from the new bot entry",
+      "targetDocs": [
+        "docs/general/user-guide.md"
+      ],
+      "recordedAt": "2026-04-09T16:29:50Z"
+    },
+    {
+      "number": 28,
+      "updatedAt": "2026-04-07T14:04:29Z",
+      "decision": "skip",
+      "reason": "current docs already describe /list as a VS Code-instance-only entry and no additional durable doc update is needed",
+      "recordedAt": "2026-04-09T16:40:03Z"
+    },
+    {
+      "number": 29,
+      "updatedAt": "2026-04-07T14:36:07Z",
+      "decision": "skip",
+      "reason": "this issue was itself the doc refresh that already landed across README, QUICKSTART, and canonical docs, so no extra sync output is needed",
+      "recordedAt": "2026-04-09T16:29:50Z"
+    },
+    {
+      "number": 32,
+      "updatedAt": "2026-04-08T10:18:44Z",
+      "decision": "skip",
+      "reason": "the repo docs were already updated by this issue itself to remove install.sh and converge on the single-binary workflow",
+      "recordedAt": "2026-04-09T16:33:22Z"
+    },
+    {
+      "number": 33,
+      "updatedAt": "2026-04-08T01:00:05Z",
+      "decision": "skip",
+      "reason": "current user-guide and Feishu product docs already cover final replies being sent as replies to the triggering message with fallback behavior",
+      "recordedAt": "2026-04-09T16:29:50Z"
+    },
+    {
+      "number": 34,
+      "updatedAt": "2026-04-08T01:08:44Z",
+      "decision": "skip",
+      "reason": "card inline-tag styling is a rendering-detail improvement; current product docs intentionally describe behavior rather than that visual micro-format",
+      "recordedAt": "2026-04-09T16:30:35Z"
+    },
+    {
       "number": 35,
       "title": "[Work] 去掉newinstance相关的命令",
       "updatedAt": "2026-04-08T01:49:46Z",
@@ -22,6 +240,13 @@
       "reason": "current docs already cover the durable result in docs/general/remote-surface-state-machine.md and docs/obsoleted/feishu-headless-instance-design.md",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/35",
       "recordedAt": "2026-04-08T04:20:34Z"
+    },
+    {
+      "number": 36,
+      "updatedAt": "2026-04-08T02:13:51Z",
+      "decision": "skip",
+      "reason": "current Feishu product docs, user guide, and deploy README already cover /help, menu, and the command catalog surface",
+      "recordedAt": "2026-04-09T16:30:35Z"
     },
     {
       "number": 37,
@@ -42,14 +267,316 @@
       "recordedAt": "2026-04-08T04:20:35Z"
     },
     {
+      "number": 39,
+      "updatedAt": "2026-04-08T04:48:32Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures persisted headless restore hints and their daemon-restart behavior",
+      "recordedAt": "2026-04-09T16:30:35Z"
+    },
+    {
+      "number": 40,
+      "updatedAt": "2026-04-08T04:23:02Z",
+      "decision": "skip",
+      "reason": "the repo-local issue-doc-sync workflow, tracked state cache, and sample validation already landed in the repository, so no extra doc extraction output is needed",
+      "recordedAt": "2026-04-09T16:40:03Z"
+    },
+    {
+      "number": 41,
+      "updatedAt": "2026-04-08T05:19:01Z",
+      "decision": "skip",
+      "reason": "current Feishu product docs already describe the unified old/current/old_card lifecycle verdicts and card lifecycle stamping behavior",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 42,
+      "updatedAt": "2026-04-08T05:51:01Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already documents the delayed headless auto-restore behavior landed by this issue",
+      "recordedAt": "2026-04-09T16:31:49Z"
+    },
+    {
+      "number": 43,
+      "updatedAt": "2026-04-08T06:46:38Z",
+      "decision": "skip",
+      "reason": "release-track behavior is already reflected in README, DEVELOPER, install docs, and the installer interface",
+      "recordedAt": "2026-04-09T16:32:04Z"
+    },
+    {
+      "number": 44,
+      "updatedAt": "2026-04-09T04:16:47Z",
+      "decision": "skip",
+      "reason": "the issue was explicitly closed as half-done rather than as a settled product baseline, so it should not be synced into canonical docs yet",
+      "recordedAt": "2026-04-09T16:35:16Z"
+    },
+    {
+      "number": 45,
+      "updatedAt": "2026-04-08T07:47:32Z",
+      "decision": "skip",
+      "reason": "Windows console-close cleanup for managed headless instances is a narrow runtime bugfix and does not need additional canonical doc coverage",
+      "recordedAt": "2026-04-09T16:33:02Z"
+    },
+    {
+      "number": 46,
+      "updatedAt": "2026-04-08T07:09:45Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already documents graceful shutdown fanout and daemon_shutting_down notice behavior",
+      "recordedAt": "2026-04-09T16:32:25Z"
+    },
+    {
+      "number": 47,
+      "updatedAt": "2026-04-08T07:13:24Z",
+      "decision": "skip",
+      "reason": "current Feishu product docs already describe old action rejection and old-card expiry behavior for previous daemon lifecycle inputs",
+      "recordedAt": "2026-04-09T16:32:04Z"
+    },
+    {
+      "number": 48,
+      "updatedAt": "2026-04-08T07:22:04Z",
+      "decision": "skip",
+      "reason": "current Feishu product docs already describe final card titles using source-message previews when available",
+      "recordedAt": "2026-04-09T16:33:02Z"
+    },
+    {
+      "number": 49,
+      "updatedAt": "2026-04-08T07:29:16Z",
+      "decision": "skip",
+      "reason": "Windows managed-headless no-window handling is a narrow runtime implementation detail with no additional durable doc surface to sync",
+      "recordedAt": "2026-04-09T16:33:02Z"
+    },
+    {
+      "number": 50,
+      "updatedAt": "2026-04-08T07:30:52Z",
+      "decision": "skip",
+      "reason": "final-message inline tag rendering is a visual consistency fix rather than a new durable product-rule change for docs",
+      "recordedAt": "2026-04-09T16:33:02Z"
+    },
+    {
+      "number": 51,
+      "updatedAt": "2026-04-08T08:09:43Z",
+      "decision": "skip",
+      "reason": "the extensible preview-pipeline baseline already lives in docs/draft/feishu-file-preview-handler-design.md, so no extra sync doc entry is needed",
+      "recordedAt": "2026-04-09T16:33:44Z"
+    },
+    {
+      "number": 52,
+      "updatedAt": "2026-04-08T09:22:05Z",
+      "decision": "skip",
+      "reason": "current user guide and setup docs already reflect the scenario-based VS Code setup flow introduced by this issue",
+      "recordedAt": "2026-04-09T16:33:22Z"
+    },
+    {
+      "number": 55,
+      "updatedAt": "2026-04-08T12:54:48Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures the retained-offline transport-degraded behavior and this issue's durable result",
+      "recordedAt": "2026-04-09T16:34:08Z"
+    },
+    {
+      "number": 56,
+      "updatedAt": "2026-04-08T16:27:34Z",
+      "decision": "skip",
+      "reason": "the durable result already lives in docs/implemented/relay-backpressure-hardening-design.md after this issue's own doc refresh",
+      "recordedAt": "2026-04-09T16:34:55Z"
+    },
+    {
+      "number": 57,
+      "updatedAt": "2026-04-08T13:59:41Z",
+      "decision": "skip",
+      "reason": "current install-deploy and relay protocol docs already capture the wrapper-drain shutdown gate and process.exit behavior added for this issue",
+      "recordedAt": "2026-04-09T16:34:24Z"
+    },
+    {
+      "number": 58,
+      "updatedAt": "2026-04-08T14:26:28Z",
+      "decision": "skip",
+      "reason": "current user-facing docs and state machine already reflect the removal of headless-instance wording and /detach-based recovery cancellation",
+      "recordedAt": "2026-04-09T16:34:08Z"
+    },
+    {
+      "number": 59,
+      "updatedAt": "2026-04-08T14:33:14Z",
+      "decision": "skip",
+      "reason": "setup and deploy docs already reflect menu guidance derived from the centralized Feishu command registry",
+      "recordedAt": "2026-04-09T16:34:08Z"
+    },
+    {
+      "number": 60,
+      "updatedAt": "2026-04-08T17:11:08Z",
+      "decision": "skip",
+      "reason": "auto-continue behavior is already reflected in the current Feishu product and state-machine docs after this issue's own documentation update",
+      "recordedAt": "2026-04-09T16:34:55Z"
+    },
+    {
+      "number": 61,
+      "updatedAt": "2026-04-08T16:35:59Z",
+      "decision": "skip",
+      "reason": "narrow gateway missing-message classification bugfix with no additional durable doc surface beyond current recalled-message behavior",
+      "recordedAt": "2026-04-09T16:34:55Z"
+    },
+    {
+      "number": 63,
+      "updatedAt": "2026-04-09T00:43:00Z",
+      "decision": "skip",
+      "reason": "preview inventory remote-first semantics were already synced into the preview and admin docs by this issue itself",
+      "recordedAt": "2026-04-09T16:34:55Z"
+    },
+    {
+      "number": 67,
+      "updatedAt": "2026-04-09T11:49:43Z",
+      "decision": "skip",
+      "reason": "the final workspace-aware mother issue result already lives across the current draft redesign, product docs, user guide, and canonical state machine",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 68,
+      "updatedAt": "2026-04-09T05:52:04Z",
+      "decision": "skip",
+      "reason": "current workspace-aware product docs and state machine already cover ProductMode and workspace-claim behavior",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 69,
+      "updatedAt": "2026-04-09T06:32:41Z",
+      "decision": "skip",
+      "reason": "current workspace-aware docs and state machine already describe normal-mode workspace attach and switch behavior",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 70,
+      "updatedAt": "2026-04-09T07:04:22Z",
+      "decision": "skip",
+      "reason": "current workspace-aware docs and state machine already capture normal-mode thread ownership and workspace-scoped /use behavior",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 71,
+      "updatedAt": "2026-04-09T08:19:09Z",
+      "decision": "skip",
+      "reason": "current product docs already describe the narrowed vscode-mode behavior and its command constraints",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 72,
+      "updatedAt": "2026-04-09T09:30:21Z",
+      "decision": "skip",
+      "reason": "this issue itself synchronized the workspace-aware state machine, product docs, and help/menu copy, so no extra sync output is needed",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 73,
+      "updatedAt": "2026-04-09T09:04:51Z",
+      "decision": "skip",
+      "reason": "current workspace-aware docs already cover workspace identity and workspace-default ownership after the migration",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 74,
+      "updatedAt": "2026-04-09T05:02:52Z",
+      "decision": "skip",
+      "reason": "current Feishu product docs and state machine already describe sqlite freshness merged into /use candidate sourcing",
+      "recordedAt": "2026-04-09T16:35:16Z"
+    },
+    {
+      "number": 75,
+      "updatedAt": "2026-04-09T03:12:39Z",
+      "decision": "skip",
+      "reason": "preview/send timeout separation is already reflected in current Feishu product and relay error-reporting docs",
+      "recordedAt": "2026-04-09T16:35:16Z"
+    },
+    {
+      "number": 76,
+      "updatedAt": "2026-04-09T06:50:10Z",
+      "decision": "skip",
+      "reason": "current README, QUICKSTART, and install/deploy docs already cover the Linux systemd --user service path and local binary upgrade transaction",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 77,
+      "updatedAt": "2026-04-09T04:43:53Z",
+      "decision": "merge",
+      "reason": "current Feishu product doc was missing the durable final-turn elapsed footer behavior, so the issue is merged into the canonical product surface doc",
+      "targetDocs": [
+        "docs/general/feishu-product-design.md"
+      ],
+      "recordedAt": "2026-04-09T16:36:01Z"
+    },
+    {
+      "number": 78,
+      "updatedAt": "2026-04-09T06:02:40Z",
+      "decision": "merge",
+      "reason": "current install/deploy docs were missing the durable codex.real child-env rule for restoring the active provider env key, so this issue is merged into the canonical install/deploy doc",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md"
+      ],
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 79,
+      "updatedAt": "2026-04-09T06:18:25Z",
+      "decision": "skip",
+      "reason": "the research conclusion already lives in docs/draft/non-linux-user-autostart-research.md, so no extra sync doc entry is needed",
+      "recordedAt": "2026-04-09T16:40:04Z"
+    },
+    {
+      "number": 82,
+      "updatedAt": "2026-04-09T11:34:26Z",
+      "decision": "skip",
+      "reason": "current user guide and setup docs already reflect the added autostart step before VS Code setup",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 84,
+      "updatedAt": "2026-04-09T13:03:21Z",
+      "decision": "skip",
+      "reason": "research-only tray feasibility conclusions do not describe current shipped product behavior and were intentionally split into follow-up implementation issues instead",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 85,
+      "updatedAt": "2026-04-09T13:45:00Z",
+      "decision": "skip",
+      "reason": "the persisted mode and surface-resume behavior already lives in the canonical remote surface state machine after this mother issue closed",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 86,
+      "updatedAt": "2026-04-09T13:30:47Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures the normal-mode daemon-restart recovery path introduced by this stage",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 87,
+      "updatedAt": "2026-04-09T13:06:39Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures the persisted surface-resume-state infrastructure introduced by this stage",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 88,
+      "updatedAt": "2026-04-09T13:42:46Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures the vscode-mode daemon-restart recovery path introduced by this stage",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
+      "number": 92,
+      "updatedAt": "2026-04-09T16:07:39Z",
+      "decision": "skip",
+      "reason": "current install/user/state-machine docs already cover the managed_shim-only VS Code integration path and migration-card behavior",
+      "recordedAt": "2026-04-09T16:40:05Z"
+    },
+    {
       "number": 93,
+      "title": "web setup 新增运行环境检查页，统一判定 headless 基础可用性",
       "updatedAt": "2026-04-09T16:14:28Z",
       "decision": "merge",
-      "reason": "durable setup runtime requirements behavior already merged into canonical setup docs during implementation",
+      "reason": "processed out of order as the latest canonical setup baseline; older issues must be compared against the current docs and must not overwrite the runtime-requirements setup design that was already merged during implementation",
       "targetDocs": [
         "docs/general/user-guide.md",
         "docs/draft/web-setup-wizard-redesign.md"
       ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/93",
       "recordedAt": "2026-04-09T16:17:29Z"
     }
   ]

@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 增补 Linux systemd user service 与本地 binary 升级事务入口。
+> Updated: `2026-04-10`
+> Summary: 增补 Linux systemd user service、本地 binary 升级事务入口，以及 `codex.real` 子进程的定向 provider env 补齐规则。
 
 ## 1. 范围
 
@@ -232,6 +232,12 @@ release 包中的归档目录只是版本缓存位置，不是长期运行路径
 - 当前机器本地 VS Code
 - VS Code Remote
 - 希望不依赖 `settings.json` 的场景
+
+当前 wrapper / headless 在真正拉起 `codex.real` 前，还会补一条稳定规则：
+
+- wrapper 自己仍按本地 relay 通信要求清理代理环境
+- 启动 `codex.real` 时会恢复已捕获的 proxy env
+- 若当前 active provider 的 `env_key` 不在父进程环境中，会按同一套 child-env 规则定向补齐这个 key，而不是整包导入 shell 环境
 
 ### 5.3 legacy `settings.json` 迁移
 

@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 同步 setup 里的运行环境检查步骤与 VS Code managed-shim-only 接入路径，并保留 release track、命令帮助、旧卡片、后台恢复、迁移卡片与文档预览 fixed-root inventory 的当前用户语义。
+> Updated: `2026-04-10`
+> Summary: 同步 setup 里的运行环境检查步骤、飞书 App 切换提示与 VS Code managed-shim-only 接入路径，并保留 release track、命令帮助、旧卡片、后台恢复、迁移卡片与文档预览 fixed-root inventory 的当前用户语义。
 
 ## 1. 这是什么
 
@@ -144,6 +144,11 @@ Windows PowerShell：
 4. 先看页面给出的“运行环境检查”结果，确认当前机器已经满足正常使用要求
 5. 按需处理自动启动
 6. 如果你需要 VS Code，再按你的实际使用场景完成 VS Code 接入
+
+关于飞书 App 的保存和测试连接，还需要记住两条规则：
+
+- `测试连接` 只表示当前保存的凭据可以和本机服务建立连接，不等于旧飞书会话已经自动切到新的机器人身份
+- 如果你把 `App ID` 改成了另一个飞书 App，旧会话不会自动迁移；需要到新机器人的聊天入口重新开始会话
 
 这个“运行环境检查”步骤会统一告诉你：
 

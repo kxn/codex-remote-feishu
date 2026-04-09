@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、最终回复 reply 与状态提示。
+> Updated: `2026-04-10`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括文本命令、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、turn 失败红卡、最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -541,6 +541,16 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - `告诉 Codex 怎么改` 不会直接发送 native decision，而是让 surface 进入一次性反馈捕获模式
 - 若请求已经在其他端处理完成，再次点击会提示已过期
 
+### 7.1.2 Turn 失败卡片
+
+当远端 turn 以非用户主动停止的已知错误结束时：
+
+- 会投影一张红色错误卡片，而不是静默停住
+- 当前错误卡片使用 `turn_failed` notice，对应飞书 error theme
+- 卡片正文会尽量保留可调试的技术信息，而不是只给一个模糊的“系统错误”
+- 若同一次 turn 的错误已经在完成路径里被折叠成统一失败提示，链路会避免再额外补一张重复告警
+- 这条能力当前只覆盖“明确观测到的失败提示”，不等价于自动重启或自动 resume
+
 ### 7.2 过程消息
 
 非 final 的 `block.committed`：
@@ -556,6 +566,13 @@ final `block.committed`：
 - 若能拿到 reply anchor 对应的原用户消息预览，则标题会变成 `最后答复：<原消息预览>`
 - 若当前 turn 带有可用的飞书源消息 `SourceMessageID`，会优先 reply 到触发消息
 - 若 reply 失败、目标消息已不存在或不可回复，则回退到独立发卡
+- 若该 turn 带有文件修改 summary，会把摘要直接追加在 final assistant card 底部，而不是额外再发一张独立卡片
+- 文件摘要会展示本轮修改文件数、总 `+/-` 行数，以及逐文件的 `+/-` 统计
+- 文件展示名优先使用“最短唯一后缀”，避免直接铺完整长路径；重命名会显示 `旧路径 → 新路径`
+- 当前最多展开前 6 个文件；超出的部分只提示“另有 N 个文件未展开”
+- 若本轮没有可展示的最终正文，但存在文件修改 summary，仍会补一张合成 final card，正文为 `已完成文件修改。`
+- final card 底部当前会追加一条 turn summary footer，至少显示本轮用时
+- 若协议链路后续带来可精确复用的 usage 字段，footer 才会继续追加 token 数；当前实现不会做猜测或估算
 - 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
 - Markdown 预览重写与最终 reply/create message 发送使用独立 timeout 预算
 - 预览物化失败时不会阻塞主回复，正文保持原样
