@@ -15,6 +15,14 @@ var _ translator.Translator = (*Translator)(nil)
 // Result is an alias for the canonical translator.Result type.
 type Result = translator.Result
 
+// blockState tracks the state of a content block being streamed.
+type blockState struct {
+	blockType string // "text", "thinking", "tool_use"
+	itemID    string
+	toolName  string
+	toolUseID string
+}
+
 // permissionRequest tracks a pending can_use_tool control request.
 type permissionRequest struct {
 	RequestID string
@@ -43,12 +51,11 @@ type Translator struct {
 	turnActive bool
 	turnNumber int
 
-	// Streaming state for content blocks
-	activeBlockIndex int
-	activeBlockType  string // "text", "thinking", "tool_use"
-	activeItemID     string
-	activeToolName   string
-	activeToolUseID  string
+	// Streaming state for content blocks, indexed by block index
+	blocks          map[int]*blockState
+	activeItemID    string
+	activeToolName  string
+	activeToolUseID string
 
 	// Permission tracking
 	pendingPermissions map[string]permissionRequest
@@ -58,6 +65,7 @@ type Translator struct {
 func NewTranslator(instanceID string) *Translator {
 	return &Translator{
 		instanceID:         instanceID,
+		blocks:             map[int]*blockState{},
 		pendingPermissions: map[string]permissionRequest{},
 	}
 }

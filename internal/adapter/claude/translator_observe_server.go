@@ -116,7 +116,7 @@ func (t *Translator) observeStreamEvent(message map[string]any) (Result, error) 
 func (t *Translator) observeMessageStart(event map[string]any) (Result, error) {
 	t.turnID = t.nextTurnID()
 	t.turnActive = true
-	t.activeBlockIndex = -1
+	t.blocks = map[int]*blockState{}
 
 	t.debugf("observe message_start: thread=%s turn=%s", t.currentThreadID, t.turnID)
 
@@ -129,11 +129,15 @@ func (t *Translator) observeMessageStart(event map[string]any) (Result, error) {
 }
 
 func (t *Translator) observeContentBlockStart(event map[string]any) (Result, error) {
-	t.activeBlockIndex++
+	index := intField(event, "index")
 	block, _ := event["content_block"].(map[string]any)
 	blockType, _ := block["type"].(string)
-	t.activeBlockType = blockType
-	t.activeItemID = fmt.Sprintf("item-%s-%d", t.turnID, t.activeBlockIndex)
+	itemID := fmt.Sprintf("item-%s-%d", t.turnID, index)
+
+	bs := &blockState{
+		blockType: blockType,
+		itemID:    itemID,
+	}
 
 	var itemKind string
 	switch blockType {
@@ -143,32 +147,40 @@ func (t *Translator) observeContentBlockStart(event map[string]any) (Result, err
 		itemKind = "reasoning_content"
 	case "tool_use":
 		itemKind = "command_execution"
-		t.activeToolName = stringField(block, "name")
-		t.activeToolUseID = stringField(block, "id")
+		bs.toolName = stringField(block, "name")
+		bs.toolUseID = stringField(block, "id")
 	default:
 		itemKind = blockType
 	}
 
-	t.debugf("observe content_block_start: index=%d type=%s itemKind=%s tool=%s",
-		t.activeBlockIndex, blockType, itemKind, t.activeToolName)
+	t.blocks[index] = bs
 
-	metadata := map[string]any{"blockIndex": t.activeBlockIndex}
-	if t.activeToolName != "" {
-		metadata["toolName"] = t.activeToolName
-		metadata["toolUseId"] = t.activeToolUseID
+	t.debugf("observe content_block_start: index=%d type=%s itemKind=%s tool=%s",
+		index, blockType, itemKind, bs.toolName)
+
+	metadata := map[string]any{"blockIndex": index}
+	if bs.toolName != "" {
+		metadata["toolName"] = bs.toolName
+		metadata["toolUseId"] = bs.toolUseID
 	}
 
 	return Result{Events: []agentproto.Event{{
 		Kind:     agentproto.EventItemStarted,
 		ThreadID: t.currentThreadID,
 		TurnID:   t.turnID,
-		ItemID:   t.activeItemID,
+		ItemID:   itemID,
 		ItemKind: itemKind,
 		Metadata: metadata,
 	}}}, nil
 }
 
 func (t *Translator) observeContentBlockDelta(event map[string]any) (Result, error) {
+	index := intField(event, "index")
+	bs, exists := t.blocks[index]
+	if !exists {
+		return Result{}, nil
+	}
+
 	delta, _ := event["delta"].(map[string]any)
 	if delta == nil {
 		return Result{}, nil
@@ -188,6 +200,7 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) (Result, err
 		itemKind = "command_execution"
 		text, _ = delta["partial_json"].(string)
 	default:
+		// signature_delta and other unknown types -- silently skip
 		return Result{}, nil
 	}
 
@@ -199,15 +212,21 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) (Result, err
 		Kind:     agentproto.EventItemDelta,
 		ThreadID: t.currentThreadID,
 		TurnID:   t.turnID,
-		ItemID:   t.activeItemID,
+		ItemID:   bs.itemID,
 		ItemKind: itemKind,
 		Delta:    text,
 	}}}, nil
 }
 
 func (t *Translator) observeContentBlockStop(event map[string]any) (Result, error) {
+	index := intField(event, "index")
+	bs, exists := t.blocks[index]
+	if !exists {
+		return Result{}, nil
+	}
+
 	itemKind := "agent_message"
-	switch t.activeBlockType {
+	switch bs.blockType {
 	case "thinking":
 		itemKind = "reasoning_content"
 	case "tool_use":
@@ -216,21 +235,17 @@ func (t *Translator) observeContentBlockStop(event map[string]any) (Result, erro
 		itemKind = "agent_message"
 	}
 
-	t.debugf("observe content_block_stop: index=%d type=%s", t.activeBlockIndex, t.activeBlockType)
+	t.debugf("observe content_block_stop: index=%d type=%s", index, bs.blockType)
 
-	result := Result{Events: []agentproto.Event{{
+	delete(t.blocks, index)
+
+	return Result{Events: []agentproto.Event{{
 		Kind:     agentproto.EventItemCompleted,
 		ThreadID: t.currentThreadID,
 		TurnID:   t.turnID,
-		ItemID:   t.activeItemID,
+		ItemID:   bs.itemID,
 		ItemKind: itemKind,
-	}}}
-
-	// Reset active tool state
-	t.activeToolName = ""
-	t.activeToolUseID = ""
-
-	return result, nil
+	}}}, nil
 }
 
 // observeAssistant handles complete assistant messages.
@@ -411,4 +426,9 @@ func (t *Translator) observeControlResponse(message map[string]any) (Result, err
 func stringField(m map[string]any, key string) string {
 	v, _ := m[key].(string)
 	return strings.TrimSpace(v)
+}
+
+func intField(m map[string]any, key string) int {
+	v, _ := m[key].(float64)
+	return int(v)
 }
