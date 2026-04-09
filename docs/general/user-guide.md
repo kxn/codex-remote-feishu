@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-04-08`
-> Summary: 补充 release track、`/help`/`menu`、旧卡片过期、点赞 steering 与后台恢复的当前用户语义。
+> Updated: `2026-04-09`
+> Summary: 补充 release track、`/help`/`menu`、旧卡片过期、点赞 steering、后台恢复，以及文档预览 fixed-root inventory 的当前语义。
 
 ## 1. 这是什么
 
@@ -350,6 +350,7 @@ VS Code 接入目前有两种常用方式：
 默认预览目录是：
 
 - `Codex Remote Previews/`
+- 管理页里的文档预览清理只会作用于这个固定目录内的内容
 
 权限规则：
 
