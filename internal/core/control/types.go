@@ -117,6 +117,7 @@ type Snapshot struct {
 	SurfaceSessionID string
 	ActorUserID      string
 	ProductMode      string
+	WorkspaceKey     string
 	Attachment       AttachmentSummary
 	PendingHeadless  PendingHeadlessSummary
 	NextPrompt       PromptRouteSummary

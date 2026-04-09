@@ -144,6 +144,7 @@ type SurfaceConsoleRecord struct {
 	ChatID               string
 	ActorUserID          string
 	ProductMode          ProductMode
+	ClaimedWorkspaceKey  string
 	AttachedInstanceID   string
 	SelectedThreadID     string
 	LastInboundAt        time.Time

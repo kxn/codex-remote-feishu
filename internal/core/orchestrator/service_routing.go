@@ -30,6 +30,146 @@ func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
 	return initialThreadID
 }
 
+func normalizeWorkspaceClaimKey(value string) string {
+	return strings.TrimSpace(value)
+}
+
+func instanceWorkspaceClaimKey(inst *state.InstanceRecord) string {
+	if inst == nil {
+		return ""
+	}
+	if key := normalizeWorkspaceClaimKey(inst.WorkspaceKey); key != "" {
+		return key
+	}
+	return normalizeWorkspaceClaimKey(inst.WorkspaceRoot)
+}
+
+func mergedThreadWorkspaceClaimKey(view *mergedThreadView) string {
+	if view == nil {
+		return ""
+	}
+	if key := normalizeWorkspaceClaimKey(threadCWD(view)); key != "" {
+		return key
+	}
+	return instanceWorkspaceClaimKey(view.Inst)
+}
+
+func (s *Service) surfaceUsesWorkspaceClaims(surface *state.SurfaceConsoleRecord) bool {
+	return s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal
+}
+
+func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord) string {
+	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
+		return ""
+	}
+	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		surface.ClaimedWorkspaceKey = key
+		return key
+	}
+	if pending := surface.PendingHeadless; pending != nil {
+		if key := normalizeWorkspaceClaimKey(pending.ThreadCWD); key != "" {
+			surface.ClaimedWorkspaceKey = key
+			return key
+		}
+	}
+	if key := normalizeWorkspaceClaimKey(surface.PreparedThreadCWD); key != "" {
+		surface.ClaimedWorkspaceKey = key
+		return key
+	}
+	if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {
+		if key := instanceWorkspaceClaimKey(inst); key != "" {
+			surface.ClaimedWorkspaceKey = key
+			return key
+		}
+	}
+	return ""
+}
+
+func (s *Service) workspaceClaimSurface(workspaceKey string) *state.SurfaceConsoleRecord {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return nil
+	}
+	if claim := s.workspaceClaims[workspaceKey]; claim != nil {
+		surface := s.root.Surfaces[claim.SurfaceSessionID]
+		if surface != nil && s.surfaceUsesWorkspaceClaims(surface) && s.surfaceCurrentWorkspaceKey(surface) == workspaceKey {
+			return surface
+		}
+		delete(s.workspaceClaims, workspaceKey)
+	}
+	var owner *state.SurfaceConsoleRecord
+	for _, surface := range s.root.Surfaces {
+		if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
+			continue
+		}
+		if s.surfaceCurrentWorkspaceKey(surface) != workspaceKey {
+			continue
+		}
+		if owner == nil ||
+			surface.LastInboundAt.After(owner.LastInboundAt) ||
+			(surface.LastInboundAt.Equal(owner.LastInboundAt) && surface.SurfaceSessionID < owner.SurfaceSessionID) {
+			owner = surface
+		}
+	}
+	if owner != nil {
+		s.workspaceClaims[workspaceKey] = &workspaceClaimRecord{
+			WorkspaceKey:     workspaceKey,
+			SurfaceSessionID: owner.SurfaceSessionID,
+		}
+	}
+	return owner
+}
+
+func (s *Service) claimWorkspace(surface *state.SurfaceConsoleRecord, workspaceKey string) bool {
+	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
+		return true
+	}
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return false
+	}
+	if owner := s.workspaceClaimSurface(workspaceKey); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		return false
+	}
+	if current := s.surfaceCurrentWorkspaceKey(surface); current != "" && current != workspaceKey {
+		s.releaseSurfaceWorkspaceClaim(surface)
+	}
+	surface.ClaimedWorkspaceKey = workspaceKey
+	s.workspaceClaims[workspaceKey] = &workspaceClaimRecord{
+		WorkspaceKey:     workspaceKey,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	}
+	return true
+}
+
+func (s *Service) releaseSurfaceWorkspaceClaim(surface *state.SurfaceConsoleRecord) {
+	if surface == nil {
+		return
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey)
+	if workspaceKey != "" {
+		if claim := s.workspaceClaims[workspaceKey]; claim != nil && claim.SurfaceSessionID == surface.SurfaceSessionID {
+			delete(s.workspaceClaims, workspaceKey)
+		}
+	}
+	surface.ClaimedWorkspaceKey = ""
+}
+
+func (s *Service) workspaceBusyOwnerForSurface(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.SurfaceConsoleRecord {
+	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
+		return nil
+	}
+	owner := s.workspaceClaimSurface(workspaceKey)
+	if owner == nil || owner.SurfaceSessionID == surface.SurfaceSessionID {
+		return nil
+	}
+	return owner
+}
+
+func (s *Service) workspaceBusyOwnerForView(surface *state.SurfaceConsoleRecord, view *mergedThreadView) *state.SurfaceConsoleRecord {
+	return s.workspaceBusyOwnerForSurface(surface, mergedThreadWorkspaceClaimKey(view))
+}
+
 func (s *Service) instanceClaimSurface(instanceID string) *state.SurfaceConsoleRecord {
 	if strings.TrimSpace(instanceID) == "" {
 		return nil
@@ -488,6 +628,7 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	}
 	instanceID := surface.AttachedInstanceID
 	s.clearRemoteOwnership(surface)
+	s.releaseSurfaceWorkspaceClaim(surface)
 	s.releaseSurfaceThreadClaim(surface)
 	s.releaseSurfaceInstanceClaim(surface)
 	s.clearPreparedNewThread(surface)

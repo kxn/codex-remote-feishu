@@ -950,6 +950,26 @@ func TestProjectSnapshotShowsNormalModeWhenDetached(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsClaimedWorkspace(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode:  "normal",
+			WorkspaceKey: "/data/dl/droid",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !containsAll(ops[0].CardBody,
+		"**当前 workspace：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
+		"**已接管：** 无",
+	) {
+		t.Fatalf("unexpected snapshot body with workspace claim: %#v", ops[0].CardBody)
+	}
+}
+
 func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	projector := NewProjector()
 	dueAt := time.Date(2026, 4, 9, 12, 0, 30, 0, time.FixedZone("CST", 8*3600))

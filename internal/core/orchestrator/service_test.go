@@ -248,6 +248,7 @@ func TestAttachBusyInstanceRejectsSecondSurface(t *testing.T) {
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-2", ChatID: "chat-2", ActorUserID: "user-2", Text: "/mode vscode"})
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachInstance,
@@ -387,6 +388,7 @@ func TestUseBusyIdleThreadShowsKickPromptAndConfirmTransfersClaim(t *testing.T) 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
 	svc.root.Surfaces["surface-2"] = &state.SurfaceConsoleRecord{
 		SurfaceSessionID:   "surface-2",
+		ProductMode:        state.ProductModeVSCode,
 		AttachedInstanceID: "inst-1",
 		RouteMode:          state.RouteModeUnbound,
 		QueueItems:         map[string]*state.QueueItemRecord{},
@@ -451,6 +453,7 @@ func TestUseBusyRunningThreadRejectsKick(t *testing.T) {
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
 	svc.root.Surfaces["surface-2"] = &state.SurfaceConsoleRecord{
 		SurfaceSessionID:   "surface-2",
+		ProductMode:        state.ProductModeVSCode,
 		AttachedInstanceID: "inst-1",
 		RouteMode:          state.RouteModeUnbound,
 		QueueItems:         map[string]*state.QueueItemRecord{},
@@ -631,6 +634,230 @@ func TestModeCommandRejectsSwitchWhileWorkIsRunning(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "surface_mode_busy" {
 		t.Fatalf("expected surface_mode_busy notice, got %#v", events)
+	}
+}
+
+func TestNormalModeAttachClaimsWorkspaceAndProjectsSnapshot(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected claimed workspace key, got %#v", surface)
+	}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.WorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected snapshot workspace key, got %#v", snapshot)
+	}
+}
+
+func TestNormalModeAttachRejectsBusyWorkspaceAcrossInstances(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid-a",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-a",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "droid-b",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-b",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+		InstanceID:       "inst-2",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "workspace_busy" {
+		t.Fatalf("expected workspace_busy notice, got %#v", events)
+	}
+	if surface := svc.root.Surfaces["surface-2"]; surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" {
+		t.Fatalf("expected second surface to remain detached without workspace claim, got %#v", surface)
+	}
+}
+
+func TestVSCodeModeDoesNotUseWorkspaceClaimForAttach(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid-a",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-a",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "droid-b",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-b",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-2", ChatID: "chat-2", ActorUserID: "user-2", Text: "/mode vscode"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+		InstanceID:       "inst-2",
+	})
+
+	surface := svc.root.Surfaces["surface-2"]
+	if surface.ProductMode != state.ProductModeVSCode {
+		t.Fatalf("expected vscode mode, got %#v", surface)
+	}
+	if surface.AttachedInstanceID != "inst-2" || surface.ClaimedWorkspaceKey != "" {
+		t.Fatalf("expected vscode attach without workspace claim, got %#v", surface)
+	}
+	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != "attached" {
+		t.Fatalf("expected attach success, got %#v", events)
+	}
+}
+
+func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid-a",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-a",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "droid-b",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-b",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected one selection prompt, got %#v", events)
+	}
+	var found bool
+	for _, option := range events[0].SelectionPrompt.Options {
+		if option.OptionID != "thread-2" {
+			continue
+		}
+		found = true
+		if !option.Disabled || option.ButtonLabel != "已占用" || !strings.Contains(option.Subtitle, "workspace 已被其他飞书会话占用") {
+			t.Fatalf("expected thread in claimed workspace to be disabled, got %#v", option)
+		}
+	}
+	if !found {
+		t.Fatalf("expected claimed workspace thread to appear in prompt, got %#v", events[0].SelectionPrompt)
+	}
+}
+
+func TestDetachReleasesWorkspaceClaim(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid-a",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-a",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-2",
+		DisplayName:             "droid-b",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid-b",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-2",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionDetach, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+		InstanceID:       "inst-2",
+	})
+
+	surface := svc.root.Surfaces["surface-2"]
+	if surface.AttachedInstanceID != "inst-2" || surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected workspace claim to be released for second attach, got %#v", surface)
+	}
+	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != "attached" {
+		t.Fatalf("expected attach success after detach release, got %#v", events)
 	}
 }
 

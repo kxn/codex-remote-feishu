@@ -16,6 +16,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ActorUserID:      surface.ActorUserID,
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
+		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
 	snapshot.Gate = snapshotGateSummary(surface)

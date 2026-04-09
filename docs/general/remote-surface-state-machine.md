@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步显式 `ProductMode` overlay：surface 现在默认 `normal`、支持 `/mode normal|vscode`、`/status` 会展示当前 mode，但 attach/list/use/follow 语义当前仍维持既有 instance/thread-first 行为。
+> Summary: 同步显式 `ProductMode` + normal-mode `workspace claim` 基座：surface 现在默认 `normal`、支持 `/mode normal|vscode`、normal mode 的 attach/use/headless 恢复会先经过 workspace 仲裁，`/status` 也会展示当前 mode 与已占用 workspace。
 
 ## 1. 文档定位
 
@@ -62,8 +62,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 | 代号 | 条件 | 用户语义 |
 | --- | --- | --- |
-| `M0 Normal` | `ProductMode=normal` | 新 surface 默认值；当前只影响 `/status` 投影、持久记忆与 `/mode` 切换入口，不改变 attach/list/use/follow 的既有语义 |
-| `M1 VSCode` | `ProductMode=vscode` | 只能显式 `/mode vscode` 进入；当前同样只影响 mode 投影与记忆，不改变既有 instance/thread-first 路由语义 |
+| `M0 Normal` | `ProductMode=normal` | 新 surface 默认值；当前会开启 workspace claim 仲裁，并把已占用 workspace 投影到 `/status` |
+| `M1 VSCode` | `ProductMode=vscode` | 只能显式 `/mode vscode` 进入；当前不参与 workspace claim，仍保留既有 instance/thread-first 路由语义 |
 
 补充说明：
 
@@ -71,9 +71,10 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. daemon 重启后，只要该 surface 状态被恢复，mode 也会一起恢复。
 3. `/mode` 当前只在 detached 或 idle attached surface 上执行切换：
    1. 会先走 detach-like 清理。
-   2. 清掉 attachment / claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
+   2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
 4. 若当前仍有 live remote work，则 `/mode` 直接拒绝，并明确提示用户 `/stop` 或 `/detach`。
 5. `PendingHeadless` 与 `Abandoning` 仍是更高优先级 gate，所以这两类状态下 `/mode` 不会放行。
+6. 当前 mode 还没有彻底重写 `/list` / `/use` / `/follow` 的产品主语义；但 normal mode 已经会改变 attach/use/headless 恢复的仲裁层。
 
 ### 3.2 路由主状态
 
@@ -166,15 +167,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 ## 4. 当前已实现的不变量
 
-### 4.1 instance attach 全局互斥
+### 4.1 normal mode 先做 workspace claim，instance claim 退回下一层
 
-当前 `attachInstance()` 与 `attachHeadlessInstance()` 都走 `instanceClaims`。
+当前 `attachInstance()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 normal mode 下都会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
 
 结果：
 
-1. 一个 instance 同时只能被一个飞书 surface attach。
-2. 第二个 surface attach 同一 instance 会直接收到 `instance_busy`。
-3. 不会进入“instance attach 成功但 thread attach 失败且用户不知道下一步”的半 attach 状态。
+1. 同一个 workspace 当前最多只允许一个 normal-mode surface 占有。
+2. 第二个 normal-mode surface 如果试图 attach 同 workspace 的另一实例，或 `/use` / headless 恢复到该 workspace，会直接收到 `workspace_busy`。
+3. 同一个 instance 仍然只能被一个飞书 surface attach；也就是说 instance claim 还在，只是已经退回到 workspace claim 之后。
+4. 不会进入“workspace 仲裁层已经冲突，但仍然 attach 成功”的半 attach 状态。
 
 唯一保留的显式可恢复状态是 `R1 AttachedUnbound`：
 
@@ -185,14 +187,15 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 这不是死状态，因为用户仍然只有一条明确下一步：`/use` 或点 thread 卡片。
 
-### 4.2 thread attach 全局互斥
+### 4.2 thread claim 仍是全局的，但在 normal mode 下退回 workspace 内仲裁
 
 当前 `threadClaims` 仍按 `threadID` 做全局仲裁。
 
 结果：
 
 1. 一个 thread 同时只能被一个飞书 surface 占有。
-2. `/use` 命中已被他人占用的 thread 时：
+2. normal mode 下，如果目标 thread 所在 workspace 已被其他 normal-mode surface 占有，会先在 workspace 层被禁用，不再进入 thread kick 逻辑。
+3. `/use` 命中已被他人占用的 thread 时：
    1. 如果目标 thread 在**当前 attached instance 内可见**，仍保留现有强踢逻辑：
       1. 对方 idle 才会弹强踢确认。
       2. 对方 queued/running 会直接拒绝。
@@ -326,34 +329,36 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 当前 `Snapshot` 不再只展示 attachment 和 next prompt。
 
-现在至少会额外投影五类“决定下一条输入会发生什么”的状态：
+现在至少会额外投影六类“决定下一条输入会发生什么”的状态：
 
 1. 当前 `ProductMode`
    1. `normal`
    2. `vscode`
-2. request gate：
+2. 当前已占用的 workspace（若有）
+3. request gate：
    1. `PendingRequest`
    2. `RequestCapture`
-3. dispatch / queue：
+4. dispatch / queue：
    1. `Dispatching`
    2. `Running`
    3. `PausedForLocal`
    4. `HandoffWait`
    5. queued count
-4. auto-continue runtime：
+5. auto-continue runtime：
    1. enabled / disabled
    2. pending reason
    3. pending due time
    4. consecutive count
-5. transport degraded 后“attachment 仍保留但实例已离线”的 retained-offline 状态。
+6. transport degraded 后“attachment 仍保留但实例已离线”的 retained-offline 状态。
 
 它仍然不是完整调试面板，但已经能回答最关键的问题：
 
 1. 当前到底记住的是 `normal` 还是 `vscode`。
-2. 下一条文本是不是会先被 request gate 吃掉。
-3. 现在是执行中、排队中，还是被本地 VS Code 暂停。
-4. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
-5. attachment 还在不在，以及当前是不是在等实例恢复。
+2. 当前到底占着哪个 workspace。
+3. 下一条文本是不是会先被 request gate 吃掉。
+4. 现在是执行中、排队中，还是被本地 VS Code 暂停。
+5. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
+6. attachment 还在不在，以及当前是不是在等实例恢复。
 
 ### 4.12 `/mode` 是 surface 级持久 overlay，当前只负责记忆与清理切换
 
@@ -361,8 +366,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 1. `/mode` 无参数时，直接回当前 `Snapshot`。
 2. `/mode normal` / `/mode vscode` 允许在 detached 或 idle attached surface 上切换。
-3. 切换时一定先做 detach-like 清理，再进入目标 mode 的 detached 态。
-4. 切换当前不会隐式改写 `/list`、`/use`、`/follow` 的既有 instance/thread-first 逻辑。
+3. 切换时一定先做 detach-like 清理，再进入目标 mode 的 detached 态；workspace claim 也会一起释放。
+4. 切换当前不会彻底重写 `/list`、`/use`、`/follow` 的主交互语义，但会改变 normal/vscode 两种 mode 是否参与 workspace claim 仲裁。
 5. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
 
 ### 4.13 `/autocontinue` 是 surface 级、内存态、跨 route 可查询的 overlay 开关
@@ -738,6 +743,7 @@ retained-offline overlay 额外规则：
 18. **headless 自动恢复在首轮 refresh 前过早报失败，或恢复成功后重放旧 replay / 额外补 attached 噪音**：已修复。当前会先静默等待首轮 refresh，恢复成功只发单条成功 notice，且会清空旧 replay 而不是补发。
 19. **`PendingHeadless` 只能靠隐藏的 `/killinstance` 逃生**：已修复。当前 `/detach` 可以直接取消恢复流程并回到 `R0 Detached`；旧 `/killinstance` 只回迁移提示。
 20. **显式切 mode 会保留旧 attachment / request gate / draft 残留，导致进入半切换状态**：已修复。当前 idle/detached 时 `/mode` 会先做 detach-like 清理；busy path 则明确拒绝并提示 `/stop` 或 `/detach`。
+21. **normal mode 仍然只按 instance/thread 仲裁，导致同 workspace 多 surface 并存**：已修复。当前 normal mode 的 attach/use/headless 恢复都会先经过 workspace claim；只有显式切到 `vscode` mode 才绕过这层仲裁。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

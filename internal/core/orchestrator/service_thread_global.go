@@ -416,6 +416,14 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 			NoticeText: "目标会话不存在或当前不可见。",
 		}
 	}
+	if owner := s.workspaceBusyOwnerForView(surface, view); owner != nil {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			View:       view,
+			NoticeCode: "workspace_busy",
+			NoticeText: "目标会话所在 workspace 当前已被其他飞书会话占用。",
+		}
+	}
 	if view.CurrentVisible {
 		return resolvedThreadTarget{
 			Mode: threadAttachCurrentVisible,
@@ -518,6 +526,9 @@ func (s *Service) mergedThreadStatus(surface *state.SurfaceConsoleRecord, view *
 			return "当前跟随", "", false
 		}
 		return "当前会话", "", false
+	}
+	if owner := s.workspaceBusyOwnerForView(surface, view); owner != nil {
+		return "所在 workspace 已被其他飞书会话占用", "已占用", true
 	}
 	if view.BusyOwner != nil {
 		return "已被其他飞书会话占用", "已占用", true

@@ -61,6 +61,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 			surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 		}
 		s.normalizeSurfaceProductMode(surface)
+		s.surfaceCurrentWorkspaceKey(surface)
 		surface.LastInboundAt = s.now()
 		return surface
 	}
@@ -206,7 +207,15 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 		buttonLabel := ""
 		current := surface.AttachedInstanceID == inst.InstanceID
 		disabled := false
-		if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		if owner := s.workspaceBusyOwnerForSurface(surface, instanceWorkspaceClaimKey(inst)); owner != nil {
+			disabled = true
+			buttonLabel = "已占用"
+			if subtitle == "" {
+				subtitle = "所在 workspace 已被其他飞书会话接管"
+			} else {
+				subtitle += "\n所在 workspace 已被其他飞书会话接管"
+			}
+		} else if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 			disabled = true
 			buttonLabel = "已占用"
 			if subtitle == "" {
@@ -241,11 +250,18 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	if inst == nil {
 		return notice(surface, "instance_not_found", "实例不存在。")
 	}
+	workspaceKey := instanceWorkspaceClaimKey(inst)
 	if surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID {
 		return notice(surface, "attach_requires_detach", "当前会话已接管其他实例，请先 /detach。")
 	}
 	if surface.AttachedInstanceID == instanceID {
 		return notice(surface, "already_attached", fmt.Sprintf("当前已接管 %s。", inst.DisplayName))
+	}
+	if s.surfaceUsesWorkspaceClaims(surface) && workspaceKey == "" {
+		return notice(surface, "workspace_key_missing", "当前无法确定实例对应的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
 	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
@@ -257,9 +273,17 @@ func (s *Service) attachInstance(surface *state.SurfaceConsoleRecord, instanceID
 	s.releaseSurfaceThreadClaim(surface)
 	s.clearPreparedNewThread(surface)
 	surface.PromptOverride = state.ModelConfigRecord{}
+	if !s.claimWorkspace(surface, workspaceKey) {
+		if s.surfaceUsesWorkspaceClaims(surface) {
+			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
+		}
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定实例对应的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")...)
+	}
 	if !s.claimInstance(surface, instanceID) {
+		s.releaseSurfaceWorkspaceClaim(surface)
 		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
 	}
+	s.surfaceCurrentWorkspaceKey(surface)
 	surface.AttachedInstanceID = instanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
@@ -507,6 +531,12 @@ func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, threadCWD 
 
 func headlessRestoreFailureNotice(code string) *control.Notice {
 	switch strings.TrimSpace(code) {
+	case "workspace_busy":
+		return &control.Notice{
+			Code:  "headless_restore_workspace_busy",
+			Title: "恢复失败",
+			Text:  "之前的 workspace 当前被其他飞书会话占用，暂时无法恢复，请稍后重试或尝试其他会话。",
+		}
 	case "thread_busy":
 		return &control.Notice{
 			Code:  "headless_restore_thread_busy",
@@ -616,6 +646,13 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	if surface == nil || inst == nil || view == nil || strings.TrimSpace(view.ThreadID) == "" {
 		return nil
 	}
+	workspaceKey := mergedThreadWorkspaceClaimKey(view)
+	if s.surfaceUsesWorkspaceClaims(surface) && workspaceKey == "" {
+		return notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
+		return attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)
+	}
 	if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)
 	}
@@ -637,10 +674,18 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		delete(s.pausedUntil, surface.SurfaceSessionID)
 		delete(s.abandoningUntil, surface.SurfaceSessionID)
 	}
+	if !s.claimWorkspace(surface, workspaceKey) {
+		if s.surfaceUsesWorkspaceClaims(surface) {
+			return append(events, attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)...)
+		}
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")...)
+	}
 
 	if !s.claimInstance(surface, inst.InstanceID) {
+		s.releaseSurfaceWorkspaceClaim(surface)
 		return append(events, attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)...)
 	}
+	s.surfaceCurrentWorkspaceKey(surface)
 	surface.AttachedInstanceID = inst.InstanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
@@ -755,6 +800,17 @@ func attachSurfaceToKnownThreadThreadBusyNotice(surface *state.SurfaceConsoleRec
 	return notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")
 }
 
+func attachSurfaceToKnownThreadWorkspaceBusyNotice(surface *state.SurfaceConsoleRecord, mode attachSurfaceToKnownThreadMode) []control.UIEvent {
+	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice("workspace_busy"),
+		}}
+	}
+	return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")
+}
+
 func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode) []control.UIEvent {
 	if surface == nil || view == nil {
 		return nil
@@ -769,6 +825,16 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 			}}
 		}
 		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法在后台恢复该会话。")
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, cwd); owner != nil {
+		if mode == startHeadlessModeHeadlessRestore {
+			return []control.UIEvent{{
+				Kind:             control.UIEventNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice:           headlessRestoreFailureNotice("workspace_busy"),
+			}}
+		}
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")
 	}
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
@@ -794,6 +860,19 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		clearSurfaceRequests(surface)
 		s.clearPreparedNewThread(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
+	}
+	if !s.claimWorkspace(surface, cwd) {
+		if s.surfaceUsesWorkspaceClaims(surface) {
+			if mode == startHeadlessModeHeadlessRestore {
+				return append(events, control.UIEvent{
+					Kind:             control.UIEventNotice,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					Notice:           headlessRestoreFailureNotice("workspace_busy"),
+				})
+			}
+			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")...)
+		}
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式恢复。请切到 `/mode vscode` 后再试。")...)
 	}
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,

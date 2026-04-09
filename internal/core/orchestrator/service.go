@@ -36,6 +36,7 @@ type Service struct {
 	activeRemote     map[string]*remoteTurnBinding
 	pendingSteers    map[string]*pendingSteerBinding
 	instanceClaims   map[string]*instanceClaimRecord
+	workspaceClaims  map[string]*workspaceClaimRecord
 	threadClaims     map[string]*threadClaimRecord
 	persistedThreads PersistedThreadCatalog
 }
@@ -100,6 +101,11 @@ type instanceClaimRecord struct {
 	SurfaceSessionID string
 }
 
+type workspaceClaimRecord struct {
+	WorkspaceKey     string
+	SurfaceSessionID string
+}
+
 type threadClaimRecord struct {
 	ThreadID         string
 	InstanceID       string
@@ -152,6 +158,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		activeRemote:    map[string]*remoteTurnBinding{},
 		pendingSteers:   map[string]*pendingSteerBinding{},
 		instanceClaims:  map[string]*instanceClaimRecord{},
+		workspaceClaims: map[string]*workspaceClaimRecord{},
 		threadClaims:    map[string]*threadClaimRecord{},
 	}
 }
