@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；daemon 重启后会先恢复 latent surface 与 mode，但当前仍保持 detached，不自动恢复 visible attach。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；daemon 重启后会恢复 latent surface 与 mode，其中 normal mode 会继续按 persisted target 尝试 visible/workspace 恢复，vscode mode 当前仍保持 detached。
 
 ## 1. 文档定位
 
@@ -74,7 +74,12 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `ProductMode` 当前已经进入 daemon 级 `surface resume state`：
    1. 进程内已有 surface 会保留它。
    2. daemon 重启后，startup 会先从 `surface resume state` materialize latent surface，并恢复之前的 `ProductMode`。
-   3. 当前阶段只恢复 latent surface + mode，不自动恢复 visible instance attach；因此重启后的 surface 仍先落在 detached 态。
+   3. `normal` mode surface 随后会按 persisted resume target 继续尝试恢复：
+      1. 优先 exact visible thread 恢复。
+      2. visible thread 当前不可见时，可降级回原 workspace 的 attached-unbound 语义。
+      3. 若还带有 headless restore hint，则只有在 visible/workspace 路径没有恢复成功时，才继续交给 headless auto-restore。
+      4. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
+   4. `vscode` mode 当前仍只恢复 latent surface + mode，不自动恢复 visible attach；因此重启后的 vscode surface 仍先落在 detached 态。
 3. `/mode` 当前只在没有 live remote work 的 surface 上执行切换：
    1. 会先走 detach-like 清理。
    2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
@@ -112,10 +117,14 @@ surface 不是单一枚举，而是五层正交状态叠加。
 1. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
    1. surface 有 `gateway/chat/user` 路由信息。
    2. surface 的 `ProductMode` 已从持久化 `surface resume state` 恢复。
-   3. surface 可能还带有持久化的 resume target 元数据（instance / thread / workspace / route 语义），但这些 target 当前不会在 startup 时直接投影成 live attach。
-   4. 若该 surface 还带有持久化的 headless restore hint，daemon 之后仍可继续评估 normal-mode 的 headless auto-restore。
+   3. surface 可能还带有持久化的 resume target 元数据（instance / thread / workspace / route 语义）；它们不会在 materialize 当下直接投影成 live attach，但 daemon 随后会异步评估恢复。
+   4. 对 `normal` mode 来说，这个 latent detached 可能是短暂中间态：
+      1. exact visible thread 恢复成功后会进入 `R2 AttachedPinned`。
+      2. visible thread 不可见但 workspace 仍可接管时，会进入 `R1 AttachedUnbound`。
+      3. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待。
+   5. 若该 surface 还带有持久化的 headless restore hint，daemon 会在 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore。
 2. 这种 latent surface 在 route 维度上仍然是 `R0 Detached`，不是新的 route state。
-3. 当前 startup 阶段不会因为 resume target 元数据而直接进入 `R1~R5`；是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，仍取决于 daemon 后续恢复调度，而不是 materialize 本身。
+3. 当前 startup 阶段不会因为 resume target 元数据而在 materialize 当下直接进入 `R1~R5`；是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，仍取决于 daemon 后续恢复调度，而不是 materialize 本身。
 
 ### 3.3 执行状态
 
@@ -403,7 +412,9 @@ surface 不是单一枚举，而是五层正交状态叠加。
 5. `vscode` surface 不参与 headless auto-restore；即使仍有残留 hint 或可复用 headless，后台恢复入口也会直接跳过。
 6. 当前 mode 会跨 daemon 重启保留：
    1. startup 会先恢复 latent surface 与 `ProductMode`
-   2. 但当前不会自动恢复 visible attach；用户看到的仍是目标 mode 下的 detached surface
+   2. `normal` mode 会继续按 persisted target 尝试自动恢复：exact visible thread > workspace attach fallback > 与 headless restore 协同
+   3. 若存在 `ResumeThreadID`，在首轮 `threads.refresh -> threads.snapshot` 完成前会先静默等待，不会过早降级或直接报失败
+   4. `vscode` mode 当前不会自动恢复 visible attach；用户看到的仍是目标 mode 下的 detached surface
 7. 切换当前已经会改变 `/list` 的主交互语义：
    1. `normal` 下 `/list` 是 workspace chooser。
    2. `vscode` 下 `/list` 是 instance chooser。
@@ -448,6 +459,9 @@ R0 Detached
   -- /use(thread，normal mode 且可解析到当前可用实例) --> R2 AttachedPinned
   -- /use(thread，normal mode 且需要新 headless) --> R0 + G1 PendingHeadlessStarting
   -- /use(thread，vscode mode) --> 拒绝 + migration to /list
+  -- daemon startup latent normal surface + exact visible thread restore --> R2 AttachedPinned
+  -- daemon startup latent normal surface + workspace fallback --> R1 AttachedUnbound
+  -- daemon startup latent normal surface + waiting first refresh --> 保持 R0 Detached
 
 R1 AttachedUnbound
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
@@ -596,10 +610,11 @@ E5 HandoffWait
 1. `/new` 本身不会绕过 instance 级本地仲裁。
 2. `R5` 下首条消息如果碰到本地活动，仍可能先在 `PausedForLocal/HandoffWait` 中排队。
 
-### 5.4 headless 生命周期
+### 5.4 daemon 重启恢复与 headless 生命周期
 
 ```text
 G0 None
+  -- daemon startup latent normal surface + persisted target --> 先走 normal visible/workspace 恢复判定
   -- /use(thread，需要 create headless) --> G1 PendingHeadlessStarting
   -- R0 Detached 且存在 restore hint --> 后台恢复判定
 
@@ -612,6 +627,42 @@ G1 PendingHeadlessStarting
   -- /newinstance / /killinstance / 历史 resume_headless_thread --> migration notice，状态不变
   -- Tick timeout --> kill headless + clear pending + detach if needed
 ```
+
+daemon startup 的 normal resume 额外规则：
+
+1. 触发点：
+   1. daemon startup 后的 tick
+   2. `hello`
+   3. `threads.snapshot`
+   4. `thread.discovered`
+   5. `thread.focused`
+   6. `disconnect`
+2. 前置条件：
+   1. surface 当前是 `normal` mode
+   2. surface 当前没有显式 attach
+   3. surface 当前没有 pending headless
+   4. `surface resume state` 里仍有 `ResumeThreadID` 或 `ResumeWorkspaceKey`
+3. 恢复优先级：
+   1. exact visible thread 恢复
+   2. workspace attach fallback
+   3. 只有以上路径都没有恢复成功，才继续评估 headless restore hint
+4. 若 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 还没走完，且 persisted target 里包含 `ResumeThreadID`：
+   1. 保持 `R0 Detached`
+   2. 静默等待
+   3. 不降级到 workspace，也不给失败提示
+5. exact visible thread 恢复成功时：
+   1. 进入 `R2 AttachedPinned`
+   2. 只发一条 “已恢复到之前会话” notice
+   3. 清掉该 thread 的旧 replay，避免补历史噪音
+   4. 若同时存在 headless restore hint，会一并清掉
+6. visible thread 不可见但 workspace attach fallback 成功时：
+   1. 进入 `R1 AttachedUnbound`
+   2. 只发一条 “已先回到工作区” notice
+   3. 明确提示后续 `/use` 或 `/new`
+   4. 若同时存在 headless restore hint，会一并清掉
+7. 若首轮 refresh 已完成，但 visible/workspace 路径仍无法恢复：
+   1. 若不存在 headless restore hint：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
+   2. 若仍存在 headless restore hint：继续交给 headless auto-restore 链路；normal resume 自己不额外发失败提示
 
 后台 auto-restore 额外规则：
 
@@ -804,7 +855,8 @@ retained-offline overlay 额外规则：
 25. **normal `/list` 仍按 instance root 聚合，broad headless pool 会把多个 thread `cwd` workspace 压成一个选项**：已修复。当前 workspace 列表先看可见 thread `CWD`，只有无可见 thread 时才回退到实例级 workspace metadata。
 26. **normal detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 normal mode 的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
 27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 restore hint，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。
-28. **daemon 重启后 latent surface 会丢 mode，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由与 `ProductMode`；但 visible attach 仍保持后续阶段单独恢复。
+28. **daemon 重启后 latent surface 会丢 mode，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由与 `ProductMode`。
+29. **normal mode daemon 重启后会静默掉回 detached、过早报失败，或与 headless restore 优先级互相打架**：已修复。当前恢复顺序已收敛为 exact visible thread > workspace fallback > headless restore；首轮 refresh 前会静默等待，成功后会清理 stale headless hint，失败路径也只保留单条 notice + backoff。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

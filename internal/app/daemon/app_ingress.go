@@ -319,6 +319,8 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	a.refreshHeadlessRestoreHintsLocked()
 	a.syncHeadlessRestoreStateLocked()
+	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
+	a.handleUIEvents(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
@@ -352,6 +354,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		switch event.Kind {
 		case agentproto.EventThreadsSnapshot, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused:
+			uiEvents = append(uiEvents, a.maybeRecoverNormalSurfacesLocked(now)...)
 			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
 		}
 		a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
@@ -393,6 +396,7 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	if a.shuttingDown {
 		return
 	}
+	now := time.Now().UTC()
 	a.markStartupThreadsRefreshSettledLocked(instanceID)
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
@@ -411,6 +415,8 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.PID,
 	)
 	a.handleUIEvents(ctx, uiEvents)
+	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
+	a.handleUIEvents(ctx, normalRecoveryEvents)
 	a.syncSurfaceResumeStateLocked(nil)
 }
 
@@ -431,6 +437,8 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.maybeStartAutoUpgradeCheckLocked(now)
+	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
+	a.handleUIEvents(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)

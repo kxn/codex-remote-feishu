@@ -2,11 +2,14 @@ package daemon
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 func TestSurfaceResumeStoreRoundTrip(t *testing.T) {
@@ -115,6 +118,15 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 		ResumeWorkspaceKey: "/data/dl/droid",
 		ResumeRouteMode:    "pinned",
 	})
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-missing",
+		ThreadTitle:      "旧会话",
+		ThreadCWD:        "/data/dl/droid",
+	})
 
 	app := newRestoreHintTestApp(stateDir)
 	snapshot := app.service.SurfaceSnapshot("surface-1")
@@ -187,6 +199,191 @@ func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetButRestartStaysDetached(
 	reloaded := restarted.SurfaceResumeState("surface-1")
 	if reloaded == nil || !sameSurfaceResumeEntryContent(*entry, *reloaded) {
 		t.Fatalf("expected restart to preserve stored resume target: want=%#v got=%#v", entry, reloaded)
+	}
+}
+
+func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, SurfaceResumeEntry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		ResumeInstanceID:   "inst-vscode-1",
+		ResumeThreadID:     "thread-1",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+	})
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+		ThreadTitle:      "修复登录流程",
+		ThreadCWD:        "/data/dl/droid",
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-vscode-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+			Source:        "vscode",
+		},
+	})
+	app.onEvents(context.Background(), "inst-vscode-1", []agentproto.Event{{
+		Kind: agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{
+			ThreadID: "thread-1",
+			Name:     "修复登录流程",
+			CWD:      "/data/dl/droid",
+			Loaded:   true,
+		}},
+	}})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-vscode-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected normal resume to reattach visible thread, got %#v", snapshot)
+	}
+	if snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected visible resume to avoid headless fallback, got %#v", snapshot)
+	}
+	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
+		t.Fatalf("expected visible resume to clear stale headless hint, got %#v", hint)
+	}
+	if len(gateway.operations) == 0 || !strings.Contains(gateway.operations[len(gateway.operations)-1].CardBody, "已恢复到之前会话") {
+		t.Fatalf("expected recovery notice after visible resume, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonNormalResumeFallsBackToWorkspace(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, SurfaceResumeEntry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		ResumeInstanceID:   "inst-vscode-1",
+		ResumeThreadID:     "thread-missing",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-vscode-1",
+			DisplayName:   "droid",
+			WorkspaceRoot: "/data/dl/droid",
+			WorkspaceKey:  "/data/dl/droid",
+			ShortName:     "droid",
+			Source:        "vscode",
+		},
+	})
+	app.onEvents(context.Background(), "inst-vscode-1", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: nil,
+	}})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.ProductMode != "normal" || snapshot.Attachment.InstanceID != "inst-vscode-1" {
+		t.Fatalf("expected workspace fallback to attach workspace instance, got %#v", snapshot)
+	}
+	if snapshot.Attachment.SelectedThreadID != "" || snapshot.Attachment.RouteMode != "unbound" {
+		t.Fatalf("expected workspace fallback to stay unbound, got %#v", snapshot)
+	}
+	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
+		t.Fatalf("expected workspace fallback to clear stale headless hint, got %#v", hint)
+	}
+	if len(gateway.operations) == 0 || !strings.Contains(gateway.operations[len(gateway.operations)-1].CardBody, "已先回到工作区") {
+		t.Fatalf("expected workspace fallback notice, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, SurfaceResumeEntry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		ResumeInstanceID:   "inst-vscode-1",
+		ResumeThreadID:     "thread-missing",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-other-1",
+			DisplayName:   "other",
+			WorkspaceRoot: "/data/dl/other",
+			WorkspaceKey:  "/data/dl/other",
+			ShortName:     "other",
+			Source:        "vscode",
+		},
+	})
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no failure notice before first refresh completes, got %#v", gateway.operations)
+	}
+
+	app.onEvents(context.Background(), "inst-other-1", []agentproto.Event{{
+		Kind: agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{{
+			ThreadID: "thread-other",
+			Name:     "其他会话",
+			CWD:      "/data/dl/other",
+			Loaded:   true,
+		}},
+	}})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
+		t.Fatalf("expected failed resume surface to remain detached, got %#v", snapshot)
+	}
+	if len(gateway.operations) != 1 || !strings.Contains(gateway.operations[0].CardBody, "暂时无法恢复到之前会话") {
+		t.Fatalf("expected single resume failure notice after first refresh, got %#v", gateway.operations)
 	}
 }
 

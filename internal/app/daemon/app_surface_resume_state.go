@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -16,6 +17,8 @@ type surfaceResumeTarget struct {
 	ResumeWorkspaceKey string
 	ResumeRouteMode    string
 }
+
+const surfaceResumeRetryBackoff = 30 * time.Second
 
 func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	path := surfaceResumeStatePath(stateDir)
@@ -29,6 +32,7 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	}
 	a.surfaceResumeState = store
 	a.materializeSurfaceResumeStateLocked()
+	a.syncSurfaceResumeRecoveryStateLocked()
 }
 
 func (a *App) SurfaceResumeState(surfaceID string) *SurfaceResumeEntry {
@@ -103,6 +107,7 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 			log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
 		}
 	}
+	a.syncSurfaceResumeRecoveryStateLocked()
 }
 
 func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecord, clearResumeTarget bool) (SurfaceResumeEntry, bool) {
@@ -185,4 +190,114 @@ func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before
 	default:
 		return false
 	}
+}
+
+func (a *App) syncSurfaceResumeRecoveryStateLocked() {
+	if a.surfaceResumeRecovery == nil {
+		a.surfaceResumeRecovery = map[string]*surfaceResumeRecoveryState{}
+	}
+	entries := map[string]SurfaceResumeEntry{}
+	if a.surfaceResumeState != nil {
+		entries = a.surfaceResumeState.Entries()
+	}
+	for surfaceID, entry := range entries {
+		if !surfaceResumeEntryNeedsRecovery(entry) {
+			delete(a.surfaceResumeRecovery, surfaceID)
+			continue
+		}
+		current := a.surfaceResumeRecovery[surfaceID]
+		if current == nil || !sameSurfaceResumeEntryContent(current.Entry, entry) {
+			a.surfaceResumeRecovery[surfaceID] = &surfaceResumeRecoveryState{Entry: entry}
+			continue
+		}
+		current.Entry = entry
+	}
+	for surfaceID := range a.surfaceResumeRecovery {
+		if entry, ok := entries[surfaceID]; !ok || !surfaceResumeEntryNeedsRecovery(entry) {
+			delete(a.surfaceResumeRecovery, surfaceID)
+		}
+	}
+}
+
+func surfaceResumeEntryNeedsRecovery(entry SurfaceResumeEntry) bool {
+	return state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeNormal &&
+		(strings.TrimSpace(entry.ResumeThreadID) != "" || state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) != "")
+}
+
+func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent {
+	if len(a.surfaceResumeRecovery) == 0 {
+		return nil
+	}
+	surfaceIDs := make([]string, 0, len(a.surfaceResumeRecovery))
+	for surfaceID := range a.surfaceResumeRecovery {
+		surfaceIDs = append(surfaceIDs, surfaceID)
+	}
+	sort.Strings(surfaceIDs)
+	allowMissingTargetFailure := a.initialThreadsRefreshRoundCompleteLocked()
+	events := []control.UIEvent{}
+	clearedHeadlessHint := false
+	for _, surfaceID := range surfaceIDs {
+		recovery := a.surfaceResumeRecovery[surfaceID]
+		if recovery == nil {
+			continue
+		}
+		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
+			continue
+		}
+		headlessFallbackAvailable := false
+		if a.headlessRestoreHints != nil {
+			_, headlessFallbackAvailable = a.headlessRestoreHints.Get(surfaceID)
+		}
+		restoreEvents, result := a.service.TryAutoResumeNormalSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
+			InstanceID:   recovery.Entry.ResumeInstanceID,
+			ThreadID:     recovery.Entry.ResumeThreadID,
+			WorkspaceKey: recovery.Entry.ResumeWorkspaceKey,
+		}, allowMissingTargetFailure)
+		switch result.Status {
+		case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
+			a.clearSurfaceResumeBackoffLocked(surfaceID)
+			if headlessFallbackAvailable {
+				a.clearHeadlessRestoreHintLocked(surfaceID)
+				clearedHeadlessHint = true
+			}
+			events = append(events, restoreEvents...)
+		case orchestrator.SurfaceResumeStatusFailed:
+			a.setSurfaceResumeBackoffLocked(surfaceID, result.FailureCode, now)
+			if headlessFallbackAvailable {
+				continue
+			}
+			notice := orchestrator.NoticeForSurfaceResumeFailure(result.FailureCode)
+			if notice != nil {
+				events = append(events, control.UIEvent{
+					Kind:             control.UIEventNotice,
+					SurfaceSessionID: surfaceID,
+					Notice:           notice,
+				})
+			}
+		}
+	}
+	if clearedHeadlessHint {
+		a.syncHeadlessRestoreStateLocked()
+	}
+	return events
+}
+
+func (a *App) clearSurfaceResumeBackoffLocked(surfaceID string) {
+	recovery := a.surfaceResumeRecovery[strings.TrimSpace(surfaceID)]
+	if recovery == nil {
+		return
+	}
+	recovery.NextAttemptAt = time.Time{}
+	recovery.LastAttemptAt = time.Time{}
+	recovery.LastFailureCode = ""
+}
+
+func (a *App) setSurfaceResumeBackoffLocked(surfaceID, code string, now time.Time) {
+	recovery := a.surfaceResumeRecovery[strings.TrimSpace(surfaceID)]
+	if recovery == nil {
+		return
+	}
+	recovery.LastAttemptAt = now
+	recovery.NextAttemptAt = now.Add(surfaceResumeRetryBackoff)
+	recovery.LastFailureCode = strings.TrimSpace(code)
 }

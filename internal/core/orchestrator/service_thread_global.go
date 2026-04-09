@@ -540,6 +540,34 @@ func (s *Service) resolveHeadlessRestoreTargetFromView(surface *state.SurfaceCon
 	}
 }
 
+func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceConsoleRecord, view *mergedThreadView, preferredInstanceID string) (*state.InstanceRecord, string) {
+	if view == nil {
+		return nil, "thread_not_found"
+	}
+	preferredInstanceID = strings.TrimSpace(preferredInstanceID)
+	if preferredInstanceID != "" {
+		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online && threadVisible(inst.Threads[view.ThreadID]) {
+			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+				return nil, "thread_busy"
+			}
+			if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+				return nil, "workspace_instance_busy"
+			}
+			return inst, ""
+		}
+	}
+	if view.BusyOwner != nil {
+		return nil, "thread_busy"
+	}
+	if view.FreeVisibleInst != nil {
+		return view.FreeVisibleInst, ""
+	}
+	if view.AnyVisibleInst != nil {
+		return nil, "workspace_instance_busy"
+	}
+	return nil, "thread_not_found"
+}
+
 func threadCWD(view *mergedThreadView) string {
 	if view == nil || view.Thread == nil {
 		return ""

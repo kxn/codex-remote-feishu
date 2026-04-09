@@ -61,6 +61,13 @@ type headlessRestoreRecoveryState struct {
 	LastFailureCode string
 }
 
+type surfaceResumeRecoveryState struct {
+	Entry           SurfaceResumeEntry
+	NextAttemptAt   time.Time
+	LastAttemptAt   time.Time
+	LastFailureCode string
+}
+
 type App struct {
 	service             *orchestrator.Service
 	projector           *feishu.Projector
@@ -91,6 +98,7 @@ type App struct {
 	pendingGatewayNotices map[string][]control.UIEvent
 	headlessRuntime       HeadlessRuntimeConfig
 	surfaceResumeState    *surfaceResumeStore
+	surfaceResumeRecovery map[string]*surfaceResumeRecoveryState
 	headlessRestoreHints  *headlessRestoreHintStore
 	headlessRestoreState  map[string]*headlessRestoreRecoveryState
 	startupRefreshPending map[string]bool
@@ -157,6 +165,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonStartedAt:        daemonStartedAt,
 		daemonLifecycleID:      daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGatewayNotices:  map[string][]control.UIEvent{},
+		surfaceResumeRecovery:  map[string]*surfaceResumeRecoveryState{},
 		headlessRestoreState:   map[string]*headlessRestoreRecoveryState{},
 		startupRefreshPending:  map[string]bool{},
 		managedHeadless:        map[string]*managedHeadlessProcess{},

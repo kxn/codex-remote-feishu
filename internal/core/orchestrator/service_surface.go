@@ -16,6 +16,12 @@ type HeadlessRestoreAttempt struct {
 	ThreadCWD   string
 }
 
+type SurfaceResumeAttempt struct {
+	InstanceID   string
+	ThreadID     string
+	WorkspaceKey string
+}
+
 type HeadlessRestoreStatus string
 
 const (
@@ -31,11 +37,27 @@ type HeadlessRestoreResult struct {
 	FailureCode string
 }
 
+type SurfaceResumeStatus string
+
+const (
+	SurfaceResumeStatusSkipped           SurfaceResumeStatus = "skipped"
+	SurfaceResumeStatusWaiting           SurfaceResumeStatus = "waiting"
+	SurfaceResumeStatusThreadAttached    SurfaceResumeStatus = "thread_attached"
+	SurfaceResumeStatusWorkspaceAttached SurfaceResumeStatus = "workspace_attached"
+	SurfaceResumeStatusFailed            SurfaceResumeStatus = "failed"
+)
+
+type SurfaceResumeResult struct {
+	Status      SurfaceResumeStatus
+	FailureCode string
+}
+
 type attachSurfaceToKnownThreadMode string
 
 const (
 	attachSurfaceToKnownThreadDefault         attachSurfaceToKnownThreadMode = "default"
 	attachSurfaceToKnownThreadHeadlessRestore attachSurfaceToKnownThreadMode = "headless_restore"
+	attachSurfaceToKnownThreadSurfaceResume   attachSurfaceToKnownThreadMode = "surface_resume"
 )
 
 type startHeadlessMode string
@@ -43,6 +65,13 @@ type startHeadlessMode string
 const (
 	startHeadlessModeDefault         startHeadlessMode = "default"
 	startHeadlessModeHeadlessRestore startHeadlessMode = "headless_restore"
+)
+
+type attachWorkspaceMode string
+
+const (
+	attachWorkspaceModeDefault       attachWorkspaceMode = "default"
+	attachWorkspaceModeSurfaceResume attachWorkspaceMode = "surface_resume"
 )
 
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
@@ -479,6 +508,10 @@ func workspaceSelectionLabel(workspaceKey string) string {
 }
 
 func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspaceKey string) []control.UIEvent {
+	return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeDefault)
+}
+
+func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, workspaceKey string, mode attachWorkspaceMode) []control.UIEvent {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
 		return notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /list。")
@@ -558,7 +591,15 @@ func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspace
 		noticeCode = "workspace_switched"
 		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话，或 /new 准备新会话。", workspaceKey)
 	}
-	if len(workspaceVisibleThreads(inst, workspaceKey)) == 0 {
+	visibleThreadCount := len(workspaceVisibleThreads(inst, workspaceKey))
+	if mode == attachWorkspaceModeSurfaceResume {
+		noticeCode = "surface_resume_workspace_attached"
+		if visibleThreadCount == 0 {
+			noticeText = fmt.Sprintf("之前的会话暂未恢复，已先回到工作区 %s。当前还没有可见会话；你可以直接 /new 准备新会话，或稍后发送 /use。", workspaceKey)
+		} else {
+			noticeText = fmt.Sprintf("之前的会话当前不可见，已先回到工作区 %s。请继续 /use 选择要恢复的会话，或 /new 准备新会话。", workspaceKey)
+		}
+	} else if visibleThreadCount == 0 {
 		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话；你可以直接 /new 准备新会话，或稍后发送 /use。", workspaceKey)
 	}
 	events = append(events, control.UIEvent{
@@ -569,7 +610,7 @@ func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspace
 			Text: noticeText,
 		},
 	})
-	if len(workspaceVisibleThreads(inst, workspaceKey)) != 0 {
+	if visibleThreadCount != 0 {
 		events = append(events, s.autoPromptUseThread(surface, inst)...)
 	}
 	return events
@@ -889,6 +930,58 @@ func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessResto
 	}
 }
 
+func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]control.UIEvent, SurfaceResumeResult) {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+
+	failureCode := ""
+	threadID := strings.TrimSpace(attempt.ThreadID)
+	if threadID != "" {
+		view := s.mergedThreadView(surface, threadID)
+		if inst, code := s.resolveSurfaceResumeVisibleInstance(surface, view, strings.TrimSpace(attempt.InstanceID)); inst != nil {
+			return s.attachSurfaceToKnownThread(surface, inst, view, attachSurfaceToKnownThreadSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
+		} else if code != "" {
+			failureCode = code
+		}
+		if !allowMissingTargetFailure {
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+		}
+	}
+
+	workspaceKey := normalizeWorkspaceClaimKey(attempt.WorkspaceKey)
+	if workspaceKey != "" {
+		if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_busy"}
+		}
+		if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
+			return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
+		}
+		if len(s.workspaceOnlineInstances(workspaceKey)) == 0 {
+			if !allowMissingTargetFailure {
+				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+			}
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: firstNonEmpty(failureCode, "workspace_not_found")}
+		}
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_instance_busy"}
+	}
+
+	if failureCode == "" {
+		failureCode = "thread_not_found"
+	}
+	if !allowMissingTargetFailure && failureCode == "thread_not_found" {
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+	}
+	return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: failureCode}
+}
+
 func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attempt HeadlessRestoreAttempt) *mergedThreadView {
 	threadID := strings.TrimSpace(attempt.ThreadID)
 	if threadID == "" {
@@ -963,6 +1056,39 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 			Text:  "暂时无法找到之前会话，请稍后重试或尝试其他会话。",
 		}
 	}
+}
+
+func surfaceResumeFailureNotice(code string) *control.Notice {
+	switch strings.TrimSpace(code) {
+	case "workspace_busy":
+		return &control.Notice{
+			Code:  "surface_resume_workspace_busy",
+			Title: "恢复失败",
+			Text:  "之前的工作区当前被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择工作区。",
+		}
+	case "workspace_instance_busy":
+		return &control.Notice{
+			Code:  "surface_resume_workspace_instance_busy",
+			Title: "恢复失败",
+			Text:  "之前的工作区当前暂时不可接管。请稍后重试，或发送 /list 重新选择工作区。",
+		}
+	case "thread_busy":
+		return &control.Notice{
+			Code:  "surface_resume_thread_busy",
+			Title: "恢复失败",
+			Text:  "之前的会话当前被其他飞书会话占用，暂时无法直接恢复。请稍后重试，或发送 /use 选择其他会话。",
+		}
+	default:
+		return &control.Notice{
+			Code:  "surface_resume_target_not_found",
+			Title: "恢复失败",
+			Text:  "暂时无法恢复到之前会话。请稍后重试，或发送 /list 重新选择工作区。",
+		}
+	}
+}
+
+func NoticeForSurfaceResumeFailure(code string) *control.Notice {
+	return surfaceResumeFailureNotice(code)
 }
 
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
@@ -1137,7 +1263,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		thread.LastUsedAt = view.Thread.LastUsedAt
 		thread.ListOrder = view.Thread.ListOrder
 	}
-	if mode == attachSurfaceToKnownThreadHeadlessRestore {
+	if mode == attachSurfaceToKnownThreadHeadlessRestore || mode == attachSurfaceToKnownThreadSurfaceResume {
 		s.clearThreadReplay(inst, view.ThreadID)
 	} else {
 		s.adoptThreadReplay(inst, view.ThreadID)
@@ -1169,6 +1295,23 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 				Text:  fmt.Sprintf("重连成功，已恢复到之前会话：%s", title),
 			},
 		})
+	} else if mode == attachSurfaceToKnownThreadSurfaceResume {
+		s.clearThreadReplay(inst, view.ThreadID)
+		surface.LastSelection = &state.SelectionAnnouncementRecord{
+			ThreadID:  view.ThreadID,
+			RouteMode: string(surface.RouteMode),
+			Title:     title,
+			Preview:   preview,
+		}
+		events = append(events, control.UIEvent{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:  "surface_resume_attached",
+				Title: "会话已恢复",
+				Text:  fmt.Sprintf("已恢复到之前会话：%s", title),
+			},
+		})
 	} else {
 		attachLead := s.attachedLeadText(surface, inst)
 		events = append(events, control.UIEvent{
@@ -1198,6 +1341,13 @@ func attachSurfaceToKnownThreadInstanceBusyNotice(surface *state.SurfaceConsoleR
 			Notice:           headlessRestoreFailureNotice("thread_busy"),
 		}}
 	}
+	if mode == attachSurfaceToKnownThreadSurfaceResume {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           surfaceResumeFailureNotice("workspace_instance_busy"),
+		}}
+	}
 	if surface != nil && state.NormalizeProductMode(surface.ProductMode) == state.ProductModeNormal {
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
@@ -1212,6 +1362,13 @@ func attachSurfaceToKnownThreadThreadBusyNotice(surface *state.SurfaceConsoleRec
 			Notice:           headlessRestoreFailureNotice("thread_busy"),
 		}}
 	}
+	if mode == attachSurfaceToKnownThreadSurfaceResume {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           surfaceResumeFailureNotice("thread_busy"),
+		}}
+	}
 	return notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")
 }
 
@@ -1221,6 +1378,13 @@ func attachSurfaceToKnownThreadWorkspaceBusyNotice(surface *state.SurfaceConsole
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice:           headlessRestoreFailureNotice("workspace_busy"),
+		}}
+	}
+	if mode == attachSurfaceToKnownThreadSurfaceResume {
+		return []control.UIEvent{{
+			Kind:             control.UIEventNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           surfaceResumeFailureNotice("workspace_busy"),
 		}}
 	}
 	return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")
