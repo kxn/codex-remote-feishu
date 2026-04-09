@@ -1,8 +1,8 @@
 # Relay Error Reporting Protocol
 
 > Type: `general`
-> Updated: `2026-04-06`
-> Summary: 迁移到 `docs/general` 并统一文档元信息头，保留当前错误回传协议说明。
+> Updated: `2026-04-09`
+> Summary: 说明 relay 链路错误如何回传到 Feishu，并区分 gateway apply 失败与 final preview rewrite 降级。
 
 ## Goal
 
@@ -70,6 +70,8 @@ If wrapper rejects a relay command, daemon uses `CommandAck.problem` to:
 ### Gateway apply failures
 
 If daemon fails while sending a card/message to Feishu, it cannot report that failure immediately through the same failed request.
+
+This stage is specifically about the outbound Feishu send itself. For example, final markdown preview rewrite may fail earlier and degrade locally, but that does not count as `daemon.gateway_apply` unless the later Feishu send also fails.
 
 Best-effort fallback:
 

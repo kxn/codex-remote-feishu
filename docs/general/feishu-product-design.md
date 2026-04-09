@@ -464,6 +464,7 @@ final `block.committed`：
 - 若当前 turn 带有可用的飞书源消息 `SourceMessageID`，会优先 reply 到触发消息
 - 若 reply 失败、目标消息已不存在或不可回复，则回退到独立发卡
 - 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
+- Markdown 预览重写与最终 reply/create message 发送使用独立 timeout 预算
 - 预览物化失败时不会阻塞主回复，正文保持原样
 
 ### 7.4 代码块
