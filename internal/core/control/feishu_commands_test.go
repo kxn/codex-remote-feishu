@@ -110,7 +110,7 @@ func TestFeishuRecommendedMenusStayInSuggestedOrder(t *testing.T) {
 	want := []FeishuRecommendedMenu{
 		{Key: "list", Name: "查看列表", Description: "Normal 模式列出可用工作区；VS Code 模式列出在线实例，并提供接管入口。"},
 		{Key: "status", Name: "当前状态", Description: "查看当前接管状态、输入目标和飞书侧临时覆盖。"},
-		{Key: "threads", Name: "切换会话", Description: "展示最近可见会话，并切换后续输入目标。"},
+		{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"},
 		{Key: "stop", Name: "停止当前执行", Description: "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"},
 		{Key: "reason_low", Name: "推理 Low", Description: "只覆盖下一条消息的推理强度为 low。"},
 		{Key: "reason_medium", Name: "推理 Medium", Description: "只覆盖下一条消息的推理强度为 medium。"},

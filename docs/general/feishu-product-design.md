@@ -216,10 +216,16 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 `/threads`、`/use`、`/sessions` 当前都走同一条主入口：展示**最近会话**。
 
-这里的会话列表不是“当前 instance 内 thread 列表”这么窄，而是 merged thread view：
+这里的会话列表当前按 `ProductMode + attach 状态` 分层：
 
-- 已 attach 时，会包含当前实例的可见会话
-- detached 时，也会 merge Codex sqlite 中最近 persisted 的非 archived thread metadata，降低对 `threads.refresh -> thread/list` 时机的依赖
+- normal mode detached 时：
+  - 保留 global merged thread shortcut
+  - 也会 merge Codex sqlite 中最近 persisted 的非 archived thread metadata，降低对 `threads.refresh -> thread/list` 时机的依赖
+- normal mode 已 attach workspace 时：
+  - `/use` / `/useall` 只展示当前 workspace 内会话
+  - 不再通过 `/use` 静默跳到其他 workspace
+- vscode mode 时：
+  - 仍保留当前的 merged thread view / force-pick 语义
 - `/useall` / `/sessionsall` 仍走同一套 merged source，只是展示范围更大
 - sqlite 只负责补 freshness；最终 attach/reuse/create/busy 判定仍走现有 runtime resolver
 - sqlite read 失败或 schema 不兼容时，会安全回退到当前 runtime/catalog-only 行为
@@ -237,24 +243,32 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 选择目标会话时，当前实现会按 resolver 自动决定后续动作：
 
 - 当前实例可见：直接切到目标 thread
-- 目标会话在其他在线实例上可见：自动接管目标实例
+- normal mode detached 且目标会话在其他在线实例上可见：自动接管所属 workspace，再落到目标 thread
+- normal mode 已 attach workspace 时：只允许留在当前 workspace 内部解析
+- vscode mode 下，目标会话在其他在线实例上可见时仍可自动接管目标实例
 - 当前没有合适在线实例但会话带有可恢复 `cwd`：自动复用现有恢复链路，或在后台准备恢复
 
 如果用户点到旧卡片上的 legacy `prompt_select`，会统一收到 `selection_expired` 提示，要求重新发送 `/list`、`/use` 或 `/useall`。
 
 ### 4.3 `follow`
 
-`/follow` 会清空显式 thread 绑定，并进入：
+`/follow` 当前只在 `vscode mode` 下保留：
 
-- `RouteMode = follow_local`
+- 会清空显式 thread 绑定，并进入 `RouteMode = follow_local`
+- 后续 prompt 跟随 instance 当前观测到的 focused thread
 
-后续 prompt 会跟随 instance 当前观测到的 focused thread。
+`normal mode` 下 `/follow` 已废弃：
+
+- 不再进入 follow 路径
+- 会返回迁移提示，要求用户改走当前 workspace 下的 `/use`、`/new`
+- 如果确实需要 VS Code follow 语义，用户需要先显式 `/mode vscode`
 
 ### 4.4 `attached_unbound`
 
 当 surface 已接管实例，但当前没有拿到可发送的 thread 时，会进入 `attached_unbound`：
 
-- 系统会明确提示下一步应该走 `/use`、`/useall`、`/follow` 或 `/detach`
+- normal mode 下，系统会明确提示下一步应该走 `/use`、`/useall`、`/new` 或 `/list`
+- vscode mode 下，系统会明确提示下一步应该走 `/use`、`/useall`、`/follow` 或 `/detach`
 - 若当前实例仍有可见会话，会主动补发 `/use` 选择卡
 - 普通文本不会再被当成“隐式创建 thread”来直接发出
 

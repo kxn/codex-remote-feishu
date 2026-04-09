@@ -16,6 +16,11 @@ func newServiceForTest(now *time.Time) *Service {
 	return NewService(func() time.Time { return *now }, Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner())
 }
 
+func materializeVSCodeSurfaceForTest(svc *Service, surfaceID string) {
+	svc.MaterializeSurface(surfaceID, "app-1", "chat-1", "user-1")
+	svc.root.Surfaces[surfaceID].ProductMode = state.ProductModeVSCode
+}
+
 type fakePersistedThreadCatalog struct {
 	recent    []state.ThreadRecord
 	byID      map[string]state.ThreadRecord
@@ -2548,6 +2553,7 @@ func TestUseThreadDiscardsStagedImagesOnRouteChange(t *testing.T) {
 func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 	now := time.Date(2026, 4, 6, 9, 50, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -2595,6 +2601,7 @@ func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 func TestFollowLocalBlockedByPendingRequest(t *testing.T) {
 	now := time.Date(2026, 4, 7, 19, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -2626,6 +2633,7 @@ func TestFollowLocalBlockedByPendingRequest(t *testing.T) {
 func TestFollowLocalBlockedByRequestCapture(t *testing.T) {
 	now := time.Date(2026, 4, 7, 19, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -2651,6 +2659,80 @@ func TestFollowLocalBlockedByRequestCapture(t *testing.T) {
 	}
 	if surface := svc.root.Surfaces["surface-1"]; surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
 		t.Fatalf("expected /follow block to keep prior route, got %#v", surface)
+	}
+}
+
+func TestFollowLocalNormalModeShowsMigrationNotice(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 7, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionFollowLocal,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "follow_deprecated_normal" || !strings.Contains(events[0].Notice.Text, "/mode vscode") {
+		t.Fatalf("expected normal-mode /follow migration notice, got %#v", events)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" {
+		t.Fatalf("expected normal-mode /follow rejection to keep workspace-unbound state, got %#v", surface)
+	}
+}
+
+func TestLegacyNormalFollowRouteNormalizesToPinned(t *testing.T) {
+	now := time.Date(2026, 4, 7, 19, 8, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
+		SurfaceSessionID:    "surface-1",
+		ProductMode:         state.ProductModeNormal,
+		ClaimedWorkspaceKey: "/data/dl/droid",
+		AttachedInstanceID:  "inst-1",
+		SelectedThreadID:    "thread-1",
+		RouteMode:           state.RouteModeFollowLocal,
+		QueueItems:          map[string]*state.QueueItemRecord{},
+		StagedImages:        map[string]*state.StagedImageRecord{},
+		PendingRequests:     map[string]*state.RequestPromptRecord{},
+	}
+	svc.threadClaims["thread-1"] = &threadClaimRecord{
+		ThreadID:         "thread-1",
+		InstanceID:       "inst-1",
+		SurfaceSessionID: "surface-1",
+	}
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+	if snapshot.Attachment.RouteMode != string(state.RouteModePinned) || snapshot.Attachment.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected legacy normal follow route to normalize to pinned, got %#v", snapshot)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected surface route to normalize to pinned, got %#v", surface)
 	}
 }
 
@@ -2987,6 +3069,7 @@ func TestLocalInteractionDoesNotSwitchPinnedSurfaceBeforeTurnStarts(t *testing.T
 func TestFollowLocalSurfaceBindsOnLocalTurnStart(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",
 		DisplayName:   "droid",
@@ -4249,6 +4332,7 @@ func TestUseThreadSameAsCurrentStillAcknowledgesSelection(t *testing.T) {
 func TestNewLocalThreadSequenceAnnouncesSelectionOnlyOnce(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",
 		DisplayName:   "dl",
@@ -4289,6 +4373,7 @@ func TestNewLocalThreadSequenceAnnouncesSelectionOnlyOnce(t *testing.T) {
 func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",
 		DisplayName:   "dl",
@@ -4339,6 +4424,7 @@ func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *te
 func TestFollowLocalAutoReevaluationBlockedByPendingRequest(t *testing.T) {
 	now := time.Date(2026, 4, 7, 19, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -4380,6 +4466,7 @@ func TestFollowLocalAutoReevaluationBlockedByPendingRequest(t *testing.T) {
 func TestFollowLocalAutoReevaluationBlockedByRequestCapture(t *testing.T) {
 	now := time.Date(2026, 4, 7, 19, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",

@@ -17,7 +17,7 @@
       {
         "key": "threads",
         "name": "切换会话",
-        "description": "展示最近可见会话，并切换后续输入目标。"
+        "description": "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"
       },
       {
         "key": "stop",

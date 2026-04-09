@@ -168,7 +168,42 @@ func (s *Service) normalizeSurfaceProductMode(surface *state.SurfaceConsoleRecor
 		return state.ProductModeNormal
 	}
 	surface.ProductMode = state.NormalizeProductMode(surface.ProductMode)
+	s.normalizeLegacyNormalFollowRoute(surface)
 	return surface.ProductMode
+}
+
+func (s *Service) normalizeLegacyNormalFollowRoute(surface *state.SurfaceConsoleRecord) {
+	if surface == nil || surface.ProductMode != state.ProductModeNormal || surface.RouteMode != state.RouteModeFollowLocal {
+		return
+	}
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	threadID := surface.SelectedThreadID
+	if inst != nil && threadID != "" {
+		if owner := s.threadClaimSurface(threadID); owner == nil || owner.SurfaceSessionID == surface.SurfaceSessionID {
+			if !s.surfaceOwnsThread(surface, threadID) {
+				s.claimKnownThread(surface, inst, threadID)
+			}
+			if s.surfaceOwnsThread(surface, threadID) {
+				thread := s.ensureThread(inst, threadID)
+				surface.RouteMode = state.RouteModePinned
+				surface.LastSelection = &state.SelectionAnnouncementRecord{
+					ThreadID:  threadID,
+					RouteMode: string(state.RouteModePinned),
+					Title:     displayThreadTitle(inst, thread, threadID),
+					Preview:   threadPreview(thread),
+				}
+				return
+			}
+		}
+	}
+	s.releaseSurfaceThreadClaim(surface)
+	surface.RouteMode = state.RouteModeUnbound
+	surface.LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "",
+		RouteMode: string(state.RouteModeUnbound),
+		Title:     "未绑定会话",
+		Preview:   "",
+	}
 }
 
 func (s *Service) UpsertInstance(inst *state.InstanceRecord) {

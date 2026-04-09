@@ -673,6 +673,12 @@ func (s *Service) finishSurfaceAfterWork(surface *state.SurfaceConsoleRecord) []
 }
 
 func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if strings.TrimSpace(surface.AttachedInstanceID) == "" {
+			return notice(surface, "follow_deprecated_normal", "normal 模式不再支持 /follow。请先 /list 选择工作区，再 /use 或 /new；如需跟随 VS Code，请先 /mode vscode。")
+		}
+		return notice(surface, "follow_deprecated_normal", "normal 模式不再支持 /follow。请继续 /use 选择当前工作区会话，或 /new 准备新会话；如需跟随 VS Code，请先 /mode vscode。")
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")

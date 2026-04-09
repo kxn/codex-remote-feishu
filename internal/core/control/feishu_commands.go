@@ -113,7 +113,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/new"},
-		description:  "准备一个新的远端会话，下一条消息会作为新会话首条输入。",
+		description:  "在当前工作区或当前会话上下文里准备一个新会话，下一条消息会作为新会话首条输入。",
 		buttons: []CommandCatalogButton{
 			{Label: "新建会话", CommandText: "/new"},
 		},
@@ -132,12 +132,12 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/threads", "/use", "/sessions"},
-		description:  "展示最近可见会话，并切换后续输入目标。",
+		description:  "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。",
 		buttons: []CommandCatalogButton{
 			{Label: "最近会话", CommandText: "/use"},
 		},
 		recommendedMenus: []FeishuRecommendedMenu{
-			{Key: "threads", Name: "切换会话", Description: "展示最近可见会话，并切换后续输入目标。"},
+			{Key: "threads", Name: "切换会话", Description: "展示最近可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。"},
 		},
 		showInHelp: true,
 		showInMenu: true,
@@ -157,7 +157,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/useall", "/sessionsall", "/sessions/all"},
-		description:  "展示全部可见会话，用于切回旧会话或恢复之前的会话。",
+		description:  "展示全部可见会话；normal 模式 detached 时可全局选择，已接管 workspace 后只看当前工作区。",
 		buttons: []CommandCatalogButton{
 			{Label: "全部会话", CommandText: "/useall"},
 		},
@@ -179,7 +179,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		section:      "实例与会话",
 		helpCommands: []string{"/follow"},
-		description:  "清空显式会话绑定，后续输入跟随当前 VS Code 聚焦会话。",
+		description:  "跟随当前 VS Code 聚焦会话。仅 VS Code 模式可用；normal 模式会提示迁移到 /use、/new 或 /mode vscode。",
 		buttons: []CommandCatalogButton{
 			{Label: "跟随当前", CommandText: "/follow"},
 		},
