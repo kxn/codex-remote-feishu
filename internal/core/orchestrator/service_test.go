@@ -6249,6 +6249,63 @@ func TestNewThreadRejectedDuringRequestCapture(t *testing.T) {
 	}
 }
 
+func TestNewThreadReadyNormalWorkspaceAttachedWithoutBoundThread(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 45, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionNewThread,
+		SurfaceSessionID: "surface-1",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModeNewThreadReady || surface.SelectedThreadID != "" {
+		t.Fatalf("expected workspace-attached /new to enter new_thread_ready without selected thread, got %#v", surface)
+	}
+	if surface.PreparedThreadCWD != "/data/dl/droid" || surface.PreparedFromThreadID != "" {
+		t.Fatalf("expected normal-mode /new to use workspace ownership, got %#v", surface)
+	}
+	if len(events) == 0 || events[len(events)-1].Notice == nil || events[len(events)-1].Notice.Code != "new_thread_ready" {
+		t.Fatalf("expected /new readiness notice, got %#v", events)
+	}
+}
+
+func TestTextMessageNormalWorkspaceUnboundPromptsUseOrNew(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 50, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "直接发一条消息",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_unbound" || !strings.Contains(events[0].Notice.Text, "/new") {
+		t.Fatalf("expected normal unbound text to suggest /new, got %#v", events)
+	}
+}
+
 func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

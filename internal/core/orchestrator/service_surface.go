@@ -499,13 +499,13 @@ func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspace
 	}
 
 	noticeCode := "workspace_attached"
-	noticeText := fmt.Sprintf("已接管工作区 %s。请继续 /use 选择一个会话。", workspaceKey)
+	noticeText := fmt.Sprintf("已接管工作区 %s。请继续 /use 选择一个会话，或 /new 准备新会话。", workspaceKey)
 	if currentWorkspace != "" && currentWorkspace != workspaceKey {
 		noticeCode = "workspace_switched"
-		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话。", workspaceKey)
+		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话，或 /new 准备新会话。", workspaceKey)
 	}
 	if len(visibleThreads(inst)) == 0 {
-		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话，请稍后发送 /use，或直接 /detach。", workspaceKey)
+		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话；你可以直接 /new 准备新会话，或稍后发送 /use。", workspaceKey)
 	}
 	events = append(events, control.UIEvent{
 		Kind:             control.UIEventNotice,
@@ -1209,7 +1209,15 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []contro
 		if blocked := s.blockPreparedNewThreadReprepare(surface); blocked != nil {
 			return blocked
 		}
-		if strings.TrimSpace(surface.PreparedThreadCWD) == "" {
+		cwd := strings.TrimSpace(surface.PreparedThreadCWD)
+		if cwd == "" {
+			if fallbackCWD, fallbackThreadID, ok := s.prepareNewThreadBase(surface, inst); ok {
+				surface.PreparedThreadCWD = fallbackCWD
+				surface.PreparedFromThreadID = fallbackThreadID
+				cwd = fallbackCWD
+			}
+		}
+		if cwd == "" {
 			return notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")
 		}
 		discarded := countPendingDrafts(surface)
@@ -1220,17 +1228,12 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []contro
 		}
 		return append(events, notice(surface, "new_thread_ready_reset", fmt.Sprintf("已丢弃 %d 条未发送输入。下一条文本会创建新会话。", discarded))...)
 	}
-	threadID := strings.TrimSpace(surface.SelectedThreadID)
-	if threadID == "" || !s.surfaceOwnsThread(surface, threadID) {
+	cwd, threadID, ok := s.prepareNewThreadBase(surface, inst)
+	if !ok {
+		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+			return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
+		}
 		return notice(surface, "new_thread_requires_bound_thread", "当前必须先绑定并接管一个会话，才能基于它的新建会话。请先 /use，或在 follow 模式下等到已跟随到会话。")
-	}
-	thread := inst.Threads[threadID]
-	if !threadVisible(thread) {
-		return notice(surface, "thread_not_found", "当前绑定的会话不存在或当前不可见。")
-	}
-	cwd := strings.TrimSpace(thread.CWD)
-	if cwd == "" {
-		return notice(surface, "new_thread_cwd_missing", "当前会话缺少可继承的工作目录，无法新建会话。")
 	}
 	if blocked := s.blockNewThreadPreparation(surface); blocked != nil {
 		return blocked
@@ -1251,6 +1254,37 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []contro
 		text = fmt.Sprintf("已清空当前远端上下文，并丢弃 %d 条未发送输入。下一条文本会创建新会话。", discarded)
 	}
 	return append(events, notice(surface, "new_thread_ready", text)...)
+}
+
+func (s *Service) prepareNewThreadBase(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) (string, string, bool) {
+	if surface == nil || inst == nil {
+		return "", "", false
+	}
+	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
+		if workspaceKey == "" {
+			return "", "", false
+		}
+		threadID := strings.TrimSpace(surface.SelectedThreadID)
+		if threadID == "" || !s.surfaceOwnsThread(surface, threadID) || !threadVisible(inst.Threads[threadID]) {
+			return workspaceKey, "", true
+		}
+		return workspaceKey, threadID, true
+	}
+
+	threadID := strings.TrimSpace(surface.SelectedThreadID)
+	if threadID == "" || !s.surfaceOwnsThread(surface, threadID) {
+		return "", "", false
+	}
+	thread := inst.Threads[threadID]
+	if !threadVisible(thread) {
+		return "", "", false
+	}
+	cwd := strings.TrimSpace(thread.CWD)
+	if cwd == "" {
+		return "", "", false
+	}
+	return cwd, threadID, true
 }
 
 func preparedNewThreadSelectionTitle() string {
