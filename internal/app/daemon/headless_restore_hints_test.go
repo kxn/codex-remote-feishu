@@ -215,6 +215,54 @@ func TestDaemonClearsHeadlessRestoreHintWhenSwitchingToVSCode(t *testing.T) {
 	}
 }
 
+func TestDaemonModeSwitchToVSCodeClearsHeadlessRestoreState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	seedHeadlessInstance(app, "inst-headless-1", "thread-1")
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-headless-1",
+	})
+	if hint := app.HeadlessRestoreHint("surface-1"); hint == nil {
+		t.Fatal("expected restore hint after headless attach")
+	}
+	if len(app.headlessRestoreState) != 1 {
+		t.Fatalf("expected one in-memory restore entry before mode switch, got %#v", app.headlessRestoreState)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionModeCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+
+	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
+		t.Fatalf("expected restore hint to clear after /mode vscode, got %#v", hint)
+	}
+	if len(app.headlessRestoreState) != 0 {
+		t.Fatalf("expected in-memory restore state to clear after /mode vscode, got %#v", app.headlessRestoreState)
+	}
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected detached vscode snapshot after mode switch, got %#v", snapshot)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	if hint := restarted.HeadlessRestoreHint("surface-1"); hint != nil {
+		t.Fatalf("expected restore hint to stay cleared after restart, got %#v", hint)
+	}
+}
+
 func TestDaemonKeepsHeadlessRestoreHintOnDisconnect(t *testing.T) {
 	t.Parallel()
 

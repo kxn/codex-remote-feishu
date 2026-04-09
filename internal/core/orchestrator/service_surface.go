@@ -91,6 +91,7 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	switch action.Kind {
 	case control.ActionStatus,
 		control.ActionAutoContinueCommand,
+		control.ActionModeCommand,
 		control.ActionDebugCommand,
 		control.ActionDetach,
 		control.ActionKillInstance,
@@ -848,6 +849,9 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]control.UIEvent, HeadlessRestoreResult) {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	if surface == nil {
+		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
+	}
+	if s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
 		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {

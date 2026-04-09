@@ -75,6 +75,12 @@ func (a *App) shouldClearHeadlessRestoreHintLocked(action control.Action, before
 		return true
 	case control.ActionKillInstance:
 		return snapshotCarriesHeadlessRestoreTarget(before)
+	case control.ActionModeCommand:
+		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
+		if after == nil || before == nil {
+			return false
+		}
+		return !strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode))
 	case control.ActionAttachInstance, control.ActionUseThread:
 		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 		if after == nil {

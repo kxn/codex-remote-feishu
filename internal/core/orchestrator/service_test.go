@@ -882,6 +882,56 @@ func TestModeCommandDetachesIdleAttachmentBeforeSwitching(t *testing.T) {
 	}
 }
 
+func TestModeCommandCancelsPendingHeadlessBeforeSwitching(t *testing.T) {
+	now := time.Date(2026, 4, 9, 10, 11, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	start := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+	if len(start) != 2 || start[1].DaemonCommand == nil || start[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected detached /use to start headless launch, got %#v", start)
+	}
+	pending := svc.root.Surfaces["surface-1"].PendingHeadless
+	if pending == nil {
+		t.Fatal("expected pending headless before mode switch")
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/mode vscode",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ProductMode != state.ProductModeVSCode {
+		t.Fatalf("expected product mode vscode, got %q", surface.ProductMode)
+	}
+	if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound || surface.PendingHeadless != nil {
+		t.Fatalf("expected mode switch to fully clear pending headless state, got %#v", surface)
+	}
+	if len(events) != 2 || events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless || events[1].Notice == nil || events[1].Notice.Code != "surface_mode_switched" {
+		t.Fatalf("expected kill + switched notice, got %#v", events)
+	}
+	if events[0].DaemonCommand.InstanceID != pending.InstanceID || events[0].DaemonCommand.ThreadID != pending.ThreadID {
+		t.Fatalf("expected mode switch to kill pending headless launch, got %#v", events[0].DaemonCommand)
+	}
+}
+
 func TestModeCommandRejectsSwitchWhileWorkIsRunning(t *testing.T) {
 	now := time.Date(2026, 4, 9, 10, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -7917,6 +7967,52 @@ func TestTryAutoRestoreHeadlessPrefersHeadlessOverVisibleVSCode(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "headless_restore_attached" {
 		t.Fatalf("expected single recovery success notice, got %#v", events)
+	}
+}
+
+func TestTryAutoRestoreHeadlessSkipsVSCodeSurface(t *testing.T) {
+	now := time.Date(2026, 4, 8, 3, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "vscode",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
+		ThreadID:    "thread-1",
+		ThreadTitle: "修复登录流程",
+		ThreadCWD:   "/data/dl/droid",
+	}, true)
+
+	if result.Status != HeadlessRestoreStatusSkipped {
+		t.Fatalf("expected vscode surface to skip headless auto-restore, got %#v", result)
+	}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected vscode surface to remain detached after skipped restore, got %#v", snapshot)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected no events when vscode surface rejects headless auto-restore, got %#v", events)
 	}
 }
 

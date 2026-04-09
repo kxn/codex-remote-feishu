@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-09`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/new` 是稳定 prepared state；帮助与用户语义以此为准。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode：`/list` 在 normal 下先选 workspace，在 vscode 下 follow-first attach instance；`/mode` 会清理 headless 恢复语义，vscode 下禁止 headless auto-restore；帮助与用户语义以此为准。
 
 ## 1. 文档定位
 
@@ -67,13 +67,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 补充说明：
 
-1. `ProductMode` 当前是 surface 级持久字段；`/detach` 不会清掉它。
-2. daemon 重启后，只要该 surface 状态被恢复，mode 也会一起恢复。
-3. `/mode` 当前只在 detached 或 idle attached surface 上执行切换：
+1. `ProductMode` 当前是 surface 级内存字段；`/detach` 不会清掉它。
+2. `ProductMode` 当前不是 daemon 持久化字段：
+   1. 进程内已有 surface 会保留它。
+   2. daemon 重启后，如果只是靠 headless restore hint materialize latent surface，会重新回到默认 `normal`。
+3. `/mode` 当前只在没有 live remote work 的 surface 上执行切换：
    1. 会先走 detach-like 清理。
    2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
+   3. 如果当时还带着 `PendingHeadless`，会先显式 kill 当前 headless 启动流程，并清掉 headless restore hint 与内存恢复状态。
 4. 若当前仍有 live remote work，则 `/mode` 直接拒绝，并明确提示用户 `/stop` 或 `/detach`。
-5. `PendingHeadless` 与 `Abandoning` 仍是更高优先级 gate，所以这两类状态下 `/mode` 不会放行。
+5. `Abandoning` 仍是更高优先级 gate；但 `PendingHeadless` 不再阻塞 `/mode`，用户可以直接切到 `vscode` 终止恢复流程。
 6. 当前 `/list` 已按 mode 分流：
    1. normal mode 列 workspace，并走 workspace attach/switch。
    2. vscode mode 继续列在线 VS Code instance。
@@ -221,14 +224,14 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/autocontinue`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 的兼容提示、消息撤回、reaction。
+1. 允许：`/status`、`/autocontinue`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 的兼容提示、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
 
 1. `starting` 时不能旁路 attach/use/follow/new。
 2. detached `/use` 触发的 preselected headless，在实例连上后会直接落到目标 thread，不会再进入手工 selecting。
-3. `/detach` 会主动取消当前恢复流程，并回到 `R0 Detached`；此外还有启动超时 watchdog。
+3. `/mode vscode` 与 `/detach` 都会主动取消当前恢复流程，并回到 detached 态；此外还有启动超时 watchdog。
 4. 旧 `/newinstance`、旧 `/killinstance` 与旧 `resume_headless_thread` 卡片即使仍被用户触发，也只会返回迁移提示，不会改动当前 pending headless。
 5. 后台 auto-restore 触发的 pending headless 也复用同一个 `G1` gate：
    1. 启动阶段默认静默，不额外发 “headless_starting”。
@@ -384,18 +387,20 @@ surface 不是单一枚举，而是五层正交状态叠加。
 6. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
 7. attachment 还在不在，以及当前是不是在等实例恢复。
 
-### 4.12 `/mode` 是 surface 级持久 overlay，当前只负责记忆与清理切换
+### 4.12 `/mode` 是 surface 级 overlay，当前只负责记忆与清理切换
 
 当前 `/mode` 的实现边界已经固定为：
 
 1. `/mode` 无参数时，直接回当前 `Snapshot`。
-2. `/mode normal` / `/mode vscode` 允许在 detached 或 idle attached surface 上切换。
+2. `/mode normal` / `/mode vscode` 允许在 detached、idle attached、或 `PendingHeadless` 尚未进入 live remote work 的 surface 上切换。
 3. 切换时一定先做 detach-like 清理，再进入目标 mode 的 detached 态；workspace claim 也会一起释放。
-4. 切换当前已经会改变 `/list` 的主交互语义：
+4. 若切换前存在 `PendingHeadless` 或已持久化的 headless restore hint，会一并 kill / clear，避免 mode 切完以后又被后台恢复拉回 headless。
+5. `vscode` surface 不参与 headless auto-restore；即使仍有残留 hint 或可复用 headless，后台恢复入口也会直接跳过。
+6. 切换当前已经会改变 `/list` 的主交互语义：
    1. `normal` 下 `/list` 是 workspace chooser。
    2. `vscode` 下 `/list` 是 instance chooser。
-5. `normal mode` 下 `/follow` 已退出长期路径；`vscode mode` 当前则固定走 follow-first，并把 `/use` 收窄到当前 instance 内的一次性 force-pick。
-6. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
+7. `normal mode` 下 `/follow` 已退出长期路径；`vscode mode` 当前则固定走 follow-first，并把 `/use` 收窄到当前 instance 内的一次性 force-pick。
+8. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
 
 ### 4.13 `/autocontinue` 是 surface 级、内存态、跨 route 可查询的 overlay 开关
 
@@ -594,6 +599,7 @@ G1 PendingHeadlessStarting
   -- instance connected 且 pending.ThreadID != "" 且非 auto-restore --> R2 AttachedPinned + G0 None
   -- instance connected 且 pending.ThreadID != "" 且 auto-restore --> R2 AttachedPinned + G0 None + 单条恢复成功 notice
   -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + migration notice + G0 None
+  -- /mode vscode --> kill headless + clear restore hint + G0 None + R0 Detached(M1 VSCode)
   -- /detach --> kill headless + G0 None + R0 Detached
   -- /newinstance / /killinstance / 历史 resume_headless_thread --> migration notice，状态不变
   -- Tick timeout --> kill headless + clear pending + detach if needed
@@ -609,26 +615,28 @@ G1 PendingHeadlessStarting
    5. `thread.focused`
 2. daemon 会先根据 restore hint materialize latent detached surface。
 3. 后台恢复前置条件：
-   1. surface 当前没有显式 attach
-   2. surface 当前没有 pending headless
-   3. restore hint 仍存在
+   1. surface 当前是 `normal` mode
+   2. surface 当前没有显式 attach
+   3. surface 当前没有 pending headless
+   4. restore hint 仍存在
 4. 解析顺序：
    1. 先看当前 merged thread view
    2. 若 thread 不可见但 hint 仍有 `threadID + threadCWD`，允许构造 synthetic view
    3. 之后只允许落到 headless 目标，不会自动 attach 到 VS Code
-5. 若 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 还没走完，且当前又无法从 visible/synthetic view 判定恢复目标：
+5. 若 surface 当前是 `vscode` mode，后台恢复会直接跳过，不会 attach 现有 headless，也不会启动新的 headless。
+6. 若 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 还没走完，且当前又无法从 visible/synthetic view 判定恢复目标：
    1. 保持 `R0 Detached`
    2. 静默等待
    3. 不给用户失败提示
-6. 若首轮 refresh 已完成，目标 thread 仍不可判定：
+7. 若首轮 refresh 已完成，目标 thread 仍不可判定：
    1. 保持 `R0 Detached`
    2. 发一条 “暂时无法找到之前会话” 的恢复失败提示
    3. 进入 daemon 内存态 backoff，避免重复重试噪音
-7. 后台恢复成功 attach 时：
+8. 后台恢复成功 attach 时：
    1. 不补发 thread replay
    2. 不补 thread selection changed 卡片
    3. 只发一条恢复成功 notice
-8. headless launch 失败或超时时：
+9. headless launch 失败或超时时：
    1. 清掉 pending
    2. 保持 `R0 Detached`
    3. 发恢复失败提示
@@ -716,7 +724,7 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autocontinue`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autocontinue`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
 | `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片 |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `E6 Abandoning` | 只允许 `/status`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
@@ -787,6 +795,7 @@ retained-offline overlay 额外规则：
 24. **旧版本残留的 `vscode + new_thread_ready` 会在升级后继续活着，等价绕回被设计移除的 `/new` 路径**：已修复。现在 surface 读取时会自动归一化回 `follow_local`，并尽量复用当前 observed focus。
 25. **normal `/list` 仍按 instance root 聚合，broad headless pool 会把多个 thread `cwd` workspace 压成一个选项**：已修复。当前 workspace 列表先看可见 thread `CWD`，只有无可见 thread 时才回退到实例级 workspace metadata。
 26. **normal detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 normal mode 的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
+27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 restore hint，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
