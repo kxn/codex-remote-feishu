@@ -735,6 +735,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 }
 
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
+	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
+	}
 	threads := s.scopedMergedThreadViews(surface)
 	if len(threads) == 0 {
 		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
@@ -922,11 +925,15 @@ func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string
 }
 
 func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
+	return s.useAttachedVisibleThreadMode(surface, threadID, s.surfaceThreadPickRouteMode(surface))
+}
+
+func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleRecord, threadID string, routeMode state.RouteMode) []control.UIEvent {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", "当前还没有接管任何实例。")
 	}
-	if (surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != threadID) && surfaceHasRouteMutationRequestState(surface) {
+	if (surface.RouteMode != routeMode || surface.SelectedThreadID != threadID) && surfaceHasRouteMutationRequestState(surface) {
 		if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
 			return blocked
 		}
@@ -964,10 +971,10 @@ func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, 
 		s.clearPreparedNewThread(surface)
 		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
 	}
-	events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, threadID, state.RouteModePinned)...)
+	events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
 	surface.SelectedThreadID = threadID
 	s.clearPreparedNewThread(surface)
-	surface.RouteMode = state.RouteModePinned
+	surface.RouteMode = routeMode
 	title := threadID
 	preview := ""
 	thread = s.ensureThread(inst, threadID)

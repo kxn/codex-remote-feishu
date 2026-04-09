@@ -588,7 +588,7 @@ func TestUseBusyIdleThreadShowsKickPromptAndConfirmTransfersClaim(t *testing.T) 
 	if first.SelectedThreadID != "" || first.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected victim surface to become unbound, got selected=%q route=%q", first.SelectedThreadID, first.RouteMode)
 	}
-	if second.SelectedThreadID != "thread-1" || second.RouteMode != state.RouteModePinned {
+	if second.SelectedThreadID != "thread-1" || second.RouteMode != state.RouteModeFollowLocal {
 		t.Fatalf("expected requesting surface to claim thread-1, got selected=%q route=%q", second.SelectedThreadID, second.RouteMode)
 	}
 	var sawVictimNotice, sawWinnerNotice bool
@@ -2719,7 +2719,7 @@ func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 	if _, ok := surface.StagedImages["img-1"]; ok {
 		t.Fatalf("expected staged image to be dropped on /follow route change")
 	}
-	var sawDiscard, sawNotice, sawSelection bool
+	var sawDiscard, sawNotice bool
 	for _, event := range events {
 		if event.PendingInput != nil && event.PendingInput.Status == string(state.ImageDiscarded) && event.PendingInput.QueueOff && event.PendingInput.ThumbsDown {
 			sawDiscard = true
@@ -2727,12 +2727,9 @@ func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 		if event.Notice != nil && event.Notice.Code == "staged_images_discarded_on_route_change" {
 			sawNotice = true
 		}
-		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-1" && event.ThreadSelection.RouteMode == string(state.RouteModeFollowLocal) {
-			sawSelection = true
-		}
 	}
-	if !sawDiscard || !sawNotice || !sawSelection {
-		t.Fatalf("expected discard notice + follow_local selection, got %#v", events)
+	if !sawDiscard || !sawNotice {
+		t.Fatalf("expected discard notice while switching into follow_local, got %#v", events)
 	}
 }
 
@@ -2753,6 +2750,11 @@ func TestFollowLocalBlockedByPendingRequest(t *testing.T) {
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].RouteMode = state.RouteModePinned
+	svc.root.Surfaces["surface-1"].LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "thread-1",
+		RouteMode: string(state.RouteModePinned),
+	}
 	svc.root.Surfaces["surface-1"].PendingRequests["req-1"] = &state.RequestPromptRecord{RequestID: "req-1"}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -2785,6 +2787,11 @@ func TestFollowLocalBlockedByRequestCapture(t *testing.T) {
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.root.Surfaces["surface-1"].RouteMode = state.RouteModePinned
+	svc.root.Surfaces["surface-1"].LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "thread-1",
+		RouteMode: string(state.RouteModePinned),
+	}
 	svc.root.Surfaces["surface-1"].ActiveRequestCapture = &state.RequestCaptureRecord{RequestID: "req-1"}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -6800,6 +6807,74 @@ func TestShowThreadsAttachedNormalFiltersToCurrentWorkspace(t *testing.T) {
 	}
 }
 
+func TestShowThreadsAttachedVSCodeFiltersToCurrentInstance(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 17, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "当前实例会话", CWD: "/data/dl/droid", LastUsedAt: now.Add(3 * time.Minute)},
+			"thread-2": {ThreadID: "thread-2", Name: "当前实例旧会话", CWD: "/data/dl/droid", LastUsedAt: now.Add(2 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-3": {ThreadID: "thread-3", Name: "其他实例会话", CWD: "/data/dl/web", LastUsedAt: now.Add(4 * time.Minute)},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected vscode prompt scoped to current instance, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 2 {
+		t.Fatalf("expected only current instance threads, got %#v", prompt.Options)
+	}
+	for _, option := range prompt.Options {
+		if option.OptionID == "thread-3" {
+			t.Fatalf("expected other instance thread to be filtered out, got %#v", prompt.Options)
+		}
+	}
+}
+
+func TestShowThreadsDetachedVSCodeRequiresAttach(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 18, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "not_attached_vscode" {
+		t.Fatalf("expected detached vscode /use to require /list first, got %#v", events)
+	}
+}
+
 func TestUseThreadDetachedAttachesFreeVisibleInstanceAndReplays(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -6882,11 +6957,37 @@ func TestUseThreadAttachedNormalRejectsCrossWorkspaceSelection(t *testing.T) {
 	}
 }
 
-func TestUseThreadCrossInstanceAttachesResolvedTargetAfterDetachSemanticsInVSCodeMode(t *testing.T) {
+func TestUseThreadDetachedRejectsInVSCodeMode(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	svc.root.Surfaces["surface-1"].ProductMode = state.ProductModeVSCode
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "not_attached_vscode" {
+		t.Fatalf("expected detached vscode /use to reject until /list attach, got %#v", events)
+	}
+}
+
+func TestUseThreadAttachedVSCodeRejectsCrossInstanceSelection(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -6921,34 +7022,27 @@ func TestUseThreadCrossInstanceAttachesResolvedTargetAfterDetachSemanticsInVSCod
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-2" || surface.SelectedThreadID != "thread-2" || surface.RouteMode != state.RouteModePinned {
-		t.Fatalf("expected cross-instance /use to retarget attachment, got %#v", surface)
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_outside_instance" {
+		t.Fatalf("expected attached vscode /use to reject cross-instance thread, got %#v", events)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{}) {
-		t.Fatalf("expected detach-style migration to clear prompt override, got %#v", surface.PromptOverride)
+	if surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected attached vscode surface to stay on current instance, got %#v", surface)
 	}
-	if len(surface.StagedImages) != 0 {
-		t.Fatalf("expected drafts to be discarded on cross-instance attach, got %#v", surface.StagedImages)
+	if surface.PromptOverride != (state.ModelConfigRecord{Model: "gpt-5.4"}) {
+		t.Fatalf("expected invalid cross-instance /use not to clear prompt override, got %#v", surface.PromptOverride)
 	}
-	if svc.instanceClaimSurface("inst-1") != nil || svc.instanceClaimSurface("inst-2") == nil {
-		t.Fatalf("expected old instance claim released and new instance claimed")
+	if len(surface.StagedImages) != 1 {
+		t.Fatalf("expected invalid cross-instance /use not to discard staged images, got %#v", surface.StagedImages)
 	}
-	var sawSelection bool
-	for _, event := range events {
-		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-2" {
-			sawSelection = true
-		}
-	}
-	if !sawSelection {
-		t.Fatalf("expected thread selection event after cross-instance attach, got %#v", events)
+	if svc.instanceClaimSurface("inst-1") == nil || svc.instanceClaimSurface("inst-2") != nil {
+		t.Fatalf("expected instance claim to remain on current instance")
 	}
 }
 
 func TestUseThreadCrossInstanceBlockedByPendingRequestInVSCodeMode(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	svc.root.Surfaces["surface-1"].ProductMode = state.ProductModeVSCode
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
@@ -6981,11 +7075,72 @@ func TestUseThreadCrossInstanceBlockedByPendingRequestInVSCodeMode(t *testing.T)
 		ThreadID:         "thread-2",
 	})
 
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_pending" {
-		t.Fatalf("expected pending request gate to block cross-instance attach, got %#v", events)
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_outside_instance" {
+		t.Fatalf("expected vscode cross-instance /use to reject before retargeting, got %#v", events)
 	}
-	if surface := svc.root.Surfaces["surface-1"]; surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" {
+	if surface := svc.root.Surfaces["surface-1"]; surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModeFollowLocal {
 		t.Fatalf("expected surface to remain on original attachment, got %#v", surface)
+	}
+}
+
+func TestUseThreadAttachedVSCodeKeepsFollowLocalUntilObservedFocusChanges(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 36, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+			"thread-2": {ThreadID: "thread-2", Name: "整理日志", CWD: "/data/dl/droid", Loaded: true},
+			"thread-3": {ThreadID: "thread-3", Name: "新的焦点", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-2",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.SelectedThreadID != "thread-2" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected vscode force-pick to keep follow-local route, got %#v", surface)
+	}
+	var sawFollowLocalSelection bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-2" && event.ThreadSelection.RouteMode == string(state.RouteModeFollowLocal) {
+			sawFollowLocalSelection = true
+		}
+	}
+	if !sawFollowLocalSelection {
+		t.Fatalf("expected vscode force-pick to announce follow-local selection, got %#v", events)
+	}
+
+	events = svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-3",
+		CWD:      "/data/dl/droid",
+		Action:   "turn_start",
+	})
+
+	if surface.SelectedThreadID != "thread-3" || surface.RouteMode != state.RouteModeFollowLocal {
+		t.Fatalf("expected later observed focus to override one-shot pick, got %#v", surface)
+	}
+	var sawRetarget bool
+	for _, event := range events {
+		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-3" && event.ThreadSelection.RouteMode == string(state.RouteModeFollowLocal) {
+			sawRetarget = true
+		}
+	}
+	if !sawRetarget {
+		t.Fatalf("expected follow-local retarget after later observed focus, got %#v", events)
 	}
 }
 

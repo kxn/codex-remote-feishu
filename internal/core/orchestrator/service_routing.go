@@ -30,6 +30,13 @@ func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
 	return initialThreadID
 }
 
+func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord) state.RouteMode {
+	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
+		return state.RouteModeFollowLocal
+	}
+	return state.RouteModePinned
+}
+
 func normalizeWorkspaceClaimKey(value string) string {
 	return strings.TrimSpace(value)
 }
@@ -844,7 +851,7 @@ func (s *Service) confirmKickThread(surface *state.SurfaceConsoleRecord, threadI
 
 func (s *Service) kickThreadOwner(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string, victim *state.SurfaceConsoleRecord) []control.UIEvent {
 	events := s.releaseVictimThread(victim, inst, threadID)
-	events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, state.RouteModePinned)...)
+	events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, s.surfaceThreadPickRouteMode(surface))...)
 	events = append(events, notice(surface, "thread_kicked", "已接管目标会话。原拥有者已退回未绑定状态。")...)
 	return events
 }

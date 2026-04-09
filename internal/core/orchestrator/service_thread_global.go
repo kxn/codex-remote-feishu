@@ -397,6 +397,9 @@ func workspaceAffinityScore(root, cwd string) int {
 }
 
 func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threadID string) resolvedThreadTarget {
+	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
+		return s.resolveAttachedVSCodeThreadTarget(surface, threadID)
+	}
 	view := s.mergedThreadView(surface, threadID)
 	if view == nil {
 		return resolvedThreadTarget{
@@ -409,6 +412,35 @@ func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threa
 		return s.threadOutsideCurrentWorkspaceTarget(surface)
 	}
 	return s.resolveThreadTargetFromView(surface, view)
+}
+
+func (s *Service) resolveAttachedVSCodeThreadTarget(surface *state.SurfaceConsoleRecord, threadID string) resolvedThreadTarget {
+	if surface == nil || strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			NoticeCode: "not_attached_vscode",
+			NoticeText: "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。",
+		}
+	}
+	if view := s.currentInstanceThreadView(surface, threadID); view != nil {
+		return resolvedThreadTarget{
+			Mode:     threadAttachCurrentVisible,
+			View:     view,
+			Instance: view.Inst,
+		}
+	}
+	if s.mergedThreadView(surface, threadID) != nil {
+		return resolvedThreadTarget{
+			Mode:       threadAttachUnavailable,
+			NoticeCode: "thread_outside_instance",
+			NoticeText: "vscode 模式下只能选择当前接管实例的已知会话；如需其他实例，请先 /list 切换。",
+		}
+	}
+	return resolvedThreadTarget{
+		Mode:       threadAttachUnavailable,
+		NoticeCode: "thread_not_found",
+		NoticeText: "目标会话不存在或当前实例尚未观测到它。",
+	}
 }
 
 func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecord, view *mergedThreadView) resolvedThreadTarget {
@@ -538,7 +570,60 @@ func (s *Service) threadViewSelectableInCurrentScope(surface *state.SurfaceConso
 	return mergedThreadWorkspaceClaimKey(view) == workspaceKey
 }
 
+func (s *Service) currentInstanceThreadViews(surface *state.SurfaceConsoleRecord) []*mergedThreadView {
+	if surface == nil {
+		return nil
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if inst == nil {
+		return nil
+	}
+	owner := s.instanceClaimSurface(inst.InstanceID)
+	views := make([]*mergedThreadView, 0, len(inst.Threads))
+	for _, thread := range visibleThreads(inst) {
+		if thread == nil {
+			continue
+		}
+		view := &mergedThreadView{
+			ThreadID:       thread.ThreadID,
+			Inst:           inst,
+			Thread:         thread,
+			CurrentVisible: true,
+		}
+		if inst.Online {
+			view.AnyVisibleInst = inst
+			if owner == nil || owner.SurfaceSessionID == surface.SurfaceSessionID {
+				view.FreeVisibleInst = inst
+			}
+		}
+		if busyOwner := s.threadClaimSurface(thread.ThreadID); busyOwner != nil && busyOwner.SurfaceSessionID != surface.SurfaceSessionID {
+			view.BusyOwner = busyOwner
+		}
+		views = append(views, view)
+	}
+	sortMergedThreadViews(views)
+	return views
+}
+
+func (s *Service) currentInstanceThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	for _, view := range s.currentInstanceThreadViews(surface) {
+		if view != nil && view.ThreadID == threadID {
+			return view
+		}
+	}
+	return nil
+}
+
 func (s *Service) scopedMergedThreadViews(surface *state.SurfaceConsoleRecord) []*mergedThreadView {
+	if surface != nil &&
+		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
+		strings.TrimSpace(surface.AttachedInstanceID) != "" {
+		return s.currentInstanceThreadViews(surface)
+	}
 	views := s.mergedThreadViews(surface)
 	workspaceKey := s.threadSelectionWorkspaceScope(surface)
 	if workspaceKey == "" {
