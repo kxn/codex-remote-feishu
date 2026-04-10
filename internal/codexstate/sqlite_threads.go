@@ -19,6 +19,8 @@ import (
 const (
 	defaultCodexStateDir       = ".codex"
 	defaultCodexSQLiteFilename = "state_5.sqlite"
+	internalProbeThreadPrefix  = "_tmp-codex-thread-latency-"
+	internalProbeAppPrefix     = "_tmp-codex-appserver-"
 )
 
 type SQLiteThreadCatalogOptions struct {
@@ -82,6 +84,10 @@ func (c *SQLiteThreadCatalog) RecentThreads(limit int) ([]state.ThreadRecord, er
 SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
 FROM threads
 WHERE archived = 0
+  AND source IN ('cli', 'vscode')
+  AND COALESCE(agent_role, '') = ''
+  AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
+  AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
 ORDER BY updated_at DESC, id DESC
 LIMIT ?
 `, limit)
@@ -125,7 +131,12 @@ func (c *SQLiteThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, 
 	row := db.QueryRow(`
 SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
 FROM threads
-WHERE id = ? AND archived = 0
+WHERE id = ?
+  AND archived = 0
+  AND source IN ('cli', 'vscode')
+  AND COALESCE(agent_role, '') = ''
+  AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
+  AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
 LIMIT 1
 `, threadID)
 	thread, err := scanPersistedThread(row)
@@ -194,6 +205,10 @@ func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 	if threadID == "" || archived != 0 {
 		return nil, nil
 	}
+	cwd = strings.TrimSpace(cwd)
+	if internalProbeWorkspace(cwd) {
+		return nil, nil
+	}
 	preview := strings.TrimSpace(firstUserMessage.String)
 	title = strings.TrimSpace(title)
 	if preview == "" {
@@ -206,12 +221,24 @@ func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 		ThreadID:                threadID,
 		Name:                    title,
 		Preview:                 preview,
-		CWD:                     strings.TrimSpace(cwd),
+		CWD:                     cwd,
 		ExplicitModel:           strings.TrimSpace(model.String),
 		ExplicitReasoningEffort: strings.TrimSpace(reasoningEffort.String),
 		Loaded:                  true,
 		LastUsedAt:              unixTimestamp(updatedAt),
 	}, nil
+}
+
+func internalProbeWorkspace(cwd string) bool {
+	base := filepath.Base(filepath.Clean(strings.TrimSpace(cwd)))
+	switch {
+	case strings.HasPrefix(base, internalProbeThreadPrefix):
+		return true
+	case strings.HasPrefix(base, internalProbeAppPrefix):
+		return true
+	default:
+		return false
+	}
 }
 
 func unixTimestamp(value int64) time.Time {

@@ -76,6 +76,11 @@ For medium or large follow-up work in this repository:
 - Track it in GitHub Issues instead of a local `TODO.md` or similar scratch file.
 - Tiny fixes that can be completed immediately in the same task do not need an issue; just implement them directly.
 - This workflow applies whether the active issue was opened by the user, the repository owner, or any other contributor.
+- The fixed mechanical entry points are:
+  - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number>`
+  - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number>`
+  - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> [--comment-file path] [--close]`
+- Default rule: use those commands for sync, claim, issue-shape checks, and cleanup instead of redoing raw `git` / `gh` sequences by hand each time. Keep model reasoning for semantic reassessment, planning, validation choice, and comment/body content.
 - Default lifecycle is:
   1. sync local tracked files to the latest safe state
   2. reassess the issue against the latest code and current issue state
@@ -117,6 +122,7 @@ When picking up or re-assessing an active issue, follow this order:
 1. First sync local tracked files to the latest safe state of the working branch.
    - Do not assess or code against stale local code.
    - If local changes prevent a safe sync, resolve that first or explicitly treat it as a blocker.
+   - Prefer `issuectl.sh prepare` for this step; it blocks on tracked local changes, runs `git pull --ff-only`, fetches the issue snapshot, and claims `processing`.
 2. Read the current issue body, current labels, the latest comments, and the current code.
 3. Check whether `背景`, `目标`, and `完成标准` are present and specific enough.
    - An issue is not implementable yet if these minimum sections are still missing or too vague.
@@ -137,8 +143,8 @@ After reassessment, classify the issue into one of these states:
 State-transition rule:
 
 - Compare the reassessed state with the issue's previously recorded actionable state.
-- If the state changed in either direction, update the issue body and labels, remove `processing`, leave the necessary concise evidence if applicable, and stop there for this turn.
-- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, remove `processing`, and stop there for this turn.
+- If the state changed in either direction, update the issue body and labels, leave the necessary concise evidence if applicable, run `issuectl.sh finish --issue <number> --skip-checks`, and stop there for this turn.
+- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, run `issuectl.sh finish --issue <number> --skip-checks`, and stop there for this turn.
 - Only when the issue was already implementable and remains implementable after reassessment may implementation start immediately.
 
 Issue labeling rule:
@@ -197,6 +203,7 @@ When closing an issue, leave a short completion note that includes:
 - the commit or PR reference
 - any follow-up issue if remaining work was intentionally deferred
 - Before finishing the turn, remove `processing`.
+  - Prefer `issuectl.sh finish --issue <number> --comment-file <file> --close` so local mechanical checks, close-out, and `processing` release stay coupled.
 
 ## Git Push Rule
 

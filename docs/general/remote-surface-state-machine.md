@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-10`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页，以及 bare `/mode` `/autocontinue` `/reasoning` `/access` `/model` `/debug` `/upgrade` 的统一参数卡表单。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页，以及 bare `/mode` `/autocontinue` `/reasoning` `/access` `/model` `/debug` `/upgrade` 的统一参数卡表单；同时记录 `/use` / `/useall` 的 scoped/global 展示规则，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -587,7 +587,10 @@ R5 NewThreadReady
    4. create managed headless。
 5. normal mode detached/global `/use` 与 `/useall` 的**候选 thread 列表**当前先 merge 两类来源：
    1. runtime/catalog 已可见 thread。
-   2. Codex sqlite 中最近 persisted 的非 archived thread metadata。
+   2. Codex sqlite 中最近 persisted 的主交互 thread metadata：
+      1. 仅 `cli` / `vscode` source。
+      2. 排除 subagent role、`exec` / `mcp` 等后台线程。
+      3. 排除内部 probe workspace（例如 `_tmp-codex-thread-latency-*`、`_tmp-codex-appserver-*`）。
 6. sqlite 只负责补 freshness，不旁路 resolver：
    1. busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
    2. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。

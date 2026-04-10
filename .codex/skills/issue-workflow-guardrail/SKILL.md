@@ -1,6 +1,6 @@
 ---
 name: issue-workflow-guardrail
-description: "Use when handling a GitHub issue for this repository: sync local code first, reassess the issue against the latest code, update the issue state before acting, stop when the startability state changed, execute implementable work in staged delivery, keep plans synced back to the issue, and leave a validation-focused completion note when closing the issue."
+description: "Use when handling a GitHub issue for this repository: run the fixed prepare/lint/finish workflow first, reassess the issue against the latest code, update issue state before acting, stop when the startability state changed, execute implementable work in staged delivery, keep plans synced back to the issue, and leave a validation-focused completion note when closing the issue."
 ---
 
 # Issue Workflow Guardrail
@@ -16,34 +16,50 @@ Examples:
 
 Do not run a one-time cleanup pass over old issues. Normalize an issue only when it becomes active.
 
-## Sync First
+## Fixed Entry Points
 
-Before making any issue decision:
+Default to the bundled wrapper instead of redoing raw `git` / `gh` sequences by hand:
 
-1. sync local tracked files to the latest safe state of the working branch
-2. if local changes prevent a safe sync, resolve that first or treat it as a blocker
-3. do not assess or code against stale local code
+```bash
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number>
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number>
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> [--comment-file path] [--close]
+```
 
-## Processing Label Claim
+What each command owns:
 
-After the local sync succeeds and before substantive issue assessment:
+- `prepare`
+  - blocks on tracked local changes before sync
+  - runs `git pull --ff-only`
+  - fetches the live issue snapshot from GitHub
+  - claims `processing` when available
+  - writes a reusable snapshot JSON under `.codex/state/issue-workflow/`
+- `lint`
+  - checks required issue sections
+  - checks status/category/scope label shape
+  - warns when the staged-plan section is still missing on a label-wise implementable issue
+- `finish`
+  - runs the fixed local mechanical checks
+  - can post a comment, close the issue, and release `processing`
 
-1. check whether the issue already has the `processing` label
-2. if `processing` is already present, stop for this turn and do not continue handling that issue
-3. if `processing` is absent, add `processing` immediately before continuing
+Use these commands at fixed times:
 
-Treat `processing` as a single-worker claim for the current turn.
+1. Before substantive issue assessment, run `prepare`.
+2. After body or label edits, run `lint`.
+3. Before any normal stop path for the issue, run `finish`.
 
-- Do not continue issue work once you have confirmed that another worker already claimed it with `processing`.
-- On every normal stop path in this turn, remove `processing` before you finish:
-  - stopping because the issue is not implementable yet
-  - stopping after a state-transition update
-  - stopping after implementation, validation, and close-out
-- If the session dies or the label is left behind accidentally, do not invent recovery rules inside this skill. A human may clear it manually.
+Only spend extra reasoning on the parts the scripts cannot decide:
+
+- whether the issue is actually implementable now
+- whether the latest comments override the body
+- how to refine the body content
+- how to split staged delivery
+- what tests are sufficient
+- what the final completion or blocking comment should say
 
 ## Read Order
 
-After syncing local files, read in this order:
+After `prepare` succeeds, read in this order:
 
 1. the current issue body
 2. current labels
@@ -100,8 +116,8 @@ After refining against the latest code, classify the issue into one of these sta
 
 Compare the reassessed state with the issue's previously recorded actionable state.
 
-- If the state changed in either direction, update the issue body, labels, and concise evidence as needed, remove `processing`, then stop there for this turn.
-- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, remove `processing`, then stop there for this turn.
+- If the state changed in either direction, update the issue body, labels, and concise evidence as needed, then run `finish --issue <number> --skip-checks` and stop there for this turn.
+- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, then run `finish --issue <number> --skip-checks` and stop there for this turn.
 - Only when the issue was already implementable and remains implementable after reassessment may coding start immediately.
 
 ## Status Labels
@@ -127,7 +143,7 @@ When work cannot start, leave one concise comment that contains:
 - what reply or action would unblock the issue
 
 Keep it short and actionable. Do not restate the full issue body.
-Before you stop on this path, remove `processing`.
+Before you stop on this path, prefer `finish --issue <number> --comment-file <file> --skip-checks` so `processing` is released mechanically.
 
 ## Implementation Rules
 
@@ -157,4 +173,10 @@ When closing the issue, leave a short completion note with:
 - commit or PR reference
 - follow-up issue reference if work was intentionally deferred
 
-Before finishing the turn, remove `processing`.
+Before finishing the turn, prefer:
+
+```bash
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --comment-file <file> --close
+```
+
+This runs the fixed local checks first, then closes the issue and releases `processing`.

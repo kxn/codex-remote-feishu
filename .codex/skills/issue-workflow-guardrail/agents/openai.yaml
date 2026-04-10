@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue 工作流护栏"
+  short_description: "GitHub issue 的 sync、claim、lint、finish 固定流程"
+  default_prompt: "Use $issue-workflow-guardrail to handle a GitHub issue in this repository through the fixed prepare/lint/finish workflow before doing semantic reassessment or implementation."

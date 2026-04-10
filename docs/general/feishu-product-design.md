@@ -296,7 +296,8 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 - normal mode detached 时：
   - 保留 global merged thread shortcut
-  - 也会 merge Codex sqlite 中最近 persisted 的非 archived thread metadata，降低对 `threads.refresh -> thread/list` 时机的依赖
+  - 也会 merge Codex sqlite 中最近 persisted 的主交互 thread metadata，降低对 `threads.refresh -> thread/list` 时机的依赖
+  - sqlite 侧会过滤 subagent role、`exec` / `mcp` 等后台线程，以及内部 probe workspace
 - normal mode 已 attach workspace 时：
   - `/use` / `/useall` 只展示当前 workspace 内会话
   - 不再通过 `/use` 静默跳到其他 workspace

@@ -661,33 +661,62 @@ func TestProjectUsageNoticeRendersInlineTags(t *testing.T) {
 	}
 	if !containsAll(ops[0].CardBody,
 		"用法：<text_tag color='neutral'>/model</text_tag> 查看当前配置；",
-		"<text_tag color='neutral'>/model &lt;模型&gt;</text_tag>",
+		"<text_tag color='neutral'>/model <模型></text_tag>",
 		"<text_tag color='neutral'>/model clear</text_tag>",
 	) {
 		t.Fatalf("unexpected usage notice body: %#v", ops[0].CardBody)
 	}
 }
 
-func TestProjectUsageNoticePreservesGreaterThanInInlineTags(t *testing.T) {
+func TestProjectUsageNoticePreservesAngleBracketsInInlineTags(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventNotice,
 		Notice: &control.Notice{
 			Code: "surface_override_usage",
-			Text: "核心证据很简单：`section -> entry -> button`，动作键：`run_command`。",
+			Text: "核心证据很简单：`section -> entry -> button`，占位符：`/model <模型> <推理强度>`，比较：`a < b > c`。",
 		},
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if strings.Contains(ops[0].CardBody, "&gt;") {
-		t.Fatalf("expected inline code to preserve >, got %#v", ops[0].CardBody)
+	if strings.Contains(ops[0].CardBody, "&gt;") || strings.Contains(ops[0].CardBody, "&lt;") {
+		t.Fatalf("expected inline code to preserve angle brackets, got %#v", ops[0].CardBody)
 	}
 	if !containsAll(ops[0].CardBody,
 		"<text_tag color='neutral'>section -> entry -> button</text_tag>",
-		"<text_tag color='neutral'>run_command</text_tag>",
+		"<text_tag color='neutral'>/model <模型> <推理强度></text_tag>",
+		"<text_tag color='neutral'>a < b > c</text_tag>",
 	) {
 		t.Fatalf("unexpected usage notice body: %#v", ops[0].CardBody)
+	}
+}
+
+func TestProjectFinalAssistantBlockPreservesAngleBracketsInInlineCode(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:            control.UIEventBlockCommitted,
+		SourceMessageID: "msg-inline-angle",
+		Block: &render.Block{
+			Kind:        render.BlockAssistantMarkdown,
+			Text:        "请运行 `/model <模型> <推理强度>`，再检查 `a < b > c`。",
+			ThreadID:    "thread-1",
+			ThreadTitle: "droid · 修复登录流程",
+			ThemeKey:    "thread-1",
+			Final:       true,
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if strings.Contains(ops[0].CardBody, "&gt;") || strings.Contains(ops[0].CardBody, "&lt;") {
+		t.Fatalf("expected final inline code to preserve angle brackets, got %#v", ops[0].CardBody)
+	}
+	if !containsAll(ops[0].CardBody,
+		"<text_tag color='neutral'>/model <模型> <推理强度></text_tag>",
+		"<text_tag color='neutral'>a < b > c</text_tag>",
+	) {
+		t.Fatalf("unexpected final inline-tag body: %#v", ops[0].CardBody)
 	}
 }
 

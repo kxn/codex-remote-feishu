@@ -1052,9 +1052,8 @@ func formatCommandTextTag(text string) string {
 func formatInlineCodeTextTag(text string) string {
 	trimmed := strings.TrimSpace(text)
 	escaped := html.EscapeString(trimmed)
-	if !strings.Contains(trimmed, "<") {
-		escaped = strings.ReplaceAll(escaped, "&gt;", ">")
-	}
+	escaped = strings.ReplaceAll(escaped, "&lt;", "<")
+	escaped = strings.ReplaceAll(escaped, "&gt;", ">")
 	return "<text_tag color='neutral'>" + escaped + "</text_tag>"
 }
 

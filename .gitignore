@@ -12,3 +12,4 @@ coverage.out
 .tools/
 web/node_modules/
 web/.vite/
+.codex/state/issue-workflow/
