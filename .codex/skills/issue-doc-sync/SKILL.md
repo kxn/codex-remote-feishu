@@ -18,10 +18,12 @@ Use this skill when the user asks to:
    - Run `git pull --ff-only`.
    - Do not assess issues against stale local code or stale tracked cache.
 2. List only changed closed issues.
-   - Run `go run ./cmd/issue-doc-sync plan --repo kxn/codex-remote-feishu`.
+   - Prefer `scripts/issue-doc-sync/review.sh plan`.
    - This compares GitHub `updatedAt` against `.codex/state/issue-doc-sync/state.json`.
+   - The default processing order is old to new by `closedAt`, with issue number fallback for same-time ties.
 3. Review each candidate issue.
-   - Run `go run ./cmd/issue-doc-sync inspect --repo kxn/codex-remote-feishu --issue <number> --format markdown`.
+   - Prefer `scripts/issue-doc-sync/review.sh inspect [issue-number]`.
+   - If no issue number is given, the runner opens the oldest pending candidate automatically.
    - If current docs already cover the durable result, skip it and record why.
    - If an existing canonical doc is the right home, merge into that doc.
    - If no suitable doc exists, create a new doc under the correct lifecycle directory.
@@ -32,15 +34,18 @@ Use this skill when the user asks to:
      - `Summary`
    - If you add or move a lifecycle doc, update `docs/README.md` in the same change.
 5. Record the decision in the tracked state cache.
-   - Use `go run ./cmd/issue-doc-sync record ...` after each reviewed issue.
+   - Prefer `scripts/issue-doc-sync/review.sh record [issue-number] --decision ... --reason ...`.
+   - If no issue number is given, the runner records against the oldest pending candidate.
    - Required fields:
      - `--issue`
-     - `--updated-at`
      - `--decision skip|merge|new-doc`
      - `--reason`
    - Add `--target-doc` once per touched doc path when the decision is `merge` or `new-doc`.
+   - The underlying `record` command now auto-fills issue metadata from GitHub when not provided.
+   - If a target doc was already touched by a newer synced issue, `record` refuses by default and requires `--force` for an intentional backfill.
 6. Validate.
-   - Re-run `go run ./cmd/issue-doc-sync plan --repo kxn/codex-remote-feishu` and confirm unchanged issues disappear from the candidate set.
+   - The runner re-runs `plan` automatically after `record`.
+   - You can also run `scripts/issue-doc-sync/review.sh plan` and confirm unchanged issues disappear from the candidate set.
 
 ## Decision Rules
 

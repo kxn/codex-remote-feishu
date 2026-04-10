@@ -27,17 +27,17 @@ func TestBuildPlanReportDetectsUncachedAndChangedIssues(t *testing.T) {
 	if report.CandidateCount != 2 {
 		t.Fatalf("candidate count = %d, want 2", report.CandidateCount)
 	}
-	if report.Candidates[0].Number != 40 {
-		t.Fatalf("first candidate = %#v, want issue 40", report.Candidates[0])
+	if report.Candidates[0].Number != 38 {
+		t.Fatalf("first candidate = %#v, want issue 38", report.Candidates[0])
 	}
-	if report.Candidates[0].Reason != "not yet recorded in tracked issue-doc sync state" {
-		t.Fatalf("unexpected uncached reason: %#v", report.Candidates[0])
+	if report.Candidates[0].Reason != "issue updated since the recorded sync decision" {
+		t.Fatalf("unexpected changed reason: %#v", report.Candidates[0])
 	}
-	if report.Candidates[1].Number != 38 {
-		t.Fatalf("second candidate = %#v, want issue 38", report.Candidates[1])
+	if report.Candidates[1].Number != 40 {
+		t.Fatalf("second candidate = %#v, want issue 40", report.Candidates[1])
 	}
-	if report.Candidates[1].PreviousUpdatedAt == "" {
-		t.Fatalf("expected changed issue to include previousUpdatedAt, got %#v", report.Candidates[1])
+	if report.Candidates[0].PreviousUpdatedAt == "" {
+		t.Fatalf("expected changed issue to include previousUpdatedAt, got %#v", report.Candidates[0])
 	}
 }
 
@@ -66,6 +66,7 @@ func TestWritePlanReportText(t *testing.T) {
 	for _, fragment := range []string{
 		"repo: kxn/codex-remote-feishu",
 		"candidates: 1",
+		"processing order: oldest closed issue first",
 		"#22",
 		"Headless instance 改用 pool 管理",
 	} {

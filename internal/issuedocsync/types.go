@@ -23,6 +23,7 @@ type IssueRecord struct {
 	Number     int      `json:"number"`
 	Title      string   `json:"title,omitempty"`
 	UpdatedAt  string   `json:"updatedAt"`
+	ClosedAt   string   `json:"closedAt,omitempty"`
 	Decision   string   `json:"decision,omitempty"`
 	Reason     string   `json:"reason,omitempty"`
 	TargetDocs []string `json:"targetDocs,omitempty"`
@@ -59,6 +60,7 @@ type PlanCandidate struct {
 	Number            int    `json:"number"`
 	Title             string `json:"title"`
 	UpdatedAt         string `json:"updatedAt"`
+	ClosedAt          string `json:"closedAt,omitempty"`
 	URL               string `json:"url,omitempty"`
 	Reason            string `json:"reason"`
 	PreviousUpdatedAt string `json:"previousUpdatedAt,omitempty"`

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 )
@@ -25,6 +24,7 @@ func BuildPlanReport(repo string, summaries []IssueSummary, state StateFile) Pla
 				Number:    summary.Number,
 				Title:     summary.Title,
 				UpdatedAt: currentUpdatedAt,
+				ClosedAt:  formatTimeRFC3339(summary.ClosedAt),
 				URL:       summary.URL,
 				Reason:    "not yet recorded in tracked issue-doc sync state",
 			})
@@ -35,15 +35,14 @@ func BuildPlanReport(repo string, summaries []IssueSummary, state StateFile) Pla
 				Number:            summary.Number,
 				Title:             summary.Title,
 				UpdatedAt:         currentUpdatedAt,
+				ClosedAt:          formatTimeRFC3339(summary.ClosedAt),
 				URL:               summary.URL,
 				Reason:            "issue updated since the recorded sync decision",
 				PreviousUpdatedAt: record.UpdatedAt,
 			})
 		}
 	}
-	sort.Slice(report.Candidates, func(i, j int) bool {
-		return report.Candidates[i].UpdatedAt > report.Candidates[j].UpdatedAt
-	})
+	SortPlanCandidatesOldestFirst(report.Candidates)
 	report.CandidateCount = len(report.Candidates)
 	return report
 }
@@ -58,7 +57,7 @@ func WritePlanReport(w io.Writer, report PlanReport, format string) error {
 		_, err = fmt.Fprintln(w, string(payload))
 		return err
 	case "text":
-		if _, err := fmt.Fprintf(w, "repo: %s\nclosed issues scanned: %d\ntracked cache entries: %d\ncandidates: %d\n", report.Repo, report.ScannedClosed, report.CachedIssueCount, report.CandidateCount); err != nil {
+		if _, err := fmt.Fprintf(w, "repo: %s\nclosed issues scanned: %d\ntracked cache entries: %d\ncandidates: %d\nprocessing order: oldest closed issue first\n", report.Repo, report.ScannedClosed, report.CachedIssueCount, report.CandidateCount); err != nil {
 			return err
 		}
 		if len(report.Candidates) == 0 {
@@ -68,6 +67,11 @@ func WritePlanReport(w io.Writer, report PlanReport, format string) error {
 		for _, candidate := range report.Candidates {
 			if _, err := fmt.Fprintf(w, "- #%d %s\n  updatedAt: %s\n  reason: %s\n", candidate.Number, candidate.Title, candidate.UpdatedAt, candidate.Reason); err != nil {
 				return err
+			}
+			if candidate.ClosedAt != "" {
+				if _, err := fmt.Fprintf(w, "  closedAt: %s\n", candidate.ClosedAt); err != nil {
+					return err
+				}
 			}
 			if candidate.PreviousUpdatedAt != "" {
 				if _, err := fmt.Fprintf(w, "  previousUpdatedAt: %s\n", candidate.PreviousUpdatedAt); err != nil {
@@ -84,6 +88,13 @@ func WritePlanReport(w io.Writer, report PlanReport, format string) error {
 	default:
 		return fmt.Errorf("unsupported format %q", format)
 	}
+}
+
+func formatTimeRFC3339(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func WriteIssueDetails(w io.Writer, details IssueDetails, format string) error {
