@@ -30,6 +30,16 @@ Use this skill for changes or debugging involving:
 
 Before changing code, gather these facts in order:
 
+0. Prefer the repo helper script first.
+   - Run `./scripts/relay/collect-diagnostics.sh`.
+   - It captures the fixed low-level evidence in one pass:
+     - proxy env
+     - service status
+     - process and port checks
+     - `/api/admin/bootstrap-state`
+     - `/v1/status`
+     - recent relayd logs
+
 1. Check relay runtime state.
    - Read `relayd` status.
    - Verify actual processes and listening ports.
@@ -80,7 +90,7 @@ Before changing code, gather these facts in order:
 ## Validation
 
 - Clear proxy variables before local tests and localhost checks.
-- Use the real-stack verification commands in `references/commands.md`.
+- Prefer `./scripts/relay/collect-diagnostics.sh` for fixed evidence collection, then use the lower-level commands in `references/commands.md` when you need a narrower repro.
 - After protocol or state-machine edits, run:
   - `go test ./...`
 - When the bug is user-visible, verify the exact symptom path:

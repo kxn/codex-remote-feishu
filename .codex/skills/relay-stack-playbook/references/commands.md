@@ -8,6 +8,14 @@ Use these commands for real-stack debugging in this repository.
 env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy go test ./...
 ```
 
+## One-shot diagnostics
+
+Prefer this first when you need the fixed evidence bundle:
+
+```bash
+./scripts/relay/collect-diagnostics.sh
+```
+
 ## Proxy-safe relay status query
 
 Prefer this over `curl` when localhost requests may be intercepted:
