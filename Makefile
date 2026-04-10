@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: check test build fmt release-artifacts smoke-release-install release-track-version start stop status web-build
+.PHONY: check test build fmt install-hooks release-artifacts smoke-release-install release-track-version start stop status web-build
 
 check:
 	bash scripts/web/build-admin-ui.sh
@@ -26,6 +26,9 @@ web-build:
 
 fmt:
 	gofmt -w $$(find cmd internal testkit -name '*.go' | sort)
+
+install-hooks:
+	bash scripts/dev/install-git-hooks.sh
 
 release-artifacts:
 	@test -n "$(VERSION)" || (echo "VERSION is required, e.g. make release-artifacts VERSION=v0.1.0" >&2; exit 1)

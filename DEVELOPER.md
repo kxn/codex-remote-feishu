@@ -247,6 +247,27 @@ curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .
 - mock 必须贴近真实协议，不能用静态脚本假装通过
 - 公开文档、README、模板文件里不要泄露本机路径
 
+## Git Hooks
+
+首次在本地启用仓库自带 hook：
+
+```bash
+make install-hooks
+```
+
+当前 `pre-commit` 会执行：
+
+- 自动 `gofmt` 已暂存的 `cmd/`、`internal/`、`testkit/` 下 Go 文件并重新加入暂存区
+- 检查公开文档和工作流文件里是否泄露本机绝对路径
+- 检查旧项目名和废弃路径是否回流
+- 兜底检查整个仓库的 Go 格式
+- 运行 release track 版本脚本回归测试
+
+说明：
+
+- hook 只放快速、低副作用检查，不在提交时跑 Web 构建或 release smoke
+- 发布前仍应执行下面的完整自检
+
 ## 发布前自检
 
 ```bash

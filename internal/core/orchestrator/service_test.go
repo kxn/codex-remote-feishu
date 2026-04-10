@@ -567,8 +567,8 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 			Managed:       true,
 			Online:        true,
 			Threads: map[string]*state.ThreadRecord{
-				fmt.Sprintf("thread-fs-%d", i): {ThreadID: fmt.Sprintf("thread-fs-%d", i), Name: "fschannel", CWD: "/data/dl/fschannel", Loaded: true},
-				fmt.Sprintf("thread-sf-%d", i): {ThreadID: fmt.Sprintf("thread-sf-%d", i), Name: "simplefq", CWD: "/data/dl/simplefq", Loaded: true},
+				fmt.Sprintf("thread-fs-%d", i): {ThreadID: fmt.Sprintf("thread-fs-%d", i), Name: "atlas", CWD: "/data/dl/atlas", Loaded: true},
+				fmt.Sprintf("thread-sf-%d", i): {ThreadID: fmt.Sprintf("thread-sf-%d", i), Name: "harbor", CWD: "/data/dl/harbor", Loaded: true},
 			},
 		})
 	}
@@ -594,7 +594,7 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 	for _, option := range prompt.Options {
 		got[option.OptionID] = true
 	}
-	if !got["/data/dl/fschannel"] || !got["/data/dl/simplefq"] || got["/data/dl"] {
+	if !got["/data/dl/atlas"] || !got["/data/dl/harbor"] || got["/data/dl"] {
 		t.Fatalf("expected thread cwd workspaces only, got %#v", prompt.Options)
 	}
 }
@@ -612,8 +612,8 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 		Managed:       true,
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-fs": {ThreadID: "thread-fs", Name: "修复 relay", CWD: "/data/dl/fschannel", Loaded: true},
-			"thread-sf": {ThreadID: "thread-sf", Name: "整理 simplefq", CWD: "/data/dl/simplefq", Loaded: true},
+			"thread-fs": {ThreadID: "thread-fs", Name: "修复 relay", CWD: "/data/dl/atlas", Loaded: true},
+			"thread-sf": {ThreadID: "thread-sf", Name: "整理 harbor", CWD: "/data/dl/harbor", Loaded: true},
 		},
 	})
 
@@ -622,11 +622,11 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		WorkspaceKey:     "/data/dl/fschannel",
+		WorkspaceKey:     "/data/dl/atlas",
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-headless-1" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel" {
+	if surface.AttachedInstanceID != "inst-headless-1" || surface.ClaimedWorkspaceKey != "/data/dl/atlas" {
 		t.Fatalf("expected workspace attach to resolve via thread cwd, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
@@ -5048,11 +5048,11 @@ func TestThreadTitleFallsBackToPreviewSummary(t *testing.T) {
 		ShortName:    "droid",
 	}, &state.ThreadRecord{
 		ThreadID: "thread-1",
-		Preview:  "我先按 fschannel 这个工程统计了入口文件和模块边界。",
+		Preview:  "我先按 atlas 这个工程统计了入口文件和模块边界。",
 		CWD:      "/data/dl/droid",
 	}, "thread-1")
 
-	if title != "droid · 我先按 fschannel 这个工程统计了入口文件和模块边界。" {
+	if title != "droid · 我先按 atlas 这个工程统计了入口文件和模块边界。" {
 		t.Fatalf("unexpected preview-based title: %q", title)
 	}
 }

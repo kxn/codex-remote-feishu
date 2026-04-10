@@ -64,11 +64,11 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	}
 
 	stateValue := InstallState{
-		BaseDir:         dir,
-		ConfigPath:      configPath,
-		StatePath:       statePath,
-		ServiceManager:  ServiceManagerSystemdUser,
-		CurrentVersion:  "v1.0.0",
+		BaseDir:           dir,
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerSystemdUser,
+		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: currentBinary,
 		VersionsRoot:      filepath.Join(dir, "releases"),
 		PendingUpgrade: &PendingUpgrade{
