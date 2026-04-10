@@ -470,6 +470,9 @@ const (
 )
 
 func useThreadSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+	if useThreadPromptUsesWorkspaceGrouping(prompt) {
+		return useThreadWorkspaceGroupedElements(prompt, daemonLifecycleID)
+	}
 	grouped := map[useThreadOptionGroup][]control.SelectionOption{
 		useThreadOptionGroupCurrent:     {},
 		useThreadOptionGroupTakeover:    {},
@@ -518,6 +521,145 @@ func useThreadSelectionPromptElements(prompt control.SelectionPrompt, daemonLife
 		})
 	}
 	return elements
+}
+
+type useThreadWorkspaceGroup struct {
+	Key     string
+	Label   string
+	AgeText string
+	Options []control.SelectionOption
+}
+
+func useThreadPromptUsesWorkspaceGrouping(prompt control.SelectionPrompt) bool {
+	if strings.TrimSpace(prompt.Title) != "全部会话" {
+		return false
+	}
+	for _, option := range prompt.Options {
+		if strings.TrimSpace(option.GroupKey) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+	elements := make([]map[string]any, 0, len(prompt.Options)*3+8)
+	currentOptions := make([]control.SelectionOption, 0, 1)
+	groups := make([]useThreadWorkspaceGroup, 0)
+	groupIndex := map[string]int{}
+	for _, option := range prompt.Options {
+		if strings.TrimSpace(option.ActionKind) == "show_scoped_threads" {
+			continue
+		}
+		if option.IsCurrent {
+			currentOptions = append(currentOptions, option)
+			continue
+		}
+		groupKey := strings.TrimSpace(option.GroupKey)
+		if groupKey == "" || groupKey == strings.TrimSpace(prompt.ContextKey) {
+			continue
+		}
+		position, ok := groupIndex[groupKey]
+		if !ok {
+			position = len(groups)
+			groupIndex[groupKey] = position
+			groups = append(groups, useThreadWorkspaceGroup{
+				Key:     groupKey,
+				Label:   firstNonEmpty(strings.TrimSpace(option.GroupLabel), groupKey),
+				AgeText: strings.TrimSpace(option.AgeText),
+				Options: []control.SelectionOption{},
+			})
+		}
+		groups[position].Options = append(groups[position].Options, option)
+	}
+
+	if len(currentOptions) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**当前会话**",
+		})
+		for _, option := range currentOptions {
+			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
+			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+				elements = append(elements, map[string]any{
+					"tag":     "markdown",
+					"content": meta,
+				})
+			}
+		}
+	}
+
+	if title := strings.TrimSpace(prompt.ContextTitle); title != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**" + title + "**",
+		})
+	}
+	if text := strings.TrimSpace(prompt.ContextText); text != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(text),
+		})
+	}
+
+	for _, group := range groups {
+		header := strings.TrimSpace(group.Label)
+		if header == "" {
+			header = strings.TrimSpace(group.Key)
+		}
+		if age := strings.TrimSpace(group.AgeText); age != "" {
+			header += " · " + age
+		}
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**" + header + "**",
+		})
+		available := make([]control.SelectionOption, 0, len(group.Options))
+		var unavailableReason string
+		for _, option := range group.Options {
+			if option.Disabled {
+				if unavailableReason == "" {
+					unavailableReason = strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option)))
+				}
+				continue
+			}
+			available = append(available, option)
+		}
+		if len(available) == 0 {
+			if unavailableReason != "" {
+				elements = append(elements, map[string]any{
+					"tag":     "markdown",
+					"content": renderSystemInlineTags(unavailableReason),
+				})
+			}
+			continue
+		}
+		for index, option := range available {
+			meta := strings.TrimSpace(firstNonEmpty(option.MetaText, "时间未知"))
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": fmt.Sprintf("%d. %s", index+1, renderSystemInlineTags(meta)),
+			})
+			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
+		}
+	}
+
+	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(hint),
+		})
+	}
+	return elements
+}
+
+func useThreadActionElement(prompt control.SelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
+	return map[string]any{
+		"tag": "action",
+		"actions": []map[string]any{
+			selectionOptionButton(prompt, option, daemonLifecycleID),
+		},
+	}
 }
 
 func useThreadSelectionOptionGroup(option control.SelectionOption) useThreadOptionGroup {

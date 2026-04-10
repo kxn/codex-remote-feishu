@@ -608,7 +608,12 @@ R5 NewThreadReady
    2. force-pick 后会保留 `RouteMode=follow_local`，后续 observed focus 变化仍可覆盖。
    3. attached `vscode /use` / `/useall` 的卡片分组和动作前缀与 normal mode 一致，只是“更多”按钮文案会改成 `查看全部 · 当前实例全部会话`
 9. attached normal `/useall` 当前会显示 cross-workspace 的全部会话，并允许直接点击切到其他 workspace。
-   1. 这类 global 卡片会把 workspace 放在按钮下方第一行，再把接管状态放在下一行；当前会话若仍在列表内，也会单独归到“当前会话”分组并显示 `已接管`
+   1. 这类 global 卡片会先保留一个单独的“当前会话”区块。
+   2. 若当前 surface 已 attach workspace，还会在其后插入一段“当前工作区”摘要，仅供参考，不再展开当前 workspace 的 thread 列表；同 workspace 内切换仍建议回 `/use`
+   3. 其余会话会按 workspace 分组展示，workspace 分组按该组内最新 thread 的最近活跃时间倒序。
+   4. 组内 thread 同样按最近活跃时间倒序，并在按钮外显示 `1. 5分10秒前` 这类序号 + 相对时间行；thread 本身只保留动作按钮
+   5. 若 thread 还带有 “VS Code 占用中” 提示，会附加在相对时间行里
+   6. 若某个 workspace 下全部 thread 当前都不可接管，则该组只显示 workspace 标题和原因，不再展开 thread 列表
 10. 当 normal mode `/use` / `/useall` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
    1. queued / staged draft 会被清掉。
    2. `PromptOverride`、pending request、request capture 会被清掉。

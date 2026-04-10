@@ -109,6 +109,10 @@ type SelectionOption struct {
 	Label               string
 	Subtitle            string
 	ButtonLabel         string
+	GroupKey            string
+	GroupLabel          string
+	AgeText             string
+	MetaText            string
 	ActionKind          string
 	IsCurrent           bool
 	Disabled            bool
@@ -116,13 +120,16 @@ type SelectionOption struct {
 }
 
 type SelectionPrompt struct {
-	PromptID  string
-	Kind      SelectionPromptKind
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	Title     string
-	Hint      string
-	Options   []SelectionOption
+	PromptID     string
+	Kind         SelectionPromptKind
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	Title        string
+	Hint         string
+	ContextTitle string
+	ContextText  string
+	ContextKey   string
+	Options      []SelectionOption
 }
 
 type Snapshot struct {

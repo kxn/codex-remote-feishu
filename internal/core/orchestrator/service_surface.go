@@ -914,14 +914,19 @@ func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord
 	threads := presentation.views[:limit]
 	options := make([]control.SelectionOption, 0, len(threads)+1)
 	for i, view := range threads {
-		_, disabled := s.threadSelectionStatus(surface, view, presentation.allowCrossWorkspace)
+		status, disabled := s.threadSelectionStatus(surface, view, presentation.allowCrossWorkspace)
 		summary := threadSelectionButtonLabel(view.Thread, view.ThreadID)
+		workspaceKey := mergedThreadWorkspaceClaimKey(view)
 		options = append(options, control.SelectionOption{
 			Index:               i + 1,
 			OptionID:            view.ThreadID,
 			Label:               summary,
 			Subtitle:            s.threadSelectionOptionSubtitle(surface, view, presentation.includeWorkspace, presentation.allowCrossWorkspace),
 			ButtonLabel:         summary,
+			GroupKey:            workspaceKey,
+			GroupLabel:          workspaceSelectionLabel(workspaceKey),
+			AgeText:             humanizeRelativeTime(s.now(), threadLastUsedAt(view)),
+			MetaText:            s.threadSelectionMetaText(surface, view, status),
 			IsCurrent:           surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
 			Disabled:            disabled,
 			AllowCrossWorkspace: presentation.allowCrossWorkspace,
@@ -939,11 +944,60 @@ func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord
 		Kind:             control.UIEventSelectionPrompt,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SelectionPrompt: &control.SelectionPrompt{
-			Kind:    control.SelectionPromptUseThread,
-			Title:   presentation.title,
-			Options: options,
+			Kind:         control.SelectionPromptUseThread,
+			Title:        presentation.title,
+			ContextTitle: s.threadSelectionContextTitle(surface, presentation),
+			ContextText:  s.threadSelectionContextText(surface, presentation),
+			ContextKey:   s.threadSelectionContextKey(surface, presentation),
+			Options:      options,
 		},
 	}}
+}
+
+func (s *Service) threadSelectionContextTitle(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
+	if surface == nil || !presentation.includeWorkspace || strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return ""
+	}
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		return ""
+	}
+	if presentation.title != "全部会话" {
+		return ""
+	}
+	if workspaceKey := s.surfaceCurrentWorkspaceKey(surface); workspaceKey != "" {
+		return "当前工作区"
+	}
+	return ""
+}
+
+func (s *Service) threadSelectionContextText(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
+	workspaceKey := s.threadSelectionContextKey(surface, presentation)
+	if workspaceKey == "" {
+		return ""
+	}
+	label := workspaceSelectionLabel(workspaceKey)
+	if label == "" {
+		label = workspaceKey
+	}
+	parts := []string{label}
+	if latest := threadViewsLatestUsedAt(s.scopedMergedThreadViews(surface)); !latest.IsZero() {
+		parts[0] += " · " + humanizeRelativeTime(s.now(), latest)
+	}
+	parts = append(parts, "同工作区内切换请直接用 /use")
+	return strings.Join(parts, "\n")
+}
+
+func (s *Service) threadSelectionContextKey(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
+	if surface == nil || !presentation.includeWorkspace || strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return ""
+	}
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		return ""
+	}
+	if presentation.title != "全部会话" {
+		return ""
+	}
+	return s.surfaceCurrentWorkspaceKey(surface)
 }
 
 func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) threadSelectionPresentation {

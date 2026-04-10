@@ -5207,8 +5207,14 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if prompt.Title != "全部会话" || prompt.Hint != "" {
 		t.Fatalf("unexpected all-session prompt metadata: %#v", prompt)
 	}
+	if prompt.ContextTitle != "当前工作区" || prompt.ContextKey != "/data/dl" || !strings.Contains(prompt.ContextText, "dl ·") {
+		t.Fatalf("expected attached /useall prompt to expose current workspace summary, got %#v", prompt)
+	}
 	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
 		t.Fatalf("expected all sessions sorted by recency, got %#v", prompt.Options)
+	}
+	if prompt.Options[0].GroupKey != "/data/dl" || prompt.Options[0].GroupLabel != "dl" || prompt.Options[0].AgeText == "" {
+		t.Fatalf("expected grouped workspace metadata on /useall options, got %#v", prompt.Options[0])
 	}
 }
 
@@ -7701,8 +7707,14 @@ func TestShowAllThreadsAttachedNormalShowsCrossWorkspaceSessions(t *testing.T) {
 	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("expected cross-workspace all-session prompt, got %#v", prompt)
 	}
+	if prompt.ContextTitle != "当前工作区" || prompt.ContextKey != "/data/dl/droid" {
+		t.Fatalf("expected current workspace summary for attached /useall, got %#v", prompt)
+	}
 	if prompt.Options[0].OptionID != "thread-3" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/web") {
 		t.Fatalf("expected other-workspace thread to appear in /useall prompt, got %#v", prompt.Options[0])
+	}
+	if prompt.Options[0].GroupKey != "/data/dl/web" || prompt.Options[0].GroupLabel != "web" || prompt.Options[0].AgeText == "" || prompt.Options[0].MetaText == "" {
+		t.Fatalf("expected cross-workspace option to include grouped rendering metadata, got %#v", prompt.Options[0])
 	}
 }
 
