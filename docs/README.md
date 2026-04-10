@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-09`
-> Summary: 新增有认证外部访问基座设计文档并刷新索引。
+> Updated: `2026-04-10`
+> Summary: 新增飞书卡片原地更新设计草案并刷新索引。
 
 ## 1. 适用范围
 
@@ -138,6 +138,7 @@
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [authenticated-external-access-foundation-design.md](./draft/authenticated-external-access-foundation-design.md)
+- [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
