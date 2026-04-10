@@ -56,6 +56,9 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if thread == nil {
 				continue
 			}
+			if !threadBelongsToInstanceWorkspace(inst, thread) {
+				continue
+			}
 			view := viewsByID[thread.ThreadID]
 			if view == nil {
 				view = &mergedThreadView{ThreadID: thread.ThreadID}
@@ -68,10 +71,11 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if inst.InstanceID == currentInstanceID {
 				view.CurrentVisible = true
 			}
-			if inst.Online && view.AnyVisibleInst == nil {
+			if inst.Online && betterVisibleThreadInstance(surface, view.AnyVisibleInst, inst, thread) {
 				view.AnyVisibleInst = inst
 			}
-			if inst.Online && view.FreeVisibleInst == nil && (owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) {
+			if inst.Online && (owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
+				betterVisibleThreadInstance(surface, view.FreeVisibleInst, inst, thread) {
 				view.FreeVisibleInst = inst
 			}
 		}
@@ -419,6 +423,48 @@ func reusableHeadlessScore(surface *state.SurfaceConsoleRecord, inst *state.Inst
 	return score
 }
 
+func betterVisibleThreadInstance(surface *state.SurfaceConsoleRecord, current, next *state.InstanceRecord, thread *state.ThreadRecord) bool {
+	if next == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	currentScore := visibleThreadInstanceScore(surface, current, thread)
+	nextScore := visibleThreadInstanceScore(surface, next, thread)
+	if nextScore != currentScore {
+		return nextScore > currentScore
+	}
+	return next.InstanceID < current.InstanceID
+}
+
+func visibleThreadInstanceScore(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, thread *state.ThreadRecord) int {
+	if inst == nil {
+		return 0
+	}
+	score := 0
+	root := state.NormalizeWorkspaceKey(inst.WorkspaceRoot)
+	cwd := ""
+	if thread != nil {
+		cwd = state.NormalizeWorkspaceKey(thread.CWD)
+	}
+	switch {
+	case root != "" && cwd != "" && cwd == root:
+		score += 10000
+	case root != "" && cwd != "" && strings.HasPrefix(cwd, root+"/"):
+		score += 5000 + len(root)
+	case root != "" && cwd != "":
+		score += 1
+	}
+	if surface != nil && inst.InstanceID == strings.TrimSpace(surface.AttachedInstanceID) {
+		score += 100
+	}
+	if inst.ActiveTurnID == "" {
+		score += 1
+	}
+	return score
+}
+
 func workspaceAffinityScore(root, cwd string) int {
 	root = state.NormalizeWorkspaceKey(root)
 	cwd = state.NormalizeWorkspaceKey(cwd)
@@ -502,7 +548,7 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 			NoticeText: "目标会话所在 workspace 当前已被其他飞书会话占用。",
 		}
 	}
-	if view.CurrentVisible {
+	if view.CurrentVisible && s.currentVisibleThreadEligible(surface, view.ThreadID) {
 		return resolvedThreadTarget{
 			Mode: threadAttachCurrentVisible,
 			View: view,
@@ -594,7 +640,8 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	}
 	preferredInstanceID = strings.TrimSpace(preferredInstanceID)
 	if preferredInstanceID != "" {
-		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online && threadVisible(inst.Threads[view.ThreadID]) {
+		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online &&
+			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) {
 			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 				return nil, "thread_busy"
 			}
@@ -621,6 +668,18 @@ func threadCWD(view *mergedThreadView) string {
 		return ""
 	}
 	return strings.TrimSpace(view.Thread.CWD)
+}
+
+func (s *Service) currentVisibleThreadEligible(surface *state.SurfaceConsoleRecord, threadID string) bool {
+	if s == nil || surface == nil {
+		return false
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if inst == nil {
+		return false
+	}
+	thread := inst.Threads[strings.TrimSpace(threadID)]
+	return threadVisible(thread) && threadBelongsToInstanceWorkspace(inst, thread)
 }
 
 func (s *Service) threadSelectionWorkspaceScope(surface *state.SurfaceConsoleRecord) string {

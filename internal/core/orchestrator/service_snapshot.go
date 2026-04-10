@@ -1276,6 +1276,9 @@ func (s *Service) discardStagedImagesForRouteChange(surface *state.SurfaceConsol
 }
 
 func (s *Service) maybePromoteWorkspaceRoot(inst *state.InstanceRecord, cwd string) {
+	if inst == nil {
+		return
+	}
 	cwd = state.NormalizeWorkspaceKey(cwd)
 	if cwd == "" {
 		return
@@ -1283,8 +1286,6 @@ func (s *Service) maybePromoteWorkspaceRoot(inst *state.InstanceRecord, cwd stri
 	currentRoot := state.NormalizeWorkspaceKey(inst.WorkspaceRoot)
 	switch {
 	case currentRoot == "":
-		currentRoot = cwd
-	case strings.HasPrefix(currentRoot, cwd+string(os.PathSeparator)):
 		currentRoot = cwd
 	}
 	inst.WorkspaceRoot = currentRoot

@@ -227,6 +227,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 1. `presentWorkspaceSelection()` 优先按所有在线 instance 的可见 thread `CWD` 归并 workspace。
    1. 只有当某个 instance 当前完全没有可见 thread 时，才回退到该 instance 的 `WorkspaceKey/WorkspaceRoot`。
    2. 这样 broad headless pool 不会再把多个真实 workspace 压扁成一个实例级根目录。
+   3. 对 `normal mode` / managed headless 来说，这里的“可见 thread”当前还要求 `thread.CWD` 必须落在该 instance 的 `WorkspaceRoot` 之下；若某个 `threads.snapshot` 混入了别的 workspace 的 thread，它不会再参与 workspace 归并、`/use` 候选或 current/free-visible 解析。
 2. normal mode `/list` 的 Feishu 卡片当前走专用 `grouped_attach_workspace` 布局，不再复用通用 selection 模板。
    1. 若 surface 当前已 attach workspace，会先在卡片顶部投影一个“当前工作区”摘要。
    2. 当前工作区摘要只显示 `workspace label + 最近活跃时间 + /use / /new 提示`，不会再把当前 workspace 混进可点击列表。
@@ -247,6 +248,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 4. 不会进入“workspace 仲裁层已经冲突，但仍然 attach 成功”的半 attach 状态。
 5. normal mode 的 `/list` attach/switch 不会自动抢默认 thread；用户会明确落到 `R1`，然后继续 `/use` 或点 thread 卡片。
 6. 如果当前 surface 已 attach 且没有其他可切换 workspace，卡片仍会保留“当前工作区”摘要，并在底部给出“当前没有其他可接管工作区”的短提示，不会出现空白卡片。
+7. managed headless instance 一旦已经被 retarget 到某个精确 workspace，后续 `thread.focused` / `threads.snapshot` 里的更宽父目录 `cwd` 当前不会再把它的 `WorkspaceRoot` 回退成父目录，避免 `/status` 与 `/use` 再次出现“实例显示是 A，实际 thread 在 B”的分裂态。
 
 ### 4.1.1 vscode mode `/list` 先选 instance，并显式投影“当前实例”
 
@@ -273,7 +275,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 1. 一个 thread 同时只能被一个飞书 surface 占有。
 2. normal mode 下，如果目标 thread 所在 workspace 已被其他 normal-mode surface 占有，会先在 workspace 层被禁用，不再进入 thread kick 逻辑。
 3. `/use` 命中已被他人占用的 thread 时：
-   1. 如果目标 thread 在**当前 attached instance 内可见**，仍保留现有强踢逻辑：
+   1. 如果目标 thread 在**当前 attached instance 内可见，且仍属于该 instance 当前 workspace**，仍保留现有强踢逻辑：
       1. 对方 idle 才会弹强踢确认。
       2. 对方 queued/running 会直接拒绝。
    2. 如果目标 thread 走的是 global thread-first attach 路径，不提供强踢，只会在列表里显示 busy 并禁用。
@@ -618,6 +620,7 @@ R5 NewThreadReady
    2. free existing visible instance。
    3. reusable managed headless。
    4. create managed headless。
+   5. 第 1/2 类 visible resolver 当前只接受“thread 仍属于该 instance 当前 workspace”的候选；foreign workspace thread 即使短暂出现在实例快照里，也不会再把 surface silently 留在错误 workspace 上。
 5. normal mode detached/global `/use` 与 `/useall` 的**候选 thread 列表**当前先 merge 两类来源：
    1. runtime/catalog 已可见 thread。
    2. Codex sqlite 中最近 persisted 的主交互 thread metadata：

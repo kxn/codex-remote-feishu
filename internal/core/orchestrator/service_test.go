@@ -5880,6 +5880,37 @@ func TestThreadsSnapshotDoesNotDropPreviouslyObservedThread(t *testing.T) {
 	}
 }
 
+func TestThreadsSnapshotDoesNotBroadenManagedHeadlessWorkspaceRoot(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "fschannel3",
+		WorkspaceRoot: "/data/dl/fschannel3",
+		WorkspaceKey:  "/data/dl/fschannel3",
+		ShortName:     "fschannel3",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+
+	svc.ApplyAgentEvent("inst-headless-1", agentproto.Event{
+		Kind: agentproto.EventThreadsSnapshot,
+		Threads: []agentproto.ThreadSnapshotRecord{
+			{ThreadID: "thread-ancestor", Name: "污染线程", CWD: "/data/dl", Loaded: true},
+			{ThreadID: "thread-1", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+
+	inst := svc.root.Instances["inst-headless-1"]
+	if inst.WorkspaceRoot != "/data/dl/fschannel3" || inst.WorkspaceKey != "/data/dl/fschannel3" || inst.DisplayName != "fschannel3" {
+		t.Fatalf("expected managed headless workspace metadata to stay on the precise workspace, got %#v", inst)
+	}
+}
+
 func TestPendingRemoteDispatchKeepsLaterMessageQueuedUntilTurnStarts(t *testing.T) {
 	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -8438,6 +8469,106 @@ func TestUseThreadAttachedNormalRejectsCrossWorkspaceSelection(t *testing.T) {
 	surface := svc.root.Surfaces["surface-1"]
 	if surface.AttachedInstanceID != "inst-1" || surface.ClaimedWorkspaceKey != "/data/dl/droid" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected surface to stay on current workspace without rebinding, got %#v", surface)
+	}
+}
+
+func TestUseThreadAttachedNormalIgnoresPollutedCurrentInstanceThreadVisibility(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 27, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-picdetect",
+		DisplayName:   "picdetect",
+		WorkspaceRoot: "/data/dl/picdetect",
+		WorkspaceKey:  "/data/dl/picdetect",
+		ShortName:     "picdetect",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-pic": {ThreadID: "thread-pic", Name: "图片检测", CWD: "/data/dl/picdetect", Loaded: true},
+			"thread-fs":  {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-fschannel3",
+		DisplayName:   "fschannel3",
+		WorkspaceRoot: "/data/dl/fschannel3",
+		WorkspaceKey:  "/data/dl/fschannel3",
+		ShortName:     "fschannel3",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/picdetect",
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:                control.ActionUseThread,
+		SurfaceSessionID:    "surface-1",
+		ChatID:              "chat-1",
+		ActorUserID:         "user-1",
+		ThreadID:            "thread-fs",
+		AllowCrossWorkspace: true,
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-fschannel3" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel3" || surface.SelectedThreadID != "thread-fs" {
+		t.Fatalf("expected cross-workspace /use to reattach to the correct workspace instance, got %#v", surface)
+	}
+	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.WorkspaceKey != "/data/dl/fschannel3" || snapshot.Attachment.InstanceID != "inst-fschannel3" {
+		t.Fatalf("expected snapshot to stay aligned with selected thread workspace, got %#v", snapshot)
+	}
+}
+
+func TestUseThreadDetachedPrefersMatchingVisibleWorkspaceInstance(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 28, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-picdetect",
+		DisplayName:   "picdetect",
+		WorkspaceRoot: "/data/dl/picdetect",
+		WorkspaceKey:  "/data/dl/picdetect",
+		ShortName:     "picdetect",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-fschannel3",
+		DisplayName:   "fschannel3",
+		WorkspaceRoot: "/data/dl/fschannel3",
+		WorkspaceKey:  "/data/dl/fschannel3",
+		ShortName:     "fschannel3",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+		},
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-fs",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-fschannel3" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel3" || surface.SelectedThreadID != "thread-fs" {
+		t.Fatalf("expected detached /use to attach the matching workspace instance, got %#v", surface)
 	}
 }
 

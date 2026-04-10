@@ -596,6 +596,9 @@ func instanceWorkspaceSelectionKeys(inst *state.InstanceRecord) []string {
 		if thread == nil {
 			continue
 		}
+		if !threadBelongsToInstanceWorkspace(inst, thread) {
+			continue
+		}
 		key := state.ResolveWorkspaceKey(thread.CWD)
 		if key == "" {
 			continue
@@ -638,12 +641,30 @@ func workspaceVisibleThreads(inst *state.InstanceRecord, workspaceKey string) []
 		if thread == nil {
 			continue
 		}
+		if !threadBelongsToInstanceWorkspace(inst, thread) {
+			continue
+		}
 		if state.ResolveWorkspaceKey(thread.CWD) != workspaceKey {
 			continue
 		}
 		threads = append(threads, thread)
 	}
 	return threads
+}
+
+func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.ThreadRecord) bool {
+	if inst == nil || thread == nil {
+		return false
+	}
+	if isVSCodeInstance(inst) {
+		return true
+	}
+	root := state.NormalizeWorkspaceKey(inst.WorkspaceRoot)
+	cwd := state.NormalizeWorkspaceKey(thread.CWD)
+	if root == "" || cwd == "" {
+		return true
+	}
+	return cwd == root || strings.HasPrefix(cwd, root+string(filepath.Separator))
 }
 
 func (s *Service) workspaceOnlineInstances(workspaceKey string) []*state.InstanceRecord {
@@ -1679,6 +1700,10 @@ func NoticeForVSCodeOpenPrompt(hadPreviousInstance bool) *control.Notice {
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) []control.UIEvent {
 	threadID = strings.TrimSpace(threadID)
 	target := s.resolveThreadTargetWithScope(surface, threadID, allowCrossWorkspace)
+	return s.executeResolvedThreadTarget(surface, threadID, target)
+}
+
+func (s *Service) executeResolvedThreadTarget(surface *state.SurfaceConsoleRecord, threadID string, target resolvedThreadTarget) []control.UIEvent {
 	switch target.Mode {
 	case threadAttachCurrentVisible:
 		return s.useAttachedVisibleThread(surface, threadID)
@@ -1725,6 +1750,13 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 	thread := inst.Threads[threadID]
 	if !threadVisible(thread) {
 		return append(events, notice(surface, "thread_not_found", "目标会话不存在或当前不可见。")...)
+	}
+	if !threadBelongsToInstanceWorkspace(inst, thread) {
+		fallback := s.resolveThreadTargetFromView(surface, s.mergedThreadView(surface, threadID))
+		if fallback.Mode == threadAttachCurrentVisible {
+			return append(events, notice(surface, "thread_not_found", "目标会话不存在或当前不可见。")...)
+		}
+		return append(events, s.executeResolvedThreadTarget(surface, threadID, fallback)...)
 	}
 	if owner := s.threadClaimSurface(threadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		switch s.threadKickStatus(inst, owner, threadID) {
