@@ -249,6 +249,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		if !switchedIntoVSCode {
 			return inlineResult
 		}
+		a.invalidateVSCodeCompatibilityCacheLocked()
 		promptEvents, _ := a.maybePromptVSCodeCompatibilityLocked(action.SurfaceSessionID)
 		if inlineResult == nil {
 			a.handleUIEvents(ctx, promptEvents)
@@ -343,6 +344,9 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	connectEvents := a.service.ApplyInstanceConnected(inst.InstanceID)
 	a.recordHeadlessRestoreOutcomeEventsLocked(connectEvents, now)
 	a.handleUIEvents(ctx, connectEvents)
+	if inst.Source == "vscode" {
+		a.invalidateVSCodeCompatibilityCacheLocked()
+	}
 
 	command := agentproto.Command{
 		CommandID: a.nextCommandID(),
@@ -485,6 +489,9 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.PID,
 	)
 	a.handleUIEvents(ctx, uiEvents)
+	if inst.Source == "vscode" {
+		a.invalidateVSCodeCompatibilityCacheLocked()
+	}
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityLocked("")
 	a.handleUIEvents(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []control.UIEvent{}
@@ -515,8 +522,13 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.maybeStartAutoUpgradeCheckLocked(now)
-	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityLocked("")
-	a.handleUIEvents(ctx, vscodePromptEvents)
+	vscodeBlocked := false
+	if a.vscodeStartupCheckDue || a.vscodeCompatibility.Checked {
+		a.vscodeStartupCheckDue = false
+		vscodePromptEvents, blocked := a.maybePromptVSCodeCompatibilityLocked("")
+		vscodeBlocked = blocked
+		a.handleUIEvents(ctx, vscodePromptEvents)
+	}
 	vscodeRecoveryEvents := []control.UIEvent{}
 	if !vscodeBlocked {
 		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)

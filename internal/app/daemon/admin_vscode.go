@@ -68,6 +68,9 @@ func (a *App) handleVSCodeApply(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	a.mu.Lock()
+	a.invalidateVSCodeCompatibilityCacheLocked()
+	a.mu.Unlock()
 	payload, err := a.buildVSCodeDetectResponse()
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
@@ -98,6 +101,9 @@ func (a *App) handleVSCodeReinstallShim(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+	a.mu.Lock()
+	a.invalidateVSCodeCompatibilityCacheLocked()
+	a.mu.Unlock()
 	payload, err := a.buildVSCodeDetectResponse()
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{

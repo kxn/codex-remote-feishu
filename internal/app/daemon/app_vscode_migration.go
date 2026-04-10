@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -18,6 +19,11 @@ type vscodeCompatibilityIssue struct {
 	ActionText  string
 	ButtonLabel string
 	SuccessText string
+}
+
+type vscodeCompatibilityPromptTarget struct {
+	SurfaceSessionID string
+	GatewayID        string
 }
 
 func classifyVSCodeCompatibilityIssue(detect vscodeDetectResponse) *vscodeCompatibilityIssue {
@@ -82,7 +88,7 @@ func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.CommandCatal
 }
 
 func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, error) {
-	detect, err := a.buildVSCodeDetectResponse()
+	detect, err := a.detectVSCodeCompatibility()
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +97,14 @@ func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, erro
 
 func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]control.UIEvent, bool) {
 	a.syncVSCodeMigrationPromptStateLocked()
-	issue, err := a.currentVSCodeCompatibilityIssue()
+	targets := a.detachedVSCodeCompatibilityTargetsLocked(surfaceFilter)
+	if len(targets) == 0 {
+		if surfaceFilter != "" {
+			delete(a.vscodeMigrationPrompts, strings.TrimSpace(surfaceFilter))
+		}
+		return nil, false
+	}
+	issue, err := a.cachedVSCodeCompatibilityIssueLocked()
 	if err != nil {
 		log.Printf("detect vscode compatibility issue failed: err=%v", err)
 		return nil, false
@@ -102,35 +115,20 @@ func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]cont
 	}
 
 	events := []control.UIEvent{}
-	matched := false
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil {
+	for _, target := range targets {
+		if a.vscodeMigrationPrompts[target.SurfaceSessionID] == issue.Key {
 			continue
 		}
-		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
-		if surfaceFilter != "" && surfaceID != strings.TrimSpace(surfaceFilter) {
-			continue
-		}
-		if state.NormalizeProductMode(surface.ProductMode) != state.ProductModeVSCode {
-			continue
-		}
-		if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
-			continue
-		}
-		matched = true
-		if a.vscodeMigrationPrompts[surfaceID] == issue.Key {
-			continue
-		}
-		a.vscodeMigrationPrompts[surfaceID] = issue.Key
+		a.vscodeMigrationPrompts[target.SurfaceSessionID] = issue.Key
 		catalog := vscodeMigrationCatalog(*issue)
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventCommandCatalog,
-			GatewayID:        surface.GatewayID,
-			SurfaceSessionID: surfaceID,
+			GatewayID:        target.GatewayID,
+			SurfaceSessionID: target.SurfaceSessionID,
 			CommandCatalog:   &catalog,
 		})
 	}
-	return events, matched
+	return events, true
 }
 
 func (a *App) syncVSCodeMigrationPromptStateLocked() {
@@ -151,6 +149,60 @@ func (a *App) clearVSCodeMigrationPromptsLocked() {
 	}
 }
 
+func (a *App) detectVSCodeCompatibility() (vscodeDetectResponse, error) {
+	if a.vscodeDetect != nil {
+		return a.vscodeDetect()
+	}
+	return a.buildVSCodeDetectResponse()
+}
+
+func (a *App) cachedVSCodeCompatibilityIssueLocked() (*vscodeCompatibilityIssue, error) {
+	if a.vscodeCompatibility.Checked {
+		return a.vscodeCompatibility.Issue, nil
+	}
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	if err != nil {
+		return nil, err
+	}
+	a.vscodeCompatibility = vscodeCompatibilityCacheState{
+		Checked: true,
+		Issue:   issue,
+	}
+	return issue, nil
+}
+
+func (a *App) invalidateVSCodeCompatibilityCacheLocked() {
+	a.vscodeCompatibility = vscodeCompatibilityCacheState{}
+}
+
+func (a *App) detachedVSCodeCompatibilityTargetsLocked(surfaceFilter string) []vscodeCompatibilityPromptTarget {
+	surfaceFilter = strings.TrimSpace(surfaceFilter)
+	targets := []vscodeCompatibilityPromptTarget{}
+	for _, surface := range a.service.Surfaces() {
+		if surface == nil {
+			continue
+		}
+		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
+		if surfaceFilter != "" && surfaceID != surfaceFilter {
+			continue
+		}
+		if state.NormalizeProductMode(surface.ProductMode) != state.ProductModeVSCode {
+			continue
+		}
+		if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+			continue
+		}
+		targets = append(targets, vscodeCompatibilityPromptTarget{
+			SurfaceSessionID: surfaceID,
+			GatewayID:        strings.TrimSpace(surface.GatewayID),
+		})
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].SurfaceSessionID < targets[j].SurfaceSessionID
+	})
+	return targets
+}
+
 func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []control.UIEvent {
 	detect, err := a.buildVSCodeDetectResponse()
 	if err != nil {
@@ -164,6 +216,7 @@ func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []contro
 		log.Printf("apply vscode migration failed: surface=%s err=%v", command.SurfaceSessionID, err)
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_failed", "迁移失败", fmt.Sprintf("迁移扩展入口失败：%v。请确认 VS Code 已关闭，并且这台机器上的 Codex 扩展已经安装后再重试。", err))
 	}
+	a.invalidateVSCodeCompatibilityCacheLocked()
 
 	remaining, err := a.currentVSCodeCompatibilityIssue()
 	if err != nil {

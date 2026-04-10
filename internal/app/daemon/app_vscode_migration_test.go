@@ -240,6 +240,74 @@ func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing
 	}
 }
 
+func TestDaemonTickSkipsVSCodeCompatibilityDetectWithoutVSCodeSurface(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+	detectCalls := 0
+	app.vscodeDetect = func() (vscodeDetectResponse, error) {
+		detectCalls++
+		return vscodeDetectResponse{}, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	app.onTick(context.Background(), time.Now().UTC())
+	app.onTick(context.Background(), time.Now().UTC().Add(time.Second))
+
+	if detectCalls != 0 {
+		t.Fatalf("expected no vscode compatibility detect on normal tick, got %d", detectCalls)
+	}
+}
+
+func TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	putSurfaceResumeStateForTest(t, filepath.Join(home, ".local", "state", "codex-remote"), SurfaceResumeEntry{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ProductMode:      "vscode",
+	})
+
+	gateway := &recordingGateway{}
+	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, false)
+	detectCalls := 0
+	app.vscodeDetect = func() (vscodeDetectResponse, error) {
+		detectCalls++
+		return vscodeDetectResponse{
+			CurrentMode:            "editor_settings",
+			LatestBundleEntrypoint: "/tmp/fake-entrypoint",
+		}, nil
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+	app.onTick(context.Background(), time.Now().UTC().Add(time.Second))
+
+	if detectCalls != 1 {
+		t.Fatalf("expected restored vscode surface to trigger exactly one compatibility detect, got %d", detectCalls)
+	}
+	card := findOperationByTitle(gateway.operations, "VS Code 接入需要迁移")
+	if card == nil {
+		t.Fatalf("expected migration card for restored vscode surface, got %#v", gateway.operations)
+	}
+}
+
 func writeLegacyVSCodeSettings(t *testing.T, path, binaryPath string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

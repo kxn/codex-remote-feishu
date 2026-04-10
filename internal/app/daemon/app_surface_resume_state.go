@@ -33,6 +33,7 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	a.surfaceResumeState = store
 	a.materializeSurfaceResumeStateLocked()
 	a.syncSurfaceResumeRecoveryStateLocked()
+	a.vscodeStartupCheckDue = storedVSCodeResumeExists(store)
 }
 
 func (a *App) SurfaceResumeState(surfaceID string) *SurfaceResumeEntry {
@@ -69,6 +70,18 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			state.ProductMode(entry.ProductMode),
 		)
 	}
+}
+
+func storedVSCodeResumeExists(store *surfaceResumeStore) bool {
+	if store == nil {
+		return false
+	}
+	for _, entry := range store.Entries() {
+		if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeVSCode {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {

@@ -87,6 +87,11 @@ type surfaceResumeRecoveryState struct {
 	LastFailureCode string
 }
 
+type vscodeCompatibilityCacheState struct {
+	Checked bool
+	Issue   *vscodeCompatibilityIssue
+}
+
 type App struct {
 	service             *orchestrator.Service
 	projector           *feishu.Projector
@@ -121,6 +126,9 @@ type App struct {
 	surfaceResumeRecovery  map[string]*surfaceResumeRecoveryState
 	vscodeResumeNotices    map[string]bool
 	vscodeMigrationPrompts map[string]string
+	vscodeDetect           func() (vscodeDetectResponse, error)
+	vscodeCompatibility    vscodeCompatibilityCacheState
+	vscodeStartupCheckDue  bool
 	headlessRestoreHints   *headlessRestoreHintStore
 	headlessRestoreState   map[string]*headlessRestoreRecoveryState
 	startupRefreshPending  map[string]bool
