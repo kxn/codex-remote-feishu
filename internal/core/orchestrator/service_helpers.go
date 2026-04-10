@@ -484,32 +484,29 @@ func isDigits(value string) bool {
 }
 
 func threadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallback string) string {
-	if inst == nil {
-		inst = &state.InstanceRecord{}
-	}
-	short := inst.ShortName
-	if short == "" {
-		short = filepath.Base(inst.WorkspaceKey)
-	}
-	if short == "" {
-		short = inst.DisplayName
-	}
+	short := threadWorkspaceLabel(inst, thread)
 	if thread == nil {
 		if fallback == "" {
 			return short
 		}
+		if short == "" {
+			return shortenThreadID(fallback)
+		}
 		return fmt.Sprintf("%s · %s", short, shortenThreadID(fallback))
 	}
-	if thread.Name != "" {
-		return fmt.Sprintf("%s · %s", short, thread.Name)
-	}
-	if summary := previewSnippet(thread.Preview); summary != "" {
-		return fmt.Sprintf("%s · %s", short, summary)
+	if body := threadDisplayBody(thread, 40); body != "" {
+		if short == "" {
+			return body
+		}
+		return fmt.Sprintf("%s · %s", short, body)
 	}
 	if thread.CWD != "" {
 		base := filepath.Base(thread.CWD)
 		switch {
 		case base == "", base == ".", base == string(filepath.Separator), base == short:
+			if short == "" {
+				return shortenThreadID(fallback)
+			}
 			return fmt.Sprintf("%s · %s", short, shortenThreadID(fallback))
 		default:
 			return fmt.Sprintf("%s · %s · %s", short, base, shortenThreadID(fallback))
@@ -518,7 +515,71 @@ func threadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallbac
 	if fallback == "" {
 		return short
 	}
+	if short == "" {
+		return shortenThreadID(fallback)
+	}
 	return fmt.Sprintf("%s · %s", short, shortenThreadID(fallback))
+}
+
+func threadWorkspaceLabel(inst *state.InstanceRecord, thread *state.ThreadRecord) string {
+	if thread != nil {
+		if short := state.WorkspaceShortName(thread.CWD); short != "" {
+			return short
+		}
+	}
+	if inst != nil {
+		if short := state.WorkspaceShortName(inst.WorkspaceKey); short != "" {
+			return short
+		}
+		if short := state.WorkspaceShortName(inst.WorkspaceRoot); short != "" {
+			return short
+		}
+		if short := strings.TrimSpace(inst.ShortName); short != "" {
+			return short
+		}
+		if short := strings.TrimSpace(inst.DisplayName); short != "" {
+			return short
+		}
+	}
+	return ""
+}
+
+func threadDisplayBody(thread *state.ThreadRecord, limit int) string {
+	if thread == nil {
+		return ""
+	}
+	if name := threadDisplayName(thread); name != "" {
+		return truncateThreadDisplayText(name, limit)
+	}
+	if preview := previewOfText(thread.Preview); preview != "" {
+		return truncateThreadDisplayText(preview, limit)
+	}
+	return ""
+}
+
+func threadDisplayName(thread *state.ThreadRecord) string {
+	if thread == nil {
+		return ""
+	}
+	name := strings.Join(strings.Fields(strings.TrimSpace(thread.Name)), " ")
+	switch strings.ToLower(name) {
+	case "", "新会话", "新聊天", "new chat", "new thread":
+		return ""
+	default:
+		return name
+	}
+}
+
+func truncateThreadDisplayText(text string, limit int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" || limit <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func displayThreadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallback string) string {
@@ -564,37 +625,18 @@ func threadPreview(thread *state.ThreadRecord) string {
 }
 
 func threadSelectionButtonLabel(thread *state.ThreadRecord, fallback string) string {
-	source := ""
-	if thread != nil {
-		name := strings.TrimSpace(thread.Name)
-		switch strings.ToLower(name) {
-		case "", "新会话", "新聊天", "new chat", "new thread":
-		default:
-			source = name
-		}
-		if source == "" {
-			source = previewOfText(thread.Preview)
-		}
-	}
+	source := threadDisplayBody(thread, 20)
 	if source == "" {
 		source = shortenThreadID(fallback)
 	}
-	source = strings.Join(strings.Fields(strings.TrimSpace(source)), " ")
 	if source == "" {
-		return "未命名会话"
+		source = "未命名会话"
 	}
-	return truncateThreadSelectionLabel(source, 20)
-}
-
-func truncateThreadSelectionLabel(text string, limit int) string {
-	if limit <= 0 {
-		return ""
+	workspace := threadWorkspaceLabel(nil, thread)
+	if workspace == "" {
+		return source
 	}
-	runes := []rune(strings.TrimSpace(text))
-	if len(runes) <= limit {
-		return string(runes)
-	}
-	return string(runes[:limit]) + "..."
+	return workspace + " · " + source
 }
 
 func (s *Service) maybeRequestThreadRefresh(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string) []control.UIEvent {

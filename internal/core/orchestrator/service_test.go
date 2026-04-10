@@ -1367,7 +1367,7 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 			continue
 		}
 		found = true
-		if !option.Disabled || option.ButtonLabel != "整理日志" || !strings.Contains(option.Subtitle, "workspace 已被其他飞书会话接管") {
+		if !option.Disabled || option.ButtonLabel != "droid · 整理日志" || !strings.Contains(option.Subtitle, "workspace 已被其他飞书会话接管") {
 			t.Fatalf("expected thread in claimed workspace to be disabled, got %#v", option)
 		}
 	}
@@ -4503,6 +4503,54 @@ func TestThreadTitleUsesPreviewSummaryWhenNameMissing(t *testing.T) {
 	}
 }
 
+func TestThreadTitleUsesThreadWorkspaceSuffixOverInstanceShortName(t *testing.T) {
+	title := threadTitle(&state.InstanceRecord{
+		DisplayName:   "dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		WorkspaceRoot: "/data/dl",
+	}, &state.ThreadRecord{
+		ThreadID: "thread-1",
+		Name:     "修复 relay 队列背压",
+		CWD:      "/data/dl/fschannel3",
+	}, "thread-1")
+
+	if title != "fschannel3 · 修复 relay 队列背压" {
+		t.Fatalf("expected thread cwd basename to drive title prefix, got %q", title)
+	}
+}
+
+func TestThreadTitleSkipsPlaceholderNameAndTruncatesPreview(t *testing.T) {
+	title := threadTitle(&state.InstanceRecord{
+		DisplayName:   "fschannel3",
+		WorkspaceKey:  "/data/dl/fschannel3",
+		ShortName:     "fschannel3",
+		WorkspaceRoot: "/data/dl/fschannel3",
+	}, &state.ThreadRecord{
+		ThreadID: "thread-1",
+		Name:     "新会话",
+		Preview:  "0123456789012345678901234567890123456789XYZ",
+		CWD:      "/data/dl/fschannel3",
+	}, "thread-1")
+
+	if title != "fschannel3 · 0123456789012345678901234567890123456789..." {
+		t.Fatalf("expected placeholder name to fall back to truncated preview, got %q", title)
+	}
+}
+
+func TestThreadSelectionButtonLabelUsesWorkspaceSuffixAndPreviewFallback(t *testing.T) {
+	label := threadSelectionButtonLabel(&state.ThreadRecord{
+		ThreadID: "thread-1",
+		Name:     "新会话",
+		Preview:  "01234567890123456789XYZ",
+		CWD:      "/data/dl/fschannel3",
+	}, "thread-1")
+
+	if label != "fschannel3 · 01234567890123456789..." {
+		t.Fatalf("expected selection label to include workspace suffix and truncated preview, got %q", label)
+	}
+}
+
 func TestThreadDiscoveredDoesNotEraseExistingName(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -7451,7 +7499,7 @@ func TestShowThreadsDetachedFiltersPersistedThreadsToListVisibleWorkspaces(t *te
 	if prompt.Options[0].OptionID != "thread-persisted" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
 		t.Fatalf("expected newest persisted thread first, got %#v", prompt.Options[0])
 	}
-	if prompt.Options[0].Label != "数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
+	if prompt.Options[0].Label != "sqlite · 数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
 		t.Fatalf("expected persisted metadata to render in prompt, got %#v", prompt.Options[0])
 	}
 }
@@ -7547,7 +7595,7 @@ func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *tes
 		t.Fatalf("expected prompt, got %#v", events)
 	}
 	option := events[0].SelectionPrompt.Options[0]
-	if option.Label != "数据库里的新标题" || option.ButtonLabel != "数据库里的新标题" || option.Subtitle != "/data/dl/droid\n可接管" {
+	if option.Label != "droid · 数据库里的新标题" || option.ButtonLabel != "droid · 数据库里的新标题" || option.Subtitle != "/data/dl/droid\n可接管" {
 		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
 	}
 }
@@ -7602,7 +7650,7 @@ func TestPresentGlobalThreadSelectionMarksBusyThreadDisabled(t *testing.T) {
 	if busyOption == nil {
 		t.Fatalf("expected busy thread in global prompt, got %#v", prompt.Options)
 	}
-	if !busyOption.Disabled || busyOption.ButtonLabel != "忙碌会话" || !strings.Contains(busyOption.Subtitle, "接管") {
+	if !busyOption.Disabled || busyOption.ButtonLabel != "web · 忙碌会话" || !strings.Contains(busyOption.Subtitle, "接管") {
 		t.Fatalf("expected busy thread to be disabled in global prompt, got %#v", busyOption)
 	}
 }
