@@ -38,6 +38,8 @@ for platform in "${platforms[@]}"; do
     extension=".exe"
   fi
 
+  bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
+
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
     go build -trimpath -ldflags "-X main.version=${version}" \
     -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote

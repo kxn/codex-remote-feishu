@@ -4,6 +4,7 @@ GO ?= go
 
 check:
 	bash scripts/web/build-admin-ui.sh
+	bash scripts/externalaccess/prepare-cloudflared-embed.sh
 	bash scripts/check/no-local-paths.sh
 	bash scripts/check/no-legacy-names.sh
 	files="$$(find cmd internal testkit -name '*.go' | sort)"; output="$$(gofmt -l $$files)"; test -z "$$output" || (echo "$$output" >&2; exit 1)
@@ -12,10 +13,12 @@ check:
 	$(GO) test ./...
 
 test:
+	bash scripts/externalaccess/prepare-cloudflared-embed.sh
 	$(GO) test ./...
 
 build:
 	bash scripts/web/build-admin-ui.sh
+	bash scripts/externalaccess/prepare-cloudflared-embed.sh
 	$(GO) build ./cmd/codex-remote
 	$(GO) build ./cmd/relayd
 	$(GO) build ./cmd/relay-wrapper

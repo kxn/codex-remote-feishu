@@ -2,10 +2,13 @@ package externalaccess
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -50,6 +53,61 @@ func TestTryCloudflareProviderEnsurePublicBase(t *testing.T) {
 	snapshot := provider.Snapshot()
 	if !snapshot.Ready || snapshot.BaseURL != base.BaseURL {
 		t.Fatalf("snapshot = %#v, want ready base=%q", snapshot, base.BaseURL)
+	}
+}
+
+func TestTryCloudflareProviderResolveBinaryPathUsesBundledExtractor(t *testing.T) {
+	dir := t.TempDir()
+	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
+		t.Fatalf("seed current binary: %v", err)
+	}
+	bundledPath := filepath.Join(dir, executableName("cloudflared"))
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{
+		CurrentBinary: currentBinary,
+		EnsureBundledBinary: func(path string) (string, bool, error) {
+			if path != currentBinary {
+				t.Fatalf("currentBinary = %q, want %q", path, currentBinary)
+			}
+			if err := os.WriteFile(bundledPath, []byte("cloudflared"), 0o755); err != nil {
+				t.Fatalf("seed bundled asset: %v", err)
+			}
+			return bundledPath, true, nil
+		},
+	})
+
+	pathValue, err := provider.resolveBinaryPath()
+	if err != nil {
+		t.Fatalf("resolveBinaryPath: %v", err)
+	}
+	if pathValue != bundledPath {
+		t.Fatalf("pathValue = %q, want %q", pathValue, bundledPath)
+	}
+}
+
+func TestTryCloudflareProviderResolveBinaryPathReportsBundledError(t *testing.T) {
+	dir := t.TempDir()
+	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
+		t.Fatalf("seed current binary: %v", err)
+	}
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{
+		CurrentBinary: currentBinary,
+		EnsureBundledBinary: func(string) (string, bool, error) {
+			return "", false, errors.New("extract embedded cloudflared failed")
+		},
+	})
+
+	_, err := provider.resolveBinaryPath()
+	if err == nil {
+		t.Fatal("resolveBinaryPath succeeded unexpectedly")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "extract embedded cloudflared failed") {
+		t.Fatalf("error = %q, want bundled extraction detail", message)
+	}
+	if !strings.Contains(message, "path fallback failed") {
+		t.Fatalf("error = %q, want path fallback detail", message)
 	}
 }
 

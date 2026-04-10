@@ -38,7 +38,7 @@
 
 - 走独立 listener，不与现有 admin/setup listener 混用。
 - provider 第一阶段选择 `trycloudflare`。
-- 运行时需要随仓库发行物一起 bundle 一个 `cloudflared` sidecar。
+- 运行时需要随仓库发行物一起 bundle 一个 `cloudflared`，实现上优先收敛为主二进制内嵌、首次使用时解到当前进程旁边。
 - 对外能力的 source of truth 是 daemon 内部的授权与 allowlist 规则，不是 consumer 自己拼 token。
 - 面向公网的第一阶段只提供“有认证的 HTTP/WS 反代能力”，不承诺通用任意端口穿透。
 - 第一个真实 consumer 按 `#112 /debug admin` 收敛，但 consumer 需求不应反向破坏基座边界。
@@ -189,9 +189,15 @@ type TryCloudflareSettings struct {
 - 如果依赖 PATH，上手与排障成本都会很高
 - provider 行为对版本比较敏感，绑定一组经过测试的 `cloudflared` 版本更稳
 
-### 7.2 sidecar 布局
+### 7.2 内嵌后解包布局
 
-建议不要把 `cloudflared` 作为“系统依赖”处理，而是作为当前版本槽位的 sidecar：
+建议不要把 `cloudflared` 作为“系统依赖”处理。当前实现更适合收敛为：
+
+- 构建时把目标平台的 `cloudflared` 内嵌到 `codex-remote`
+- 首次需要 `trycloudflare` 时，再把它解到当前进程旁边
+- 如果目标位置已经有 `cloudflared`，则直接复用
+
+运行时落盘后的形态仍然是：
 
 ```text
 <versionsRoot>/<slot>/
@@ -201,8 +207,9 @@ type TryCloudflareSettings struct {
 
 好处：
 
-- 当前版本槽位切换时，`codex-remote` 和 `cloudflared` 一起切
-- 回滚时 sidecar 也天然跟着回滚
+- 对 systemd / launchd / Windows service 的 PATH 没有依赖
+- 当前版本槽位切换时，`codex-remote` 和解出的 `cloudflared` 仍然一起切
+- 回滚时 `cloudflared` 也天然跟着回滚
 - 不需要为 provider 单独做另一套版本状态机
 
 ### 7.3 解析顺序
@@ -210,8 +217,8 @@ type TryCloudflareSettings struct {
 运行时解析 `cloudflared` binary 的顺序建议为：
 
 1. `config.externalAccess.provider.tryCloudflare.binaryPath`
-2. 当前版本槽位同目录下的 bundled `cloudflared`
-3. 当前进程旁边的 sidecar `cloudflared`
+2. 当前版本槽位或当前进程旁边已存在的 `cloudflared`
+3. 从主二进制内嵌资源解出的 `cloudflared`
 4. PATH 中的 `cloudflared` 作为开发环境兜底
 
 phase 1 不建议只保留 PATH 方案。

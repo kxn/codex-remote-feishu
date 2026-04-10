@@ -13,3 +13,5 @@ coverage.out
 web/node_modules/
 web/.vite/
 .codex/state/issue-workflow/
+internal/externalaccess/cloudflaredembed/assets/
+internal/externalaccess/cloudflaredembed/cloudflared_*_embed.go

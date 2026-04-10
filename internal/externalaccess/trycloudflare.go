@@ -15,28 +15,32 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/externalaccess/cloudflaredembed"
 )
 
 var tryCloudflareURLPattern = regexp.MustCompile(`https://[a-zA-Z0-9.-]+\.trycloudflare\.com`)
 
 type TryCloudflareOptions struct {
-	BinaryPath     string
-	CurrentBinary  string
-	LaunchTimeout  time.Duration
-	MetricsPort    int
-	LogPath        string
-	Now            func() time.Time
-	CommandFactory func(context.Context, string, ...string) *exec.Cmd
+	BinaryPath          string
+	CurrentBinary       string
+	LaunchTimeout       time.Duration
+	MetricsPort         int
+	LogPath             string
+	Now                 func() time.Time
+	CommandFactory      func(context.Context, string, ...string) *exec.Cmd
+	EnsureBundledBinary func(string) (string, bool, error)
 }
 
 type TryCloudflareProvider struct {
-	now            func() time.Time
-	binaryPath     string
-	currentBinary  string
-	launchTimeout  time.Duration
-	metricsPort    int
-	logPath        string
-	commandFactory func(context.Context, string, ...string) *exec.Cmd
+	now                 func() time.Time
+	binaryPath          string
+	currentBinary       string
+	launchTimeout       time.Duration
+	metricsPort         int
+	logPath             string
+	commandFactory      func(context.Context, string, ...string) *exec.Cmd
+	ensureBundledBinary func(string) (string, bool, error)
 
 	mu         sync.Mutex
 	cmd        *exec.Cmd
@@ -54,17 +58,22 @@ func NewTryCloudflareProvider(opts TryCloudflareOptions) *TryCloudflareProvider 
 	if factory == nil {
 		factory = exec.CommandContext
 	}
+	ensureBundledBinary := opts.EnsureBundledBinary
+	if ensureBundledBinary == nil {
+		ensureBundledBinary = cloudflaredembed.EnsureSibling
+	}
 	if opts.LaunchTimeout <= 0 {
 		opts.LaunchTimeout = 20 * time.Second
 	}
 	return &TryCloudflareProvider{
-		now:            now,
-		binaryPath:     strings.TrimSpace(opts.BinaryPath),
-		currentBinary:  strings.TrimSpace(opts.CurrentBinary),
-		launchTimeout:  opts.LaunchTimeout,
-		metricsPort:    opts.MetricsPort,
-		logPath:        strings.TrimSpace(opts.LogPath),
-		commandFactory: factory,
+		now:                 now,
+		binaryPath:          strings.TrimSpace(opts.BinaryPath),
+		currentBinary:       strings.TrimSpace(opts.CurrentBinary),
+		launchTimeout:       opts.LaunchTimeout,
+		metricsPort:         opts.MetricsPort,
+		logPath:             strings.TrimSpace(opts.LogPath),
+		commandFactory:      factory,
+		ensureBundledBinary: ensureBundledBinary,
 	}
 }
 
@@ -234,12 +243,24 @@ func (p *TryCloudflareProvider) resolveBinaryPath() (string, error) {
 		return value, nil
 	}
 	if sibling := ResolveBundledCloudflaredPath(p.currentBinary); sibling != "" {
-		if _, err := os.Stat(sibling); err == nil {
+		if info, err := os.Stat(sibling); err == nil && info.Mode().IsRegular() {
 			return sibling, nil
+		}
+	}
+	var bundledErr error
+	if p.ensureBundledBinary != nil {
+		pathValue, ok, err := p.ensureBundledBinary(p.currentBinary)
+		if err != nil {
+			bundledErr = err
+		} else if ok && strings.TrimSpace(pathValue) != "" {
+			return pathValue, nil
 		}
 	}
 	pathValue, err := exec.LookPath(executableName("cloudflared"))
 	if err != nil {
+		if bundledErr != nil {
+			return "", fmt.Errorf("resolve cloudflared binary: %v; path fallback failed: %w", bundledErr, err)
+		}
 		return "", fmt.Errorf("resolve cloudflared binary: %w", err)
 	}
 	return pathValue, nil

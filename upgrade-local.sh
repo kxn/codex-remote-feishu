@@ -71,6 +71,7 @@ git pull --ff-only
 
 printf '[2/4] build %s\n' "${BUILD_OUTPUT}"
 mkdir -p "${BIN_DIR}"
+bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh"
 "${GO_BIN}" build -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
 
 if [[ ! -f "${state_path}" ]]; then
