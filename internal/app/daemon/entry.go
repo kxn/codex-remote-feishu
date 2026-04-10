@@ -21,6 +21,7 @@ import (
 type runnableDaemon interface {
 	Bind() error
 	Run(context.Context) error
+	PprofURL() string
 }
 
 func RunMain(ctx context.Context, version string) error {
@@ -111,6 +112,7 @@ func RunMain(ctx context.Context, version string) error {
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
+	app.ConfigurePprof(defaultPprofBindAddr())
 	if cfg.DebugRelayRaw {
 		rawLogger, err := debuglog.OpenRaw(paths.DaemonRawLogFile, "daemon", "", os.Getpid())
 		if err != nil {
@@ -134,7 +136,7 @@ func runConfiguredDaemon(ctx context.Context, app runnableDaemon, startup startu
 	if err := app.Bind(); err != nil {
 		return fmt.Errorf("bind daemon listeners: %w", err)
 	}
-	logStartupState(startup, services)
+	logStartupState(startup, services, app.PprofURL())
 	if err := maybeOpenSetupBrowser(startup, env); err != nil {
 		switch {
 		case err == errBrowserUnavailable:
@@ -220,9 +222,12 @@ func sanitizeGatewayPath(gatewayID string) string {
 	return value
 }
 
-func logStartupState(startup startupAccessPlan, services config.ServicesConfig) {
+func logStartupState(startup startupAccessPlan, services config.ServicesConfig, pprofURL string) {
 	relayEndpoint := net.JoinHostPort(strings.TrimSpace(services.RelayHost), strings.TrimSpace(services.RelayPort))
 	log.Printf("relay daemon listening: relay=%s admin=%s", relayEndpoint, startup.AdminURL)
+	if strings.TrimSpace(pprofURL) != "" {
+		log.Printf("pprof (local only): %s", pprofURL)
+	}
 	if startup.SetupRequired {
 		setupURL := startup.SetupURL
 		if startup.SSHSession && strings.TrimSpace(startup.SetupToken) != "" {

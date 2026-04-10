@@ -99,6 +99,7 @@ type App struct {
 
 	relayServer *http.Server
 	apiServer   *http.Server
+	pprofServer *http.Server
 
 	daemonStartedAt   time.Time
 	daemonLifecycleID string
@@ -146,6 +147,7 @@ type App struct {
 
 	relayListener          net.Listener
 	apiListener            net.Listener
+	pprofListener          net.Listener
 	externalAccessListener net.Listener
 	externalAccessServer   *http.Server
 
@@ -293,22 +295,29 @@ func (a *App) Bind() error {
 	a.listenMu.Lock()
 	defer a.listenMu.Unlock()
 
-	if a.relayListener != nil && a.apiListener != nil {
-		return nil
+	var createdRelay bool
+	if a.relayListener == nil {
+		relayListener, err := net.Listen("tcp", a.relayServer.Addr)
+		if err != nil {
+			return err
+		}
+		a.relayListener = relayListener
+		createdRelay = true
 	}
 
-	relayListener, err := net.Listen("tcp", a.relayServer.Addr)
-	if err != nil {
-		return err
-	}
-	apiListener, err := net.Listen("tcp", a.apiServer.Addr)
-	if err != nil {
-		_ = relayListener.Close()
-		return err
+	if a.apiListener == nil {
+		apiListener, err := net.Listen("tcp", a.apiServer.Addr)
+		if err != nil {
+			if createdRelay {
+				_ = a.relayListener.Close()
+				a.relayListener = nil
+			}
+			return err
+		}
+		a.apiListener = apiListener
 	}
 
-	a.relayListener = relayListener
-	a.apiListener = apiListener
+	a.bindPprofListenerLocked()
 	return nil
 }
 
@@ -320,6 +329,8 @@ func (a *App) Run(ctx context.Context) error {
 	a.listenMu.Lock()
 	relayListener := a.relayListener
 	apiListener := a.apiListener
+	pprofListener := a.pprofListener
+	pprofServer := a.pprofServer
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 3)
@@ -335,6 +346,13 @@ func (a *App) Run(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+	if pprofServer != nil && pprofListener != nil {
+		go func() {
+			if err := pprofServer.Serve(pprofListener); err != nil && err != http.ErrServerClosed {
+				log.Printf("pprof server stopped: %v", err)
+			}
+		}()
+	}
 	gatewayCtx, gatewayCancel := context.WithCancel(context.Background())
 	gatewayDone := make(chan struct{})
 	a.setGatewayRuntime(gatewayCancel, gatewayDone)

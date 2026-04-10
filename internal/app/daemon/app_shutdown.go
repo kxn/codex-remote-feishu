@@ -45,6 +45,9 @@ func (a *App) Shutdown(_ context.Context) error {
 	if a.apiServer != nil {
 		_ = a.apiServer.Close()
 	}
+	if a.pprofServer != nil {
+		_ = a.pprofServer.Close()
+	}
 	a.mu.Lock()
 	a.shutdownExternalAccessLocked("daemon_shutdown")
 	a.mu.Unlock()
@@ -153,6 +156,7 @@ func (a *App) clearListeners() {
 	defer a.listenMu.Unlock()
 	a.relayListener = nil
 	a.apiListener = nil
+	a.pprofListener = nil
 	a.externalAccessListener = nil
 }
 

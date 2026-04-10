@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -109,6 +111,105 @@ func TestAdminUIAssetRouteServesBuiltBundle(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "Codex Remote") {
 		t.Fatalf("expected built bundle body, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminPprofRouteIsNotServedByAdminMux(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app := newAdminUITestApp(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Types of profiles available") {
+		t.Fatalf("expected admin mux to hide pprof content, body=%s", body)
+	}
+	if !strings.Contains(body, "Codex Remote Control Plane") {
+		t.Fatalf("expected admin shell fallback, body=%s", body)
+	}
+}
+
+func TestDedicatedPprofServerServesProfiles(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app := newAdminUITestApp(cfg)
+	app.ConfigurePprof("127.0.0.1:0")
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+
+	if app.pprofServer == nil || app.pprofListener == nil {
+		t.Fatal("expected dedicated pprof listener to be bound")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = app.pprofServer.Serve(app.pprofListener)
+	}()
+
+	resp, err := (&http.Client{Transport: &http.Transport{}}).Get(app.PprofURL())
+	if err != nil {
+		t.Fatalf("GET %s: %v", app.PprofURL(), err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", resp.StatusCode, string(body))
+	}
+	if !strings.Contains(string(body), "Types of profiles available") {
+		t.Fatalf("expected pprof index page, body=%s", string(body))
+	}
+
+	if err := app.Shutdown(nil); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	<-done
+}
+
+func TestBindIgnoresDedicatedPprofPortConflict(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	defer listener.Close()
+
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app := newAdminUITestApp(cfg)
+	app.ConfigurePprof(listener.Addr().String())
+
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer app.Shutdown(nil)
+
+	if url := app.PprofURL(); url != "" {
+		t.Fatalf("expected pprof to be disabled after bind conflict, url=%s", url)
 	}
 }
 

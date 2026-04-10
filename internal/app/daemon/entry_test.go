@@ -15,6 +15,7 @@ type stubRunnableDaemon struct {
 	bindErr    error
 	bindCalled bool
 	runCalled  bool
+	pprofURL   string
 }
 
 func (s *stubRunnableDaemon) Bind() error {
@@ -25,6 +26,10 @@ func (s *stubRunnableDaemon) Bind() error {
 func (s *stubRunnableDaemon) Run(context.Context) error {
 	s.runCalled = true
 	return nil
+}
+
+func (s *stubRunnableDaemon) PprofURL() string {
+	return s.pprofURL
 }
 
 func TestRuntimeGatewayAppsUsesConfigApps(t *testing.T) {
