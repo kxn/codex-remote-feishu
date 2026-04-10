@@ -1,8 +1,9 @@
 import { AdminRoute } from "./routes/AdminRoute";
+import { currentRouteIsSetup } from "./lib/paths";
 import { SetupRoute } from "./routes/SetupRoute";
 
 export function App() {
-  if (window.location.pathname.startsWith("/setup")) {
+  if (currentRouteIsSetup()) {
     return <SetupRoute />;
   }
   return <AdminRoute />;

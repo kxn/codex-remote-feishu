@@ -1,3 +1,5 @@
+import { relativeLocalPath } from "./paths";
+
 export interface APIErrorShape {
   error?: {
     code?: string;
@@ -42,7 +44,7 @@ export async function requestJSON<T>(path: string, init?: RequestInit): Promise<
 }
 
 export async function requestJSONAllowHTTPError<T>(path: string, init?: RequestInit): Promise<JSONResult<T>> {
-  const response = await fetch(path, {
+  const response = await fetch(resolveRequestPath(path), {
     credentials: "same-origin",
     ...init,
     headers: {
@@ -66,7 +68,7 @@ export async function requestJSONAllowHTTPError<T>(path: string, init?: RequestI
 }
 
 export async function requestVoid(path: string, init?: RequestInit): Promise<void> {
-  const response = await fetch(path, {
+  const response = await fetch(resolveRequestPath(path), {
     credentials: "same-origin",
     ...init,
     headers: {
@@ -116,6 +118,10 @@ export function formatError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function resolveRequestPath(path: string): string {
+  return relativeLocalPath(path);
 }
 
 function formatErrorDetails(details: unknown): string {

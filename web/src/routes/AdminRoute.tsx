@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { APIRequestError, formatError, requestJSON, requestJSONAllowHTTPError, requestVoid, sendJSON } from "../lib/api";
+import { relativeLocalPath } from "../lib/paths";
 import type {
   AdminInstanceSummary,
   AdminInstancesResponse,
@@ -128,7 +129,7 @@ export function AdminRoute() {
     const source = runtime?.gateways?.length ? runtime.gateways : bootstrap?.gateways ?? [];
     return source;
   }, [bootstrap?.gateways, runtime?.gateways]);
-  const setupURL = bootstrap?.admin.setupURL || "/setup";
+  const setupURL = relativeLocalPath(bootstrap?.admin.setupURL || "/setup");
   const setupURLForApp = (appID: string) => buildAppSetupURL(setupURL, appID);
   const vscodePrimaryLabel = vscodePrimaryActionLabel(vscode, vscodeScenario);
   const vscodeCanContinue = Boolean(vscode) && (vscode?.sshSession ? vscodeHasDetectedBundle(vscode) : vscodeScenario !== null && (vscodeScenario === "remote_only" || vscodeHasDetectedBundle(vscode)));
@@ -632,9 +633,9 @@ function feishuMutationTone(mutation?: FeishuAppMutation): Notice["tone"] {
 }
 
 function buildAppSetupURL(baseURL: string, appID: string): string {
-  const url = new URL(baseURL, window.location.origin);
+  const url = new URL(baseURL, window.location.href);
   url.searchParams.set("app", appID);
-  return url.toString();
+  return relativeLocalPath(url.toString());
 }
 
 function parseFeishuRuntimeApplyFailureDetails(value: unknown): FeishuRuntimeApplyFailureDetails | null {

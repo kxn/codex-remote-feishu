@@ -18,6 +18,7 @@ import type {
   VSCodeDetectResponse,
 } from "../lib/types";
 import { BlockingModal, ErrorState, LoadingState, Panel, ShellScaffold, StatusBadge } from "../components/ui";
+import { relativeLocalPath } from "../lib/paths";
 import {
   SetupStepContent,
   SetupStepPrimaryAction,
@@ -630,7 +631,7 @@ export function SetupRoute() {
     await runAction("finish-setup", async () => {
       const response = await sendJSON<SetupCompleteResponse>("/api/setup/complete", "POST");
       if (bootstrap.session.trustedLoopback) {
-        window.location.assign("/");
+        window.location.assign(relativeLocalPath("/"));
         return;
       }
       setFinishInfo(response);

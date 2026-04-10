@@ -7,7 +7,7 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  base: "/",
+  base: "./",
   build: {
     outDir: path.resolve(rootDir, "../internal/app/daemon/adminui/dist"),
     emptyOutDir: true,

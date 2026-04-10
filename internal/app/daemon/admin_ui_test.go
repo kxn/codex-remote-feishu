@@ -87,13 +87,17 @@ func TestAdminUIAssetRouteServesBuiltBundle(t *testing.T) {
 	rec := httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
 
-	re := regexp.MustCompile(`/assets/[^"]+\.js`)
+	if strings.Contains(rec.Body.String(), `src="/assets/`) || strings.Contains(rec.Body.String(), `href="/assets/`) {
+		t.Fatalf("expected embedded shell to avoid absolute asset paths, body=%s", rec.Body.String())
+	}
+
+	re := regexp.MustCompile(`(?:\./)?assets/[^"]+\.js`)
 	match := re.FindString(rec.Body.String())
 	if match == "" {
 		t.Fatalf("expected js asset path in shell, body=%s", rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, match, nil)
+	req = httptest.NewRequest(http.MethodGet, "/"+strings.TrimPrefix(match, "./"), nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec = httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
