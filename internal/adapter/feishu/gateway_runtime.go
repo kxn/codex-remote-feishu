@@ -24,24 +24,21 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		if err != nil || !ok {
 			return err
 		}
-		handler(ctx, action)
-		return nil
+		return handleGatewayEventAction(ctx, action, handler)
 	})
 	dispatch.OnP2MessageRecalledV1(func(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
 		action, ok := g.parseMessageRecalledEvent(event)
 		if !ok {
 			return nil
 		}
-		handler(ctx, action)
-		return nil
+		return handleGatewayEventAction(ctx, action, handler)
 	})
 	dispatch.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
 		action, ok := g.parseMessageReactionCreatedEvent(event)
 		if !ok {
 			return nil
 		}
-		handler(ctx, action)
-		return nil
+		return handleGatewayEventAction(ctx, action, handler)
 	})
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
 		action, ok := g.parseCardActionTriggerEvent(event)
@@ -55,14 +52,22 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		if !ok {
 			return nil
 		}
-		handler(ctx, action)
-		return nil
+		return handleGatewayEventAction(ctx, action, handler)
 	})
 	return newGatewayWSRunner(g.config, dispatch, g.emitState).Run(ctx)
 }
 
+func handleGatewayEventAction(ctx context.Context, action control.Action, handler ActionHandler) error {
+	if shouldAcknowledgeGatewayActionImmediately(action) {
+		go handler(context.Background(), action)
+		return nil
+	}
+	handler(ctx, action)
+	return nil
+}
+
 func handleCardActionTrigger(ctx context.Context, action control.Action, handler ActionHandler) (*larkcallback.CardActionTriggerResponse, error) {
-	if shouldHandleCardActionAsync(action) {
+	if shouldAcknowledgeGatewayActionImmediately(action) {
 		go handler(context.Background(), action)
 		return &larkcallback.CardActionTriggerResponse{}, nil
 	}
@@ -74,14 +79,19 @@ func handleCardActionTrigger(ctx context.Context, action control.Action, handler
 	return &larkcallback.CardActionTriggerResponse{}, nil
 }
 
-func shouldHandleCardActionAsync(action control.Action) bool {
-	// Synchronous replacement is still disabled. Keeping card callbacks async
-	// avoids holding the Feishu callback open long enough for duplicate
-	// delivery on slower request paths.
-	if action.Inbound == nil {
+func shouldAcknowledgeGatewayActionImmediately(action control.Action) bool {
+	switch action.Kind {
+	case control.ActionTextMessage,
+		control.ActionImageMessage,
+		control.ActionReactionCreated,
+		control.ActionMessageRecalled:
 		return false
+	default:
+		// Command, menu, button and request-control actions do not currently rely
+		// on a synchronous callback payload. Ack them immediately so long-running
+		// control flows do not get redelivered by Feishu.
+		return true
 	}
-	return strings.EqualFold(strings.TrimSpace(action.Inbound.EventType), "card.action.trigger")
 }
 
 func callbackCardResponse(result *ActionResult) *larkcallback.CardActionTriggerResponse {

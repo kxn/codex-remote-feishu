@@ -363,6 +363,7 @@ func (r *gatewayWSRunner) handleDataFrame(ctx context.Context, conn *websocket.C
 		response any
 		err      error
 	)
+	start := time.Now().UnixMilli()
 	switch larkws.MessageType(typeName) {
 	case larkws.MessageTypeEvent:
 		response, err = r.dispatcher.Do(ctx, payload)
@@ -371,6 +372,7 @@ func (r *gatewayWSRunner) handleDataFrame(ctx context.Context, conn *websocket.C
 	default:
 		return nil
 	}
+	hs.Add(larkws.HeaderBizRt, strconv.FormatInt(time.Now().UnixMilli()-start, 10))
 
 	reply := larkws.NewResponseByCode(http.StatusOK)
 	if err != nil {
