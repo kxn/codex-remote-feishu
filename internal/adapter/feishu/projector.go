@@ -17,6 +17,7 @@ type OperationKind string
 const (
 	OperationSendText       OperationKind = "send_text"
 	OperationSendCard       OperationKind = "send_card"
+	OperationSendImage      OperationKind = "send_image"
 	OperationAddReaction    OperationKind = "add_reaction"
 	OperationRemoveReaction OperationKind = "remove_reaction"
 )
@@ -32,6 +33,8 @@ type Operation struct {
 	ReplyToMessageID string
 	EmojiType        string
 	Text             string
+	ImagePath        string
+	ImageBase64      string
 	CardTitle        string
 	CardBody         string
 	CardThemeKey     string
@@ -242,6 +245,22 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			return nil
 		}
 		return projectBlock(event.GatewayID, event.SurfaceSessionID, chatID, event.SourceMessageID, event.SourceMessagePreview, *event.Block, event.FileChangeSummary, event.FinalTurnSummary)
+	case control.UIEventImageOutput:
+		if event.ImageOutput == nil {
+			return nil
+		}
+		if strings.TrimSpace(event.ImageOutput.SavedPath) == "" && strings.TrimSpace(event.ImageOutput.ImageBase64) == "" {
+			return nil
+		}
+		return []Operation{{
+			Kind:             OperationSendImage,
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			ReplyToMessageID: event.SourceMessageID,
+			ImagePath:        strings.TrimSpace(event.ImageOutput.SavedPath),
+			ImageBase64:      strings.TrimSpace(event.ImageOutput.ImageBase64),
+		}}
 	case control.UIEventThreadSelectionChange:
 		if event.ThreadSelection == nil {
 			return nil

@@ -36,10 +36,12 @@ type LiveGateway struct {
 	client    *lark.Client
 	projector *Projector
 
-	downloadImageFn func(context.Context, string, string) (string, string, error)
-	fetchMessageFn  func(context.Context, string) (*gatewayMessage, error)
-	createMessageFn func(context.Context, string, string, string, string) (*larkim.CreateMessageResp, error)
-	replyMessageFn  func(context.Context, string, string, string) (*larkim.ReplyMessageResp, error)
+	downloadImageFn    func(context.Context, string, string) (string, string, error)
+	uploadImagePathFn  func(context.Context, string) (string, error)
+	uploadImageBytesFn func(context.Context, []byte) (string, error)
+	fetchMessageFn     func(context.Context, string) (*gatewayMessage, error)
+	createMessageFn    func(context.Context, string, string, string, string) (*larkim.CreateMessageResp, error)
+	replyMessageFn     func(context.Context, string, string, string) (*larkim.ReplyMessageResp, error)
 
 	mu        sync.Mutex
 	stateHook func(GatewayState, error)
@@ -89,6 +91,8 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 		messages:  map[string]string{},
 	}
 	gateway.downloadImageFn = gateway.downloadImage
+	gateway.uploadImagePathFn = gateway.uploadImagePath
+	gateway.uploadImageBytesFn = gateway.uploadImageBytes
 	gateway.fetchMessageFn = gateway.fetchMessage
 	gateway.createMessageFn = gateway.createMessage
 	gateway.replyMessageFn = gateway.replyMessage

@@ -3,6 +3,7 @@ package feishu
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -1614,4 +1615,138 @@ func stringRef(value string) *string {
 
 func int64Ref(value int64) *int64 {
 	return &value
+}
+
+func TestApplySendImageRepliesToSourceMessage(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	var (
+		uploadPath     string
+		replyMessageID string
+		replyMsgType   string
+		replyContent   string
+		createCalled   bool
+	)
+	gateway.uploadImagePathFn = func(_ context.Context, path string) (string, error) {
+		uploadPath = path
+		return "img-key-1", nil
+	}
+	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+		replyMessageID = messageID
+		replyMsgType = msgType
+		replyContent = content
+		return &larkim.ReplyMessageResp{
+			ApiResp: &larkcore.ApiResp{},
+			CodeError: larkcore.CodeError{
+				Code: 0,
+				Msg:  "ok",
+			},
+			Data: &larkim.ReplyMessageRespData{
+				MessageId: stringRef("om-image-1"),
+			},
+		}, nil
+	}
+	gateway.createMessageFn = func(_ context.Context, _, _, _, _ string) (*larkim.CreateMessageResp, error) {
+		createCalled = true
+		return nil, nil
+	}
+
+	err := gateway.Apply(t.Context(), []Operation{{
+		Kind:             OperationSendImage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "oc_1",
+		ReceiveID:        "oc_1",
+		ReceiveIDType:    "chat_id",
+		ReplyToMessageID: "om-source-1",
+		ImagePath:        "/tmp/generated.png",
+	}})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if createCalled {
+		t.Fatalf("expected reply path without fallback create")
+	}
+	if uploadPath != "/tmp/generated.png" {
+		t.Fatalf("unexpected uploaded image path: %q", uploadPath)
+	}
+	if replyMessageID != "om-source-1" || replyMsgType != "image" {
+		t.Fatalf("unexpected image reply request: message=%q type=%q", replyMessageID, replyMsgType)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(replyContent), &payload); err != nil {
+		t.Fatalf("image reply content is not valid json: %v", err)
+	}
+	if payload["image_key"] != "img-key-1" {
+		t.Fatalf("unexpected image reply payload: %#v", payload)
+	}
+	if gateway.messages["om-image-1"] != "surface-1" {
+		t.Fatalf("expected replied image message to be tracked for surface callbacks, got %#v", gateway.messages)
+	}
+}
+
+func TestApplySendImageFallsBackToBase64WhenSavedPathUploadFails(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	var (
+		pathCalls     int
+		uploadedBytes []byte
+		createMsgType string
+		createContent string
+	)
+	gateway.uploadImagePathFn = func(_ context.Context, _ string) (string, error) {
+		pathCalls++
+		return "", errors.New("missing file")
+	}
+	gateway.uploadImageBytesFn = func(_ context.Context, data []byte) (string, error) {
+		uploadedBytes = append([]byte(nil), data...)
+		return "img-key-2", nil
+	}
+	gateway.createMessageFn = func(_ context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
+		if receiveIDType != "chat_id" || receiveID != "oc_1" {
+			t.Fatalf("unexpected receive target: type=%q id=%q", receiveIDType, receiveID)
+		}
+		createMsgType = msgType
+		createContent = content
+		return &larkim.CreateMessageResp{
+			ApiResp: &larkcore.ApiResp{},
+			CodeError: larkcore.CodeError{
+				Code: 0,
+				Msg:  "ok",
+			},
+			Data: &larkim.CreateMessageRespData{
+				MessageId: stringRef("om-image-2"),
+			},
+		}, nil
+	}
+
+	encoded := base64.StdEncoding.EncodeToString([]byte("fake-image"))
+	err := gateway.Apply(t.Context(), []Operation{{
+		Kind:             OperationSendImage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "oc_1",
+		ReceiveID:        "oc_1",
+		ReceiveIDType:    "chat_id",
+		ImagePath:        "/tmp/missing.png",
+		ImageBase64:      encoded,
+	}})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if pathCalls != 1 {
+		t.Fatalf("expected one saved-path upload attempt, got %d", pathCalls)
+	}
+	if string(uploadedBytes) != "fake-image" {
+		t.Fatalf("unexpected uploaded fallback bytes: %q", uploadedBytes)
+	}
+	if createMsgType != "image" {
+		t.Fatalf("unexpected image message type: %q", createMsgType)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(createContent), &payload); err != nil {
+		t.Fatalf("image create content is not valid json: %v", err)
+	}
+	if payload["image_key"] != "img-key-2" {
+		t.Fatalf("unexpected image create payload: %#v", payload)
+	}
+	if gateway.messages["om-image-2"] != "surface-1" {
+		t.Fatalf("expected created image message to be tracked for surface callbacks, got %#v", gateway.messages)
+	}
 }

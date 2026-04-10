@@ -1,7 +1,9 @@
 package feishu
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -146,6 +148,47 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
 		}
 		return nil
+	case OperationSendImage:
+		receiveID, receiveIDType := operation.ReceiveID, operation.ReceiveIDType
+		if receiveID == "" || receiveIDType == "" {
+			receiveID, receiveIDType = ResolveReceiveTarget(operation.ChatID, "")
+		}
+		if receiveID == "" || receiveIDType == "" {
+			return fmt.Errorf("send image failed: missing receive target")
+		}
+		imageKey, err := g.uploadOperationImage(ctx, operation)
+		if err != nil {
+			return err
+		}
+		body, _ := json.Marshal(map[string]string{"image_key": imageKey})
+		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "image", string(body))
+			if err == nil && resp != nil && resp.Success() {
+				if resp.Data != nil {
+					g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+				}
+				return nil
+			}
+			log.Printf(
+				"feishu image reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
+				operation.SurfaceSessionID,
+				operation.ReplyToMessageID,
+				err,
+				replyRespCode(resp),
+				replyRespMsg(resp),
+			)
+		}
+		resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, "image", string(body))
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return fmt.Errorf("send image failed: code=%d msg=%s", resp.Code, resp.Msg)
+		}
+		if resp.Data != nil {
+			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+		}
+		return nil
 	case OperationAddReaction:
 		if operation.MessageID == "" {
 			return nil
@@ -201,6 +244,116 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 	default:
 		return nil
 	}
+}
+
+func (g *LiveGateway) uploadOperationImage(ctx context.Context, operation Operation) (string, error) {
+	path := strings.TrimSpace(operation.ImagePath)
+	base64Data := strings.TrimSpace(operation.ImageBase64)
+	if path != "" {
+		imageKey, err := g.uploadImagePathFn(ctx, path)
+		if err == nil {
+			return imageKey, nil
+		}
+		if base64Data == "" {
+			return "", fmt.Errorf("upload image from saved path %q failed: %w", path, err)
+		}
+		log.Printf("feishu image upload path fallback: surface=%s path=%s err=%v", operation.SurfaceSessionID, path, err)
+		imageKey, fallbackErr := g.uploadImageBase64(ctx, base64Data)
+		if fallbackErr == nil {
+			return imageKey, nil
+		}
+		return "", fmt.Errorf("upload image failed: saved path %q: %v; base64 fallback: %w", path, err, fallbackErr)
+	}
+	if base64Data != "" {
+		return g.uploadImageBase64(ctx, base64Data)
+	}
+	return "", fmt.Errorf("upload image failed: missing image payload")
+}
+
+func (g *LiveGateway) uploadImageBase64(ctx context.Context, value string) (string, error) {
+	data, err := decodeBase64Image(value)
+	if err != nil {
+		return "", fmt.Errorf("decode image base64 failed: %w", err)
+	}
+	return g.uploadImageBytesFn(ctx, data)
+}
+
+func (g *LiveGateway) uploadImagePath(ctx context.Context, path string) (string, error) {
+	body, err := larkim.NewCreateImagePathReqBodyBuilder().
+		ImageType("message").
+		ImagePath(path).
+		Build()
+	if err != nil {
+		return "", err
+	}
+	resp, err := g.client.Im.V1.Image.Create(ctx, larkim.NewCreateImageReqBuilder().
+		Body(body).
+		Build())
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("upload image failed: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
+		return "", fmt.Errorf("upload image failed: missing image key")
+	}
+	return strings.TrimSpace(stringPtr(resp.Data.ImageKey)), nil
+}
+
+func (g *LiveGateway) uploadImageBytes(ctx context.Context, data []byte) (string, error) {
+	resp, err := g.client.Im.V1.Image.Create(ctx, larkim.NewCreateImageReqBuilder().
+		Body(larkim.NewCreateImageReqBodyBuilder().
+			ImageType("message").
+			Image(bytes.NewReader(data)).
+			Build()).
+		Build())
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("upload image failed: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
+		return "", fmt.Errorf("upload image failed: missing image key")
+	}
+	return strings.TrimSpace(stringPtr(resp.Data.ImageKey)), nil
+}
+
+func decodeBase64Image(value string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("empty image payload")
+	}
+	if strings.HasPrefix(strings.ToLower(trimmed), "data:") {
+		if comma := strings.Index(trimmed, ","); comma >= 0 {
+			trimmed = trimmed[comma+1:]
+		}
+	}
+	var builder strings.Builder
+	builder.Grow(len(trimmed))
+	for _, r := range trimmed {
+		switch r {
+		case ' ', '\n', '\r', '\t':
+			continue
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	compact := builder.String()
+	decoders := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	}
+	for _, decoder := range decoders {
+		data, err := decoder.DecodeString(compact)
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid base64 image payload")
 }
 
 func (g *LiveGateway) createMessage(ctx context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
