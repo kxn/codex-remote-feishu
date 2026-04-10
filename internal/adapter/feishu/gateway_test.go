@@ -72,6 +72,9 @@ func TestApplySendCardRepliesToSourceMessage(t *testing.T) {
 	if err := json.Unmarshal([]byte(replyContent), &payload); err != nil {
 		t.Fatalf("reply content is not valid json: %v", err)
 	}
+	if _, ok := payload["schema"]; ok {
+		t.Fatalf("expected normal send card to keep legacy envelope, got %#v", payload)
+	}
 	header := payload["header"].(map[string]any)
 	title := header["title"].(map[string]any)
 	if title["content"] != "最后答复：处理一下" {
@@ -142,6 +145,9 @@ func TestApplySendCardFallsBackToCreateWhenReplyFails(t *testing.T) {
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(createContent), &payload); err != nil {
 		t.Fatalf("fallback create content is not valid json: %v", err)
+	}
+	if _, ok := payload["schema"]; ok {
+		t.Fatalf("expected fallback send card to keep legacy envelope, got %#v", payload)
 	}
 	header := payload["header"].(map[string]any)
 	title := header["title"].(map[string]any)
@@ -917,12 +923,16 @@ func TestCallbackCardResponseBuildsReplacementCard(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected callback card data map, got %#v", response.Card.Data)
 	}
+	if data["schema"] != "2.0" {
+		t.Fatalf("expected callback card schema 2.0, got %#v", data)
+	}
 	header, _ := data["header"].(map[string]any)
 	title, _ := header["title"].(map[string]any)
 	if title["content"] != "命令菜单" {
 		t.Fatalf("unexpected callback card header: %#v", data)
 	}
-	elements, _ := data["elements"].([]map[string]any)
+	body, _ := data["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
 	if len(elements) != 2 {
 		t.Fatalf("expected body markdown plus extra element, got %#v", elements)
 	}

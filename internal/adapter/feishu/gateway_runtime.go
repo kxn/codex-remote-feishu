@@ -74,7 +74,7 @@ func callbackCardResponse(result *ActionResult) *larkcallback.CardActionTriggerR
 	return &larkcallback.CardActionTriggerResponse{
 		Card: &larkcallback.Card{
 			Type: "card_json",
-			Data: buildCard(card.CardTitle, card.CardBody, card.CardThemeKey, card.CardElements),
+			Data: buildCallbackCard(card.CardTitle, card.CardBody, card.CardThemeKey, card.CardElements),
 		},
 	}
 }
@@ -457,6 +457,34 @@ func buildCard(title, body, themeKey string, extraElements []map[string]any) map
 			},
 		},
 		"elements": elements,
+	}
+}
+
+func buildCallbackCard(title, body, themeKey string, extraElements []map[string]any) map[string]any {
+	elements := make([]map[string]any, 0, len(extraElements)+1)
+	if strings.TrimSpace(body) != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": body,
+		})
+	}
+	elements = append(elements, extraElements...)
+	return map[string]any{
+		"schema": "2.0",
+		"config": map[string]any{
+			"width_mode":     "fill",
+			"enable_forward": true,
+		},
+		"header": map[string]any{
+			"template": cardTemplate(themeKey, title),
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": title,
+			},
+		},
+		"body": map[string]any{
+			"elements": elements,
+		},
 	}
 }
 

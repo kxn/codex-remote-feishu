@@ -279,25 +279,11 @@ func (a *App) inlineCardActionResultLocked(action control.Action, events []contr
 }
 
 func shouldInlineReplaceCurrentCard(action control.Action) bool {
-	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
-		return false
-	}
-	switch action.Kind {
-	case control.ActionShowCommandMenu,
-		control.ActionShowThreads,
-		control.ActionShowAllThreads,
-		control.ActionShowScopedThreads,
-		control.ActionShowWorkspaceThreads:
-		return true
-	case control.ActionModeCommand,
-		control.ActionAutoContinueCommand,
-		control.ActionReasoningCommand,
-		control.ActionAccessCommand,
-		control.ActionModelCommand:
-		return len(strings.Fields(strings.TrimSpace(action.Text))) <= 1
-	default:
-		return false
-	}
+	// Current Feishu cards still use the legacy message-card envelope on send.
+	// The synchronous callback replacement path is being rejected by Feishu at
+	// runtime (observed as code 200672), so keep card clicks on the append-only
+	// path until these cards are migrated end-to-end to the newer card schema.
+	return false
 }
 
 func (a *App) ensureSurfaceRouteForNotice(action control.Action) {

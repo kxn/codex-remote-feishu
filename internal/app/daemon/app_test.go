@@ -200,7 +200,7 @@ func operationHasActionValue(operation feishu.Operation, kind, key, want string)
 	return false
 }
 
-func TestHandleGatewayActionReturnsInlineMenuReplacementForCardNavigation(t *testing.T) {
+func TestHandleGatewayActionAppendsMenuCardForCardNavigation(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
 		PID:       42,
@@ -220,21 +220,21 @@ func TestHandleGatewayActionReturnsInlineMenuReplacementForCardNavigation(t *tes
 		},
 	})
 
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected inline replacement result, got %#v", result)
+	if result != nil {
+		t.Fatalf("expected append-only behavior without inline replacement, got %#v", result)
 	}
-	if len(gateway.operations) != 0 {
-		t.Fatalf("inline replacement should not append new gateway operations, got %#v", gateway.operations)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected one appended gateway operation, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "命令菜单" {
-		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
+	if gateway.operations[0].CardTitle != "命令菜单" {
+		t.Fatalf("unexpected appended card: %#v", gateway.operations[0])
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/menu") {
-		t.Fatalf("expected submenu replacement card to include back-to-home command, got %#v", result.ReplaceCurrentCard.CardElements)
+	if !operationHasActionValue(gateway.operations[0], "run_command", "command_text", "/menu") {
+		t.Fatalf("expected appended submenu card to include back-to-home command, got %#v", gateway.operations[0].CardElements)
 	}
 }
 
-func TestHandleGatewayActionReturnsInlineScopedThreadReplacementForCardNavigation(t *testing.T) {
+func TestHandleGatewayActionAppendsScopedThreadCardForCardNavigation(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
 		PID:       42,
@@ -276,17 +276,17 @@ func TestHandleGatewayActionReturnsInlineScopedThreadReplacementForCardNavigatio
 		},
 	})
 
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected inline replacement result, got %#v", result)
+	if result != nil {
+		t.Fatalf("expected append-only behavior without inline replacement, got %#v", result)
 	}
-	if len(gateway.operations) != 0 {
-		t.Fatalf("inline replacement should not append new gateway operations, got %#v", gateway.operations)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected one appended gateway operation, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "当前工作区全部会话" {
-		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
+	if gateway.operations[0].CardTitle != "当前工作区全部会话" {
+		t.Fatalf("unexpected appended card title: %#v", gateway.operations[0])
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_threads", "", "") {
-		t.Fatalf("expected scoped-all replacement card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	if !operationHasActionValue(gateway.operations[0], "show_threads", "", "") {
+		t.Fatalf("expected appended scoped-all card to include return action, got %#v", gateway.operations[0].CardElements)
 	}
 }
 

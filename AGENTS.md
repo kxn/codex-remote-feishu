@@ -40,6 +40,7 @@ Trigger it for:
 - `upgrade-local.sh`
 - pull latest code, rebuild, and upgrade the locally installed daemon
 - requests to trigger the built-in local upgrade transaction from a repo build
+- Without explicit user approval in the current turn, do not automatically run repository-local upgrade flows such as `./upgrade-local.sh` or `codex-remote local-upgrade`, even if they seem like the natural next validation step.
 
 For repository-local safe push after local commits, also use `.codex/skills/safe-push/`.
 
