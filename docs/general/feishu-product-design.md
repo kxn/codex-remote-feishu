@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-10`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、turn 失败红卡、最终回复 reply 与文件修改摘要。
+> Updated: `2026-04-11`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显、已完成 assistant item 的提前过程文本投影，以及最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -620,6 +620,26 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 对用户在飞书发起的正常 remote turn，若某段 `agent_message` 已收到 `item.completed`，会尽早作为过程文本投影，不必强等到 `turn.completed`
 - 这条“提前投影已完成 assistant item”的策略当前不扩展到 local UI turn，也不扩展到 auto-continue turn
 
+### 7.2.1 图片与 dynamic tool 结果
+
+当前会单独回显两类富结果，而不是只依赖 final text：
+
+- `image_generation`
+  - item 完成后会直接向当前飞书会话发送图片消息
+  - 优先上传本地 `saved_path`，拿不到时回退到 base64 / data-url
+  - 同一 turn 内若产生多张图，会逐张发送
+- `dynamic_tool_call`
+  - 会保留 tool 名称、成功状态与可读文本摘要
+  - 若结果里带有可直接上传的图片内容，同样会发送飞书图片消息
+  - 若结果只有远程图片 URL，当前不会额外抓取转存，而是降级成可读链接或摘要
+  - 若结果主要是结构化内容，当前先给用户可读摘要，而不是暴露整份原始 payload
+
+这些富结果和普通文本可以在同一 turn 内并存：
+
+- 图片不会吞掉 final text
+- final text 也不会把已经单独发出的图片重新包进 markdown
+- 若图片上传或构造 payload 失败，链路会给出可见提示，而不是静默丢失
+
 ### 7.3 最终回复
 
 final `block.committed`：
@@ -629,12 +649,12 @@ final `block.committed`：
 - 若能拿到 reply anchor 对应的原用户消息预览，则标题会变成 `最后答复：<原消息预览>`
 - 若当前 turn 带有可用的飞书源消息 `SourceMessageID`，会优先 reply 到触发消息
 - 若 reply 失败、目标消息已不存在或不可回复，则回退到独立发卡
+- 若同一 turn 的 assistant 正文已经在过程阶段完整投影，而完成时只新增 elapsed footer，则不再额外补一张重复或空洞的 final card
+- 若过程阶段已经投影过正文，但完成时又新增了文件修改摘要等真正的收尾信息，仍会补 final card 承载这些新增内容
 - 若该 turn 带有文件修改 summary，会把摘要直接追加在 final assistant card 底部，而不是额外再发一张独立卡片
 - 文件摘要会展示本轮修改文件数、总 `+/-` 行数，以及逐文件的 `+/-` 统计
 - 文件展示名优先使用“最短唯一后缀”，避免直接铺完整长路径；重命名会显示 `旧路径 → 新路径`
 - 当前最多展开前 6 个文件；超出的部分只提示“另有 N 个文件未展开”
-- 若 assistant 正文已经在过程阶段提前投影过，而完成时只剩 elapsed footer 这类轻量收尾信息，则不会再额外补一张重复正文或空洞结束卡
-- 若 assistant 正文已经在过程阶段提前投影过，但完成时还有文件修改摘要等新增信息，仍会补一张 final card 承载这些新增内容
 - 若本轮没有可展示的最终正文，但存在文件修改 summary，仍会补一张合成 final card，正文为 `已完成文件修改。`
 - final card 底部当前会追加一条 turn summary footer，至少显示本轮用时
 - 若协议链路后续带来可精确复用的 usage 字段，footer 才会继续追加 token 数；当前实现不会做猜测或估算
