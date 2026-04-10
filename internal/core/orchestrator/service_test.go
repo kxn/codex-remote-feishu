@@ -1367,7 +1367,7 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 			continue
 		}
 		found = true
-		if !option.Disabled || option.ButtonLabel != "已占用" || !strings.Contains(option.Subtitle, "workspace 已被其他飞书会话占用") {
+		if !option.Disabled || option.ButtonLabel != "整理日志" || !strings.Contains(option.Subtitle, "workspace 已被其他飞书会话接管") {
 			t.Fatalf("expected thread in claimed workspace to be disabled, got %#v", option)
 		}
 	}
@@ -5023,8 +5023,8 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 	if events[0].SelectionPrompt.Title != "最近会话" {
 		t.Fatalf("expected recent session prompt title, got %#v", events[0].SelectionPrompt)
 	}
-	if events[0].SelectionPrompt.Options[0].Subtitle != "/data/dl\n可切换" {
-		t.Fatalf("expected subtitle to prefer cwd, got %#v", events[0].SelectionPrompt.Options[0])
+	if events[0].SelectionPrompt.Options[0].Subtitle != "可接管" {
+		t.Fatalf("expected attached /use subtitle to only show handoff status, got %#v", events[0].SelectionPrompt.Options[0])
 	}
 }
 
@@ -5062,14 +5062,59 @@ func TestPresentThreadSelectionShowsMostRecentFive(t *testing.T) {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if len(prompt.Options) != 5 {
-		t.Fatalf("expected recent prompt to show five sessions, got %#v", prompt.Options)
+	if len(prompt.Options) != 6 {
+		t.Fatalf("expected recent prompt plus scoped-all button, got %#v", prompt.Options)
 	}
-	if prompt.Title != "最近会话" || prompt.Hint != "发送 `/useall` 查看全部会话。" {
+	if prompt.Title != "最近会话" || prompt.Hint != "" {
 		t.Fatalf("unexpected recent prompt metadata: %#v", prompt)
 	}
 	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[4].OptionID != "thread-2" {
 		t.Fatalf("expected most recent sessions first, got %#v", prompt.Options)
+	}
+	if prompt.Options[5].ActionKind != "show_scoped_threads" || prompt.Options[5].ButtonLabel != "显示当前工作区全部会话" {
+		t.Fatalf("expected trailing scoped-all action, got %#v", prompt.Options[5])
+	}
+}
+
+func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := &state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "dl",
+		WorkspaceRoot: "/data/dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	}
+	for i := 1; i <= 6; i++ {
+		threadID := "thread-" + string(rune('0'+i))
+		inst.Threads[threadID] = &state.ThreadRecord{
+			ThreadID:   threadID,
+			Name:       "会话" + string(rune('0'+i)),
+			CWD:        "/data/dl",
+			LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+			ListOrder:  i,
+		}
+	}
+	svc.UpsertInstance(inst)
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowScopedThreads,
+		SurfaceSessionID: "surface-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "当前工作区全部会话" || len(prompt.Options) != 6 {
+		t.Fatalf("expected all current-workspace sessions, got %#v", prompt)
+	}
+	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[5].OptionID != "thread-1" {
+		t.Fatalf("expected scoped-all prompt to keep recency order, got %#v", prompt.Options)
 	}
 }
 
@@ -7296,13 +7341,13 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 		t.Fatalf("expected detached /use to show global thread prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if prompt.Title != "最近会话" || len(prompt.Options) != 2 {
+	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected prompt: %#v", prompt)
 	}
-	if prompt.Options[0].OptionID != "thread-2" || prompt.Options[0].ButtonLabel != "恢复" {
+	if prompt.Options[0].OptionID != "thread-2" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/web") || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
 		t.Fatalf("expected newer offline thread to require background restore, got %#v", prompt.Options[0])
 	}
-	if prompt.Options[1].OptionID != "thread-1" || prompt.Options[1].ButtonLabel != "接管" {
+	if prompt.Options[1].OptionID != "thread-1" || !prompt.Options[1].AllowCrossWorkspace || prompt.Options[1].Subtitle != "/data/dl/droid\n可接管" {
 		t.Fatalf("expected online free thread to support direct attach, got %#v", prompt.Options[1])
 	}
 }
@@ -7332,10 +7377,10 @@ func TestShowThreadsDetachedMergesPersistedRecentThreads(t *testing.T) {
 	if len(prompt.Options) != 2 {
 		t.Fatalf("expected persisted threads to appear in prompt, got %#v", prompt.Options)
 	}
-	if prompt.Options[0].OptionID != "thread-persisted" || prompt.Options[0].ButtonLabel != "恢复" {
+	if prompt.Options[0].OptionID != "thread-persisted" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
 		t.Fatalf("expected newest persisted thread first, got %#v", prompt.Options[0])
 	}
-	if prompt.Options[0].Label != "sqlite · 数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
+	if prompt.Options[0].Label != "数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
 		t.Fatalf("expected persisted metadata to render in prompt, got %#v", prompt.Options[0])
 	}
 }
@@ -7409,7 +7454,7 @@ func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *tes
 		t.Fatalf("expected prompt, got %#v", events)
 	}
 	option := events[0].SelectionPrompt.Options[0]
-	if option.Label != "droid · 数据库里的新标题" || option.ButtonLabel != "接管" {
+	if option.Label != "数据库里的新标题" || option.ButtonLabel != "数据库里的新标题" || option.Subtitle != "/data/dl/droid\n可接管" {
 		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
 	}
 }
@@ -7464,7 +7509,7 @@ func TestPresentGlobalThreadSelectionMarksBusyThreadDisabled(t *testing.T) {
 	if busyOption == nil {
 		t.Fatalf("expected busy thread in global prompt, got %#v", prompt.Options)
 	}
-	if !busyOption.Disabled || busyOption.ButtonLabel != "已占用" || !strings.Contains(busyOption.Subtitle, "占用") {
+	if !busyOption.Disabled || busyOption.ButtonLabel != "忙碌会话" || !strings.Contains(busyOption.Subtitle, "接管") {
 		t.Fatalf("expected busy thread to be disabled in global prompt, got %#v", busyOption)
 	}
 }
@@ -7525,6 +7570,101 @@ func TestShowThreadsAttachedNormalFiltersToCurrentWorkspace(t *testing.T) {
 		if option.OptionID == "thread-3" {
 			t.Fatalf("expected other-workspace thread to be filtered out, got %#v", prompt.Options)
 		}
+	}
+}
+
+func TestShowAllThreadsAttachedNormalShowsCrossWorkspaceSessions(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 16, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-droid-1",
+		DisplayName:   "droid-a",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid-a",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "当前工作区会话", CWD: "/data/dl/droid", LastUsedAt: now.Add(2 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web-1",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-3": {ThreadID: "thread-3", Name: "其他工作区会话", CWD: "/data/dl/web", LastUsedAt: now.Add(3 * time.Minute)},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
+		t.Fatalf("expected cross-workspace all-session prompt, got %#v", prompt)
+	}
+	if prompt.Options[0].OptionID != "thread-3" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/web") {
+		t.Fatalf("expected other-workspace thread to appear in /useall prompt, got %#v", prompt.Options[0])
+	}
+}
+
+func TestUseThreadAttachedNormalAllowsCrossWorkspaceSelectionWhenRequested(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 16, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-droid-1",
+		DisplayName:   "droid-a",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid-a",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "当前工作区会话", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web-1",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-3": {ThreadID: "thread-3", Name: "其他工作区会话", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:                control.ActionUseThread,
+		SurfaceSessionID:    "surface-1",
+		ThreadID:            "thread-3",
+		AllowCrossWorkspace: true,
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-web-1" || surface.ClaimedWorkspaceKey != "/data/dl/web" || surface.SelectedThreadID != "thread-3" {
+		t.Fatalf("expected cross-workspace /useall selection to rebind workspace, got %#v", surface)
+	}
+	var sawAttached bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "attached" && strings.Contains(event.Notice.Text, "其他工作区会话") {
+			sawAttached = true
+		}
+	}
+	if !sawAttached {
+		t.Fatalf("expected reattach notice for cross-workspace thread selection, got %#v", events)
 	}
 }
 

@@ -88,16 +88,22 @@ func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 	}
 }
 
-func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
+func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSelectionPrompt,
 		SelectionPrompt: &control.SelectionPrompt{
 			Kind:  control.SelectionPromptUseThread,
 			Title: "最近会话",
-			Hint:  "发送 `/useall` 查看全部会话。",
 			Options: []control.SelectionOption{
-				{Index: 1, OptionID: "thread-1", Label: "droid · 修复登录流程", Subtitle: "/data/dl/droid"},
+				{
+					Index:               1,
+					OptionID:            "thread-1",
+					Label:               "修复登录流程",
+					ButtonLabel:         "修复登录流程",
+					Subtitle:            "/data/dl/droid\n可接管",
+					AllowCrossWorkspace: true,
+				},
 			},
 		},
 	})
@@ -107,22 +113,26 @@ func TestProjectSessionSelectionPromptIncludesHint(t *testing.T) {
 	if ops[0].CardTitle != "最近会话" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
-	if len(ops[0].CardElements) != 3 {
-		t.Fatalf("expected markdown + action + hint elements, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 2 {
+		t.Fatalf("expected action + markdown elements, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "1. droid · 修复登录流程\n<text_tag color='neutral'>/data/dl/droid</text_tag>" {
-		t.Fatalf("unexpected option element: %#v", ops[0].CardElements[0])
-	}
-	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	actionRow, _ := ops[0].CardElements[0]["actions"].([]map[string]any)
 	if len(actionRow) != 1 {
-		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[0])
+	}
+	if actionRow[0]["width"] != "fill" {
+		t.Fatalf("expected thread button to fill width, got %#v", actionRow[0])
+	}
+	textValue, _ := actionRow[0]["text"].(map[string]any)
+	if textValue["content"] != "修复登录流程" {
+		t.Fatalf("unexpected button text: %#v", actionRow[0])
 	}
 	value, _ := actionRow[0]["value"].(map[string]any)
-	if value["kind"] != "use_thread" || value["thread_id"] != "thread-1" {
+	if value["kind"] != "use_thread" || value["thread_id"] != "thread-1" || value["allow_cross_workspace"] != true {
 		t.Fatalf("unexpected action payload: %#v", value)
 	}
-	if ops[0].CardElements[2]["content"] != "发送 <text_tag color='neutral'>/useall</text_tag> 查看全部会话。" {
-		t.Fatalf("unexpected hint element: %#v", ops[0].CardElements[2])
+	if ops[0].CardElements[1]["content"] != "<text_tag color='neutral'>/data/dl/droid</text_tag>\n可接管" {
+		t.Fatalf("unexpected option detail element: %#v", ops[0].CardElements[1])
 	}
 }
 
@@ -134,11 +144,11 @@ func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 		SelectionPrompt: &control.SelectionPrompt{
 			Kind: control.SelectionPromptUseThread,
 			Options: []control.SelectionOption{
-				{Index: 1, OptionID: "thread-1", Label: "droid · 修复登录流程"},
+				{Index: 1, OptionID: "thread-1", Label: "修复登录流程", ButtonLabel: "修复登录流程"},
 			},
 		},
 	})
-	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	actionRow, _ := ops[0].CardElements[0]["actions"].([]map[string]any)
 	value, _ := actionRow[0]["value"].(map[string]any)
 	if value["daemon_lifecycle_id"] != "life-1" {
 		t.Fatalf("expected selection prompt action to carry daemon lifecycle id, got %#v", value)

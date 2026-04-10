@@ -82,6 +82,25 @@ const (
 	attachInstanceModeSurfaceResume attachInstanceMode = "surface_resume"
 )
 
+type threadSelectionDisplayMode string
+
+const (
+	threadSelectionDisplayRecent    threadSelectionDisplayMode = "recent"
+	threadSelectionDisplayAll       threadSelectionDisplayMode = "all"
+	threadSelectionDisplayScopedAll threadSelectionDisplayMode = "scoped_all"
+)
+
+type threadSelectionPresentation struct {
+	title               string
+	views               []*mergedThreadView
+	limit               int
+	includeWorkspace    bool
+	allowCrossWorkspace bool
+	showScopedAllButton bool
+	scopedAllButtonText string
+	scopedAllStatus     string
+}
+
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
 	surface := s.root.Surfaces[action.SurfaceSessionID]
 	if surface != nil {
@@ -863,42 +882,57 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 }
 
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []control.UIEvent {
+	mode := threadSelectionDisplayRecent
+	if showAll {
+		mode = threadSelectionDisplayAll
+	}
+	return s.presentThreadSelectionMode(surface, mode)
+}
+
+func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.presentThreadSelectionMode(surface, threadSelectionDisplayScopedAll)
+}
+
+func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) []control.UIEvent {
 	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
 	}
-	threads := s.scopedMergedThreadViews(surface)
-	if len(threads) == 0 {
+	presentation := s.resolveThreadSelectionPresentation(surface, mode)
+	if len(presentation.views) == 0 {
 		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 			return notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
 		}
 		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
-			return notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。请稍后发送 /use，或先 /list 切换工作区。", workspaceKey))
+			return notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。你可以直接 /new、发送 /useall 查看其他 workspace 的会话，或先 /list 切换工作区。", workspaceKey))
 		}
 		return notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
 	}
-	limit := len(threads)
-	title := "全部会话"
-	hint := ""
-	if !showAll {
-		title = "最近会话"
-		if limit > 5 {
-			limit = 5
-			hint = "发送 `/useall` 查看全部会话。"
-		}
+	limit := presentation.limit
+	if limit <= 0 || limit > len(presentation.views) {
+		limit = len(presentation.views)
 	}
-	threads = threads[:limit]
-	options := make([]control.SelectionOption, 0, len(threads))
+	threads := presentation.views[:limit]
+	options := make([]control.SelectionOption, 0, len(threads)+1)
 	for i, view := range threads {
-		buttonStatus, buttonLabel, disabled := s.mergedThreadStatus(surface, view)
-		_ = buttonStatus
+		_, disabled := s.threadSelectionStatus(surface, view, presentation.allowCrossWorkspace)
+		summary := threadSelectionButtonLabel(view.Thread, view.ThreadID)
 		options = append(options, control.SelectionOption{
-			Index:       i + 1,
-			OptionID:    view.ThreadID,
-			Label:       displayThreadTitle(view.Inst, view.Thread, view.ThreadID),
-			Subtitle:    s.mergedThreadSubtitle(surface, view),
-			ButtonLabel: buttonLabel,
-			IsCurrent:   surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
-			Disabled:    disabled,
+			Index:               i + 1,
+			OptionID:            view.ThreadID,
+			Label:               summary,
+			Subtitle:            s.threadSelectionOptionSubtitle(surface, view, presentation.includeWorkspace, presentation.allowCrossWorkspace),
+			ButtonLabel:         summary,
+			IsCurrent:           surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
+			Disabled:            disabled,
+			AllowCrossWorkspace: presentation.allowCrossWorkspace,
+		})
+	}
+	if presentation.showScopedAllButton {
+		options = append(options, control.SelectionOption{
+			Index:       len(options) + 1,
+			ButtonLabel: presentation.scopedAllButtonText,
+			Subtitle:    presentation.scopedAllStatus,
+			ActionKind:  "show_scoped_threads",
 		})
 	}
 	return []control.UIEvent{{
@@ -906,11 +940,72 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SelectionPrompt: &control.SelectionPrompt{
 			Kind:    control.SelectionPromptUseThread,
-			Title:   title,
-			Hint:    hint,
+			Title:   presentation.title,
 			Options: options,
 		},
 	}}
+}
+
+func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) threadSelectionPresentation {
+	productMode := state.ProductModeNormal
+	if surface != nil {
+		productMode = s.normalizeSurfaceProductMode(surface)
+	}
+	switch productMode {
+	case state.ProductModeVSCode:
+		views := s.scopedMergedThreadViews(surface)
+		presentation := threadSelectionPresentation{
+			title:            "最近会话",
+			views:            views,
+			limit:            min(5, len(views)),
+			includeWorkspace: false,
+		}
+		switch mode {
+		case threadSelectionDisplayAll:
+			presentation.title = "全部会话"
+			presentation.limit = len(views)
+		case threadSelectionDisplayScopedAll:
+			presentation.title = "当前实例全部会话"
+			presentation.limit = len(views)
+		default:
+			if len(views) > 5 {
+				presentation.showScopedAllButton = true
+				presentation.scopedAllButtonText = "显示当前实例全部会话"
+				presentation.scopedAllStatus = "不再只显示最近 5 个"
+			}
+		}
+		return presentation
+	default:
+		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
+		if !attached || mode == threadSelectionDisplayAll {
+			views := s.mergedThreadViews(surface)
+			return threadSelectionPresentation{
+				title:               "全部会话",
+				views:               views,
+				limit:               len(views),
+				includeWorkspace:    true,
+				allowCrossWorkspace: true,
+			}
+		}
+		views := s.scopedMergedThreadViews(surface)
+		presentation := threadSelectionPresentation{
+			title:            "最近会话",
+			views:            views,
+			limit:            min(5, len(views)),
+			includeWorkspace: false,
+		}
+		if mode == threadSelectionDisplayScopedAll {
+			presentation.title = "当前工作区全部会话"
+			presentation.limit = len(views)
+			return presentation
+		}
+		if len(views) > 5 {
+			presentation.showScopedAllButton = true
+			presentation.scopedAllButtonText = "显示当前工作区全部会话"
+			presentation.scopedAllStatus = "不再只显示最近 5 个"
+		}
+		return presentation
+	}
 }
 
 func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]control.UIEvent, HeadlessRestoreResult) {
@@ -1179,9 +1274,9 @@ func NoticeForVSCodeOpenPrompt(hadPreviousInstance bool) *control.Notice {
 	}
 }
 
-func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string) []control.UIEvent {
+func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) []control.UIEvent {
 	threadID = strings.TrimSpace(threadID)
-	target := s.resolveThreadTarget(surface, threadID)
+	target := s.resolveThreadTargetWithScope(surface, threadID, allowCrossWorkspace)
 	switch target.Mode {
 	case threadAttachCurrentVisible:
 		return s.useAttachedVisibleThread(surface, threadID)

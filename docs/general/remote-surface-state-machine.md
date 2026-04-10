@@ -101,15 +101,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. normal mode 列 workspace，并走 workspace attach/switch。
    2. vscode mode 继续列在线 VS Code instance。
 7. `normal mode` 当前已经完成这一轮产品收窄：
-   1. `/use` detached 时仍可作为 global thread shortcut。
-   2. `/use` 已 attach 后只允许留在当前 workspace 内。
-   3. `/new` 已变成 workspace-owned prepared state。
-   4. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
+   1. detached `/use` 现在直接等同 detached `/useall`：都会展示 cross-workspace 的全部会话列表。
+   2. attached `/use` 现在只展示当前 workspace 的最近 5 个会话；若超过 5 个，会在卡片底部追加一个 `show_scoped_threads` 按钮进入“当前工作区全部会话”。
+   3. attached `/useall` 现在改成 cross-workspace 的全部会话列表；卡片里的 `use_thread` 按钮会显式携带 `allow_cross_workspace=true`，允许直接切到其他 workspace。
+   4. `/new` 已变成 workspace-owned prepared state。
+   5. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
 8. `vscode mode` 当前已经完成这一轮收窄：
    1. `/list` attach/switch instance 后默认进入 follow-first，而不是落回 pinned/unbound。
    2. 默认跟随目标只看 `ObservedFocusedThreadID`，不再回落 `ActiveThreadID`。
    3. detached `vscode /use` / `/useall` 会直接拒绝，并要求先 `/list`。
-   4. attached `vscode /use` / `/useall` 只看当前 attached instance 的已知 thread 集合。
+   4. attached `vscode /use` / `/useall` 只看当前 attached instance 的已知 thread 集合；其中 `/use` 也是最近 5 个 + `show_scoped_threads`，`/useall` 才是当前实例全部会话。
    5. `vscode /use` 的 one-shot force-pick 会保留 `RouteMode=follow_local`，后续 observed focus 仍可覆盖。
 
 ### 3.2 路由主状态
@@ -281,9 +282,13 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. `attach_workspace`
    2. `attach_instance`
    3. `use_thread`
-   4. `kick_thread_confirm`
-   5. `kick_thread_cancel`
-3. 旧 `resume_headless_thread` 只保留兼容解析，服务端统一返回迁移提示。
+   4. `show_scoped_threads`
+   5. `kick_thread_confirm`
+   6. `kick_thread_cancel`
+3. `use_thread` 会按卡片来源附带额外上下文：
+   1. normal `/useall` 与 detached/global `/use` 会携带 `allow_cross_workspace=true`
+   2. attached current-scope `/use` 不会带这个标记，因此仍只允许留在当前 workspace / 当前 instance 内
+4. 旧 `resume_headless_thread` 只保留兼容解析，服务端统一返回迁移提示。
 4. 旧 `prompt_select` 只保留兼容解析，服务端统一返回 `selection_expired`。
 5. `"1"`、`"2"` 这类纯数字文本现在就是普通文本。
 
@@ -567,21 +572,26 @@ R5 NewThreadReady
 3. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
    1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
    2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
-4. normal mode detached/global `/use` 的 resolver 顺序当前是：
+4. normal mode detached/global `/use` 与 `/useall` 的 resolver 顺序当前是：
    1. 当前 attached instance 内可见 thread。
    2. free existing visible instance。
    3. reusable managed headless。
    4. create managed headless。
-5. normal mode detached/global `/use` 的**候选 thread 列表**当前先 merge 两类来源：
+5. normal mode detached/global `/use` 与 `/useall` 的**候选 thread 列表**当前先 merge 两类来源：
    1. runtime/catalog 已可见 thread。
    2. Codex sqlite 中最近 persisted 的非 archived thread metadata。
 6. sqlite 只负责补 freshness，不旁路 resolver：
    1. busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
    2. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。
-7. attached `vscode /use` / `/useall` 当前有两条额外约束：
+7. attached normal `/use` / `show_scoped_threads` 当前只看当前 claimed workspace：
+   1. `/use` = 最近 5 个
+   2. `show_scoped_threads` = 当前工作区全部会话
+   3. 两者都不显示 workspace 行，只显示接管状态
+8. attached `vscode /use` / `/useall` 当前有两条额外约束：
    1. 只展示当前 attached instance 的可见 thread，不再走 merged global thread view。
    2. force-pick 后会保留 `RouteMode=follow_local`，后续 observed focus 变化仍可覆盖。
-8. 当 normal mode `/use` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
+9. attached normal `/useall` 当前会显示 cross-workspace 的全部会话，并允许直接点击切到其他 workspace。
+10. 当 normal mode `/use` / `/useall` 命中第 2/3/4 类 resolver 时，当前实现会先走 detach 语义清理：
    1. queued / staged draft 会被清掉。
    2. `PromptOverride`、pending request、request capture 会被清掉。
    3. 当前 instance claim 会先释放，再 attach 到新目标。
@@ -850,7 +860,7 @@ transport degraded retained attachment
 | `/newinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/new` | 拒绝 | `normal`: 允许；`vscode`: 拒绝 | `normal`: 允许；`vscode`: 拒绝 | 拒绝 | 拒绝 | 允许；若首条消息已 dispatching/running 则拒绝 |
 | `/killinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
-| `/use` `/useall` | `normal`: 允许；`vscode`: 拒绝并提示先 `/list` | `normal`: 允许；`vscode`: 仅当前 attached instance 已知 thread（该态通常只作兼容） | `normal`: 允许；`vscode`: 仅当前 attached instance 已知 thread | 仅当前 attached instance 已知 thread | 仅当前 attached instance 已知 thread | 允许；若仅有 unsent draft 会先丢弃 |
+| `/use` `/useall` | `normal`: `/use`=`/useall`，都会展示 global 全量会话；`vscode`: 拒绝并提示先 `/list` | `normal`: `/use`=当前 workspace 最近 5 个，`/useall`=global 全量，卡片 `show_scoped_threads`=当前 workspace 全量；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `normal`: `/use`=当前 workspace 最近 5 个，`/useall`=global 全量，卡片 `show_scoped_threads`=当前 workspace 全量；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | 允许；若仅有 unsent draft 会先丢弃 |
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许 | 允许 | 允许 | 拒绝并提示迁移 |
 | `/mode` | 允许 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 |
 | `/autocontinue` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |

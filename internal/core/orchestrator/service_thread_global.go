@@ -392,6 +392,10 @@ func workspaceAffinityScore(root, cwd string) int {
 }
 
 func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threadID string) resolvedThreadTarget {
+	return s.resolveThreadTargetWithScope(surface, threadID, false)
+}
+
+func (s *Service) resolveThreadTargetWithScope(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) resolvedThreadTarget {
 	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
 		return s.resolveAttachedVSCodeThreadTarget(surface, threadID)
 	}
@@ -403,7 +407,7 @@ func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threa
 			NoticeText: "目标会话不存在或当前不可见。",
 		}
 	}
-	if !s.threadViewSelectableInCurrentScope(surface, view) {
+	if !allowCrossWorkspace && !s.threadViewSelectableInCurrentScope(surface, view) {
 		return s.threadOutsideCurrentWorkspaceTarget(surface)
 	}
 	return s.resolveThreadTargetFromView(surface, view)
@@ -674,54 +678,61 @@ func (s *Service) threadOutsideCurrentWorkspaceTarget(surface *state.SurfaceCons
 	}
 }
 
-func (s *Service) mergedThreadStatus(surface *state.SurfaceConsoleRecord, view *mergedThreadView) (string, string, bool) {
+func (s *Service) threadSelectionStatus(surface *state.SurfaceConsoleRecord, view *mergedThreadView, allowCrossWorkspace bool) (string, bool) {
 	if view == nil {
-		return "", "", true
+		return "", true
 	}
 	if surface != nil && surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID) {
 		if surface.RouteMode == state.RouteModeFollowLocal {
-			return "当前跟随", "", false
+			return "当前跟随", false
 		}
-		return "当前会话", "", false
+		return "当前会话", false
 	}
 	if owner := s.workspaceBusyOwnerForView(surface, view); owner != nil {
-		return "所在 workspace 已被其他飞书会话占用", "已占用", true
+		return "所在 workspace 已被其他飞书会话接管", true
 	}
 	if view.BusyOwner != nil {
-		return "已被其他飞书会话占用", "已占用", true
+		return "已被其他飞书会话接管", true
 	}
-	target := s.resolveThreadTargetFromView(surface, view)
+	target := s.resolveThreadTargetWithScope(surface, view.ThreadID, allowCrossWorkspace)
 	switch target.Mode {
 	case threadAttachCurrentVisible:
-		return "可切换", "切换", false
+		return "可接管", false
 	case threadAttachFreeVisible:
-		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			return "可直接接管", "接管", false
+		if surface != nil &&
+			s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal &&
+			strings.TrimSpace(surface.AttachedInstanceID) != "" &&
+			target.Instance != nil &&
+			isVSCodeInstance(target.Instance) {
+			return "可接管，但被 VS Code 占用中，不建议", false
 		}
-		return "可接管已在线实例", "接管", false
+		return "可接管", false
 	case threadAttachReuseHeadless:
-		return "将复用现有后台恢复", "恢复", false
+		return "可接管，将复用后台恢复", false
 	case threadAttachCreateHeadless:
-		return "将启动新的后台恢复", "恢复", false
+		return "可接管，将启动后台恢复", false
 	default:
 		if target.NoticeText != "" {
-			return target.NoticeText, "不可用", true
+			return target.NoticeText, true
 		}
-		return "当前不可接管", "不可用", true
+		return "当前不可接管", true
 	}
 }
 
-func (s *Service) mergedThreadSubtitle(surface *state.SurfaceConsoleRecord, view *mergedThreadView) string {
+func (s *Service) threadSelectionOptionSubtitle(surface *state.SurfaceConsoleRecord, view *mergedThreadView, includeWorkspaceLine, allowCrossWorkspace bool) string {
 	if view == nil {
 		return ""
 	}
-	subtitle := threadSelectionSubtitle(view.Thread, view.ThreadID)
-	status, _, _ := s.mergedThreadStatus(surface, view)
-	if status == "" {
-		return subtitle
+	lines := []string{}
+	if includeWorkspaceLine {
+		if workspaceKey := mergedThreadWorkspaceClaimKey(view); workspaceKey != "" {
+			lines = append(lines, workspaceKey)
+		} else if fallback := threadSelectionSubtitle(view.Thread, view.ThreadID); fallback != "" {
+			lines = append(lines, fallback)
+		}
 	}
-	if subtitle == "" {
-		return status
+	if status, _ := s.threadSelectionStatus(surface, view, allowCrossWorkspace); status != "" {
+		lines = append(lines, status)
 	}
-	return subtitle + "\n" + status
+	return strings.Join(lines, "\n")
 }

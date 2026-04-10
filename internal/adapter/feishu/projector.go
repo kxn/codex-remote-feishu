@@ -423,17 +423,30 @@ func selectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID s
 	}
 	elements := make([]map[string]any, 0, len(prompt.Options)*2+1)
 	for _, option := range prompt.Options {
-		line := selectionOptionBody(prompt.Kind, option)
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": line,
-		})
-		elements = append(elements, map[string]any{
+		button := map[string]any{
 			"tag": "action",
 			"actions": []map[string]any{
 				selectionOptionButton(prompt, option, daemonLifecycleID),
 			},
-		})
+		}
+		line := selectionOptionBody(prompt.Kind, option)
+		if prompt.Kind == control.SelectionPromptUseThread {
+			elements = append(elements, button)
+			if line != "" {
+				elements = append(elements, map[string]any{
+					"tag":     "markdown",
+					"content": line,
+				})
+			}
+			continue
+		}
+		if line != "" {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": line,
+			})
+		}
+		elements = append(elements, button)
 	}
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
@@ -468,6 +481,24 @@ func selectionOptionBody(kind control.SelectionPromptKind, option control.Select
 			}
 			return line
 		}
+	case control.SelectionPromptUseThread:
+		if option.Subtitle == "" {
+			return ""
+		}
+		parts := strings.Split(option.Subtitle, "\n")
+		lines := make([]string, 0, len(parts))
+		for i, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if i == 0 && strings.HasPrefix(part, "/") {
+				lines = append(lines, formatNeutralTextTag(part))
+				continue
+			}
+			lines = append(lines, part)
+		}
+		return strings.Join(lines, "\n")
 	default:
 		if option.Subtitle != "" {
 			parts := strings.Split(option.Subtitle, "\n")
@@ -490,6 +521,9 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		text = "选择"
 	}
 	value := map[string]any{}
+	if strings.TrimSpace(option.ActionKind) == "show_scoped_threads" {
+		value = map[string]any{"kind": "show_scoped_threads"}
+	}
 	switch prompt.Kind {
 	case control.SelectionPromptAttachInstance:
 		if text == "选择" {
@@ -508,12 +542,12 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 			"workspace_key": strings.TrimSpace(option.OptionID),
 		}
 	case control.SelectionPromptUseThread:
-		if text == "选择" {
-			text = "切换"
-		}
-		value = map[string]any{
-			"kind":      "use_thread",
-			"thread_id": strings.TrimSpace(option.OptionID),
+		if len(value) == 0 {
+			value = map[string]any{
+				"kind":                  "use_thread",
+				"thread_id":             strings.TrimSpace(option.OptionID),
+				"allow_cross_workspace": option.AllowCrossWorkspace,
+			}
 		}
 	case control.SelectionPromptKickThread:
 		if strings.TrimSpace(option.OptionID) == "cancel" {
@@ -535,12 +569,14 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 	disabled := option.Disabled
 	buttonType := "default"
 	if option.IsCurrent {
-		text = "当前"
 		disabled = true
+		if prompt.Kind != control.SelectionPromptUseThread {
+			text = "当前"
+		}
 	} else {
 		buttonType = "primary"
 	}
-	return map[string]any{
+	button := map[string]any{
 		"tag":  "button",
 		"type": buttonType,
 		"text": map[string]any{
@@ -550,6 +586,10 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		"disabled": disabled,
 		"value":    value,
 	}
+	if prompt.Kind == control.SelectionPromptUseThread {
+		button["width"] = "fill"
+	}
+	return button
 }
 
 func commandCatalogBody(catalog control.CommandCatalog) string {

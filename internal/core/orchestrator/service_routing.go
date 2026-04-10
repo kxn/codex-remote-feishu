@@ -980,10 +980,10 @@ func (s *Service) confirmKickThread(surface *state.SurfaceConsoleRecord, threadI
 	}
 	owner := s.threadClaimSurface(threadID)
 	if owner == nil {
-		return append(events, s.useThread(surface, threadID)...)
+		return append(events, s.useThread(surface, threadID, false)...)
 	}
 	if owner.SurfaceSessionID == surface.SurfaceSessionID {
-		return append(events, s.useThread(surface, threadID)...)
+		return append(events, s.useThread(surface, threadID, false)...)
 	}
 	switch s.threadKickStatus(inst, owner, threadID) {
 	case threadKickIdle:

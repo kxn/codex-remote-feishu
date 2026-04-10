@@ -563,6 +563,40 @@ func threadPreview(thread *state.ThreadRecord) string {
 	return previewSnippet(thread.Preview)
 }
 
+func threadSelectionButtonLabel(thread *state.ThreadRecord, fallback string) string {
+	source := ""
+	if thread != nil {
+		name := strings.TrimSpace(thread.Name)
+		switch strings.ToLower(name) {
+		case "", "新会话", "新聊天", "new chat", "new thread":
+		default:
+			source = name
+		}
+		if source == "" {
+			source = previewOfText(thread.Preview)
+		}
+	}
+	if source == "" {
+		source = shortenThreadID(fallback)
+	}
+	source = strings.Join(strings.Fields(strings.TrimSpace(source)), " ")
+	if source == "" {
+		return "未命名会话"
+	}
+	return truncateThreadSelectionLabel(source, 20)
+}
+
+func truncateThreadSelectionLabel(text string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit]) + "..."
+}
+
 func (s *Service) maybeRequestThreadRefresh(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string) []control.UIEvent {
 	if surface == nil || inst == nil || surface.AttachedInstanceID != inst.InstanceID {
 		return nil

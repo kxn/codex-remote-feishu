@@ -71,13 +71,24 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			return control.Action{}, false
 		}
 		return control.Action{
-			Kind:             control.ActionUseThread,
+			Kind:                control.ActionUseThread,
+			GatewayID:           g.config.GatewayID,
+			SurfaceSessionID:    surfaceSessionID,
+			ChatID:              chatID,
+			ActorUserID:         operatorID,
+			MessageID:           messageID,
+			ThreadID:            threadID,
+			AllowCrossWorkspace: boolMapValue(value, "allow_cross_workspace"),
+			Inbound:             meta,
+		}, true
+	case "show_scoped_threads":
+		return control.Action{
+			Kind:             control.ActionShowScopedThreads,
 			GatewayID:        g.config.GatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			ThreadID:         threadID,
 			Inbound:          meta,
 		}, true
 	case "resume_headless_thread":

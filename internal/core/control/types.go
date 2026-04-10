@@ -37,6 +37,7 @@ const (
 	ActionAttachWorkspace      ActionKind = "surface.button.attach_workspace"
 	ActionShowThreads          ActionKind = "surface.button.show_threads"
 	ActionShowAllThreads       ActionKind = "surface.button.show_all_threads"
+	ActionShowScopedThreads    ActionKind = "surface.button.show_scoped_threads"
 	ActionUseThread            ActionKind = "surface.button.use_thread"
 	ActionConfirmKickThread    ActionKind = "surface.button.confirm_kick_thread"
 	ActionCancelKickThread     ActionKind = "surface.button.cancel_kick_thread"
@@ -67,29 +68,30 @@ type ActionInboundMeta struct {
 }
 
 type Action struct {
-	Kind             ActionKind
-	GatewayID        string
-	SurfaceSessionID string
-	ChatID           string
-	ActorUserID      string
-	MessageID        string
-	Text             string
-	Inputs           []agentproto.Input
-	PromptID         string
-	OptionID         string
-	RequestID        string
-	RequestType      string
-	RequestOptionID  string
-	Approved         bool
-	CommandID        string
-	InstanceID       string
-	WorkspaceKey     string
-	ThreadID         string
-	LocalPath        string
-	MIMEType         string
-	ReactionType     string
-	TargetMessageID  string
-	Inbound          *ActionInboundMeta
+	Kind                ActionKind
+	GatewayID           string
+	SurfaceSessionID    string
+	ChatID              string
+	ActorUserID         string
+	MessageID           string
+	Text                string
+	Inputs              []agentproto.Input
+	PromptID            string
+	OptionID            string
+	RequestID           string
+	RequestType         string
+	RequestOptionID     string
+	Approved            bool
+	CommandID           string
+	InstanceID          string
+	WorkspaceKey        string
+	ThreadID            string
+	AllowCrossWorkspace bool
+	LocalPath           string
+	MIMEType            string
+	ReactionType        string
+	TargetMessageID     string
+	Inbound             *ActionInboundMeta
 }
 
 type SelectionPromptKind string
@@ -102,13 +104,15 @@ const (
 )
 
 type SelectionOption struct {
-	Index       int
-	OptionID    string
-	Label       string
-	Subtitle    string
-	ButtonLabel string
-	IsCurrent   bool
-	Disabled    bool
+	Index               int
+	OptionID            string
+	Label               string
+	Subtitle            string
+	ButtonLabel         string
+	ActionKind          string
+	IsCurrent           bool
+	Disabled            bool
+	AllowCrossWorkspace bool
 }
 
 type SelectionPrompt struct {
