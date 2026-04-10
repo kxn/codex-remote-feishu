@@ -74,6 +74,17 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 	if ops[0].CardElements[7]["content"] != "1小时前 · 当前被其他飞书会话接管" {
 		t.Fatalf("unexpected action payload: %#v", value)
 	}
+	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
+		t.Fatalf("expected selection prompt to use structured V2 send path, got %#v", ops[0])
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if containsRenderedTag(renderedElements, "action") {
+		t.Fatalf("expected rendered V2 selection prompt to avoid legacy action rows, got %#v", renderedElements)
+	}
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[3])
+	if renderedValue["kind"] != "attach_instance" || renderedValue["instance_id"] != "inst-2" {
+		t.Fatalf("unexpected rendered V2 selection action payload: %#v", renderedValue)
+	}
 }
 
 func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
@@ -235,6 +246,11 @@ func TestProjectWorkspaceSelectionPromptPreservesShowWorkspaceThreadsAction(t *t
 	value, _ := actionRow[0]["value"].(map[string]any)
 	if value["kind"] != "show_workspace_threads" || value["workspace_key"] != "/data/dl/picdetect" {
 		t.Fatalf("expected workspace selection to preserve special action, got %#v", value)
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[1])
+	if renderedValue["kind"] != "show_workspace_threads" || renderedValue["workspace_key"] != "/data/dl/picdetect" {
+		t.Fatalf("expected rendered V2 workspace selection to preserve special action, got %#v", renderedValue)
 	}
 }
 
@@ -658,6 +674,17 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	if value["kind"] != "run_command" || value["command_text"] != "/list" {
 		t.Fatalf("unexpected run command payload: %#v", value)
 	}
+	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
+		t.Fatalf("expected button-only command catalog to use structured V2 send path, got %#v", ops[0])
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if containsRenderedTag(renderedElements, "action") {
+		t.Fatalf("expected rendered V2 command catalog to avoid legacy action rows, got %#v", renderedElements)
+	}
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[3])
+	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/list" {
+		t.Fatalf("unexpected rendered V2 command button payload: %#v", renderedValue)
+	}
 }
 
 func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testing.T) {
@@ -706,6 +733,13 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 	secondText, _ := secondRow[0]["text"].(map[string]any)
 	if secondText["content"] != "high（当前）" {
 		t.Fatalf("unexpected second stacked label: %#v", secondRow[0])
+	}
+	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
+		t.Fatalf("expected compact button catalog to use structured V2 send path, got %#v", ops[0])
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if renderedElements[2]["tag"] != "button" || renderedElements[3]["tag"] != "button" {
+		t.Fatalf("expected stacked compact buttons to render as direct V2 buttons, got %#v", renderedElements)
 	}
 }
 
@@ -774,6 +808,9 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if relatedValue["kind"] != "run_command" || relatedValue["command_text"] != "/menu send_settings" {
 		t.Fatalf("unexpected related button payload: %#v", relatedValue)
 	}
+	if ops[0].cardEnvelope == cardEnvelopeV2 || ops[0].card != nil {
+		t.Fatalf("expected command catalog with form to stay on legacy path until #120, got %#v", ops[0])
+	}
 }
 
 func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {
@@ -824,6 +861,37 @@ func TestProjectInteractiveCommandCatalogStampsDaemonLifecycleID(t *testing.T) {
 	value, _ := actionRow[0]["value"].(map[string]any)
 	if value["daemon_lifecycle_id"] != "life-1" {
 		t.Fatalf("expected command catalog action to carry daemon lifecycle id, got %#v", value)
+	}
+}
+
+func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		CommandCatalog: &control.CommandCatalog{
+			Title:        "发送设置",
+			Summary:      "请选择操作。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayDefault,
+			RelatedButtons: []control.CommandCatalogButton{{
+				Label:       "返回菜单",
+				CommandText: "/menu",
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
+		t.Fatalf("expected related-buttons catalog without form to use V2, got %#v", ops[0])
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if len(renderedElements) != 2 {
+		t.Fatalf("expected summary markdown plus related button, got %#v", renderedElements)
+	}
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[1])
+	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/menu" {
+		t.Fatalf("unexpected related button callback payload: %#v", renderedValue)
 	}
 }
 
@@ -1943,6 +2011,45 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func renderedV2BodyElements(t *testing.T, operation Operation) []map[string]any {
+	t.Helper()
+	if operation.cardEnvelope != cardEnvelopeV2 || operation.card == nil {
+		t.Fatalf("expected structured V2 operation, got %#v", operation)
+	}
+	payload := renderOperationCard(operation, operation.ordinaryCardEnvelope())
+	if payload["schema"] != "2.0" {
+		t.Fatalf("expected V2 schema, got %#v", payload)
+	}
+	body, _ := payload["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
+	return elements
+}
+
+func containsRenderedTag(elements []map[string]any, tag string) bool {
+	for _, element := range elements {
+		if element["tag"] == tag {
+			return true
+		}
+	}
+	return false
+}
+
+func renderedButtonCallbackValue(t *testing.T, button map[string]any) map[string]any {
+	t.Helper()
+	if button["tag"] != "button" {
+		t.Fatalf("expected rendered V2 button, got %#v", button)
+	}
+	if button["value"] != nil {
+		t.Fatalf("expected rendered V2 button to move callback payload into behaviors, got %#v", button)
+	}
+	behaviors, _ := button["behaviors"].([]map[string]any)
+	if len(behaviors) != 1 || behaviors[0]["type"] != "callback" {
+		t.Fatalf("expected one callback behavior, got %#v", button)
+	}
+	value, _ := behaviors[0]["value"].(map[string]any)
+	return value
 }
 
 func TestProjectImageOutputAsImageMessage(t *testing.T) {

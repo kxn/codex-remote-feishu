@@ -134,6 +134,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				title = "强踢当前会话？"
 			}
 		}
+		elements := selectionPromptElements(*event.SelectionPrompt, event.DaemonLifecycleID)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
@@ -142,7 +143,9 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			CardTitle:        title,
 			CardBody:         "",
 			CardThemeKey:     cardThemeInfo,
-			CardElements:     selectionPromptElements(*event.SelectionPrompt, event.DaemonLifecycleID),
+			CardElements:     elements,
+			cardEnvelope:     cardEnvelopeV2,
+			card:             legacyCompatibleCardDocument(title, "", cardThemeInfo, elements),
 		}}
 	case control.UIEventCommandCatalog:
 		if event.CommandCatalog == nil {
@@ -152,16 +155,23 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if title == "" {
 			title = "命令菜单"
 		}
-		return []Operation{{
+		body := commandCatalogBody(*event.CommandCatalog)
+		elements := commandCatalogElements(*event.CommandCatalog, event.DaemonLifecycleID)
+		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        title,
-			CardBody:         commandCatalogBody(*event.CommandCatalog),
+			CardBody:         body,
 			CardThemeKey:     cardThemeInfo,
-			CardElements:     commandCatalogElements(*event.CommandCatalog, event.DaemonLifecycleID),
-		}}
+			CardElements:     elements,
+		}
+		if commandCatalogSupportsV2(*event.CommandCatalog) {
+			operation.cardEnvelope = cardEnvelopeV2
+			operation.card = legacyCompatibleCardDocument(title, body, cardThemeInfo, elements)
+		}
+		return []Operation{operation}
 	case control.UIEventRequestPrompt:
 		if event.RequestPrompt == nil {
 			return nil
@@ -1375,6 +1385,17 @@ func selectionOptionButtonText(prompt control.SelectionPrompt, option control.Se
 
 func commandCatalogBody(catalog control.CommandCatalog) string {
 	return renderSystemInlineTags(strings.TrimSpace(catalog.Summary))
+}
+
+func commandCatalogSupportsV2(catalog control.CommandCatalog) bool {
+	for _, section := range catalog.Sections {
+		for _, entry := range section.Entries {
+			if entry.Form != nil {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID string) []map[string]any {
