@@ -1,8 +1,8 @@
 # Authenticated External Access Foundation Design
 
 > Type: `draft`
-> Updated: `2026-04-09`
-> Summary: 收敛 `#83` 第一阶段方案，明确独立 listener、`trycloudflare` provider、短时授权 URL 与内部 URL builder 的基座接口。
+> Updated: `2026-04-10`
+> Summary: 收敛 `#83` 第一阶段方案，明确独立 listener、`trycloudflare` provider、短时授权 URL 与内部 URL builder 的基座接口，并补齐 `#112` 作为第一个 `/debug admin` consumer 的接入约束与预取安全规则。
 
 ## 1. 文档定位
 
@@ -21,6 +21,17 @@
 1. 用户点击一个短时有效的外部链接，可以从公网访问到指定的本地页面。
 2. 程序内部可以通过统一接口，把某个 localhost 目标 URL 变成一个短时有效的外部授权 URL。
 
+## 1.1 当前确认的第一个真实 consumer
+
+截至 `2026-04-10`，这条基座已经有了第一个明确使用用例：`#112 /debug admin`。
+
+它带来两条额外约束，需要提前沉淀到基座层，而不是等 consumer 落地时再临时加：
+
+1. 第一个 consumer 不是泛化 preview/review 页面，而是**短时暴露本地 admin 页面**，并从飞书会话里直接返回可点击链接。
+2. 飞书消息里的外链存在被预览/预取的现实风险。当前没有足够明确的官方承诺可以证明“飞书绝不会在用户点击前请求链接”，因此基座必须按**链接可能被预取**来设计 token 交换语义。
+
+这意味着 phase 1/2 的基座设计里，不能把外部授权 URL 里的初始 `?t=` token 设计成“第一次匿名 GET 就一次性烧掉”的模型，否则第一个 consumer 一接进来就会出现可用性问题。
+
 ## 2. 收敛结论
 
 当前产品方向按下面结论收敛：
@@ -30,6 +41,8 @@
 - 运行时需要随仓库发行物一起 bundle 一个 `cloudflared` sidecar。
 - 对外能力的 source of truth 是 daemon 内部的授权与 allowlist 规则，不是 consumer 自己拼 token。
 - 面向公网的第一阶段只提供“有认证的 HTTP/WS 反代能力”，不承诺通用任意端口穿透。
+- 第一个真实 consumer 按 `#112 /debug admin` 收敛，但 consumer 需求不应反向破坏基座边界。
+- 初始授权链接必须按“可能被飞书/浏览器/安全组件预取”设计，不能依赖 first-GET 单次消费语义。
 
 `gradio` 仍然可以作为将来某些页面自身的实现技术，但不再作为这条“通用外部访问基座”的 provider。
 
@@ -352,6 +365,22 @@ https://<public-base>/g/<grant-id>/
 
 这样 token 不会长期留在地址栏、浏览器历史或后续 subresource request 里。
 
+这里再补一条 product-safe 约束：
+
+- `?t=` 虽然只用于第一次交换 cookie，但**不能**设计成“任何匿名 GET 第一次命中就永久失效”的一次性口令。
+
+原因是：
+
+- 飞书消息链路可能存在平台预取
+- 浏览器、系统分享面板、安全扫描器也可能提前访问链接
+- 第一个 consumer `#112 /debug admin` 需要在这类预取存在时仍然可用
+
+因此 phase 1 的 safest default 应该是：
+
+- `?t=` 在 `link TTL` 内是一个**可重复交换 session 的短时 bearer exchange token**
+- 它的风险边界靠 `link TTL`、`grant allowlist`、`purpose` 和 path-scoped session 控制
+- 不靠“第一次谁先 GET 到谁就永久抢走访问机会”来保证安全
+
 ## 10. 认证与 cookie 规则
 
 ### 10.1 grant token
@@ -365,6 +394,18 @@ grant token 的职责只有一个：
 - 避免 token 挂在后续资源 URL 上
 - 减少 Referer 泄漏
 - 让 consumer 页面里的相对路径资源加载更自然
+
+但这里要明确，phase 1 的 grant token 语义不是“单次消费码”，而是“短时 exchange token”：
+
+- 在 `link TTL` 内，重复命中 `?t=` 应该仍能换出 grant-scoped session
+- 这样即使飞书或中间链路发生预取，也不会把真实用户点击的机会提前烧掉
+- 真正的收口点放在：
+  - token 过期
+  - grant allowlist
+  - session TTL
+  - 后续如有需要，再追加更强的 interactive confirmation / device binding
+
+phase 1 不建议在没有更多运行时证据前就把 token 做成严格一次性消费。
 
 ### 10.2 session cookie
 
@@ -546,6 +587,14 @@ consumer 统一走这条入口，不直接碰 provider。
 - 补 redirect/cookie/websocket 边界测试
 - 视需要再决定是否把某个 preview/review 页面正式挂上
 
+当前已知优先顺序建议固定为：
+
+1. 先接 `#112 /debug admin`
+2. 验证飞书返回链接、cookie 建立、admin 页面加载与基础操作
+3. 再评估是否值得把 preview/review 类页面接到同一基座
+
+不要在第一个 consumer 还没跑通之前，把 stage 3 扩散成多个页面并行接入。
+
 ## 16. 需要测试的内容
 
 至少需要覆盖：
@@ -558,6 +607,7 @@ consumer 统一走这条入口，不直接碰 provider。
 - `trycloudflare` URL 解析
 - metrics `/ready` 健康检查
 - child process 配置目录隔离
+- `?t=` 在重复 GET / 预取场景下不会让真实用户首次点击直接失效
 
 ## 17. 当前建议
 
