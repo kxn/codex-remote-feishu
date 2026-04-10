@@ -654,11 +654,10 @@ func TestDriveMarkdownPreviewerSummaryUsesRemoteInventoryWithoutLocalRoot(t *tes
 	}
 }
 
-func TestDriveMarkdownPreviewerLazyCleanupRunsAtMostOncePerInterval(t *testing.T) {
+func TestDriveMarkdownPreviewerRewriteDoesNotRunCleanup(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
 	root := t.TempDir()
 	writeMarkdownFile(t, filepath.Join(root, "docs", "one.md"), "# one\n")
-	writeMarkdownFile(t, filepath.Join(root, "docs", "two.md"), "# two\n")
 
 	api := newFakePreviewAPI()
 	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
@@ -713,41 +712,88 @@ func TestDriveMarkdownPreviewerLazyCleanupRunsAtMostOncePerInterval(t *testing.T
 	}
 	result, err := previewer.RewriteFinalBlock(context.Background(), req1)
 	if err != nil {
-		t.Fatalf("first rewrite returned error: %v", err)
+		t.Fatalf("rewrite returned error: %v", err)
 	}
 	if result.Block.Text != "Open [one](https://preview/file-1)." {
-		t.Fatalf("unexpected first rewrite: %q", result.Block.Text)
+		t.Fatalf("unexpected rewrite: %q", result.Block.Text)
 	}
-	if len(api.deleteFileCalls) != 1 || api.deleteFileCalls[0].Token != "file-old" {
-		t.Fatalf("expected first upload to cleanup one old managed file, got %#v", api.deleteFileCalls)
+	if len(api.deleteFileCalls) != 0 {
+		t.Fatalf("expected rewrite upload path to skip cleanup, got %#v", api.deleteFileCalls)
+	}
+}
+
+func TestDriveMarkdownPreviewerBackgroundCleanupRunsOnInterval(t *testing.T) {
+	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
+	deleted := make(chan string, 1)
+	api := newFakePreviewAPI()
+	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
+		switch folderToken {
+		case "":
+			return []previewRemoteNode{
+				{
+					Token:       "fld-root",
+					Type:        previewFolderType,
+					Name:        defaultPreviewRootFolderName,
+					URL:         "https://preview/fld-root",
+					CreatedTime: now.Add(-72 * time.Hour),
+				},
+			}, nil
+		case "fld-root":
+			return []previewRemoteNode{
+				{Token: "fld-old", Type: previewFolderType, Name: "feishu-main-chat-oc_old"},
+			}, nil
+		case "fld-old":
+			return []previewRemoteNode{
+				{
+					Token:       "file-old",
+					Type:        previewFileType,
+					Name:        "__crp__legacy--deadbeef.md",
+					CreatedTime: now.Add(-48 * time.Hour),
+				},
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+	api.deleteFileFunc = func(_ context.Context, token, _ string) error {
+		select {
+		case deleted <- token:
+		default:
+		}
+		return nil
 	}
 
-	now = now.Add(1 * time.Hour)
-	req2 := MarkdownPreviewRequest{
-		GatewayID:        "main",
-		SurfaceSessionID: "feishu:main:chat:oc_chat",
-		ChatID:           "oc_chat",
-		ActorUserID:      "ou_user",
-		WorkspaceRoot:    root,
-		ThreadCWD:        root,
-		Block: render.Block{
-			Kind:  render.BlockAssistantMarkdown,
-			Final: true,
-			Text:  "Open [two](docs/two.md).",
-		},
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		GatewayID:               "main",
+		StatePath:               filepath.Join(t.TempDir(), "preview.json"),
+		BackgroundCleanupEvery:  20 * time.Millisecond,
+		BackgroundCleanupMaxAge: 24 * time.Hour,
+	})
+	previewer.nowFn = time.Now
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		previewer.RunBackgroundMaintenance(ctx)
+	}()
+
+	select {
+	case token := <-deleted:
+		if token != "file-old" {
+			t.Fatalf("unexpected deleted token: %q", token)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for background cleanup")
 	}
-	result, err = previewer.RewriteFinalBlock(context.Background(), req2)
-	if err != nil {
-		t.Fatalf("second rewrite returned error: %v", err)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for background cleanup goroutine to stop")
 	}
-	if result.Block.Text != "Open [two](https://preview/file-2)." {
-		t.Fatalf("unexpected second rewrite: %q", result.Block.Text)
-	}
-	if len(api.deleteFileCalls) != 1 {
-		t.Fatalf("expected lazy cleanup throttle to suppress a second cleanup run, got %#v", api.deleteFileCalls)
-	}
-	if len(api.uploadFileCalls) != 2 {
-		t.Fatalf("expected both rewrites to upload their own preview files, got %#v", api.uploadFileCalls)
+	if previewer.state == nil || previewer.state.LastCleanupAt.IsZero() {
+		t.Fatalf("expected background cleanup to record last cleanup timestamp, got %#v", previewer.state)
 	}
 }
 

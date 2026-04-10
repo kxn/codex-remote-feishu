@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,8 +11,7 @@ import (
 )
 
 type previewRewriteRuntime struct {
-	dirty              bool
-	lazyCleanupChecked bool
+	dirty bool
 }
 
 func (p *DriveMarkdownPreviewer) nowUTC() time.Time {
@@ -53,25 +53,6 @@ func parsePreviewRemoteTime(raw string) time.Time {
 	return time.Time{}
 }
 
-func (p *DriveMarkdownPreviewer) maybeLazyCleanupBeforeUploadLocked(ctx context.Context, state *previewState, runtime *previewRewriteRuntime) error {
-	if runtime == nil || runtime.lazyCleanupChecked {
-		return nil
-	}
-	runtime.lazyCleanupChecked = true
-
-	now := p.nowUTC()
-	if !state.LastCleanupAt.IsZero() && now.Before(state.LastCleanupAt.Add(defaultPreviewLazyCleanupGap)) {
-		return nil
-	}
-
-	if _, err := p.cleanupManagedPreviewFilesLocked(ctx, state, now.Add(-defaultPreviewLazyCleanupAge)); err != nil {
-		return err
-	}
-	state.LastCleanupAt = now
-	runtime.dirty = true
-	return nil
-}
-
 func (p *DriveMarkdownPreviewer) cleanupManagedPreviewFilesLocked(ctx context.Context, state *previewState, cutoff time.Time) (PreviewDriveCleanupResult, error) {
 	state = normalizePreviewState(state)
 	result := PreviewDriveCleanupResult{}
@@ -111,6 +92,55 @@ func (p *DriveMarkdownPreviewer) cleanupManagedPreviewFilesLocked(ctx context.Co
 	}
 	result.Summary = summarizePreviewState(state, strings.TrimSpace(p.config.StatePath))
 	return result, nil
+}
+
+func (p *DriveMarkdownPreviewer) RunBackgroundMaintenance(ctx context.Context) {
+	if p == nil || p.api == nil || strings.TrimSpace(p.config.StatePath) == "" {
+		return
+	}
+
+	ticker := time.NewTicker(p.config.BackgroundCleanupEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := p.runBackgroundCleanup(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("markdown preview background cleanup failed: gateway=%s err=%v", strings.TrimSpace(p.config.GatewayID), err)
+			}
+		}
+	}
+}
+
+func (p *DriveMarkdownPreviewer) runBackgroundCleanup(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	state := p.loadStateLocked()
+	now := p.nowUTC()
+	if !state.LastCleanupAt.IsZero() && now.Before(state.LastCleanupAt.Add(p.config.BackgroundCleanupEvery)) {
+		return nil
+	}
+
+	result, err := p.cleanupManagedPreviewFilesLocked(ctx, state, now.Add(-p.config.BackgroundCleanupMaxAge))
+	if err != nil {
+		return err
+	}
+	state.LastCleanupAt = now
+	if err := p.saveStateLocked(); err != nil {
+		return err
+	}
+	if result.DeletedFileCount > 0 {
+		log.Printf(
+			"markdown preview background cleanup: gateway=%s deleted=%d bytes=%d",
+			strings.TrimSpace(p.config.GatewayID),
+			result.DeletedFileCount,
+			result.DeletedEstimatedBytes,
+		)
+	}
+	return nil
 }
 
 func (p *DriveMarkdownPreviewer) discoverManagedRootLocked(ctx context.Context) (previewRemoteNode, bool, error) {

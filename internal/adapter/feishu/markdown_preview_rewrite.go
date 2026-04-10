@@ -295,9 +295,6 @@ func (p *DriveMarkdownPreviewer) publishDriveMarkdownLinkLocked(ctx context.Cont
 	}
 
 	if record.Token == "" {
-		if err := p.maybeLazyCleanupBeforeUploadLocked(ctx, req.State, req.Runtime); err != nil {
-			return nil, true, err
-		}
 		if err := p.uploadPreviewFileLocked(ctx, record, scopeFolder.Token, artifact.SourcePath, artifact.Bytes, artifact.ContentHash); err != nil {
 			if isPreviewParentMissingError(err) {
 				clearPreviewScope(req.State, req.ScopeKey)
@@ -330,9 +327,6 @@ func (p *DriveMarkdownPreviewer) publishDriveMarkdownLinkLocked(ctx context.Cont
 			record.Token = ""
 			record.URL = ""
 			record.Shared = nil
-			if err := p.maybeLazyCleanupBeforeUploadLocked(ctx, req.State, req.Runtime); err != nil {
-				return nil, true, err
-			}
 			if err := p.uploadPreviewFileLocked(ctx, record, scopeFolder.Token, artifact.SourcePath, artifact.Bytes, artifact.ContentHash); err != nil {
 				return nil, true, err
 			}

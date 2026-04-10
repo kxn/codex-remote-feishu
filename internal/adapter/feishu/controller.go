@@ -301,6 +301,9 @@ func (c *MultiGatewayController) ensureWorkerRunningLocked(gatewayID string) err
 		}
 		c.applyStateHook(gatewayID, generation, GatewayStateStopped, nil)
 	}(runtime, workerCtx)
+	if maintainer, ok := worker.previewer.(FinalBlockPreviewMaintenanceService); ok {
+		go maintainer.RunBackgroundMaintenance(workerCtx)
+	}
 	return nil
 }
 

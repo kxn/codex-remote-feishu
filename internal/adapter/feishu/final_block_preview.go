@@ -10,6 +10,10 @@ type FinalBlockPreviewService interface {
 	RewriteFinalBlock(context.Context, FinalBlockPreviewRequest) (FinalBlockPreviewResult, error)
 }
 
+type FinalBlockPreviewMaintenanceService interface {
+	RunBackgroundMaintenance(context.Context)
+}
+
 type FinalBlockPreviewRequest struct {
 	GatewayID        string
 	SurfaceSessionID string

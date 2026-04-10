@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	defaultPreviewRootFolderName = "Codex Remote Previews"
-	defaultPreviewMaxFileBytes   = 20 * 1024 * 1024
-	defaultPreviewLazyCleanupAge = 24 * time.Hour
-	defaultPreviewLazyCleanupGap = 5 * time.Hour
-	previewFileType              = "file"
-	previewFolderType            = "folder"
-	previewPermissionView        = "view"
+	defaultPreviewRootFolderName        = "Codex Remote Previews"
+	defaultPreviewMaxFileBytes          = 20 * 1024 * 1024
+	defaultPreviewBackgroundCleanupAge  = 24 * time.Hour
+	defaultPreviewBackgroundCleanupTick = 1 * time.Hour
+	previewFileType                     = "file"
+	previewFolderType                   = "folder"
+	previewPermissionView               = "view"
 )
 
 var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
@@ -29,10 +29,12 @@ type PreviewDriveAdminService interface {
 }
 
 type MarkdownPreviewConfig struct {
-	StatePath    string
-	GatewayID    string
-	ProcessCWD   string
-	MaxFileBytes int64
+	StatePath               string
+	GatewayID               string
+	ProcessCWD              string
+	MaxFileBytes            int64
+	BackgroundCleanupEvery  time.Duration
+	BackgroundCleanupMaxAge time.Duration
 }
 
 type DriveMarkdownPreviewer struct {
@@ -142,6 +144,12 @@ func NewDriveMarkdownPreviewer(api previewDriveAPI, cfg MarkdownPreviewConfig) *
 	cfg.GatewayID = normalizeGatewayID(cfg.GatewayID)
 	if cfg.MaxFileBytes <= 0 {
 		cfg.MaxFileBytes = defaultPreviewMaxFileBytes
+	}
+	if cfg.BackgroundCleanupEvery <= 0 {
+		cfg.BackgroundCleanupEvery = defaultPreviewBackgroundCleanupTick
+	}
+	if cfg.BackgroundCleanupMaxAge <= 0 {
+		cfg.BackgroundCleanupMaxAge = defaultPreviewBackgroundCleanupAge
 	}
 	if cfg.ProcessCWD == "" {
 		if cwd, err := os.Getwd(); err == nil {

@@ -187,6 +187,62 @@ func TestMultiGatewayControllerUpsertRestartsWorker(t *testing.T) {
 	waitFakeGatewayStopped(t, first)
 }
 
+func TestMultiGatewayControllerStartsAndStopsPreviewMaintenance(t *testing.T) {
+	controller := NewMultiGatewayController()
+	runtime := newFakeGatewayRuntime("app-1")
+	previewer := &fakePreviewer{
+		gatewayID:          "app-1",
+		maintenanceStarted: make(chan struct{}, 1),
+		maintenanceStopped: make(chan struct{}, 1),
+	}
+	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
+		return runtime
+	}
+	controller.newPreviewer = func(_ gatewayRuntime, cfg GatewayAppConfig) FinalBlockPreviewService {
+		previewer.gatewayID = cfg.GatewayID
+		return previewer
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := controller.UpsertApp(ctx, GatewayAppConfig{
+		GatewayID: "app-1",
+		AppID:     "cli_app-1",
+		AppSecret: "secret_app-1",
+		Enabled:   true,
+	}); err != nil {
+		t.Fatalf("UpsertApp: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- controller.Start(ctx, func(context.Context, control.Action) {})
+	}()
+
+	waitFakeGatewayStarted(t, runtime)
+	select {
+	case <-previewer.maintenanceStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for preview maintenance to start")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start returned error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for controller stop")
+	}
+	select {
+	case <-previewer.maintenanceStopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for preview maintenance to stop")
+	}
+}
+
 func TestMultiGatewayControllerStatusShowsDisabledApps(t *testing.T) {
 	controller := NewMultiGatewayController()
 	if err := controller.UpsertApp(context.Background(), GatewayAppConfig{
@@ -259,9 +315,11 @@ func (f *fakeGatewayRuntime) emitState(state GatewayState, err error) {
 }
 
 type fakePreviewer struct {
-	gatewayID   string
-	calls       int
-	supplements []PreviewSupplement
+	gatewayID          string
+	calls              int
+	supplements        []PreviewSupplement
+	maintenanceStarted chan struct{}
+	maintenanceStopped chan struct{}
 }
 
 func (f *fakePreviewer) RewriteFinalBlock(_ context.Context, req FinalBlockPreviewRequest) (FinalBlockPreviewResult, error) {
@@ -272,6 +330,22 @@ func (f *fakePreviewer) RewriteFinalBlock(_ context.Context, req FinalBlockPrevi
 		Block:       block,
 		Supplements: append([]PreviewSupplement(nil), f.supplements...),
 	}, nil
+}
+
+func (f *fakePreviewer) RunBackgroundMaintenance(ctx context.Context) {
+	if f.maintenanceStarted != nil {
+		select {
+		case f.maintenanceStarted <- struct{}{}:
+		default:
+		}
+	}
+	<-ctx.Done()
+	if f.maintenanceStopped != nil {
+		select {
+		case f.maintenanceStopped <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func waitFakeGatewayStarted(t *testing.T, runtime *fakeGatewayRuntime) {
