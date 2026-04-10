@@ -91,6 +91,49 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 	return views
 }
 
+func (s *Service) threadViewsVisibleInNormalList(surface *state.SurfaceConsoleRecord, views []*mergedThreadView) []*mergedThreadView {
+	if len(views) == 0 {
+		return nil
+	}
+	allowedWorkspaces := s.normalModeListWorkspaceSet(surface)
+	if len(allowedWorkspaces) == 0 {
+		return nil
+	}
+	filtered := make([]*mergedThreadView, 0, len(views))
+	for _, view := range views {
+		workspaceKey := mergedThreadWorkspaceClaimKey(view)
+		if workspaceKey == "" {
+			continue
+		}
+		if _, ok := allowedWorkspaces[workspaceKey]; !ok {
+			continue
+		}
+		filtered = append(filtered, view)
+	}
+	return filtered
+}
+
+func (s *Service) normalModeListWorkspaceSet(surface *state.SurfaceConsoleRecord) map[string]struct{} {
+	workspaces := map[string]struct{}{}
+	for _, inst := range s.root.Instances {
+		if inst == nil || !inst.Online {
+			continue
+		}
+		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
+			if workspaceKey == "" {
+				continue
+			}
+			workspaces[workspaceKey] = struct{}{}
+		}
+	}
+	if surface != nil {
+		if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace != "" {
+			workspaces[currentWorkspace] = struct{}{}
+		}
+	}
+	return workspaces
+}
+
 func (s *Service) mergedThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {

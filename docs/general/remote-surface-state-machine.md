@@ -591,6 +591,10 @@ R5 NewThreadReady
       1. 仅 `cli` / `vscode` source。
       2. 排除 subagent role、`exec` / `mcp` 等后台线程。
       3. 排除内部 probe workspace（例如 `_tmp-codex-thread-latency-*`、`_tmp-codex-appserver-*`）。
+   3. merge 完成后，最终展示给用户前还会再按 normal `/list` 当前可见的 workspace 集合过滤：
+      1. 只保留当前在线实例能导出的 workspace。
+      2. 如果 surface 已 attach，则额外保留当前已 claimed 的 workspace。
+      3. 因此 sqlite 里的历史奇怪 workspace 不会再直接出现在 `/useall` 卡片里。
 6. sqlite 只负责补 freshness，不旁路 resolver：
    1. busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
    2. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。

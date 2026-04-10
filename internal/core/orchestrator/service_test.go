@@ -7401,20 +7401,25 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 		t.Fatalf("expected detached /use to show global thread prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
+	if prompt.Title != "全部会话" || len(prompt.Options) != 1 {
 		t.Fatalf("unexpected prompt: %#v", prompt)
 	}
-	if prompt.Options[0].OptionID != "thread-2" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/web") || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
-		t.Fatalf("expected newer offline thread to require background restore, got %#v", prompt.Options[0])
-	}
-	if prompt.Options[1].OptionID != "thread-1" || !prompt.Options[1].AllowCrossWorkspace || prompt.Options[1].Subtitle != "/data/dl/droid\n可接管" {
-		t.Fatalf("expected online free thread to support direct attach, got %#v", prompt.Options[1])
+	if prompt.Options[0].OptionID != "thread-1" || !prompt.Options[0].AllowCrossWorkspace || prompt.Options[0].Subtitle != "/data/dl/droid\n可接管" {
+		t.Fatalf("expected only list-visible workspace thread to remain in prompt, got %#v", prompt.Options[0])
 	}
 }
 
-func TestShowThreadsDetachedMergesPersistedRecentThreads(t *testing.T) {
+func TestShowThreadsDetachedFiltersPersistedThreadsToListVisibleWorkspaces(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-sqlite-1",
+		DisplayName:   "sqlite",
+		WorkspaceRoot: "/data/dl/sqlite",
+		WorkspaceKey:  "/data/dl/sqlite",
+		ShortName:     "sqlite",
+		Online:        true,
+	})
 	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
 		recent: []state.ThreadRecord{
 			{ThreadID: "thread-persisted", Name: "数据库里的新会话", Preview: "sqlite freshness", CWD: "/data/dl/sqlite", Loaded: true, LastUsedAt: now.Add(2 * time.Minute)},
@@ -7434,14 +7439,36 @@ func TestShowThreadsDetachedMergesPersistedRecentThreads(t *testing.T) {
 		t.Fatalf("expected detached /use prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if len(prompt.Options) != 2 {
-		t.Fatalf("expected persisted threads to appear in prompt, got %#v", prompt.Options)
+	if len(prompt.Options) != 1 {
+		t.Fatalf("expected only list-visible persisted workspace thread to appear in prompt, got %#v", prompt.Options)
 	}
 	if prompt.Options[0].OptionID != "thread-persisted" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
 		t.Fatalf("expected newest persisted thread first, got %#v", prompt.Options[0])
 	}
 	if prompt.Options[0].Label != "数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
 		t.Fatalf("expected persisted metadata to render in prompt, got %#v", prompt.Options[0])
+	}
+}
+
+func TestShowThreadsDetachedHidesPersistedThreadsWhenNoListVisibleWorkspaceMatches(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 6, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recent: []state.ThreadRecord{
+			{ThreadID: "thread-persisted", Name: "数据库里的新会话", Preview: "sqlite freshness", CWD: "/data/dl/sqlite", Loaded: true, LastUsedAt: now.Add(2 * time.Minute)},
+		},
+		byID: map[string]state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "no_visible_threads" {
+		t.Fatalf("expected persisted-only hidden workspace set to fall back to no_visible_threads, got %#v", events)
 	}
 }
 

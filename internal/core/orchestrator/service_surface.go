@@ -978,7 +978,7 @@ func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConso
 	default:
 		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
 		if !attached || mode == threadSelectionDisplayAll {
-			views := s.mergedThreadViews(surface)
+			views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
 			return threadSelectionPresentation{
 				title:               "全部会话",
 				views:               views,
