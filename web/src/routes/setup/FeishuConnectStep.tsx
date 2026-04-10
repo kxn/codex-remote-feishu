@@ -1,4 +1,4 @@
-import type { FeishuAppSummary, FeishuOnboardingSession } from "../../lib/types";
+import type { FeishuAppSummary, FeishuOnboardingCompleteResponse, FeishuOnboardingSession } from "../../lib/types";
 import { FeishuAppFields } from "../shared/FeishuAppFields";
 import type { FeishuConnectMode, FeishuConnectStage, SetupDraft } from "./types";
 
@@ -10,6 +10,7 @@ type FeishuConnectStepProps = {
   connectStage: FeishuConnectStage;
   connectMode: FeishuConnectMode | null;
   onboardingSession: FeishuOnboardingSession | null;
+  onboardingCompletion: FeishuOnboardingCompleteResponse | null;
   onboardingNeedsManualRetry: boolean;
   busyAction: string;
   onNameChange: (value: string) => void;
@@ -23,6 +24,7 @@ type FeishuConnectStepProps = {
   onRestartOnboarding: () => void;
   onSwitchToExistingFlow: () => void;
   onRetryOnboardingComplete: () => void;
+  onContinueOnboardingNotice: () => void;
 };
 
 export function FeishuConnectStep({
@@ -33,6 +35,7 @@ export function FeishuConnectStep({
   connectStage,
   connectMode,
   onboardingSession,
+  onboardingCompletion,
   onboardingNeedsManualRetry,
   busyAction,
   onNameChange,
@@ -46,9 +49,11 @@ export function FeishuConnectStep({
   onRestartOnboarding,
   onSwitchToExistingFlow,
   onRetryOnboardingComplete,
+  onContinueOnboardingNotice,
 }: FeishuConnectStepProps) {
   const isSetupSurface = surface === "setup";
   const verifyActionLabel = isSetupSurface ? "验证并继续" : "保存并验证";
+  const onboardingGuide = onboardingCompletion?.guide;
   const extraSetupNotice = isSetupSurface && apps.length > 1
     ? [{ tone: "warn" as const, message: "当前 setup 只继续处理一个应用。更多应用的新增、切换和运行管理请到本地管理页进行。" }]
     : [];
@@ -185,7 +190,50 @@ export function FeishuConnectStep({
     );
   }
 
+  if (connectStage === "new_qr_notice") {
+    const appName = onboardingCompletion?.app.name || onboardingCompletion?.session.displayName || onboardingSession?.displayName || "新飞书应用";
+    const appID = onboardingCompletion?.app.appId || onboardingCompletion?.session.appId || onboardingSession?.appId || "-";
+    const remainingActions = onboardingGuide?.remainingManualActions?.length
+      ? onboardingGuide.remainingManualActions
+      : [
+          "如果需要把 Markdown 预览上传到飞书云盘，还需要额外申请 `drive:drive` 权限。",
+          "这个权限通常需要管理员审批；不需要 Markdown 预览时可以先跳过。",
+        ];
+
+    return (
+      <div className="wizard-step-layout two-column">
+        <div className="wizard-form-stack">
+          <div className="wizard-status-card good">
+            <strong>{appName}</strong>
+            <p>App ID: {appID}</p>
+          </div>
+          <div className="manifest-block">
+            <h4>{onboardingGuide?.autoConfiguredSummary || "扫码创建已经完成"}</h4>
+            <p>机器人基础接入已经处理完成。下面给你一个明确的收口说明，避免流程看起来像是直接跳回去了。</p>
+          </div>
+        </div>
+
+        <div className="wizard-info-stack">
+          <div className="manifest-block">
+            <h4>还剩哪些可选动作</h4>
+            <ul className="wizard-bullet-list">
+              {remainingActions.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="wizard-inline-actions">
+            <button className="primary-button" type="button" onClick={onContinueOnboardingNotice} disabled={busyAction !== ""}>
+              下一步
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const expiresAtText = onboardingSession?.expiresAt ? new Date(onboardingSession.expiresAt).toLocaleString() : "";
+  const pollIntervalSeconds = Math.max(2, onboardingSession?.pollIntervalSeconds ?? 5);
 
   return (
     <div className="wizard-step-layout two-column">
@@ -215,6 +263,7 @@ export function FeishuConnectStep({
             <div className="manifest-block">
               <h4>正在等待扫码</h4>
               <p>扫完以后，这里会自动显示新应用的名称和 App ID，并继续做连接测试。</p>
+              <p>页面会每 {pollIntervalSeconds} 秒自动检查一次扫码结果；如果你怀疑卡住了，也可以手动刷新。</p>
             </div>
             <div className="wizard-inline-actions">
               <button className="secondary-button" type="button" onClick={onRefreshOnboarding} disabled={busyAction !== ""}>

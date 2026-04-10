@@ -83,6 +83,7 @@ export function SetupRoute() {
   const [feishuConnectStage, setFeishuConnectStage] = useState<FeishuConnectStage>("mode_select");
   const [feishuConnectMode, setFeishuConnectMode] = useState<FeishuConnectMode | null>(null);
   const [onboardingSession, setOnboardingSession] = useState<FeishuOnboardingSession | null>(null);
+  const [onboardingCompletion, setOnboardingCompletion] = useState<FeishuOnboardingCompleteResponse | null>(null);
   const [onboardingNeedsManualRetry, setOnboardingNeedsManualRetry] = useState(false);
 
   async function loadData(preferredID?: string) {
@@ -279,6 +280,7 @@ export function SetupRoute() {
     setFeishuConnectStage("mode_select");
     setFeishuConnectMode(nextMode ?? (apps.length > 0 ? "existing" : "new"));
     setOnboardingSession(null);
+    setOnboardingCompletion(null);
     setOnboardingNeedsManualRetry(false);
   }
 
@@ -302,6 +304,7 @@ export function SetupRoute() {
       setFeishuConnectMode("new");
       setFeishuConnectStage("new_qr");
       setOnboardingSession(response.session);
+      setOnboardingCompletion(null);
       setOnboardingNeedsManualRetry(false);
     });
   }
@@ -335,17 +338,28 @@ export function SetupRoute() {
         { method: "POST" },
       );
       setOnboardingSession(response.data.session);
-      await loadData(response.data.app.id);
       if (!response.ok) {
         const detail = `${response.data.result.errorCode || "verify_failed"} ${response.data.result.errorMessage || ""}`.trim();
         setOnboardingNeedsManualRetry(true);
         showBlockingError("这一步还没有完成", "扫码创建的飞书应用已经拿到凭据，但连接测试失败。请检查机器人能力是否可用，然后重试连接测试。", detail);
         return;
       }
+      setOnboardingCompletion(response.data);
       setOnboardingNeedsManualRetry(false);
+      setFeishuConnectStage("new_qr_notice");
+    });
+  }
+
+  async function continueOnboardingNotice() {
+    if (!onboardingCompletion) {
+      showBlockingError("这一步还没有完成", "当前还没有可继续的扫码结果，请重新开始扫码。");
+      return;
+    }
+    await runAction("continue-feishu-onboarding-notice", async () => {
+      await loadData(onboardingCompletion.app.id);
       setNotice({
-        tone: response.data.app.status?.state !== "connected" ? "warn" : "good",
-        message: buildSetupFeishuVerifySuccessMessage(response.data.app, response.data.mutation),
+        tone: onboardingCompletion.app.status?.state !== "connected" ? "warn" : "good",
+        message: buildSetupFeishuVerifySuccessMessage(onboardingCompletion.app, onboardingCompletion.mutation),
       });
       setSetupStarted(true);
       resetFeishuConnectFlow("existing");
@@ -722,6 +736,7 @@ export function SetupRoute() {
                 connectStage={feishuConnectStage}
                 connectMode={feishuConnectMode}
                 onboardingSession={onboardingSession}
+                onboardingCompletion={onboardingCompletion}
                 onboardingNeedsManualRetry={onboardingNeedsManualRetry}
                 scopesJSON={scopesJSON}
                 permissionsConfirmed={permissionsConfirmed}
@@ -748,9 +763,11 @@ export function SetupRoute() {
                   setFeishuConnectMode("existing");
                   setFeishuConnectStage("existing_manual");
                   setOnboardingSession(null);
+                  setOnboardingCompletion(null);
                   setOnboardingNeedsManualRetry(false);
                 }}
                 onRetryOnboardingComplete={() => void retryOnboardingComplete()}
+                onContinueOnboardingNotice={() => void continueOnboardingNotice()}
                 onPermissionsConfirmedChange={setPermissionsConfirmed}
                 onEventsConfirmedChange={setEventsConfirmed}
                 onLongConnectionConfirmedChange={setLongConnectionConfirmed}

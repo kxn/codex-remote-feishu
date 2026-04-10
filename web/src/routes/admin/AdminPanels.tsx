@@ -2,6 +2,7 @@ import type {
   AdminInstanceSummary,
   BootstrapState,
   FeishuAppSummary,
+  FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
   GatewayStatus,
   ImageStagingStatusResponse,
@@ -53,6 +54,7 @@ type AdminFeishuPanelProps = {
   connectStage: FeishuConnectStage;
   connectMode: FeishuConnectMode | null;
   onboardingSession: FeishuOnboardingSession | null;
+  onboardingCompletion: FeishuOnboardingCompleteResponse | null;
   onboardingNeedsManualRetry: boolean;
   setupURLForApp: (appID: string) => string;
   onBeginNewApp: () => void;
@@ -66,6 +68,7 @@ type AdminFeishuPanelProps = {
   onRestartOnboarding: () => void;
   onSwitchToExistingFlow: () => void;
   onRetryOnboardingComplete: () => void;
+  onContinueOnboardingNotice: () => void;
   onSaveApp: () => void;
   onVerifyApp: () => void;
   onReconnectApp: () => void;
@@ -202,6 +205,7 @@ export function AdminFeishuPanel({
   connectStage,
   connectMode,
   onboardingSession,
+  onboardingCompletion,
   onboardingNeedsManualRetry,
   setupURLForApp,
   onBeginNewApp,
@@ -215,6 +219,7 @@ export function AdminFeishuPanel({
   onRestartOnboarding,
   onSwitchToExistingFlow,
   onRetryOnboardingComplete,
+  onContinueOnboardingNotice,
   onSaveApp,
   onVerifyApp,
   onReconnectApp,
@@ -323,6 +328,7 @@ export function AdminFeishuPanel({
               connectStage={connectStage}
               connectMode={connectMode}
               onboardingSession={onboardingSession}
+              onboardingCompletion={onboardingCompletion}
               onboardingNeedsManualRetry={onboardingNeedsManualRetry}
               busyAction={busyAction}
               onNameChange={(value) => onDraftChange((current) => ({ ...current, name: value }))}
@@ -336,6 +342,7 @@ export function AdminFeishuPanel({
               onRestartOnboarding={onRestartOnboarding}
               onSwitchToExistingFlow={onSwitchToExistingFlow}
               onRetryOnboardingComplete={onRetryOnboardingComplete}
+              onContinueOnboardingNotice={onContinueOnboardingNotice}
             />
           ) : (
             <>

@@ -277,7 +277,12 @@ describe("AdminRoute", () => {
     await user.click(screen.getByRole("button", { name: "下一步" }));
 
     expect(await screen.findByText("扫码创建飞书应用")).toBeInTheDocument();
+    expect(await screen.findByText(/页面会每 2 秒自动检查一次扫码结果/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "刷新二维码状态" }));
+    expect(await screen.findByText("扫码创建已经完成")).toBeInTheDocument();
+    expect(screen.getByText(/drive:drive/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "下一步" }));
     expect(await screen.findByText(/连接测试成功/)).toBeInTheDocument();
   });
 

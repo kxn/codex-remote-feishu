@@ -63,7 +63,7 @@ describe("SetupRoute", () => {
     expect(screen.queryByLabelText("显示名称")).not.toBeInTheDocument();
   });
 
-  it("creates a new app through qr onboarding and advances to permissions", async () => {
+  it("creates a new app through qr onboarding, shows the notice page, and then advances to permissions", async () => {
     window.history.replaceState({}, "", "/setup");
     let appsConfigured = false;
     const { calls } = installMockFetch({
@@ -136,6 +136,10 @@ describe("SetupRoute", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "开始" }));
     await user.click(await screen.findByRole("button", { name: "下一步" }));
+
+    expect(await screen.findByText("扫码创建已经完成")).toBeInTheDocument();
+    expect(screen.getByText(/drive:drive/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "下一步" }));
 
     expect(await screen.findByText("权限导入说明")).toBeInTheDocument();
     expect(calls.some((call) => call.path === "/api/setup/feishu/onboarding/sessions")).toBe(true);

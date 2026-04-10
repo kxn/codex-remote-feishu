@@ -4,6 +4,7 @@ import type {
   AutostartDetectResponse,
   FeishuAppSummary,
   FeishuManifest,
+  FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
   RuntimeRequirementsDetectResponse,
   VSCodeDetectResponse,
@@ -22,6 +23,7 @@ type SetupStepContentProps = {
   connectStage: FeishuConnectStage;
   connectMode: FeishuConnectMode | null;
   onboardingSession: FeishuOnboardingSession | null;
+  onboardingCompletion: FeishuOnboardingCompleteResponse | null;
   onboardingNeedsManualRetry: boolean;
   scopesJSON: string;
   permissionsConfirmed: boolean;
@@ -46,6 +48,7 @@ type SetupStepContentProps = {
   onRestartOnboarding: () => void;
   onSwitchToExistingFlow: () => void;
   onRetryOnboardingComplete: () => void;
+  onContinueOnboardingNotice: () => void;
   onPermissionsConfirmedChange: (value: boolean) => void;
   onEventsConfirmedChange: (value: boolean) => void;
   onLongConnectionConfirmedChange: (value: boolean) => void;
@@ -91,6 +94,7 @@ export function SetupStepContent({
   connectStage,
   connectMode,
   onboardingSession,
+  onboardingCompletion,
   onboardingNeedsManualRetry,
   scopesJSON,
   permissionsConfirmed,
@@ -115,6 +119,7 @@ export function SetupStepContent({
   onRestartOnboarding,
   onSwitchToExistingFlow,
   onRetryOnboardingComplete,
+  onContinueOnboardingNotice,
   onPermissionsConfirmedChange,
   onEventsConfirmedChange,
   onLongConnectionConfirmedChange,
@@ -149,6 +154,7 @@ export function SetupStepContent({
           connectStage={connectStage}
           connectMode={connectMode}
           onboardingSession={onboardingSession}
+          onboardingCompletion={onboardingCompletion}
           onboardingNeedsManualRetry={onboardingNeedsManualRetry}
           busyAction={busyAction}
           onNameChange={(value) => onDraftChange((current) => ({ ...current, name: value }))}
@@ -162,6 +168,7 @@ export function SetupStepContent({
           onRestartOnboarding={onRestartOnboarding}
           onSwitchToExistingFlow={onSwitchToExistingFlow}
           onRetryOnboardingComplete={onRetryOnboardingComplete}
+          onContinueOnboardingNotice={onContinueOnboardingNotice}
         />
       );
     case "permissions":

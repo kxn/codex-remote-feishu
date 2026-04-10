@@ -137,11 +137,18 @@ export interface FeishuOnboardingSessionResponse {
   session: FeishuOnboardingSession;
 }
 
+export interface FeishuOnboardingGuide {
+  autoConfiguredSummary?: string;
+  remainingManualActions?: string[];
+  recommendedNextStep?: string;
+}
+
 export interface FeishuOnboardingCompleteResponse {
   app: FeishuAppSummary;
   mutation?: FeishuAppMutation;
   result: VerifyResult;
   session: FeishuOnboardingSession;
+  guide?: FeishuOnboardingGuide;
 }
 
 export interface FeishuAppPublishCheckResponse {
