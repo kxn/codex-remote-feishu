@@ -18,6 +18,19 @@ func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesDebugAdminCommand(t *testing.T) {
+	action, ok := ParseFeishuTextAction("/debug admin")
+	if !ok {
+		t.Fatal("expected /debug admin to be parsed")
+	}
+	if action.Kind != ActionDebugCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionDebugCommand)
+	}
+	if action.Text != "/debug admin" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/debug admin")
+	}
+}
+
 func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 	tests := []string{
 		"/upgrade",

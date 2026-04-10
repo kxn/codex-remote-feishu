@@ -238,6 +238,9 @@ func TestBuildDebugStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if form == nil || form.CommandText != "/debug" {
 		t.Fatalf("expected debug form entry, got %#v", catalog.Sections[2].Entries[0])
 	}
+	if got := catalog.Sections[0].Entries[0].Buttons[1].CommandText; got != "/debug admin" {
+		t.Fatalf("expected debug catalog to expose admin link button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
 }
 
 func TestBuildUpgradeStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
@@ -258,6 +261,61 @@ func TestBuildUpgradeStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if !strings.Contains(catalog.Summary, "本地升级产物：") {
 		t.Fatalf("expected upgrade summary to keep artifact path, got %#v", catalog.Summary)
 	}
+}
+
+func TestParseDebugCommandTextRecognizesAdmin(t *testing.T) {
+	parsed, err := parseDebugCommandText("/debug admin")
+	if err != nil {
+		t.Fatalf("parseDebugCommandText: %v", err)
+	}
+	if parsed.Mode != debugCommandAdmin {
+		t.Fatalf("mode = %q, want %q", parsed.Mode, debugCommandAdmin)
+	}
+}
+
+func TestDebugAdminCommandIssuesExternalAccessLink(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	defer app.Shutdown(nil)
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "disabled",
+		},
+	})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionDebugCommand,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/debug admin",
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ops := gateway.snapshotOperations()
+		for _, op := range ops {
+			if op.CardTitle != "Debug" {
+				continue
+			}
+			if !strings.Contains(op.CardBody, "临时管理页外链已生成") || !strings.Contains(op.CardBody, "/g/") {
+				t.Fatalf("unexpected debug admin body: %#v", op.CardBody)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for debug admin link notice")
 }
 
 type feishuOperationView struct {

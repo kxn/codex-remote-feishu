@@ -22,6 +22,7 @@ const (
 	debugCommandShowStatus debugCommandMode = "status"
 	debugCommandShowTrack  debugCommandMode = "track_show"
 	debugCommandSetTrack   debugCommandMode = "track_set"
+	debugCommandAdmin      debugCommandMode = "admin"
 	debugCommandUpgrade    debugCommandMode = "upgrade"
 )
 
@@ -62,6 +63,9 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 	parsed, err := parseDebugCommandText(command.Text)
 	if err != nil {
 		return debugUsageEvents(command.SurfaceSessionID, err.Error())
+	}
+	if parsed.Mode == debugCommandAdmin {
+		return a.handleDebugAdminCommand(command)
 	}
 
 	stateValue, _, err := a.loadUpgradeStateLocked(true)
@@ -105,6 +109,31 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 	default:
 		return debugUsageEvents(command.SurfaceSessionID, "不支持的 /debug 子命令。")
 	}
+}
+
+func (a *App) handleDebugAdminCommand(command control.DaemonCommand) []control.UIEvent {
+	service := a.externalAccess
+	if service == nil {
+		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", "生成管理页外链失败：external access 当前未启用。")}
+	}
+	adminURL := a.admin.adminURL
+	localURL, err := a.ensureExternalAccessListenerLocked()
+	if err != nil {
+		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err))}
+	}
+	a.mu.Unlock()
+	issued, err := service.IssueURL(context.Background(), debugAdminIssueRequest(adminURL), localURL)
+	a.mu.Lock()
+	if err != nil {
+		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err))}
+	}
+	text := fmt.Sprintf(
+		"临时管理页外链已生成：\n[打开管理页](%s)\n\n链接：`%s`\n有效期到：`%s`",
+		issued.ExternalURL,
+		issued.ExternalURL,
+		issued.ExpiresAt.UTC().Format(time.RFC3339),
+	)
+	return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_link_ready", text)}
 }
 
 func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []control.UIEvent {
@@ -502,6 +531,11 @@ func parseDebugCommandText(text string) (parsedDebugCommand, error) {
 		return parsedDebugCommand{Mode: debugCommandShowStatus}, nil
 	}
 	switch fields[1] {
+	case "admin":
+		if len(fields) != 2 {
+			return parsedDebugCommand{}, fmt.Errorf("`/debug admin` 不接受额外参数。")
+		}
+		return parsedDebugCommand{Mode: debugCommandAdmin}, nil
 	case "upgrade":
 		if len(fields) != 2 {
 			return parsedDebugCommand{}, fmt.Errorf("`/debug upgrade` 不接受额外参数。")
@@ -583,6 +617,7 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
 						runCommandButton("查看 track", "/debug track", "", false),
+						runCommandButton("管理页外链", "/debug admin", "", false),
 						runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
 						runCommandButton("本地升级", "/upgrade local", "", false),
 					},
