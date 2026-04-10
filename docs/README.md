@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-10`
-> Summary: 新增飞书卡片原地更新设计草案并刷新索引。
+> Summary: 将 external-access foundation 文档转入 implemented 并刷新索引。
 
 ## 1. 适用范围
 
@@ -127,6 +127,7 @@
 - [managed-headless-pool-design.md](./implemented/managed-headless-pool-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)
 - [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
+- [authenticated-external-access-foundation-design.md](./implemented/authenticated-external-access-foundation-design.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
@@ -137,7 +138,6 @@
 ### 6.4 `draft`
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
-- [authenticated-external-access-foundation-design.md](./draft/authenticated-external-access-foundation-design.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)

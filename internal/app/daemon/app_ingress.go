@@ -401,6 +401,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
 }
 
@@ -541,5 +542,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
 }

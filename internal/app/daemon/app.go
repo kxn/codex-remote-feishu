@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
+	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -32,6 +33,24 @@ type HeadlessRuntimeConfig struct {
 	IdleRefreshInterval time.Duration
 	IdleRefreshTimeout  time.Duration
 	MinIdle             int
+}
+
+type ExternalAccessRuntimeConfig struct {
+	Settings      externalAccessSettingsView
+	CurrentBinary string
+}
+
+type externalAccessSettingsView struct {
+	ListenHost                 string
+	ListenPort                 int
+	DefaultLinkTTL             time.Duration
+	DefaultSessionTTL          time.Duration
+	ProviderKind               string
+	ProviderLazyStart          bool
+	TryCloudflareBinaryPath    string
+	TryCloudflareLaunchTimeout time.Duration
+	TryCloudflareMetricsPort   int
+	TryCloudflareLogPath       string
 }
 
 type managedHeadlessProcess struct {
@@ -120,11 +139,15 @@ type App struct {
 	feishuOnboarding       map[string]*feishuOnboardingSession
 	feishuSetup            feishuSetupClient
 
-	adminAuth *adminauth.Manager
-	admin     adminRuntimeState
+	adminAuth             *adminauth.Manager
+	admin                 adminRuntimeState
+	externalAccess        *externalaccess.Service
+	externalAccessRuntime ExternalAccessRuntimeConfig
 
-	relayListener net.Listener
-	apiListener   net.Listener
+	relayListener          net.Listener
+	apiListener            net.Listener
+	externalAccessListener net.Listener
+	externalAccessServer   *http.Server
 
 	shutdownGracePeriod    time.Duration
 	shutdownNoticeTimeout  time.Duration

@@ -90,6 +90,10 @@ func RunMain(ctx context.Context, version string) error {
 	})
 	app.SetFinalBlockPreviewer(finalBlockPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings:      externalAccessSettingsViewFromConfig(loadedConfig.Config.ExternalAccess),
+		CurrentBinary: identity.BinaryPath,
+	})
 	if catalog, err := codexstate.NewDefaultSQLiteThreadCatalog(codexstate.SQLiteThreadCatalogOptions{Logf: log.Printf}); err != nil {
 		log.Printf("codex sqlite thread catalog disabled: %v", err)
 	} else if catalog != nil {

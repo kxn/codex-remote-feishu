@@ -34,9 +34,14 @@ type ServicesConfig struct {
 }
 
 const (
-	UnifiedConfigEnvPath = "CODEX_REMOTE_CONFIG"
-	DebugRelayFlowEnv    = "CODEX_REMOTE_DEBUG_RELAY_FLOW"
-	DebugRelayRawEnv     = "CODEX_REMOTE_DEBUG_RELAY_RAW"
+	UnifiedConfigEnvPath          = "CODEX_REMOTE_CONFIG"
+	DebugRelayFlowEnv             = "CODEX_REMOTE_DEBUG_RELAY_FLOW"
+	DebugRelayRawEnv              = "CODEX_REMOTE_DEBUG_RELAY_RAW"
+	ExternalAccessHostEnv         = "EXTERNAL_ACCESS_HOST"
+	ExternalAccessPortEnv         = "EXTERNAL_ACCESS_PORT"
+	ExternalAccessProviderEnv     = "CODEX_REMOTE_EXTERNAL_ACCESS_PROVIDER"
+	TryCloudflareBinaryEnv        = "CODEX_REMOTE_TRYCLOUDFLARE_BINARY"
+	TryCloudflareLaunchTimeoutEnv = "CODEX_REMOTE_TRYCLOUDFLARE_LAUNCH_TIMEOUT"
 )
 
 func LoadEnvFile(path string) (map[string]string, error) {
@@ -205,6 +210,15 @@ func fileExists(path string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func ResolveExternalAccessSettings(base ExternalAccessSettings) ExternalAccessSettings {
+	base.ListenHost = chooseNonEmpty(os.Getenv(ExternalAccessHostEnv), base.ListenHost)
+	base.ListenPort = chooseInt(os.Getenv(ExternalAccessPortEnv), base.ListenPort)
+	base.Provider.Kind = chooseNonEmpty(os.Getenv(ExternalAccessProviderEnv), base.Provider.Kind)
+	base.Provider.TryCloudflare.BinaryPath = chooseNonEmpty(os.Getenv(TryCloudflareBinaryEnv), base.Provider.TryCloudflare.BinaryPath)
+	base.Provider.TryCloudflare.LaunchTimeoutSeconds = chooseInt(os.Getenv(TryCloudflareLaunchTimeoutEnv), base.Provider.TryCloudflare.LaunchTimeoutSeconds)
+	return base
 }
 
 func xdgConfigPath(parts ...string) string {

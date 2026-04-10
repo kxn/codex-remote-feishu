@@ -26,13 +26,14 @@ type LoadedAppConfig struct {
 }
 
 type AppConfig struct {
-	Version int             `json:"version"`
-	Relay   RelaySettings   `json:"relay"`
-	Admin   AdminSettings   `json:"admin"`
-	Wrapper WrapperSettings `json:"wrapper"`
-	Feishu  FeishuSettings  `json:"feishu"`
-	Debug   DebugSettings   `json:"debug"`
-	Storage StorageSettings `json:"storage,omitempty"`
+	Version        int                    `json:"version"`
+	Relay          RelaySettings          `json:"relay"`
+	Admin          AdminSettings          `json:"admin"`
+	ExternalAccess ExternalAccessSettings `json:"externalAccess,omitempty"`
+	Wrapper        WrapperSettings        `json:"wrapper"`
+	Feishu         FeishuSettings         `json:"feishu"`
+	Debug          DebugSettings          `json:"debug"`
+	Storage        StorageSettings        `json:"storage,omitempty"`
 }
 
 type RelaySettings struct {
@@ -45,6 +46,27 @@ type AdminSettings struct {
 	ListenHost      string `json:"listenHost,omitempty"`
 	ListenPort      int    `json:"listenPort,omitempty"`
 	AutoOpenBrowser *bool  `json:"autoOpenBrowser,omitempty"`
+}
+
+type ExternalAccessSettings struct {
+	ListenHost               string                         `json:"listenHost,omitempty"`
+	ListenPort               int                            `json:"listenPort,omitempty"`
+	DefaultLinkTTLSeconds    int                            `json:"defaultLinkTTLSeconds,omitempty"`
+	DefaultSessionTTLSeconds int                            `json:"defaultSessionTTLSeconds,omitempty"`
+	Provider                 ExternalAccessProviderSettings `json:"provider,omitempty"`
+}
+
+type ExternalAccessProviderSettings struct {
+	Kind          string                `json:"kind,omitempty"`
+	LazyStart     *bool                 `json:"lazyStart,omitempty"`
+	TryCloudflare TryCloudflareSettings `json:"tryCloudflare,omitempty"`
+}
+
+type TryCloudflareSettings struct {
+	BinaryPath           string `json:"binaryPath,omitempty"`
+	LaunchTimeoutSeconds int    `json:"launchTimeoutSeconds,omitempty"`
+	MetricsPort          int    `json:"metricsPort,omitempty"`
+	LogPath              string `json:"logPath,omitempty"`
 }
 
 type WrapperSettings struct {
@@ -108,6 +130,19 @@ func DefaultAppConfig() AppConfig {
 			ListenHost:      defaultAdminListenHost,
 			ListenPort:      defaultAdminListenPort,
 			AutoOpenBrowser: boolPtr(true),
+		},
+		ExternalAccess: ExternalAccessSettings{
+			ListenHost:               defaultAdminListenHost,
+			ListenPort:               9512,
+			DefaultLinkTTLSeconds:    600,
+			DefaultSessionTTLSeconds: 1800,
+			Provider: ExternalAccessProviderSettings{
+				Kind:      "trycloudflare",
+				LazyStart: boolPtr(true),
+				TryCloudflare: TryCloudflareSettings{
+					LaunchTimeoutSeconds: 20,
+				},
+			},
 		},
 		Wrapper: WrapperSettings{
 			CodexRealBinary: "codex",
@@ -544,6 +579,28 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 	if cfg.Admin.AutoOpenBrowser == nil {
 		cfg.Admin.AutoOpenBrowser = boolPtr(*defaults.Admin.AutoOpenBrowser)
+	}
+
+	if strings.TrimSpace(cfg.ExternalAccess.ListenHost) == "" {
+		cfg.ExternalAccess.ListenHost = defaults.ExternalAccess.ListenHost
+	}
+	if cfg.ExternalAccess.ListenPort <= 0 {
+		cfg.ExternalAccess.ListenPort = defaults.ExternalAccess.ListenPort
+	}
+	if cfg.ExternalAccess.DefaultLinkTTLSeconds <= 0 {
+		cfg.ExternalAccess.DefaultLinkTTLSeconds = defaults.ExternalAccess.DefaultLinkTTLSeconds
+	}
+	if cfg.ExternalAccess.DefaultSessionTTLSeconds <= 0 {
+		cfg.ExternalAccess.DefaultSessionTTLSeconds = defaults.ExternalAccess.DefaultSessionTTLSeconds
+	}
+	if strings.TrimSpace(cfg.ExternalAccess.Provider.Kind) == "" {
+		cfg.ExternalAccess.Provider.Kind = defaults.ExternalAccess.Provider.Kind
+	}
+	if cfg.ExternalAccess.Provider.LazyStart == nil {
+		cfg.ExternalAccess.Provider.LazyStart = boolPtr(*defaults.ExternalAccess.Provider.LazyStart)
+	}
+	if cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds <= 0 {
+		cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds = defaults.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds
 	}
 
 	if strings.TrimSpace(cfg.Wrapper.CodexRealBinary) == "" {

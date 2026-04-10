@@ -189,6 +189,8 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))
+	mux.HandleFunc("GET /api/admin/external-access/status", a.requireAdmin(a.handleAdminExternalAccessStatus))
+	mux.HandleFunc("POST /api/admin/external-access/link", a.requireAdmin(a.handleAdminExternalAccessLink))
 	mux.HandleFunc("GET /api/admin/feishu/manifest", a.requireAdmin(a.handleFeishuManifest))
 	mux.HandleFunc("GET /api/admin/feishu/apps", a.requireAdmin(a.handleFeishuAppsList))
 	mux.HandleFunc("POST /api/admin/feishu/apps", a.requireAdmin(a.handleFeishuAppCreate))

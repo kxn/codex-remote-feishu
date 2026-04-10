@@ -45,6 +45,9 @@ func (a *App) Shutdown(_ context.Context) error {
 	if a.apiServer != nil {
 		_ = a.apiServer.Close()
 	}
+	a.mu.Lock()
+	a.shutdownExternalAccessLocked("daemon_shutdown")
+	a.mu.Unlock()
 	a.clearListeners()
 
 	a.deliverShutdownNotices(events)
@@ -150,6 +153,7 @@ func (a *App) clearListeners() {
 	defer a.listenMu.Unlock()
 	a.relayListener = nil
 	a.apiListener = nil
+	a.externalAccessListener = nil
 }
 
 func (a *App) shutdownGracePeriodValue() time.Duration {
