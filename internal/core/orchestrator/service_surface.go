@@ -427,21 +427,36 @@ func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord)
 			grouped[workspaceKey] = append(grouped[workspaceKey], inst)
 		}
 	}
-	if len(grouped) == 0 {
+	views := s.mergedThreadViews(surface)
+	visibleWorkspaces := s.normalModeListWorkspaceSetWithViews(surface, views)
+	if len(visibleWorkspaces) == 0 {
 		return notice(surface, "no_available_workspaces", "当前没有可接管的工作区。请先连接一个 VS Code 会话，或等待可恢复工作区出现。")
+	}
+	recoverableWorkspaces := map[string]time.Time{}
+	recoverableWorkspaceSeen := map[string]bool{}
+	for _, view := range views {
+		workspaceKey := mergedThreadWorkspaceClaimKey(view)
+		if workspaceKey == "" {
+			continue
+		}
+		recoverableWorkspaceSeen[workspaceKey] = true
+		usedAt := threadLastUsedAt(view)
+		if current, ok := recoverableWorkspaces[workspaceKey]; !ok || usedAt.After(current) {
+			recoverableWorkspaces[workspaceKey] = usedAt
+		}
 	}
 
 	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
-	available := make([]workspaceSelectionEntry, 0, len(grouped))
-	unavailable := make([]workspaceSelectionEntry, 0, len(grouped))
+	available := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
+	unavailable := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
 	contextTitle := ""
 	contextText := ""
-	for workspaceKey, groupedInstances := range grouped {
+	for workspaceKey := range visibleWorkspaces {
 		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
-		instances := append([]*state.InstanceRecord(nil), groupedInstances...)
+		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
 
-		latestUsedAt := s.workspaceLatestVisibleThreadUsedAt(instances, workspaceKey)
+		latestUsedAt := recoverableWorkspaces[workspaceKey]
 		ageText := ""
 		if !latestUsedAt.IsZero() {
 			ageText = humanizeRelativeTime(s.now(), latestUsedAt)
@@ -449,18 +464,25 @@ func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord)
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
 		isCurrent := surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace == workspaceKey
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
-		unattachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) == nil
+		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
+		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
 
 		buttonLabel := ""
+		actionKind := ""
 		disabled := false
 		switch {
 		case isCurrent:
 		case busy:
 			disabled = true
-		case unattachable:
+		case attachable:
+			if surface.AttachedInstanceID != "" {
+				buttonLabel = "切换"
+			}
+		case recoverableOnly:
+			buttonLabel = "恢复"
+			actionKind = "show_workspace_threads"
+		default:
 			disabled = true
-		case surface.AttachedInstanceID != "":
-			buttonLabel = "切换"
 		}
 
 		option := control.SelectionOption{
@@ -468,7 +490,8 @@ func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord)
 			Label:       workspaceSelectionLabel(workspaceKey),
 			ButtonLabel: buttonLabel,
 			AgeText:     ageText,
-			MetaText:    workspaceSelectionMetaText(ageText, hasVSCodeActivity, busy, unattachable),
+			MetaText:    workspaceSelectionMetaText(ageText, hasVSCodeActivity, busy, !attachable && !recoverableOnly, recoverableOnly),
+			ActionKind:  actionKind,
 			IsCurrent:   isCurrent,
 			Disabled:    disabled,
 		}
@@ -557,7 +580,7 @@ func (s *Service) workspaceLatestVisibleThreadUsedAt(instances []*state.Instance
 	return latest
 }
 
-func workspaceSelectionMetaText(ageText string, hasVSCodeActivity, busy, unavailable bool) string {
+func workspaceSelectionMetaText(ageText string, hasVSCodeActivity, busy, unavailable, recoverableOnly bool) string {
 	parts := make([]string, 0, 2)
 	if age := strings.TrimSpace(ageText); age != "" {
 		parts = append(parts, age)
@@ -565,6 +588,8 @@ func workspaceSelectionMetaText(ageText string, hasVSCodeActivity, busy, unavail
 	switch {
 	case busy:
 		parts = append(parts, "当前被其他飞书会话接管")
+	case recoverableOnly:
+		parts = append(parts, "后台可恢复")
 	case unavailable:
 		parts = append(parts, "当前暂不可接管")
 	case hasVSCodeActivity:

@@ -202,6 +202,42 @@ func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 	}
 }
 
+func TestProjectWorkspaceSelectionPromptPreservesShowWorkspaceThreadsAction(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Kind:  control.SelectionPromptAttachWorkspace,
+			Title: "工作区列表",
+			Options: []control.SelectionOption{
+				{
+					Index:       1,
+					OptionID:    "/data/dl/picdetect",
+					Label:       "picdetect",
+					ButtonLabel: "恢复",
+					MetaText:    "3分前 · 后台可恢复",
+					ActionKind:  "show_workspace_threads",
+				},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	actionRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[1])
+	}
+	textValue, _ := actionRow[0]["text"].(map[string]any)
+	if textValue["content"] != "恢复 · picdetect" {
+		t.Fatalf("unexpected button text: %#v", actionRow[0])
+	}
+	value, _ := actionRow[0]["value"].(map[string]any)
+	if value["kind"] != "show_workspace_threads" || value["workspace_key"] != "/data/dl/picdetect" {
+		t.Fatalf("expected workspace selection to preserve special action, got %#v", value)
+	}
+}
+
 func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

@@ -100,7 +100,7 @@ func (s *Service) threadViewsVisibleInNormalList(surface *state.SurfaceConsoleRe
 	if len(views) == 0 {
 		return nil
 	}
-	allowedWorkspaces := s.normalModeListWorkspaceSet(surface)
+	allowedWorkspaces := s.normalModeListWorkspaceSetWithViews(surface, views)
 	if len(allowedWorkspaces) == 0 {
 		return nil
 	}
@@ -119,6 +119,10 @@ func (s *Service) threadViewsVisibleInNormalList(surface *state.SurfaceConsoleRe
 }
 
 func (s *Service) normalModeListWorkspaceSet(surface *state.SurfaceConsoleRecord) map[string]struct{} {
+	return s.normalModeListWorkspaceSetWithViews(surface, s.mergedThreadViews(surface))
+}
+
+func (s *Service) normalModeListWorkspaceSetWithViews(surface *state.SurfaceConsoleRecord, views []*mergedThreadView) map[string]struct{} {
 	workspaces := map[string]struct{}{}
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
@@ -134,6 +138,11 @@ func (s *Service) normalModeListWorkspaceSet(surface *state.SurfaceConsoleRecord
 	if surface != nil {
 		if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace != "" {
 			workspaces[currentWorkspace] = struct{}{}
+		}
+	}
+	for _, view := range views {
+		if workspaceKey := mergedThreadWorkspaceClaimKey(view); workspaceKey != "" {
+			workspaces[workspaceKey] = struct{}{}
 		}
 	}
 	return workspaces

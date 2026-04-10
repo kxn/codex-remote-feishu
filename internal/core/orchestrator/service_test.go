@@ -680,6 +680,55 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 	}
 }
 
+func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
+	now := time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recent: []state.ThreadRecord{
+			{
+				ThreadID:   "thread-picdetect",
+				Name:       "排查图片识别",
+				Preview:    "sqlite only",
+				CWD:        "/data/dl/picdetect",
+				Loaded:     true,
+				LastUsedAt: now.Add(-3 * time.Minute),
+			},
+		},
+		byID: map[string]state.ThreadRecord{
+			"thread-picdetect": {
+				ThreadID:   "thread-picdetect",
+				Name:       "排查图片识别",
+				Preview:    "sqlite only",
+				CWD:        "/data/dl/picdetect",
+				Loaded:     true,
+				LastUsedAt: now.Add(-3 * time.Minute),
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected one workspace selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 1 {
+		t.Fatalf("expected one recoverable workspace option, got %#v", prompt.Options)
+	}
+	option := prompt.Options[0]
+	if option.OptionID != "/data/dl/picdetect" || option.ActionKind != "show_workspace_threads" || option.ButtonLabel != "恢复" || option.Disabled {
+		t.Fatalf("expected persisted-only workspace to route to workspace thread list, got %#v", option)
+	}
+	if option.MetaText != "3分前 · 后台可恢复" {
+		t.Fatalf("expected recoverable workspace meta, got %#v", option.MetaText)
+	}
+}
+
 func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	now := time.Date(2026, 4, 9, 19, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -722,6 +771,63 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	}
 	if threadPrompt == nil || len(threadPrompt.Options) != 1 || threadPrompt.Options[0].OptionID != "thread-fs" {
 		t.Fatalf("expected /use prompt to be scoped to selected workspace, got %#v", events)
+	}
+}
+
+func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
+	now := time.Date(2026, 4, 10, 14, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recent: []state.ThreadRecord{
+			{
+				ThreadID:   "thread-picdetect",
+				Name:       "最新排查",
+				Preview:    "sqlite only",
+				CWD:        "/data/dl/picdetect",
+				Loaded:     true,
+				LastUsedAt: now.Add(-2 * time.Minute),
+			},
+			{
+				ThreadID:   "thread-other",
+				Name:       "其他工作区",
+				Preview:    "other",
+				CWD:        "/data/dl/other",
+				Loaded:     true,
+				LastUsedAt: now.Add(-1 * time.Minute),
+			},
+		},
+		byID: map[string]state.ThreadRecord{
+			"thread-picdetect": {
+				ThreadID:   "thread-picdetect",
+				Name:       "最新排查",
+				Preview:    "sqlite only",
+				CWD:        "/data/dl/picdetect",
+				Loaded:     true,
+				LastUsedAt: now.Add(-2 * time.Minute),
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowWorkspaceThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/picdetect",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected workspace thread selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "picdetect 全部会话" || len(prompt.Options) != 2 {
+		t.Fatalf("unexpected persisted-only workspace prompt: %#v", prompt)
+	}
+	if prompt.Options[0].OptionID != "thread-picdetect" || !prompt.Options[0].AllowCrossWorkspace {
+		t.Fatalf("expected persisted-only thread option to remain recoverable, got %#v", prompt.Options[0])
+	}
+	if prompt.Options[1].ActionKind != "show_all_threads" {
+		t.Fatalf("expected trailing return action, got %#v", prompt.Options[1])
 	}
 }
 
@@ -5885,15 +5991,15 @@ func TestThreadsSnapshotDoesNotBroadenManagedHeadlessWorkspaceRoot(t *testing.T)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-headless-1",
-		DisplayName:   "fschannel3",
-		WorkspaceRoot: "/data/dl/fschannel3",
-		WorkspaceKey:  "/data/dl/fschannel3",
-		ShortName:     "fschannel3",
+		DisplayName:   "atlas",
+		WorkspaceRoot: "/data/dl/atlas",
+		WorkspaceKey:  "/data/dl/atlas",
+		ShortName:     "atlas",
 		Source:        "headless",
 		Managed:       true,
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			"thread-1": {ThreadID: "thread-1", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 
@@ -5901,12 +6007,12 @@ func TestThreadsSnapshotDoesNotBroadenManagedHeadlessWorkspaceRoot(t *testing.T)
 		Kind: agentproto.EventThreadsSnapshot,
 		Threads: []agentproto.ThreadSnapshotRecord{
 			{ThreadID: "thread-ancestor", Name: "污染线程", CWD: "/data/dl", Loaded: true},
-			{ThreadID: "thread-1", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			{ThreadID: "thread-1", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 
 	inst := svc.root.Instances["inst-headless-1"]
-	if inst.WorkspaceRoot != "/data/dl/fschannel3" || inst.WorkspaceKey != "/data/dl/fschannel3" || inst.DisplayName != "fschannel3" {
+	if inst.WorkspaceRoot != "/data/dl/atlas" || inst.WorkspaceKey != "/data/dl/atlas" || inst.DisplayName != "atlas" {
 		t.Fatalf("expected managed headless workspace metadata to stay on the precise workspace, got %#v", inst)
 	}
 }
@@ -7864,15 +7970,18 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 		t.Fatalf("expected detached /use to show global thread prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if prompt.Title != "全部会话" || len(prompt.Options) != 1 {
+	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected prompt: %#v", prompt)
 	}
-	if prompt.Options[0].OptionID != "thread-1" || !prompt.Options[0].AllowCrossWorkspace || prompt.Options[0].Subtitle != "/data/dl/droid\n可接管" {
-		t.Fatalf("expected only list-visible workspace thread to remain in prompt, got %#v", prompt.Options[0])
+	if prompt.Options[0].OptionID != "thread-2" || !prompt.Options[0].AllowCrossWorkspace || prompt.Options[0].Subtitle != "/data/dl/web\n可接管，将启动后台恢复" {
+		t.Fatalf("expected offline workspace thread to stay visible for recovery, got %#v", prompt.Options[0])
+	}
+	if prompt.Options[1].OptionID != "thread-1" || !prompt.Options[1].AllowCrossWorkspace || prompt.Options[1].Subtitle != "/data/dl/droid\n可接管" {
+		t.Fatalf("expected online workspace thread to remain visible, got %#v", prompt.Options[1])
 	}
 }
 
-func TestShowThreadsDetachedFiltersPersistedThreadsToListVisibleWorkspaces(t *testing.T) {
+func TestShowThreadsDetachedIncludesPersistedThreadsFromRecoverableWorkspaces(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -7902,8 +8011,8 @@ func TestShowThreadsDetachedFiltersPersistedThreadsToListVisibleWorkspaces(t *te
 		t.Fatalf("expected detached /use prompt, got %#v", events)
 	}
 	prompt := events[0].SelectionPrompt
-	if len(prompt.Options) != 1 {
-		t.Fatalf("expected only list-visible persisted workspace thread to appear in prompt, got %#v", prompt.Options)
+	if len(prompt.Options) != 2 {
+		t.Fatalf("expected persisted recoverable workspaces to appear in prompt, got %#v", prompt.Options)
 	}
 	if prompt.Options[0].OptionID != "thread-persisted" || !prompt.Options[0].AllowCrossWorkspace || !strings.Contains(prompt.Options[0].Subtitle, "后台恢复") {
 		t.Fatalf("expected newest persisted thread first, got %#v", prompt.Options[0])
@@ -7911,9 +8020,12 @@ func TestShowThreadsDetachedFiltersPersistedThreadsToListVisibleWorkspaces(t *te
 	if prompt.Options[0].Label != "sqlite · 数据库里的新会话" || !strings.Contains(prompt.Options[0].Subtitle, "/data/dl/sqlite") {
 		t.Fatalf("expected persisted metadata to render in prompt, got %#v", prompt.Options[0])
 	}
+	if prompt.Options[1].OptionID != "thread-older" || !prompt.Options[1].AllowCrossWorkspace || !strings.Contains(prompt.Options[1].Subtitle, "/data/dl/older") {
+		t.Fatalf("expected persisted-only recoverable workspace thread to remain visible, got %#v", prompt.Options[1])
+	}
 }
 
-func TestShowThreadsDetachedHidesPersistedThreadsWhenNoListVisibleWorkspaceMatches(t *testing.T) {
+func TestShowThreadsDetachedShowsPersistedThreadsWhenOnlyRecoverableWorkspacesExist(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 6, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
@@ -7930,8 +8042,12 @@ func TestShowThreadsDetachedHidesPersistedThreadsWhenNoListVisibleWorkspaceMatch
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "no_visible_threads" {
-		t.Fatalf("expected persisted-only hidden workspace set to fall back to no_visible_threads, got %#v", events)
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected persisted-only recoverable workspace to produce thread prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "thread-persisted" {
+		t.Fatalf("expected persisted-only recoverable thread to remain selectable, got %#v", prompt)
 	}
 }
 
@@ -8486,20 +8602,20 @@ func TestUseThreadAttachedNormalIgnoresPollutedCurrentInstanceThreadVisibility(t
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-pic": {ThreadID: "thread-pic", Name: "图片检测", CWD: "/data/dl/picdetect", Loaded: true},
-			"thread-fs":  {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			"thread-fs":  {ThreadID: "thread-fs", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-fschannel3",
-		DisplayName:   "fschannel3",
-		WorkspaceRoot: "/data/dl/fschannel3",
-		WorkspaceKey:  "/data/dl/fschannel3",
-		ShortName:     "fschannel3",
+		InstanceID:    "inst-atlas",
+		DisplayName:   "atlas",
+		WorkspaceRoot: "/data/dl/atlas",
+		WorkspaceKey:  "/data/dl/atlas",
+		ShortName:     "atlas",
 		Source:        "headless",
 		Managed:       true,
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			"thread-fs": {ThreadID: "thread-fs", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{
@@ -8520,10 +8636,10 @@ func TestUseThreadAttachedNormalIgnoresPollutedCurrentInstanceThreadVisibility(t
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-fschannel3" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel3" || surface.SelectedThreadID != "thread-fs" {
+	if surface.AttachedInstanceID != "inst-atlas" || surface.ClaimedWorkspaceKey != "/data/dl/atlas" || surface.SelectedThreadID != "thread-fs" {
 		t.Fatalf("expected cross-workspace /use to reattach to the correct workspace instance, got %#v", surface)
 	}
-	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.WorkspaceKey != "/data/dl/fschannel3" || snapshot.Attachment.InstanceID != "inst-fschannel3" {
+	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.WorkspaceKey != "/data/dl/atlas" || snapshot.Attachment.InstanceID != "inst-atlas" {
 		t.Fatalf("expected snapshot to stay aligned with selected thread workspace, got %#v", snapshot)
 	}
 }
@@ -8541,20 +8657,20 @@ func TestUseThreadDetachedPrefersMatchingVisibleWorkspaceInstance(t *testing.T) 
 		Managed:       true,
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			"thread-fs": {ThreadID: "thread-fs", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-fschannel3",
-		DisplayName:   "fschannel3",
-		WorkspaceRoot: "/data/dl/fschannel3",
-		WorkspaceKey:  "/data/dl/fschannel3",
-		ShortName:     "fschannel3",
+		InstanceID:    "inst-atlas",
+		DisplayName:   "atlas",
+		WorkspaceRoot: "/data/dl/atlas",
+		WorkspaceKey:  "/data/dl/atlas",
+		ShortName:     "atlas",
 		Source:        "headless",
 		Managed:       true,
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-fs": {ThreadID: "thread-fs", Name: "实现 issue 114", CWD: "/data/dl/fschannel3", Loaded: true},
+			"thread-fs": {ThreadID: "thread-fs", Name: "整理 atlas", CWD: "/data/dl/atlas", Loaded: true},
 		},
 	})
 
@@ -8567,7 +8683,7 @@ func TestUseThreadDetachedPrefersMatchingVisibleWorkspaceInstance(t *testing.T) 
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-fschannel3" || surface.ClaimedWorkspaceKey != "/data/dl/fschannel3" || surface.SelectedThreadID != "thread-fs" {
+	if surface.AttachedInstanceID != "inst-atlas" || surface.ClaimedWorkspaceKey != "/data/dl/atlas" || surface.SelectedThreadID != "thread-fs" {
 		t.Fatalf("expected detached /use to attach the matching workspace instance, got %#v", surface)
 	}
 }

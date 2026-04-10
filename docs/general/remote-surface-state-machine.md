@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-10`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页，以及 bare `/mode` `/autocontinue` `/reasoning` `/access` `/model` `/debug` `/upgrade` 的统一参数卡表单；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 的飞书回传路径，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页，以及 bare `/mode` `/autocontinue` `/reasoning` `/access` `/model` `/debug` `/upgrade` 的统一参数卡表单；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、normal `/list` 对 recoverable-only workspace 的恢复入口、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 的飞书回传路径，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -252,7 +252,9 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. 其余 workspace 按“可接管 / 其他状态”分组展示；按钮使用全宽动作前缀文案，例如 `接管 · web`、`切换 · web`、`不可接管 · ops`。
    4. 每个 workspace 的第二行状态当前压缩为短元信息，例如 `2分前 · 有 VS Code 活动`、`1小时前 · 当前被其他飞书会话接管`。
    5. 组内排序按该 workspace 下可见 thread 的最新活跃时间倒序；无时间时再回退到 `workspaceKey` 字典序。
-3. 卡片按钮走 `attach_workspace -> ActionAttachWorkspace`。
+3. normal mode `/list` 卡片按钮当前分成两类：
+   1. workspace 仍有可接管 online instance 时，走 `attach_workspace -> ActionAttachWorkspace`。
+   2. workspace 只剩可恢复的 persisted/offline thread、但当前没有可接管 online instance 时，走 `show_workspace_threads -> ActionShowWorkspaceThreads`，先展示该 workspace 的全部可恢复会话，再复用现有 `/use` 恢复链路。
 4. `attachWorkspace()` 在 normal mode 下先做 `workspaceClaims`，再按“当前 instance / free instance / 当前 workspace 可见 thread 数 / exact workspace match”选择一个可接管的 online instance 落到该 workspace。
 5. attach / switch 成功后，统一进入 `R1 AttachedUnbound`，不再复用默认 thread 自动 pin。
 
@@ -569,6 +571,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 ```text
 R0 Detached
   -- /list -> attach_workspace(normal mode，workspace 可接管) --> R1 AttachedUnbound
+  -- /list -> show_workspace_threads(normal mode，workspace 仅剩后台可恢复会话) --> 保持 R0 Detached，等待后续 /use(thread)
   -- /list -> attach_instance(vscode mode 且 observed focus 可接管) --> R4 FollowBound
   -- /list -> attach_instance(vscode mode 且尚无可接管 observed focus) --> R3 FollowWaiting
   -- /use(thread，normal mode 且可解析到当前可用实例) --> R2 AttachedPinned
@@ -646,9 +649,10 @@ R5 NewThreadReady
       2. 排除 subagent role、`exec` / `mcp` 等后台线程。
       3. 排除内部 probe workspace（例如 `_tmp-codex-thread-latency-*`、`_tmp-codex-appserver-*`）。
    3. merge 完成后，最终展示给用户前还会再按 normal `/list` 当前可见的 workspace 集合过滤：
-      1. 只保留当前在线实例能导出的 workspace。
+      1. 保留当前在线实例能导出的 workspace。
       2. 如果 surface 已 attach，则额外保留当前已 claimed 的 workspace。
-      3. 因此 sqlite 里的历史奇怪 workspace 不会再直接出现在 `/useall` 卡片里。
+      3. 同时也保留 merged recent thread 自己导出的 recoverable workspace，因此 persisted/offline-only workspace 现在会直接出现在 detached/global `/use` `/useall` 和 normal `/list` 里。
+      4. 仍然会过滤没有任何 merged thread 支撑的历史脏 workspace key。
 6. sqlite 只负责补 freshness，不旁路 resolver：
    1. busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
    2. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。
@@ -987,6 +991,7 @@ retained-offline overlay 额外规则：
 | 卡片动作 | 服务端 action | 说明 |
 | --- | --- | --- |
 | `attach_workspace` | `ActionAttachWorkspace` | normal mode `/list` 的 workspace attach/switch 入口 |
+| `show_workspace_threads` | `ActionShowWorkspaceThreads` | normal mode `/list` 中 recoverable-only workspace 的单-workspace 会话列表入口 |
 | `attach_instance` | `ActionAttachInstance` | 直达 attach |
 | `use_thread` | `ActionUseThread` | 直达 thread 切换 |
 | `show_threads` | `ActionShowThreads` | 从 scoped-all 视图返回最近 5 个会话 |
@@ -1062,6 +1067,7 @@ retained-offline overlay 额外规则：
 30. **vscode mode daemon 重启后只保留 mode、不恢复实例，或者恢复链路误走 headless**：已修复。当前会按 exact `ResumeInstanceID` 恢复到原 VS Code 实例，回到 follow-local 语义；若还没有新的 VS Code 活动，会明确提示去 VS Code 再说一句话或手动 `/use`，并且会主动清理 stale headless hint。
 31. **vscode mode 进入或 daemon 重启恢复时，会在 legacy `settings.json` / stale managed shim 状态下继续尝试恢复，导致用户看起来进入了 vscode mode，但底层仍沿用旧接入方式或失效入口**：已修复。当前 detached-vscode 恢复会先做本机 VS Code 兼容性检查；命中旧 `settings.json` override 或 stale managed shim 时，会保持 detached，发迁移/修复卡片，并在点击后统一迁移到 managed shim，同时清掉旧 `chatgpt.cliExecutable`。
 32. **同一张 `/menu` 或 `/use` 导航卡每点一步就继续在消息流里堆新卡，导致用户停留在同一选择上下文却要反复找最新卡**：已修复。当前限定范围内的 same-context 导航已经改成 card callback 同步替换当前卡，不再制造额外历史噪音。
+33. **normal `/list` 只能展示仍有 online instance 的 workspace，导致仅能从 persisted/offline thread 恢复的 workspace（例如 `picdetect`）完全不可见**：已修复。当前 normal `/list` 会把 recoverable-only workspace 也列出来，但不会伪装成 attach；按钮会直接进入该 workspace 的会话列表，再复用现有 `/use` 恢复链路。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

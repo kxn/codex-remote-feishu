@@ -1214,20 +1214,24 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 	}
 	switch prompt.Kind {
 	case control.SelectionPromptAttachInstance:
-		if text == "选择" {
-			text = "接管"
-		}
-		value = map[string]any{
-			"kind":        "attach_instance",
-			"instance_id": strings.TrimSpace(option.OptionID),
+		if len(value) == 0 {
+			if text == "选择" {
+				text = "接管"
+			}
+			value = map[string]any{
+				"kind":        "attach_instance",
+				"instance_id": strings.TrimSpace(option.OptionID),
+			}
 		}
 	case control.SelectionPromptAttachWorkspace:
-		if text == "选择" {
-			text = "接管"
-		}
-		value = map[string]any{
-			"kind":          "attach_workspace",
-			"workspace_key": strings.TrimSpace(option.OptionID),
+		if len(value) == 0 {
+			if text == "选择" {
+				text = "接管"
+			}
+			value = map[string]any{
+				"kind":          "attach_workspace",
+				"workspace_key": strings.TrimSpace(option.OptionID),
+			}
 		}
 	case control.SelectionPromptUseThread:
 		if len(value) == 0 {
@@ -1297,6 +1301,16 @@ func selectionOptionButtonText(prompt control.SelectionPrompt, option control.Se
 	}
 	if prompt.Kind == control.SelectionPromptAttachWorkspace {
 		summary := firstNonEmpty(strings.TrimSpace(option.Label), text, "工作区")
+		if strings.TrimSpace(option.ActionKind) == "show_workspace_threads" {
+			switch {
+			case option.IsCurrent:
+				return "当前 · " + summary
+			case option.Disabled:
+				return "不可恢复 · " + summary
+			default:
+				return "恢复 · " + summary
+			}
+		}
 		switch {
 		case option.IsCurrent:
 			return "当前 · " + summary
