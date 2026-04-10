@@ -29,14 +29,14 @@ export function makeBootstrap(overrides: Partial<BootstrapState> = {}): Bootstra
     },
     relay: {
       listenHost: "127.0.0.1",
-      listenPort: "4317",
-      serverURL: "http://127.0.0.1:4317",
+      listenPort: "9500",
+      serverURL: "ws://127.0.0.1:9500/ws/agent",
       ...(overrides.relay ?? {}),
     },
     admin: {
       listenHost: "127.0.0.1",
-      listenPort: "4300",
-      url: "http://127.0.0.1:4300",
+      listenPort: "9501",
+      url: "http://127.0.0.1:9501",
       setupURL: "/setup",
       setupTokenRequired: false,
       ...(overrides.admin ?? {}),
