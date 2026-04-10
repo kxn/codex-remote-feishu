@@ -573,6 +573,10 @@ func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID st
 			})
 		}
 		for _, entry := range section.Entries {
+			if catalog.DisplayStyle == control.CommandCatalogDisplayCompactButtons && catalog.Interactive && len(entry.Buttons) > 0 {
+				elements = append(elements, commandCatalogCompactButtonElements(entry.Buttons, daemonLifecycleID)...)
+				continue
+			}
 			elements = append(elements, map[string]any{
 				"tag":     "markdown",
 				"content": commandCatalogEntryMarkdown(entry),
@@ -589,6 +593,21 @@ func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID st
 		elements = append(elements, map[string]any{
 			"tag":     "action",
 			"actions": commandCatalogButtons(catalog.RelatedButtons, daemonLifecycleID),
+		})
+	}
+	return elements
+}
+
+func commandCatalogCompactButtonElements(buttons []control.CommandCatalogButton, daemonLifecycleID string) []map[string]any {
+	elements := make([]map[string]any, 0, len(buttons))
+	for _, button := range buttons {
+		actions := commandCatalogButtonsWithDefault([]control.CommandCatalogButton{button}, daemonLifecycleID, "default")
+		if len(actions) == 0 {
+			continue
+		}
+		elements = append(elements, map[string]any{
+			"tag":     "action",
+			"actions": actions,
 		})
 	}
 	return elements
@@ -655,9 +674,15 @@ func commandCatalogBreadcrumbMarkdown(items []control.CommandCatalogBreadcrumb) 
 }
 
 func commandCatalogButtons(buttons []control.CommandCatalogButton, daemonLifecycleID string) []map[string]any {
+	return commandCatalogButtonsWithDefault(buttons, daemonLifecycleID, "")
+}
+
+func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, daemonLifecycleID, defaultTypeOverride string) []map[string]any {
 	actions := make([]map[string]any, 0, len(buttons))
 	defaultType := "default"
-	if len(buttons) == 1 {
+	if defaultTypeOverride != "" {
+		defaultType = defaultTypeOverride
+	} else if len(buttons) == 1 {
 		defaultType = "primary"
 	}
 	for _, button := range buttons {

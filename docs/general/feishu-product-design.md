@@ -63,6 +63,7 @@ alias 仍继续兼容，但不再作为主展示入口：
 其中：
 
 - `/menu` 当前会打开阶段感知的命令首页，而不是静态平铺目录
+- `/menu` 和参数卡当前采用紧凑按钮优先布局，尽量让主操作一屏可见；`/help` 保持文本帮助取向
 - bare `/reasoning`、`/access`、`/mode`、`/autocontinue` 会返回当前状态 + 参数选择卡
 - bare `/model` 会返回当前状态 + 常见示例 + 手动输入入口；手动输入走 capture/apply fallback，而不是只回 usage 文本
 

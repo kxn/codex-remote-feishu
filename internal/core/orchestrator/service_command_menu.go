@@ -54,19 +54,19 @@ func (s *Service) commandMenuStage(surface *state.SurfaceConsoleRecord) commandM
 func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage) control.CommandCatalog {
 	sections := []control.CommandCatalogSection{
 		{
-			Title:   "现在最常用",
+			Title:   "常用操作",
 			Entries: s.commandMenuHomeEntries(stage),
 		},
 		{
-			Title:   "浏览分组",
+			Title:   "全部分组",
 			Entries: s.commandMenuGroupEntries(),
 		},
 	}
 	return control.CommandCatalog{
-		Title:       "命令菜单",
-		Summary:     s.commandMenuHomeSummary(surface, stage),
-		Interactive: true,
-		Sections:    sections,
+		Title:        "命令菜单",
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Sections:     sections,
 	}
 }
 
@@ -86,9 +86,9 @@ func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleReco
 		entries = append(entries, commandEntryForDefinition(def))
 	}
 	return control.CommandCatalog{
-		Title:       "命令菜单",
-		Summary:     fmt.Sprintf("当前阶段：%s。%s", s.commandMenuStageLabel(stage), group.Description),
-		Interactive: true,
+		Title:        "命令菜单",
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
 		Breadcrumbs: []control.CommandCatalogBreadcrumb{
 			{Label: "菜单首页"},
 			{Label: group.Title},
@@ -102,31 +102,6 @@ func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleReco
 			Kind:        control.CommandCatalogButtonRunCommand,
 			CommandText: "/menu",
 		}},
-	}
-}
-
-func (s *Service) commandMenuHomeSummary(surface *state.SurfaceConsoleRecord, stage commandMenuStage) string {
-	switch stage {
-	case commandMenuStageDetached:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
-			return "当前还没接管任何实例或会话。先用 `/list`、`/use`、`/status` 让路由重新就绪。"
-		}
-		return "当前还没接管任何工作区或会话。先用 `/list`、`/use`、`/status` 开始或继续工作。"
-	case commandMenuStageVSCodeWorking:
-		return "当前处于 vscode 工作态。首页优先展示 `/stop` 和发送设置，`/follow` 仅作为相关动作保留。"
-	default:
-		return "当前处于 normal 工作态。首页优先展示 `/stop`、`/new`，以及常用发送设置。"
-	}
-}
-
-func (s *Service) commandMenuStageLabel(stage commandMenuStage) string {
-	switch stage {
-	case commandMenuStageDetached:
-		return "未接管"
-	case commandMenuStageVSCodeWorking:
-		return "vscode 工作中"
-	default:
-		return "normal 工作中"
 	}
 }
 
@@ -168,7 +143,7 @@ func (s *Service) commandMenuGroupEntries() []control.CommandCatalogEntry {
 			Title:       group.Title,
 			Description: group.Description,
 			Buttons: []control.CommandCatalogButton{{
-				Label:       "打开",
+				Label:       submenuButtonLabel(group.Title),
 				Kind:        control.CommandCatalogButtonRunCommand,
 				CommandText: menuCommandText(group.ID),
 			}},
@@ -184,20 +159,32 @@ func commandEntryForDefinition(def control.FeishuCommandDefinition) control.Comm
 		Description: strings.TrimSpace(def.Description),
 		Examples:    append([]string(nil), def.Examples...),
 		Buttons: []control.CommandCatalogButton{{
-			Label:       menuActionButtonLabel(def),
+			Label:       commandMenuButtonLabel(def),
 			Kind:        control.CommandCatalogButtonRunCommand,
 			CommandText: def.CanonicalSlash,
 		}},
 	}
 }
 
-func menuActionButtonLabel(def control.FeishuCommandDefinition) string {
-	switch def.ArgumentKind {
-	case control.FeishuCommandArgumentChoice, control.FeishuCommandArgumentText:
-		return "打开"
+func commandMenuButtonLabel(def control.FeishuCommandDefinition) string {
+	title := strings.TrimSpace(def.Title)
+	command := strings.TrimSpace(def.CanonicalSlash)
+	switch {
+	case title == "":
+		return command
+	case command == "":
+		return title
 	default:
-		return strings.TrimSpace(def.Title)
+		return title + " " + command
 	}
+}
+
+func submenuButtonLabel(label string) string {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return "打开子菜单"
+	}
+	return label + " ›"
 }
 
 func menuCommandText(view string) string {
@@ -228,15 +215,14 @@ func commandBackButtons(groupID string) []control.CommandCatalogButton {
 func (s *Service) buildModeCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
 	current := s.normalizeSurfaceProductMode(surface)
 	return control.CommandCatalog{
-		Title:       "切换模式",
-		Summary:     fmt.Sprintf("当前模式：`%s`。切换前会校验当前是否还有运行中的 turn、派发中的请求或排队消息。", current),
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "切换模式"),
+		Title:        "切换模式",
+		Summary:      fmt.Sprintf("当前模式：`%s`。", current),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "切换模式"),
 		Sections: []control.CommandCatalogSection{{
-			Title: "可选模式",
+			Title: "立即切换",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "normal / vscode",
-				Description: "点击后立即尝试切换。",
 				Buttons: []control.CommandCatalogButton{
 					choiceCommandButton("normal", "/mode normal", current == state.ProductModeNormal, "primary"),
 					choiceCommandButton("vscode", "/mode vscode", current == state.ProductModeVSCode, ""),
@@ -254,15 +240,14 @@ func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) 
 		statusText = "开启"
 	}
 	return control.CommandCatalog{
-		Title:       "自动续跑",
-		Summary:     fmt.Sprintf("当前 auto-continue：`%s`。这个开关只作用于当前飞书会话，daemon 重启后会恢复为关闭。", statusText),
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "自动续跑"),
+		Title:        "自动续跑",
+		Summary:      fmt.Sprintf("当前：`%s`。", statusText),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "自动续跑"),
 		Sections: []control.CommandCatalogSection{{
-			Title: "可选状态",
+			Title: "立即切换",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "on / off",
-				Description: "点击后立即切换当前飞书会话的 auto-continue。",
 				Buttons: []control.CommandCatalogButton{
 					choiceCommandButton("on", "/autocontinue on", enabled, "primary"),
 					choiceCommandButton("off", "/autocontinue off", !enabled, ""),
@@ -281,16 +266,15 @@ func (s *Service) buildReasoningCatalog(surface *state.SurfaceConsoleRecord) con
 	}
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     reasoningCatalogSummary(summary),
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      reasoningCatalogSummary(summary),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
-			Title: "可选参数",
+			Title: "立即应用",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "点击即应用",
-				Description: "只作用于后续从飞书发出的消息；`clear` 用于清除飞书侧 override。",
-				Buttons:     choiceButtonsFromOptions(def.Options, summary.OverrideReasoningEffort, ""),
+				Buttons: choiceButtonsFromOptions(def.Options, summary.OverrideReasoningEffort, ""),
 			}},
 		}},
 		RelatedButtons: commandBackButtons(def.GroupID),
@@ -305,16 +289,15 @@ func (s *Service) buildAccessCatalog(surface *state.SurfaceConsoleRecord) contro
 	}
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     accessCatalogSummary(summary),
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      accessCatalogSummary(summary),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
-			Title: "可选参数",
+			Title: "立即应用",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "点击即应用",
-				Description: "`clear` 会恢复飞书默认执行权限。",
-				Buttons:     choiceButtonsFromOptions(def.Options, summary.OverrideAccessMode, ""),
+				Buttons: choiceButtonsFromOptions(def.Options, summary.OverrideAccessMode, ""),
 			}},
 		}},
 		RelatedButtons: commandBackButtons(def.GroupID),
@@ -333,35 +316,31 @@ func (s *Service) buildModelCatalog(surface *state.SurfaceConsoleRecord) control
 		choiceCommandButton("gpt-5.4-mini", "/model gpt-5.4-mini", summary.OverrideModel == "gpt-5.4-mini", ""),
 	}
 	manualButtons := []control.CommandCatalogButton{{
-		Label:     "开始输入",
+		Label:     "输入模型名",
 		Kind:      control.CommandCatalogButtonStartCommandCapture,
 		CommandID: control.FeishuCommandModel,
 		Style:     "primary",
 	}}
 	if strings.TrimSpace(summary.OverrideModel) != "" || strings.TrimSpace(summary.OverrideReasoningEffort) != "" {
-		manualButtons = append(manualButtons, choiceCommandButton("clear", "/model clear", false, ""))
+		manualButtons = append(manualButtons, choiceCommandButton("清除覆盖", "/model clear", false, ""))
 	}
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     modelCatalogSummary(summary),
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      modelCatalogSummary(summary),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{
 			{
 				Title: "常见模型",
 				Entries: []control.CommandCatalogEntry{{
-					Title:       "直达示例",
-					Description: "如果你已经知道完整命令或完整 menu key，可以直接发送；这里保留两个常见直达示例。",
-					Examples:    []string{"/model gpt-5.4", "/model gpt-5.4-mini"},
-					Buttons:     presetButtons,
+					Buttons: presetButtons,
 				}},
 			},
 			{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
-					Title:       "capture/apply fallback",
-					Description: "点击“开始输入”后，下一条普通文本会先被捕获为模型名，再给你一张确认卡片，不会直接生效。",
-					Buttons:     manualButtons,
+					Buttons: manualButtons,
 				}},
 			},
 		},
@@ -376,17 +355,16 @@ func (s *Service) buildModelCaptureWaitingCatalog(surface *state.SurfaceConsoleR
 		summary = modelCatalogSummary(s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{}))
 	}
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     summary + "\n\n接下来一条普通文本会先被捕获为模型名；收到后会再给你一张确认卡片。",
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      summary + "\n\n下一条普通文本会先被捕获为模型名；收到后还需要再点一次 Apply。",
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
-			Title: "等待输入",
+			Title: "当前操作",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "发送一条普通文本",
-				Description: "例如直接发送 `gpt-5.4` 或 `gpt-5.4 high`。如果你改主意了，可以直接取消或发送其他 slash command 退出这次捕获。",
 				Buttons: []control.CommandCatalogButton{{
-					Label:     "取消",
+					Label:     "取消输入",
 					Kind:      control.CommandCatalogButtonCancelCommandCapture,
 					CommandID: control.FeishuCommandModel,
 				}},
@@ -404,18 +382,16 @@ func (s *Service) buildModelApplyCatalog(surface *state.SurfaceConsoleRecord, ca
 		summary = modelCatalogSummary(s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})) + "\n\n" + summary
 	}
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     summary,
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      summary,
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
-			Title: "待应用内容",
+			Title: "当前操作",
 			Entries: []control.CommandCatalogEntry{{
-				Title:       "确认后生效",
-				Commands:    []string{"/model " + captured},
-				Description: "如果你希望重新输入，先点“重新输入”；如果不想应用，点“取消”。",
 				Buttons: []control.CommandCatalogButton{
-					choiceCommandButton("Apply", "/model "+captured, false, "primary"),
+					choiceCommandButton("Apply "+captured, "/model "+captured, false, "primary"),
 					{
 						Label:     "重新输入",
 						Kind:      control.CommandCatalogButtonStartCommandCapture,
@@ -435,10 +411,11 @@ func (s *Service) buildModelApplyCatalog(surface *state.SurfaceConsoleRecord, ca
 
 func (s *Service) buildAttachmentRequiredCatalog(surface *state.SurfaceConsoleRecord, def control.FeishuCommandDefinition) control.CommandCatalog {
 	return control.CommandCatalog{
-		Title:       def.Title,
-		Summary:     s.notAttachedText(surface) + "\n\n这类发送前覆盖会在接管目标后才有意义。先让路由进入可工作状态，再回来调整参数。",
-		Interactive: true,
-		Breadcrumbs: commandBreadcrumbs(def.GroupID, def.Title),
+		Title:        def.Title,
+		Summary:      "还没接管目标。先开始或继续工作，再回来调整这个参数。",
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
 			Title: "开始 / 继续工作",
 			Entries: []control.CommandCatalogEntry{
@@ -461,7 +438,7 @@ func recoveryEntry(commandID string) control.CommandCatalogEntry {
 		Commands:    []string{def.CanonicalSlash},
 		Description: def.Description,
 		Buttons: []control.CommandCatalogButton{{
-			Label:       def.Title,
+			Label:       commandMenuButtonLabel(def),
 			Kind:        control.CommandCatalogButtonRunCommand,
 			CommandText: def.CanonicalSlash,
 		}},
@@ -508,8 +485,13 @@ func choiceButtonsFromOptions(options []control.FeishuCommandOption, currentOver
 		default:
 			disabled = currentOverride != "" && currentOverride == value
 		}
+		label := strings.TrimSpace(option.Label)
+		if disabled && value != "clear" {
+			label += "（当前）"
+			style = "primary"
+		}
 		buttons = append(buttons, control.CommandCatalogButton{
-			Label:       option.Label,
+			Label:       label,
 			Kind:        control.CommandCatalogButtonRunCommand,
 			CommandText: option.CommandText,
 			Style:       style,
@@ -520,37 +502,27 @@ func choiceButtonsFromOptions(options []control.FeishuCommandOption, currentOver
 }
 
 func reasoningCatalogSummary(summary control.PromptRouteSummary) string {
-	lines := []string{
-		fmt.Sprintf("当前 effective 推理强度：`%s`。", displayPromptValue(summary.EffectiveReasoningEffort, "未设置")),
-		fmt.Sprintf("当前飞书 override：`%s`。", displayPromptValue(summary.OverrideReasoningEffort, "无")),
-	}
-	if strings.TrimSpace(summary.BaseReasoningEffort) != "" {
-		lines = append(lines, fmt.Sprintf("底层默认：`%s`（来源：%s）。", summary.BaseReasoningEffort, displayPromptValue(summary.BaseReasoningEffortSource, "unknown")))
-	}
-	return strings.Join(lines, "\n")
+	return fmt.Sprintf(
+		"当前：`%s`；飞书覆盖：`%s`。",
+		displayPromptValue(summary.EffectiveReasoningEffort, "未设置"),
+		displayPromptValue(summary.OverrideReasoningEffort, "无"),
+	)
 }
 
 func accessCatalogSummary(summary control.PromptRouteSummary) string {
-	lines := []string{
-		fmt.Sprintf("当前 effective 执行权限：`%s`。", displayPromptValue(summary.EffectiveAccessMode, "未设置")),
-		fmt.Sprintf("当前飞书 override：`%s`。", displayPromptValue(summary.OverrideAccessMode, "无")),
-	}
-	if strings.TrimSpace(summary.EffectiveAccessModeSource) != "" {
-		lines = append(lines, fmt.Sprintf("当前 effective 来源：%s。", summary.EffectiveAccessModeSource))
-	}
-	return strings.Join(lines, "\n")
+	return fmt.Sprintf(
+		"当前：`%s`；飞书覆盖：`%s`。",
+		displayPromptValue(summary.EffectiveAccessMode, "未设置"),
+		displayPromptValue(summary.OverrideAccessMode, "无"),
+	)
 }
 
 func modelCatalogSummary(summary control.PromptRouteSummary) string {
 	lines := []string{
-		fmt.Sprintf("当前 effective 模型：`%s`。", displayPromptValue(summary.EffectiveModel, "未设置")),
-		fmt.Sprintf("当前飞书 override 模型：`%s`。", displayPromptValue(summary.OverrideModel, "无")),
+		fmt.Sprintf("当前模型：`%s`；飞书覆盖：`%s`。", displayPromptValue(summary.EffectiveModel, "未设置"), displayPromptValue(summary.OverrideModel, "无")),
 	}
 	if strings.TrimSpace(summary.OverrideReasoningEffort) != "" {
-		lines = append(lines, fmt.Sprintf("当前飞书 override 推理强度：`%s`。`/model clear` 会一并清除这里的附带推理覆盖。", summary.OverrideReasoningEffort))
-	}
-	if strings.TrimSpace(summary.BaseModel) != "" {
-		lines = append(lines, fmt.Sprintf("底层默认模型：`%s`（来源：%s）。", summary.BaseModel, displayPromptValue(summary.BaseModelSource, "unknown")))
+		lines = append(lines, fmt.Sprintf("附带推理覆盖：`%s`。", summary.OverrideReasoningEffort))
 	}
 	return strings.Join(lines, "\n")
 }

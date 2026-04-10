@@ -279,6 +279,13 @@ const (
 	CommandCatalogButtonCancelCommandCapture CommandCatalogButtonKind = "cancel_command_capture"
 )
 
+type CommandCatalogDisplayStyle string
+
+const (
+	CommandCatalogDisplayDefault        CommandCatalogDisplayStyle = "default"
+	CommandCatalogDisplayCompactButtons CommandCatalogDisplayStyle = "compact_buttons"
+)
+
 type CommandCatalogBreadcrumb struct {
 	Label string
 }
@@ -309,6 +316,7 @@ type CommandCatalog struct {
 	Title          string
 	Summary        string
 	Interactive    bool
+	DisplayStyle   CommandCatalogDisplayStyle
 	Breadcrumbs    []CommandCatalogBreadcrumb
 	Sections       []CommandCatalogSection
 	RelatedButtons []CommandCatalogButton

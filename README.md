@@ -246,7 +246,8 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 - `/help`：查看当前可用命令、示例和说明
 - `menu` 或 `/menu`：打开阶段感知的命令菜单首页；未接管时优先 `/list`、`/use`、`/status`，工作态优先 `/stop`、`/new` 和发送设置
 - `/list`：列出当前可手工接管的目标；`normal` 模式下是工作区，`vscode` 模式下是在线 VS Code 实例
-- 选择方式：当前通过卡片里的按钮直接触发；如果看到旧卡片，请重新发送命令
+- 选择方式：`/menu` 和参数卡现在是按钮优先的紧凑卡片，主操作尽量一行一个按钮；`/help` 仍保持文本帮助
+- 如果看到旧卡片，请重新发送命令
 - `/use`：列出最近可见会话；即使当前还没显式 attach，也可以直接从这里继续已有对话
 - `/threads`：`/use` 的兼容别名
 - `/useall`：列出全部可见会话
@@ -275,7 +276,7 @@ docker compose -f deploy/docker/compose.yml --env-file deploy/docker/.env up -d 
 - `model`
 - `access`
 
-WebSetup 里的推荐菜单、飞书模板和 `/help` 当前都来自同一套命令定义；按当前列表配置即可。
+WebSetup 里的推荐菜单、飞书模板和 `/help` 当前都来自同一套命令定义；其中 `/help` 保持文本帮助，`/menu` / 参数卡走紧凑按钮卡片。
 
 关于 `.md` 预览：
 

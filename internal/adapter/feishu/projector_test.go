@@ -261,15 +261,65 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	}
 }
 
+func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		CommandCatalog: &control.CommandCatalog{
+			Title:        "推理强度",
+			Summary:      "当前：`high`；飞书覆盖：`high`。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+			Sections: []control.CommandCatalogSection{{
+				Title: "立即应用",
+				Entries: []control.CommandCatalogEntry{{
+					Title:       "点击即应用",
+					Description: "这段说明在紧凑布局里不应该出现。",
+					Buttons: []control.CommandCatalogButton{
+						{Label: "low", CommandText: "/reasoning low"},
+						{Label: "high（当前）", CommandText: "/reasoning high", Disabled: true, Style: "primary"},
+					},
+				}},
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if len(ops[0].CardElements) != 3 {
+		t.Fatalf("expected section + two stacked action rows, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "**立即应用**" {
+		t.Fatalf("unexpected section element: %#v", ops[0].CardElements[0])
+	}
+	if content, _ := ops[0].CardElements[1]["content"].(string); content != "" {
+		t.Fatalf("compact layout should not render entry markdown, got %#v", ops[0].CardElements[1])
+	}
+	firstRow, _ := ops[0].CardElements[1]["actions"].([]map[string]any)
+	secondRow, _ := ops[0].CardElements[2]["actions"].([]map[string]any)
+	if len(firstRow) != 1 || len(secondRow) != 1 {
+		t.Fatalf("expected one button per stacked row, got %#v / %#v", firstRow, secondRow)
+	}
+	firstText, _ := firstRow[0]["text"].(map[string]any)
+	if firstText["content"] != "low" {
+		t.Fatalf("unexpected first stacked label: %#v", firstRow[0])
+	}
+	secondText, _ := secondRow[0]["text"].(map[string]any)
+	if secondText["content"] != "high（当前）" {
+		t.Fatalf("unexpected second stacked label: %#v", secondRow[0])
+	}
+}
+
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCaptureButtons(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventCommandCatalog,
 		CommandCatalog: &control.CommandCatalog{
-			Title:       "模型",
-			Summary:     "等待输入模型名。",
-			Interactive: true,
-			Breadcrumbs: []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
+			Title:        "模型",
+			Summary:      "等待输入模型名。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+			Breadcrumbs:  []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
 			Sections: []control.CommandCatalogSection{{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
@@ -292,18 +342,18 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCaptureButtons(t *
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if len(ops[0].CardElements) != 5 {
-		t.Fatalf("expected breadcrumb + section + entry + action + related action, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 4 {
+		t.Fatalf("expected breadcrumb + section + action + related action, got %#v", ops[0].CardElements)
 	}
 	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
 		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
 	}
-	actionRow, _ := ops[0].CardElements[3]["actions"].([]map[string]any)
+	actionRow, _ := ops[0].CardElements[2]["actions"].([]map[string]any)
 	value, _ := actionRow[0]["value"].(map[string]any)
 	if value["kind"] != "start_command_capture" || value["command_id"] != control.FeishuCommandModel {
 		t.Fatalf("unexpected start capture payload: %#v", value)
 	}
-	relatedRow, _ := ops[0].CardElements[4]["actions"].([]map[string]any)
+	relatedRow, _ := ops[0].CardElements[3]["actions"].([]map[string]any)
 	relatedValue, _ := relatedRow[0]["value"].(map[string]any)
 	if relatedValue["kind"] != "cancel_command_capture" || relatedValue["command_id"] != control.FeishuCommandModel {
 		t.Fatalf("unexpected cancel capture payload: %#v", relatedValue)

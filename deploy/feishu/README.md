@@ -29,7 +29,7 @@
    - `model`
    - `access`
 
-WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞书里的 `/help` / `menu` 现在都来自同一套命令定义；按当前列表配置即可，不需要自己再推测一份菜单组合。
+WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞书里的 `/help` / `menu` 现在都来自同一套命令定义；按当前列表配置即可，不需要自己再推测一份菜单组合。注意：`/help` 保持文本帮助，`/menu` 和参数命令卡片走紧凑按钮布局。
 
 `card.action.trigger` 现在不仅用于 attach / 切换会话，也用于 `/menu` 面包屑/子菜单、参数卡和 `model` capture/apply fallback；如果这个回调没配，飞书里的按钮卡片会点了没反应。
 

@@ -4671,6 +4671,9 @@ func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 	if !events[0].CommandCatalog.Interactive {
 		t.Fatalf("menu catalog should be interactive: %#v", events[0].CommandCatalog)
 	}
+	if events[0].CommandCatalog.DisplayStyle != control.CommandCatalogDisplayCompactButtons {
+		t.Fatalf("menu catalog should use compact button display: %#v", events[0].CommandCatalog)
+	}
 	if events[0].CommandCatalog.Title != "命令菜单" {
 		t.Fatalf("unexpected menu catalog title: %#v", events[0].CommandCatalog)
 	}
@@ -4691,7 +4694,7 @@ func TestMenuActionDetachedHomepagePrioritizesListUseStatus(t *testing.T) {
 		t.Fatalf("expected command catalog, got %#v", events)
 	}
 	catalog := events[0].CommandCatalog
-	if len(catalog.Sections) < 2 || catalog.Sections[0].Title != "现在最常用" {
+	if len(catalog.Sections) < 2 || catalog.Sections[0].Title != "常用操作" {
 		t.Fatalf("unexpected detached home catalog: %#v", catalog)
 	}
 	got := firstCommands(catalog.Sections[0].Entries)
@@ -4806,7 +4809,7 @@ func TestModelCaptureFlowBuildsWaitingAndApplyCards(t *testing.T) {
 	if svc.root.Surfaces["surface-1"].ActiveCommandCapture == nil {
 		t.Fatalf("expected active command capture to be created")
 	}
-	if !strings.Contains(start[0].CommandCatalog.Summary, "接下来一条普通文本会先被捕获为模型名") {
+	if !strings.Contains(start[0].CommandCatalog.Summary, "下一条普通文本会先被捕获为模型名") {
 		t.Fatalf("unexpected waiting summary: %#v", start[0].CommandCatalog)
 	}
 
