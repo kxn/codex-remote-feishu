@@ -162,22 +162,33 @@ Linux 当前已支持显式选择 `systemd_user` 作为 daemon lifecycle manager
 loginctl enable-linger "$USER"
 ```
 
-### 4.4 本地 binary 升级入口
+### 4.4 统一升级入口
 
-除了 release asset 下载路径，当前还支持把“本机刚编译出的 binary”导入同一套 upgrade transaction：
+当前产品已经把升级入口统一为 daemon 内置事务：
 
-```bash
-codex-remote install -upgrade-source-binary /path/to/codex-remote -upgrade-slot local-<slot>
+- release 升级
+  - 用户发送 `/upgrade latest`
+  - daemon 按当前 track 检查或继续升级到最新 release
+- 本地编译产物升级
+  - 用户先把新编译的 binary 放到固定 artifact 路径
+  - 再发送 `/upgrade local`
+
+本地 artifact 路径按当前 install-state 推导，默认位于：
+
+```text
+<stateDir>/local-upgrade/codex-remote
 ```
 
-行为：
+Windows 下文件名为 `codex-remote.exe`。
 
-- 把目标 binary 复制到 `versionsRoot/<slot>/`
+统一事务行为：
+
+- 把目标 binary 准备到 `versionsRoot/<slot>/`
 - 写入 `PendingUpgrade` 与 rollback candidate
-- 启动隐藏 `upgrade-helper`
-- 在 `systemd_user` 模式下通过 `systemctl --user stop/start` 管理切换
-- 在 `detached` 模式下继续沿用 PID stop + detached start
-- 新版本健康检查失败时，自动回滚 binary 和 live config
+- daemon 复制当前 live binary 作为 `upgrade-helper`
+- 在 `systemd_user` 模式下，通过独立 transient unit 启动 helper，避免 stop 旧服务时把 helper 一并杀掉
+- helper 负责 stop old service -> switch stable binary -> start new service -> observe health
+- 新版本启动或健康检查失败时，自动回滚 binary 和 live config
 
 ### 4.2 已安装二进制目录
 

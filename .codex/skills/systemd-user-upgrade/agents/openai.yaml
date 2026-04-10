@@ -1,4 +1,0 @@
-interface:
-  display_name: "Systemd 用户升级回滚"
-  short_description: "本仓库 codex-remote 的 systemd 升级与失败回滚"
-  default_prompt: "Use $systemd-user-upgrade to deploy a built codex-remote binary into this repository's systemd --user service, verify health, and roll back automatically on failure."

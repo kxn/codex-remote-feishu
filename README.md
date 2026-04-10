@@ -155,7 +155,7 @@ VS Code 两种接管方式的区别：
 
 它们是仓库 helper，不是 release 包产品入口。
 
-## Linux 常驻服务与本地升级
+## Linux 常驻服务与内置升级
 
 如果你希望 Linux 上的正式常驻实例由 `systemd --user` 托管，而不是依赖 detached daemon：
 
@@ -174,19 +174,36 @@ loginctl enable-linger "$USER"
 
 这条路径保持运行身份为当前用户，并继续使用当前 XDG 配置/状态目录。
 
-如果你已经在源码仓库里编译了一个新的本地 binary，希望复用内置 upgrade transaction 去更新已安装的稳定路径：
+如果你已经在源码仓库里编译了一个新的本地 binary，现在不再通过额外脚本或 `install -upgrade-source-binary` 发起升级。正式入口统一是产品命令：
 
 ```bash
-./bin/codex-remote install -upgrade-source-binary ./bin/codex-remote -upgrade-slot local-$(git rev-parse --short HEAD)
+cp ./bin/codex-remote ~/.local/share/codex-remote/local-upgrade/codex-remote
 ```
 
-这会：
+然后在已接入的飞书会话里发送：
 
-- 把本地 binary 导入 `versionsRoot/<slot>/`
-- 写入同一套 upgrade journal / rollback candidate
-- 启动内置 `upgrade-helper`
-- 在 `systemd_user` 模式下通过 `systemctl --user stop/start` 切换服务
-- 如果健康检查失败，自动回滚 binary 和 live config
+```text
+/upgrade local
+```
+
+如果要检查或继续升级到当前 track 的最新 GitHub release，则发送：
+
+```text
+/upgrade latest
+```
+
+默认 Linux `systemd --user` 安装的本地 artifact 固定路径是：
+
+```text
+~/.local/share/codex-remote/local-upgrade/codex-remote
+```
+
+这两条入口都会复用同一套内置 upgrade transaction：
+
+- 准备目标 slot 与 rollback candidate
+- 复制当前 live binary 为 `upgrade-helper`
+- 在 `systemd_user` 模式下通过独立 transient unit 执行切换
+- 如果新版本启动或健康检查失败，自动回滚 binary 和 live config
 
 ## 仓库内联调入口
 

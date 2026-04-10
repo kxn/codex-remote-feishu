@@ -89,13 +89,15 @@ loginctl enable-linger "$USER"
 
 ## Upgrade From A Local Build
 
-If you already built a fresh local binary and want to roll the installed daemon forward through the built-in upgrade transaction:
+If you already built a fresh local binary and want to roll the installed daemon forward through the built-in upgrade transaction, copy it to the fixed local artifact path first:
 
 ```bash
-./bin/codex-remote install -upgrade-source-binary ./bin/codex-remote -upgrade-slot local-$(git rev-parse --short HEAD)
+cp ./bin/codex-remote ~/.local/share/codex-remote/local-upgrade/codex-remote
 ```
 
-This imports the local binary into `versionsRoot/<slot>`, runs the same upgrade helper transaction, and automatically rolls back if the new daemon does not recover to a healthy state.
+Then send `/upgrade local` in Feishu. To check or continue an upgrade to the latest GitHub release on the current track, send `/upgrade latest`.
+
+Both commands reuse the same built-in helper transaction and automatically roll back if the new daemon does not recover to a healthy state.
 
 ## Before you test in Feishu
 

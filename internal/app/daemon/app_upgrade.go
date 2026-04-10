@@ -98,7 +98,7 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 		if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 			return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_write_failed", fmt.Sprintf("切换 track 失败：%v", err))}
 		}
-		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_updated", fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /debug upgrade。", parsed.Track))}
+		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_updated", fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /upgrade latest。", parsed.Track))}
 	case debugCommandUpgrade:
 		command.Text = "/upgrade latest"
 		return a.handleUpgradeLatestCommand(command, stateValue)
