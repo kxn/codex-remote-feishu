@@ -189,6 +189,9 @@ button {
 }
 
 .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.78rem 1.05rem;
   border: 1px solid rgba(15, 118, 110, 0.18);
   border-radius: 999px;
@@ -200,6 +203,9 @@ button {
 .primary-button,
 .ghost-button,
 .danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.82rem 1.1rem;
   border-radius: 999px;
   cursor: pointer;
@@ -1147,14 +1153,35 @@ button {
 
   .stat-grid,
   .definition-list,
-  .setup-two-column,
-  .checklist-grid,
   .card-grid-two-column,
-  .form-grid,
-  .wizard-step-layout.two-column,
   .wizard-tech-grid,
   .wizard-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .setup-two-column,
+  .checklist-grid,
+  .wizard-step-layout.two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .page-hero,
+  .panel-head,
+  .section-heading,
+  .attention-row,
+  .app-card-head,
+  .wizard-step,
+  .wizard-link-row,
+  .wizard-link-list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero-actions,
+  .panel-actions,
+  .attention-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
@@ -1167,6 +1194,15 @@ button {
   .page-hero,
   .panel {
     border-radius: 1.35rem;
+  }
+
+  .side-rail {
+    padding: 1rem;
+  }
+
+  .page-hero,
+  .panel {
+    padding: 1.1rem;
   }
 
   .shell-rail-header {
@@ -1188,15 +1224,54 @@ button {
   .data-row,
   .panel-head,
   .section-heading,
-  .attention-row {
+  .attention-row,
+  .app-card-head,
+  .wizard-step,
+  .wizard-link-row,
+  .wizard-link-list {
     flex-direction: column;
   }
 
   .hero-actions,
   .data-meta,
   .panel-actions,
-  .attention-actions {
+  .attention-actions,
+  .button-row,
+  .wizard-inline-actions,
+  .wizard-footer-left,
+  .wizard-footer-right {
     align-items: flex-start;
+  }
+
+  .hero-actions,
+  .panel-actions,
+  .button-row,
+  .attention-actions,
+  .wizard-inline-actions,
+  .wizard-footer-left,
+  .wizard-footer-right {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .panel-actions > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .button-row > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .attention-actions > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .wizard-inline-actions > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .wizard-footer-left > :is(.primary-button, .secondary-button, .ghost-button, .danger-button),
+  .wizard-footer-right > :is(.primary-button, .secondary-button, .ghost-button, .danger-button) {
+    width: 100%;
+  }
+
+  .attention-actions .status-badge {
+    align-self: flex-start;
+  }
+
+  .data-meta {
+    width: 100%;
+    white-space: normal;
   }
 
   .side-nav,
@@ -1207,6 +1282,33 @@ button {
   .side-nav a,
   .wizard-step-link {
     padding: 0.85rem 0.9rem;
+  }
+
+  .app-card,
+  .manifest-block,
+  .info-card,
+  .wizard-qr-card,
+  .wizard-status-card,
+  .wizard-tech-detail,
+  .wizard-link-row {
+    padding: 0.95rem;
+  }
+
+  .page-hero h2 {
+    font-size: clamp(1.55rem, 7vw, 2rem);
+  }
+
+  .stat-card strong {
+    font-size: 1.45rem;
+  }
+
+  .choice-card,
+  .checkbox-card {
+    grid-template-columns: 1fr;
+  }
+
+  .checkbox-row {
+    align-items: flex-start;
   }
 
   .stat-grid,
