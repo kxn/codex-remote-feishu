@@ -13,6 +13,8 @@ import (
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
@@ -44,11 +46,7 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
 		action, ok := g.parseCardActionTriggerEvent(event)
 		if ok {
-			if result := handler(ctx, action); result != nil {
-				if response := callbackCardResponse(result); response != nil {
-					return response, nil
-				}
-			}
+			return handleCardActionTrigger(ctx, action, handler)
 		}
 		return &larkcallback.CardActionTriggerResponse{}, nil
 	})
@@ -61,6 +59,29 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		return nil
 	})
 	return newGatewayWSRunner(g.config, dispatch, g.emitState).Run(ctx)
+}
+
+func handleCardActionTrigger(ctx context.Context, action control.Action, handler ActionHandler) (*larkcallback.CardActionTriggerResponse, error) {
+	if shouldHandleCardActionAsync(action) {
+		go handler(context.Background(), action)
+		return &larkcallback.CardActionTriggerResponse{}, nil
+	}
+	if result := handler(ctx, action); result != nil {
+		if response := callbackCardResponse(result); response != nil {
+			return response, nil
+		}
+	}
+	return &larkcallback.CardActionTriggerResponse{}, nil
+}
+
+func shouldHandleCardActionAsync(action control.Action) bool {
+	// Current cards still use the legacy send envelope, and synchronous card
+	// replacement is disabled. Waiting for the full action path here can keep
+	// the callback open long enough for Feishu to redeliver the same click.
+	if action.Inbound == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(action.Inbound.EventType), "card.action.trigger")
 }
 
 func callbackCardResponse(result *ActionResult) *larkcallback.CardActionTriggerResponse {

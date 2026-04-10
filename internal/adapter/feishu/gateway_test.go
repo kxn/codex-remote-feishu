@@ -983,6 +983,47 @@ func TestCallbackCardResponseBuildsReplacementCard(t *testing.T) {
 	}
 }
 
+func TestHandleCardActionTriggerReturnsImmediatelyForAsyncAction(t *testing.T) {
+	action := control.Action{
+		Kind: control.ActionDebugCommand,
+		Inbound: &control.ActionInboundMeta{
+			EventType: "card.action.trigger",
+		},
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	handler := func(context.Context, control.Action) *ActionResult {
+		close(started)
+		<-release
+		close(done)
+		return nil
+	}
+
+	begin := time.Now()
+	resp, err := handleCardActionTrigger(context.Background(), action, handler)
+	if err != nil {
+		t.Fatalf("handleCardActionTrigger returned error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected empty callback response")
+	}
+	if elapsed := time.Since(begin); elapsed > 100*time.Millisecond {
+		t.Fatalf("expected async callback ack, took %s", elapsed)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("expected background handler to start")
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected background handler to finish")
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsRemovedResumeHeadlessAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")
