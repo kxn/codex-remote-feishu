@@ -28,6 +28,7 @@ type TryCloudflareOptions struct {
 	MetricsPort         int
 	LogPath             string
 	Now                 func() time.Time
+	WaitReady           func(context.Context, int) error
 	CommandFactory      func(context.Context, string, ...string) *exec.Cmd
 	EnsureBundledBinary func(string) (string, bool, error)
 }
@@ -39,6 +40,7 @@ type TryCloudflareProvider struct {
 	launchTimeout       time.Duration
 	metricsPort         int
 	logPath             string
+	waitReady           func(context.Context, int) error
 	commandFactory      func(context.Context, string, ...string) *exec.Cmd
 	ensureBundledBinary func(string) (string, bool, error)
 
@@ -63,6 +65,10 @@ func NewTryCloudflareProvider(opts TryCloudflareOptions) *TryCloudflareProvider 
 	if factory == nil {
 		factory = exec.CommandContext
 	}
+	waitReadyFn := opts.WaitReady
+	if waitReadyFn == nil {
+		waitReadyFn = waitReady
+	}
 	ensureBundledBinary := opts.EnsureBundledBinary
 	if ensureBundledBinary == nil {
 		ensureBundledBinary = cloudflaredembed.EnsureSibling
@@ -77,6 +83,7 @@ func NewTryCloudflareProvider(opts TryCloudflareOptions) *TryCloudflareProvider 
 		launchTimeout:       opts.LaunchTimeout,
 		metricsPort:         opts.MetricsPort,
 		logPath:             strings.TrimSpace(opts.LogPath),
+		waitReady:           waitReadyFn,
 		commandFactory:      factory,
 		ensureBundledBinary: ensureBundledBinary,
 	}
@@ -237,7 +244,7 @@ func (p *TryCloudflareProvider) startPublicBase(ctx context.Context, localListen
 			if candidate == "" {
 				continue
 			}
-			if err := waitReady(launchCtx, metricsPort); err != nil {
+			if err := p.waitReady(launchCtx, metricsPort); err != nil {
 				procCancel()
 				if cmd.Process != nil {
 					_ = cmd.Process.Kill()
