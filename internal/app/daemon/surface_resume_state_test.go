@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -543,6 +544,75 @@ func TestDaemonNormalResumeFallsBackToWorkspace(t *testing.T) {
 	}
 	if len(gateway.operations) == 0 || !strings.Contains(gateway.operations[len(gateway.operations)-1].CardBody, "已先回到工作区") {
 		t.Fatalf("expected workspace fallback notice, got %#v", gateway.operations)
+	}
+}
+
+func TestDaemonNormalResumeHeadlessTargetSkipsWorkspaceFallback(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, SurfaceResumeEntry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/droid",
+		ResumeWorkspaceKey: filepath.Join("/data/dl/.local/state", "codex-remote"),
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		IdleTTL:    time.Hour,
+		KillGrace:  time.Second,
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+		BinaryPath: "codex",
+	})
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 4321, nil
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-headless-pool",
+			DisplayName:   "headless",
+			WorkspaceRoot: filepath.Join("/data/dl/.local/state", "codex-remote"),
+			WorkspaceKey:  filepath.Join("/data/dl/.local/state", "codex-remote"),
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+	app.onEvents(context.Background(), "inst-headless-pool", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: nil,
+	}})
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected latent surface snapshot after recovery attempt")
+	}
+	if snapshot.Attachment.InstanceID != "" {
+		if snapshot.Attachment.SelectedThreadID != "thread-1" || snapshot.Attachment.RouteMode != "pinned" {
+			t.Fatalf("expected headless resume target to reattach a concrete thread instead of workspace fallback, got %#v", snapshot)
+		}
+		if snapshot.WorkspaceKey == filepath.Join("/data/dl/.local/state", "codex-remote") {
+			t.Fatalf("expected headless resume to avoid state-dir workspace fallback, got %#v", snapshot)
+		}
+	} else if snapshot.PendingHeadless.InstanceID == "" || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/droid" {
+		t.Fatalf("expected headless recovery to start directly from persisted resume target, got %#v", snapshot)
+	}
+	for _, operation := range gateway.operations {
+		if strings.Contains(operation.CardBody, "已先回到工作区") {
+			t.Fatalf("expected ResumeHeadless target to skip workspace fallback notice, got %#v", gateway.operations)
+		}
 	}
 }
 

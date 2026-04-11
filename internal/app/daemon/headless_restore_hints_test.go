@@ -173,6 +173,39 @@ func TestDaemonDerivesHeadlessRestoreHintFromSurfaceResumeState(t *testing.T) {
 	if len(app.headlessRestoreState) != 1 {
 		t.Fatalf("expected in-memory headless restore state derived from surface resume state, got %#v", app.headlessRestoreState)
 	}
+	if _, err := os.Stat(headlessRestoreHintsStatePath(stateDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected compatible startup to remove migrated legacy hint file, stat err=%v", err)
+	}
+}
+
+func TestDaemonMigratesLegacyHeadlessRestoreHintIntoSurfaceResumeState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putRestoreHintForTest(t, stateDir, HeadlessRestoreHint{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+		ThreadTitle:      "修复登录流程",
+		ThreadCWD:        "/data/dl/droid",
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil {
+		t.Fatal("expected legacy restore hint to migrate into surface resume state")
+	}
+	if entry.ProductMode != "normal" || entry.ResumeThreadID != "thread-1" || entry.ResumeThreadTitle != "修复登录流程" {
+		t.Fatalf("unexpected migrated surface resume entry: %#v", entry)
+	}
+	if entry.ResumeThreadCWD != "/data/dl/droid" || entry.ResumeWorkspaceKey != "/data/dl/droid" || !entry.ResumeHeadless {
+		t.Fatalf("expected migrated headless metadata in surface resume entry, got %#v", entry)
+	}
+	if _, err := os.Stat(headlessRestoreHintsStatePath(stateDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected migrated legacy hint file to be removed, stat err=%v", err)
+	}
 }
 
 func TestDaemonClearsHeadlessRestoreHintOnDetach(t *testing.T) {
