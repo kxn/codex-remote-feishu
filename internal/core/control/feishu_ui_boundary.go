@@ -1,13 +1,14 @@
 package control
 
-// FeishuUIDTOOwner identifies which layer currently owns the DTO shape exposed
+// FeishuUIDTOwner identifies which layer currently owns the DTO shape exposed
 // to the Feishu adapter. Phase 1 keeps these as Feishu-oriented transition DTOs
 // while the query/policy boundary is made explicit.
-type FeishuUIDTOOwner string
+type FeishuUIDTOwner string
 
 const (
-	FeishuUIDTOwnerTransition FeishuUIDTOOwner = "feishu_transition_dto"
-	FeishuUIDTOwnerSelection  FeishuUIDTOOwner = "feishu_selection_view"
+	FeishuUIDTOwnerTransition FeishuUIDTOwner = "feishu_transition_dto"
+	FeishuUIDTOwnerSelection  FeishuUIDTOwner = "feishu_selection_view"
+	FeishuUIDTOwnerCommand    FeishuUIDTOwner = "feishu_command_view"
 )
 
 // FeishuUICallbackPayloadOwner identifies the layer that owns callback payload
@@ -40,7 +41,7 @@ type FeishuUISurfaceContext struct {
 // FeishuUISelectionContext describes the stable query/policy inputs that back a
 // selection prompt while the DTO itself remains a Feishu-owned transition type.
 type FeishuUISelectionContext struct {
-	DTOOwner     FeishuUIDTOOwner
+	DTOOwner     FeishuUIDTOwner
 	Surface      FeishuUISurfaceContext
 	PromptKind   SelectionPromptKind
 	ViewMode     string
@@ -54,10 +55,13 @@ type FeishuUISelectionContext struct {
 // FeishuUICommandContext describes the stable query/policy inputs that back a
 // command catalog while the catalog DTO remains Feishu-owned in this phase.
 type FeishuUICommandContext struct {
-	DTOOwner    FeishuUIDTOOwner
+	DTOOwner    FeishuUIDTOwner
 	Surface     FeishuUISurfaceContext
+	ViewKind    string
 	MenuStage   string
 	MenuView    string
+	CommandID   string
+	NeedsTarget bool
 	Title       string
 	Summary     string
 	Breadcrumbs []CommandCatalogBreadcrumb
@@ -66,7 +70,7 @@ type FeishuUICommandContext struct {
 // FeishuUIRequestContext describes the stable query/policy inputs that back a
 // request prompt while the prompt DTO remains a Feishu transition type.
 type FeishuUIRequestContext struct {
-	DTOOwner    FeishuUIDTOOwner
+	DTOOwner    FeishuUIDTOwner
 	Surface     FeishuUISurfaceContext
 	RequestID   string
 	RequestType string

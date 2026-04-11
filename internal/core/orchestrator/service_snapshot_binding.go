@@ -86,6 +86,17 @@ func (s *Service) commandCatalogEvent(surface *state.SurfaceConsoleRecord, view 
 	}
 }
 
+func (s *Service) commandViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
+	catalog := s.commandCatalogFromView(view)
+	return control.UIEvent{
+		Kind:                 control.UIEventCommandCatalog,
+		GatewayID:            surface.GatewayID,
+		SurfaceSessionID:     surface.SurfaceSessionID,
+		FeishuCommandView:    &view,
+		FeishuCommandContext: s.buildFeishuCommandContextFromView(surface, view, catalog),
+	}
+}
+
 func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
 	return s.handleProblem(instanceID, problem)
 }

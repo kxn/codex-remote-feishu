@@ -469,6 +469,7 @@ type UIEvent struct {
 	FeishuSelectionView    *FeishuSelectionView
 	FeishuSelectionContext *FeishuUISelectionContext
 	CommandCatalog         *CommandCatalog
+	FeishuCommandView      *FeishuCommandView
 	FeishuCommandContext   *FeishuUICommandContext
 	RequestPrompt          *RequestPrompt
 	FeishuRequestContext   *FeishuUIRequestContext

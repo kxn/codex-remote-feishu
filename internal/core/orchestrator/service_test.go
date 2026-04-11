@@ -56,6 +56,29 @@ func selectionPromptFromEvent(t *testing.T, event control.UIEvent) *control.Sele
 	return prompt
 }
 
+func eventCommandCatalog(event control.UIEvent) (*control.CommandCatalog, bool) {
+	if event.CommandCatalog != nil {
+		return event.CommandCatalog, true
+	}
+	if event.FeishuCommandView != nil {
+		catalog, ok := feishuadapter.CommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
+		if !ok {
+			return nil, false
+		}
+		return &catalog, true
+	}
+	return nil, false
+}
+
+func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.CommandCatalog {
+	t.Helper()
+	catalog, ok := eventCommandCatalog(event)
+	if !ok {
+		t.Fatalf("expected command catalog or command view, got %#v", event)
+	}
+	return catalog
+}
+
 func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control.SelectionPrompt {
 	t.Helper()
 	if len(events) != 1 {
@@ -343,13 +366,17 @@ func TestApplyFeishuUIIntentBuildsModeCatalog(t *testing.T) {
 		Kind:    control.FeishuUIIntentShowModeCatalog,
 		RawText: "/mode",
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected mode catalog event, got %#v", events)
 	}
-	if events[0].CommandCatalog.Title != "切换模式" {
-		t.Fatalf("unexpected mode catalog: %#v", events[0].CommandCatalog)
+	catalog := commandCatalogFromEvent(t, events[0])
+	if catalog.Title != "切换模式" {
+		t.Fatalf("unexpected mode catalog: %#v", catalog)
 	}
-	if events[0].FeishuCommandContext == nil || events[0].FeishuCommandContext.MenuView != control.FeishuCommandMode {
+	if events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil || events[0].FeishuCommandView.Config.CommandID != control.FeishuCommandMode {
+		t.Fatalf("expected feishu command view for mode catalog, got %#v", events[0].FeishuCommandView)
+	}
+	if events[0].FeishuCommandContext == nil || events[0].FeishuCommandContext.DTOOwner != control.FeishuUIDTOwnerCommand || events[0].FeishuCommandContext.CommandID != control.FeishuCommandMode {
 		t.Fatalf("expected feishu command context for mode catalog, got %#v", events[0].FeishuCommandContext)
 	}
 }

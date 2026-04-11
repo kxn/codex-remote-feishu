@@ -182,15 +182,25 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			card:             rawCardDocument(title, "", cardThemeInfo, elements),
 		}}
 	case control.UIEventCommandCatalog:
-		if event.CommandCatalog == nil {
+		var catalog *control.CommandCatalog
+		switch {
+		case event.FeishuCommandView != nil:
+			projected, ok := CommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
+			if !ok {
+				return nil
+			}
+			catalog = &projected
+		case event.CommandCatalog != nil:
+			catalog = event.CommandCatalog
+		default:
 			return nil
 		}
-		title := strings.TrimSpace(event.CommandCatalog.Title)
+		title := strings.TrimSpace(catalog.Title)
 		if title == "" {
 			title = "命令菜单"
 		}
-		body := commandCatalogBody(*event.CommandCatalog)
-		elements := commandCatalogElements(*event.CommandCatalog, event.DaemonLifecycleID)
+		body := commandCatalogBody(*catalog)
+		elements := commandCatalogElements(*catalog, event.DaemonLifecycleID)
 		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,

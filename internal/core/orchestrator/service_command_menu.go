@@ -17,19 +17,7 @@ const (
 )
 
 func (s *Service) buildCommandMenuCatalog(surface *state.SurfaceConsoleRecord, raw string) control.CommandCatalog {
-	stage := s.commandMenuStage(surface)
-	switch parseCommandMenuView(raw) {
-	case control.FeishuCommandGroupCurrentWork:
-		return s.buildCommandMenuGroupCatalog(surface, stage, control.FeishuCommandGroupCurrentWork)
-	case control.FeishuCommandGroupSendSettings:
-		return s.buildCommandMenuGroupCatalog(surface, stage, control.FeishuCommandGroupSendSettings)
-	case control.FeishuCommandGroupSwitchTarget:
-		return s.buildCommandMenuGroupCatalog(surface, stage, control.FeishuCommandGroupSwitchTarget)
-	case control.FeishuCommandGroupMaintenance:
-		return s.buildCommandMenuGroupCatalog(surface, stage, control.FeishuCommandGroupMaintenance)
-	default:
-		return s.buildCommandMenuHomeCatalog(surface, stage)
-	}
+	return s.commandCatalogFromView(s.buildCommandMenuView(surface, raw))
 }
 
 func parseCommandMenuView(raw string) string {
@@ -205,170 +193,23 @@ func commandBackButtons(groupID string) []control.CommandCatalogButton {
 }
 
 func (s *Service) buildModeCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
-	current := s.normalizeSurfaceProductMode(surface)
-	sections := []control.CommandCatalogSection{{
-		Title: "立即切换",
-		Entries: []control.CommandCatalogEntry{{
-			Buttons: []control.CommandCatalogButton{
-				choiceCommandButton("normal", "/mode normal", current == state.ProductModeNormal, "primary"),
-				choiceCommandButton("vscode", "/mode vscode", current == state.ProductModeVSCode, ""),
-			},
-		}},
-	}}
-	if form := control.FeishuCommandFormWithDefault(control.FeishuCommandMode, ""); form != nil {
-		sections = append(sections, control.CommandCatalogSection{
-			Title: "手动输入",
-			Entries: []control.CommandCatalogEntry{{
-				Form: form,
-			}},
-		})
-	}
-	return control.CommandCatalog{
-		Title:          "切换模式",
-		Summary:        fmt.Sprintf("当前模式：`%s`。", current),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "切换模式"),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(control.FeishuCommandGroupMaintenance),
-	}
+	return s.commandCatalogFromView(s.buildModeCommandView(surface))
 }
 
 func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
-	enabled := surface != nil && surface.AutoContinue.Enabled
-	statusText := "关闭"
-	if enabled {
-		statusText = "开启"
-	}
-	sections := []control.CommandCatalogSection{{
-		Title: "立即切换",
-		Entries: []control.CommandCatalogEntry{{
-			Buttons: []control.CommandCatalogButton{
-				choiceCommandButton("on", "/autowhip on", enabled, "primary"),
-				choiceCommandButton("off", "/autowhip off", !enabled, ""),
-			},
-		}},
-	}}
-	if form := control.FeishuCommandFormWithDefault(control.FeishuCommandAutoContinue, ""); form != nil {
-		sections = append(sections, control.CommandCatalogSection{
-			Title: "手动输入",
-			Entries: []control.CommandCatalogEntry{{
-				Form: form,
-			}},
-		})
-	}
-	return control.CommandCatalog{
-		Title:          "autowhip",
-		Summary:        fmt.Sprintf("当前：`%s`。", statusText),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "autowhip"),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(control.FeishuCommandGroupMaintenance),
-	}
+	return s.commandCatalogFromView(s.buildAutoContinueCommandView(surface))
 }
 
 func (s *Service) buildReasoningCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
-	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandReasoning)
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		return s.buildAttachmentRequiredCatalog(surface, def)
-	}
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	sections := []control.CommandCatalogSection{{
-		Title: "立即应用",
-		Entries: []control.CommandCatalogEntry{{
-			Buttons: choiceButtonsFromOptions(def.Options, summary.OverrideReasoningEffort, ""),
-		}},
-	}}
-	if form := control.FeishuCommandFormWithDefault(control.FeishuCommandReasoning, ""); form != nil {
-		sections = append(sections, control.CommandCatalogSection{
-			Title: "手动输入",
-			Entries: []control.CommandCatalogEntry{{
-				Form: form,
-			}},
-		})
-	}
-	return control.CommandCatalog{
-		Title:          def.Title,
-		Summary:        reasoningCatalogSummary(summary),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
-	}
+	return s.commandCatalogFromView(s.buildReasoningCommandView(surface))
 }
 
 func (s *Service) buildAccessCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
-	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandAccess)
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		return s.buildAttachmentRequiredCatalog(surface, def)
-	}
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	sections := []control.CommandCatalogSection{{
-		Title: "立即应用",
-		Entries: []control.CommandCatalogEntry{{
-			Buttons: choiceButtonsFromOptions(def.Options, summary.OverrideAccessMode, ""),
-		}},
-	}}
-	if form := control.FeishuCommandFormWithDefault(control.FeishuCommandAccess, ""); form != nil {
-		sections = append(sections, control.CommandCatalogSection{
-			Title: "手动输入",
-			Entries: []control.CommandCatalogEntry{{
-				Form: form,
-			}},
-		})
-	}
-	return control.CommandCatalog{
-		Title:          def.Title,
-		Summary:        accessCatalogSummary(summary),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
-	}
+	return s.commandCatalogFromView(s.buildAccessCommandView(surface))
 }
 
 func (s *Service) buildModelCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
-	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandModel)
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		return s.buildAttachmentRequiredCatalog(surface, def)
-	}
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	presetButtons := []control.CommandCatalogButton{
-		choiceCommandButton("gpt-5.4", "/model gpt-5.4", summary.OverrideModel == "gpt-5.4", ""),
-		choiceCommandButton("gpt-5.4-mini", "/model gpt-5.4-mini", summary.OverrideModel == "gpt-5.4-mini", ""),
-	}
-	manualEntry := control.CommandCatalogEntry{
-		Form: control.FeishuCommandFormWithDefault(control.FeishuCommandModel, ""),
-	}
-	if strings.TrimSpace(summary.OverrideModel) != "" || strings.TrimSpace(summary.OverrideReasoningEffort) != "" {
-		manualEntry.Buttons = append(manualEntry.Buttons, choiceCommandButton("清除覆盖", "/model clear", false, ""))
-	}
-	return control.CommandCatalog{
-		Title:        def.Title,
-		Summary:      modelCatalogSummary(summary),
-		Interactive:  true,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
-		Sections: []control.CommandCatalogSection{
-			{
-				Title: "常见模型",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: presetButtons,
-				}},
-			},
-			{
-				Title:   "手动输入",
-				Entries: []control.CommandCatalogEntry{manualEntry},
-			},
-		},
-		RelatedButtons: commandBackButtons(def.GroupID),
-	}
+	return s.commandCatalogFromView(s.buildModelCommandView(surface))
 }
 
 func (s *Service) buildAttachmentRequiredCatalog(surface *state.SurfaceConsoleRecord, def control.FeishuCommandDefinition) control.CommandCatalog {
@@ -508,12 +349,8 @@ func (s *Service) startCommandCapture(surface *state.SurfaceConsoleRecord, actio
 	}
 	switch action.CommandID {
 	case control.FeishuCommandModel:
-		if s.root.Instances[surface.AttachedInstanceID] == nil {
-			def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandModel)
-			return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildAttachmentRequiredCatalog(surface, def))}
-		}
 		clearSurfaceCommandCapture(surface)
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildModelCommandView(surface))}
 	default:
 		return notice(surface, "command_capture_unsupported", "这个命令暂不支持 capture/apply 输入。")
 	}
@@ -526,7 +363,7 @@ func (s *Service) cancelCommandCapture(surface *state.SurfaceConsoleRecord, acti
 	clearSurfaceCommandCapture(surface)
 	switch action.CommandID {
 	case control.FeishuCommandModel:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildModelCommandView(surface))}
 	default:
 		return nil
 	}

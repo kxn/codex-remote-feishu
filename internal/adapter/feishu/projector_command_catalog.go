@@ -27,8 +27,10 @@ func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID st
 			})
 		}
 		for _, entry := range section.Entries {
+			renderedCompactButtons := false
 			if catalog.DisplayStyle == control.CommandCatalogDisplayCompactButtons && catalog.Interactive && len(entry.Buttons) > 0 {
 				elements = append(elements, commandCatalogCompactButtonElements(entry.Buttons, daemonLifecycleID)...)
+				renderedCompactButtons = true
 				if entry.Form == nil {
 					continue
 				}
@@ -39,7 +41,7 @@ func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID st
 					"content": markdown,
 				})
 			}
-			if catalog.Interactive && len(entry.Buttons) > 0 {
+			if catalog.Interactive && len(entry.Buttons) > 0 && !renderedCompactButtons {
 				if group := cardButtonGroupElement(commandCatalogButtons(entry.Buttons, daemonLifecycleID)); len(group) != 0 {
 					elements = append(elements, group)
 				}

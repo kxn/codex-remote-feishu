@@ -1142,6 +1142,87 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 	}
 }
 
+func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
+	catalog, ok := CommandCatalogFromView(control.FeishuCommandView{
+		Menu: &control.FeishuCommandMenuView{Stage: "detached"},
+	}, &control.FeishuUICommandContext{
+		DTOOwner:  control.FeishuUIDTOwnerCommand,
+		ViewKind:  "menu",
+		MenuStage: "detached",
+	})
+	if !ok {
+		t.Fatalf("expected menu view to project into command catalog")
+	}
+	if catalog.Title != "命令菜单" || !catalog.Interactive {
+		t.Fatalf("unexpected menu catalog: %#v", catalog)
+	}
+	if len(catalog.Sections) < 2 || catalog.Sections[0].Title != "全部分组" || catalog.Sections[1].Title != "常用操作" {
+		t.Fatalf("unexpected menu sections: %#v", catalog.Sections)
+	}
+	got := firstCommandTexts(catalog.Sections[1].Entries)
+	want := []string{"/list", "/use", "/status"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("detached menu commands = %#v, want %#v", got, want)
+	}
+}
+
+func TestProjectCommandViewRendersModelCard(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventCommandCatalog,
+		FeishuCommandView: &control.FeishuCommandView{
+			Config: &control.FeishuCommandConfigView{
+				CommandID:          control.FeishuCommandModel,
+				EffectiveValue:     "gpt-5.4",
+				OverrideValue:      "gpt-5.4-mini",
+				OverrideExtraValue: "high",
+			},
+		},
+		FeishuCommandContext: &control.FeishuUICommandContext{
+			DTOOwner:  control.FeishuUIDTOwnerCommand,
+			ViewKind:  "config",
+			CommandID: control.FeishuCommandModel,
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "模型" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if len(ops[0].CardElements) < 6 {
+		t.Fatalf("expected structured model card elements, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
+		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
+	}
+	if ops[0].CardElements[1]["content"] != "**常见模型**" {
+		t.Fatalf("unexpected first section heading: %#v", ops[0].CardElements[1])
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	formFound := false
+	relatedFound := false
+	clearCount := 0
+	for _, element := range renderedElements {
+		tag, _ := element["tag"].(string)
+		switch tag {
+		case "form":
+			formFound = true
+		case "button":
+			value := renderedButtonCallbackValue(t, element)
+			if value["kind"] == "run_command" && value["command_text"] == "/model clear" {
+				clearCount++
+			}
+			if value["kind"] == "run_command" && value["command_text"] == "/menu send_settings" {
+				relatedFound = true
+			}
+		}
+	}
+	if !formFound || !relatedFound || clearCount != 1 {
+		t.Fatalf("expected rendered V2 model form and related action, got %#v", renderedElements)
+	}
+}
+
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -1230,6 +1311,17 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if renderedRelatedValue["kind"] != "run_command" || renderedRelatedValue["command_text"] != "/menu send_settings" {
 		t.Fatalf("unexpected rendered related button payload: %#v", renderedRelatedValue)
 	}
+}
+
+func firstCommandTexts(entries []control.CommandCatalogEntry) []string {
+	commands := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if len(entry.Commands) == 0 {
+			continue
+		}
+		commands = append(commands, entry.Commands[0])
+	}
+	return commands
 }
 
 func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {

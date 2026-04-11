@@ -133,6 +133,29 @@ func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord,
 	}
 }
 
+func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView, catalog control.CommandCatalog) *control.FeishuUICommandContext {
+	context := &control.FeishuUICommandContext{
+		DTOOwner:    control.FeishuUIDTOwnerCommand,
+		Surface:     s.buildFeishuUISurfaceContext(surface),
+		Title:       strings.TrimSpace(catalog.Title),
+		Summary:     strings.TrimSpace(catalog.Summary),
+		Breadcrumbs: append([]control.CommandCatalogBreadcrumb(nil), catalog.Breadcrumbs...),
+	}
+	switch {
+	case view.Menu != nil:
+		context.ViewKind = "menu"
+		context.MenuStage = strings.TrimSpace(view.Menu.Stage)
+		context.MenuView = strings.TrimSpace(view.Menu.GroupID)
+	case view.Config != nil:
+		commandID := strings.TrimSpace(view.Config.CommandID)
+		context.ViewKind = "config"
+		context.MenuView = commandID
+		context.CommandID = commandID
+		context.NeedsTarget = view.Config.RequiresAttachment
+	}
+	return context
+}
+
 func (s *Service) buildFeishuRequestContext(surface *state.SurfaceConsoleRecord, prompt control.RequestPrompt) *control.FeishuUIRequestContext {
 	return &control.FeishuUIRequestContext{
 		DTOOwner:    control.FeishuUIDTOwnerTransition,

@@ -13,17 +13,17 @@ func (s *Service) ApplyFeishuUIIntent(action control.Action, intent control.Feis
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, intent control.FeishuUIIntent) []control.UIEvent {
 	switch intent.Kind {
 	case control.FeishuUIIntentShowCommandMenu:
-		return []control.UIEvent{s.commandCatalogEvent(surface, parseCommandMenuView(intent.RawText), s.commandMenuStage(surface), s.buildCommandMenuCatalog(surface, intent.RawText))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildCommandMenuView(surface, intent.RawText))}
 	case control.FeishuUIIntentShowModeCatalog:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandMode, "", s.buildModeCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildModeCommandView(surface))}
 	case control.FeishuUIIntentShowAutoContinueCatalog:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandAutoContinue, "", s.buildAutoContinueCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildAutoContinueCommandView(surface))}
 	case control.FeishuUIIntentShowReasoningCatalog:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandReasoning, "", s.buildReasoningCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildReasoningCommandView(surface))}
 	case control.FeishuUIIntentShowAccessCatalog:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandAccess, "", s.buildAccessCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildAccessCommandView(surface))}
 	case control.FeishuUIIntentShowModelCatalog:
-		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandViewEvent(surface, s.buildModelCommandView(surface))}
 	case control.FeishuUIIntentShowRecentWorkspaces:
 		return s.presentWorkspaceSelection(surface)
 	case control.FeishuUIIntentShowAllWorkspaces:

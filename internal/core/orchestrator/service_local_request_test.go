@@ -1270,23 +1270,30 @@ func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 		GatewayID:        "app-1",
 	})
 
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected interactive command catalog event, got %#v", events)
 	}
-	if !events[0].CommandCatalog.Interactive {
-		t.Fatalf("menu catalog should be interactive: %#v", events[0].CommandCatalog)
+	catalog := commandCatalogFromEvent(t, events[0])
+	if !catalog.Interactive {
+		t.Fatalf("menu catalog should be interactive: %#v", catalog)
 	}
-	if events[0].CommandCatalog.DisplayStyle != control.CommandCatalogDisplayCompactButtons {
-		t.Fatalf("menu catalog should use compact button display: %#v", events[0].CommandCatalog)
+	if catalog.DisplayStyle != control.CommandCatalogDisplayCompactButtons {
+		t.Fatalf("menu catalog should use compact button display: %#v", catalog)
 	}
-	if events[0].CommandCatalog.Title != "命令菜单" {
-		t.Fatalf("unexpected menu catalog title: %#v", events[0].CommandCatalog)
+	if catalog.Title != "命令菜单" {
+		t.Fatalf("unexpected menu catalog title: %#v", catalog)
 	}
 	if events[0].FeishuCommandContext == nil {
 		t.Fatalf("expected feishu command context, got %#v", events[0])
 	}
-	if events[0].FeishuCommandContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+	if events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Menu == nil {
+		t.Fatalf("expected feishu command view menu payload, got %#v", events[0].FeishuCommandView)
+	}
+	if events[0].FeishuCommandContext.DTOOwner != control.FeishuUIDTOwnerCommand {
 		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuCommandContext)
+	}
+	if events[0].FeishuCommandContext.ViewKind != "menu" || events[0].FeishuCommandContext.MenuStage != "detached" {
+		t.Fatalf("unexpected command context: %#v", events[0].FeishuCommandContext)
 	}
 	if events[0].FeishuCommandContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
 		t.Fatalf("unexpected callback payload owner: %#v", events[0].FeishuCommandContext)
@@ -1307,10 +1314,10 @@ func TestMenuActionDetachedHomepagePrioritizesListUseStatus(t *testing.T) {
 		ActorUserID:      "user-1",
 		GatewayID:        "app-1",
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected command catalog, got %#v", events)
 	}
-	catalog := events[0].CommandCatalog
+	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.Sections) < 2 || catalog.Sections[0].Title != "全部分组" || catalog.Sections[1].Title != "常用操作" {
 		t.Fatalf("unexpected detached home catalog: %#v", catalog)
 	}
@@ -1334,7 +1341,7 @@ func TestMenuActionNormalHomepageHidesFollow(t *testing.T) {
 		ActorUserID:      "user-1",
 		GatewayID:        "app-1",
 	})
-	catalog := events[0].CommandCatalog
+	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[1].Entries)
 	want := []string{"/stop", "/new", "/reasoning", "/model", "/access"}
 	if !reflect.DeepEqual(got, want) {
@@ -1360,7 +1367,7 @@ func TestMenuActionVSCodeHomepageKeepsFollowBehindSettings(t *testing.T) {
 		ActorUserID:      "user-1",
 		GatewayID:        "app-1",
 	})
-	catalog := events[0].CommandCatalog
+	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[1].Entries)
 	want := []string{"/stop", "/reasoning", "/model", "/access", "/follow"}
 	if !reflect.DeepEqual(got, want) {
@@ -1380,10 +1387,10 @@ func TestMenuSubmenuShowsReturnToPreviousLevelButton(t *testing.T) {
 		GatewayID:        "app-1",
 		Text:             "/menu send_settings",
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected command catalog, got %#v", events)
 	}
-	catalog := events[0].CommandCatalog
+	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.RelatedButtons) != 1 || catalog.RelatedButtons[0].CommandText != "/menu" {
 		t.Fatalf("submenu should expose a back button to /menu, got %#v", catalog.RelatedButtons)
 	}
@@ -1407,10 +1414,13 @@ func TestBareReasoningCommandBuildsParameterCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		Text:             "/reasoning",
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected reasoning command catalog, got %#v", events)
 	}
-	catalog := events[0].CommandCatalog
+	if events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil || events[0].FeishuCommandView.Config.CommandID != control.FeishuCommandReasoning {
+		t.Fatalf("expected reasoning command view, got %#v", events[0].FeishuCommandView)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
 	if catalog.Title != "推理强度" {
 		t.Fatalf("unexpected reasoning catalog title: %#v", catalog)
 	}
@@ -1444,10 +1454,13 @@ func TestBareModelCommandBuildsPresetAndFormCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		Text:             "/model",
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected model catalog, got %#v", events)
 	}
-	catalog := events[0].CommandCatalog
+	if events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil || events[0].FeishuCommandView.Config.CommandID != control.FeishuCommandModel {
+		t.Fatalf("expected model command view, got %#v", events[0].FeishuCommandView)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.Sections) != 2 {
 		t.Fatalf("expected preset + manual sections, got %#v", catalog.Sections)
 	}
@@ -1482,14 +1495,18 @@ func TestLegacyModelCaptureActionReopensModelCatalogWithoutCaptureState(t *testi
 		SurfaceSessionID: "surface-1",
 		CommandID:        control.FeishuCommandModel,
 	})
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected model catalog, got %#v", events)
+	}
+	if events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil || events[0].FeishuCommandView.Config.CommandID != control.FeishuCommandModel {
+		t.Fatalf("expected model command view, got %#v", events[0].FeishuCommandView)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveCommandCapture != nil {
 		t.Fatalf("expected legacy capture action not to leave capture state behind")
 	}
-	if events[0].CommandCatalog.Sections[1].Entries[0].Form == nil {
-		t.Fatalf("expected legacy capture action to reopen model form, got %#v", events[0].CommandCatalog)
+	catalog := commandCatalogFromEvent(t, events[0])
+	if catalog.Sections[1].Entries[0].Form == nil {
+		t.Fatalf("expected legacy capture action to reopen model form, got %#v", catalog)
 	}
 }
 
