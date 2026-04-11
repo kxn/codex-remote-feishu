@@ -3,27 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Codex Remote Web Onboarding/Admin Mock</title>
+    <title>Codex Remote Onboarding/Admin Mock</title>
     <style>
       :root {
-        --bg: #f4efe7;
-        --bg-strong: #efe5d8;
-        --panel: rgba(255, 250, 244, 0.86);
-        --panel-strong: #fffaf2;
-        --panel-border: rgba(67, 53, 39, 0.12);
-        --text: #1f2833;
-        --muted: #5d6773;
+        --bg: #efe8dc;
+        --bg-deep: #e4d6bf;
+        --shell: rgba(255, 251, 245, 0.94);
+        --panel: #fffdf9;
+        --line: rgba(56, 44, 30, 0.09);
+        --text: #1f2328;
+        --muted: #6b7280;
         --brand: #0f766e;
         --brand-soft: rgba(15, 118, 110, 0.12);
         --warn: #b45309;
-        --warn-soft: rgba(180, 83, 9, 0.12);
+        --warn-soft: rgba(180, 83, 9, 0.14);
         --danger: #b42318;
-        --danger-soft: rgba(180, 35, 24, 0.12);
-        --shadow: 0 28px 60px rgba(44, 36, 28, 0.12);
+        --danger-soft: rgba(180, 35, 24, 0.14);
+        --shadow: 0 28px 60px rgba(36, 27, 18, 0.12);
         --radius-xl: 28px;
         --radius-lg: 22px;
         --radius-md: 16px;
-        --radius-sm: 999px;
+        --radius-pill: 999px;
         --font-sans: "Avenir Next", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", sans-serif;
       }
 
@@ -34,326 +34,145 @@
       body {
         margin: 0;
         min-height: 100vh;
-        color: var(--text);
         font-family: var(--font-sans);
+        color: var(--text);
         background:
-          radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 28%),
-          radial-gradient(circle at top right, rgba(180, 83, 9, 0.14), transparent 30%),
-          linear-gradient(180deg, #fbf7f2 0%, var(--bg) 100%);
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 28%),
+          radial-gradient(circle at top right, rgba(180, 83, 9, 0.18), transparent 32%),
+          linear-gradient(180deg, #fbf7f0 0%, var(--bg) 100%);
       }
 
-      body::before {
-        content: "";
-        position: fixed;
-        inset: auto auto -120px -120px;
-        width: 280px;
-        height: 280px;
-        border-radius: 50%;
-        background: rgba(15, 118, 110, 0.08);
-        filter: blur(20px);
-        pointer-events: none;
+      .workbench {
+        width: min(1440px, calc(100% - 28px));
+        margin: 18px auto 40px;
       }
 
-      a {
-        color: inherit;
-      }
-
-      .page {
-        width: min(1360px, calc(100% - 32px));
-        margin: 28px auto 40px;
-      }
-
-      .hero {
-        display: grid;
-        gap: 16px;
-        padding: 28px;
-        border: 1px solid var(--panel-border);
-        border-radius: 32px;
-        background: linear-gradient(145deg, rgba(255, 251, 246, 0.9), rgba(244, 239, 231, 0.88));
-        box-shadow: var(--shadow);
-      }
-
-      .hero-top {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        align-items: flex-start;
-      }
-
-      .hero-copy {
-        max-width: 760px;
-      }
-
-      .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        border-radius: var(--radius-sm);
-        color: var(--brand);
-        background: var(--brand-soft);
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-      }
-
-      h1,
-      h2,
-      h3,
-      h4,
-      p {
-        margin: 0;
-      }
-
-      h1 {
-        margin-top: 14px;
-        font-size: clamp(34px, 5vw, 56px);
-        line-height: 1.06;
-      }
-
-      .hero-copy p {
-        margin-top: 14px;
-        max-width: 720px;
-        color: var(--muted);
-        font-size: 17px;
-        line-height: 1.7;
-      }
-
-      .hero-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: flex-end;
-      }
-
-      .hero-link {
-        padding: 12px 16px;
-        border: 1px solid var(--panel-border);
-        border-radius: var(--radius-sm);
-        background: rgba(255, 250, 244, 0.72);
-        text-decoration: none;
-        color: var(--muted);
-        font-size: 14px;
-      }
-
-      .hero-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .hero-stat {
-        padding: 18px;
-        border-radius: var(--radius-lg);
-        border: 1px solid rgba(67, 53, 39, 0.08);
-        background: rgba(255, 250, 244, 0.72);
-      }
-
-      .hero-stat strong {
-        display: block;
-        margin-bottom: 8px;
-        font-size: 14px;
-        color: var(--muted);
-      }
-
-      .hero-stat span {
-        display: block;
-        font-size: 18px;
-        line-height: 1.5;
-      }
-
-      .workspace {
-        display: grid;
-        grid-template-columns: 290px minmax(0, 1fr);
-        gap: 20px;
-        margin-top: 22px;
-      }
-
-      .panel {
-        border: 1px solid var(--panel-border);
-        border-radius: var(--radius-xl);
-        background: var(--panel);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(14px);
-      }
-
-      .sidebar {
-        padding: 20px;
-        display: grid;
-        gap: 18px;
-        align-self: start;
+      .control-strip {
         position: sticky;
-        top: 20px;
-      }
-
-      .sidebar-section {
+        top: 14px;
+        z-index: 20;
         display: grid;
         gap: 12px;
+        padding: 14px;
+        border: 1px solid rgba(56, 44, 30, 0.08);
+        border-radius: 24px;
+        background: rgba(255, 250, 242, 0.88);
+        box-shadow: 0 18px 40px rgba(36, 27, 18, 0.1);
+        backdrop-filter: blur(18px);
       }
 
-      .sidebar-section h3 {
-        font-size: 14px;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      .chip-list {
+      .control-row {
         display: flex;
-        flex-wrap: wrap;
         gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
       }
 
-      .chip {
-        width: 100%;
-        text-align: left;
-        padding: 13px 14px;
+      .control-label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .pill-list {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .pill {
         border: 1px solid transparent;
-        border-radius: 18px;
-        background: rgba(255, 250, 244, 0.82);
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.78);
         color: var(--text);
+        min-height: 40px;
+        padding: 0 16px;
+        font-size: 14px;
+        font-weight: 700;
         cursor: pointer;
         transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
       }
 
-      .chip:hover {
+      .pill:hover {
         transform: translateY(-1px);
-        border-color: rgba(15, 118, 110, 0.24);
+        border-color: rgba(15, 118, 110, 0.22);
       }
 
-      .chip.active {
+      .pill.active {
+        background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(255, 255, 255, 0.95));
         border-color: rgba(15, 118, 110, 0.28);
-        background: linear-gradient(180deg, rgba(15, 118, 110, 0.14), rgba(255, 250, 244, 0.96));
       }
 
-      .chip strong {
-        display: block;
-        font-size: 15px;
+      .viewport-bar {
+        margin-top: 22px;
       }
 
-      .chip span {
-        display: block;
-        margin-top: 5px;
-        font-size: 13px;
-        line-height: 1.5;
-        color: var(--muted);
+      .device-shell {
+        padding: 16px;
+        border: 1px solid rgba(56, 44, 30, 0.1);
+        border-radius: 34px;
+        background: linear-gradient(180deg, rgba(246, 239, 228, 0.95), rgba(255, 251, 245, 0.96));
+        box-shadow: var(--shadow);
       }
 
-      .viewport-toggle {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-      }
-
-      .preview-area {
-        padding: 20px;
-      }
-
-      .preview-header {
+      .browser-top {
         display: flex;
-        justify-content: space-between;
-        gap: 18px;
-        align-items: flex-start;
-        margin-bottom: 18px;
-      }
-
-      .preview-header h2 {
-        font-size: clamp(24px, 3vw, 34px);
-        line-height: 1.12;
-      }
-
-      .preview-header p {
-        margin-top: 8px;
-        color: var(--muted);
-        line-height: 1.6;
-      }
-
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 11px 14px;
-        border-radius: var(--radius-sm);
-        font-size: 13px;
-        font-weight: 700;
-      }
-
-      .status-pill.ok {
-        color: var(--brand);
-        background: var(--brand-soft);
-      }
-
-      .status-pill.warn {
-        color: var(--warn);
-        background: var(--warn-soft);
-      }
-
-      .status-pill.danger {
-        color: var(--danger);
-        background: var(--danger-soft);
-      }
-
-      .browser-shell {
-        margin-top: 10px;
-        padding: 14px;
-        border-radius: 32px;
-        border: 1px solid rgba(67, 53, 39, 0.1);
-        background: linear-gradient(180deg, rgba(243, 237, 228, 0.95), rgba(255, 251, 246, 0.94));
-      }
-
-      .browser-topbar {
-        display: flex;
-        align-items: center;
         gap: 12px;
-        padding: 4px 8px 16px;
+        align-items: center;
+        padding: 4px 6px 16px;
       }
 
-      .dots {
+      .browser-dots {
         display: inline-flex;
-        gap: 8px;
+        gap: 7px;
       }
 
-      .dots span {
+      .browser-dots span {
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: rgba(67, 53, 39, 0.2);
+        background: rgba(56, 44, 30, 0.16);
       }
 
-      .address {
+      .browser-address {
         flex: 1;
-        padding: 12px 16px;
-        border-radius: var(--radius-sm);
-        background: rgba(255, 250, 244, 0.9);
-        border: 1px solid rgba(67, 53, 39, 0.08);
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(56, 44, 30, 0.08);
         color: var(--muted);
         font-size: 13px;
       }
 
-      .app-frame {
+      .viewport {
         margin-inline: auto;
         border-radius: 28px;
-        border: 1px solid rgba(67, 53, 39, 0.08);
-        background: var(--panel-strong);
         overflow: hidden;
-        transition: max-width 220ms ease;
+        border: 1px solid rgba(56, 44, 30, 0.08);
+        background: var(--panel);
+        transition: max-width 180ms ease;
       }
 
-      .app-frame[data-viewport="desktop"] {
-        max-width: 1060px;
+      .viewport[data-size="desktop"] {
+        max-width: 1120px;
       }
 
-      .app-frame[data-viewport="mobile"] {
+      .viewport[data-size="mobile"] {
         max-width: 420px;
       }
 
-      .app-nav {
+      .app-header {
         display: flex;
         justify-content: space-between;
-        gap: 16px;
+        gap: 18px;
+        align-items: center;
         padding: 18px 22px;
-        border-bottom: 1px solid rgba(67, 53, 39, 0.08);
-        background: rgba(253, 248, 241, 0.92);
+        border-bottom: 1px solid var(--line);
+        background: rgba(252, 248, 241, 0.92);
       }
 
       .brand {
@@ -366,204 +185,410 @@
         width: 42px;
         height: 42px;
         border-radius: 16px;
-        background: linear-gradient(135deg, #0f766e, #164e63);
-        color: #fff;
         display: grid;
         place-items: center;
+        background: linear-gradient(135deg, #0f766e, #164e63);
+        color: #fff;
+        font-size: 15px;
         font-weight: 800;
       }
 
       .brand small {
         display: block;
-        font-size: 12px;
+        margin-bottom: 4px;
         color: var(--muted);
+        font-size: 12px;
       }
 
       .brand strong {
-        display: block;
-        margin-top: 4px;
         font-size: 17px;
       }
 
-      .nav-summary {
+      .header-status {
         display: flex;
-        gap: 10px;
         flex-wrap: wrap;
+        gap: 8px;
         justify-content: flex-end;
       }
 
-      .nav-summary .summary-pill {
-        padding: 10px 12px;
-        border-radius: var(--radius-sm);
-        background: rgba(15, 118, 110, 0.08);
-        color: var(--muted);
+      .status-chip {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 12px;
+        border-radius: var(--radius-pill);
         font-size: 12px;
+        font-weight: 700;
       }
 
-      .frame-body {
+      .status-chip.ok {
+        color: var(--brand);
+        background: var(--brand-soft);
+      }
+
+      .status-chip.warn {
+        color: var(--warn);
+        background: var(--warn-soft);
+      }
+
+      .status-chip.danger {
+        color: var(--danger);
+        background: var(--danger-soft);
+      }
+
+      .app-body {
         display: grid;
-        grid-template-columns: 240px minmax(0, 1fr);
-        min-height: 720px;
+        grid-template-columns: 250px minmax(0, 1fr);
+        min-height: 760px;
       }
 
-      .app-frame[data-viewport="mobile"] .frame-body {
+      .viewport[data-size="mobile"] .app-body {
         grid-template-columns: 1fr;
       }
 
-      .step-rail {
-        padding: 20px;
-        border-right: 1px solid rgba(67, 53, 39, 0.08);
-        background: linear-gradient(180deg, rgba(249, 241, 232, 0.78), rgba(255, 250, 244, 0.92));
+      .side-nav {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(248, 240, 230, 0.86), rgba(255, 252, 247, 0.94));
       }
 
-      .app-frame[data-viewport="mobile"] .step-rail {
+      .viewport[data-size="mobile"] .side-nav {
         border-right: 0;
-        border-bottom: 1px solid rgba(67, 53, 39, 0.08);
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
       }
 
-      .step-rail h4 {
-        margin-bottom: 14px;
-        font-size: 15px;
+      .side-nav-title {
+        margin: 0 0 14px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        text-transform: uppercase;
       }
 
-      .step-list {
+      .side-items {
         display: grid;
         gap: 10px;
       }
 
-      .step-item {
+      .viewport[data-size="mobile"] .side-items {
+        display: flex;
+        min-width: max-content;
+      }
+
+      .side-item {
         padding: 13px 14px;
         border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
         border: 1px solid transparent;
-        background: rgba(255, 250, 244, 0.72);
       }
 
-      .step-item.active {
-        border-color: rgba(15, 118, 110, 0.22);
+      .side-item.current {
         background: rgba(15, 118, 110, 0.12);
+        border-color: rgba(15, 118, 110, 0.22);
       }
 
-      .step-item.done {
+      .side-item.done {
         background: rgba(15, 118, 110, 0.07);
       }
 
-      .step-item small {
+      .side-item small {
         display: block;
         margin-bottom: 6px;
         color: var(--muted);
         font-size: 12px;
       }
 
-      .step-item strong {
+      .side-item strong {
         display: block;
-        font-size: 15px;
+        font-size: 14px;
       }
 
       .screen {
-        padding: 24px;
-        display: grid;
-        gap: 18px;
-      }
-
-      .screen-hero {
-        display: grid;
-        gap: 14px;
         padding: 22px;
-        border-radius: 24px;
-        background: linear-gradient(160deg, rgba(15, 118, 110, 0.1), rgba(255, 250, 244, 0.94));
-        border: 1px solid rgba(15, 118, 110, 0.12);
+        display: grid;
+        gap: 16px;
+        align-content: start;
       }
 
-      .screen-hero p {
+      .page-hero {
+        padding: 22px;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(15, 118, 110, 0.12);
+        background: linear-gradient(145deg, rgba(15, 118, 110, 0.1), rgba(255, 253, 249, 0.96));
+      }
+
+      .page-hero h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.08;
+      }
+
+      .page-hero p {
+        margin: 12px 0 0;
         color: var(--muted);
         line-height: 1.7;
+        font-size: 16px;
       }
 
-      .screen-meta {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .meta-pill {
-        padding: 8px 12px;
-        border-radius: var(--radius-sm);
-        background: rgba(255, 250, 244, 0.76);
-        border: 1px solid rgba(67, 53, 39, 0.08);
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      .content-grid {
+      .page-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 16px;
       }
 
-      .app-frame[data-viewport="mobile"] .content-grid {
+      .page-grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .page-grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .viewport[data-size="mobile"] .page-grid.two,
+      .viewport[data-size="mobile"] .page-grid.three {
         grid-template-columns: 1fr;
       }
 
-      .card {
+      .surface-card {
         padding: 18px;
         border-radius: 20px;
-        background: rgba(255, 250, 244, 0.84);
-        border: 1px solid rgba(67, 53, 39, 0.08);
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.88);
       }
 
-      .card h4 {
-        font-size: 16px;
-        margin-bottom: 10px;
+      .surface-card h2,
+      .surface-card h3 {
+        margin: 0;
+        font-size: 18px;
       }
 
-      .card p {
+      .surface-card p {
+        margin: 10px 0 0;
         color: var(--muted);
         line-height: 1.65;
       }
 
-      .bullet-list {
-        margin: 12px 0 0;
+      .surface-card + .surface-card {
+        margin-top: 0;
+      }
+
+      .callout {
+        padding: 18px;
+        border-radius: 20px;
+        border: 1px solid transparent;
+      }
+
+      .callout.ok {
+        background: var(--brand-soft);
+        border-color: rgba(15, 118, 110, 0.12);
+      }
+
+      .callout.warn {
+        background: var(--warn-soft);
+        border-color: rgba(180, 83, 9, 0.14);
+      }
+
+      .callout.danger {
+        background: var(--danger-soft);
+        border-color: rgba(180, 35, 24, 0.14);
+      }
+
+      .callout strong {
+        display: block;
+        font-size: 16px;
+      }
+
+      .callout p {
+        margin: 8px 0 0;
+        color: rgba(31, 35, 40, 0.78);
+        line-height: 1.65;
+      }
+
+      .item-list {
+        margin: 14px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+      }
+
+      .item-list li {
+        padding: 14px 14px 0 0;
+      }
+
+      .item-list strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .item-list span {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .option-card,
+      .app-card,
+      .cap-card,
+      .setting-card {
+        padding: 18px;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .option-card.selected,
+      .app-card.selected {
+        border-color: rgba(15, 118, 110, 0.24);
+        box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+      }
+
+      .option-card .eyebrow,
+      .app-card .eyebrow,
+      .cap-card .eyebrow {
+        display: inline-flex;
+        min-height: 30px;
+        align-items: center;
+        padding: 0 10px;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .eyebrow.ok {
+        background: var(--brand-soft);
+        color: var(--brand);
+      }
+
+      .eyebrow.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+
+      .eyebrow.danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .eyebrow.neutral {
+        background: rgba(107, 114, 128, 0.12);
+        color: #4b5563;
+      }
+
+      .option-card h3,
+      .app-card h3,
+      .cap-card h3,
+      .setting-card h3 {
+        margin: 14px 0 0;
+        font-size: 18px;
+      }
+
+      .option-card p,
+      .app-card p,
+      .cap-card p,
+      .setting-card p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .meta-list {
+        margin: 16px 0 0;
         padding: 0;
         list-style: none;
         display: grid;
         gap: 10px;
       }
 
-      .bullet-list li {
+      .meta-list li {
         display: flex;
-        gap: 10px;
+        justify-content: space-between;
+        gap: 12px;
         align-items: flex-start;
+        padding-top: 10px;
+        border-top: 1px solid rgba(56, 44, 30, 0.08);
         color: var(--muted);
+        font-size: 14px;
+      }
+
+      .meta-list li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .meta-list span:last-child {
+        text-align: right;
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .qr-panel {
+        display: grid;
+        gap: 18px;
+        justify-items: center;
+        text-align: center;
+        padding: 28px;
+        border-radius: 24px;
+        border: 1px dashed rgba(15, 118, 110, 0.2);
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      .qr-code {
+        width: min(260px, 68vw);
+        aspect-ratio: 1;
+        border-radius: 22px;
+        background:
+          linear-gradient(90deg, rgba(15, 118, 110, 0.12) 10%, transparent 10%, transparent 20%, rgba(15, 118, 110, 0.12) 20%, rgba(15, 118, 110, 0.12) 30%, transparent 30%, transparent 40%, rgba(15, 118, 110, 0.12) 40%, rgba(15, 118, 110, 0.12) 50%, transparent 50%, transparent 60%, rgba(15, 118, 110, 0.12) 60%, rgba(15, 118, 110, 0.12) 70%, transparent 70%, transparent 80%, rgba(15, 118, 110, 0.12) 80%),
+          linear-gradient(rgba(15, 118, 110, 0.12) 10%, transparent 10%, transparent 20%, rgba(15, 118, 110, 0.12) 20%, rgba(15, 118, 110, 0.12) 30%, transparent 30%, transparent 40%, rgba(15, 118, 110, 0.12) 40%, rgba(15, 118, 110, 0.12) 50%, transparent 50%, transparent 60%, rgba(15, 118, 110, 0.12) 60%, rgba(15, 118, 110, 0.12) 70%, transparent 70%, transparent 80%, rgba(15, 118, 110, 0.12) 80%);
+        background-size: 100% 100%;
+        border: 12px solid #fff;
+        box-shadow: inset 0 0 0 1px rgba(56, 44, 30, 0.06);
+      }
+
+      .summary-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .viewport[data-size="mobile"] .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-tile {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid var(--line);
+      }
+
+      .summary-tile strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .summary-tile span {
+        display: block;
         line-height: 1.6;
       }
 
-      .bullet-list li::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        margin-top: 8px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #0f766e, #164e63);
-        flex: 0 0 auto;
-      }
-
-      .cta-row {
+      .footer-actions {
         display: flex;
         gap: 12px;
         flex-wrap: wrap;
       }
 
       .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
         min-height: 46px;
         padding: 0 18px;
-        border-radius: var(--radius-sm);
-        border: 1px solid rgba(67, 53, 39, 0.08);
-        background: rgba(255, 250, 244, 0.82);
+        border-radius: var(--radius-pill);
+        border: 1px solid rgba(56, 44, 30, 0.08);
+        background: rgba(255, 255, 255, 0.86);
         color: var(--text);
+        font-size: 14px;
         font-weight: 700;
       }
 
@@ -573,912 +598,737 @@
         color: #fff;
       }
 
-      .signal-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      .app-frame[data-viewport="mobile"] .signal-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .signal {
-        padding: 14px;
-        border-radius: 18px;
-        background: rgba(255, 250, 244, 0.76);
-        border: 1px solid rgba(67, 53, 39, 0.08);
-      }
-
-      .signal strong {
-        display: block;
-        margin-bottom: 8px;
-        font-size: 14px;
-      }
-
-      .signal span {
-        color: var(--muted);
-        line-height: 1.55;
-        font-size: 14px;
-      }
-
-      .footnote {
-        margin-top: 18px;
-        padding: 16px 18px;
-        border-radius: 18px;
-        background: rgba(255, 250, 244, 0.78);
-        border: 1px dashed rgba(67, 53, 39, 0.16);
-        color: var(--muted);
-        line-height: 1.65;
-      }
-
-      @media (max-width: 1024px) {
-        .workspace {
-          grid-template-columns: 1fr;
-        }
-
-        .sidebar {
-          position: static;
-        }
-
-        .hero-top,
-        .preview-header,
-        .app-nav {
+      @media (max-width: 960px) {
+        .app-header {
           flex-direction: column;
+          align-items: flex-start;
         }
 
-        .nav-summary {
+        .header-status {
           justify-content: flex-start;
+        }
+
+        .page-grid.two,
+        .page-grid.three {
+          grid-template-columns: 1fr;
         }
       }
 
       @media (max-width: 760px) {
-        .page {
-          width: min(100% - 20px, 1360px);
-          margin-top: 18px;
+        .workbench {
+          width: calc(100% - 16px);
+          margin-top: 10px;
         }
 
-        .hero,
-        .sidebar,
-        .preview-area {
-          padding: 18px;
-        }
-
-        .hero-grid,
-        .content-grid,
-        .signal-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .browser-shell {
-          padding: 10px;
-          border-radius: 24px;
-        }
-
-        .screen {
-          padding: 16px;
+        .control-strip,
+        .device-shell,
+        .screen,
+        .side-nav {
+          padding-left: 14px;
+          padding-right: 14px;
         }
       }
     </style>
   </head>
   <body>
-    <div class="page">
-      <section class="hero">
-        <div class="hero-top">
-          <div class="hero-copy">
-            <div class="eyebrow">HTML Mock / User Review</div>
-            <h1>Web setup/admin 用户视角原型</h1>
-            <p>
-              这份原型只回答一件事：普通用户在 setup 和 admin
-              里，第一眼应该看到什么、下一步应该点什么、什么信息该被折叠。它不是技术面板，也不是最终视觉稿。
-            </p>
-          </div>
-          <div class="hero-links">
-            <a class="hero-link" href="./web-onboarding-admin-user-view.md">打开用户视角文档</a>
-            <a class="hero-link" href="./web-onboarding-admin-workflow-prd.md">打开流程 PRD</a>
-          </div>
+    <div class="workbench">
+      <div class="control-strip">
+        <div class="control-row">
+          <span class="control-label">画面</span>
+          <div class="pill-list" id="view-list"></div>
         </div>
-        <div class="hero-grid">
-          <div class="hero-stat">
-            <strong>这版重点</strong>
-            <span>把“先能用，再慢慢补全”做成显式状态，而不是让用户一直卡在“未完成首次配置”。</span>
-          </div>
-          <div class="hero-stat">
-            <strong>页面对象</strong>
-            <span>对用户统一写“飞书应用”，不再把内部实现术语直接当作页面对象名。</span>
-          </div>
-          <div class="hero-stat">
-            <strong>查看方式</strong>
-            <span>左侧切场景，右侧切桌面/手机预览；每个屏只保留当前任务需要的信息层级。</span>
-          </div>
+        <div class="control-row">
+          <span class="control-label">预览</span>
+          <div class="pill-list" id="viewport-list"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="workspace">
-        <aside class="sidebar panel">
-          <div class="sidebar-section">
-            <h3>场景</h3>
-            <div class="chip-list" id="scenario-list"></div>
-          </div>
-          <div class="sidebar-section">
-            <h3>预览</h3>
-            <div class="viewport-toggle" id="viewport-toggle"></div>
-          </div>
-          <div class="sidebar-section">
-            <h3>当前场景里的页面</h3>
-            <div class="chip-list" id="screen-list"></div>
-          </div>
-        </aside>
-
-        <main class="preview-area panel">
-          <div class="preview-header">
-            <div>
-              <h2 id="preview-title"></h2>
-              <p id="preview-subtitle"></p>
+      <div class="viewport-bar">
+        <div class="device-shell">
+          <div class="browser-top">
+            <div class="browser-dots">
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
-            <div id="preview-status"></div>
+            <div class="browser-address" id="browser-address"></div>
           </div>
 
-          <div class="browser-shell">
-            <div class="browser-topbar">
-              <div class="dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <div class="address" id="preview-address"></div>
-            </div>
-            <div class="app-frame" id="app-frame" data-viewport="desktop">
-              <div class="app-nav">
-                <div class="brand">
-                  <div class="brand-mark">CR</div>
-                  <div>
-                    <small id="nav-kicker"></small>
-                    <strong id="nav-title"></strong>
-                  </div>
+          <div class="viewport" id="viewport" data-size="desktop">
+            <div class="app-header">
+              <div class="brand">
+                <div class="brand-mark">CR</div>
+                <div>
+                  <small id="brand-kicker"></small>
+                  <strong id="brand-title"></strong>
                 </div>
-                <div class="nav-summary" id="nav-summary"></div>
               </div>
-              <div class="frame-body">
-                <aside class="step-rail">
-                  <h4 id="step-rail-title"></h4>
-                  <div class="step-list" id="step-list"></div>
-                </aside>
-                <section class="screen">
-                  <div class="screen-hero">
-                    <div class="screen-meta" id="screen-meta"></div>
-                    <h3 id="screen-title"></h3>
-                    <p id="screen-body"></p>
-                    <div class="cta-row" id="cta-row"></div>
-                  </div>
-                  <div class="signal-grid" id="signal-grid"></div>
-                  <div class="content-grid" id="content-grid"></div>
-                  <div class="footnote" id="screen-footnote"></div>
-                </section>
-              </div>
+              <div class="header-status" id="header-status"></div>
+            </div>
+
+            <div class="app-body">
+              <aside class="side-nav">
+                <p class="side-nav-title" id="side-nav-title"></p>
+                <div class="side-items" id="side-items"></div>
+              </aside>
+              <main class="screen" id="screen"></main>
             </div>
           </div>
-        </main>
-      </section>
+        </div>
+      </div>
     </div>
 
     <script>
-      const scenarios = [
+      const views = [
         {
-          id: "blocked",
+          id: "setup-blocked",
           label: "环境阻断",
-          short: "先停在环境检查页",
           route: "/setup",
-          navKicker: "Setup / 环境门槛",
-          summary: ["不出现飞书应用配置入口", "主按钮只剩重新检查", "技术细节不默认铺满页面"],
-          screens: [
-            {
-              id: "blocked-env",
-              tab: "环境未通过",
-              pageTitle: "先把这台机器准备好",
-              subtitle: "基础环境没过时，setup 不该继续带用户去碰飞书应用。",
-              status: { tone: "danger", label: "当前不能继续" },
-              stepRailTitle: "本次 setup",
-              steps: [
-                { title: "环境检查", state: "active" },
-                { title: "现状确认", state: "pending" },
-                { title: "接入飞书应用", state: "pending" },
-                { title: "能力检查", state: "pending" },
-                { title: "机器设置", state: "pending" },
-              ],
-              meta: ["用户第一步", "阻断型页面", "不暴露后续步骤正文"],
-              title: "这台机器还不能开始配置飞书应用",
-              body: "页面先把阻断项说清楚，用户修好以后再回来继续。默认只展示能直接执行的下一步，不把内部检测字段铺在首屏。",
-              actions: [
-                { label: "重新检查环境", primary: true },
-                { label: "查看修复说明" },
-              ],
-              signals: [
-                { title: "阻断项 1", body: "没有检测到 Codex。先安装或确认环境变量。" },
-                { title: "阻断项 2", body: "运行环境检查没有通过。当前机器还不能稳定运行会话。" },
-                { title: "页面规则", body: "这里不出现“新建飞书应用”或“接入已有飞书应用”入口。" },
-              ],
-              panels: [
-                {
-                  title: "用户此刻应该看到什么",
-                  body: "清楚的阻断状态、一句话原因、两个能执行的下一步。",
-                  bullets: ["标题只讲结果，不讲内部检测模型", "错误详情收进修复说明，不占主界面", "不让用户在坏地基上继续填表"],
-                },
-                {
-                  title: "为什么这样摆",
-                  body: "先把“能不能开始”回答掉，用户就不会把机器问题误解成飞书应用问题。",
-                  bullets: ["setup 入口更像开通向导", "主 CTA 聚焦在恢复可继续状态", "手机端首屏也能看完核心信息"],
-                },
-              ],
-              footnote: "这个场景的关键不是“信息完整”，而是马上告诉用户：先修机器，再谈飞书应用。",
-            },
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "当前不能继续", tone: "danger" },
+            { text: "还没有飞书应用", tone: "warn" },
           ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "current" },
+            { step: "步骤 2", title: "当前状态", state: "" },
+            { step: "步骤 3", title: "接入飞书应用", state: "" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+            { step: "步骤 5", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>先把这台机器准备好</h1>
+              <p>在开始配置飞书应用之前，我们先确认这台机器已经满足最基本的运行要求。</p>
+            </section>
+
+            <div class="callout danger">
+              <strong>这台机器现在还不能继续</strong>
+              <p>这台机器还有基础环境问题没有解决。请先修复下面这些问题，再回来继续配置飞书应用。</p>
+            </div>
+
+            <div class="page-grid two">
+              <section class="surface-card">
+                <h2>需要先修复</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>没有检测到 Codex</strong>
+                    <span>系统暂时找不到 Codex。先把 Codex 安装好，或确认当前环境变量已经配置正确。</span>
+                  </li>
+                  <li>
+                    <strong>运行环境检查没有通过</strong>
+                    <span>这台机器当前还不能稳定运行会话。请先修复运行环境问题，再回来继续。</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="surface-card">
+                <h2>下一步</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>重新检查环境</strong>
+                    <span>修好问题以后，回到这里重新检查。</span>
+                  </li>
+                  <li>
+                    <strong>查看修复说明</strong>
+                    <span>如果你不确定怎么修，可以先看一次说明再回来。</span>
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">重新检查环境</button>
+              <button class="button">查看修复说明</button>
+            </div>
+          `,
         },
         {
-          id: "fresh",
-          label: "首次接入",
-          short: "从零接入一个飞书应用",
+          id: "setup-empty",
+          label: "当前没有飞书应用",
           route: "/setup",
-          navKicker: "Setup / 首次接入",
-          summary: ["先确认环境，再看当前现状", "一次只处理一个飞书应用", "可选增强项不阻断完成"],
-          screens: [
-            {
-              id: "fresh-ready",
-              tab: "环境通过",
-              pageTitle: "环境先过线",
-              subtitle: "通过后再带用户进入后续流程，不把机器问题和飞书应用问题混在一起。",
-              status: { tone: "ok", label: "可以继续" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "active" },
-                { title: "现状确认", state: "pending" },
-                { title: "选择来源", state: "pending" },
-                { title: "能力检查", state: "pending" },
-                { title: "完成", state: "pending" },
-              ],
-              meta: ["通过页", "轻量确认", "只保留一个 CTA"],
-              title: "这台机器已经准备好了",
-              body: "基础环境检查已经通过。接下来先看看当前有没有已经可用的飞书应用，再决定走新建还是接入已有。",
-              actions: [{ label: "继续", primary: true }],
-              signals: [
-                { title: "机器状态", body: "基础要求通过" },
-                { title: "接下来", body: "进入当前现状确认，不直接弹表单" },
-                { title: "用户感知", body: "先确认地基，再处理飞书应用" },
-              ],
-              panels: [
-                {
-                  title: "状态卡",
-                  body: "顶部给一句可继续结论，去掉过长的检测清单。",
-                  bullets: ["状态卡正文只讲“下面要做什么”", "不提前暴露高级选项", "按钮文案直接写“继续”"],
-                },
-                {
-                  title: "设计意图",
-                  body: "避免用户误以为系统已经进入配置，但其实还在卡基础环境。",
-                  bullets: ["建立流程节奏", "保护移动端首屏", "减少跨层理解负担"],
-                },
-              ],
-              footnote: "首次接入流程的第一屏，只需要让用户安心继续，不需要在这里给太多背景说明。",
-            },
-            {
-              id: "fresh-empty",
-              tab: "当前没有飞书应用",
-              pageTitle: "先看一下当前状态",
-              subtitle: "这一页先告诉用户系统现在有什么，而不是立刻把人推进配置表单。",
-              status: { tone: "warn", label: "还没有可用飞书应用" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "active" },
-                { title: "选择来源", state: "pending" },
-                { title: "能力检查", state: "pending" },
-                { title: "完成", state: "pending" },
-              ],
-              meta: ["空状态页", "先讲现状", "再给入口"],
-              title: "当前没有检测到可用飞书应用",
-              body: "你还没有可以直接使用的飞书应用。下一步需要先接入一个。这里不应该同时铺开新建、接入已有、权限检查等大段正文。",
-              actions: [{ label: "开始接入飞书应用", primary: true }],
-              signals: [
-                { title: "已检测数量", body: "0 个" },
-                { title: "推荐动作", body: "开始接入飞书应用" },
-                { title: "不该出现", body: "不把后面 4 步全部展开成长滚动页" },
-              ],
-              panels: [
-                {
-                  title: "页面应该回答",
-                  body: "用户只关心四件事：有没有、几个、状态怎样、下一步怎么走。",
-                  bullets: ["当前有没有飞书应用", "如果有，是几个", "当前推荐处理哪个", "我该点哪个按钮"],
-                },
-                {
-                  title: "文案风格",
-                  body: "所有对象统一叫“飞书应用”，不让用户去猜 bot、应用、接入实例之间的差别。",
-                  bullets: ["对象名一致", "状态名直白", "CTA 只保留主路径"],
-                },
-              ],
-              footnote: "这页是用户判断“系统现在到底已有多少东西”的地方，不是配置中心。",
-            },
-            {
-              id: "fresh-source",
-              tab: "选择来源",
-              pageTitle: "这次要处理哪个飞书应用？",
-              subtitle: "先选路径，再展开对应流程。页面上是卡片，不是一大堆输入框。",
-              status: { tone: "ok", label: "等待选择路径" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "选择来源", state: "active" },
-                { title: "能力检查", state: "pending" },
-                { title: "完成", state: "pending" },
-              ],
-              meta: ["一次只处理一个", "卡片式入口", "不混多个对象"],
-              title: "先选一条最适合你的路径",
-              body: "系统会只处理当前这个飞书应用，不会把多个飞书应用混在一起。新建、接入已有、使用当前已检测到的飞书应用，是三条互斥路径。",
-              actions: [
-                { label: "下一步", primary: true },
-                { label: "返回上一步" },
-              ],
-              signals: [
-                { title: "卡片 1", body: "新建飞书应用。适合第一次接入。" },
-                { title: "卡片 2", body: "接入已有飞书应用。适合后台已建好。" },
-                { title: "交互规则", body: "点击后只展开当前路径，不让页面同时出现多套表单。" },
-              ],
-              panels: [
-                {
-                  title: "卡片排布",
-                  body: "每张卡片只讲适用场景，不先展示具体字段。",
-                  bullets: ["用用途区分，而不是技术差异区分", "桌面端三卡并排，手机端单列", "当前推荐路径可以额外加状态标记"],
-                },
-                {
-                  title: "用户判断成本",
-                  body: "这一页要把“我到底该选哪条路”压到最短，而不是让用户自己读一堆说明后再猜。",
-                  bullets: ["短说明", "强对比标题", "干净的下一步按钮"],
-                },
-              ],
-              footnote: "选择来源页的任务只有一件事：定目标对象。没有必要把后续长内容抢先展示出来。",
-            },
-            {
-              id: "fresh-qr",
-              tab: "扫码创建",
-              pageTitle: "用飞书扫码创建应用",
-              subtitle: "让用户明确知道：系统会自动带回凭据，不要求他扫码后再回来手填。",
-              status: { tone: "ok", label: "正在等待扫码完成" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "选择来源", state: "done" },
-                { title: "接入飞书应用", state: "active" },
-                { title: "能力检查", state: "pending" },
-              ],
-              meta: ["二维码页", "自动拿回凭据", "不让用户猜下一步"],
-              title: "系统会自动创建应用、带回凭据，并继续验证连接",
-              body: "这一屏的核心是信心：扫码后会发生什么、系统会不会自动继续、二维码过期了怎么办，都要直接说出来。",
-              actions: [
-                { label: "我已扫码，继续等待", primary: true },
-                { label: "刷新二维码" },
-                { label: "返回重新选择" },
-              ],
-              signals: [
-                { title: "中心区域", body: "一张清楚的二维码 + 简短解释文案" },
-                { title: "状态提示", body: "正在等待扫码完成" },
-                { title: "用户疑问", body: "不需要再回来补填 App ID / Secret" },
-              ],
-              panels: [
-                {
-                  title: "这页应该说清楚的事",
-                  body: "用户最怕扫码结束后不知道系统到底拿到了什么、还要不要自己补操作。",
-                  bullets: ["会自动创建", "会自动带回凭据", "会自动继续验证连接"],
-                },
-                {
-                  title: "视觉层级",
-                  body: "二维码是绝对主角，其它内容都围绕“帮助用户放心扫码”服务。",
-                  bullets: ["一主两辅按钮", "状态提示不要藏在角落", "错误恢复只保留刷新二维码"],
-                },
-              ],
-              footnote: "如果这里让用户去猜下一步，整个“扫码即接入”的体验就会立刻散掉。",
-            },
-            {
-              id: "fresh-capability",
-              tab: "能力检查",
-              pageTitle: "再确认一下，现在已经能不能开始用",
-              subtitle: "这里不按 scope 列表组织，而按用户能理解的功能组展示。",
-              status: { tone: "warn", label: "现在已经可以开始使用" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "选择来源", state: "done" },
-                { title: "接入飞书应用", state: "done" },
-                { title: "能力检查", state: "active" },
-              ],
-              meta: ["核心能力先看", "增强项可稍后", "不再打卡式逐页过"],
-              title: "这个飞书应用已经能开始用，还有一些增强项可以以后再补",
-              body: "用户首先要知道的是“现在能不能开始用”。然后才是：哪些必须修、哪些可以稍后补，不要把原始权限、事件、回调分别堆成三套用户概念。",
-              actions: [
-                { label: "继续", primary: true },
-                { label: "查看技术详情" },
-              ],
-              signals: [
-                { title: "基础对话与交互", body: "通过。核心必需组，已经可用。" },
-                { title: "单聊状态提醒", body: "可稍后处理。不影响主对话。" },
-                { title: "Markdown 预览", body: "可稍后处理。只是少了预览链接。" },
-              ],
-              panels: [
-                {
-                  title: "能力卡分组",
-                  body: "能力卡首层按用户能感知的事情来分组，而不是让用户去理解 scope / event / callback 的边界。",
-                  bullets: ["基础对话与交互", "单聊状态提醒", "Markdown 预览"],
-                },
-                {
-                  title: "页面结论",
-                  body: "顶部要直接写“现在已经可以开始使用”，不要继续挂着“首次配置未完成”。",
-                  bullets: ["通过项进入摘要", "可补项进入待补全区", "技术详情折叠隐藏"],
-                },
-              ],
-              footnote: "这是整套体验里最关键的一页：它决定用户离开 setup 时，到底感受到“已经能用”还是“我又被卡住了”。",
-            },
-            {
-              id: "fresh-finish",
-              tab: "完成页",
-              pageTitle: "已经可以开始使用了",
-              subtitle: "完成页只告诉用户三件事：现在能用、还差什么、下一步去哪。",
-              status: { tone: "ok", label: "setup 可以结束" },
-              stepRailTitle: "首次开通",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "选择来源", state: "done" },
-                { title: "能力检查", state: "done" },
-                { title: "完成", state: "active" },
-              ],
-              meta: ["短完成页", "强调可用", "进入 admin"],
-              title: "这台机器已经完成基本开通",
-              body: "接下来你可以先开始对话，剩下的增强项以后再补。完成页不应该像一个总结报告，也不该继续追着用户做低优先级补全。",
-              actions: [
-                { label: "进入管理页", primary: true },
-                { label: "开始第一次对话" },
-              ],
-              signals: [
-                { title: "当前可用飞书应用", body: "开发者小助手" },
-                { title: "待补全项", body: "单聊状态提醒、Markdown 预览" },
-                { title: "完成标准", body: "基础环境通过 + 至少一个飞书应用可用 + 机器级选项已有明确决定" },
-              ],
-              panels: [
-                {
-                  title: "为什么这页要短",
-                  body: "当用户已经可用时，这一页最不该做的事，就是再把人拖回技术核对和打卡流程里。",
-                  bullets: ["明确结束感", "只保留 1 个主去向", "待补全项摘要化展示"],
-                },
-                {
-                  title: "下一步",
-                  body: "用户应自然转入 admin，而不是被暗示“还得回 setup 继续做”。",
-                  bullets: ["进入管理页", "立即开始对话", "以后再补增强项"],
-                },
-              ],
-              footnote: "完成页的语气要像“你已经可以工作了”，而不是“还有一堆没打卡的东西”。",
-            },
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "基础环境已通过", tone: "ok" },
+            { text: "当前没有可用飞书应用", tone: "warn" },
           ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "current" },
+            { step: "步骤 3", title: "接入飞书应用", state: "" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+            { step: "步骤 5", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>先看一下当前状态</h1>
+              <p>我们先帮你看一眼，这台机器上现在有没有已经可用的飞书应用。</p>
+            </section>
+
+            <div class="callout warn">
+              <strong>当前没有检测到可用飞书应用</strong>
+              <p>你还没有可以直接使用的飞书应用。下一步需要先接入一个。</p>
+            </div>
+
+            <div class="page-grid two">
+              <section class="surface-card">
+                <h2>当前情况</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>基础环境</strong>
+                    <span>已经通过，可以继续。</span>
+                  </li>
+                  <li>
+                    <strong>飞书应用</strong>
+                    <span>还没有检测到可用对象。</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="surface-card">
+                <h2>接下来会做什么</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>新建飞书应用</strong>
+                    <span>适合第一次接入，系统会引导你扫码创建。</span>
+                  </li>
+                  <li>
+                    <strong>接入已有飞书应用</strong>
+                    <span>适合你已经在飞书后台建好应用的情况。</span>
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">开始接入飞书应用</button>
+            </div>
+          `,
         },
         {
-          id: "detected",
+          id: "setup-source",
+          label: "选择来源",
+          route: "/setup",
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "基础环境已通过", tone: "ok" },
+            { text: "正在选择来源", tone: "ok" },
+          ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "done" },
+            { step: "步骤 3", title: "接入飞书应用", state: "current" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+            { step: "步骤 5", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>这次要处理哪个飞书应用？</h1>
+              <p>先选一条最适合你的路径。我们会只处理当前这个飞书应用，不会把多个飞书应用混在一起。</p>
+            </section>
+
+            <div class="page-grid three">
+              <article class="option-card selected">
+                <span class="eyebrow ok">推荐</span>
+                <h3>新建飞书应用</h3>
+                <p>适合第一次接入。系统会引导你扫码创建，并自动带回凭据。</p>
+              </article>
+              <article class="option-card">
+                <span class="eyebrow neutral">已有配置</span>
+                <h3>接入已有飞书应用</h3>
+                <p>适合你已经在飞书后台建好应用，只需要把它接到这台机器上的情况。</p>
+              </article>
+              <article class="option-card">
+                <span class="eyebrow neutral">已检测到</span>
+                <h3>使用当前已检测到的飞书应用</h3>
+                <p>适合系统已经发现一个飞书应用，而且你想直接继续用它的情况。</p>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">下一步</button>
+              <button class="button">返回上一步</button>
+            </div>
+          `,
+        },
+        {
+          id: "setup-qr",
+          label: "扫码创建",
+          route: "/setup",
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "新建飞书应用", tone: "ok" },
+            { text: "正在等待扫码完成", tone: "ok" },
+          ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "done" },
+            { step: "步骤 3", title: "接入飞书应用", state: "current" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+            { step: "步骤 5", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>用飞书扫码创建应用</h1>
+              <p>请用飞书扫码。系统会自动创建应用、带回凭据，并在完成后继续验证连接。</p>
+            </section>
+
+            <section class="qr-panel">
+              <div class="qr-code" aria-hidden="true"></div>
+              <div>
+                <strong style="font-size: 18px;">正在等待扫码完成</strong>
+                <p style="margin-top: 10px; color: var(--muted); line-height: 1.65;">如果二维码过期了，可以刷新后重新扫码。</p>
+              </div>
+            </section>
+
+            <div class="footer-actions">
+              <button class="button primary">我已扫码，继续等待</button>
+              <button class="button">刷新二维码</button>
+              <button class="button">返回重新选择</button>
+            </div>
+          `,
+        },
+        {
+          id: "setup-capability",
+          label: "能力检查",
+          route: "/setup",
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "现在已经可以开始使用", tone: "ok" },
+            { text: "还有待补全项", tone: "warn" },
+          ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "done" },
+            { step: "步骤 3", title: "接入飞书应用", state: "done" },
+            { step: "步骤 4", title: "能力检查", state: "current" },
+            { step: "步骤 5", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>再确认一下，现在已经能不能开始用</h1>
+              <p>基础项需要先准备好；增强项如果现在还没补齐，也可以以后再处理。</p>
+            </section>
+
+            <div class="callout ok">
+              <strong>现在已经可以开始使用</strong>
+              <p>还有一些增强项可以稍后补齐，不影响你现在开始对话。</p>
+            </div>
+
+            <div class="page-grid three">
+              <article class="cap-card">
+                <span class="eyebrow ok">已通过</span>
+                <h3>基础对话与交互</h3>
+                <p>让这个飞书应用能正常收发消息，在单聊和群聊里工作，处理图片与引用内容，并显示基础聊天过程反馈。</p>
+              </article>
+              <article class="cap-card">
+                <span class="eyebrow warn">可稍后处理</span>
+                <h3>单聊状态提醒</h3>
+                <p>当这个飞书应用在单聊里等待你继续输入时，可以在会话列表里显眼提醒你回来处理。</p>
+              </article>
+              <article class="cap-card">
+                <span class="eyebrow warn">可稍后处理</span>
+                <h3>Markdown 预览</h3>
+                <p>把回复里的本地文档链接自动变成飞书文档预览链接。</p>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">继续</button>
+              <button class="button">稍后再说</button>
+            </div>
+          `,
+        },
+        {
+          id: "setup-finish",
+          label: "完成页",
+          route: "/setup",
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "基本开通已完成", tone: "ok" },
+            { text: "可以进入管理页", tone: "ok" },
+          ],
+          navTitle: "开通流程",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "done" },
+            { step: "步骤 3", title: "接入飞书应用", state: "done" },
+            { step: "步骤 4", title: "能力检查", state: "done" },
+            { step: "步骤 5", title: "完成", state: "current" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>已经可以开始使用了</h1>
+              <p>这台机器已经完成基本开通。接下来你可以先开始对话，剩下的增强项以后再补。</p>
+            </section>
+
+            <div class="summary-grid">
+              <article class="summary-tile">
+                <strong>当前可用飞书应用</strong>
+                <span>开发者小助手</span>
+              </article>
+              <article class="summary-tile">
+                <strong>待补全项</strong>
+                <span>单聊状态提醒、Markdown 预览</span>
+              </article>
+              <article class="summary-tile">
+                <strong>自动启动</strong>
+                <span>稍后再说</span>
+              </article>
+              <article class="summary-tile">
+                <strong>VS Code</strong>
+                <span>以后再处理</span>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">进入管理页</button>
+              <button class="button">开始第一次对话</button>
+            </div>
+          `,
+        },
+        {
+          id: "setup-detected",
           label: "已有可用飞书应用",
-          short: "系统已经检测到可用对象",
           route: "/setup?app=legacy-default",
-          navKicker: "Setup / 已有可用对象",
-          summary: ["setup 不该逼用户重走首次接入", "允许直接继续使用当前飞书应用", "增强项进入待补全，不阻断"],
-          screens: [
-            {
-              id: "detected-existing",
-              tab: "已检测到可用对象",
-              pageTitle: "系统已经检测到一个可用飞书应用",
-              subtitle: "这时页面应该帮助用户直接继续，而不是默认把人拉回本地创建路径。",
-              status: { tone: "ok", label: "现在可以直接继续使用" },
-              stepRailTitle: "快速确认",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "active" },
-                { title: "选择来源", state: "pending" },
-                { title: "能力检查", state: "pending" },
-                { title: "完成", state: "pending" },
-              ],
-              meta: ["检测驱动", "不重走老流程", "现状先行"],
-              title: "你可以继续使用当前飞书应用，也可以先看看还有没有待补全项",
-              body: "当系统已经有真相时，setup 该做的是收口，而不是坚持要求用户在本页面重新走完接入动作。",
-              actions: [
-                { label: "继续使用当前飞书应用", primary: true },
-                { label: "查看待补全项" },
-              ],
-              signals: [
-                { title: "名称", body: "团队助手" },
-                { title: "当前状态", body: "可用，但还有待补全项" },
-                { title: "页面行为", body: "不默认展开本地凭证表单" },
-              ],
-              panels: [
-                {
-                  title: "应该让用户理解什么",
-                  body: "当前飞书应用已经能用。现在要做的，是决定直接继续，还是顺手补增强项。",
-                  bullets: ["继续使用当前飞书应用", "查看待补全项", "不被拖回“未完成首次配置”"],
-                },
-                {
-                  title: "状态来源",
-                  body: "完成语义要以当前检测结果为准，而不是看用户是否在本页面重新点过某个按钮。",
-                  bullets: ["实时检测优先", "本地打卡记录降级", "可用但未补全是合法稳态"],
-                },
-              ],
-              footnote: "这类用户最容易被旧流程惹毛，因为他明明已经能用，却还被页面判成“没做完”。",
-            },
-            {
-              id: "detected-capability",
-              tab: "快速能力确认",
-              pageTitle: "现在已经可以开始使用",
-              subtitle: "已有可用飞书应用场景里，能力页的主要任务是摘要和补全，不是重新认证一遍存在性。",
-              status: { tone: "warn", label: "还有增强项可稍后处理" },
-              stepRailTitle: "快速确认",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "能力检查", state: "active" },
-                { title: "完成", state: "pending" },
-              ],
-              meta: ["摘要优先", "增强项后置", "不把已通过项铺满"],
-              title: "核心能力已通过，剩下的是增强项补全",
-              body: "对这种场景，能力页应该更像摘要卡：告诉用户现在能用，剩下哪些是以后补的加分项。",
-              actions: [
-                { label: "进入管理页", primary: true },
-                { label: "现在去处理待补全项" },
-              ],
-              signals: [
-                { title: "基础对话与交互", body: "通过" },
-                { title: "单聊状态提醒", body: "待补全，可稍后处理" },
-                { title: "Markdown 预览", body: "待补全，可稍后处理" },
-              ],
-              panels: [
-                {
-                  title: "首屏顺序",
-                  body: "先给出“现在已经能用”的结果，再给待补全项列表。",
-                  bullets: ["可用结论先出现", "增强项不抢主 CTA", "技术详情藏在二级入口"],
-                },
-                {
-                  title: "为什么要这么短",
-                  body: "这种用户不需要重新接受一遍 onboarding 教育，他只需要一个确认与去向。",
-                  bullets: ["减少打扰", "降低重复操作", "尊重当前已有状态"],
-                },
-              ],
-              footnote: "这里的 mock 有意做得更像“摘要页”，因为重复 onboarding 体验正是这一类用户最讨厌的点。",
-            },
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "已检测到可用飞书应用", tone: "ok" },
+            { text: "可直接继续", tone: "ok" },
           ],
+          navTitle: "快速确认",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "current" },
+            { step: "步骤 3", title: "能力检查", state: "" },
+            { step: "步骤 4", title: "完成", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>系统已经检测到一个可用飞书应用</h1>
+              <p>你可以直接继续使用它，也可以先看看还有没有待补全项。</p>
+            </section>
+
+            <article class="app-card selected">
+              <span class="eyebrow ok">当前推荐</span>
+              <h3>团队助手</h3>
+              <p>现在已经可以正常使用。你也可以稍后回来补全单聊状态提醒和 Markdown 预览。</p>
+              <ul class="meta-list">
+                <li><span>当前状态</span><span>可用，但还有待补全项</span></li>
+                <li><span>来源</span><span>已检测到的现有飞书应用</span></li>
+              </ul>
+            </article>
+
+            <div class="footer-actions">
+              <button class="button primary">继续使用当前飞书应用</button>
+              <button class="button">查看待补全项</button>
+            </div>
+          `,
         },
         {
-          id: "external",
+          id: "setup-external",
           label: "外部接管",
-          short: "只读但可用的飞书应用",
           route: "/setup?app=runtime-managed",
-          navKicker: "Setup / 外部接管",
-          summary: ["用户能看懂为什么是只读", "允许验证与查看状态", "不再误导进可编辑表单"],
-          screens: [
-            {
-              id: "external-readonly",
-              tab: "只读确认页",
-              pageTitle: "继续使用当前已检测到的飞书应用",
-              subtitle: "这个飞书应用已经存在，但这里不会修改它在飞书平台上的原始配置。",
-              status: { tone: "ok", label: "外部接管 / 只读" },
-              stepRailTitle: "外部接管收口",
-              steps: [
-                { title: "环境检查", state: "done" },
-                { title: "现状确认", state: "done" },
-                { title: "当前飞书应用", state: "active" },
-                { title: "能力检查", state: "pending" },
-              ],
-              meta: ["只读但可用", "解释权归页面", "不给死流程"],
-              title: "你可以先验证它现在是否可用",
-              body: "用户应该知道自己能做什么、不能做什么：能看状态、能做验证、能换一个飞书应用；但不会在这里直接改动飞书平台配置。",
-              actions: [
-                { label: "验证当前飞书应用", primary: true },
-                { label: "换一个飞书应用" },
-              ],
-              signals: [
-                { title: "名称", body: "团队生产助手" },
-                { title: "状态", body: "可用，但配置来源于外部" },
-                { title: "可执行动作", body: "验证、查看详情、切换对象" },
-              ],
-              panels: [
-                {
-                  title: "只读提示应该说人话",
-                  body: "不是简单显示一个 technical flag，而是明确解释：为什么只读、这里能做什么。",
-                  bullets: ["这个飞书应用已经存在", "这里不会修改飞书平台配置", "你仍然可以验证或换一个对象"],
-                },
-                {
-                  title: "避免死流程",
-                  body: "以前最糟的体验，是外部接管对象也被推入本地可编辑表单，最后用户发现根本改不了。",
-                  bullets: ["不展示可编辑凭证输入", "不要求重新创建", "不制造伪可操作感"],
-                },
-              ],
-              footnote: "只读场景的重点，是让用户尽快建立稳定预期，而不是让他一层层试错后才发现不能改。",
-            },
+          kicker: "Setup",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "外部接管", tone: "warn" },
+            { text: "只读", tone: "warn" },
           ],
+          navTitle: "快速确认",
+          navItems: [
+            { step: "步骤 1", title: "环境检查", state: "done" },
+            { step: "步骤 2", title: "当前状态", state: "done" },
+            { step: "步骤 3", title: "当前飞书应用", state: "current" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>继续使用当前已检测到的飞书应用</h1>
+              <p>系统已经发现了一个飞书应用。你可以先验证它现在是否可用。</p>
+            </section>
+
+            <article class="app-card">
+              <span class="eyebrow warn">只读</span>
+              <h3>团队生产助手</h3>
+              <p>这个飞书应用已经存在。这里不会修改它在飞书平台上的原始配置。</p>
+              <ul class="meta-list">
+                <li><span>当前状态</span><span>可用，但配置来源于外部</span></li>
+                <li><span>可执行动作</span><span>验证、查看详情、换一个飞书应用</span></li>
+              </ul>
+            </article>
+
+            <div class="footer-actions">
+              <button class="button primary">验证当前飞书应用</button>
+              <button class="button">换一个飞书应用</button>
+            </div>
+          `,
         },
         {
-          id: "admin",
-          label: "日常管理",
-          short: "setup 完成后的稳态 admin",
+          id: "admin-home",
+          label: "Admin 首页",
           route: "/admin",
-          navKicker: "Admin / 稳态管理",
-          summary: ["首页先看机器和飞书应用状态", "待补全项进入管理语境", "再接一个飞书应用走 admin 子流程"],
-          screens: [
-            {
-              id: "admin-home",
-              tab: "admin 首页",
-              pageTitle: "本地管理页",
-              subtitle: "进入 admin 后应该先看到稳态信息，而不是重新掉回 setup 向导。",
-              status: { tone: "ok", label: "这台机器当前可用" },
-              stepRailTitle: "Admin",
-              steps: [
-                { title: "状态总览", state: "active" },
-                { title: "飞书应用列表", state: "pending" },
-                { title: "待补全项", state: "pending" },
-                { title: "机器设置", state: "pending" },
-              ],
-              meta: ["稳态首页", "先给全局答案", "不再是 setup 中转页"],
-              title: "这里会显示这台机器和各个飞书应用的当前状态",
-              body: "首页先回答三件事：机器现在可不可用、当前有哪些飞书应用、哪些已经可用但还有待补全项。用户不该在 admin 首页还被提醒“回 setup 完成首次配置”。",
-              actions: [
-                { label: "新增飞书应用", primary: true },
-                { label: "查看待补全项" },
-              ],
-              signals: [
-                { title: "机器状态", body: "可用" },
-                { title: "飞书应用", body: "2 个，其中 1 个可用、1 个外部接管" },
-                { title: "待补全项", body: "还有 2 个增强项可以稍后处理" },
-              ],
-              panels: [
-                {
-                  title: "首页应该直接看懂什么",
-                  body: "用户一眼就能知道：现在是否正常、下一步该点哪、问题大概在哪一层。",
-                  bullets: ["机器总状态", "飞书应用列表", "待补全项概览"],
-                },
-                {
-                  title: "文案边界",
-                  body: "这里是管理页，不是架构面板。底层 runtime、gateway、state machine 都不该默认出现在主界面。",
-                  bullets: ["主界面用户化", "技术详情按需展开", "管理动作语义明确"],
-                },
-              ],
-              footnote: "admin 首页的气质应该是“我来管理”，而不是“我还在补做 onboarding”。",
-            },
-            {
-              id: "admin-detail",
-              tab: "飞书应用详情",
-              pageTitle: "开发者小助手",
-              subtitle: "详情页也应该像状态卡，而不是一堆底层字段拼在一起。",
-              status: { tone: "warn", label: "可用，但还有待补全项" },
-              stepRailTitle: "Admin / 飞书应用详情",
-              steps: [
-                { title: "状态总览", state: "done" },
-                { title: "飞书应用详情", state: "active" },
-                { title: "待补全项", state: "pending" },
-              ],
-              meta: ["状态卡式详情", "先讲可用性", "再讲待补全"],
-              title: "这里会显示这个飞书应用现在能不能用、还缺什么，以及你接下来最适合做什么",
-              body: "详情页直接回答：能不能用、卡在哪里、还有哪些增强项没补、如果它是只读的这里还能做什么。不用让用户自己在原始字段里推理。",
-              actions: [
-                { label: "查看待补全项", primary: true },
-                { label: "重新验证连接" },
-              ],
-              signals: [
-                { title: "当前状态", body: "可用" },
-                { title: "待补全项", body: "单聊状态提醒、Markdown 预览" },
-                { title: "下一步", body: "现在继续补全，或者稍后再说" },
-              ],
-              panels: [
-                {
-                  title: "首屏结构",
-                  body: "状态结论、推荐动作、补充说明，三段式足够表达主信息。",
-                  bullets: ["可用结论在最上方", "推荐动作紧跟其后", "原始检查项留到下方或折叠区"],
-                },
-                {
-                  title: "和 setup 的关系",
-                  body: "admin 里补增强项是自然延续，不应再用“首次配置还没完成”去给用户制造心理负担。",
-                  bullets: ["继续补全", "查看待补全项", "不再提示回 setup"],
-                },
-              ],
-              footnote: "详情页应该增强掌控感，而不是把用户重新扔回一个复杂向导里。",
-            },
-            {
-              id: "admin-add",
-              tab: "admin 内新增飞书应用",
-              pageTitle: "新增飞书应用",
-              subtitle: "这个子流程本质上复用 setup 里的飞书应用接入主线，但发生在 admin 里。",
-              status: { tone: "ok", label: "独立子流程" },
-              stepRailTitle: "Admin / 新增飞书应用",
-              steps: [
-                { title: "选择来源", state: "active" },
-                { title: "接入", state: "pending" },
-                { title: "验证", state: "pending" },
-                { title: "能力检查", state: "pending" },
-              ],
-              meta: ["admin 内部子流程", "不踢回 setup", "一次只接一个"],
-              title: "再接入一个新的飞书应用，或继续使用当前已经检测到的飞书应用",
-              body: "这里不应把用户踢回 setup 重走整套首次安装。只要复用飞书应用接入主线，把范围收敛在“新增或选择一个飞书应用”上即可。",
-              actions: [
-                { label: "下一步", primary: true },
-                { label: "返回管理页" },
-              ],
-              signals: [
-                { title: "路径 1", body: "新建飞书应用" },
-                { title: "路径 2", body: "接入已有飞书应用" },
-                { title: "路径 3", body: "继续使用当前已检测到的飞书应用" },
-              ],
-              panels: [
-                {
-                  title: "为什么不回 setup",
-                  body: "admin 的上下文已经是“稳定管理”，再把用户踢回 setup 会让角色定位变得很乱。",
-                  bullets: ["admin 自己承接新增对象", "setup 保持一次性开通语义", "减少跨页面心智切换"],
-                },
-                {
-                  title: "复用范围",
-                  body: "复用的是接入主线，不是把 setup 的整套机器级选项和首次完成语义一起搬过来。",
-                  bullets: ["选择来源", "接入与验证", "能力检查摘要"],
-                },
-              ],
-              footnote: "新增飞书应用是 admin 的日常动作，应该像“再添加一个对象”，而不是像“再重新安装一次产品”。",
-            },
+          kicker: "Admin",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "这台机器当前可用", tone: "ok" },
+            { text: "还有 2 个增强项", tone: "warn" },
           ],
+          navTitle: "管理页",
+          navItems: [
+            { step: "总览", title: "当前状态", state: "current" },
+            { step: "飞书应用", title: "应用列表", state: "" },
+            { step: "待补全项", title: "继续补全", state: "" },
+            { step: "机器设置", title: "自动启动与 VS Code", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>本地管理页</h1>
+              <p>这里会显示这台机器和各个飞书应用的当前状态。你也可以在这里继续补全增强项，或者再接入一个新的飞书应用。</p>
+            </section>
+
+            <div class="page-grid two">
+              <article class="app-card selected">
+                <span class="eyebrow ok">可用，但还有待补全项</span>
+                <h3>开发者小助手</h3>
+                <p>现在已经可以正常使用。你也可以稍后回来补全单聊状态提醒和 Markdown 预览。</p>
+                <ul class="meta-list">
+                  <li><span>推荐动作</span><span>查看待补全项</span></li>
+                  <li><span>最后状态</span><span>刚刚检查通过</span></li>
+                </ul>
+              </article>
+
+              <article class="app-card">
+                <span class="eyebrow warn">外部接管</span>
+                <h3>团队生产助手</h3>
+                <p>当前可以查看状态，但不会在这里修改它在飞书平台上的原始配置。</p>
+                <ul class="meta-list">
+                  <li><span>推荐动作</span><span>查看只读状态说明</span></li>
+                  <li><span>当前状态</span><span>可用</span></li>
+                </ul>
+              </article>
+            </div>
+
+            <div class="page-grid two">
+              <article class="setting-card">
+                <h3>机器设置</h3>
+                <p>自动启动：稍后处理</p>
+                <p>VS Code：以后再处理</p>
+              </article>
+              <article class="setting-card">
+                <h3>待补全项</h3>
+                <p>还有 2 个增强项可以稍后处理，不影响现在开始使用。</p>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">新增飞书应用</button>
+              <button class="button">查看待补全项</button>
+            </div>
+          `,
+        },
+        {
+          id: "admin-detail",
+          label: "飞书应用详情",
+          route: "/admin/apps/dev-helper",
+          kicker: "Admin",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "当前可用", tone: "ok" },
+            { text: "还有待补全项", tone: "warn" },
+          ],
+          navTitle: "飞书应用详情",
+          navItems: [
+            { step: "总览", title: "当前状态", state: "done" },
+            { step: "详情", title: "开发者小助手", state: "current" },
+            { step: "待补全项", title: "继续补全", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>开发者小助手</h1>
+              <p>这里会显示这个飞书应用现在能不能用、还缺什么，以及你接下来最适合做什么。</p>
+            </section>
+
+            <div class="callout ok">
+              <strong>当前可用</strong>
+              <p>还有 2 个增强项可以稍后补齐，不影响现在开始使用。</p>
+            </div>
+
+            <div class="page-grid two">
+              <article class="surface-card">
+                <h2>当前状态</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>基础对话与交互</strong>
+                    <span>已经通过，可以正常开始对话。</span>
+                  </li>
+                  <li>
+                    <strong>连接状态</strong>
+                    <span>最近一次验证通过。</span>
+                  </li>
+                </ul>
+              </article>
+
+              <article class="surface-card">
+                <h2>待补全项</h2>
+                <ul class="item-list">
+                  <li>
+                    <strong>单聊状态提醒</strong>
+                    <span>可稍后处理。</span>
+                  </li>
+                  <li>
+                    <strong>Markdown 预览</strong>
+                    <span>可稍后处理。</span>
+                  </li>
+                </ul>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">查看待补全项</button>
+              <button class="button">重新验证连接</button>
+            </div>
+          `,
+        },
+        {
+          id: "admin-add",
+          label: "Admin 内新增飞书应用",
+          route: "/admin/apps/new",
+          kicker: "Admin",
+          title: "Codex Remote",
+          headerStatus: [
+            { text: "新增飞书应用", tone: "ok" },
+            { text: "独立子流程", tone: "ok" },
+          ],
+          navTitle: "新增飞书应用",
+          navItems: [
+            { step: "步骤 1", title: "选择来源", state: "current" },
+            { step: "步骤 2", title: "接入", state: "" },
+            { step: "步骤 3", title: "验证", state: "" },
+            { step: "步骤 4", title: "能力检查", state: "" },
+          ],
+          body: `
+            <section class="page-hero">
+              <h1>新增飞书应用</h1>
+              <p>再接入一个新的飞书应用，或继续使用当前已经检测到的飞书应用。</p>
+            </section>
+
+            <div class="page-grid three">
+              <article class="option-card selected">
+                <span class="eyebrow ok">推荐</span>
+                <h3>新建飞书应用</h3>
+                <p>适合第一次接入。系统会引导你扫码创建，并自动带回凭据。</p>
+              </article>
+              <article class="option-card">
+                <span class="eyebrow neutral">已有配置</span>
+                <h3>接入已有飞书应用</h3>
+                <p>适合你已经在飞书后台建好应用，只需要把它接到这台机器上的情况。</p>
+              </article>
+              <article class="option-card">
+                <span class="eyebrow neutral">已检测到</span>
+                <h3>使用当前已检测到的飞书应用</h3>
+                <p>适合系统已经发现一个飞书应用，而且你想直接继续用它的情况。</p>
+              </article>
+            </div>
+
+            <div class="footer-actions">
+              <button class="button primary">下一步</button>
+              <button class="button">返回管理页</button>
+            </div>
+          `,
         },
       ];
 
       const state = {
-        scenarioId: scenarios[1].id,
-        screenId: scenarios[1].screens[0].id,
+        activeView: views[0].id,
         viewport: "desktop",
       };
 
-      function getScenario() {
-        return scenarios.find((item) => item.id === state.scenarioId);
+      function currentView() {
+        return views.find((view) => view.id === state.activeView) || views[0];
       }
 
-      function getScreen() {
-        const scenario = getScenario();
-        return scenario.screens.find((item) => item.id === state.screenId);
-      }
-
-      function el(tag, className, text) {
+      function makeNode(tag, className, text) {
         const node = document.createElement(tag);
         if (className) node.className = className;
-        if (text) node.textContent = text;
+        if (typeof text === "string") node.textContent = text;
         return node;
       }
 
-      function renderScenarioList() {
-        const container = document.getElementById("scenario-list");
-        container.innerHTML = "";
-        scenarios.forEach((scenario) => {
-          const button = el("button", `chip${scenario.id === state.scenarioId ? " active" : ""}`);
+      function renderViewButtons() {
+        const root = document.getElementById("view-list");
+        root.innerHTML = "";
+        for (const view of views) {
+          const button = makeNode("button", `pill${view.id === state.activeView ? " active" : ""}`, view.label);
           button.type = "button";
           button.addEventListener("click", () => {
-            state.scenarioId = scenario.id;
-            state.screenId = scenario.screens[0].id;
+            state.activeView = view.id;
             render();
           });
-          button.append(el("strong", "", scenario.label));
-          button.append(el("span", "", scenario.short));
-          container.append(button);
-        });
+          root.append(button);
+        }
       }
 
-      function renderViewportToggle() {
+      function renderViewportButtons() {
         const options = [
-          { id: "desktop", label: "桌面预览", hint: "宽屏壳体" },
-          { id: "mobile", label: "手机预览", hint: "窄屏单列" },
+          { id: "desktop", label: "桌面" },
+          { id: "mobile", label: "手机" },
         ];
-        const container = document.getElementById("viewport-toggle");
-        container.innerHTML = "";
-        options.forEach((option) => {
-          const button = el("button", `chip${option.id === state.viewport ? " active" : ""}`);
+        const root = document.getElementById("viewport-list");
+        root.innerHTML = "";
+        for (const option of options) {
+          const button = makeNode("button", `pill${option.id === state.viewport ? " active" : ""}`, option.label);
           button.type = "button";
           button.addEventListener("click", () => {
             state.viewport = option.id;
             render();
           });
-          button.append(el("strong", "", option.label));
-          button.append(el("span", "", option.hint));
-          container.append(button);
-        });
+          root.append(button);
+        }
       }
 
-      function renderScreenList() {
-        const scenario = getScenario();
-        const container = document.getElementById("screen-list");
-        container.innerHTML = "";
-        scenario.screens.forEach((screen) => {
-          const button = el("button", `chip${screen.id === state.screenId ? " active" : ""}`);
-          button.type = "button";
-          button.addEventListener("click", () => {
-            state.screenId = screen.id;
-            render();
-          });
-          button.append(el("strong", "", screen.tab));
-          button.append(el("span", "", screen.pageTitle));
-          container.append(button);
-        });
-      }
+      function renderScreen() {
+        const view = currentView();
+        document.getElementById("browser-address").textContent = view.route;
+        document.getElementById("brand-kicker").textContent = view.kicker;
+        document.getElementById("brand-title").textContent = view.title;
+        document.getElementById("side-nav-title").textContent = view.navTitle;
+        document.getElementById("viewport").setAttribute("data-size", state.viewport);
 
-      function renderMain() {
-        const scenario = getScenario();
-        const screen = getScreen();
+        const headerStatus = document.getElementById("header-status");
+        headerStatus.innerHTML = "";
+        for (const item of view.headerStatus) {
+          headerStatus.append(makeNode("span", `status-chip ${item.tone}`, item.text));
+        }
 
-        document.getElementById("preview-title").textContent = scenario.label;
-        document.getElementById("preview-subtitle").textContent = scenario.short;
+        const sideItems = document.getElementById("side-items");
+        sideItems.innerHTML = "";
+        for (const item of view.navItems) {
+          const card = makeNode("div", `side-item ${item.state}`.trim());
+          card.append(makeNode("small", "", item.step));
+          card.append(makeNode("strong", "", item.title));
+          sideItems.append(card);
+        }
 
-        const status = document.getElementById("preview-status");
-        status.innerHTML = "";
-        const statusPill = el("div", `status-pill ${screen.status.tone}`, screen.status.label);
-        status.append(statusPill);
-
-        document.getElementById("preview-address").textContent = `${scenario.route} · ${screen.pageTitle}`;
-        document.getElementById("nav-kicker").textContent = scenario.navKicker;
-        document.getElementById("nav-title").textContent = screen.pageTitle;
-
-        const navSummary = document.getElementById("nav-summary");
-        navSummary.innerHTML = "";
-        scenario.summary.forEach((item) => {
-          navSummary.append(el("div", "summary-pill", item));
-        });
-
-        const frame = document.getElementById("app-frame");
-        frame.setAttribute("data-viewport", state.viewport);
-
-        document.getElementById("step-rail-title").textContent = screen.stepRailTitle;
-
-        const stepList = document.getElementById("step-list");
-        stepList.innerHTML = "";
-        screen.steps.forEach((step, index) => {
-          const node = el("div", `step-item ${step.state}`);
-          node.append(el("small", "", `步骤 ${index + 1}`));
-          node.append(el("strong", "", step.title));
-          stepList.append(node);
-        });
-
-        const meta = document.getElementById("screen-meta");
-        meta.innerHTML = "";
-        screen.meta.forEach((item) => meta.append(el("span", "meta-pill", item)));
-
-        document.getElementById("screen-title").textContent = screen.title;
-        document.getElementById("screen-body").textContent = screen.body;
-
-        const ctaRow = document.getElementById("cta-row");
-        ctaRow.innerHTML = "";
-        screen.actions.forEach((action) => {
-          ctaRow.append(el("button", `button${action.primary ? " primary" : ""}`, action.label));
-        });
-
-        const signalGrid = document.getElementById("signal-grid");
-        signalGrid.innerHTML = "";
-        screen.signals.forEach((signal) => {
-          const card = el("div", "signal");
-          card.append(el("strong", "", signal.title));
-          card.append(el("span", "", signal.body));
-          signalGrid.append(card);
-        });
-
-        const contentGrid = document.getElementById("content-grid");
-        contentGrid.innerHTML = "";
-        screen.panels.forEach((panel) => {
-          const card = el("section", "card");
-          card.append(el("h4", "", panel.title));
-          card.append(el("p", "", panel.body));
-          const list = el("ul", "bullet-list");
-          panel.bullets.forEach((item) => list.append(el("li", "", item)));
-          card.append(list);
-          contentGrid.append(card);
-        });
-
-        document.getElementById("screen-footnote").textContent = screen.footnote;
+        document.getElementById("screen").innerHTML = view.body;
       }
 
       function render() {
-        renderScenarioList();
-        renderViewportToggle();
-        renderScreenList();
-        renderMain();
+        renderViewButtons();
+        renderViewportButtons();
+        renderScreen();
       }
 
       render();
