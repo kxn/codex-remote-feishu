@@ -42,6 +42,28 @@ describe("AdminRoute", () => {
     expect(calls.some((call) => call.path === "/g/demo/api/admin/bootstrap-state")).toBe(true);
   });
 
+  it("does not duplicate the grant prefix in setup links", async () => {
+    window.history.replaceState({}, "", "/g/demo/admin");
+
+    installMockFetch({
+      "/g/demo/api/admin/bootstrap-state": { body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }) },
+      "/g/demo/api/admin/runtime-status": { body: makeRuntimeStatus() },
+      "/g/demo/api/admin/feishu/apps": { body: { apps: [makeApp({ wizard: {} })] } },
+      "/g/demo/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/g/demo/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/g/demo/api/admin/instances": { body: { instances: [] } },
+      "/g/demo/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
+      "/g/demo/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      },
+    });
+
+    render(<AdminRoute />);
+
+    const link = await screen.findByRole("link", { name: "继续完成首次配置" });
+    expect(link.getAttribute("href")).toBe("./setup?app=bot-1");
+  });
+
   it("toggles the shell section navigation and closes it after selecting a section", async () => {
     const user = userEvent.setup();
     installMockFetch({
