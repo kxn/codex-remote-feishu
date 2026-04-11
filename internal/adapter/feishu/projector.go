@@ -74,10 +74,18 @@ type gitWorktreeSummary struct {
 
 type Projector struct {
 	readGitWorktree func(string) *gitWorktreeSummary
+	snapshotVersion string
 }
 
 func NewProjector() *Projector {
 	return &Projector{readGitWorktree: inspectGitWorktreeSummary}
+}
+
+func (p *Projector) SetSnapshotVersion(version string) {
+	if p == nil {
+		return
+	}
+	p.snapshotVersion = strings.TrimSpace(version)
 }
 
 func (p *Projector) ProjectPreviewSupplements(gatewayID, surfaceSessionID, chatID, replyToMessageID string, supplements []PreviewSupplement) []Operation {
@@ -100,16 +108,17 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.Snapshot == nil {
 			return nil
 		}
+		body := formatSnapshot(*event.Snapshot, p.snapshotVersion)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        "当前状态",
-			CardBody:         formatSnapshot(*event.Snapshot),
+			CardBody:         body,
 			CardThemeKey:     cardThemeInfo,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             legacyCardDocument("当前状态", formatSnapshot(*event.Snapshot), cardThemeInfo, nil),
+			card:             legacyCardDocument("当前状态", body, cardThemeInfo, nil),
 		}}
 	case control.UIEventNotice:
 		if event.Notice == nil {

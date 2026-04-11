@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
@@ -21,6 +22,24 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func formatStatusSnapshotVersion(identity agentproto.ServerIdentity) string {
+	version := strings.TrimSpace(identity.Version)
+	fingerprint := strings.TrimSpace(identity.BuildFingerprint)
+	if len(fingerprint) > 10 {
+		fingerprint = fingerprint[:10]
+	}
+	switch {
+	case version != "" && version != "dev" && fingerprint != "":
+		return version + " / " + fingerprint
+	case version != "" && version != "dev":
+		return version
+	case version != "" && fingerprint != "":
+		return version + " / " + fingerprint
+	default:
+		return firstNonEmpty(version, fingerprint)
+	}
 }
 
 func (a *App) handleStatus(w http.ResponseWriter, _ *http.Request) {

@@ -89,8 +89,11 @@ func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody, "新建会话（等待首条消息）", "**目标：** 新建会话", "**工作目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>") {
+	if !containsAll(ops[0].CardBody, "新建会话（等待首条消息）", "**工作目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>") {
 		t.Fatalf("expected snapshot body to show new-thread-ready target, got %#v", ops[0].CardBody)
+	}
+	if strings.Contains(ops[0].CardBody, "**目标：**") {
+		t.Fatalf("snapshot body should not repeat target section, got %#v", ops[0].CardBody)
 	}
 }
 
@@ -718,6 +721,23 @@ func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotDisplaysVersionLine(t *testing.T) {
+	projector := NewProjector()
+	projector.SetSnapshotVersion("v1.2.3 / abcdef1234")
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode: "normal",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !strings.Contains(ops[0].CardBody, "**当前版本：** <text_tag color='neutral'>v1.2.3 / abcdef1234</text_tag>") {
+		t.Fatalf("expected snapshot version line, got %#v", ops[0].CardBody)
+	}
+}
+
 func TestProjectSnapshotDisplaysFullAccessWithCompactToken(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -842,6 +862,46 @@ func TestProjectSnapshotIncludesBackgroundRestoreAttachmentAndPendingLaunch(t *t
 	}
 	if strings.Contains(ops[0].CardBody, "在线实例：") {
 		t.Fatalf("status card should not include online instance list, got %#v", ops[0].CardBody)
+	}
+}
+
+func TestProjectSnapshotTruncatesLongSelectedPreview(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			Attachment: control.AttachmentSummary{
+				InstanceID:            "inst-1",
+				DisplayName:           "droid",
+				SelectedThreadID:      "thread-1",
+				SelectedThreadTitle:   "droid · 这是一个特别长特别长特别长的当前输入目标标题",
+				SelectedThreadPreview: "这是一条特别长特别长特别长特别长的最近消息内容，需要在 status 卡片里缩略显示",
+				RouteMode:             "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				ThreadID:                       "thread-1",
+				ThreadTitle:                    "droid · 这是一个特别长特别长特别长的当前输入目标标题",
+				CWD:                            "/data/dl/droid",
+				EffectiveModel:                 "gpt-5.4",
+				EffectiveReasoningEffort:       "medium",
+				EffectiveAccessMode:            "confirm",
+				EffectiveModelSource:           "surface_default",
+				EffectiveReasoningEffortSource: "surface_default",
+				EffectiveAccessModeSource:      "surface_default",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !containsAll(ops[0].CardBody,
+		"**当前输入目标：** droid · 这是一个特别长特别长特别长的当前输入目标...",
+		"**最近信息：** 这是一条特别长特别长特别长特别长的最近消息内容，...",
+	) {
+		t.Fatalf("expected snapshot body to compact long text, got %#v", ops[0].CardBody)
+	}
+	if strings.Contains(ops[0].CardBody, "**目标：**") {
+		t.Fatalf("snapshot body should not repeat target line, got %#v", ops[0].CardBody)
 	}
 }
 

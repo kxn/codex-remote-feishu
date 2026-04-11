@@ -8,9 +8,17 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func formatSnapshot(snapshot control.Snapshot) string {
+const (
+	snapshotStatusTitleLimit   = 28
+	snapshotStatusPreviewLimit = 24
+)
+
+func formatSnapshot(snapshot control.Snapshot, daemonVersion string) string {
 	lines := []string{}
 	lines = append(lines, snapshotField("当前模式", formatNeutralTextTag(displaySnapshotMode(snapshot.ProductMode))))
+	if daemonVersion = strings.TrimSpace(daemonVersion); daemonVersion != "" {
+		lines = append(lines, snapshotField("当前版本", formatNeutralTextTag(daemonVersion)))
+	}
 	if strings.TrimSpace(snapshot.WorkspaceKey) != "" {
 		lines = append(lines, snapshotField("当前 workspace", formatNeutralTextTag(snapshot.WorkspaceKey)))
 	}
@@ -25,7 +33,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		}
 		switch {
 		case snapshot.Attachment.SelectedThreadTitle != "":
-			lines = append(lines, snapshotField("当前输入目标", snapshot.Attachment.SelectedThreadTitle))
+			lines = append(lines, snapshotField("当前输入目标", compactSnapshotStatusText(snapshot.Attachment.SelectedThreadTitle, snapshotStatusTitleLimit)))
 			if short := shortenThreadID(snapshot.Attachment.SelectedThreadID); short != "" {
 				lines = append(lines, snapshotField("会话 ID", short))
 			}
@@ -39,7 +47,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 			lines = append(lines, snapshotField("当前输入目标", "未绑定会话"))
 		}
 		if preview := strings.TrimSpace(snapshot.Attachment.SelectedThreadPreview); preview != "" {
-			lines = append(lines, snapshotField("最近信息", preview))
+			lines = append(lines, snapshotField("最近信息", compactSnapshotStatusText(preview, snapshotStatusPreviewLimit)))
 		}
 		if dispatch := snapshotDispatchText(snapshot.Dispatch); dispatch != "" {
 			lines = append(lines, snapshotField("执行状态", dispatch))
@@ -52,20 +60,6 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		}
 		lines = append(lines, "")
 		lines = append(lines, "**如果现在从飞书发送一条消息：**")
-		target := "未就绪"
-		switch {
-		case snapshot.NextPrompt.ThreadTitle != "":
-			target = snapshot.NextPrompt.ThreadTitle
-		case snapshot.NextPrompt.ThreadID != "":
-			target = snapshot.NextPrompt.ThreadID
-		case snapshot.NextPrompt.CreateThread:
-			target = "新建会话"
-		case snapshot.Attachment.RouteMode == "new_thread_ready":
-			target = "新建会话"
-		case snapshot.Attachment.RouteMode == "follow_local":
-			target = "跟随当前 VS Code（等待中）"
-		}
-		lines = append(lines, snapshotField("目标", target))
 		if snapshot.NextPrompt.CWD != "" {
 			lines = append(lines, snapshotField("工作目录", formatNeutralTextTag(snapshot.NextPrompt.CWD)))
 		}
@@ -118,6 +112,18 @@ func formatSnapshot(snapshot control.Snapshot) string {
 
 func snapshotField(label, value string) string {
 	return fmt.Sprintf("**%s：** %s", label, value)
+}
+
+func compactSnapshotStatusText(text string, limit int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" || limit <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func displaySnapshotMode(mode string) string {
