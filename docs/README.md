@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 新增 daemon 大包拆分方案草案，并刷新文档索引。
+> Summary: 新增 release roadmap workflow 文档，并刷新文档索引。
 
 ## 1. 适用范围
 
@@ -116,6 +116,7 @@
 - [feishu-im-message-research.md](./general/feishu-im-message-research.md)
 - [go-test-strategy.md](./general/go-test-strategy.md)
 - [install-deploy-design.md](./general/install-deploy-design.md)
+- [release-roadmap-workflow.md](./general/release-roadmap-workflow.md)
 - [remote-surface-state-machine.md](./general/remote-surface-state-machine.md)
 - [relay-error-reporting-protocol.md](./general/relay-error-reporting-protocol.md)
 - [relay-protocol-spec.md](./general/relay-protocol-spec.md)

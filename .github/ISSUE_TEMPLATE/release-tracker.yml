@@ -1,0 +1,86 @@
+name: Release Tracker
+description: 版本里程碑、发版检查项和自动发版闸门
+title: "[Release] "
+labels:
+  - release:tracker
+  - area:release
+body:
+  - type: markdown
+    attributes:
+      value: |
+        用这个模板表示一个准备发出的版本。
+
+        创建后请立刻补 3 件事：
+
+        1. 把本 issue 的 Milestone 设为与“版本号”完全一致的版本号。
+        2. 把要进入该版本的 issue 都挂到同一个 Milestone。
+        3. 对允许延期但不阻塞发版的 issue 加 `release:stretch`。
+
+        当本 issue 被关闭时，仓库会按这里填写的版本号去触发对应 release workflow。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 自动发版会直接使用这个版本号；Milestone 标题也必须与它完全一致
+      placeholder: v0.14.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: track
+    attributes:
+      label: 发布轨道
+      description: production 用于正式版本；beta/alpha 也可以用同样的 tracker 流程
+      options:
+        - production
+        - beta
+        - alpha
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 本版目标
+      description: 这一版想交付的核心价值；不要重复列出所有实现细节
+      placeholder: |
+        例如：
+        - 稳定 Feishu <-> Codex 远程主链路
+        - 收口安装和本地升级体验
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: 本版非目标
+      description: 明确这一版不承诺什么，避免 Milestone 范围不断膨胀
+      placeholder: |
+        例如：
+        - 不做多租户
+        - 不重写整个 relay protocol
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: release_checks
+    attributes:
+      label: 发布前检查
+      description: 全部勾完后再关闭本 issue；关闭动作会触发自动发版
+      options:
+        - label: 同 Milestone 下未标记 `release:stretch` 的 issue 都已关闭
+        - label: `go test ./...` 已通过
+        - label: 安装 / 升级 / 关键路径验证已完成
+        - label: Release notes、目标版本号和发布轨道已确认
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充说明
+      description: 记录延期项、手工操作说明、已知风险或特殊发版注意事项；没有可写“无”
+      placeholder: |
+        例如：
+        - #123 标记为 release:stretch，下一版继续跟进
+        - 如果当前版本已经存在同名 tag，需要先处理冲突再重试
+
