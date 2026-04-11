@@ -290,8 +290,6 @@ release 包中的归档目录只是版本缓存位置，不是长期运行路径
 - 一个带版本号的 `codex-remote`
 - `QUICKSTART.md`
 - `CHANGELOG.md`
-- `deploy/feishu/app-template.json`
-- `deploy/feishu/README.md`
 
 另外单独生成：
 

@@ -30,8 +30,6 @@
   - `codex-remote` / `codex-remote.exe`
   - `QUICKSTART.md`
   - `CHANGELOG.md`
-  - `deploy/feishu/app-template.json`
-  - `deploy/feishu/README.md`
 - 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
 - GitHub Releases 现在区分 `production / beta / alpha` 三条 track
   - 默认在线安装入口始终指向最新 `production`
@@ -240,8 +238,6 @@ release 包内会附带：
 
 - [QUICKSTART.md](./QUICKSTART.md)
 - [CHANGELOG.md](./CHANGELOG.md)
-- [deploy/feishu/app-template.json](./deploy/feishu/app-template.json)
-- [deploy/feishu/README.md](./deploy/feishu/README.md)
 
 用法：
 
