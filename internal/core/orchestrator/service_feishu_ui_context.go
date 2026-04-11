@@ -53,6 +53,74 @@ func (s *Service) buildFeishuSelectionContext(surface *state.SurfaceConsoleRecor
 	}
 }
 
+func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) *control.FeishuUISelectionContext {
+	context := &control.FeishuUISelectionContext{
+		DTOOwner:   control.FeishuUIDTOwnerSelection,
+		Surface:    s.buildFeishuUISurfaceContext(surface),
+		PromptKind: view.PromptKind,
+	}
+	if view.Workspace != nil {
+		context.Layout = "grouped_attach_workspace"
+		context.Title = "工作区列表"
+		context.ViewMode = "recent"
+		if view.Workspace.Expanded {
+			context.Title = "全部工作区"
+			context.ViewMode = "all"
+		}
+		if view.Workspace.Current != nil {
+			context.ContextTitle = "当前工作区"
+			context.ContextText = workspaceSelectionContextText(view.Workspace.Current.WorkspaceLabel, view.Workspace.Current.AgeText)
+			context.ContextKey = strings.TrimSpace(view.Workspace.Current.WorkspaceKey)
+		}
+		return context
+	}
+	if view.Thread == nil {
+		return context
+	}
+	context.ViewMode = string(view.Thread.Mode)
+	switch view.Thread.Mode {
+	case control.FeishuThreadSelectionNormalGlobalRecent:
+		context.Layout = "workspace_grouped_useall"
+		context.Title = "全部会话"
+	case control.FeishuThreadSelectionNormalGlobalAll:
+		context.Layout = "workspace_grouped_useall"
+		context.Title = "全部会话"
+	case control.FeishuThreadSelectionNormalScopedRecent:
+		context.Title = "最近会话"
+	case control.FeishuThreadSelectionNormalScopedAll:
+		context.Title = "当前工作区全部会话"
+	case control.FeishuThreadSelectionNormalWorkspaceView:
+		context.Layout = "workspace_grouped_useall"
+		if view.Thread.Workspace != nil {
+			context.Title = strings.TrimSpace(view.Thread.Workspace.WorkspaceLabel) + " 全部会话"
+			context.ContextKey = strings.TrimSpace(view.Thread.Workspace.WorkspaceKey)
+		}
+	case control.FeishuThreadSelectionVSCodeRecent:
+		context.Layout = "vscode_instance_threads"
+		context.Title = "最近会话"
+	case control.FeishuThreadSelectionVSCodeAll, control.FeishuThreadSelectionVSCodeScopedAll:
+		context.Layout = "vscode_instance_threads"
+		context.Title = "当前实例全部会话"
+	}
+	if view.Thread.CurrentWorkspace != nil {
+		context.ContextTitle = "当前工作区"
+		context.ContextKey = strings.TrimSpace(view.Thread.CurrentWorkspace.WorkspaceKey)
+		line := strings.TrimSpace(view.Thread.CurrentWorkspace.WorkspaceLabel)
+		if age := strings.TrimSpace(view.Thread.CurrentWorkspace.AgeText); age != "" {
+			line += " · " + age
+		}
+		context.ContextText = strings.Join([]string{line, "同工作区内切换请直接用 /use"}, "\n")
+	}
+	if view.Thread.CurrentInstance != nil {
+		context.ContextTitle = "当前实例"
+		context.ContextText = strings.TrimSpace(view.Thread.CurrentInstance.Label)
+		if status := strings.TrimSpace(view.Thread.CurrentInstance.Status); status != "" {
+			context.ContextText += " · " + status
+		}
+	}
+	return context
+}
+
 func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.CommandCatalog) *control.FeishuUICommandContext {
 	return &control.FeishuUICommandContext{
 		DTOOwner:    control.FeishuUIDTOwnerTransition,
@@ -83,6 +151,15 @@ func (s *Service) selectionPromptEvent(surface *state.SurfaceConsoleRecord, prom
 		SurfaceSessionID:       surface.SurfaceSessionID,
 		SelectionPrompt:        &prompt,
 		FeishuSelectionContext: s.buildFeishuSelectionContext(surface, prompt),
+	}
+}
+
+func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) control.UIEvent {
+	return control.UIEvent{
+		Kind:                   control.UIEventSelectionPrompt,
+		SurfaceSessionID:       surface.SurfaceSessionID,
+		FeishuSelectionView:    &view,
+		FeishuSelectionContext: s.buildFeishuSelectionContextFromView(surface, view),
 	}
 }
 

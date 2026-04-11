@@ -88,21 +88,6 @@ const (
 	threadSelectionDisplayScopedAll   threadSelectionDisplayMode = "scoped_all"
 )
 
-type threadSelectionPresentation struct {
-	title               string
-	views               []*mergedThreadView
-	limit               int
-	includeWorkspace    bool
-	allowCrossWorkspace bool
-	showMoreButton      bool
-	showMoreActionKind  string
-	showMoreButtonText  string
-	showMoreStatus      string
-	returnActionKind    string
-	returnButtonText    string
-	returnStatus        string
-}
-
 func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleRecord {
 	surface := s.root.Surfaces[action.SurfaceSessionID]
 	if surface != nil {

@@ -466,6 +466,7 @@ type UIEvent struct {
 	SourceMessagePreview   string
 	Snapshot               *Snapshot
 	SelectionPrompt        *SelectionPrompt
+	FeishuSelectionView    *FeishuSelectionView
 	FeishuSelectionContext *FeishuUISelectionContext
 	CommandCatalog         *CommandCatalog
 	FeishuCommandContext   *FeishuUICommandContext

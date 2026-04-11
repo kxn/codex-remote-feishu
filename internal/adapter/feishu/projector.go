@@ -141,13 +141,23 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			card:             legacyCardDocument(title, projectNoticeBody(*event.Notice), noticeThemeKey(*event.Notice), nil),
 		}}
 	case control.UIEventSelectionPrompt:
-		if event.SelectionPrompt == nil {
+		var prompt *control.SelectionPrompt
+		switch {
+		case event.FeishuSelectionView != nil:
+			projected, ok := SelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
+			if !ok {
+				return nil
+			}
+			prompt = &projected
+		case event.SelectionPrompt != nil:
+			prompt = event.SelectionPrompt
+		default:
 			return nil
 		}
-		title := strings.TrimSpace(event.SelectionPrompt.Title)
+		title := strings.TrimSpace(prompt.Title)
 		if title == "" {
 			title = "请选择"
-			switch event.SelectionPrompt.Kind {
+			switch prompt.Kind {
 			case control.SelectionPromptAttachInstance:
 				title = "在线 VS Code 实例"
 			case control.SelectionPromptAttachWorkspace:
@@ -158,7 +168,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 				title = "强踢当前会话？"
 			}
 		}
-		elements := selectionPromptElements(*event.SelectionPrompt, event.DaemonLifecycleID)
+		elements := selectionPromptElements(*prompt, event.DaemonLifecycleID)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,

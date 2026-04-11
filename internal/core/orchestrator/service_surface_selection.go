@@ -1,7 +1,6 @@
 package orchestrator
 
 import (
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -196,6 +195,20 @@ func (s *Service) presentAllWorkspaceSelection(surface *state.SurfaceConsoleReco
 const workspaceSelectionRecentLimit = 5
 
 func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRecord, expanded bool) []control.UIEvent {
+	model, events := s.buildWorkspaceSelectionModel(surface, expanded)
+	if len(events) != 0 {
+		return events
+	}
+	if model == nil {
+		return nil
+	}
+	return []control.UIEvent{s.selectionViewEvent(surface, control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptAttachWorkspace,
+		Workspace:  model,
+	})}
+}
+
+func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleRecord, expanded bool) (*control.FeishuWorkspaceSelectionView, []control.UIEvent) {
 	grouped := map[string][]*state.InstanceRecord{}
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
@@ -208,7 +221,7 @@ func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRec
 	views := s.mergedThreadViews(surface)
 	visibleWorkspaces := s.normalModeListWorkspaceSetWithViews(surface, views)
 	if len(visibleWorkspaces) == 0 {
-		return notice(surface, "no_available_workspaces", "当前没有可接管的工作区。请先连接一个 VS Code 会话，或等待可恢复工作区出现。")
+		return nil, notice(surface, "no_available_workspaces", "当前没有可接管的工作区。请先连接一个 VS Code 会话，或等待可恢复工作区出现。")
 	}
 	recoverableWorkspaces := map[string]time.Time{}
 	recoverableWorkspaceSeen := map[string]bool{}
@@ -225,10 +238,8 @@ func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRec
 	}
 
 	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
-	available := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
-	unavailable := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
-	contextTitle := ""
-	contextText := ""
+	entries := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
+	var current *control.FeishuWorkspaceSelectionCurrent
 	for workspaceKey := range visibleWorkspaces {
 		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
@@ -239,134 +250,64 @@ func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRec
 		if !latestUsedAt.IsZero() {
 			ageText = humanizeRelativeTime(s.now(), latestUsedAt)
 		}
+		label := workspaceSelectionLabel(workspaceKey)
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
 		isCurrent := surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace == workspaceKey
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
 		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
 		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
 
-		buttonLabel := ""
-		actionKind := ""
-		disabled := false
-		switch {
-		case isCurrent:
-		case busy:
-			disabled = true
-		case attachable:
-			if surface.AttachedInstanceID != "" {
-				buttonLabel = "切换"
-			}
-		case recoverableOnly:
-			buttonLabel = "恢复"
-			actionKind = "show_workspace_threads"
-		default:
-			disabled = true
-		}
-
-		option := control.SelectionOption{
-			OptionID:    workspaceKey,
-			Label:       workspaceSelectionLabel(workspaceKey),
-			ButtonLabel: buttonLabel,
-			AgeText:     ageText,
-			MetaText:    workspaceSelectionMetaText(ageText, hasVSCodeActivity, busy, !attachable && !recoverableOnly, recoverableOnly),
-			ActionKind:  actionKind,
-			IsCurrent:   isCurrent,
-			Disabled:    disabled,
-		}
 		if isCurrent {
-			contextTitle = "当前工作区"
-			contextText = workspaceSelectionContextText(option.Label, ageText)
+			current = &control.FeishuWorkspaceSelectionCurrent{
+				WorkspaceKey:   workspaceKey,
+				WorkspaceLabel: label,
+				AgeText:        ageText,
+			}
 			continue
 		}
 		entry := workspaceSelectionEntry{
-			option:       option,
-			latestUsedAt: latestUsedAt,
+			workspaceKey:      workspaceKey,
+			latestUsedAt:      latestUsedAt,
+			label:             label,
+			ageText:           ageText,
+			hasVSCodeActivity: hasVSCodeActivity,
+			busy:              busy,
+			attachable:        attachable,
+			recoverableOnly:   recoverableOnly,
 		}
-		if disabled {
-			unavailable = append(unavailable, entry)
-			continue
-		}
-		available = append(available, entry)
+		entries = append(entries, entry)
 	}
 
-	sortWorkspaceSelectionEntries(available)
-	sortWorkspaceSelectionEntries(unavailable)
-
-	allEntries := append([]workspaceSelectionEntry(nil), available...)
-	allEntries = append(allEntries, unavailable...)
-	sortWorkspaceSelectionEntries(allEntries)
-	if !expanded && len(allEntries) > workspaceSelectionRecentLimit {
-		visible := map[string]bool{}
-		for _, entry := range allEntries[:workspaceSelectionRecentLimit] {
-			visible[strings.TrimSpace(entry.option.OptionID)] = true
-		}
-		available = filterWorkspaceSelectionEntriesByVisibleSet(available, visible)
-		unavailable = filterWorkspaceSelectionEntriesByVisibleSet(unavailable, visible)
+	sortWorkspaceSelectionEntries(entries)
+	model := &control.FeishuWorkspaceSelectionView{
+		Expanded:    expanded,
+		RecentLimit: workspaceSelectionRecentLimit,
+		Current:     current,
+		Entries:     make([]control.FeishuWorkspaceSelectionEntry, 0, len(entries)),
 	}
-
-	options := make([]control.SelectionOption, 0, len(available)+len(unavailable)+1)
-	appendIndexed := func(entries []workspaceSelectionEntry) {
-		for _, entry := range entries {
-			entry.option.Index = len(options) + 1
-			options = append(options, entry.option)
-		}
-	}
-	appendIndexed(available)
-	appendIndexed(unavailable)
-
-	if hiddenCount := len(allEntries) - workspaceSelectionRecentLimit; !expanded && hiddenCount > 0 {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			Label:       "全部工作区",
-			ButtonLabel: "全部工作区",
-			ActionKind:  "show_all_workspaces",
-			MetaText:    fmt.Sprintf("还有 %d 个工作区未显示", hiddenCount),
-		})
-	} else if expanded && len(allEntries) > workspaceSelectionRecentLimit {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			Label:       "最近工作区",
-			ButtonLabel: "最近工作区",
-			ActionKind:  "show_recent_workspaces",
-			MetaText:    fmt.Sprintf("回到最近 %d 个工作区", workspaceSelectionRecentLimit),
-		})
-	}
-
-	hint := ""
-	if contextTitle != "" && len(options) == 0 {
-		hint = "当前没有其他可接管工作区。"
-	}
-
-	title := "工作区列表"
-	if expanded {
-		title = "全部工作区"
-	}
-
-	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
-		Kind:         control.SelectionPromptAttachWorkspace,
-		Layout:       "grouped_attach_workspace",
-		Title:        title,
-		Hint:         hint,
-		ContextTitle: contextTitle,
-		ContextText:  contextText,
-		Options:      options,
-	})}
-}
-
-func filterWorkspaceSelectionEntriesByVisibleSet(entries []workspaceSelectionEntry, visible map[string]bool) []workspaceSelectionEntry {
-	filtered := make([]workspaceSelectionEntry, 0, len(entries))
 	for _, entry := range entries {
-		if !visible[strings.TrimSpace(entry.option.OptionID)] {
-			continue
-		}
-		filtered = append(filtered, entry)
+		model.Entries = append(model.Entries, control.FeishuWorkspaceSelectionEntry{
+			WorkspaceKey:      entry.workspaceKey,
+			WorkspaceLabel:    entry.label,
+			AgeText:           entry.ageText,
+			HasVSCodeActivity: entry.hasVSCodeActivity,
+			Busy:              entry.busy,
+			Attachable:        entry.attachable,
+			RecoverableOnly:   entry.recoverableOnly,
+		})
 	}
-	return filtered
+	return model, nil
 }
 
 type workspaceSelectionEntry struct {
-	option       control.SelectionOption
-	latestUsedAt time.Time
+	workspaceKey      string
+	latestUsedAt      time.Time
+	label             string
+	ageText           string
+	hasVSCodeActivity bool
+	busy              bool
+	attachable        bool
+	recoverableOnly   bool
 }
 
 func sortWorkspaceSelectionEntries(entries []workspaceSelectionEntry) {
@@ -382,7 +323,7 @@ func sortWorkspaceSelectionEntries(entries []workspaceSelectionEntry) {
 		case !left.latestUsedAt.Equal(right.latestUsedAt):
 			return left.latestUsedAt.After(right.latestUsedAt)
 		}
-		return strings.TrimSpace(left.option.OptionID) < strings.TrimSpace(right.option.OptionID)
+		return strings.TrimSpace(left.workspaceKey) < strings.TrimSpace(right.workspaceKey)
 	})
 }
 

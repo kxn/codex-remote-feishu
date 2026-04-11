@@ -710,10 +710,10 @@ func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected detached /use to show global thread prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected prompt: %#v", prompt)
 	}
@@ -751,10 +751,10 @@ func TestShowThreadsDetachedIncludesPersistedThreadsFromRecoverableWorkspaces(t 
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected detached /use prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 2 {
 		t.Fatalf("expected persisted recoverable workspaces to appear in prompt, got %#v", prompt.Options)
 	}
@@ -786,10 +786,10 @@ func TestShowThreadsDetachedShowsPersistedThreadsWhenOnlyRecoverableWorkspacesEx
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected persisted-only recoverable workspace to produce thread prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "thread-persisted" {
 		t.Fatalf("expected persisted-only recoverable thread to remain selectable, got %#v", prompt)
 	}
@@ -821,10 +821,10 @@ func TestShowThreadsDetachedFallsBackWhenPersistedReaderFails(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected fallback prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "thread-1" {
 		t.Fatalf("expected catalog-only fallback prompt, got %#v", prompt.Options)
 	}
@@ -860,10 +860,11 @@ func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *tes
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected prompt, got %#v", events)
 	}
-	option := events[0].SelectionPrompt.Options[0]
+	prompt := selectionPromptFromEvent(t, events[0])
+	option := prompt.Options[0]
 	if option.Label != "droid · 数据库里的新标题" || option.ButtonLabel != "droid · 数据库里的新标题" || option.Subtitle != "/data/dl/droid\n可接管" {
 		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
 	}
@@ -904,10 +905,10 @@ func TestPresentGlobalThreadSelectionMarksBusyThreadDisabled(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	var busyOption *control.SelectionOption
 	for i := range prompt.Options {
 		option := prompt.Options[i]
@@ -969,10 +970,10 @@ func TestShowThreadsAttachedNormalFiltersToCurrentWorkspace(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 2 {
 		t.Fatalf("expected only current-workspace threads, got %#v", prompt.Options)
 	}
@@ -1017,10 +1018,10 @@ func TestShowAllThreadsAttachedNormalShowsCrossWorkspaceSessions(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("expected cross-workspace all-session prompt, got %#v", prompt)
 	}
@@ -1123,10 +1124,10 @@ func TestShowThreadsAttachedVSCodeFiltersToCurrentInstance(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected vscode prompt scoped to current instance, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Layout != "vscode_instance_threads" || prompt.ContextTitle != "当前实例" || !strings.Contains(prompt.ContextText, "droid · 当前跟随中") {
 		t.Fatalf("expected vscode /use prompt to expose current instance summary, got %#v", prompt)
 	}
@@ -1187,17 +1188,17 @@ func TestShowAllThreadsAttachedVSCodeShowsCurrentInstanceAllSessions(t *testing.
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "当前实例全部会话" || prompt.Layout != "vscode_instance_threads" {
 		t.Fatalf("expected instance-scoped vscode /useall prompt, got %#v", prompt)
 	}
 	if prompt.ContextTitle != "当前实例" || prompt.ContextText != "droid · 当前跟随中" {
 		t.Fatalf("expected current instance summary, got %#v", prompt)
 	}
-	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
+	if len(prompt.Options) != 3 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
 		t.Fatalf("expected only current instance sessions in recency order, got %#v", prompt.Options)
 	}
 	if prompt.Options[0].Label != "整理日志" || prompt.Options[0].MetaText != "VS Code 当前焦点 · 1分前" {
@@ -1205,6 +1206,9 @@ func TestShowAllThreadsAttachedVSCodeShowsCurrentInstanceAllSessions(t *testing.
 	}
 	if prompt.Options[1].Label != "当前实例会话" || prompt.Options[1].MetaText != "当前跟随中 · 3分前" {
 		t.Fatalf("expected current thread metadata, got %#v", prompt.Options[1])
+	}
+	if prompt.Options[2].ActionKind != "show_threads" || prompt.Options[2].ButtonLabel != "最近会话" {
+		t.Fatalf("expected expanded vscode view to include return action, got %#v", prompt.Options[2])
 	}
 }
 

@@ -25,9 +25,23 @@ func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleRecord, workspaceKey string) []control.UIEvent {
+	model, events := s.buildWorkspaceThreadSelectionModel(surface, workspaceKey)
+	if len(events) != 0 {
+		return events
+	}
+	if model == nil {
+		return nil
+	}
+	return []control.UIEvent{s.selectionViewEvent(surface, control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread:     model,
+	})}
+}
+
+func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConsoleRecord, workspaceKey string) (*control.FeishuThreadSelectionView, []control.UIEvent) {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
-		return notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /useall。")
+		return nil, notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /useall。")
 	}
 	views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
 	filtered := make([]*mergedThreadView, 0, len(views))
@@ -38,168 +52,126 @@ func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleR
 		filtered = append(filtered, view)
 	}
 	if len(filtered) == 0 {
-		return notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。", workspaceKey))
+		return nil, notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。", workspaceKey))
 	}
-	options := make([]control.SelectionOption, 0, len(filtered))
-	for i, view := range filtered {
-		status, disabled := s.threadSelectionStatus(surface, view, true)
-		summary := s.threadSelectionSummary(surface, view)
-		options = append(options, control.SelectionOption{
-			Index:               i + 1,
-			OptionID:            view.ThreadID,
-			Label:               summary,
-			Subtitle:            s.threadSelectionOptionSubtitle(surface, view, false, true),
-			ButtonLabel:         summary,
-			GroupKey:            workspaceKey,
-			GroupLabel:          workspaceSelectionLabel(workspaceKey),
-			AgeText:             humanizeRelativeTime(s.now(), threadLastUsedAt(view)),
-			MetaText:            s.threadSelectionMetaText(surface, view, status),
-			IsCurrent:           surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
-			Disabled:            disabled,
-			AllowCrossWorkspace: true,
-		})
+	model := &control.FeishuThreadSelectionView{
+		Mode:        control.FeishuThreadSelectionNormalWorkspaceView,
+		RecentLimit: workspaceSelectionRecentLimit,
+		Workspace: &control.FeishuThreadSelectionWorkspaceContext{
+			WorkspaceKey:   workspaceKey,
+			WorkspaceLabel: workspaceSelectionLabel(workspaceKey),
+		},
+		Entries: make([]control.FeishuThreadSelectionEntry, 0, len(filtered)),
 	}
-	options = append(options, control.SelectionOption{
-		Index:       len(options) + 1,
-		ButtonLabel: "全部会话",
-		Subtitle:    "回到跨工作区会话列表",
-		ActionKind:  "show_all_threads",
-	})
-	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
-		Kind:    control.SelectionPromptUseThread,
-		Layout:  "workspace_grouped_useall",
-		Title:   workspaceSelectionLabel(workspaceKey) + " 全部会话",
-		Options: options,
-	})}
+	for _, view := range filtered {
+		model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
+	}
+	return model, nil
 }
 
 func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) []control.UIEvent {
-	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
-		return notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
+	model, events := s.buildThreadSelectionModel(surface, mode)
+	if len(events) != 0 {
+		return events
 	}
-	presentation := s.resolveThreadSelectionPresentation(surface, mode)
-	if len(presentation.views) == 0 {
-		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
-			return notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
-		}
-		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
-			return notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。你可以直接 /new、发送 /useall 查看其他 workspace 的会话，或先 /list 切换工作区。", workspaceKey))
-		}
-		return notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
+	if model == nil {
+		return nil
 	}
-	limit := presentation.limit
-	if limit <= 0 || limit > len(presentation.views) {
-		limit = len(presentation.views)
-	}
-	threads := presentation.views[:limit]
-	options := make([]control.SelectionOption, 0, len(threads)+1)
-	for i, view := range threads {
-		status, disabled := s.threadSelectionStatus(surface, view, presentation.allowCrossWorkspace)
-		summary := s.threadSelectionSummary(surface, view)
-		workspaceKey := mergedThreadWorkspaceClaimKey(view)
-		options = append(options, control.SelectionOption{
-			Index:               i + 1,
-			OptionID:            view.ThreadID,
-			Label:               summary,
-			Subtitle:            s.threadSelectionOptionSubtitle(surface, view, presentation.includeWorkspace, presentation.allowCrossWorkspace),
-			ButtonLabel:         summary,
-			GroupKey:            workspaceKey,
-			GroupLabel:          workspaceSelectionLabel(workspaceKey),
-			AgeText:             humanizeRelativeTime(s.now(), threadLastUsedAt(view)),
-			MetaText:            s.threadSelectionMetaText(surface, view, status),
-			IsCurrent:           surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
-			Disabled:            disabled,
-			AllowCrossWorkspace: presentation.allowCrossWorkspace,
-		})
-	}
-	if presentation.showMoreButton {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: presentation.showMoreButtonText,
-			Subtitle:    presentation.showMoreStatus,
-			ActionKind:  presentation.showMoreActionKind,
-		})
-	}
-	if strings.TrimSpace(presentation.returnActionKind) != "" {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: presentation.returnButtonText,
-			Subtitle:    presentation.returnStatus,
-			ActionKind:  presentation.returnActionKind,
-		})
-	}
-	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
-		Kind:         control.SelectionPromptUseThread,
-		Layout:       s.threadSelectionPromptLayout(surface, presentation),
-		Title:        presentation.title,
-		ContextTitle: s.threadSelectionContextTitle(surface, presentation),
-		ContextText:  s.threadSelectionContextText(surface, presentation),
-		ContextKey:   s.threadSelectionContextKey(surface, presentation),
-		Options:      options,
+	return []control.UIEvent{s.selectionViewEvent(surface, control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread:     model,
 	})}
 }
 
-func (s *Service) threadSelectionPromptLayout(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
-	if surface != nil &&
-		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
-		strings.TrimSpace(surface.AttachedInstanceID) != "" {
-		return "vscode_instance_threads"
+func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) (*control.FeishuThreadSelectionView, []control.UIEvent) {
+	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return nil, notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
 	}
-	if presentation.title == "全部会话" && presentation.includeWorkspace {
-		return "workspace_grouped_useall"
+	productMode := state.ProductModeNormal
+	if surface != nil {
+		productMode = s.normalizeSurfaceProductMode(surface)
 	}
-	return ""
+	model := &control.FeishuThreadSelectionView{RecentLimit: workspaceSelectionRecentLimit}
+	switch productMode {
+	case state.ProductModeVSCode:
+		views := s.scopedMergedThreadViews(surface)
+		if surface != nil {
+			if inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]; inst != nil {
+				model.CurrentInstance = &control.FeishuThreadSelectionInstanceContext{
+					Label:  instanceSelectionLabel(inst),
+					Status: s.vscodeInstanceSurfaceStatus(surface, inst),
+				}
+			}
+		}
+		switch mode {
+		case threadSelectionDisplayScopedAll:
+			model.Mode = control.FeishuThreadSelectionVSCodeScopedAll
+		case threadSelectionDisplayAll, threadSelectionDisplayAllExpanded:
+			model.Mode = control.FeishuThreadSelectionVSCodeAll
+		default:
+			model.Mode = control.FeishuThreadSelectionVSCodeRecent
+		}
+		for _, view := range views {
+			model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
+		}
+	default:
+		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
+		if !attached || mode == threadSelectionDisplayAll || mode == threadSelectionDisplayAllExpanded {
+			if workspaceKey := s.surfaceCurrentWorkspaceKey(surface); workspaceKey != "" {
+				model.CurrentWorkspace = &control.FeishuThreadSelectionWorkspaceContext{
+					WorkspaceKey:   workspaceKey,
+					WorkspaceLabel: workspaceSelectionLabel(workspaceKey),
+					AgeText:        humanizeRelativeTime(s.now(), threadViewsLatestUsedAt(s.scopedMergedThreadViews(surface))),
+				}
+			}
+			views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
+			if mode == threadSelectionDisplayAllExpanded {
+				model.Mode = control.FeishuThreadSelectionNormalGlobalAll
+			} else {
+				model.Mode = control.FeishuThreadSelectionNormalGlobalRecent
+			}
+			for _, view := range views {
+				model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
+			}
+		} else {
+			views := s.scopedMergedThreadViews(surface)
+			if mode == threadSelectionDisplayScopedAll {
+				model.Mode = control.FeishuThreadSelectionNormalScopedAll
+			} else {
+				model.Mode = control.FeishuThreadSelectionNormalScopedRecent
+			}
+			for _, view := range views {
+				model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
+			}
+		}
+	}
+	if len(model.Entries) == 0 {
+		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
+			return nil, notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
+		}
+		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
+			return nil, notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。你可以直接 /new、发送 /useall 查看其他 workspace 的会话，或先 /list 切换工作区。", workspaceKey))
+		}
+		return nil, notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
+	}
+	return model, nil
 }
 
-func (s *Service) threadSelectionContextTitle(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
-	if surface == nil || strings.TrimSpace(surface.AttachedInstanceID) == "" {
-		return ""
+func (s *Service) threadSelectionViewEntry(surface *state.SurfaceConsoleRecord, view *mergedThreadView, allowCrossWorkspace bool) control.FeishuThreadSelectionEntry {
+	status, disabled := s.threadSelectionStatus(surface, view, allowCrossWorkspace)
+	workspaceKey := mergedThreadWorkspaceClaimKey(view)
+	return control.FeishuThreadSelectionEntry{
+		ThreadID:            view.ThreadID,
+		Summary:             s.threadSelectionSummary(surface, view),
+		WorkspaceKey:        workspaceKey,
+		WorkspaceLabel:      workspaceSelectionLabel(workspaceKey),
+		AgeText:             humanizeRelativeTime(s.now(), threadLastUsedAt(view)),
+		Status:              status,
+		VSCodeFocused:       view != nil && view.Inst != nil && strings.TrimSpace(view.Inst.ObservedFocusedThreadID) == view.ThreadID,
+		Disabled:            disabled,
+		AllowCrossWorkspace: allowCrossWorkspace,
+		Current:             surface != nil && surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID),
 	}
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
-		return "当前实例"
-	}
-	if !presentation.includeWorkspace || presentation.title != "全部会话" {
-		return ""
-	}
-	if workspaceKey := s.surfaceCurrentWorkspaceKey(surface); workspaceKey != "" {
-		return "当前工作区"
-	}
-	return ""
-}
-
-func (s *Service) threadSelectionContextText(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
-	if surface != nil &&
-		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
-		strings.TrimSpace(surface.AttachedInstanceID) != "" {
-		return s.vscodeThreadSelectionContextText(surface)
-	}
-	workspaceKey := s.threadSelectionContextKey(surface, presentation)
-	if workspaceKey == "" {
-		return ""
-	}
-	label := workspaceSelectionLabel(workspaceKey)
-	if label == "" {
-		label = workspaceKey
-	}
-	parts := []string{label}
-	if latest := threadViewsLatestUsedAt(s.scopedMergedThreadViews(surface)); !latest.IsZero() {
-		parts[0] += " · " + humanizeRelativeTime(s.now(), latest)
-	}
-	parts = append(parts, "同工作区内切换请直接用 /use")
-	return strings.Join(parts, "\n")
-}
-
-func (s *Service) threadSelectionContextKey(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {
-	if surface == nil || !presentation.includeWorkspace || strings.TrimSpace(surface.AttachedInstanceID) == "" {
-		return ""
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-		return ""
-	}
-	if presentation.title != "全部会话" {
-		return ""
-	}
-	return s.surfaceCurrentWorkspaceKey(surface)
 }
 
 func (s *Service) threadSelectionSummary(surface *state.SurfaceConsoleRecord, view *mergedThreadView) string {
@@ -252,145 +224,6 @@ func (s *Service) vscodeThreadSelectionContextText(surface *state.SurfaceConsole
 		return label
 	}
 	return label + " · " + status
-}
-
-func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) threadSelectionPresentation {
-	productMode := state.ProductModeNormal
-	if surface != nil {
-		productMode = s.normalizeSurfaceProductMode(surface)
-	}
-	switch productMode {
-	case state.ProductModeVSCode:
-		views := s.scopedMergedThreadViews(surface)
-		presentation := threadSelectionPresentation{
-			title:            "最近会话",
-			views:            views,
-			limit:            min(5, len(views)),
-			includeWorkspace: false,
-		}
-		switch mode {
-		case threadSelectionDisplayAll:
-			presentation.title = "当前实例全部会话"
-			presentation.limit = len(views)
-		case threadSelectionDisplayAllExpanded:
-			presentation.title = "当前实例全部会话"
-			presentation.limit = len(views)
-		case threadSelectionDisplayScopedAll:
-			presentation.title = "当前实例全部会话"
-			presentation.limit = len(views)
-			presentation.returnActionKind = "show_threads"
-			presentation.returnButtonText = "最近会话"
-			presentation.returnStatus = "回到当前实例最近 5 个会话"
-		default:
-			if len(views) > 5 {
-				presentation.showMoreButton = true
-				presentation.showMoreActionKind = "show_scoped_threads"
-				presentation.showMoreButtonText = "当前实例全部会话"
-				presentation.showMoreStatus = "展开当前实例内的全部会话"
-			}
-		}
-		return presentation
-	default:
-		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
-		if !attached || mode == threadSelectionDisplayAll || mode == threadSelectionDisplayAllExpanded {
-			views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
-			currentWorkspaceKey := ""
-			if attached {
-				currentWorkspaceKey = s.surfaceCurrentWorkspaceKey(surface)
-			}
-			totalGroups := countThreadWorkspaceGroups(views, currentWorkspaceKey)
-			presentation := threadSelectionPresentation{
-				title:               "全部会话",
-				views:               views,
-				limit:               len(views),
-				includeWorkspace:    true,
-				allowCrossWorkspace: true,
-			}
-			if mode != threadSelectionDisplayAllExpanded {
-				filtered, visibleGroups := filterThreadViewsToRecentWorkspaceGroups(views, currentWorkspaceKey, workspaceSelectionRecentLimit)
-				presentation.views = filtered
-				presentation.limit = len(filtered)
-				if totalGroups > visibleGroups {
-					presentation.showMoreButton = true
-					presentation.showMoreActionKind = "show_all_thread_workspaces"
-					presentation.showMoreButtonText = "全部工作区"
-					presentation.showMoreStatus = fmt.Sprintf("还有 %d 个工作区未显示", totalGroups-visibleGroups)
-				}
-				return presentation
-			}
-			if totalGroups > workspaceSelectionRecentLimit {
-				presentation.returnActionKind = "show_recent_thread_workspaces"
-				presentation.returnButtonText = "最近工作区"
-				presentation.returnStatus = fmt.Sprintf("回到最近 %d 个工作区", workspaceSelectionRecentLimit)
-			}
-			return presentation
-		}
-		views := s.scopedMergedThreadViews(surface)
-		presentation := threadSelectionPresentation{
-			title:            "最近会话",
-			views:            views,
-			limit:            min(5, len(views)),
-			includeWorkspace: false,
-		}
-		if mode == threadSelectionDisplayScopedAll {
-			presentation.title = "当前工作区全部会话"
-			presentation.limit = len(views)
-			presentation.returnActionKind = "show_threads"
-			presentation.returnButtonText = "最近会话"
-			presentation.returnStatus = "回到当前工作区最近 5 个会话"
-			return presentation
-		}
-		if len(views) > 5 {
-			presentation.showMoreButton = true
-			presentation.showMoreActionKind = "show_scoped_threads"
-			presentation.showMoreButtonText = "当前工作区全部会话"
-			presentation.showMoreStatus = "展开当前工作区内的全部会话"
-		}
-		return presentation
-	}
-}
-
-func countThreadWorkspaceGroups(views []*mergedThreadView, excludeWorkspaceKey string) int {
-	excludeWorkspaceKey = normalizeWorkspaceClaimKey(excludeWorkspaceKey)
-	seen := map[string]struct{}{}
-	for _, view := range views {
-		workspaceKey := normalizeWorkspaceClaimKey(mergedThreadWorkspaceClaimKey(view))
-		if workspaceKey == "" || workspaceKey == excludeWorkspaceKey {
-			continue
-		}
-		seen[workspaceKey] = struct{}{}
-	}
-	return len(seen)
-}
-
-func filterThreadViewsToRecentWorkspaceGroups(views []*mergedThreadView, excludeWorkspaceKey string, limit int) ([]*mergedThreadView, int) {
-	if len(views) == 0 {
-		return nil, 0
-	}
-	excludeWorkspaceKey = normalizeWorkspaceClaimKey(excludeWorkspaceKey)
-	seenGroups := map[string]struct{}{}
-	visibleGroups := map[string]struct{}{}
-	filtered := make([]*mergedThreadView, 0, len(views))
-	for _, view := range views {
-		workspaceKey := normalizeWorkspaceClaimKey(mergedThreadWorkspaceClaimKey(view))
-		if workspaceKey == "" {
-			continue
-		}
-		if workspaceKey == excludeWorkspaceKey {
-			filtered = append(filtered, view)
-			continue
-		}
-		if _, ok := seenGroups[workspaceKey]; !ok {
-			seenGroups[workspaceKey] = struct{}{}
-			if len(visibleGroups) < limit {
-				visibleGroups[workspaceKey] = struct{}{}
-			}
-		}
-		if _, ok := visibleGroups[workspaceKey]; ok {
-			filtered = append(filtered, view)
-		}
-	}
-	return filtered, len(visibleGroups)
 }
 
 func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]control.UIEvent, HeadlessRestoreResult) {

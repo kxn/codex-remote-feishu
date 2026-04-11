@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	feishuadapter "github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
@@ -30,6 +31,48 @@ func firstCommands(entries []control.CommandCatalogEntry) []string {
 		commands = append(commands, entry.Commands[0])
 	}
 	return commands
+}
+
+func eventSelectionPrompt(event control.UIEvent) (*control.SelectionPrompt, bool) {
+	if event.SelectionPrompt != nil {
+		return event.SelectionPrompt, true
+	}
+	if event.FeishuSelectionView != nil {
+		prompt, ok := feishuadapter.SelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
+		if !ok {
+			return nil, false
+		}
+		return &prompt, true
+	}
+	return nil, false
+}
+
+func selectionPromptFromEvent(t *testing.T, event control.UIEvent) *control.SelectionPrompt {
+	t.Helper()
+	prompt, ok := eventSelectionPrompt(event)
+	if !ok {
+		t.Fatalf("expected selection prompt or selection view, got %#v", event)
+	}
+	return prompt
+}
+
+func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control.SelectionPrompt {
+	t.Helper()
+	if len(events) != 1 {
+		t.Fatalf("expected exactly one event, got %#v", events)
+	}
+	return selectionPromptFromEvent(t, events[0])
+}
+
+func findSelectionPromptByKind(t *testing.T, events []control.UIEvent, kind control.SelectionPromptKind) *control.SelectionPrompt {
+	t.Helper()
+	for _, event := range events {
+		prompt, ok := eventSelectionPrompt(event)
+		if ok && prompt.Kind == kind {
+			return prompt
+		}
+	}
+	return nil
 }
 
 type fakePersistedThreadCatalog struct {
@@ -269,13 +312,13 @@ func TestWorkspaceSelectionEventCarriesFeishuSelectionContext(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
-		t.Fatalf("expected selection prompt event, got %#v", events)
+	if len(events) != 1 || events[0].FeishuSelectionView == nil {
+		t.Fatalf("expected selection view event, got %#v", events)
 	}
 	if events[0].FeishuSelectionContext == nil {
 		t.Fatalf("expected feishu selection context, got %#v", events[0])
 	}
-	if events[0].FeishuSelectionContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+	if events[0].FeishuSelectionContext.DTOOwner != control.FeishuUIDTOwnerSelection {
 		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuSelectionContext)
 	}
 	if events[0].FeishuSelectionContext.PromptKind != control.SelectionPromptAttachWorkspace || events[0].FeishuSelectionContext.Layout != "grouped_attach_workspace" {
@@ -377,7 +420,7 @@ func TestAttachWithoutDefaultThreadEntersUnboundAndPromptsUse(t *testing.T) {
 		if event.Notice != nil && event.Notice.Code == "attached" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
 			sawPrompt = true
 		}
 	}
@@ -422,7 +465,7 @@ func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
 		if event.Notice != nil && event.Notice.Code == "workspace_attached" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
 			sawPrompt = true
 		}
 	}
@@ -492,7 +535,7 @@ func TestAttachWorkspaceSwitchClearsPinnedThread(t *testing.T) {
 		if event.Notice != nil && event.Notice.Code == "workspace_switched" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
+		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
 			sawPrompt = true
 		}
 	}
@@ -588,10 +631,10 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 		ActorUserID:      "user-2",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Kind != control.SelectionPromptAttachWorkspace || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected workspace prompt: %#v", prompt)
 	}
@@ -674,10 +717,10 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 		ActorUserID:      "user-current",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Layout != "grouped_attach_workspace" || prompt.ContextTitle != "当前工作区" {
 		t.Fatalf("unexpected workspace prompt metadata: %#v", prompt)
 	}
@@ -722,10 +765,10 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one workspace selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Kind != control.SelectionPromptAttachWorkspace || prompt.Title != "工作区列表" || prompt.Layout != "grouped_attach_workspace" {
 		t.Fatalf("unexpected workspace prompt: %#v", prompt)
 	}
@@ -774,10 +817,10 @@ func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one workspace selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 1 {
 		t.Fatalf("expected one recoverable workspace option, got %#v", prompt.Options)
 	}
@@ -820,10 +863,10 @@ func TestListWorkspacesShowsRecentFiveWithExpandAction(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one workspace selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "工作区列表" {
 		t.Fatalf("unexpected prompt title: %#v", prompt)
 	}
@@ -838,6 +881,49 @@ func TestListWorkspacesShowsRecentFiveWithExpandAction(t *testing.T) {
 	last := prompt.Options[5]
 	if last.ActionKind != "show_all_workspaces" || last.ButtonLabel != "全部工作区" || last.MetaText != "还有 1 个工作区未显示" {
 		t.Fatalf("unexpected expand option: %#v", last)
+	}
+}
+
+func TestBuildWorkspaceSelectionModelKeepsSemanticEntries(t *testing.T) {
+	now := time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	for i := 0; i < 6; i++ {
+		key := fmt.Sprintf("/data/dl/proj-%d", i)
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-%d", i),
+			DisplayName:   fmt.Sprintf("proj-%d", i),
+			WorkspaceRoot: key,
+			WorkspaceKey:  key,
+			ShortName:     fmt.Sprintf("proj-%d", i),
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-%d", i): {
+					ThreadID:   fmt.Sprintf("thread-%d", i),
+					Name:       fmt.Sprintf("会话-%d", i),
+					CWD:        key,
+					LastUsedAt: now.Add(-time.Duration(i) * time.Minute),
+				},
+			},
+		})
+	}
+
+	model, events := svc.buildWorkspaceSelectionModel(svc.ensureSurface(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}), false)
+	if len(events) != 0 || model == nil {
+		t.Fatalf("expected workspace selection model, got model=%#v events=%#v", model, events)
+	}
+	if model.Expanded || model.RecentLimit != workspaceSelectionRecentLimit {
+		t.Fatalf("unexpected workspace selection view metadata: %#v", model)
+	}
+	if len(model.Entries) != 6 {
+		t.Fatalf("expected semantic entries for all workspaces, got %#v", model.Entries)
+	}
+	if model.Entries[0].WorkspaceKey != "/data/dl/proj-0" || !model.Entries[0].Attachable || model.Entries[0].RecoverableOnly {
+		t.Fatalf("unexpected first workspace entry: %#v", model.Entries[0])
 	}
 }
 
@@ -871,10 +957,10 @@ func TestShowAllWorkspacesExpandsListAndOffersReturn(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one workspace selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "全部工作区" {
 		t.Fatalf("unexpected prompt title: %#v", prompt)
 	}
@@ -922,8 +1008,8 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	}
 	var threadPrompt *control.SelectionPrompt
 	for _, event := range events {
-		if event.SelectionPrompt != nil && event.SelectionPrompt.Kind == control.SelectionPromptUseThread {
-			threadPrompt = event.SelectionPrompt
+		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
+			threadPrompt = prompt
 			break
 		}
 	}
@@ -974,10 +1060,10 @@ func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
 		WorkspaceKey:     "/data/dl/picdetect",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected workspace thread selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "picdetect 全部会话" || len(prompt.Options) != 2 {
 		t.Fatalf("unexpected persisted-only workspace prompt: %#v", prompt)
 	}
@@ -1022,7 +1108,10 @@ func TestUseBusyIdleThreadShowsKickPromptAndConfirmTransfersClaim(t *testing.T) 
 		SurfaceSessionID: "surface-2",
 		ThreadID:         "thread-1",
 	})
-	if len(promptEvents) != 1 || promptEvents[0].SelectionPrompt == nil || promptEvents[0].SelectionPrompt.Kind != control.SelectionPromptKickThread {
+	if len(promptEvents) != 1 {
+		t.Fatalf("expected kick confirmation prompt, got %#v", promptEvents)
+	}
+	if prompt := selectionPromptFromEvent(t, promptEvents[0]); prompt.Kind != control.SelectionPromptKickThread {
 		t.Fatalf("expected kick confirmation prompt, got %#v", promptEvents)
 	}
 
@@ -1703,11 +1792,12 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 		ActorUserID:      "user-2",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
+	prompt := selectionPromptFromEvent(t, events[0])
 	var found bool
-	for _, option := range events[0].SelectionPrompt.Options {
+	for _, option := range prompt.Options {
 		if option.OptionID != "thread-2" {
 			continue
 		}
@@ -1717,7 +1807,7 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 		}
 	}
 	if !found {
-		t.Fatalf("expected claimed workspace thread to appear in prompt, got %#v", events[0].SelectionPrompt)
+		t.Fatalf("expected claimed workspace thread to appear in prompt, got %#v", prompt)
 	}
 }
 
@@ -1789,10 +1879,10 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one workspace selection prompt for headless-only runtime, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Kind != control.SelectionPromptAttachWorkspace || prompt.Title != "工作区列表" || prompt.Layout != "grouped_attach_workspace" {
 		t.Fatalf("unexpected workspace prompt: %#v", prompt)
 	}
@@ -1874,10 +1964,10 @@ func TestVSCodeModeListFiltersOutHeadlessInstances(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "在线 VS Code 实例" || prompt.Layout != "grouped_attach_instance" {
 		t.Fatalf("expected vscode attach prompt title, got %#v", prompt)
 	}
@@ -1955,10 +2045,10 @@ func TestVSCodeModeListShowsCurrentInstanceSummaryAndFocusSortedCandidates(t *te
 		ActorUserID:      "user-main",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Layout != "grouped_attach_instance" || prompt.ContextTitle != "当前实例" {
 		t.Fatalf("unexpected vscode instance prompt metadata: %#v", prompt)
 	}

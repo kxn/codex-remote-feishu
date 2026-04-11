@@ -7,6 +7,7 @@ type FeishuUIDTOOwner string
 
 const (
 	FeishuUIDTOwnerTransition FeishuUIDTOOwner = "feishu_transition_dto"
+	FeishuUIDTOwnerSelection  FeishuUIDTOOwner = "feishu_selection_view"
 )
 
 // FeishuUICallbackPayloadOwner identifies the layer that owns callback payload
@@ -42,6 +43,7 @@ type FeishuUISelectionContext struct {
 	DTOOwner     FeishuUIDTOOwner
 	Surface      FeishuUISurfaceContext
 	PromptKind   SelectionPromptKind
+	ViewMode     string
 	Layout       string
 	Title        string
 	ContextTitle string

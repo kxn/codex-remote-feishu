@@ -422,6 +422,117 @@ func TestProjectUseAllSelectionPromptGroupsByWorkspace(t *testing.T) {
 	}
 }
 
+func TestProjectUseAllSelectionViewGroupsByWorkspace(t *testing.T) {
+	projector := NewProjector()
+	view := control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread: &control.FeishuThreadSelectionView{
+			Mode:        control.FeishuThreadSelectionNormalGlobalAll,
+			RecentLimit: 5,
+			CurrentWorkspace: &control.FeishuThreadSelectionWorkspaceContext{
+				WorkspaceKey:   "/data/dl/droid",
+				WorkspaceLabel: "droid",
+				AgeText:        "5分前",
+			},
+			Entries: []control.FeishuThreadSelectionEntry{
+				{
+					ThreadID:       "thread-1",
+					Summary:        "当前会话",
+					WorkspaceKey:   "/data/dl/droid",
+					WorkspaceLabel: "droid",
+					Status:         "已接管",
+					Current:        true,
+				},
+				{
+					ThreadID:            "thread-2",
+					Summary:             "别的会话",
+					WorkspaceKey:        "/data/dl/web",
+					WorkspaceLabel:      "web",
+					AgeText:             "2分前",
+					AllowCrossWorkspace: true,
+				},
+				{
+					ThreadID:            "thread-3",
+					Summary:             "另一个会话",
+					WorkspaceKey:        "/data/dl/web",
+					WorkspaceLabel:      "web",
+					AgeText:             "2分前",
+					Status:              "VS Code 占用中",
+					AllowCrossWorkspace: true,
+				},
+				{
+					ThreadID:            "thread-4",
+					Summary:             "不可接管会话",
+					WorkspaceKey:        "/data/dl/ops",
+					WorkspaceLabel:      "ops",
+					AgeText:             "1小时前",
+					Status:              "当前被其他飞书会话接管，暂不可接管",
+					Disabled:            true,
+					AllowCrossWorkspace: true,
+				},
+			},
+		},
+	}
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:                control.UIEventSelectionPrompt,
+		FeishuSelectionView: &view,
+		FeishuSelectionContext: &control.FeishuUISelectionContext{
+			DTOOwner:   control.FeishuUIDTOwnerSelection,
+			PromptKind: control.SelectionPromptUseThread,
+			Layout:     "workspace_grouped_useall",
+			Title:      "全部会话",
+			ViewMode:   string(control.FeishuThreadSelectionNormalGlobalAll),
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardTitle != "全部会话" {
+		t.Fatalf("unexpected card title: %#v", ops[0])
+	}
+	if !containsRenderedTag(ops[0].CardElements, "markdown") {
+		t.Fatalf("expected selection view to render structured card elements, got %#v", ops[0].CardElements)
+	}
+	var buttonLabels []string
+	for _, element := range ops[0].CardElements {
+		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
+			continue
+		}
+		for _, button := range cardElementButtons(t, element) {
+			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
+		}
+	}
+	for _, want := range []string{
+		"当前 · 当前会话",
+		"查看当前工作区全部会话",
+		"接管 · 别的会话",
+		"接管 · 另一个会话",
+	} {
+		if !containsString(buttonLabels, want) {
+			t.Fatalf("expected view-projected grouped button %q, got %#v", want, buttonLabels)
+		}
+	}
+	var rendered []string
+	for _, element := range ops[0].CardElements {
+		if content, _ := element["content"].(string); content != "" {
+			rendered = append(rendered, content)
+		}
+	}
+	for _, fragment := range []string{
+		"**当前工作区**",
+		"droid · 5分前\n同工作区内切换请直接用 /use",
+		"**web · 2分前**",
+	} {
+		if !containsString(rendered, fragment) {
+			t.Fatalf("expected view-projected grouped content to include %q, got %#v", fragment, rendered)
+		}
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if !containsRenderedTag(renderedElements, "button") {
+		t.Fatalf("expected rendered V2 view projection to keep interactive buttons, got %#v", renderedElements)
+	}
+}
+
 func TestProjectUseAllSelectionPromptLimitsWorkspaceToFiveAndAddsExpandButtons(t *testing.T) {
 	projector := NewProjector()
 	options := []control.SelectionOption{

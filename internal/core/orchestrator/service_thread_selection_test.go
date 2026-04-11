@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	feishuadapter "github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -116,14 +117,18 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 		Kind:             control.ActionShowThreads,
 		SurfaceSessionID: "surface-1",
 	})
-	if len(events) != 1 || events[0].SelectionPrompt == nil || len(events[0].SelectionPrompt.Options) != 1 {
+	if len(events) != 1 {
 		t.Fatalf("expected one thread selection prompt, got %#v", events)
 	}
-	if events[0].SelectionPrompt.Title != "最近会话" {
-		t.Fatalf("expected recent session prompt title, got %#v", events[0].SelectionPrompt)
+	prompt := selectionPromptFromEvent(t, events[0])
+	if len(prompt.Options) != 1 {
+		t.Fatalf("expected one thread selection prompt, got %#v", events)
 	}
-	if events[0].SelectionPrompt.Options[0].Subtitle != "可接管" {
-		t.Fatalf("expected attached /use subtitle to only show handoff status, got %#v", events[0].SelectionPrompt.Options[0])
+	if prompt.Title != "最近会话" {
+		t.Fatalf("expected recent session prompt title, got %#v", prompt)
+	}
+	if prompt.Options[0].Subtitle != "可接管" {
+		t.Fatalf("expected attached /use subtitle to only show handoff status, got %#v", prompt.Options[0])
 	}
 }
 
@@ -157,10 +162,10 @@ func TestPresentThreadSelectionShowsMostRecentFive(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 6 {
 		t.Fatalf("expected recent prompt plus scoped-all button, got %#v", prompt.Options)
 	}
@@ -205,10 +210,10 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 		SurfaceSessionID: "surface-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "当前工作区全部会话" || len(prompt.Options) != 7 {
 		t.Fatalf("expected all current-workspace sessions, got %#v", prompt)
 	}
@@ -242,10 +247,10 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "全部会话" || prompt.Hint != "" || prompt.Layout != "workspace_grouped_useall" {
 		t.Fatalf("unexpected all-session prompt metadata: %#v", prompt)
 	}
@@ -290,10 +295,10 @@ func TestPresentAllThreadSelectionLimitsToRecentFiveWorkspaceGroups(t *testing.T
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Title != "全部会话" || prompt.Layout != "workspace_grouped_useall" {
 		t.Fatalf("unexpected prompt metadata: %#v", prompt)
 	}
@@ -308,6 +313,69 @@ func TestPresentAllThreadSelectionLimitsToRecentFiveWorkspaceGroups(t *testing.T
 	last := prompt.Options[len(prompt.Options)-1]
 	if last.ActionKind != "show_all_thread_workspaces" || last.ButtonLabel != "全部工作区" || !strings.Contains(last.Subtitle, "还有 1 个工作区未显示") {
 		t.Fatalf("expected trailing expand action, got %#v", last)
+	}
+}
+
+func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testing.T) {
+	now := time.Date(2026, 4, 11, 5, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	for i := 1; i <= 6; i++ {
+		workspaceKey := fmt.Sprintf("/data/dl/proj-%d", i)
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-%d", i),
+			DisplayName:   fmt.Sprintf("proj-%d", i),
+			WorkspaceRoot: workspaceKey,
+			WorkspaceKey:  workspaceKey,
+			ShortName:     fmt.Sprintf("proj-%d", i),
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-%d", i): {
+					ThreadID:   fmt.Sprintf("thread-%d", i),
+					Name:       fmt.Sprintf("会话-%d", i),
+					CWD:        workspaceKey,
+					LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+				},
+			},
+		})
+	}
+
+	surface := svc.ensureSurface(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	model, events := svc.buildThreadSelectionModel(surface, threadSelectionDisplayAll)
+	if len(events) != 0 || model == nil {
+		t.Fatalf("expected thread selection model, got model=%#v events=%#v", model, events)
+	}
+	if model.Mode != control.FeishuThreadSelectionNormalGlobalRecent {
+		t.Fatalf("expected recent grouped mode for /useall entry view, got %#v", model)
+	}
+	if len(model.Entries) != 6 {
+		t.Fatalf("expected semantic views for all workspace groups, got %#v", model.Entries)
+	}
+	if model.Entries[0].ThreadID != "thread-6" || model.Entries[0].WorkspaceKey != "/data/dl/proj-6" || !model.Entries[0].AllowCrossWorkspace {
+		t.Fatalf("unexpected first semantic thread view: %#v", model.Entries[0])
+	}
+
+	view := control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread:     model,
+	}
+	prompt, ok := feishuadapter.SelectionPromptFromView(view, svc.buildFeishuSelectionContextFromView(surface, view))
+	if !ok {
+		t.Fatalf("expected selection view to be projectable, got %#v", model)
+	}
+	if len(prompt.Options) != 6 {
+		t.Fatalf("expected five visible groups plus expand action, got %#v", prompt.Options)
+	}
+	if prompt.Options[4].OptionID != "thread-2" {
+		t.Fatalf("expected prompt projection to keep only recent five workspace groups, got %#v", prompt.Options)
+	}
+	last := prompt.Options[len(prompt.Options)-1]
+	if last.ActionKind != "show_all_thread_workspaces" || last.ButtonLabel != "全部工作区" {
+		t.Fatalf("expected prompt projection to append expand action, got %#v", last)
 	}
 }
 
@@ -341,10 +409,10 @@ func TestPresentAllThreadWorkspacesShowsAllGroupsAndReturnAction(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 7 {
 		t.Fatalf("expected six workspace groups plus return action, got %#v", prompt.Options)
 	}
@@ -412,10 +480,10 @@ func TestPresentAllThreadSelectionDoesNotCountCurrentWorkspaceAgainstGroupLimit(
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.ContextKey != "/data/dl/current" || prompt.ContextTitle != "当前工作区" {
 		t.Fatalf("expected current workspace context, got %#v", prompt)
 	}
@@ -484,10 +552,10 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if len(events) != 1 || events[0].SelectionPrompt == nil {
+	if len(events) != 1 {
 		t.Fatalf("expected workspace selection prompt, got %#v", events)
 	}
-	prompt := events[0].SelectionPrompt
+	prompt := selectionPromptFromEvent(t, events[0])
 	if prompt.Layout != "workspace_grouped_useall" || prompt.Title != "web 全部会话" || len(prompt.Options) != 4 {
 		t.Fatalf("unexpected workspace-all prompt: %#v", prompt)
 	}
