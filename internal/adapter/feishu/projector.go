@@ -17,11 +17,12 @@ import (
 type OperationKind string
 
 const (
-	OperationSendText       OperationKind = "send_text"
-	OperationSendCard       OperationKind = "send_card"
-	OperationSendImage      OperationKind = "send_image"
-	OperationAddReaction    OperationKind = "add_reaction"
-	OperationRemoveReaction OperationKind = "remove_reaction"
+	OperationSendText         OperationKind = "send_text"
+	OperationSendCard         OperationKind = "send_card"
+	OperationSendImage        OperationKind = "send_image"
+	OperationAddReaction      OperationKind = "add_reaction"
+	OperationRemoveReaction   OperationKind = "remove_reaction"
+	OperationSetTimeSensitive OperationKind = "set_time_sensitive"
 )
 
 type Operation struct {
@@ -34,6 +35,7 @@ type Operation struct {
 	MessageID        string
 	ReplyToMessageID string
 	EmojiType        string
+	TimeSensitive    bool
 	Text             string
 	ImagePath        string
 	ImageBase64      string

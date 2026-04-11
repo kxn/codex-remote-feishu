@@ -55,6 +55,7 @@ func DefaultManifest() Manifest {
 			Scopes: PermissionScopes{
 				Tenant: []string{
 					"drive:drive",
+					"im:datasync.feed_card.time_sensitive:write",
 					"im:message",
 					"im:message.group_at_msg:readonly",
 					"im:message.p2p_msg:readonly",
@@ -89,6 +90,7 @@ func DefaultManifest() Manifest {
 				Items: []string{
 					"打开“权限管理”里的“批量导入/导出权限”，粘贴 scopes import JSON。",
 					"点击“保存并申请开通”，再回到当前页面继续。",
+					"如果需要在单聊列表里标记“等待你输入”的机器人，保持 im:datasync.feed_card.time_sensitive:write 启用。",
 					"如果需要 Markdown 预览，保持 drive:drive 权限启用。",
 				},
 			},

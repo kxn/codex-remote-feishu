@@ -1036,6 +1036,64 @@ func TestDaemonTickResumesQueuedRemoteInputAfterLocalTurnCompletes(t *testing.T)
 	}
 }
 
+func TestDaemonTickSyncsFeishuTimeSensitiveForPendingInput(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+
+	userSurfaceID := "feishu:app-1:user:ou_user-1"
+	chatSurfaceID := "feishu:app-1:chat:oc_group-1"
+	app.service.MaterializeSurface(userSurfaceID, "app-1", "oc_p2p-1", "ou_user-1")
+	app.service.MaterializeSurface(chatSurfaceID, "app-1", "oc_group-1", "ou_user-1")
+
+	surfaces := app.service.Surfaces()
+	for _, surface := range surfaces {
+		switch surface.SurfaceSessionID {
+		case userSurfaceID, chatSurfaceID:
+			surface.PendingRequests = map[string]*state.RequestPromptRecord{
+				"req-1": {RequestID: "req-1"},
+			}
+		}
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+
+	if len(gateway.operations) != 1 {
+		t.Fatalf("operations = %#v, want exactly one time-sensitive enable for user surface", gateway.operations)
+	}
+	if gateway.operations[0].Kind != feishu.OperationSetTimeSensitive {
+		t.Fatalf("first operation kind = %q, want %q", gateway.operations[0].Kind, feishu.OperationSetTimeSensitive)
+	}
+	if !gateway.operations[0].TimeSensitive {
+		t.Fatalf("expected first operation to enable time-sensitive state, got %#v", gateway.operations[0])
+	}
+	if gateway.operations[0].ReceiveID != "ou_user-1" || gateway.operations[0].ReceiveIDType != "open_id" {
+		t.Fatalf("unexpected user target for time-sensitive enable: %#v", gateway.operations[0])
+	}
+
+	app.onTick(context.Background(), time.Now().UTC().Add(time.Second))
+	if len(gateway.operations) != 1 {
+		t.Fatalf("second tick should not resend unchanged time-sensitive state, got %#v", gateway.operations)
+	}
+
+	for _, surface := range app.service.Surfaces() {
+		if surface.SurfaceSessionID == userSurfaceID {
+			surface.PendingRequests = nil
+		}
+	}
+
+	app.onTick(context.Background(), time.Now().UTC().Add(2*time.Second))
+
+	if len(gateway.operations) != 2 {
+		t.Fatalf("operations after clearing pending input = %#v, want one enable and one disable", gateway.operations)
+	}
+	if gateway.operations[1].Kind != feishu.OperationSetTimeSensitive || gateway.operations[1].TimeSensitive {
+		t.Fatalf("second operation = %#v, want time-sensitive disable", gateway.operations[1])
+	}
+	if gateway.operations[1].ReceiveID != "ou_user-1" || gateway.operations[1].ReceiveIDType != "open_id" {
+		t.Fatalf("unexpected user target for time-sensitive disable: %#v", gateway.operations[1])
+	}
+}
+
 func TestDaemonProjectsQueuedAndDiscardedReactionsForRecalledMessage(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

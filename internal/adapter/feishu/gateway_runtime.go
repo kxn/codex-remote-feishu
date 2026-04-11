@@ -13,6 +13,7 @@ import (
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkimv2 "github.com/larksuite/oapi-sdk-go/v3/service/im/v2"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -292,9 +293,51 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		delete(g.reactions, reactionKey(operation.MessageID, operation.EmojiType))
 		g.mu.Unlock()
 		return nil
+	case OperationSetTimeSensitive:
+		userID := strings.TrimSpace(operation.ReceiveID)
+		userIDType := strings.TrimSpace(operation.ReceiveIDType)
+		if userID == "" || userIDType == "" {
+			return fmt.Errorf("set time sensitive failed: missing user target")
+		}
+		resp, err := g.botTimeSensitiveFn(ctx, userIDType, operation.TimeSensitive, []string{userID})
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return fmt.Errorf("set time sensitive failed: code=%d msg=%s", resp.Code, resp.Msg)
+		}
+		if resp.Data != nil && len(resp.Data.FailedUserReasons) != 0 {
+			reason := resp.Data.FailedUserReasons[0]
+			code := 0
+			if reason.ErrorCode != nil {
+				code = *reason.ErrorCode
+			}
+			return fmt.Errorf(
+				"set time sensitive failed: user=%s code=%d msg=%s",
+				strings.TrimSpace(stringPtr(reason.UserId)),
+				code,
+				strings.TrimSpace(stringPtr(reason.ErrorMessage)),
+			)
+		}
+		return nil
 	default:
 		return nil
 	}
+}
+
+func (g *LiveGateway) botTimeSensitive(ctx context.Context, userIDType string, timeSensitive bool, userIDs []string) (*larkimv2.BotTimeSentiveFeedCardResp, error) {
+	return g.client.Im.V2.FeedCard.BotTimeSentive(
+		ctx,
+		larkimv2.NewBotTimeSentiveFeedCardReqBuilder().
+			UserIdType(userIDType).
+			Body(
+				larkimv2.NewBotTimeSentiveFeedCardReqBodyBuilder().
+					TimeSensitive(timeSensitive).
+					UserIds(userIDs).
+					Build(),
+			).
+			Build(),
+	)
 }
 
 func (g *LiveGateway) uploadOperationImage(ctx context.Context, operation Operation) (string, error) {

@@ -579,5 +579,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 }

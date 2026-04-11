@@ -6,6 +6,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkimv2 "github.com/larksuite/oapi-sdk-go/v3/service/im/v2"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -46,6 +47,7 @@ type LiveGateway struct {
 	fetchMessageFn     func(context.Context, string) (*gatewayMessage, error)
 	createMessageFn    func(context.Context, string, string, string, string) (*larkim.CreateMessageResp, error)
 	replyMessageFn     func(context.Context, string, string, string) (*larkim.ReplyMessageResp, error)
+	botTimeSensitiveFn func(context.Context, string, bool, []string) (*larkimv2.BotTimeSentiveFeedCardResp, error)
 
 	mu        sync.Mutex
 	stateHook func(GatewayState, error)
@@ -100,6 +102,7 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	gateway.fetchMessageFn = gateway.fetchMessage
 	gateway.createMessageFn = gateway.createMessage
 	gateway.replyMessageFn = gateway.replyMessage
+	gateway.botTimeSensitiveFn = gateway.botTimeSensitive
 	return gateway
 }
 

@@ -13,7 +13,49 @@ import (
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkimv2 "github.com/larksuite/oapi-sdk-go/v3/service/im/v2"
 )
+
+func TestApplySetTimeSensitive(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	var (
+		gotUserIDType    string
+		gotTimeSensitive bool
+		gotUserIDs       []string
+	)
+	gateway.botTimeSensitiveFn = func(_ context.Context, userIDType string, timeSensitive bool, userIDs []string) (*larkimv2.BotTimeSentiveFeedCardResp, error) {
+		gotUserIDType = userIDType
+		gotTimeSensitive = timeSensitive
+		gotUserIDs = append([]string(nil), userIDs...)
+		return &larkimv2.BotTimeSentiveFeedCardResp{
+			ApiResp: &larkcore.ApiResp{},
+			CodeError: larkcore.CodeError{
+				Code: 0,
+				Msg:  "ok",
+			},
+		}, nil
+	}
+
+	err := gateway.Apply(t.Context(), []Operation{{
+		Kind:          OperationSetTimeSensitive,
+		GatewayID:     "app-1",
+		ReceiveID:     "ou_user-1",
+		ReceiveIDType: "open_id",
+		TimeSensitive: true,
+	}})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if gotUserIDType != "open_id" {
+		t.Fatalf("user id type = %q, want open_id", gotUserIDType)
+	}
+	if !gotTimeSensitive {
+		t.Fatalf("time sensitive = false, want true")
+	}
+	if len(gotUserIDs) != 1 || gotUserIDs[0] != "ou_user-1" {
+		t.Fatalf("user ids = %#v, want [ou_user-1]", gotUserIDs)
+	}
+}
 
 func TestApplySendCardRepliesToSourceMessageWithV2EnvelopeByDefault(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})

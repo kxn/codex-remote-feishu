@@ -70,6 +70,7 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 如果你的飞书控制台支持权限 JSON 导入，优先在这个入口里粘贴这段内容，再补手工确认：
 
 - `drive:drive`
+- `im:datasync.feed_card.time_sensitive:write`
 - `im:message`
 - `im:message.group_at_msg:readonly`
 - `im:message.p2p_msg:readonly`
@@ -122,6 +123,10 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 ### 4. 单聊额外权限
 
 如果你主要通过单聊与机器人交互，还需要额外开通 P2P 消息接收权限。
+
+如果你希望机器人在“等待你继续输入”时能在单聊列表里即时提示，还需要额外开通：
+
+- `im:datasync.feed_card.time_sensitive:write`
 
 ## `.md` 预览额外权限
 
