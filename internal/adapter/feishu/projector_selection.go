@@ -56,116 +56,32 @@ func selectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID s
 }
 
 func attachInstanceSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
-	available := make([]control.SelectionOption, 0, len(prompt.Options))
-	unavailable := make([]control.SelectionOption, 0, len(prompt.Options))
-	current := make([]control.SelectionOption, 0, 1)
-	for _, option := range prompt.Options {
-		switch {
-		case option.IsCurrent:
-			current = append(current, option)
-		case option.Disabled:
-			unavailable = append(unavailable, option)
-		default:
-			available = append(available, option)
-		}
-	}
-
-	capacity := len(prompt.Options)*2 + 4
-	if strings.TrimSpace(prompt.ContextTitle) != "" || strings.TrimSpace(prompt.ContextText) != "" {
-		capacity += 2
-	}
-	if len(current) > 0 {
-		capacity += len(current) * 2
-	}
-	elements := make([]map[string]any, 0, capacity)
-
-	if title := strings.TrimSpace(prompt.ContextTitle); title != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**" + title + "**",
-		})
-	}
-	if text := strings.TrimSpace(prompt.ContextText); text != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(text),
-		})
-	}
-
-	if len(current) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**当前实例**",
-		})
-		for _, option := range current {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if len(available) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**可接管**",
-		})
-		for _, option := range available {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if len(unavailable) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**其他状态**",
-		})
-		for _, option := range unavailable {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
-		})
-	}
-	if len(elements) == 0 {
-		return nil
-	}
-	return elements
+	return buildAttachSelectionPromptElements(prompt, daemonLifecycleID, "当前实例", nil)
 }
 
 func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+	return buildAttachSelectionPromptElements(prompt, daemonLifecycleID, "当前工作区", func(option control.SelectionOption) bool {
+		switch strings.TrimSpace(option.ActionKind) {
+		case "show_all_workspaces", "show_recent_workspaces":
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func buildAttachSelectionPromptElements(
+	prompt control.SelectionPrompt,
+	daemonLifecycleID string,
+	currentHeading string,
+	isMoreOption func(control.SelectionOption) bool,
+) []map[string]any {
 	available := make([]control.SelectionOption, 0, len(prompt.Options))
 	unavailable := make([]control.SelectionOption, 0, len(prompt.Options))
 	current := make([]control.SelectionOption, 0, 1)
 	more := make([]control.SelectionOption, 0, 1)
 	for _, option := range prompt.Options {
-		switch strings.TrimSpace(option.ActionKind) {
-		case "show_all_workspaces", "show_recent_workspaces":
+		if isMoreOption != nil && isMoreOption(option) {
 			more = append(more, option)
 			continue
 		}
@@ -201,77 +117,10 @@ func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daem
 		})
 	}
 
-	if len(current) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**当前工作区**",
-		})
-		for _, option := range current {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if len(available) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**可接管**",
-		})
-		for _, option := range available {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if len(unavailable) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**其他状态**",
-		})
-		for _, option := range unavailable {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
-
-	if len(more) > 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**更多**",
-		})
-		for _, option := range more {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
-				elements = append(elements, button)
-			}
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				elements = append(elements, map[string]any{
-					"tag":     "markdown",
-					"content": renderSystemInlineTags(meta),
-				})
-			}
-		}
-	}
+	elements = appendAttachSelectionSection(elements, prompt, daemonLifecycleID, currentHeading, current)
+	elements = appendAttachSelectionSection(elements, prompt, daemonLifecycleID, "可接管", available)
+	elements = appendAttachSelectionSection(elements, prompt, daemonLifecycleID, "其他状态", unavailable)
+	elements = appendAttachSelectionSection(elements, prompt, daemonLifecycleID, "更多", more)
 
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
@@ -281,6 +130,34 @@ func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daem
 	}
 	if len(elements) == 0 {
 		return nil
+	}
+	return elements
+}
+
+func appendAttachSelectionSection(
+	elements []map[string]any,
+	prompt control.SelectionPrompt,
+	daemonLifecycleID string,
+	title string,
+	options []control.SelectionOption,
+) []map[string]any {
+	if len(options) == 0 {
+		return elements
+	}
+	elements = append(elements, map[string]any{
+		"tag":     "markdown",
+		"content": "**" + title + "**",
+	})
+	for _, option := range options {
+		if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
+			elements = append(elements, button)
+		}
+		if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": renderSystemInlineTags(meta),
+			})
+		}
 	}
 	return elements
 }
