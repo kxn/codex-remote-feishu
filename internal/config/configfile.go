@@ -19,6 +19,8 @@ const (
 	defaultAdminListenPort = 9501
 	defaultToolListenHost  = "127.0.0.1"
 	defaultToolListenPort  = 9502
+	defaultPprofListenHost = "127.0.0.1"
+	defaultPprofListenPort = 17501
 	defaultPreviewRootName = "Codex Remote Previews"
 )
 
@@ -109,8 +111,15 @@ type FeishuAppConfig struct {
 }
 
 type DebugSettings struct {
-	RelayFlow bool `json:"relayFlow,omitempty"`
-	RelayRaw  bool `json:"relayRaw,omitempty"`
+	RelayFlow bool           `json:"relayFlow,omitempty"`
+	RelayRaw  bool           `json:"relayRaw,omitempty"`
+	Pprof     *PprofSettings `json:"pprof,omitempty"`
+}
+
+type PprofSettings struct {
+	Enabled    bool   `json:"enabled,omitempty"`
+	ListenHost string `json:"listenHost,omitempty"`
+	ListenPort int    `json:"listenPort,omitempty"`
 }
 
 type StorageSettings struct {
@@ -632,9 +641,35 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.Wrapper.IntegrationMode = defaults.Wrapper.IntegrationMode
 	}
 
+	if cfg.Debug.Pprof != nil {
+		normalized := cfg.Debug.Pprof.normalized()
+		if normalized.isZero() {
+			cfg.Debug.Pprof = nil
+		} else {
+			cfg.Debug.Pprof = &normalized
+		}
+	}
+
 	if strings.TrimSpace(cfg.Storage.PreviewRootFolderName) == "" {
 		cfg.Storage.PreviewRootFolderName = defaults.Storage.PreviewRootFolderName
 	}
 
 	return cfg
+}
+
+func (cfg PprofSettings) normalized() PprofSettings {
+	if !cfg.Enabled {
+		return cfg
+	}
+	if strings.TrimSpace(cfg.ListenHost) == "" {
+		cfg.ListenHost = defaultPprofListenHost
+	}
+	if cfg.ListenPort <= 0 {
+		cfg.ListenPort = defaultPprofListenPort
+	}
+	return cfg
+}
+
+func (cfg PprofSettings) isZero() bool {
+	return !cfg.Enabled && strings.TrimSpace(cfg.ListenHost) == "" && cfg.ListenPort <= 0
 }

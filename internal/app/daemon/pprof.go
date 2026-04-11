@@ -5,16 +5,41 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"strconv"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
 const (
 	defaultPprofListenHost = "127.0.0.1"
-	defaultPprofListenPort = "17501"
+	defaultPprofListenPort = 17501
 )
 
 func defaultPprofBindAddr() string {
-	return net.JoinHostPort(defaultPprofListenHost, defaultPprofListenPort)
+	return pprofBindAddrFromConfig(config.PprofSettings{Enabled: true})
+}
+
+func pprofBindAddrForDebugSettings(settings config.DebugSettings) string {
+	if settings.Pprof == nil {
+		return ""
+	}
+	return pprofBindAddrFromConfig(*settings.Pprof)
+}
+
+func pprofBindAddrFromConfig(settings config.PprofSettings) string {
+	if !settings.Enabled {
+		return ""
+	}
+	host := strings.TrimSpace(settings.ListenHost)
+	if host == "" {
+		host = defaultPprofListenHost
+	}
+	port := settings.ListenPort
+	if port <= 0 {
+		port = defaultPprofListenPort
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 func (a *App) ConfigurePprof(addr string) {

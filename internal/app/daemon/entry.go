@@ -117,7 +117,7 @@ func RunMain(ctx context.Context, version string) error {
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
-	app.ConfigurePprof(defaultPprofBindAddr())
+	app.ConfigurePprof(pprofBindAddrForDebugSettings(loadedConfig.Config.Debug))
 	if cfg.DebugRelayRaw {
 		rawLogger, err := debuglog.OpenRaw(paths.DaemonRawLogFile, "daemon", "", os.Getpid())
 		if err != nil {

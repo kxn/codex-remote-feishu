@@ -308,6 +308,48 @@ func TestBootstrapPreservesExistingDebugRelayRawFlag(t *testing.T) {
 	}
 }
 
+func TestBootstrapPreservesExistingPprofConfig(t *testing.T) {
+	baseDir := t.TempDir()
+	configDir := filepath.Join(baseDir, ".config", "codex-remote")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	configPath := filepath.Join(configDir, "config.json")
+	cfg := config.DefaultAppConfig()
+	cfg.Debug.Pprof = &config.PprofSettings{
+		Enabled:    true,
+		ListenHost: "127.0.0.1",
+		ListenPort: 17601,
+	}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("seed unified config: %v", err)
+	}
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:         baseDir,
+		BinaryPath:      seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary-bin"),
+		CurrentVersion:  "dev",
+		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
+		CodexRealBinary: "/usr/local/bin/codex",
+		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+
+	loaded := loadAppConfigForTest(t, state.ConfigPath)
+	if loaded.Debug.Pprof == nil {
+		t.Fatal("expected pprof config to be preserved")
+	}
+	if !loaded.Debug.Pprof.Enabled {
+		t.Fatalf("expected pprof to stay enabled, got %#v", loaded.Debug.Pprof)
+	}
+	if loaded.Debug.Pprof.ListenHost != "127.0.0.1" || loaded.Debug.Pprof.ListenPort != 17601 {
+		t.Fatalf("expected pprof config to be preserved, got %#v", loaded.Debug.Pprof)
+	}
+}
+
 func TestBootstrapAcceptsMatchingDeprecatedBinaryFlags(t *testing.T) {
 	baseDir := t.TempDir()
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary-bin")
