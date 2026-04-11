@@ -29,6 +29,7 @@ fi
 
 bash scripts/check/no-local-paths.sh
 bash scripts/check/no-legacy-names.sh
+bash scripts/check/go-file-length.sh
 
 files="$(find cmd internal testkit -name '*.go' | sort)"
 if [[ -n "${files}" ]]; then
