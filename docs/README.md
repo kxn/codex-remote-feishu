@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 新增 Web onboarding/admin 的用户视角 HTML mock，并刷新文档索引。
+> Summary: 新增 daemon 大包拆分方案草案，并刷新文档索引。
 
 ## 1. 适用范围
 
@@ -140,6 +140,7 @@
 ### 6.4 `draft`
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
+- [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
