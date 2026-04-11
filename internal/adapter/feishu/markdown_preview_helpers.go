@@ -200,6 +200,26 @@ func previewFileName(resolvedPath, contentSHA string) string {
 	return name + "--" + shortSHA + ext
 }
 
+func previewArtifactMetadata(path string) (artifactKind string, mimeType string, ok bool) {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".md":
+		return "markdown", "text/markdown", true
+	case ".html", ".htm":
+		return "html", "text/html", true
+	default:
+		return "", "", false
+	}
+}
+
+func isSupportedPreviewArtifactKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "markdown", "html":
+		return true
+	default:
+		return false
+	}
+}
+
 func limitNameBytes(value string, limit int) string {
 	if limit <= 0 || len(value) <= limit {
 		return value

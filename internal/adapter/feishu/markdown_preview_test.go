@@ -225,6 +225,50 @@ func TestDriveMarkdownPreviewerPersistsCacheAndReusesUpload(t *testing.T) {
 	}
 }
 
+func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinks(t *testing.T) {
+	root := t.TempDir()
+	htmlPath := writePreviewFile(t, filepath.Join(root, "docs", "mock.html"), "<!doctype html><title>mock</title><h1>Mock</h1>")
+	api := newFakePreviewAPI()
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		StatePath:  filepath.Join(root, "state", "preview.json"),
+		ProcessCWD: root,
+	})
+
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Open [mock](docs/mock.html).",
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if result.Block.Text != "Open [mock](https://preview/file-1)." {
+		t.Fatalf("unexpected rewritten text: %q", result.Block.Text)
+	}
+	if len(api.uploadFileCalls) != 1 {
+		t.Fatalf("expected one upload, got %#v", api.uploadFileCalls)
+	}
+	if !strings.HasPrefix(api.uploadFileCalls[0].FileName, "mock--") || !strings.HasSuffix(api.uploadFileCalls[0].FileName, ".html") {
+		t.Fatalf("unexpected uploaded file name: %#v", api.uploadFileCalls[0])
+	}
+	if api.uploadFileCalls[0].Content != "<!doctype html><title>mock</title><h1>Mock</h1>" {
+		t.Fatalf("unexpected uploaded content: %#v", api.uploadFileCalls[0])
+	}
+	raw, err := os.ReadFile(previewer.config.StatePath)
+	if err != nil {
+		t.Fatalf("read preview state: %v", err)
+	}
+	if !strings.Contains(string(raw), htmlPath) {
+		t.Fatalf("expected state file to contain source path %q, got %s", htmlPath, string(raw))
+	}
+}
+
 func TestDriveMarkdownPreviewerUploadsNewVersionWhenMarkdownChanges(t *testing.T) {
 	root := t.TempDir()
 	docPath := writeMarkdownFile(t, filepath.Join(root, "docs", "design.md"), "# v1\n")
@@ -1015,6 +1059,11 @@ func TestPreviewPrincipalsRecognizeGatewayAwareChatSurface(t *testing.T) {
 }
 
 func writeMarkdownFile(t *testing.T, path, content string) string {
+	t.Helper()
+	return writePreviewFile(t, path, content)
+}
+
+func writePreviewFile(t *testing.T, path, content string) string {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", path, err)

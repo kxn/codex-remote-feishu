@@ -194,27 +194,32 @@ func (h markdownFilePreviewHandler) Match(_ FinalBlockPreviewRequest, ref Previe
 		return false
 	}
 	cleanTarget, _ := stripMarkdownLocationSuffix(target)
-	return strings.EqualFold(filepath.Ext(cleanTarget), ".md")
+	_, _, ok := previewArtifactMetadata(cleanTarget)
+	return ok
 }
 
 func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPreviewRequest, ref PreviewReference) (*PreviewPlan, bool, error) {
 	if h.previewer == nil {
 		return nil, false, nil
 	}
-	resolvedPath, ok, err := h.previewer.resolveMarkdownPath(ref.RawTarget, req)
+	resolvedPath, ok, err := h.previewer.resolvePreviewPath(ref.RawTarget, req)
 	if err != nil || !ok {
 		return nil, ok, err
+	}
+	artifactKind, mimeType, supported := previewArtifactMetadata(resolvedPath)
+	if !supported {
+		return nil, false, nil
 	}
 
 	content, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return nil, true, fmt.Errorf("read markdown preview source %s: %w", resolvedPath, err)
+		return nil, true, fmt.Errorf("read preview source %s: %w", resolvedPath, err)
 	}
 	if len(content) == 0 {
-		return nil, true, fmt.Errorf("skip empty markdown preview source %s", resolvedPath)
+		return nil, true, fmt.Errorf("skip empty preview source %s", resolvedPath)
 	}
 	if int64(len(content)) > h.previewer.config.MaxFileBytes {
-		return nil, true, fmt.Errorf("markdown preview source exceeds %d bytes: %s", h.previewer.config.MaxFileBytes, resolvedPath)
+		return nil, true, fmt.Errorf("preview source exceeds %d bytes: %s", h.previewer.config.MaxFileBytes, resolvedPath)
 	}
 
 	sum := sha256.Sum256(content)
@@ -225,8 +230,8 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 			SourcePath:   resolvedPath,
 			DisplayName:  filepath.Base(resolvedPath),
 			ContentHash:  contentSHA,
-			ArtifactKind: "markdown",
-			MIMEType:     "text/markdown",
+			ArtifactKind: artifactKind,
+			MIMEType:     mimeType,
 			Text:         string(content),
 			Bytes:        append([]byte(nil), content...),
 		},
@@ -246,7 +251,7 @@ func (p driveMarkdownLinkPublisher) Supports(delivery PreviewDeliveryPlan, artif
 	return p.previewer != nil &&
 		p.previewer.api != nil &&
 		delivery.Kind == PreviewDeliveryDriveFileLink &&
-		strings.EqualFold(strings.TrimSpace(artifact.ArtifactKind), "markdown")
+		isSupportedPreviewArtifactKind(artifact.ArtifactKind)
 }
 
 func (p driveMarkdownLinkPublisher) Publish(ctx context.Context, req PreviewPublishRequest) (*PreviewPublishResult, bool, error) {
@@ -317,7 +322,7 @@ func (p *DriveMarkdownPreviewer) publishDriveMarkdownLinkLocked(ctx context.Cont
 	if record.URL == "" {
 		url, err := p.api.QueryMetaURL(ctx, record.Token, previewFileType)
 		if err != nil {
-			return nil, true, fmt.Errorf("query markdown preview url for %s: %w", artifact.SourcePath, err)
+			return nil, true, fmt.Errorf("query preview url for %s: %w", artifact.SourcePath, err)
 		}
 		record.URL = url
 	}
@@ -352,7 +357,7 @@ func (p *DriveMarkdownPreviewer) driveMarkdownPublisherID() string {
 func (p *DriveMarkdownPreviewer) uploadPreviewFileLocked(ctx context.Context, record *previewFileRecord, parentToken, resolvedPath string, content []byte, contentSHA string) error {
 	fileToken, err := p.api.UploadFile(ctx, parentToken, previewFileName(resolvedPath, contentSHA), content)
 	if err != nil {
-		return fmt.Errorf("upload markdown preview for %s: %w", resolvedPath, err)
+		return fmt.Errorf("upload preview for %s: %w", resolvedPath, err)
 	}
 	record.Token = fileToken
 	record.URL = ""
@@ -383,7 +388,7 @@ func (p *DriveMarkdownPreviewer) ensureScopeFolderLocked(ctx context.Context, st
 					state.Root = nil
 					continue
 				}
-				return nil, fmt.Errorf("create markdown preview folder for %s: %w", scopeKey, err)
+				return nil, fmt.Errorf("create preview folder for %s: %w", scopeKey, err)
 			}
 			scope.Folder.Token = node.Token
 			scope.Folder.URL = node.URL
@@ -395,12 +400,12 @@ func (p *DriveMarkdownPreviewer) ensureScopeFolderLocked(ctx context.Context, st
 				scope.Folder = nil
 				continue
 			}
-			return nil, fmt.Errorf("authorize markdown preview folder for %s: %w", scopeKey, err)
+			return nil, fmt.Errorf("authorize preview folder for %s: %w", scopeKey, err)
 		}
 		return scope.Folder, nil
 	}
 
-	return nil, fmt.Errorf("create markdown preview folder for %s: exhausted retries", scopeKey)
+	return nil, fmt.Errorf("create preview folder for %s: exhausted retries", scopeKey)
 }
 
 func (p *DriveMarkdownPreviewer) ensureRootFolderLocked(ctx context.Context, state *previewState) (*previewFolderRecord, error) {
@@ -411,7 +416,7 @@ func (p *DriveMarkdownPreviewer) ensureRootFolderLocked(ctx context.Context, sta
 		if state.Root.Token == "" {
 			node, ok, err := p.discoverManagedRootLocked(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("discover markdown preview root folder: %w", err)
+				return nil, fmt.Errorf("discover preview root folder: %w", err)
 			}
 			if ok {
 				state.Root.Token = node.Token
@@ -422,7 +427,7 @@ func (p *DriveMarkdownPreviewer) ensureRootFolderLocked(ctx context.Context, sta
 		if state.Root.Token == "" {
 			node, err := p.api.CreateFolder(ctx, defaultPreviewRootFolderName, "")
 			if err != nil {
-				return nil, fmt.Errorf("create markdown preview root folder: %w", err)
+				return nil, fmt.Errorf("create preview root folder: %w", err)
 			}
 			state.Root.Token = node.Token
 			state.Root.URL = node.URL
@@ -430,10 +435,10 @@ func (p *DriveMarkdownPreviewer) ensureRootFolderLocked(ctx context.Context, sta
 		return state.Root, nil
 	}
 
-	return nil, fmt.Errorf("create markdown preview root folder: exhausted retries")
+	return nil, fmt.Errorf("create preview root folder: exhausted retries")
 }
 
-func (p *DriveMarkdownPreviewer) resolveMarkdownPath(rawTarget string, req MarkdownPreviewRequest) (string, bool, error) {
+func (p *DriveMarkdownPreviewer) resolvePreviewPath(rawTarget string, req MarkdownPreviewRequest) (string, bool, error) {
 	target := strings.TrimSpace(rawTarget)
 	if target == "" {
 		return "", false, nil
@@ -449,7 +454,7 @@ func (p *DriveMarkdownPreviewer) resolveMarkdownPath(rawTarget string, req Markd
 	}
 
 	cleanTarget, _ := stripMarkdownLocationSuffix(target)
-	if !strings.EqualFold(filepath.Ext(cleanTarget), ".md") {
+	if _, _, ok := previewArtifactMetadata(cleanTarget); !ok {
 		return "", false, nil
 	}
 
