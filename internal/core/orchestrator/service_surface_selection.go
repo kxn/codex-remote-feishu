@@ -84,7 +84,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 	if contextTitle != "" && len(options) == 0 {
 		hint = "当前没有其他可接管实例。"
 	}
-	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+	return []control.UIEvent{s.feishuDirectSelectionPromptEvent(surface, control.FeishuDirectSelectionPrompt{
 		Kind:         control.SelectionPromptAttachInstance,
 		Layout:       "grouped_attach_instance",
 		Title:        "在线 VS Code 实例",

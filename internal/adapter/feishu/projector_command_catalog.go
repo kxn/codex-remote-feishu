@@ -6,11 +6,11 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func commandCatalogBody(catalog control.CommandCatalog) string {
+func commandCatalogBody(catalog control.FeishuDirectCommandCatalog) string {
 	return renderSystemInlineTags(strings.TrimSpace(catalog.Summary))
 }
 
-func commandCatalogElements(catalog control.CommandCatalog, daemonLifecycleID string) []map[string]any {
+func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(catalog.Sections)*3+2)
 	if breadcrumb := commandCatalogBreadcrumbMarkdown(catalog.Breadcrumbs); breadcrumb != "" {
 		elements = append(elements, map[string]any{

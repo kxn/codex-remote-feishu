@@ -76,9 +76,9 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 	switch parsed.Mode {
 	case debugCommandShowStatus:
 		return []control.UIEvent{{
-			Kind:             control.UIEventCommandCatalog,
-			SurfaceSessionID: command.SurfaceSessionID,
-			CommandCatalog:   buildDebugStatusCatalog(stateValue, a.upgradeCheckInFlight),
+			Kind:                       control.UIEventFeishuDirectCommandCatalog,
+			SurfaceSessionID:           command.SurfaceSessionID,
+			FeishuDirectCommandCatalog: buildDebugStatusCatalog(stateValue, a.upgradeCheckInFlight),
 		}}
 	case debugCommandShowTrack:
 		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_status", buildTrackSummary(stateValue))}
@@ -169,9 +169,9 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 	switch parsed.Mode {
 	case upgradeCommandShowStatus:
 		return []control.UIEvent{{
-			Kind:             control.UIEventCommandCatalog,
-			SurfaceSessionID: command.SurfaceSessionID,
-			CommandCatalog:   buildUpgradeStatusCatalog(stateValue, a.upgradeCheckInFlight),
+			Kind:                       control.UIEventFeishuDirectCommandCatalog,
+			SurfaceSessionID:           command.SurfaceSessionID,
+			FeishuDirectCommandCatalog: buildUpgradeStatusCatalog(stateValue, a.upgradeCheckInFlight),
 		}}
 	case upgradeCommandLatest:
 		return a.handleUpgradeLatestCommand(command, stateValue)
@@ -426,10 +426,10 @@ func (a *App) promptPendingUpgradeOnSurfaceLocked(surfaceID string, stateValue i
 		pending.RequestedAt = &promptedAt
 	}
 	return []control.UIEvent{{
-		Kind:             control.UIEventCommandCatalog,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		CommandCatalog:   buildUpgradePromptCatalog(stateValue),
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		GatewayID:                  surface.GatewayID,
+		SurfaceSessionID:           surface.SurfaceSessionID,
+		FeishuDirectCommandCatalog: buildUpgradePromptCatalog(stateValue),
 	}}
 }
 
@@ -604,7 +604,7 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 	}
 }
 
-func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool) *control.CommandCatalog {
+func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{
 		fmt.Sprintf("当前来源：%s", displayInstallSource(stateValue.InstallSource)),
 		fmt.Sprintf("当前 track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
@@ -621,7 +621,7 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
 	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
-	return &control.CommandCatalog{
+	return &control.FeishuDirectCommandCatalog{
 		Title:        "Debug / Upgrade",
 		Summary:      strings.Join(summaryLines, "\n"),
 		Interactive:  true,
@@ -660,7 +660,7 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 	}
 }
 
-func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bool) *control.CommandCatalog {
+func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bool) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{
 		fmt.Sprintf("当前来源：%s", displayInstallSource(stateValue.InstallSource)),
 		fmt.Sprintf("当前 track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
@@ -677,7 +677,7 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 		summaryLines = append(summaryLines, "待处理升级：无")
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
-	return &control.CommandCatalog{
+	return &control.FeishuDirectCommandCatalog{
 		Title:        "Upgrade",
 		Summary:      strings.Join(summaryLines, "\n"),
 		Interactive:  true,
@@ -705,7 +705,7 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 	}
 }
 
-func buildUpgradePromptCatalog(stateValue install.InstallState) *control.CommandCatalog {
+func buildUpgradePromptCatalog(stateValue install.InstallState) *control.FeishuDirectCommandCatalog {
 	targetVersion := ""
 	if stateValue.PendingUpgrade != nil {
 		targetVersion = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
@@ -716,7 +716,7 @@ func buildUpgradePromptCatalog(stateValue install.InstallState) *control.Command
 		firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
 		firstNonEmpty(targetVersion, "unknown"),
 	)
-	return &control.CommandCatalog{
+	return &control.FeishuDirectCommandCatalog{
 		Title:       "发现可升级版本",
 		Summary:     summary,
 		Interactive: true,
@@ -833,9 +833,9 @@ func debugUsageEvents(surfaceID, message string) []control.UIEvent {
 		events = append(events, debugNoticeEvent(surfaceID, "debug_usage_error", message))
 	}
 	events = append(events, control.UIEvent{
-		Kind:             control.UIEventCommandCatalog,
-		SurfaceSessionID: surfaceID,
-		CommandCatalog:   buildDebugStatusCatalog(install.InstallState{}, false),
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		SurfaceSessionID:           surfaceID,
+		FeishuDirectCommandCatalog: buildDebugStatusCatalog(install.InstallState{}, false),
 	})
 	return events
 }
@@ -846,9 +846,9 @@ func upgradeUsageEvents(surfaceID, message string) []control.UIEvent {
 		events = append(events, upgradeNoticeEvent(surfaceID, "upgrade_usage_error", message))
 	}
 	events = append(events, control.UIEvent{
-		Kind:             control.UIEventCommandCatalog,
-		SurfaceSessionID: surfaceID,
-		CommandCatalog:   buildUpgradeStatusCatalog(install.InstallState{}, false),
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		SurfaceSessionID:           surfaceID,
+		FeishuDirectCommandCatalog: buildUpgradeStatusCatalog(install.InstallState{}, false),
 	})
 	return events
 }

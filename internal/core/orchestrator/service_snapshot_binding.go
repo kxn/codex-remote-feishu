@@ -76,20 +76,20 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 	}}
 }
 
-func (s *Service) commandCatalogEvent(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.CommandCatalog) control.UIEvent {
+func (s *Service) feishuDirectCommandCatalogEvent(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.FeishuDirectCommandCatalog) control.UIEvent {
 	return control.UIEvent{
-		Kind:                 control.UIEventCommandCatalog,
-		GatewayID:            surface.GatewayID,
-		SurfaceSessionID:     surface.SurfaceSessionID,
-		CommandCatalog:       &catalog,
-		FeishuCommandContext: s.buildFeishuCommandContext(surface, view, menuStage, catalog),
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		GatewayID:                  surface.GatewayID,
+		SurfaceSessionID:           surface.SurfaceSessionID,
+		FeishuDirectCommandCatalog: &catalog,
+		FeishuCommandContext:       s.buildFeishuCommandContext(surface, view, menuStage, catalog),
 	}
 }
 
 func (s *Service) commandViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
 	catalog := s.commandCatalogFromView(view)
 	return control.UIEvent{
-		Kind:                     control.UIEventCommandCatalog,
+		Kind:                     control.UIEventFeishuDirectCommandCatalog,
 		GatewayID:                surface.GatewayID,
 		SurfaceSessionID:         surface.SurfaceSessionID,
 		InlineReplaceCurrentCard: true,

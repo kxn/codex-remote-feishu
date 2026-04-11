@@ -735,7 +735,7 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 	return defs
 }
 
-func FeishuCommandHelpCatalog() CommandCatalog {
+func FeishuCommandHelpCatalog() FeishuDirectCommandCatalog {
 	return buildFeishuCommandCatalog(
 		"Slash 命令帮助",
 		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
@@ -743,7 +743,7 @@ func FeishuCommandHelpCatalog() CommandCatalog {
 	)
 }
 
-func FeishuCommandMenuCatalog() CommandCatalog {
+func FeishuCommandMenuCatalog() FeishuDirectCommandCatalog {
 	return buildFeishuCommandCatalog(
 		"命令目录",
 		"这是同源的静态命令目录。真正的 `/menu` 首页会在 service 层按当前阶段动态重排。",
@@ -776,7 +776,7 @@ func FeishuRecommendedMenus() []FeishuRecommendedMenu {
 	return menus
 }
 
-func buildFeishuCommandCatalog(title, summary string, interactive bool) CommandCatalog {
+func buildFeishuCommandCatalog(title, summary string, interactive bool) FeishuDirectCommandCatalog {
 	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))
 	for _, group := range feishuCommandGroups {
 		entries := make([]CommandCatalogEntry, 0, len(feishuCommandSpecs))
@@ -813,7 +813,7 @@ func buildFeishuCommandCatalog(title, summary string, interactive bool) CommandC
 			Entries: entries,
 		})
 	}
-	return CommandCatalog{
+	return FeishuDirectCommandCatalog{
 		Title:       title,
 		Summary:     summary,
 		Interactive: interactive,

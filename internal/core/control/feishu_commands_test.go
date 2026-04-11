@@ -107,7 +107,7 @@ func TestParseFeishuTextActionRecognizesVSCodeMigrateCommand(t *testing.T) {
 func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
 	cases := []struct {
 		name    string
-		catalog CommandCatalog
+		catalog FeishuDirectCommandCatalog
 	}{
 		{name: "help", catalog: FeishuCommandHelpCatalog()},
 		{name: "menu", catalog: FeishuCommandMenuCatalog()},
@@ -167,7 +167,7 @@ func TestFeishuRecommendedMenusStayInSuggestedOrder(t *testing.T) {
 }
 
 func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
-	for _, catalog := range []CommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
+	for _, catalog := range []FeishuDirectCommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
 		found := false
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {
@@ -185,7 +185,7 @@ func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
 }
 
 func TestFeishuCommandCatalogsIncludeMode(t *testing.T) {
-	for _, catalog := range []CommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
+	for _, catalog := range []FeishuDirectCommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
 		found := false
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {
@@ -203,7 +203,7 @@ func TestFeishuCommandCatalogsIncludeMode(t *testing.T) {
 }
 
 func TestFeishuCommandCatalogsIncludeUpgrade(t *testing.T) {
-	for _, catalog := range []CommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
+	for _, catalog := range []FeishuDirectCommandCatalog{FeishuCommandHelpCatalog(), FeishuCommandMenuCatalog()} {
 		found := false
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {

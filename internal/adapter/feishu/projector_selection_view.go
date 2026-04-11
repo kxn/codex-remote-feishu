@@ -7,20 +7,20 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-// SelectionPromptFromView projects the UI-owned selection view into the prompt
+// FeishuDirectSelectionPromptFromView projects the UI-owned selection view into the prompt
 // shape currently consumed by the Feishu card renderer.
-func SelectionPromptFromView(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (control.SelectionPrompt, bool) {
+func FeishuDirectSelectionPromptFromView(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (control.FeishuDirectSelectionPrompt, bool) {
 	switch {
 	case view.Workspace != nil && view.PromptKind == control.SelectionPromptAttachWorkspace:
 		return workspaceSelectionPromptFromView(*view.Workspace, ctx), true
 	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread:
 		return threadSelectionPromptFromView(*view.Thread), true
 	default:
-		return control.SelectionPrompt{}, false
+		return control.FeishuDirectSelectionPrompt{}, false
 	}
 }
 
-func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView, ctx *control.FeishuUISelectionContext) control.SelectionPrompt {
+func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView, ctx *control.FeishuUISelectionContext) control.FeishuDirectSelectionPrompt {
 	limit := len(view.Entries)
 	if !view.Expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
 		limit = view.RecentLimit
@@ -95,7 +95,7 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 		hint = "当前没有其他可接管工作区。"
 	}
 
-	prompt := control.SelectionPrompt{
+	prompt := control.FeishuDirectSelectionPrompt{
 		Kind:    control.SelectionPromptAttachWorkspace,
 		Layout:  "grouped_attach_workspace",
 		Title:   "工作区列表",
@@ -116,7 +116,7 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 	return prompt
 }
 
-func threadSelectionPromptFromView(view control.FeishuThreadSelectionView) control.SelectionPrompt {
+func threadSelectionPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
 	switch view.Mode {
 	case control.FeishuThreadSelectionNormalWorkspaceView:
 		return threadWorkspacePromptFromView(view)
@@ -135,7 +135,7 @@ func threadSelectionPromptFromView(view control.FeishuThreadSelectionView) contr
 	}
 }
 
-func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) control.SelectionPrompt {
+func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
 	options := make([]control.SelectionOption, 0, len(view.Entries)+1)
 	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
@@ -150,7 +150,7 @@ func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) contr
 	if view.Workspace != nil {
 		title = firstNonEmpty(strings.TrimSpace(view.Workspace.WorkspaceLabel), strings.TrimSpace(view.Workspace.WorkspaceKey), "工作区") + " 全部会话"
 	}
-	return control.SelectionPrompt{
+	return control.FeishuDirectSelectionPrompt{
 		Kind:    control.SelectionPromptUseThread,
 		Layout:  "workspace_grouped_useall",
 		Title:   title,
@@ -158,7 +158,7 @@ func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) contr
 	}
 }
 
-func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.SelectionPrompt {
+func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
 	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
 	excludeWorkspaceKey := ""
 	if view.CurrentWorkspace != nil {
@@ -189,7 +189,7 @@ func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded
 			ActionKind:  "show_recent_thread_workspaces",
 		})
 	}
-	prompt := control.SelectionPrompt{
+	prompt := control.FeishuDirectSelectionPrompt{
 		Kind:    control.SelectionPromptUseThread,
 		Layout:  "workspace_grouped_useall",
 		Title:   "全部会话",
@@ -207,7 +207,7 @@ func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded
 	return prompt
 }
 
-func threadScopedPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.SelectionPrompt {
+func threadScopedPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
 	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
 	limit := len(entries)
 	if !expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
@@ -236,14 +236,14 @@ func threadScopedPromptFromView(view control.FeishuThreadSelectionView, expanded
 	if expanded {
 		title = "当前工作区全部会话"
 	}
-	return control.SelectionPrompt{
+	return control.FeishuDirectSelectionPrompt{
 		Kind:    control.SelectionPromptUseThread,
 		Title:   title,
 		Options: options,
 	}
 }
 
-func threadVSCodePromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.SelectionPrompt {
+func threadVSCodePromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
 	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
 	limit := len(entries)
 	if !expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
@@ -272,7 +272,7 @@ func threadVSCodePromptFromView(view control.FeishuThreadSelectionView, expanded
 	if expanded {
 		title = "当前实例全部会话"
 	}
-	prompt := control.SelectionPrompt{
+	prompt := control.FeishuDirectSelectionPrompt{
 		Kind:    control.SelectionPromptUseThread,
 		Layout:  "vscode_instance_threads",
 		Title:   title,

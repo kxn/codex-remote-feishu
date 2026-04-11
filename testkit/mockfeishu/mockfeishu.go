@@ -13,7 +13,7 @@ type Recorder struct {
 	TypingOffFor     []string
 	ThumbsUpFor      []string
 	ThumbsDownFor    []string
-	SelectionPrompts []control.SelectionPrompt
+	SelectionPrompts []control.FeishuDirectSelectionPrompt
 }
 
 func NewRecorder() *Recorder {
@@ -48,9 +48,9 @@ func (r *Recorder) Apply(events []control.UIEvent) {
 			if event.PendingInput.ThumbsDown {
 				r.ThumbsDownFor = append(r.ThumbsDownFor, event.PendingInput.SourceMessageID)
 			}
-		case control.UIEventSelectionPrompt:
-			if event.SelectionPrompt != nil {
-				r.SelectionPrompts = append(r.SelectionPrompts, *event.SelectionPrompt)
+		case control.UIEventFeishuDirectSelectionPrompt:
+			if event.FeishuDirectSelectionPrompt != nil {
+				r.SelectionPrompts = append(r.SelectionPrompts, *event.FeishuDirectSelectionPrompt)
 			}
 		}
 	}

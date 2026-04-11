@@ -140,17 +140,17 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             legacyCardDocument(title, projectNoticeBody(*event.Notice), noticeThemeKey(*event.Notice), nil),
 		}}
-	case control.UIEventSelectionPrompt:
-		var prompt *control.SelectionPrompt
+	case control.UIEventFeishuDirectSelectionPrompt:
+		var prompt *control.FeishuDirectSelectionPrompt
 		switch {
 		case event.FeishuSelectionView != nil:
-			projected, ok := SelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
+			projected, ok := FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
 			if !ok {
 				return nil
 			}
 			prompt = &projected
-		case event.SelectionPrompt != nil:
-			prompt = event.SelectionPrompt
+		case event.FeishuDirectSelectionPrompt != nil:
+			prompt = event.FeishuDirectSelectionPrompt
 		default:
 			return nil
 		}
@@ -181,17 +181,17 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeInfo, elements),
 		}}
-	case control.UIEventCommandCatalog:
-		var catalog *control.CommandCatalog
+	case control.UIEventFeishuDirectCommandCatalog:
+		var catalog *control.FeishuDirectCommandCatalog
 		switch {
 		case event.FeishuCommandView != nil:
-			projected, ok := CommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
+			projected, ok := FeishuDirectCommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
 			if !ok {
 				return nil
 			}
 			catalog = &projected
-		case event.CommandCatalog != nil:
-			catalog = event.CommandCatalog
+		case event.FeishuDirectCommandCatalog != nil:
+			catalog = event.FeishuDirectCommandCatalog
 		default:
 			return nil
 		}
@@ -214,16 +214,16 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		operation.cardEnvelope = cardEnvelopeV2
 		operation.card = rawCardDocument(title, body, cardThemeInfo, elements)
 		return []Operation{operation}
-	case control.UIEventRequestPrompt:
-		if event.RequestPrompt == nil {
+	case control.UIEventFeishuDirectRequestPrompt:
+		if event.FeishuDirectRequestPrompt == nil {
 			return nil
 		}
-		title := strings.TrimSpace(event.RequestPrompt.Title)
+		title := strings.TrimSpace(event.FeishuDirectRequestPrompt.Title)
 		if title == "" {
 			title = "需要确认"
 		}
-		body := requestPromptBody(*event.RequestPrompt)
-		elements := requestPromptElements(*event.RequestPrompt, event.DaemonLifecycleID)
+		body := requestPromptBody(*event.FeishuDirectRequestPrompt)
+		elements := requestPromptElements(*event.FeishuDirectRequestPrompt, event.DaemonLifecycleID)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,

@@ -125,7 +125,9 @@ type SelectionOption struct {
 	AllowCrossWorkspace bool
 }
 
-type SelectionPrompt struct {
+// FeishuDirectSelectionPrompt is a retained direct card DTO for the remaining
+// non-controller Feishu prompt paths.
+type FeishuDirectSelectionPrompt struct {
 	PromptID     string
 	Kind         SelectionPromptKind
 	Layout       string
@@ -297,7 +299,9 @@ type RequestPromptQuestion struct {
 	DirectResponse bool
 }
 
-type RequestPrompt struct {
+// FeishuDirectRequestPrompt is a retained direct card DTO for request cards
+// that still cross the boundary without a separate Feishu view model.
+type FeishuDirectRequestPrompt struct {
 	RequestID   string
 	RequestType string
 	Title       string
@@ -371,7 +375,10 @@ type CommandCatalogSection struct {
 	Entries []CommandCatalogEntry
 }
 
-type CommandCatalog struct {
+// FeishuDirectCommandCatalog is a retained direct card DTO for static help and
+// daemon-owned command cards that are intentionally not routed through the
+// newer command view path.
+type FeishuDirectCommandCatalog struct {
 	Title          string
 	Summary        string
 	Interactive    bool
@@ -421,17 +428,17 @@ type ImageOutput struct {
 type UIEventKind string
 
 const (
-	UIEventSnapshot              UIEventKind = "snapshot.updated"
-	UIEventSelectionPrompt       UIEventKind = "selection.prompt"
-	UIEventCommandCatalog        UIEventKind = "command.catalog"
-	UIEventRequestPrompt         UIEventKind = "request.prompt"
-	UIEventPendingInput          UIEventKind = "pending.input.state"
-	UIEventNotice                UIEventKind = "notice"
-	UIEventThreadSelectionChange UIEventKind = "thread.selection.changed"
-	UIEventBlockCommitted        UIEventKind = "block.committed"
-	UIEventImageOutput           UIEventKind = "image.output"
-	UIEventAgentCommand          UIEventKind = "agent.command"
-	UIEventDaemonCommand         UIEventKind = "daemon.command"
+	UIEventSnapshot                    UIEventKind = "snapshot.updated"
+	UIEventFeishuDirectSelectionPrompt UIEventKind = "selection.prompt"
+	UIEventFeishuDirectCommandCatalog  UIEventKind = "command.catalog"
+	UIEventFeishuDirectRequestPrompt   UIEventKind = "request.prompt"
+	UIEventPendingInput                UIEventKind = "pending.input.state"
+	UIEventNotice                      UIEventKind = "notice"
+	UIEventThreadSelectionChange       UIEventKind = "thread.selection.changed"
+	UIEventBlockCommitted              UIEventKind = "block.committed"
+	UIEventImageOutput                 UIEventKind = "image.output"
+	UIEventAgentCommand                UIEventKind = "agent.command"
+	UIEventDaemonCommand               UIEventKind = "daemon.command"
 )
 
 type DaemonCommandKind string
@@ -458,29 +465,29 @@ type DaemonCommand struct {
 }
 
 type UIEvent struct {
-	Kind                     UIEventKind
-	GatewayID                string
-	SurfaceSessionID         string
-	DaemonLifecycleID        string
-	SourceMessageID          string
-	SourceMessagePreview     string
-	InlineReplaceCurrentCard bool
-	Snapshot                 *Snapshot
-	SelectionPrompt          *SelectionPrompt
-	FeishuSelectionView      *FeishuSelectionView
-	FeishuSelectionContext   *FeishuUISelectionContext
-	CommandCatalog           *CommandCatalog
-	FeishuCommandView        *FeishuCommandView
-	FeishuCommandContext     *FeishuUICommandContext
-	RequestPrompt            *RequestPrompt
-	FeishuRequestContext     *FeishuUIRequestContext
-	PendingInput             *PendingInputState
-	Notice                   *Notice
-	ThreadSelection          *ThreadSelectionChanged
-	Block                    *render.Block
-	ImageOutput              *ImageOutput
-	FileChangeSummary        *FileChangeSummary
-	FinalTurnSummary         *FinalTurnSummary
-	Command                  *agentproto.Command
-	DaemonCommand            *DaemonCommand
+	Kind                        UIEventKind
+	GatewayID                   string
+	SurfaceSessionID            string
+	DaemonLifecycleID           string
+	SourceMessageID             string
+	SourceMessagePreview        string
+	InlineReplaceCurrentCard    bool
+	Snapshot                    *Snapshot
+	FeishuDirectSelectionPrompt *FeishuDirectSelectionPrompt
+	FeishuSelectionView         *FeishuSelectionView
+	FeishuSelectionContext      *FeishuUISelectionContext
+	FeishuDirectCommandCatalog  *FeishuDirectCommandCatalog
+	FeishuCommandView           *FeishuCommandView
+	FeishuCommandContext        *FeishuUICommandContext
+	FeishuDirectRequestPrompt   *FeishuDirectRequestPrompt
+	FeishuRequestContext        *FeishuUIRequestContext
+	PendingInput                *PendingInputState
+	Notice                      *Notice
+	ThreadSelection             *ThreadSelectionChanged
+	Block                       *render.Block
+	ImageOutput                 *ImageOutput
+	FileChangeSummary           *FileChangeSummary
+	FinalTurnSummary            *FinalTurnSummary
+	Command                     *agentproto.Command
+	DaemonCommand               *DaemonCommand
 }

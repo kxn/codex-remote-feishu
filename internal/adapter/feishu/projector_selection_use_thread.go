@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func useThreadSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	if useThreadPromptUsesVSCodeInstanceLayout(prompt) {
 		return useThreadVSCodeInstanceElements(prompt, daemonLifecycleID)
 	}
@@ -61,11 +61,11 @@ func useThreadSelectionPromptElements(prompt control.SelectionPrompt, daemonLife
 	return elements
 }
 
-func useThreadPromptUsesVSCodeInstanceLayout(prompt control.SelectionPrompt) bool {
+func useThreadPromptUsesVSCodeInstanceLayout(prompt control.FeishuDirectSelectionPrompt) bool {
 	return strings.TrimSpace(prompt.Layout) == "vscode_instance_threads"
 }
 
-func useThreadVSCodeInstanceElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadVSCodeInstanceElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Options)*3+8)
 	isFullView := strings.TrimSpace(prompt.Title) == "当前实例全部会话"
 
@@ -201,7 +201,7 @@ type useThreadWorkspaceGroup struct {
 	Options []control.SelectionOption
 }
 
-func useThreadPromptUsesWorkspaceGrouping(prompt control.SelectionPrompt) bool {
+func useThreadPromptUsesWorkspaceGrouping(prompt control.FeishuDirectSelectionPrompt) bool {
 	if strings.TrimSpace(prompt.Layout) != "workspace_grouped_useall" {
 		return false
 	}
@@ -213,7 +213,7 @@ func useThreadPromptUsesWorkspaceGrouping(prompt control.SelectionPrompt) bool {
 	return false
 }
 
-func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Options)*3+8)
 	currentOptions := make([]control.SelectionOption, 0, 1)
 	moreOptions := make([]control.SelectionOption, 0, 1)
@@ -369,7 +369,7 @@ func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLif
 	return elements
 }
 
-func useThreadExpandedWorkspaceIndex(prompt control.SelectionPrompt, singleWorkspaceView bool, moreOptions []control.SelectionOption) bool {
+func useThreadExpandedWorkspaceIndex(prompt control.FeishuDirectSelectionPrompt, singleWorkspaceView bool, moreOptions []control.SelectionOption) bool {
 	if singleWorkspaceView {
 		return false
 	}
@@ -387,7 +387,7 @@ func useThreadExpandedWorkspaceIndex(prompt control.SelectionPrompt, singleWorks
 	return false
 }
 
-func useThreadWorkspaceIndexElements(prompt control.SelectionPrompt, daemonLifecycleID string, currentOptions []control.SelectionOption, groups []useThreadWorkspaceGroup, moreOptions []control.SelectionOption) []map[string]any {
+func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string, currentOptions []control.SelectionOption, groups []useThreadWorkspaceGroup, moreOptions []control.SelectionOption) []map[string]any {
 	elements := make([]map[string]any, 0, len(groups)+len(moreOptions)+8)
 
 	if len(currentOptions) > 0 {
@@ -465,7 +465,7 @@ func useThreadWorkspaceIndexElements(prompt control.SelectionPrompt, daemonLifec
 	return elements
 }
 
-func useThreadActionElement(prompt control.SelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
+func useThreadActionElement(prompt control.FeishuDirectSelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
 	return selectionOptionButton(prompt, option, daemonLifecycleID)
 }
 

@@ -97,18 +97,18 @@ func (s *Service) buildModelCommandView(surface *state.SurfaceConsoleRecord) con
 	return view
 }
 
-func (s *Service) commandCatalogFromView(view control.FeishuCommandView) control.CommandCatalog {
+func (s *Service) commandCatalogFromView(view control.FeishuCommandView) control.FeishuDirectCommandCatalog {
 	switch {
 	case view.Menu != nil:
 		return s.commandMenuCatalogFromView(*view.Menu)
 	case view.Config != nil:
 		return s.commandConfigCatalogFromView(*view.Config)
 	default:
-		return control.CommandCatalog{}
+		return control.FeishuDirectCommandCatalog{}
 	}
 }
 
-func (s *Service) commandMenuCatalogFromView(view control.FeishuCommandMenuView) control.CommandCatalog {
+func (s *Service) commandMenuCatalogFromView(view control.FeishuCommandMenuView) control.FeishuDirectCommandCatalog {
 	stage := commandMenuStage(strings.TrimSpace(view.Stage))
 	groupID := strings.TrimSpace(view.GroupID)
 	if groupID == "" {
@@ -117,7 +117,7 @@ func (s *Service) commandMenuCatalogFromView(view control.FeishuCommandMenuView)
 	return s.buildCommandMenuGroupCatalog(nil, stage, groupID)
 }
 
-func (s *Service) commandConfigCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func (s *Service) commandConfigCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	switch strings.TrimSpace(view.CommandID) {
 	case control.FeishuCommandMode:
 		return modeCatalogFromView(view)
@@ -130,11 +130,11 @@ func (s *Service) commandConfigCatalogFromView(view control.FeishuCommandConfigV
 	case control.FeishuCommandModel:
 		return modelCatalogFromView(view)
 	default:
-		return control.CommandCatalog{}
+		return control.FeishuDirectCommandCatalog{}
 	}
 }
 
-func modeCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func modeCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandMode)
 	sections := []control.CommandCatalogSection{{
 		Title: "立即切换",
@@ -148,7 +148,7 @@ func modeCatalogFromView(view control.FeishuCommandConfigView) control.CommandCa
 			Entries: []control.CommandCatalogEntry{{Form: form}},
 		})
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:          def.Title,
 		Summary:        fmt.Sprintf("当前模式：`%s`。", displayPromptValue(strings.TrimSpace(view.CurrentValue), "未设置")),
 		Interactive:    true,
@@ -159,7 +159,7 @@ func modeCatalogFromView(view control.FeishuCommandConfigView) control.CommandCa
 	}
 }
 
-func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandAutoContinue)
 	statusText := "关闭"
 	if strings.EqualFold(strings.TrimSpace(view.CurrentValue), "on") {
@@ -177,7 +177,7 @@ func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.C
 			Entries: []control.CommandCatalogEntry{{Form: form}},
 		})
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:          def.Title,
 		Summary:        fmt.Sprintf("当前：`%s`。", statusText),
 		Interactive:    true,
@@ -188,7 +188,7 @@ func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.C
 	}
 }
 
-func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandReasoning)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def)
@@ -205,7 +205,7 @@ func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.Comm
 			Entries: []control.CommandCatalogEntry{{Form: form}},
 		})
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:          def.Title,
 		Summary:        fmt.Sprintf("当前：`%s`；飞书覆盖：`%s`。", displayPromptValue(strings.TrimSpace(view.EffectiveValue), "未设置"), displayPromptValue(strings.TrimSpace(view.OverrideValue), "无")),
 		Interactive:    true,
@@ -216,7 +216,7 @@ func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.Comm
 	}
 }
 
-func accessCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func accessCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandAccess)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def)
@@ -233,7 +233,7 @@ func accessCatalogFromView(view control.FeishuCommandConfigView) control.Command
 			Entries: []control.CommandCatalogEntry{{Form: form}},
 		})
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:          def.Title,
 		Summary:        fmt.Sprintf("当前：`%s`；飞书覆盖：`%s`。", displayPromptValue(strings.TrimSpace(view.EffectiveValue), "未设置"), displayPromptValue(strings.TrimSpace(view.OverrideValue), "无")),
 		Interactive:    true,
@@ -244,7 +244,7 @@ func accessCatalogFromView(view control.FeishuCommandConfigView) control.Command
 	}
 }
 
-func modelCatalogFromView(view control.FeishuCommandConfigView) control.CommandCatalog {
+func modelCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandModel)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def)
@@ -259,7 +259,7 @@ func modelCatalogFromView(view control.FeishuCommandConfigView) control.CommandC
 	if strings.TrimSpace(view.OverrideValue) != "" || strings.TrimSpace(view.OverrideExtraValue) != "" {
 		manualEntry.Buttons = append(manualEntry.Buttons, choiceCommandButton("清除覆盖", "/model clear", false, ""))
 	}
-	catalog := control.CommandCatalog{
+	catalog := control.FeishuDirectCommandCatalog{
 		Title:        def.Title,
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
@@ -288,8 +288,8 @@ func modelCatalogFromView(view control.FeishuCommandConfigView) control.CommandC
 	return catalog
 }
 
-func attachmentRequiredCatalogForDefinition(def control.FeishuCommandDefinition) control.CommandCatalog {
-	return control.CommandCatalog{
+func attachmentRequiredCatalogForDefinition(def control.FeishuCommandDefinition) control.FeishuDirectCommandCatalog {
+	return control.FeishuDirectCommandCatalog{
 		Title:        def.Title,
 		Summary:      "还没接管目标。先开始或继续工作，再回来调整这个参数。",
 		Interactive:  true,

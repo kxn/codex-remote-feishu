@@ -564,10 +564,10 @@ func TestApprovalRequestPromptUsesAttachedSurfaceForLocalTurn(t *testing.T) {
 			"declineLabel": "拒绝",
 		},
 	})
-	if len(events) != 1 || events[0].RequestPrompt == nil {
+	if len(events) != 1 || events[0].FeishuDirectRequestPrompt == nil {
 		t.Fatalf("expected one request prompt event, got %#v", events)
 	}
-	prompt := events[0].RequestPrompt
+	prompt := events[0].FeishuDirectRequestPrompt
 	if prompt.RequestID != "req-1" || prompt.ThreadTitle != "droid · 修复登录流程" {
 		t.Fatalf("unexpected request prompt: %#v", prompt)
 	}
@@ -584,7 +584,7 @@ func TestApprovalRequestPromptUsesAttachedSurfaceForLocalTurn(t *testing.T) {
 	if events[0].FeishuRequestContext == nil {
 		t.Fatalf("expected feishu request context, got %#v", events[0])
 	}
-	if events[0].FeishuRequestContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+	if events[0].FeishuRequestContext.DTOOwner != control.FeishuUIDTOwnerDirectDTO {
 		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuRequestContext)
 	}
 	if events[0].FeishuRequestContext.RequestID != "req-1" || events[0].FeishuRequestContext.RequestType != "approval" {
@@ -755,10 +755,10 @@ func TestRequestUserInputPromptUsesQuestionsAndStoresState(t *testing.T) {
 			},
 		},
 	})
-	if len(events) != 1 || events[0].RequestPrompt == nil {
+	if len(events) != 1 || events[0].FeishuDirectRequestPrompt == nil {
 		t.Fatalf("expected one request prompt event, got %#v", events)
 	}
-	prompt := events[0].RequestPrompt
+	prompt := events[0].FeishuDirectRequestPrompt
 	if prompt.RequestType != "request_user_input" || len(prompt.Questions) != 2 {
 		t.Fatalf("unexpected request prompt: %#v", prompt)
 	}
@@ -1244,17 +1244,17 @@ func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
 		GatewayID:        "app-1",
 	})
 
-	if len(events) != 1 || events[0].CommandCatalog == nil {
+	if len(events) != 1 || events[0].FeishuDirectCommandCatalog == nil {
 		t.Fatalf("expected command catalog event, got %#v", events)
 	}
-	if events[0].Kind != control.UIEventCommandCatalog {
+	if events[0].Kind != control.UIEventFeishuDirectCommandCatalog {
 		t.Fatalf("unexpected event kind: %#v", events[0])
 	}
-	if events[0].CommandCatalog.Interactive {
-		t.Fatalf("help catalog should be non-interactive: %#v", events[0].CommandCatalog)
+	if events[0].FeishuDirectCommandCatalog.Interactive {
+		t.Fatalf("help catalog should be non-interactive: %#v", events[0].FeishuDirectCommandCatalog)
 	}
-	if events[0].CommandCatalog.Title != "Slash 命令帮助" {
-		t.Fatalf("unexpected help catalog title: %#v", events[0].CommandCatalog)
+	if events[0].FeishuDirectCommandCatalog.Title != "Slash 命令帮助" {
+		t.Fatalf("unexpected help catalog title: %#v", events[0].FeishuDirectCommandCatalog)
 	}
 }
 

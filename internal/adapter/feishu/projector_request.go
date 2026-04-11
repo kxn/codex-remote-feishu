@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func requestPromptBody(prompt control.RequestPrompt) string {
+func requestPromptBody(prompt control.FeishuDirectRequestPrompt) string {
 	lines := []string{}
 	if prompt.ThreadTitle != "" {
 		lines = append(lines, "当前会话："+prompt.ThreadTitle)
@@ -29,7 +29,7 @@ func requestPromptBody(prompt control.RequestPrompt) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func requestPromptElements(prompt control.RequestPrompt, daemonLifecycleID string) []map[string]any {
+func requestPromptElements(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) []map[string]any {
 	if normalizeRequestPromptType(prompt.RequestType) == "request_user_input" && len(prompt.Questions) != 0 {
 		return requestUserInputPromptElements(prompt, daemonLifecycleID)
 	}
@@ -64,7 +64,7 @@ func requestPromptElements(prompt control.RequestPrompt, daemonLifecycleID strin
 	return elements
 }
 
-func requestUserInputPromptElements(prompt control.RequestPrompt, daemonLifecycleID string) []map[string]any {
+func requestUserInputPromptElements(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Questions)*3+1)
 	for index, question := range prompt.Questions {
 		elements = append(elements, map[string]any{
@@ -97,7 +97,7 @@ func requestUserInputPromptElements(prompt control.RequestPrompt, daemonLifecycl
 	return elements
 }
 
-func requestPromptButton(prompt control.RequestPrompt, option control.RequestPromptOption, daemonLifecycleID string) map[string]any {
+func requestPromptButton(prompt control.FeishuDirectRequestPrompt, option control.RequestPromptOption, daemonLifecycleID string) map[string]any {
 	label := strings.TrimSpace(option.Label)
 	if label == "" {
 		return nil
@@ -114,7 +114,7 @@ func requestPromptButton(prompt control.RequestPrompt, option control.RequestPro
 	}, daemonLifecycleID), false, "")
 }
 
-func requestUserInputOptionButton(prompt control.RequestPrompt, question control.RequestPromptQuestion, option control.RequestPromptQuestionOption, daemonLifecycleID string) map[string]any {
+func requestUserInputOptionButton(prompt control.FeishuDirectRequestPrompt, question control.RequestPromptQuestion, option control.RequestPromptQuestionOption, daemonLifecycleID string) map[string]any {
 	label := strings.TrimSpace(option.Label)
 	if label == "" {
 		return nil
@@ -173,7 +173,7 @@ func requestPromptQuestionMarkdown(index int, question control.RequestPromptQues
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func requestPromptNeedsForm(prompt control.RequestPrompt) bool {
+func requestPromptNeedsForm(prompt control.FeishuDirectRequestPrompt) bool {
 	for _, question := range prompt.Questions {
 		if len(question.Options) == 0 || question.AllowOther || !question.DirectResponse {
 			return true
@@ -182,7 +182,7 @@ func requestPromptNeedsForm(prompt control.RequestPrompt) bool {
 	return false
 }
 
-func requestPromptFormElement(prompt control.RequestPrompt, daemonLifecycleID string) map[string]any {
+func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Questions)+1)
 	for _, question := range prompt.Questions {
 		name := strings.TrimSpace(question.ID)
@@ -222,7 +222,7 @@ func requestPromptFormElement(prompt control.RequestPrompt, daemonLifecycleID st
 	}
 }
 
-func requestPromptQuestionHint(prompt control.RequestPrompt) string {
+func requestPromptQuestionHint(prompt control.FeishuDirectRequestPrompt) string {
 	hasDirect := false
 	for _, question := range prompt.Questions {
 		if question.DirectResponse && len(question.Options) != 0 {

@@ -33,12 +33,12 @@ func firstCommands(entries []control.CommandCatalogEntry) []string {
 	return commands
 }
 
-func eventSelectionPrompt(event control.UIEvent) (*control.SelectionPrompt, bool) {
-	if event.SelectionPrompt != nil {
-		return event.SelectionPrompt, true
+func eventSelectionPrompt(event control.UIEvent) (*control.FeishuDirectSelectionPrompt, bool) {
+	if event.FeishuDirectSelectionPrompt != nil {
+		return event.FeishuDirectSelectionPrompt, true
 	}
 	if event.FeishuSelectionView != nil {
-		prompt, ok := feishuadapter.SelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
+		prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
 		if !ok {
 			return nil, false
 		}
@@ -47,7 +47,7 @@ func eventSelectionPrompt(event control.UIEvent) (*control.SelectionPrompt, bool
 	return nil, false
 }
 
-func selectionPromptFromEvent(t *testing.T, event control.UIEvent) *control.SelectionPrompt {
+func selectionPromptFromEvent(t *testing.T, event control.UIEvent) *control.FeishuDirectSelectionPrompt {
 	t.Helper()
 	prompt, ok := eventSelectionPrompt(event)
 	if !ok {
@@ -56,12 +56,12 @@ func selectionPromptFromEvent(t *testing.T, event control.UIEvent) *control.Sele
 	return prompt
 }
 
-func eventCommandCatalog(event control.UIEvent) (*control.CommandCatalog, bool) {
-	if event.CommandCatalog != nil {
-		return event.CommandCatalog, true
+func eventCommandCatalog(event control.UIEvent) (*control.FeishuDirectCommandCatalog, bool) {
+	if event.FeishuDirectCommandCatalog != nil {
+		return event.FeishuDirectCommandCatalog, true
 	}
 	if event.FeishuCommandView != nil {
-		catalog, ok := feishuadapter.CommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
+		catalog, ok := feishuadapter.FeishuDirectCommandCatalogFromView(*event.FeishuCommandView, event.FeishuCommandContext)
 		if !ok {
 			return nil, false
 		}
@@ -70,7 +70,7 @@ func eventCommandCatalog(event control.UIEvent) (*control.CommandCatalog, bool) 
 	return nil, false
 }
 
-func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.CommandCatalog {
+func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.FeishuDirectCommandCatalog {
 	t.Helper()
 	catalog, ok := eventCommandCatalog(event)
 	if !ok {
@@ -79,7 +79,7 @@ func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.Comma
 	return catalog
 }
 
-func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control.SelectionPrompt {
+func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control.FeishuDirectSelectionPrompt {
 	t.Helper()
 	if len(events) != 1 {
 		t.Fatalf("expected exactly one event, got %#v", events)
@@ -87,7 +87,7 @@ func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control
 	return selectionPromptFromEvent(t, events[0])
 }
 
-func findSelectionPromptByKind(t *testing.T, events []control.UIEvent, kind control.SelectionPromptKind) *control.SelectionPrompt {
+func findSelectionPromptByKind(t *testing.T, events []control.UIEvent, kind control.SelectionPromptKind) *control.FeishuDirectSelectionPrompt {
 	t.Helper()
 	for _, event := range events {
 		prompt, ok := eventSelectionPrompt(event)
@@ -1033,7 +1033,7 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected broad-pool workspace attach to remain unbound, got %#v", surface)
 	}
-	var threadPrompt *control.SelectionPrompt
+	var threadPrompt *control.FeishuDirectSelectionPrompt
 	for _, event := range events {
 		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
 			threadPrompt = prompt

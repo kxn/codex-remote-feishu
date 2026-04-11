@@ -384,7 +384,7 @@ type Action struct {
 
 - `captureFeedback` 是 Feishu 产品层 option，不是 native decision
 
-### 9.2 `control.RequestPrompt` 需要 option 列表
+### 9.2 `control.FeishuDirectRequestPrompt` 需要 option 列表
 
 当前 request prompt 只有：
 
@@ -400,7 +400,7 @@ type RequestPromptOption struct {
     Style    string // primary / default / danger / secondary
 }
 
-type RequestPrompt struct {
+type FeishuDirectRequestPrompt struct {
     RequestID    string
     RequestType  string
     Title        string

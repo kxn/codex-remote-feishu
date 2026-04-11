@@ -13,8 +13,8 @@ import (
 func TestProjectSelectionPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:         control.SelectionPromptAttachInstance,
 			ContextTitle: "当前实例",
 			ContextText:  "droid · 当前跟随中\n焦点切换仍会自动跟随，换实例才用 /list",
@@ -89,8 +89,8 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:         control.SelectionPromptAttachWorkspace,
 			ContextTitle: "当前工作区",
 			ContextText:  "droid · 5分前\n同工作区内继续工作请直接 /use 或 /new",
@@ -162,8 +162,8 @@ func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:  control.SelectionPromptUseThread,
 			Title: "最近会话",
 			Options: []control.SelectionOption{
@@ -212,8 +212,8 @@ func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 func TestProjectWorkspaceSelectionPromptPreservesShowWorkspaceThreadsAction(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:  control.SelectionPromptAttachWorkspace,
 			Title: "工作区列表",
 			Options: []control.SelectionOption{
@@ -252,8 +252,8 @@ func TestProjectWorkspaceSelectionPromptPreservesShowWorkspaceThreadsAction(t *t
 func TestProjectWorkspaceSelectionPromptRendersExpandAction(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:  control.SelectionPromptAttachWorkspace,
 			Title: "工作区列表",
 			Options: []control.SelectionOption{
@@ -304,9 +304,9 @@ func TestProjectWorkspaceSelectionPromptRendersExpandAction(t *testing.T) {
 func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:              control.UIEventSelectionPrompt,
+		Kind:              control.UIEventFeishuDirectSelectionPrompt,
 		DaemonLifecycleID: "life-1",
-		SelectionPrompt: &control.SelectionPrompt{
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind: control.SelectionPromptUseThread,
 			Options: []control.SelectionOption{
 				{Index: 1, OptionID: "thread-1", Label: "修复登录流程", ButtonLabel: "修复登录流程"},
@@ -323,8 +323,8 @@ func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 func TestProjectUseAllSelectionPromptGroupsByWorkspace(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout:       "workspace_grouped_useall",
 			Kind:         control.SelectionPromptUseThread,
 			Title:        "全部会话",
@@ -474,7 +474,7 @@ func TestProjectUseAllSelectionViewGroupsByWorkspace(t *testing.T) {
 		},
 	}
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:                control.UIEventSelectionPrompt,
+		Kind:                control.UIEventFeishuDirectSelectionPrompt,
 		FeishuSelectionView: &view,
 		FeishuSelectionContext: &control.FeishuUISelectionContext{
 			DTOOwner:   control.FeishuUIDTOwnerSelection,
@@ -560,8 +560,8 @@ func TestProjectUseAllSelectionPromptLimitsWorkspaceToFiveAndAddsExpandButtons(t
 		})
 	}
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout:       "workspace_grouped_useall",
 			Kind:         control.SelectionPromptUseThread,
 			Title:        "全部会话",
@@ -591,8 +591,8 @@ func TestProjectUseAllSelectionPromptLimitsWorkspaceToFiveAndAddsExpandButtons(t
 func TestProjectUseAllSelectionPromptRendersWorkspaceGroupExpandAction(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout: "workspace_grouped_useall",
 			Kind:   control.SelectionPromptUseThread,
 			Title:  "全部会话",
@@ -644,8 +644,8 @@ func TestProjectUseAllSelectionPromptRendersWorkspaceGroupExpandAction(t *testin
 func TestProjectUseAllSelectionPromptRendersWorkspaceGroupReturnAction(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout: "workspace_grouped_useall",
 			Kind:   control.SelectionPromptUseThread,
 			Title:  "全部会话",
@@ -743,8 +743,8 @@ func TestProjectUseAllExpandedSelectionPromptUsesWorkspaceIndexAndFitsInlineCall
 		},
 	)
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout:       "workspace_grouped_useall",
 			Kind:         control.SelectionPromptUseThread,
 			Title:        "全部会话",
@@ -802,8 +802,8 @@ func TestProjectUseAllExpandedSelectionPromptUsesWorkspaceIndexAndFitsInlineCall
 func TestProjectVSCodeRecentSelectionPromptShowsInstanceSummaryAndMore(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout:       "vscode_instance_threads",
 			Kind:         control.SelectionPromptUseThread,
 			Title:        "最近会话",
@@ -867,8 +867,8 @@ func TestProjectVSCodeRecentSelectionPromptShowsInstanceSummaryAndMore(t *testin
 func TestProjectVSCodeAllSelectionPromptUsesNumberedMetaRows(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Layout:       "vscode_instance_threads",
 			Kind:         control.SelectionPromptUseThread,
 			Title:        "当前实例全部会话",
@@ -932,8 +932,8 @@ func TestProjectVSCodeAllSelectionPromptUsesNumberedMetaRows(t *testing.T) {
 func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:   "Slash 命令帮助",
 			Summary: "当前支持的 slash command 如下。",
 			Sections: []control.CommandCatalogSection{{
@@ -970,8 +970,8 @@ func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 func TestProjectCommandHelpCatalogPreservesAmpersandsInCommandTags(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:   "命令帮助",
 			Summary: "常用联调命令。",
 			Sections: []control.CommandCatalogSection{{
@@ -1003,8 +1003,8 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 	projector := NewProjector()
 	catalog := control.FeishuCommandHelpCatalog()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:           control.UIEventCommandCatalog,
-		CommandCatalog: &catalog,
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &catalog,
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
@@ -1040,8 +1040,8 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:       "命令菜单",
 			Summary:     "固定动作可直接点击。",
 			Interactive: true,
@@ -1091,8 +1091,8 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:        "推理强度",
 			Summary:      "当前：`high`；飞书覆盖：`high`。",
 			Interactive:  true,
@@ -1143,7 +1143,7 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 }
 
 func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
-	catalog, ok := CommandCatalogFromView(control.FeishuCommandView{
+	catalog, ok := FeishuDirectCommandCatalogFromView(control.FeishuCommandView{
 		Menu: &control.FeishuCommandMenuView{Stage: "detached"},
 	}, &control.FeishuUICommandContext{
 		DTOOwner:  control.FeishuUIDTOwnerCommand,
@@ -1169,7 +1169,7 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 func TestProjectCommandViewRendersModelCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
+		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuCommandView: &control.FeishuCommandView{
 			Config: &control.FeishuCommandConfigView{
 				CommandID:          control.FeishuCommandModel,
@@ -1226,8 +1226,8 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:        "模型",
 			Summary:      "直接在卡片里输入模型名。",
 			Interactive:  true,
@@ -1327,9 +1327,9 @@ func firstCommandTexts(entries []control.CommandCatalogEntry) []string {
 func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:              control.UIEventCommandCatalog,
+		Kind:              control.UIEventFeishuDirectCommandCatalog,
 		DaemonLifecycleID: "life-1",
-		CommandCatalog: &control.CommandCatalog{
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Interactive: true,
 			Sections: []control.CommandCatalogSection{{
 				Entries: []control.CommandCatalogEntry{{
@@ -1357,9 +1357,9 @@ func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {
 func TestProjectInteractiveCommandCatalogStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:              control.UIEventCommandCatalog,
+		Kind:              control.UIEventFeishuDirectCommandCatalog,
 		DaemonLifecycleID: "life-1",
-		CommandCatalog: &control.CommandCatalog{
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Interactive: true,
 			Sections: []control.CommandCatalogSection{{
 				Entries: []control.CommandCatalogEntry{{
@@ -1381,8 +1381,8 @@ func TestProjectInteractiveCommandCatalogStampsDaemonLifecycleID(t *testing.T) {
 func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventCommandCatalog,
-		CommandCatalog: &control.CommandCatalog{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
 			Title:        "发送设置",
 			Summary:      "请选择操作。",
 			Interactive:  true,
@@ -1412,8 +1412,8 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 func TestProjectRequestPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventRequestPrompt,
-		RequestPrompt: &control.RequestPrompt{
+		Kind: control.UIEventFeishuDirectRequestPrompt,
+		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
 			RequestID:   "req-1",
 			RequestType: "approval",
 			Title:       "需要确认",
@@ -1487,9 +1487,9 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 func TestProjectRequestPromptStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:              control.UIEventRequestPrompt,
+		Kind:              control.UIEventFeishuDirectRequestPrompt,
 		DaemonLifecycleID: "life-1",
-		RequestPrompt: &control.RequestPrompt{
+		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
 			RequestID:   "req-1",
 			RequestType: "approval",
 			Options: []control.RequestPromptOption{
@@ -1510,8 +1510,8 @@ func TestProjectRequestPromptStampsDaemonLifecycleID(t *testing.T) {
 func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventRequestPrompt,
-		RequestPrompt: &control.RequestPrompt{
+		Kind: control.UIEventFeishuDirectRequestPrompt,
+		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
 			RequestID:   "req-ui-1",
 			RequestType: "request_user_input",
 			Title:       "需要补充输入",
@@ -1598,8 +1598,8 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 func TestProjectKickThreadPromptUsesCustomButtonLabels(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventSelectionPrompt,
-		SelectionPrompt: &control.SelectionPrompt{
+		Kind: control.UIEventFeishuDirectSelectionPrompt,
+		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind: control.SelectionPromptKickThread,
 			Options: []control.SelectionOption{
 				{Index: 1, OptionID: "cancel", Label: "保留当前状态，不执行强踢。", ButtonLabel: "取消"},

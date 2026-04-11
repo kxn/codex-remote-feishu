@@ -63,9 +63,9 @@
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单
   - 当前是 selection 与 command/config cards 最终 projection 的 owner：
     [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
-    负责把 `FeishuSelectionView` 投影成当前仍被卡片 renderer 消费的 `SelectionPrompt`
+    负责把 `FeishuSelectionView` 投影成当前仍被卡片 renderer 消费的 `FeishuDirectSelectionPrompt`
     [internal/adapter/feishu/projector_command_view.go](../../internal/adapter/feishu/projector_command_view.go)
-    负责把 `FeishuCommandView` 投影成当前仍被卡片 renderer 消费的 `CommandCatalog`
+    负责把 `FeishuCommandView` 投影成当前仍被卡片 renderer 消费的 `FeishuDirectCommandCatalog`
 - `orchestrator`
   - 负责 attach / use / follow / request gate / capture / new-thread 等产品状态
   - 负责 mixed/product-owned 动作仍然进入主 reducer 的那部分产品语义
@@ -87,21 +87,21 @@
 
 补充规则：
 
-- `control.RequestPrompt` 当前仍是**产品层拥有语义、Feishu 层拥有序列化**的 shared DTO。
-- `control.CommandCatalog` 仍保留为当前 card renderer 的过渡 DTO，但已经不再是 `/menu` 与 bare config cards 跨 `UIEvent` 边界的主载体：
-  - `/help`、静态帮助目录、daemon upgrade / vscode migration cards、legacy 测试样例仍可直接使用 `CommandCatalog`
+- `control.FeishuDirectRequestPrompt` 当前仍是**产品层拥有语义、Feishu 层拥有序列化**的 shared DTO。
+- `control.FeishuDirectCommandCatalog` 仍保留为当前 card renderer 的过渡 DTO，但已经不再是 `/menu` 与 bare config cards 跨 `UIEvent` 边界的主载体：
+  - `/help`、静态帮助目录、daemon upgrade / vscode migration cards、legacy 测试样例仍可直接使用 `FeishuDirectCommandCatalog`
   - `/menu` 与 bare config cards 现在跨边界携带的是 `control.FeishuCommandView`
-  - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `CommandCatalog`
-- `control.SelectionPrompt` 仍然存在，但已经不再是 workspace/thread selection 跨 `UIEvent` 边界的主载体：
+  - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `FeishuDirectCommandCatalog`
+- `control.FeishuDirectSelectionPrompt` 仍然存在，但已经不再是 workspace/thread selection 跨 `UIEvent` 边界的主载体：
   - workspace/thread selection 现在跨边界携带的是 `control.FeishuSelectionView`
-  - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `SelectionPrompt`
-  - 其他 selection 场景，例如 instance selection、kick-thread confirm，仍可直接使用 `SelectionPrompt`
+  - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `FeishuDirectSelectionPrompt`
+  - 其他 selection 场景，例如 instance selection、kick-thread confirm，仍可直接使用 `FeishuDirectSelectionPrompt`
 - 这些 DTO 当前都已经显式标注 owner，并与 query/policy context 分离：
   - DTO 形状暂未全部迁出
   - `UIEvent` 已经携带独立的 `FeishuSelectionContext` / `FeishuCommandContext` / `FeishuRequestContext`
   - Feishu UI controller 已通过这层 boundary 分流 pure navigation；后续继续扩 controller 时，默认仍应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
-  - selection cards 现在是 “read model -> `FeishuSelectionView` -> adapter projection -> `SelectionPrompt`” 四段；后续修改 `/list` / `/use` / `/useall` 的分组、文案、recent/all 视图时，默认应落在 adapter projection 或 selection view 结构层，而不是回到 selection query 函数里继续混改
-  - command/config cards 现在是 “read model -> `FeishuCommandView` -> adapter projection -> `CommandCatalog`” 四段；后续修改 `/menu` 或 bare config cards 的 breadcrumbs、按钮布局、回退按钮、摘要文案时，默认也应落在 adapter projection 或 command view 结构层，而不是回到 orchestrator query 函数里继续混改
+  - selection cards 现在是 “read model -> `FeishuSelectionView` -> adapter projection -> `FeishuDirectSelectionPrompt`” 四段；后续修改 `/list` / `/use` / `/useall` 的分组、文案、recent/all 视图时，默认应落在 adapter projection 或 selection view 结构层，而不是回到 selection query 函数里继续混改
+  - command/config cards 现在是 “read model -> `FeishuCommandView` -> adapter projection -> `FeishuDirectCommandCatalog`” 四段；后续修改 `/menu` 或 bare config cards 的 breadcrumbs、按钮布局、回退按钮、摘要文案时，默认也应落在 adapter projection 或 command view 结构层，而不是回到 orchestrator query 函数里继续混改
 - `ActionShow*` 与 bare config `Action*Command` 当前若仍存在，属于 gateway / parser 的 transport compatibility 层；live path 会先归并到 `FeishuUIIntent`，不再代表主产品 reducer owner。
 - 如果只是换卡片样式、按钮 payload、inline replace 策略，优先更新本文。
 - 如果改了 DTO 里的可选项语义、route 约束或 request gate 行为，必须同时更新 core 状态机文档。
@@ -204,7 +204,7 @@
 
 - 参数应用，例如 `/mode vscode`、`/autowhip on`
 - attach / use / follow / `/new` 这类真正改变产品状态的动作
-- `/help` 这类静态帮助/目录卡，即使底层仍是 `CommandCatalog`，当前也不属于 replaceable UI navigation
+- `/help` 这类静态帮助/目录卡，即使底层仍是 `FeishuDirectCommandCatalog`，当前也不属于 replaceable UI navigation
 - request approve / request submit 的处理结果
 - 各类 notice、final reply、补充预览、状态类卡片
 
@@ -280,7 +280,7 @@
 - [internal/core/control/feishu_ui_intent_test.go](../../internal/core/control/feishu_ui_intent_test.go)
   - 锁定哪些动作会被分流到 Feishu UI controller，哪些 mixed/product-owned 动作仍留在主 reducer
 - [internal/adapter/feishu/projector_test.go](../../internal/adapter/feishu/projector_test.go)
-  - 锁定 `SelectionPrompt` / `FeishuSelectionView` / `FeishuCommandView` / `CommandCatalog` / `RequestPrompt` 的 lifecycle stamp、projection 结果与 callback payload 结构
+  - 锁定 `FeishuDirectSelectionPrompt` / `FeishuSelectionView` / `FeishuCommandView` / `FeishuDirectCommandCatalog` / `FeishuDirectRequestPrompt` 的 lifecycle stamp、projection 结果与 callback payload 结构
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件、无 lifecycle 导航仍异步 ack
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)

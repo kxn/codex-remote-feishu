@@ -319,7 +319,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionAttachWorkspace:
 		return s.attachWorkspace(surface, action.WorkspaceKey)
 	case control.ActionShowCommandHelp:
-		return []control.UIEvent{s.commandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
+		return []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
 	case control.ActionDebugCommand:
 		return []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,

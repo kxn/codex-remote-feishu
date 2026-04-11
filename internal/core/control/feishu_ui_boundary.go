@@ -6,9 +6,9 @@ package control
 type FeishuUIDTOwner string
 
 const (
-	FeishuUIDTOwnerTransition FeishuUIDTOwner = "feishu_transition_dto"
-	FeishuUIDTOwnerSelection  FeishuUIDTOwner = "feishu_selection_view"
-	FeishuUIDTOwnerCommand    FeishuUIDTOwner = "feishu_command_view"
+	FeishuUIDTOwnerDirectDTO FeishuUIDTOwner = "feishu_direct_dto"
+	FeishuUIDTOwnerSelection FeishuUIDTOwner = "feishu_selection_view"
+	FeishuUIDTOwnerCommand   FeishuUIDTOwner = "feishu_command_view"
 )
 
 // FeishuUICallbackPayloadOwner identifies the layer that owns callback payload

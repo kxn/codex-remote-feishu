@@ -182,7 +182,7 @@ func (s *Service) presentKickThreadPrompt(surface *state.SurfaceConsoleRecord, i
 	thread := inst.Threads[threadID]
 	title := displayThreadTitle(inst, thread, threadID)
 	subtitle := s.threadSelectionSubtitle(surface, inst, thread)
-	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+	return []control.UIEvent{s.feishuDirectSelectionPromptEvent(surface, control.FeishuDirectSelectionPrompt{
 		Kind:  control.SelectionPromptKickThread,
 		Title: "强踢当前会话？",
 		Hint:  "只有对方当前空闲时才能强踢；确认前会再次校验状态。",

@@ -66,7 +66,7 @@ func vscodeHasMigrationTarget(detect vscodeDetectResponse) bool {
 	return strings.TrimSpace(detect.LatestBundleEntrypoint) != "" || strings.TrimSpace(detect.RecordedBundleEntrypoint) != ""
 }
 
-func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.CommandCatalog {
+func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.FeishuDirectCommandCatalog {
 	entry := control.CommandCatalogEntry{
 		Description: strings.TrimSpace(issue.ActionText),
 	}
@@ -77,7 +77,7 @@ func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.CommandCatal
 			CommandText: vscodeMigrateCommandText,
 		}}
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:       issue.Title,
 		Summary:     issue.Summary,
 		Interactive: interactive,
@@ -122,10 +122,10 @@ func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]cont
 		a.vscodeMigrationPrompts[target.SurfaceSessionID] = issue.Key
 		catalog := vscodeMigrationCatalog(*issue)
 		events = append(events, control.UIEvent{
-			Kind:             control.UIEventCommandCatalog,
-			GatewayID:        target.GatewayID,
-			SurfaceSessionID: target.SurfaceSessionID,
-			CommandCatalog:   &catalog,
+			Kind:                       control.UIEventFeishuDirectCommandCatalog,
+			GatewayID:                  target.GatewayID,
+			SurfaceSessionID:           target.SurfaceSessionID,
+			FeishuDirectCommandCatalog: &catalog,
 		})
 	}
 	return events, true

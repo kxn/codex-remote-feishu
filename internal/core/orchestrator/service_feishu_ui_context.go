@@ -44,9 +44,9 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 	return context
 }
 
-func (s *Service) buildFeishuSelectionContext(surface *state.SurfaceConsoleRecord, prompt control.SelectionPrompt) *control.FeishuUISelectionContext {
+func (s *Service) buildFeishuSelectionContext(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) *control.FeishuUISelectionContext {
 	return &control.FeishuUISelectionContext{
-		DTOOwner:     control.FeishuUIDTOwnerTransition,
+		DTOOwner:     control.FeishuUIDTOwnerDirectDTO,
 		Surface:      s.buildFeishuUISurfaceContext(surface),
 		PromptKind:   prompt.Kind,
 		Layout:       strings.TrimSpace(prompt.Layout),
@@ -125,9 +125,9 @@ func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceCons
 	return context
 }
 
-func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.CommandCatalog) *control.FeishuUICommandContext {
+func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.FeishuDirectCommandCatalog) *control.FeishuUICommandContext {
 	return &control.FeishuUICommandContext{
-		DTOOwner:    control.FeishuUIDTOwnerTransition,
+		DTOOwner:    control.FeishuUIDTOwnerDirectDTO,
 		Surface:     s.buildFeishuUISurfaceContext(surface),
 		MenuStage:   string(menuStage),
 		MenuView:    strings.TrimSpace(view),
@@ -137,7 +137,7 @@ func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord,
 	}
 }
 
-func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView, catalog control.CommandCatalog) *control.FeishuUICommandContext {
+func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView, catalog control.FeishuDirectCommandCatalog) *control.FeishuUICommandContext {
 	context := &control.FeishuUICommandContext{
 		DTOOwner:    control.FeishuUIDTOwnerCommand,
 		Surface:     s.buildFeishuUISurfaceContext(surface),
@@ -160,9 +160,9 @@ func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsol
 	return context
 }
 
-func (s *Service) buildFeishuRequestContext(surface *state.SurfaceConsoleRecord, prompt control.RequestPrompt) *control.FeishuUIRequestContext {
+func (s *Service) buildFeishuRequestContext(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectRequestPrompt) *control.FeishuUIRequestContext {
 	return &control.FeishuUIRequestContext{
-		DTOOwner:    control.FeishuUIDTOwnerTransition,
+		DTOOwner:    control.FeishuUIDTOwnerDirectDTO,
 		Surface:     s.buildFeishuUISurfaceContext(surface),
 		RequestID:   strings.TrimSpace(prompt.RequestID),
 		RequestType: strings.TrimSpace(prompt.RequestType),
@@ -172,18 +172,18 @@ func (s *Service) buildFeishuRequestContext(surface *state.SurfaceConsoleRecord,
 	}
 }
 
-func (s *Service) selectionPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.SelectionPrompt) control.UIEvent {
+func (s *Service) feishuDirectSelectionPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) control.UIEvent {
 	return control.UIEvent{
-		Kind:                   control.UIEventSelectionPrompt,
-		SurfaceSessionID:       surface.SurfaceSessionID,
-		SelectionPrompt:        &prompt,
-		FeishuSelectionContext: s.buildFeishuSelectionContext(surface, prompt),
+		Kind:                        control.UIEventFeishuDirectSelectionPrompt,
+		SurfaceSessionID:            surface.SurfaceSessionID,
+		FeishuDirectSelectionPrompt: &prompt,
+		FeishuSelectionContext:      s.buildFeishuSelectionContext(surface, prompt),
 	}
 }
 
 func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) control.UIEvent {
 	return control.UIEvent{
-		Kind:                     control.UIEventSelectionPrompt,
+		Kind:                     control.UIEventFeishuDirectSelectionPrompt,
 		SurfaceSessionID:         surface.SurfaceSessionID,
 		InlineReplaceCurrentCard: true,
 		FeishuSelectionView:      &view,
@@ -191,11 +191,11 @@ func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view c
 	}
 }
 
-func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.RequestPrompt) control.UIEvent {
+func (s *Service) feishuDirectRequestPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectRequestPrompt) control.UIEvent {
 	return control.UIEvent{
-		Kind:                 control.UIEventRequestPrompt,
-		SurfaceSessionID:     surface.SurfaceSessionID,
-		RequestPrompt:        &prompt,
-		FeishuRequestContext: s.buildFeishuRequestContext(surface, prompt),
+		Kind:                      control.UIEventFeishuDirectRequestPrompt,
+		SurfaceSessionID:          surface.SurfaceSessionID,
+		FeishuDirectRequestPrompt: &prompt,
+		FeishuRequestContext:      s.buildFeishuRequestContext(surface, prompt),
 	}
 }

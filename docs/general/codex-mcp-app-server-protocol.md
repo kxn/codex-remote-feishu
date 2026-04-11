@@ -329,7 +329,7 @@ TUI 路线说明：
 当前本仓库内部模型还不足以完整表达 upstream MCP surface：
 
 - `internal/core/agentproto/types.go` 里的 request response 仍是 `map[string]any`
-- `internal/core/control/types.go` 的 `RequestPrompt` 只支持：
+- `internal/core/control/types.go` 的 `FeishuDirectRequestPrompt` 只支持：
   - `options`
   - `questions`
 - 它没有直接表达：

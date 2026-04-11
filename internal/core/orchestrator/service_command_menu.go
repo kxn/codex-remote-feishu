@@ -16,7 +16,7 @@ const (
 	commandMenuStageVSCodeWorking commandMenuStage = "vscode_working"
 )
 
-func (s *Service) buildCommandMenuCatalog(surface *state.SurfaceConsoleRecord, raw string) control.CommandCatalog {
+func (s *Service) buildCommandMenuCatalog(surface *state.SurfaceConsoleRecord, raw string) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildCommandMenuView(surface, raw))
 }
 
@@ -38,7 +38,7 @@ func (s *Service) commandMenuStage(surface *state.SurfaceConsoleRecord) commandM
 	return commandMenuStageNormalWorking
 }
 
-func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage) control.CommandCatalog {
+func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage) control.FeishuDirectCommandCatalog {
 	sections := []control.CommandCatalogSection{
 		{
 			Title:   "全部分组",
@@ -49,7 +49,7 @@ func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecor
 			Entries: s.commandMenuHomeEntries(stage),
 		},
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:        "命令菜单",
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
@@ -57,7 +57,7 @@ func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecor
 	}
 }
 
-func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage, groupID string) control.CommandCatalog {
+func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage, groupID string) control.FeishuDirectCommandCatalog {
 	group, ok := control.FeishuCommandGroupByID(groupID)
 	if !ok {
 		return s.buildCommandMenuHomeCatalog(surface, stage)
@@ -72,7 +72,7 @@ func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleReco
 		}
 		entries = append(entries, commandEntryForDefinition(def))
 	}
-	return control.CommandCatalog{
+	return control.FeishuDirectCommandCatalog{
 		Title:        "命令菜单",
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
@@ -192,28 +192,28 @@ func commandBackButtons(groupID string) []control.CommandCatalogButton {
 	return nil
 }
 
-func (s *Service) buildModeCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
+func (s *Service) buildModeCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildModeCommandView(surface))
 }
 
-func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
+func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildAutoContinueCommandView(surface))
 }
 
-func (s *Service) buildReasoningCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
+func (s *Service) buildReasoningCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildReasoningCommandView(surface))
 }
 
-func (s *Service) buildAccessCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
+func (s *Service) buildAccessCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildAccessCommandView(surface))
 }
 
-func (s *Service) buildModelCatalog(surface *state.SurfaceConsoleRecord) control.CommandCatalog {
+func (s *Service) buildModelCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
 	return s.commandCatalogFromView(s.buildModelCommandView(surface))
 }
 
-func (s *Service) buildAttachmentRequiredCatalog(surface *state.SurfaceConsoleRecord, def control.FeishuCommandDefinition) control.CommandCatalog {
-	return control.CommandCatalog{
+func (s *Service) buildAttachmentRequiredCatalog(surface *state.SurfaceConsoleRecord, def control.FeishuCommandDefinition) control.FeishuDirectCommandCatalog {
+	return control.FeishuDirectCommandCatalog{
 		Title:        def.Title,
 		Summary:      "还没接管目标。先开始或继续工作，再回来调整这个参数。",
 		Interactive:  true,

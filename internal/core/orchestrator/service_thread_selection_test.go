@@ -363,7 +363,7 @@ func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testin
 		PromptKind: control.SelectionPromptUseThread,
 		Thread:     model,
 	}
-	prompt, ok := feishuadapter.SelectionPromptFromView(view, svc.buildFeishuSelectionContextFromView(surface, view))
+	prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(view, svc.buildFeishuSelectionContextFromView(surface, view))
 	if !ok {
 		t.Fatalf("expected selection view to be projectable, got %#v", model)
 	}

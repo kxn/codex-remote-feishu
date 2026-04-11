@@ -121,7 +121,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		CreatedAt:   s.now(),
 	}
 	surface.PendingRequests[event.RequestID] = record
-	return []control.UIEvent{s.requestPromptEvent(surface, control.RequestPrompt{
+	return []control.UIEvent{s.feishuDirectRequestPromptEvent(surface, control.FeishuDirectRequestPrompt{
 		RequestID:   record.RequestID,
 		RequestType: record.RequestType,
 		Title:       record.Title,

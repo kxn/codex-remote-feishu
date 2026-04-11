@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func selectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func selectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	if prompt.Kind == control.SelectionPromptUseThread {
 		return useThreadSelectionPromptElements(prompt, daemonLifecycleID)
 	}
@@ -55,11 +55,11 @@ func selectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID s
 	return elements
 }
 
-func attachInstanceSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func attachInstanceSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	return buildAttachSelectionPromptElements(prompt, daemonLifecycleID, "当前实例", nil)
 }
 
-func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
+func attachWorkspaceSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	return buildAttachSelectionPromptElements(prompt, daemonLifecycleID, "当前工作区", func(option control.SelectionOption) bool {
 		switch strings.TrimSpace(option.ActionKind) {
 		case cardActionKindShowAllWorkspaces, cardActionKindShowRecentWorkspaces:
@@ -71,7 +71,7 @@ func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daem
 }
 
 func buildAttachSelectionPromptElements(
-	prompt control.SelectionPrompt,
+	prompt control.FeishuDirectSelectionPrompt,
 	daemonLifecycleID string,
 	currentHeading string,
 	isMoreOption func(control.SelectionOption) bool,
@@ -136,7 +136,7 @@ func buildAttachSelectionPromptElements(
 
 func appendAttachSelectionSection(
 	elements []map[string]any,
-	prompt control.SelectionPrompt,
+	prompt control.FeishuDirectSelectionPrompt,
 	daemonLifecycleID string,
 	title string,
 	options []control.SelectionOption,
@@ -229,7 +229,7 @@ func selectionOptionBody(kind control.SelectionPromptKind, option control.Select
 	return fmt.Sprintf("%d. %s%s", option.Index, option.Label, current)
 }
 
-func selectionOptionButton(prompt control.SelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
+func selectionOptionButton(prompt control.FeishuDirectSelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
 	text := selectionOptionButtonText(prompt, option)
 	value := map[string]any{}
 	switch strings.TrimSpace(option.ActionKind) {
@@ -301,7 +301,7 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 	return button
 }
 
-func selectionOptionButtonText(prompt control.SelectionPrompt, option control.SelectionOption) string {
+func selectionOptionButtonText(prompt control.FeishuDirectSelectionPrompt, option control.SelectionOption) string {
 	text := strings.TrimSpace(option.ButtonLabel)
 	switch strings.TrimSpace(option.ActionKind) {
 	case cardActionKindShowAllWorkspaces:
