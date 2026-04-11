@@ -71,7 +71,7 @@ func RunInteractiveWizard(in io.Reader, out io.Writer, defaults PlatformDefaults
 	fmt.Fprintln(out, "- 打开飞书开放平台，进入你的自建应用。")
 	fmt.Fprintln(out, "- 在“凭证与基础信息”页面复制 App ID / App Secret。")
 	fmt.Fprintln(out, "- 在“事件与回调”里订阅消息、reaction、菜单事件。")
-	fmt.Fprintln(out, "- 工程内的 deploy/feishu 目录提供默认权限清单模板。")
+	fmt.Fprintln(out, "- 如果你暂时不确定缺什么，先完成安装，再按 WebSetup 里的能力检查继续补齐。")
 	feishuAppID, err := promptString(reader, out, "Feishu App ID", opts.FeishuAppID)
 	if err != nil {
 		return Options{}, err

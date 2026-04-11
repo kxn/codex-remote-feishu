@@ -93,7 +93,7 @@ loginctl enable-linger "$USER"
 
 在测试前先确认：
 
-- 飞书应用已经开通 `deploy/feishu/README.md` 里列出的基础消息 / 事件权限
+- 飞书应用已经完成基础消息、事件、卡片回调和机器人菜单配置
 - 如果你希望本地 `.md` 链接自动变成飞书预览链接，还需要 `drive:drive`
 
 然后在飞书里：
