@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -576,6 +577,114 @@ func TestProjectUseAllSelectionPromptRendersWorkspaceGroupReturnAction(t *testin
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
 	if renderedValue["kind"] != "show_recent_thread_workspaces" {
 		t.Fatalf("unexpected rendered return payload: %#v", renderedValue)
+	}
+}
+
+func TestProjectUseAllExpandedSelectionPromptUsesWorkspaceIndexAndFitsInlineCallback(t *testing.T) {
+	projector := NewProjector()
+	options := []control.SelectionOption{
+		{
+			Index:       1,
+			OptionID:    "thread-current",
+			Label:       "当前会话",
+			ButtonLabel: "当前会话",
+			GroupKey:    "/data/dl/current",
+			GroupLabel:  "current",
+			MetaText:    "已接管",
+			IsCurrent:   true,
+		},
+	}
+	index := 2
+	for workspace := 1; workspace <= 40; workspace++ {
+		workspaceKey := fmt.Sprintf("/data/dl/projects/team-alpha/service-%02d", workspace)
+		workspaceLabel := fmt.Sprintf("service-%02d", workspace)
+		for thread := 1; thread <= 3; thread++ {
+			options = append(options, control.SelectionOption{
+				Index:       index,
+				OptionID:    fmt.Sprintf("thread-%02d-%d", workspace, thread),
+				Label:       fmt.Sprintf("%s-thread-%d", workspaceLabel, thread),
+				ButtonLabel: fmt.Sprintf("%s-thread-%d", workspaceLabel, thread),
+				GroupKey:    workspaceKey,
+				GroupLabel:  workspaceLabel,
+				AgeText:     fmt.Sprintf("%d分前", workspace),
+				MetaText:    fmt.Sprintf("%d分前", thread),
+			})
+			index++
+		}
+	}
+	options = append(options,
+		control.SelectionOption{
+			Index:       index,
+			OptionID:    "thread-ops-disabled",
+			Label:       "ops-thread",
+			ButtonLabel: "ops-thread",
+			GroupKey:    "/data/dl/projects/team-alpha/ops",
+			GroupLabel:  "ops",
+			AgeText:     "2小时前",
+			MetaText:    "当前被其他飞书会话接管，暂不可接管",
+			Disabled:    true,
+		},
+		control.SelectionOption{
+			Index:       index + 1,
+			Label:       "最近工作区",
+			ButtonLabel: "最近工作区",
+			ActionKind:  "show_recent_thread_workspaces",
+		},
+	)
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Layout:       "workspace_grouped_useall",
+			Kind:         control.SelectionPromptUseThread,
+			Title:        "全部会话",
+			ContextTitle: "当前工作区",
+			ContextText:  "current · 1分前\n同工作区内切换请直接用 /use",
+			ContextKey:   "/data/dl/current",
+			Options:      options,
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	var buttonLabels []string
+	for _, element := range ops[0].CardElements {
+		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
+			continue
+		}
+		for _, button := range cardElementButtons(t, element) {
+			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
+		}
+	}
+	for _, want := range []string{
+		"当前 · 当前会话",
+		"查看当前工作区全部会话",
+		"查看全部 · service-01 (3)",
+		"查看全部 · service-40 (3)",
+		"不可恢复 · ops",
+		"返回 · 最近工作区",
+	} {
+		if !containsString(buttonLabels, want) {
+			t.Fatalf("expected workspace index button %q, got %#v", want, buttonLabels)
+		}
+	}
+	for _, unexpected := range []string{
+		"接管 · service-01-thread-1",
+		"接管 · service-40-thread-3",
+	} {
+		if containsString(buttonLabels, unexpected) {
+			t.Fatalf("did not expect per-thread button %q in expanded workspace index: %#v", unexpected, buttonLabels)
+		}
+	}
+	response := callbackCardResponse(&ActionResult{ReplaceCurrentCard: &ops[0]})
+	if response == nil {
+		t.Fatalf("expected inline callback response for expanded workspace index")
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal inline callback response: %v", err)
+	}
+	if len(payload) >= 20000 {
+		t.Fatalf("expected inline callback response under 20K, got %d bytes", len(payload))
 	}
 }
 

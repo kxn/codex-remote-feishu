@@ -536,6 +536,9 @@ func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLif
 		groups[position].Options = append(groups[position].Options, option)
 	}
 	singleWorkspaceView := strings.TrimSpace(prompt.Title) != "全部会话" && strings.TrimSpace(prompt.ContextTitle) == ""
+	if useThreadExpandedWorkspaceIndex(prompt, singleWorkspaceView, moreOptions) {
+		return useThreadWorkspaceIndexElements(prompt, daemonLifecycleID, currentOptions, groups, moreOptions)
+	}
 
 	if len(currentOptions) > 0 {
 		elements = append(elements, map[string]any{
@@ -641,6 +644,102 @@ func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLif
 					"content": renderSystemInlineTags(meta),
 				})
 			}
+		}
+	}
+
+	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(hint),
+		})
+	}
+	return elements
+}
+
+func useThreadExpandedWorkspaceIndex(prompt control.SelectionPrompt, singleWorkspaceView bool, moreOptions []control.SelectionOption) bool {
+	if singleWorkspaceView {
+		return false
+	}
+	if strings.TrimSpace(prompt.Title) != "全部会话" {
+		return false
+	}
+	if strings.TrimSpace(prompt.ContextTitle) == "" {
+		return false
+	}
+	for _, option := range moreOptions {
+		if strings.TrimSpace(option.ActionKind) == "show_recent_thread_workspaces" {
+			return true
+		}
+	}
+	return false
+}
+
+func useThreadWorkspaceIndexElements(prompt control.SelectionPrompt, daemonLifecycleID string, currentOptions []control.SelectionOption, groups []useThreadWorkspaceGroup, moreOptions []control.SelectionOption) []map[string]any {
+	elements := make([]map[string]any, 0, len(groups)+len(moreOptions)+8)
+
+	if len(currentOptions) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**当前会话**",
+		})
+		for _, option := range currentOptions {
+			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
+		}
+	}
+
+	if title := strings.TrimSpace(prompt.ContextTitle); title != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**" + title + "**",
+		})
+	}
+	if text := strings.TrimSpace(prompt.ContextText); text != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(text),
+		})
+	}
+	if contextKey := strings.TrimSpace(prompt.ContextKey); contextKey != "" {
+		if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton("查看当前工作区全部会话", contextKey, daemonLifecycleID)}); len(button) != 0 {
+			elements = append(elements, button)
+		}
+	}
+
+	if len(groups) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**其他工作区**",
+		})
+	}
+	for _, group := range groups {
+		label := strings.TrimSpace(group.Label)
+		if label == "" {
+			label = strings.TrimSpace(group.Key)
+		}
+		availableCount := 0
+		for _, option := range group.Options {
+			if !option.Disabled {
+				availableCount++
+			}
+		}
+		if availableCount == 0 {
+			elements = append(elements, cardCallbackButtonElement("不可恢复 · "+label, "default", nil, true, "fill"))
+			continue
+		}
+		buttonLabel := "查看全部 · " + label
+		if availableCount > 1 {
+			buttonLabel = fmt.Sprintf("查看全部 · %s (%d)", label, availableCount)
+		}
+		elements = append(elements, workspaceThreadsButton(buttonLabel, group.Key, daemonLifecycleID))
+	}
+
+	if len(moreOptions) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**更多**",
+		})
+		for _, option := range moreOptions {
+			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 		}
 	}
 
