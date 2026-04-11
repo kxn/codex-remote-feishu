@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 新增统一 Web 设计规范文档与 Web onboarding/admin workflow PRD 草案，并刷新文档索引。
+> Summary: 新增 Web onboarding/admin 的普通用户视角说明文档，并刷新文档索引。
 
 ## 1. 适用范围
 
@@ -147,6 +147,7 @@
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-onboarding-admin-workflow-prd.md](./draft/web-onboarding-admin-workflow-prd.md)
+- [web-onboarding-admin-user-view.md](./draft/web-onboarding-admin-user-view.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 

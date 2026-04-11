@@ -18,6 +18,7 @@
 相关文档：
 
 - Tracking issue: [#135](https://github.com/kxn/codex-remote-feishu/issues/135)
+- [web-onboarding-admin-user-view.md](./web-onboarding-admin-user-view.md)
 - [web-setup-wizard-redesign.md](./web-setup-wizard-redesign.md)
 - [web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 - [web-install-admin-prerequisites-design.md](./web-install-admin-prerequisites-design.md)
