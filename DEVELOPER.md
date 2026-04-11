@@ -266,21 +266,11 @@ curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .
 make install-hooks
 ```
 
-当前 `pre-commit` 会执行：
+当前约定：
 
-- 自动 `gofmt` 已暂存的 `cmd/`、`internal/`、`testkit/` 下 Go 文件并重新加入暂存区
-- 检查公开文档和工作流文件里是否泄露本机绝对路径
-- 检查旧项目名和废弃路径是否回流
-- 检查全部 Go 文件的体积上限
-  - `*_test.go` 不得超过 `2000` 行
-  - 其他业务 Go 文件不得超过 `1000` 行
-- 兜底检查整个仓库的 Go 格式
-- 运行 release track 版本脚本回归测试
-
-说明：
-
-- hook 只放快速、低副作用检查，不在提交时跑 Web 构建或 release smoke
-- 发布前仍应执行下面的完整自检
+- `pre-commit` 只跑快速、低副作用检查；实际检查项以 `scripts/check/pre-commit.sh` 为准，不再在文档里逐条展开
+- `./safe-push.sh` 只负责 clean worktree、同步远端、必要时补跑 `go test ./...` 后再推送，不替代 `pre-commit`
+- 提交和推送阶段都不跑 Web 构建或 release smoke；发布前仍应执行下面的完整自检
 
 ## 发布前自检
 
