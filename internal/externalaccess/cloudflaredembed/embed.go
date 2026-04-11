@@ -2,7 +2,6 @@ package cloudflaredembed
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -13,12 +12,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 type Asset struct {
 	Version string
 	SHA256  string
-	Gzip    []byte
+	Zstd    []byte
 }
 
 var (
@@ -27,7 +28,7 @@ var (
 )
 
 func register(asset Asset) {
-	if len(asset.Gzip) == 0 {
+	if len(asset.Zstd) == 0 {
 		return
 	}
 	mu.Lock()
@@ -38,7 +39,7 @@ func register(asset Asset) {
 func Current() (Asset, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if len(current.Gzip) == 0 {
+	if len(current.Zstd) == 0 {
 		return Asset{}, false
 	}
 	return current, true
@@ -74,21 +75,17 @@ func EnsureSibling(currentBinary string) (string, bool, error) {
 		_ = os.Remove(tempPath)
 	}
 
-	gzipReader, err := gzip.NewReader(bytes.NewReader(asset.Gzip))
+	zstdReader, err := zstd.NewReader(bytes.NewReader(asset.Zstd))
 	if err != nil {
 		cleanupTemp()
 		return "", false, fmt.Errorf("open embedded cloudflared asset: %w", err)
 	}
+	defer zstdReader.Close()
 
 	hash := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(tempFile, hash), gzipReader); err != nil {
-		_ = gzipReader.Close()
+	if _, err := io.Copy(io.MultiWriter(tempFile, hash), zstdReader); err != nil {
 		cleanupTemp()
 		return "", false, fmt.Errorf("extract embedded cloudflared asset: %w", err)
-	}
-	if err := gzipReader.Close(); err != nil {
-		cleanupTemp()
-		return "", false, fmt.Errorf("close embedded cloudflared asset: %w", err)
 	}
 	sum := hex.EncodeToString(hash.Sum(nil))
 	if want := normalizeSHA256(asset.SHA256); want != "" && sum != want {

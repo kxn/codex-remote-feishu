@@ -6,13 +6,13 @@ package cloudflaredembed
 
 import _ "embed"
 
-//go:embed assets/cloudflared-darwin-amd64.gz
+//go:embed assets/cloudflared-darwin-amd64.zst
 var embeddedCloudflared_darwin_amd64 []byte
 
 func init() {
 	register(Asset{
 		Version: "2026.2.0",
 		SHA256:  "f32ece46ec52d21d322077b94cdc76bdd602f3061dfaaefd7fb0aa424268cad5",
-		Gzip:    embeddedCloudflared_darwin_amd64,
+		Zstd:    embeddedCloudflared_darwin_amd64,
 	})
 }

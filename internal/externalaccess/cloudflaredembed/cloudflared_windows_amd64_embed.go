@@ -6,13 +6,13 @@ package cloudflaredembed
 
 import _ "embed"
 
-//go:embed assets/cloudflared-windows-amd64.gz
+//go:embed assets/cloudflared-windows-amd64.zst
 var embeddedCloudflared_windows_amd64 []byte
 
 func init() {
 	register(Asset{
 		Version: "2026.2.0",
 		SHA256:  "b3279f2186a1c3c438ad5865e802bbbec26090c5d3fdb4ac1113f1143a94837a",
-		Gzip:    embeddedCloudflared_windows_amd64,
+		Zstd:    embeddedCloudflared_windows_amd64,
 	})
 }

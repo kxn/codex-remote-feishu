@@ -17,3 +17,9 @@ for platform in "${platforms[@]}"; do
   CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=1 \
     bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
 done
+
+find "${ROOT_DIR}/internal/externalaccess/cloudflaredembed/assets" \
+  -maxdepth 1 \
+  -type f \
+  -name 'cloudflared-*.gz' \
+  -delete

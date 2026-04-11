@@ -2,12 +2,13 @@ package cloudflaredembed
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestEnsureSiblingExtractsEmbeddedAsset(t *testing.T) {
@@ -16,7 +17,7 @@ func TestEnsureSiblingExtractsEmbeddedAsset(t *testing.T) {
 	register(Asset{
 		Version: "test",
 		SHA256:  sha256Hex(payload),
-		Gzip:    gzipBytes(t, payload),
+		Zstd:    zstdBytes(t, payload),
 	})
 	t.Cleanup(func() {
 		if hadPrevious {
@@ -66,7 +67,7 @@ func TestEnsureSiblingReusesExistingFile(t *testing.T) {
 	register(Asset{
 		Version: "test",
 		SHA256:  sha256Hex(payload),
-		Gzip:    gzipBytes(t, payload),
+		Zstd:    zstdBytes(t, payload),
 	})
 	t.Cleanup(func() {
 		if hadPrevious {
@@ -107,19 +108,22 @@ func TestEnsureSiblingReusesExistingFile(t *testing.T) {
 	}
 }
 
-func gzipBytes(t *testing.T, data []byte) []byte {
+func zstdBytes(t *testing.T, data []byte) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
-	writer := gzip.NewWriter(&buffer)
+	writer, err := zstd.NewWriter(&buffer)
+	if err != nil {
+		t.Fatalf("zstd new writer: %v", err)
+	}
 	if _, err := writer.Write(data); err != nil {
-		t.Fatalf("gzip write: %v", err)
+		t.Fatalf("zstd write: %v", err)
 	}
 	if err := writer.Close(); err != nil {
-		t.Fatalf("gzip close: %v", err)
+		t.Fatalf("zstd close: %v", err)
 	}
 	result := buffer.Bytes()
 	if len(result) == 0 {
-		t.Fatal("gzip result is empty")
+		t.Fatal("zstd result is empty")
 	}
 	return result
 }
