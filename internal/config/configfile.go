@@ -17,6 +17,8 @@ const (
 	defaultRelayListenPort = 9500
 	defaultAdminListenHost = "127.0.0.1"
 	defaultAdminListenPort = 9501
+	defaultToolListenHost  = "127.0.0.1"
+	defaultToolListenPort  = 9502
 	defaultPreviewRootName = "Codex Remote Previews"
 )
 
@@ -29,6 +31,7 @@ type AppConfig struct {
 	Version        int                    `json:"version"`
 	Relay          RelaySettings          `json:"relay"`
 	Admin          AdminSettings          `json:"admin"`
+	Tool           ToolSettings           `json:"tool,omitempty"`
 	ExternalAccess ExternalAccessSettings `json:"externalAccess,omitempty"`
 	Wrapper        WrapperSettings        `json:"wrapper"`
 	Feishu         FeishuSettings         `json:"feishu"`
@@ -46,6 +49,11 @@ type AdminSettings struct {
 	ListenHost      string `json:"listenHost,omitempty"`
 	ListenPort      int    `json:"listenPort,omitempty"`
 	AutoOpenBrowser *bool  `json:"autoOpenBrowser,omitempty"`
+}
+
+type ToolSettings struct {
+	ListenHost string `json:"listenHost,omitempty"`
+	ListenPort int    `json:"listenPort,omitempty"`
 }
 
 type ExternalAccessSettings struct {
@@ -130,6 +138,10 @@ func DefaultAppConfig() AppConfig {
 			ListenHost:      defaultAdminListenHost,
 			ListenPort:      defaultAdminListenPort,
 			AutoOpenBrowser: boolPtr(true),
+		},
+		Tool: ToolSettings{
+			ListenHost: defaultToolListenHost,
+			ListenPort: defaultToolListenPort,
 		},
 		ExternalAccess: ExternalAccessSettings{
 			ListenHost:               defaultAdminListenHost,
@@ -579,6 +591,13 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 	if cfg.Admin.AutoOpenBrowser == nil {
 		cfg.Admin.AutoOpenBrowser = boolPtr(*defaults.Admin.AutoOpenBrowser)
+	}
+
+	if strings.TrimSpace(cfg.Tool.ListenHost) == "" {
+		cfg.Tool.ListenHost = defaults.Tool.ListenHost
+	}
+	if cfg.Tool.ListenPort <= 0 {
+		cfg.Tool.ListenPort = defaults.Tool.ListenPort
 	}
 
 	if strings.TrimSpace(cfg.ExternalAccess.ListenHost) == "" {

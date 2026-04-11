@@ -40,6 +40,11 @@ type ExternalAccessRuntimeConfig struct {
 	CurrentBinary string
 }
 
+type ToolRuntimeConfig struct {
+	ListenAddr string
+	StateFile  string
+}
+
 type externalAccessSettingsView struct {
 	ListenHost                 string
 	ListenPort                 int
@@ -105,6 +110,7 @@ type App struct {
 	relayServer *http.Server
 	apiServer   *http.Server
 	pprofServer *http.Server
+	toolServer  *http.Server
 
 	daemonStartedAt   time.Time
 	daemonLifecycleID string
@@ -156,8 +162,12 @@ type App struct {
 	relayListener          net.Listener
 	apiListener            net.Listener
 	pprofListener          net.Listener
+	toolListener           net.Listener
 	externalAccessListener net.Listener
 	externalAccessServer   *http.Server
+	toolStatePath          string
+	toolBearerToken        string
+	workspaceContextRoots  map[string]string
 
 	shutdownGracePeriod    time.Duration
 	shutdownNoticeTimeout  time.Duration
@@ -215,6 +225,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		feishuOnboarding:       map[string]*feishuOnboardingSession{},
 		feishuSetup:            newLiveFeishuSetupClient(),
 		adminAuth:              authManager,
+		workspaceContextRoots:  map[string]string{},
 		shutdownGracePeriod:    5 * time.Second,
 		shutdownNoticeTimeout:  2 * time.Second,
 		gatewayStopTimeout:     3 * time.Second,
@@ -326,6 +337,18 @@ func (a *App) Bind() error {
 		a.apiListener = apiListener
 	}
 
+	if err := a.bindToolListenerLocked(); err != nil {
+		if createdRelay {
+			_ = a.relayListener.Close()
+			a.relayListener = nil
+		}
+		if a.apiListener != nil {
+			_ = a.apiListener.Close()
+			a.apiListener = nil
+		}
+		return err
+	}
+
 	a.bindPprofListenerLocked()
 	return nil
 }
@@ -340,9 +363,11 @@ func (a *App) Run(ctx context.Context) error {
 	apiListener := a.apiListener
 	pprofListener := a.pprofListener
 	pprofServer := a.pprofServer
+	toolListener := a.toolListener
+	toolServer := a.toolServer
 	a.listenMu.Unlock()
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	a.startIngressPump(ctx, errCh)
 
 	go func() {
@@ -355,6 +380,13 @@ func (a *App) Run(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+	if toolServer != nil && toolListener != nil {
+		go func() {
+			if err := toolServer.Serve(toolListener); err != nil && err != http.ErrServerClosed {
+				errCh <- err
+			}
+		}()
+	}
 	if pprofServer != nil && pprofListener != nil {
 		go func() {
 			if err := pprofServer.Serve(pprofListener); err != nil && err != http.ErrServerClosed {

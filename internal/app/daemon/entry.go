@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,6 +89,10 @@ func RunMain(ctx context.Context, version string) error {
 		BaseEnv:    baseEnv,
 		Paths:      paths,
 		MinIdle:    1,
+	})
+	app.SetToolRuntime(ToolRuntimeConfig{
+		ListenAddr: net.JoinHostPort(loadedConfig.Config.Tool.ListenHost, strconv.Itoa(loadedConfig.Config.Tool.ListenPort)),
+		StateFile:  paths.ToolServiceFile,
 	})
 	app.SetFinalBlockPreviewer(finalBlockPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)

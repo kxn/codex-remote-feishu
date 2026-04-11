@@ -18,6 +18,7 @@ type Paths struct {
 	DaemonLockFile   string
 	PIDFile          string
 	IdentityFile     string
+	ToolServiceFile  string
 }
 
 func DefaultPaths() (Paths, error) {
@@ -50,6 +51,7 @@ func DefaultPaths() (Paths, error) {
 		DaemonLockFile:   filepath.Join(stateDir, "relayd.lock"),
 		PIDFile:          filepath.Join(stateDir, "codex-remote-relayd.pid"),
 		IdentityFile:     filepath.Join(stateDir, "codex-remote-relayd.identity.json"),
+		ToolServiceFile:  filepath.Join(stateDir, "codex-remote-tool-service.json"),
 	}, nil
 }
 

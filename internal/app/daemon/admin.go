@@ -124,6 +124,7 @@ type adminConfigView struct {
 	Version int                     `json:"version"`
 	Relay   config.RelaySettings    `json:"relay"`
 	Admin   config.AdminSettings    `json:"admin"`
+	Tool    config.ToolSettings     `json:"tool,omitempty"`
 	Wrapper config.WrapperSettings  `json:"wrapper"`
 	Feishu  adminFeishuSettingsView `json:"feishu"`
 	Debug   config.DebugSettings    `json:"debug"`
@@ -566,6 +567,7 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 		Version: cfg.Version,
 		Relay:   cfg.Relay,
 		Admin:   cfg.Admin,
+		Tool:    cfg.Tool,
 		Wrapper: cfg.Wrapper,
 		Debug:   cfg.Debug,
 		Storage: cfg.Storage,

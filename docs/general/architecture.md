@@ -159,6 +159,7 @@ Feishu 平台适配层，负责：
 把这些模块组装成 daemon role：
 
 - relay websocket server
+- local tool service listener
 - orchestrator
 - renderer
 - Feishu gateway
@@ -227,6 +228,16 @@ Feishu inbound
   -> orchestrator / renderer
   -> UIEvent
   -> Feishu projector
+```
+
+### 6.3 Feishu MCP tool context
+
+```text
+normal 模式下的 workspace 排他接管
+  -> daemon 在 workspace/.codex-remote/surface-context.json 写入当前 surface
+  -> 本地 Feishu MCP tool description 要求 Codex 先读取该文件
+  -> tool call 显式带回 surface_session_id
+  -> daemon local tool service 校验并解析 surface context
 ```
 
 ### 6.2 本地 VS Code 交互

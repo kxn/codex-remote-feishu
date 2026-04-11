@@ -240,6 +240,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
 	}
 	a.syncSurfaceResumeStateLocked(clearTargets)
+	a.syncWorkspaceSurfaceContextFilesLocked()
 	if action.Kind == control.ActionModeCommand {
 		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 		switchedIntoVSCode := after != nil &&
@@ -389,6 +390,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	a.handleUIEvents(ctx, recoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
+	a.syncWorkspaceSurfaceContextFilesLocked()
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
@@ -516,6 +518,7 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEvents(ctx, normalRecoveryEvents)
 	a.syncSurfaceResumeStateLocked(nil)
+	a.syncWorkspaceSurfaceContextFilesLocked()
 }
 
 // onTick runs on the daemon's 100ms heartbeat.
