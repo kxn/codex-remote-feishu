@@ -21,6 +21,8 @@ import (
 
 var tryCloudflareURLPattern = regexp.MustCompile(`https://[a-zA-Z0-9.-]+\.trycloudflare\.com`)
 
+const defaultTryCloudflareLaunchTimeout = 60 * time.Second
+
 type TryCloudflareOptions struct {
 	BinaryPath          string
 	CurrentBinary       string
@@ -74,7 +76,7 @@ func NewTryCloudflareProvider(opts TryCloudflareOptions) *TryCloudflareProvider 
 		ensureBundledBinary = cloudflaredembed.EnsureSibling
 	}
 	if opts.LaunchTimeout <= 0 {
-		opts.LaunchTimeout = 20 * time.Second
+		opts.LaunchTimeout = defaultTryCloudflareLaunchTimeout
 	}
 	return &TryCloudflareProvider{
 		now:                 now,

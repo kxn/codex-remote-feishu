@@ -39,6 +39,18 @@ func TestDefaultAppConfigIncludesPreviewRootFolderName(t *testing.T) {
 	}
 }
 
+func TestDefaultAppConfigIncludesTryCloudflareLaunchTimeout(t *testing.T) {
+	unsetUnifiedConfigOverride(t)
+	cfg := DefaultAppConfig()
+	if cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds != defaultTryCloudflareLaunchTimeoutSeconds {
+		t.Fatalf(
+			"LaunchTimeoutSeconds = %d, want %d",
+			cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds,
+			defaultTryCloudflareLaunchTimeoutSeconds,
+		)
+	}
+}
+
 func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()

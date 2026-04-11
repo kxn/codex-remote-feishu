@@ -15,6 +15,13 @@ import (
 	"time"
 )
 
+func TestTryCloudflareProviderDefaultLaunchTimeout(t *testing.T) {
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{})
+	if provider.launchTimeout != defaultTryCloudflareLaunchTimeout {
+		t.Fatalf("launchTimeout = %v, want %v", provider.launchTimeout, defaultTryCloudflareLaunchTimeout)
+	}
+}
+
 func TestTryCloudflareProviderEnsurePublicBase(t *testing.T) {
 	metricsPort := reserveLocalPort(t)
 	provider := NewTryCloudflareProvider(TryCloudflareOptions{

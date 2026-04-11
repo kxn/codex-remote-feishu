@@ -13,15 +13,16 @@ import (
 const (
 	currentConfigVersion = 1
 
-	defaultRelayListenHost = "127.0.0.1"
-	defaultRelayListenPort = 9500
-	defaultAdminListenHost = "127.0.0.1"
-	defaultAdminListenPort = 9501
-	defaultToolListenHost  = "127.0.0.1"
-	defaultToolListenPort  = 9502
-	defaultPprofListenHost = "127.0.0.1"
-	defaultPprofListenPort = 17501
-	defaultPreviewRootName = "Codex Remote Previews"
+	defaultRelayListenHost                   = "127.0.0.1"
+	defaultRelayListenPort                   = 9500
+	defaultAdminListenHost                   = "127.0.0.1"
+	defaultAdminListenPort                   = 9501
+	defaultToolListenHost                    = "127.0.0.1"
+	defaultToolListenPort                    = 9502
+	defaultPprofListenHost                   = "127.0.0.1"
+	defaultPprofListenPort                   = 17501
+	defaultPreviewRootName                   = "Codex Remote Previews"
+	defaultTryCloudflareLaunchTimeoutSeconds = 60
 )
 
 type LoadedAppConfig struct {
@@ -161,7 +162,7 @@ func DefaultAppConfig() AppConfig {
 				Kind:      "trycloudflare",
 				LazyStart: boolPtr(true),
 				TryCloudflare: TryCloudflareSettings{
-					LaunchTimeoutSeconds: 20,
+					LaunchTimeoutSeconds: defaultTryCloudflareLaunchTimeoutSeconds,
 				},
 			},
 		},

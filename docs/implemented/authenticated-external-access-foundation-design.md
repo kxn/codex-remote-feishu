@@ -147,7 +147,7 @@ type TryCloudflareSettings struct {
 - `defaultSessionTTLSeconds = 1800`
 - `provider.kind = "trycloudflare"`
 - `provider.lazyStart = true`
-- `tryCloudflare.launchTimeoutSeconds = 20`
+- `tryCloudflare.launchTimeoutSeconds = 60`
 - `tryCloudflare.metricsPort = 0`
 
 ### 6.2 环境变量 override
