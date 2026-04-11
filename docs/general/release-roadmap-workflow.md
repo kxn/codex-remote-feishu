@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 定义版本 milestone、release tracker、显式 production 版本号和自动发版闸门之间的关系。
+> Summary: 定义版本 milestone、release tracker、显式 production 版本号、release branch 目标分支和自动发版闸门之间的关系。
 
 ## 1. 目的
 
@@ -32,6 +32,8 @@
 - 每个版本都创建一个 release tracker issue
 - 使用 `.github/ISSUE_TEMPLATE/release-tracker.yml`
 - tracker issue 的 milestone 必须与其“版本号”字段完全一致
+- 需要从 release branch 发版时，在 tracker issue 的“发布分支”字段填写目标分支，例如 `release/1.5`
+- 若“发布分支”留空，则自动发版回退到仓库默认分支
 - tracker issue 关闭时，会按其中记录的版本号触发自动发版
 
 ### 2.3 Release Labels
@@ -98,8 +100,8 @@ readiness 通过的条件是：
 关闭动作会：
 
 1. 再做一次 readiness 校验
-2. 从 tracker issue 中读取版本号和发布轨道
-3. 调用 release workflow
+2. 从 tracker issue 中读取版本号、发布轨道和发布分支
+3. 调用 release workflow，并 checkout 到目标发布分支
 4. 按 tracker 指定版本创建 release
 
 ## 5. 建议边界
@@ -113,8 +115,8 @@ readiness 通过的条件是：
 如果关闭 tracker issue 后自动发版失败，优先看三类问题：
 
 - tracker issue 的版本号、轨道、milestone 不一致
+- tracker issue 指定的发布分支不存在，或者填错了分支名
 - milestone 下还有未完成的非 `release:stretch` issue
 - 目标版本号已经被人手工发过，导致 tag/release 冲突
 
 冲突修正后，可以重新打开并再次关闭 tracker issue，或者手动触发 release workflow 并填写相同的显式版本号。
-

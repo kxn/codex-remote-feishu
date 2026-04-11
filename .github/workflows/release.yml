@@ -3,6 +3,11 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: Git ref to release from. Defaults to the ref that triggered this workflow.
+        required: false
+        default: ""
+        type: string
       track:
         description: Release track
         required: true
@@ -34,6 +39,10 @@ on:
         type: boolean
   workflow_call:
     inputs:
+      ref:
+        required: false
+        default: ""
+        type: string
       track:
         required: true
         type: string
@@ -62,10 +71,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve source ref
+        id: source_ref
+        run: |
+          ref='${{ inputs.ref }}'
+          if [[ -z "${ref}" ]]; then
+            ref='${{ github.ref_name }}'
+          fi
+          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.source_ref.outputs.ref }}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -172,4 +191,5 @@ jobs:
           gh release create "${{ steps.version.outputs.version }}" dist/* \
             --title "${{ steps.version.outputs.version }}" \
             --notes-file release-notes.md \
+            --target "${{ steps.source_ref.outputs.ref }}" \
             "${flags[@]}"

@@ -99,12 +99,15 @@ fi
 [[ -n "${repo}" ]] || die "could not resolve repository"
 
 issue_json="$("${gh_bin}" api "repos/${repo}/issues/${issue_number}")"
+repo_json="$("${gh_bin}" api "repos/${repo}")"
 state="$(jq -r '.state // ""' <<<"${issue_json}" | tr '[:upper:]' '[:lower:]')"
 body="$(jq -r '.body // ""' <<<"${issue_json}" | tr -d '\r')"
 milestone_number="$(jq -r '.milestone.number // empty' <<<"${issue_json}")"
 milestone_title="$(jq -r '.milestone.title // empty' <<<"${issue_json}")"
+default_branch="$(jq -r '.default_branch // empty' <<<"${repo_json}")"
 
 jq -e '.labels[]? | select(.name == "release:tracker")' >/dev/null <<<"${issue_json}" || die "issue #${issue_number} is not labeled release:tracker"
+[[ -n "${default_branch}" ]] || die "could not resolve repository default branch"
 
 if [[ "${require_closed}" -eq 1 && "${state}" != "closed" ]]; then
   die "issue #${issue_number} must be closed before release"
@@ -122,6 +125,19 @@ if [[ -z "${track}" ]]; then
   track="$(derive_track_from_version "${version}")"
 fi
 track="${track,,}"
+
+release_ref="$(
+  extract_heading_section "${body}" "发布分支" | first_nonempty_line || true
+)"
+if [[ -z "${release_ref}" ]]; then
+  release_ref="${default_branch}"
+fi
+encoded_release_ref="$(
+  jq -rn --arg value "${release_ref}" '$value|@uri'
+)"
+if ! "${gh_bin}" api "repos/${repo}/branches/${encoded_release_ref}" >/dev/null 2>&1; then
+  die "release ref ${release_ref} does not exist in repo ${repo}"
+fi
 
 case "${track}" in
   production)
@@ -178,6 +194,7 @@ fi
 echo "status: ready"
 echo "repo: ${repo}"
 echo "issue: #${issue_number}"
+echo "ref: ${release_ref}"
 echo "track: ${track}"
 echo "version: ${version}"
 echo "milestone: ${milestone_title}"
@@ -185,6 +202,7 @@ echo "stretch open: ${stretch_open_count}"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
+    echo "ref=${release_ref}"
     echo "track=${track}"
     echo "version=${version}"
     echo "milestone=${milestone_title}"

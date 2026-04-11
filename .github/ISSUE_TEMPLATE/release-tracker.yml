@@ -39,6 +39,15 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: ref
+    attributes:
+      label: 发布分支
+      description: 可选；需要从 release branch 发版时填写，例如 release/1.5。不填则默认使用仓库默认分支。
+      placeholder: release/1.5
+    validations:
+      required: false
+
   - type: textarea
     id: goal
     attributes:
@@ -83,4 +92,3 @@ body:
         例如：
         - #123 标记为 release:stretch，下一版继续跟进
         - 如果当前版本已经存在同名 tag，需要先处理冲突再重试
-

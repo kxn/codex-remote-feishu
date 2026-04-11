@@ -18,6 +18,7 @@ jobs:
     if: ${{ contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
     runs-on: ubuntu-latest
     outputs:
+      ref: ${{ steps.readiness.outputs.ref }}
       track: ${{ steps.readiness.outputs.track }}
       version: ${{ steps.readiness.outputs.version }}
       should_release: ${{ steps.flag.outputs.should_release }}
@@ -49,9 +50,9 @@ jobs:
     permissions:
       contents: write
     with:
+      ref: ${{ needs.plan.outputs.ref }}
       track: ${{ needs.plan.outputs.track }}
       version: ${{ needs.plan.outputs.version }}
       bump: auto
       draft: false
     secrets: inherit
-
