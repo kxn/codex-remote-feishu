@@ -590,6 +590,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 	}
 }
 
+// Tick is the orchestrator's deadline driver.
+// Keep it limited to in-memory expiry/backoff transitions that must still fire
+// when no new ingress event arrives.
 func (s *Service) Tick(now time.Time) []control.UIEvent {
 	if now.IsZero() {
 		now = s.now()

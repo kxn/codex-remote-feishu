@@ -246,6 +246,17 @@ curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .
 - helper/internal traffic 只能靠明确协议标识关联，不能靠猜测
 - mock 必须贴近真实协议，不能用静态脚本假装通过
 - 公开文档、README、模板文件里不要泄露本机路径
+- `Tick` / ticker / timeout loop 属于高频热路径，默认先假设新逻辑不应该放进去
+- 只有这几类事情才适合进 `Tick`：
+  - deadline / TTL / backoff 到期
+  - 没有可靠事件回调的跨进程结果轮询
+  - 已经有显式下一次扫描时间的低频维护
+- 如果某段逻辑本来可以由用户动作、agent 事件、command ack、实例上下线等明确事件触发，就不要因为“省事”塞进 `Tick`
+- 新增 `Tick` 逻辑时，必须同时回答：
+  - 为什么事件路径不够
+  - 为什么不会在空闲周期被无意义重复执行
+  - 需要什么 gating / next-check / backoff 才能把频率压下来
+- 对 `Tick` 里的文件系统、网络、进程管理、提示生成类逻辑尤其谨慎；没有明确限频就不要放进去
 
 ## Git Hooks
 

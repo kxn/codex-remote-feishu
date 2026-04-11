@@ -541,6 +541,9 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	a.syncSurfaceResumeStateLocked(nil)
 }
 
+// onTick runs on the daemon's 100ms heartbeat.
+// Only maintenance that cannot be tied to a specific ingress event belongs
+// here, and anything non-trivial must already have its own interval/backoff.
 func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
