@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PACKAGE_DIR="${ROOT_DIR}/internal/externalaccess/cloudflaredembed"
 ASSET_DIR="${PACKAGE_DIR}/assets"
+ALLOW_DOWNLOAD="${CLOUDFLARED_EMBED_ALLOW_DOWNLOAD:-0}"
 
 CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.2.0}"
 GOOS_VALUE="${1:-${GOOS:-$(go env GOOS)}}"
@@ -51,6 +52,15 @@ embedded_asset="${ASSET_DIR}/cloudflared-${GOOS_VALUE}-${GOARCH_VALUE}.gz"
 if [[ -f "${generated_go}" && -f "${embedded_asset}" ]] && grep -q "Version: \"${CLOUDFLARED_VERSION}\"" "${generated_go}"; then
   echo "embedded cloudflared already prepared for ${GOOS_VALUE}/${GOARCH_VALUE}"
   exit 0
+fi
+
+if [[ "${ALLOW_DOWNLOAD}" != "1" ]]; then
+  cat >&2 <<EOF
+embedded cloudflared asset missing or outdated for ${GOOS_VALUE}/${GOARCH_VALUE}
+repo-managed assets are required by default
+run: bash scripts/externalaccess/update-cloudflared-embed.sh
+EOF
+  exit 1
 fi
 
 tmp_dir="$(mktemp -d)"
