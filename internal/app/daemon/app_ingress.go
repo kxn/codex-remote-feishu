@@ -230,7 +230,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncSurfaceResumeStateLocked(nil)
 		return nil
 	}
-	events := a.service.ApplySurfaceAction(action)
+	events := a.applyIngressActionLocked(action)
 	inlineResult := a.inlineCardActionResultLocked(action, events)
 	if inlineResult == nil {
 		a.handleUIEvents(ctx, events)
@@ -256,6 +256,13 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		}
 	}
 	return inlineResult
+}
+
+func (a *App) applyIngressActionLocked(action control.Action) []control.UIEvent {
+	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
+		return a.service.ApplyFeishuUIIntent(action, *intent)
+	}
+	return a.service.ApplySurfaceAction(action)
 }
 
 func (a *App) inlineCardActionResultLocked(action control.Action, events []control.UIEvent) *feishu.ActionResult {

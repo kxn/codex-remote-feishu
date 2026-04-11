@@ -299,6 +299,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return blocked
 	}
 	s.noteAutoContinueAction(surface, action)
+	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
+		return s.applyFeishuUIIntent(surface, *intent)
+	}
 	switch action.Kind {
 	case control.ActionListInstances:
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
@@ -315,14 +318,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.attachInstance(surface, action.InstanceID)
 	case control.ActionAttachWorkspace:
 		return s.attachWorkspace(surface, action.WorkspaceKey)
-	case control.ActionShowAllWorkspaces:
-		return s.presentAllWorkspaceSelection(surface)
-	case control.ActionShowRecentWorkspaces:
-		return s.presentWorkspaceSelection(surface)
 	case control.ActionShowCommandHelp:
 		return []control.UIEvent{s.commandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
-	case control.ActionShowCommandMenu:
-		return []control.UIEvent{s.commandCatalogEvent(surface, parseCommandMenuView(action.Text), s.commandMenuStage(surface), s.buildCommandMenuCatalog(surface, action.Text))}
 	case control.ActionDebugCommand:
 		return []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,
@@ -367,18 +364,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		return s.handleModeCommand(surface, action)
 	case control.ActionRespondRequest:
 		return s.respondRequest(surface, action)
-	case control.ActionShowThreads:
-		return s.presentThreadSelection(surface, false)
-	case control.ActionShowAllThreads:
-		return s.presentThreadSelection(surface, true)
-	case control.ActionShowAllThreadWorkspaces:
-		return s.presentAllThreadWorkspaces(surface)
-	case control.ActionShowRecentThreadWorkspaces:
-		return s.presentThreadSelection(surface, true)
-	case control.ActionShowScopedThreads:
-		return s.presentScopedThreadSelection(surface)
-	case control.ActionShowWorkspaceThreads:
-		return s.presentWorkspaceThreadSelection(surface, action.WorkspaceKey)
 	case control.ActionUseThread:
 		return s.useThread(surface, action.ThreadID, action.AllowCrossWorkspace)
 	case control.ActionConfirmKickThread:

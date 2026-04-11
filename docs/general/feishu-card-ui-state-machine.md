@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 新增阶段 1 的显式 Feishu UI query/context 边界，并把 callback payload schema 收束到 adapter 单一 owner。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界之上，阶段 2 新增 Feishu UI controller 接管纯导航，并让 daemon ingress 在进入主 reducer 前先分流 same-context navigation。
 
 ## 1. 文档定位
 
@@ -48,26 +48,30 @@
 - `gateway`
   - 负责把 Feishu callback 解析成 `control.Action`
   - 负责决定 callback 是同步等待 replace，还是立即 ack 后异步处理
+- `daemon`
+  - 负责 old-card / old-message 生命周期判定
+  - 负责在 ingress 层把 pure navigation 先分流到 Feishu UI controller，而不是直接落进主 `ApplySurfaceAction()` reducer
+  - 负责只在安全条件下把同上下文导航转成 `ReplaceCurrentCard`
+- `orchestrator / Feishu UI controller`
+  - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
+  - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界继续生成现有 `SelectionPrompt` / `CommandCatalog` 事件
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单
-- `daemon`
-  - 负责 old-card / old-message 生命周期判定
-  - 负责只在安全条件下把同上下文导航转成 `ReplaceCurrentCard`
 - `orchestrator`
   - 负责 attach / use / follow / request gate / capture / new-thread 等产品状态
-  - 负责生成 `SelectionPrompt` / `CommandCatalog` / `RequestPrompt` 的语义内容
-  - 当前还会在 `UIEvent` 上额外挂出显式 `Feishu*Context`，作为后续 UI controller 的稳定 query/policy 输入
+  - 负责 mixed/product-owned 动作仍然进入主 reducer 的那部分产品语义
+  - 当前还会在 `UIEvent` 上额外挂出显式 `Feishu*Context`，作为 Feishu UI controller 的稳定 query/policy 输入
 
 ## 3. 当前 owner 分类表
 
 | 交互面 | 当前 owner | 当前边界 |
 | --- | --- | --- |
-| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 同一张命令菜单内的层级切换；当前只要求 projector/gateway/daemon 保证 inline replace 和 payload 对齐，不改 core route |
-| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | 只是工作区列表展开/收起；不改变 attach 状态 |
-| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 只是最近会话与“当前工作区全部会话”的视图切换；真正接管 thread 不在这里发生 |
-| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | 只是 `/useall` 里的 workspace-group 展开/返回；不直接改变 selected thread |
-| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare 入口和返回仍是同上下文 UI 导航；真正应用参数后会进入产品状态变更，因此 apply 仍保持 append-only |
+| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；不再直接进入主 reducer，也不改 core route |
+| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理工作区列表展开/收起；不改变 attach 状态 |
+| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理最近会话与“当前工作区全部会话”的视图切换；真正接管 thread 不在这里发生 |
+| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/useall` 里的 workspace-group 展开/返回；不直接改变 selected thread |
+| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；真正应用参数后仍进入产品状态变更，因此 apply 继续保持 append-only |
 | `request approve` / `request_user_input` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、提交校验属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
@@ -79,7 +83,7 @@
 - 当前阶段 1 已把它们显式定义为 **Feishu-oriented transition DTO**：
   - DTO 形状暂未迁出
   - 但 `UIEvent` 现在已经携带独立的 `FeishuSelectionContext` / `FeishuCommandContext` / `FeishuRequestContext`
-  - 后续 controller 应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
+  - 当前阶段 2 的 Feishu UI controller 已通过这层 boundary 分流 pure navigation；后续继续扩 controller 时，默认仍应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
 - 如果只是换卡片样式、按钮 payload、inline replace 策略，优先更新本文。
 - 如果改了 DTO 里的可选项语义、route 约束或 request gate 行为，必须同时更新 core 状态机文档。
 
@@ -202,12 +206,14 @@
 
 ### 7.1 当前关键实现文件
 
+- [internal/core/control/feishu_ui_intent.go](../../internal/core/control/feishu_ui_intent.go)
 - [internal/core/control/feishu_ui_boundary.go](../../internal/core/control/feishu_ui_boundary.go)
 - [internal/adapter/feishu/gateway_runtime.go](../../internal/adapter/feishu/gateway_runtime.go)
 - [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
 - [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
 - [internal/core/orchestrator/service_feishu_ui_context.go](../../internal/core/orchestrator/service_feishu_ui_context.go)
+- [internal/core/orchestrator/service_feishu_ui_controller.go](../../internal/core/orchestrator/service_feishu_ui_controller.go)
 - [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
 - [internal/app/daemon/app_inbound_lifecycle.go](../../internal/app/daemon/app_inbound_lifecycle.go)
 - [internal/core/control/inline_replacement.go](../../internal/core/control/inline_replacement.go)
@@ -216,6 +222,8 @@
 
 - [internal/core/control/inline_replacement_test.go](../../internal/core/control/inline_replacement_test.go)
   - 锁定 pure navigation 与 append-only 的动作集合
+- [internal/core/control/feishu_ui_intent_test.go](../../internal/core/control/feishu_ui_intent_test.go)
+  - 锁定哪些动作会被分流到 Feishu UI controller，哪些 mixed/product-owned 动作仍留在主 reducer
 - [internal/adapter/feishu/projector_test.go](../../internal/adapter/feishu/projector_test.go)
   - 锁定 `SelectionPrompt` / `CommandCatalog` / `RequestPrompt` 的 lifecycle stamp 与 callback payload 结构
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
@@ -224,7 +232,7 @@
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
   - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据，而不改变现有 DTO 与用户可见行为
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
-  - 锁定 daemon 侧 inline replace 结果，以及 old-card 导航/命令被拒绝而不是继续 replace
+  - 锁定 daemon ingress 分流后的 inline replace 结果，以及 old-card 导航/命令被拒绝而不是继续 replace
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类与拒绝文案映射
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)

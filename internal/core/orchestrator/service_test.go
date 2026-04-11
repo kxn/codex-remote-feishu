@@ -286,6 +286,31 @@ func TestWorkspaceSelectionEventCarriesFeishuSelectionContext(t *testing.T) {
 	}
 }
 
+func TestApplyFeishuUIIntentBuildsModeCatalog(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplyFeishuUIIntent(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode",
+	}, control.FeishuUIIntent{
+		Kind:    control.FeishuUIIntentShowModeCatalog,
+		RawText: "/mode",
+	})
+	if len(events) != 1 || events[0].CommandCatalog == nil {
+		t.Fatalf("expected mode catalog event, got %#v", events)
+	}
+	if events[0].CommandCatalog.Title != "切换模式" {
+		t.Fatalf("unexpected mode catalog: %#v", events[0].CommandCatalog)
+	}
+	if events[0].FeishuCommandContext == nil || events[0].FeishuCommandContext.MenuView != control.FeishuCommandMode {
+		t.Fatalf("expected feishu command context for mode catalog, got %#v", events[0].FeishuCommandContext)
+	}
+}
+
 func TestAttachBusyInstanceRejectsSecondSurface(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
