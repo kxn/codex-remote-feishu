@@ -184,6 +184,7 @@ func (p *TryCloudflareProvider) startPublicBase(ctx context.Context, localListen
 		"HOME="+configDir,
 		"XDG_CONFIG_HOME="+configDir,
 	)
+	configureTryCloudflareLaunch(cmd)
 	var logWriter io.WriteCloser = ioDiscardCloser{}
 	if p.logPath != "" {
 		if err := os.MkdirAll(filepath.Dir(p.logPath), 0o755); err == nil {
