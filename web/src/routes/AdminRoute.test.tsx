@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
@@ -14,6 +14,34 @@ import {
 import { installMockFetch } from "../test/http";
 
 describe("AdminRoute", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
+    window.history.replaceState({}, "", "/g/demo/admin");
+
+    const { calls } = installMockFetch({
+      "/g/demo/api/admin/bootstrap-state": { body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }) },
+      "/g/demo/api/admin/runtime-status": { body: makeRuntimeStatus() },
+      "/g/demo/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
+      "/g/demo/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/g/demo/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/g/demo/api/admin/instances": { body: { instances: [] } },
+      "/g/demo/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
+      "/g/demo/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      },
+    });
+
+    render(<AdminRoute />);
+
+    expect(await screen.findByRole("button", { name: "新增机器人" })).toBeInTheDocument();
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
+    expect(calls.some((call) => call.path === "/g/demo/api/admin/bootstrap-state")).toBe(true);
+  });
+
   it("toggles the shell section navigation and closes it after selecting a section", async () => {
     const user = userEvent.setup();
     installMockFetch({

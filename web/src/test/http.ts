@@ -3,6 +3,7 @@ import { vi } from "vitest";
 export type MockFetchCall = {
   path: string;
   method: string;
+  rawURL: string;
   init?: RequestInit;
 };
 
@@ -21,14 +22,18 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : null;
     const rawURL = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    const url = new URL(rawURL, window.location.origin);
+    const url = new URL(rawURL, window.location.href);
     const path = `${url.pathname}${url.search}`;
     const method = init?.method ?? request?.method ?? "GET";
-    const call: MockFetchCall = { path, method, init };
+    const call: MockFetchCall = { path, method, rawURL, init };
     calls.push(call);
 
     const handler = routes[path] ?? routes[url.pathname];
-    if (!handler && (url.pathname === "/api/setup/runtime-requirements/detect" || url.pathname === "/api/admin/runtime-requirements/detect")) {
+    if (
+      !handler &&
+      (url.pathname.endsWith("/api/setup/runtime-requirements/detect") ||
+        url.pathname.endsWith("/api/admin/runtime-requirements/detect"))
+    ) {
       return new Response(JSON.stringify({
         ready: true,
         summary: "当前机器已满足基础运行条件，可以继续后面的可选配置。",
@@ -52,7 +57,10 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
         },
       });
     }
-    if (!handler && (url.pathname === "/api/setup/autostart/detect" || url.pathname === "/api/admin/autostart/detect")) {
+    if (
+      !handler &&
+      (url.pathname.endsWith("/api/setup/autostart/detect") || url.pathname.endsWith("/api/admin/autostart/detect"))
+    ) {
       return new Response(JSON.stringify({
         platform: "linux",
         supported: true,

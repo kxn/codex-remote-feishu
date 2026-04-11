@@ -6,6 +6,28 @@ import { makeApp, makeAutostartDetect, makeBootstrap, makeManifest, makeRuntimeR
 import { installMockFetch } from "../test/http";
 
 describe("SetupRoute", () => {
+  it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
+    window.history.replaceState({}, "", "/g/demo/setup");
+
+    const { calls } = installMockFetch({
+      "/g/demo/api/setup/bootstrap-state": { body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }) },
+      "/g/demo/api/setup/feishu/apps": {
+        body: {
+          apps: [makeApp({ wizard: {} })],
+        },
+      },
+      "/g/demo/api/setup/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/g/demo/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("你想怎么接入飞书应用？")).toBeInTheDocument();
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
+    expect(calls.some((call) => call.path === "/g/demo/api/setup/bootstrap-state")).toBe(true);
+  });
+
   it("toggles the shared setup step navigation and closes it after selecting a step", async () => {
     window.history.replaceState({}, "", "/setup");
 
