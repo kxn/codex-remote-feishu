@@ -270,6 +270,7 @@ func TestMenuActionKindKnownValues(t *testing.T) {
 		"model":            control.ActionModelCommand,
 		"access":           control.ActionAccessCommand,
 		"mode":             control.ActionModeCommand,
+		"autowhip":         control.ActionAutoContinueCommand,
 		"autocontinue":     control.ActionAutoContinueCommand,
 		"help":             control.ActionShowCommandHelp,
 		"debug":            control.ActionDebugCommand,
@@ -448,6 +449,8 @@ func TestParseTextActionRecognizesModelAndReasoningCommands(t *testing.T) {
 		"/access":          control.ActionAccessCommand,
 		"/access full":     control.ActionAccessCommand,
 		"/approval":        control.ActionAccessCommand,
+		"/autowhip":        control.ActionAutoContinueCommand,
+		"/autowhip on":     control.ActionAutoContinueCommand,
 		"/autocontinue":    control.ActionAutoContinueCommand,
 		"/autocontinue on": control.ActionAutoContinueCommand,
 	}

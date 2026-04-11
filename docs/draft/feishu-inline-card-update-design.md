@@ -1,7 +1,7 @@
 # Feishu 卡片原地更新设计
 
 > Type: `draft`
-> Updated: `2026-04-10`
+> Updated: `2026-04-11`
 > Summary: 盘点当前 Feishu 卡片交互，明确哪些适合改成点击后原地更新，并给出推荐链路与分阶段落地方案。
 
 ## 1. 文档定位
@@ -28,7 +28,7 @@
 
 - 已实现：
   - `/menu` 首页 <-> 二级分组页原地替换
-  - 从 `/menu` 打开的 bare `/mode`、`/autocontinue`、`/reasoning`、`/access`、`/model` 参数卡原地替换
+  - 从 `/menu` 打开的 bare `/mode`、`/autowhip`、`/reasoning`、`/access`、`/model` 参数卡原地替换
   - 参数卡里的“返回上一层”原地替换
   - `/use` -> `show_scoped_threads`
   - `/useall` -> `show_workspace_threads`
@@ -120,7 +120,7 @@
 - `/menu switch_target`
 - `/menu maintenance`
 - bare `/mode`
-- bare `/autocontinue`
+- bare `/autowhip`
 - bare `/reasoning`
 - bare `/access`
 - bare `/model`
@@ -283,7 +283,7 @@
 
 | 交互 | 当前问题 | 推荐改法 | 推荐链路 |
 | --- | --- | --- | --- |
-| `/reasoning` `/access` `/mode` `/autocontinue` 的应用按钮 | 点完后卡片和当前状态可能脱节 | 原卡片直接刷新为最新状态，并高亮当前值 | 回调同步回包 |
+| `/reasoning` `/access` `/mode` `/autowhip` 的应用按钮 | 点完后卡片和当前状态可能脱节 | 原卡片直接刷新为最新状态，并高亮当前值 | 回调同步回包 |
 | `/model` 表单提交 | 提交后常要再看一张新状态卡 | 原卡片刷新为当前模型配置 | 回调同步回包 |
 | request prompt | 按钮点完后旧卡仍像可操作 | 改成“已处理”或“等待反馈”终态 | 回调同步回包 |
 | kick confirm | 确认后旧卡仍在 | 改成“已强踢”或“已取消” | 回调同步回包 |
@@ -415,7 +415,7 @@
 再做一次性决策卡终态化：
 
 - bare `/mode`
-- bare `/autocontinue`
+- bare `/autowhip`
 - bare `/reasoning`
 - bare `/access`
 - bare `/model`

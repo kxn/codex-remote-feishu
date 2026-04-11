@@ -16,7 +16,7 @@ const (
 	FeishuCommandDetach            = "detach"
 	FeishuCommandStop              = "stop"
 	FeishuCommandMode              = "mode"
-	FeishuCommandAutoContinue      = "autocontinue"
+	FeishuCommandAutoContinue      = "autowhip"
 	FeishuCommandModel             = "model"
 	FeishuCommandReasoning         = "reasoning"
 	FeishuCommandAccess            = "access"
@@ -115,7 +115,7 @@ var feishuCommandGroups = []FeishuCommandGroup{
 	{
 		ID:          FeishuCommandGroupMaintenance,
 		Title:       "低频与维护",
-		Description: "查看状态、切换模式、auto-continue、帮助和调试入口。",
+		Description: "查看状态、切换模式、autowhip、帮助和调试入口。",
 	},
 }
 
@@ -456,29 +456,33 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandAutoContinue,
 			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "自动续跑",
-			CanonicalSlash:   "/autocontinue",
-			CanonicalMenuKey: "autocontinue",
+			Title:            "autowhip",
+			CanonicalSlash:   "/autowhip",
+			CanonicalMenuKey: "autowhip",
 			ArgumentKind:     FeishuCommandArgumentChoice,
 			ArgumentFormHint: "on",
 			ArgumentFormNote: "输入 on 或 off。",
 			ArgumentSubmit:   "应用",
-			Description:      "查看当前 auto-continue 状态；bare `/autocontinue` 会返回 on / off 切换卡片。",
-			Examples:         []string{"/autocontinue on", "/autocontinue off"},
+			Description:      "查看当前 autowhip 状态；bare `/autowhip` 会返回 on / off 切换卡片。",
+			Examples:         []string{"/autowhip on", "/autowhip off"},
 			Options: []FeishuCommandOption{
-				commandOption("/autocontinue", "autocontinue", "on", "on", "开启当前飞书会话的 auto-continue。"),
-				commandOption("/autocontinue", "autocontinue", "off", "off", "关闭当前飞书会话的 auto-continue。"),
+				commandOption("/autowhip", "autowhip", "on", "on", "开启当前飞书会话的 autowhip。"),
+				commandOption("/autowhip", "autowhip", "off", "off", "关闭当前飞书会话的 autowhip。"),
 			},
 			ShowInHelp: true,
 			ShowInMenu: true,
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/autowhip", kind: ActionAutoContinueCommand},
 			{alias: "/autocontinue", kind: ActionAutoContinueCommand},
 		},
 		menuExact: []feishuCommandMatch{
-			{alias: "autocontinue", action: Action{Kind: ActionAutoContinueCommand, Text: "/autocontinue"}},
+			{alias: "autowhip", action: Action{Kind: ActionAutoContinueCommand, Text: "/autowhip"}},
+			{alias: "autocontinue", action: Action{Kind: ActionAutoContinueCommand, Text: "/autowhip"}},
 		},
 		menuDynamic: []feishuCommandDynamicMenuMatch{
+			{prefix: "autowhip_", kind: ActionAutoContinueCommand, build: buildMenuAutoContinueText},
+			{prefix: "autowhip-", kind: ActionAutoContinueCommand, build: buildMenuAutoContinueText},
 			{prefix: "autocontinue_", kind: ActionAutoContinueCommand, build: buildMenuAutoContinueText},
 			{prefix: "autocontinue-", kind: ActionAutoContinueCommand, build: buildMenuAutoContinueText},
 		},
@@ -922,7 +926,7 @@ func buildMenuAutoContinueText(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
 	case "on", "off":
-		return "/autocontinue " + mode, true
+		return "/autowhip " + mode, true
 	default:
 		return "", false
 	}

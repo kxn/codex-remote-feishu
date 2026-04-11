@@ -53,6 +53,9 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 
 func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
 	tests := []string{
+		"/autowhip",
+		"/autowhip on",
+		"/autowhip off",
 		"/autocontinue",
 		"/autocontinue on",
 		"/autocontinue off",
@@ -169,14 +172,14 @@ func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {
 				for _, command := range entry.Commands {
-					if command == "/autocontinue" {
+					if command == "/autowhip" {
 						found = true
 					}
 				}
 			}
 		}
 		if !found {
-			t.Fatalf("catalog %#v does not include /autocontinue", catalog.Title)
+			t.Fatalf("catalog %#v does not include /autowhip", catalog.Title)
 		}
 	}
 }

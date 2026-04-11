@@ -679,7 +679,7 @@ func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**自动继续：** 开启，连续 2 次，等待重试可恢复失败",
+		"**autowhip：** 开启，连续 2 次，等待重试上游不稳定",
 		"计划于 <text_tag color='neutral'>2026-04-09 12:00:30 CST</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)

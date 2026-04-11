@@ -367,7 +367,7 @@ func TestAutoContinueCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/autocontinue on",
+		Text:             "/autowhip on",
 	})
 	if len(enabled) != 1 || enabled[0].Notice == nil || enabled[0].Notice.Code != "auto_continue_enabled" {
 		t.Fatalf("expected enable notice, got %#v", enabled)
@@ -384,7 +384,7 @@ func TestAutoContinueCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 	disabled := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAutoContinueCommand,
 		SurfaceSessionID: "surface-1",
-		Text:             "/autocontinue off",
+		Text:             "/autowhip off",
 	})
 	if len(disabled) != 1 || disabled[0].Notice == nil || disabled[0].Notice.Code != "auto_continue_disabled" {
 		t.Fatalf("expected disable notice, got %#v", disabled)
@@ -431,7 +431,7 @@ func TestAutoContinueSchedulesIncompleteStopAfterRemoteTurn(t *testing.T) {
 	surface := setupAutoContinueSurface(t, svc)
 
 	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
-	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "还需要继续处理剩余 TODO。下一步我继续收尾。", nil)
+	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "我先去检查一下还有没有遗漏。", nil)
 
 	if surface.AutoContinue.PendingReason != state.AutoContinueReasonIncompleteStop {
 		t.Fatalf("expected incomplete-stop schedule, got %#v", surface.AutoContinue)
@@ -444,6 +444,19 @@ func TestAutoContinueSchedulesIncompleteStopAfterRemoteTurn(t *testing.T) {
 	}
 	if surface.AutoContinue.PendingReplyToMessageID != "msg-1" {
 		t.Fatalf("expected pending reply anchor to stick to original message, got %#v", surface.AutoContinue)
+	}
+}
+
+func TestAutoContinueStopsWhenFinalTextContainsStopPhrase(t *testing.T) {
+	now := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "这边都检查过了，老板不要再打我了，真的没有事情干了", nil)
+
+	if surface.AutoContinue.PendingReason != "" || surface.AutoContinue.ConsecutiveCount != 0 {
+		t.Fatalf("expected stop phrase to keep autowhip idle, got %#v", surface.AutoContinue)
 	}
 }
 
@@ -489,7 +502,7 @@ func TestAutoContinueDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testin
 	surface := setupAutoContinueSurface(t, svc)
 
 	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
-	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "还需要继续处理剩余 TODO。下一步我继续收尾。", nil)
+	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "我再检查一轮，把剩下的事情都扫掉。", nil)
 
 	now = now.Add(3 * time.Second)
 	tickEvents := svc.Tick(now)
@@ -528,7 +541,7 @@ func TestAutoContinueDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testin
 		}
 	}
 
-	finished := completeRemoteTurnWithFinalText(t, svc, "turn-2", "completed", "", "已完成并验证。", nil)
+	finished := completeRemoteTurnWithFinalText(t, svc, "turn-2", "completed", "", "老板不要再打我了，真的没有事情干了", nil)
 	var sawReplyBlock bool
 	for _, event := range finished {
 		if event.PendingInput != nil {
@@ -560,7 +573,7 @@ func TestStopSuppressesNextAutoContinueSchedule(t *testing.T) {
 		t.Fatalf("expected /stop to suppress the next auto-continue scheduling attempt, got %#v", surface.AutoContinue)
 	}
 
-	completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "", "还需要继续处理剩余 TODO。下一步我继续收尾。", nil)
+	completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "", "我再去核一遍，看看还有没有别的活。", nil)
 	if surface.AutoContinue.PendingReason != "" || !surface.AutoContinue.Enabled || surface.AutoContinue.SuppressOnce {
 		t.Fatalf("expected suppressed turn completion to leave auto-continue enabled but idle, got %#v", surface.AutoContinue)
 	}

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、auto-continue、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -59,7 +59,7 @@
 - `/detach`
 - `/stop`
 - `/mode`
-- `/autocontinue`
+- `/autowhip`
 - `/model`
 - `/reasoning`
 - `/access`
@@ -71,6 +71,7 @@ alias 仍继续兼容，但不再作为主展示入口：
 - `/threads`、`/sessions` -> `/use`
 - `/approval` -> `/access`
 - `/effort` -> `/reasoning`
+- 旧 `/autocontinue` -> `/autowhip`
 - `menu` -> `/menu`
 - 旧 `/newinstance`、`/killinstance` -> 显式迁移提示
 
@@ -78,7 +79,7 @@ alias 仍继续兼容，但不再作为主展示入口：
 
 - `/menu` 当前会打开阶段感知的命令首页，而不是静态平铺目录
 - `/menu` 和参数卡当前采用紧凑按钮优先布局，尽量让主操作一屏可见；`/help` 保持文本帮助取向
-- bare `/reasoning`、`/access`、`/mode`、`/autocontinue` 会返回当前状态 + 快捷按钮 + 单字段表单
+- bare `/reasoning`、`/access`、`/mode`、`/autowhip` 会返回当前状态 + 快捷按钮 + 单字段表单
 - bare `/model` 会返回当前状态 + 常见示例 + 手动输入表单
 - bare `/debug`、`/upgrade` 会返回当前状态卡；卡内既有快捷按钮，也有手动输入表单
 
@@ -115,7 +116,7 @@ canonical menu key 语法当前固定为：
 - `/reasoning high` <-> `reasoning_high`
 - `/access confirm` <-> `access_confirm`
 - `/mode vscode` <-> `mode_vscode`
-- `/autocontinue on` <-> `autocontinue_on`
+- `/autowhip on` <-> `autowhip_on`
 - `/model gpt-5.4` <-> `model_gpt-5.4`
 
 旧 menu key alias 仍兼容：
@@ -123,6 +124,7 @@ canonical menu key 语法当前固定为：
 - `threads` / `sessions` -> `/use`
 - `approval_confirm` -> `/access confirm`
 - `reason_high` -> `/reasoning high`
+- `autocontinue` / `autocontinue_on` -> `/autowhip`
 
 ### 3.3 图片消息
 
@@ -418,11 +420,11 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - wrapper 对 `turn.steer` 返回 `accepted=true` 后，该 item 记为 `steered`
 - 若 dispatch 失败或 wrapper reject，则恢复到原 queue 位置
 
-另外，auto-continue 实际补发时也复用同一条 queue，但它和普通用户输入不是同一种来源：
+另外，autowhip 实际补发时也复用同一条 queue，但它和普通用户输入不是同一种来源：
 
 - 普通用户输入 queue item 记录 `SourceKind=user`
-- auto-continue queue item 记录 `SourceKind=auto_continue`
-- auto-continue item 仍会保留“最终回复挂回哪条原用户消息”的 reply anchor
+- autowhip queue item 记录 `SourceKind=auto_continue`
+- autowhip item 仍会保留“最终回复挂回哪条原用户消息”的 reply anchor
 - 但不会把 queue / typing / reaction 再投影回原用户消息，避免把系统自动续推伪装成新的用户输入状态
 
 ### 5.2 Typing reaction
@@ -437,9 +439,9 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 例外：
 
-- auto-continue queue item 不会给原用户消息加/减 `THINKING`
-- auto-continue queue item 失败或完成时，也不会额外给原用户消息补 `ThumbsUp` / `ThumbsDown`
-- 但 auto-continue 产出的最终回复卡片，仍会 reply 到最初那条用户消息下面
+- autowhip queue item 不会给原用户消息加/减 `THINKING`
+- autowhip queue item 失败或完成时，也不会额外给原用户消息补 `ThumbsUp` / `ThumbsDown`
+- 但 autowhip 产出的最终回复卡片，仍会 reply 到最初那条用户消息下面
 
 ### 5.3 本地优先
 
@@ -461,24 +463,29 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 2. 丢弃飞书侧尚未发送的 queue item
 3. 丢弃未绑定到文本的 staged image
 4. 对被丢弃项加 `THUMBSDOWN`
-5. 若当前 surface 已开启 auto-continue，且 `/stop` 命中了 live remote work，则本轮 turn 收尾时会 suppress 一次 auto-continue，避免“用户刚停下，系统又自己续跑”
+5. 若当前 surface 已开启 autowhip，且 `/stop` 命中了 live remote work，则本轮 turn 收尾时会 suppress 一次 autowhip，避免“用户刚停下，系统又自己续跑”
 
-### 5.5 `autocontinue`
+### 5.5 `autowhip`
 
-`/autocontinue` 当前是 surface 维度、daemon 内存态的开关：
+`/autowhip` 当前是 surface 维度、daemon 内存态的开关：
 
-- `/autocontinue`：查看当前状态
-- `/autocontinue on`：开启
-- `/autocontinue off`：关闭
-- 不持久化；daemon 重启后恢复默认关闭
+- `/autowhip`：查看当前状态
+- `/autowhip on`：开启
+- `/autowhip off`：关闭
+- 不持久化；daemon 重启后不会恢复之前的 autowhip 状态
+- 旧 `/autocontinue` 与 `autocontinue_*` 仅作为兼容 alias 保留，不再是主展示入口
 
 当前固定补发文案：
 
-- `任务都完成了吗？如果没有就继续干，都完成了就可以停下来`
+- `你看还有没有别的任务需要完成，有就继续做，没有就说"老板不要再打我了，真的没有事情干了"`
+
+当前收工口令：
+
+- `老板不要再打我了，真的没有事情干了`
 
 当前有两条触发通道：
 
-1. `turn.completed` 后，当前 surface queue 已空，且 final assistant 文本命中“疑似未完成就停下”的 deterministic heuristics。
+1. `turn.completed` 后，当前 surface queue 已空，且 final assistant 文本**不包含**收工口令。
 2. `turn.completed` 携带 `problem.Retryable=true`，认为是 retryable upstream / API failure。
 
 当前 backoff：
@@ -488,7 +495,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 当前调度方式：
 
-- `turn.completed` 只负责在 surface 上记录 pending auto-continue runtime
+- `turn.completed` 只负责在 surface 上记录 pending autowhip runtime
 - 真正 enqueue 发生在后续 `Tick()`
 - enqueue 前会再次检查 surface 是否仍可发送：attached、非 abandoning、无 request gate、`DispatchMode=normal`、无 live remote work
 
@@ -618,7 +625,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 - 直接发纯文本
 - 对用户在飞书发起的正常 remote turn，若某段 `agent_message` 已收到 `item.completed`，会尽早作为过程文本投影，不必强等到 `turn.completed`
-- 这条“提前投影已完成 assistant item”的策略当前不扩展到 local UI turn，也不扩展到 auto-continue turn
+- 这条“提前投影已完成 assistant item”的策略当前不扩展到 local UI turn，也不扩展到 autowhip turn
 
 ### 7.2.1 图片与 dynamic tool 结果
 

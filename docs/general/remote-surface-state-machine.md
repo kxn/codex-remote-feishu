@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、bare `/mode` `/autocontinue` `/reasoning` `/access` `/model` 的统一参数卡表单，以及 `/debug` `/upgrade` 的菜单入口；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、normal `/list` 对 recoverable-only workspace 的恢复入口、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 的飞书回传路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` 的统一参数卡表单，以及 `/debug` `/upgrade` 的菜单入口；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、normal `/list` 对 recoverable-only workspace 的恢复入口、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 的飞书回传路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -194,7 +194,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 | `G2 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片会被待处理请求卡片门禁挡住；请求可以是 approval，也可以是 `request_user_input` |
 | `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
 | `G4 CommandCapture` | `ActiveCommandCapture != nil` | 仅保留旧 `/model` 历史兼容：当前 UI 不再创建新 capture；若 surface 上残留旧 capture，下一条普通文本会被直接转换成 `/model <输入>` |
-| `G5 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autocontinue` 继续正常，其余动作被挡 |
+| `G5 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autowhip` 继续正常，其余动作被挡 |
 | `G6 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
 
 ### 3.5 草稿状态
@@ -212,26 +212,26 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `D1` 还没有冻结路由，所以 route change 时必须显式处理。
 3. `D3` 不是独立 route state，而是 `R5` 上的附加约束。
 
-### 3.6 auto-continue overlay
+### 3.6 autowhip overlay
 
-`AutoContinueRuntimeRecord` 当前不是新的 route state，而是 surface 上附加的一层运行时 overlay：
+`AutoContinueRuntimeRecord` 当前不是新的 route state，而是 surface 上附加的一层运行时 overlay；用户可见命令面当前统一叫 `autowhip`：
 
 | 代号 | 条件 | 含义 |
 | --- | --- | --- |
-| `A0 Disabled` | `AutoContinue.Enabled=false` | 当前 surface 不做自动续跑 |
-| `A1 EnabledIdle` | `AutoContinue.Enabled=true`，`PendingReason==""` | 已开启，但当前没有待触发的 auto-continue |
-| `A2 Scheduled` | `AutoContinue.Enabled=true`，`PendingReason!= ""`，`PendingDueAt` 非空 | 已记录一次待触发 auto-continue，等待 backoff 到期并再次过门禁 |
+| `A0 Disabled` | `AutoContinue.Enabled=false` | 当前 surface 不做 autowhip |
+| `A1 EnabledIdle` | `AutoContinue.Enabled=true`，`PendingReason==""` | 已开启，但当前没有待触发的 autowhip |
+| `A2 Scheduled` | `AutoContinue.Enabled=true`，`PendingReason!= ""`，`PendingDueAt` 非空 | 已记录一次待触发 autowhip，等待 backoff 到期并再次过门禁 |
 
 补充说明：
 
 1. `A2 Scheduled` 不会直接占用 `ActiveQueueItemID`。
-2. 真正 enqueue auto-continue item 发生在 `Tick()`，而不是 `turn.completed` 同步路径里。
+2. 真正 enqueue autowhip item 发生在 `Tick()`，而不是 `turn.completed` 同步路径里。
 3. `A2 Scheduled` 只有在下列条件同时满足时才会真正发出：
    1. surface 仍 attached
    2. `DispatchMode=normal`
    3. 没有 `PendingHeadless` / `PendingRequest` / `RequestCapture` / `Abandoning`
    4. 当前没有 live remote work
-4. auto-continue queue item 的 reply anchor 与 pending projection 当前已显式拆开：
+4. autowhip queue item 的 reply anchor 与 pending projection 当前已显式拆开：
    1. 最终回复仍挂回原用户消息
    2. queue / typing / reaction 不再回写到原用户消息
 
@@ -307,7 +307,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/autocontinue`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 的兼容提示、消息撤回、reaction。
+1. 允许：`/status`、`/autowhip`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 的兼容提示、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
@@ -461,7 +461,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. `PausedForLocal`
    4. `HandoffWait`
    5. queued count
-6. auto-continue runtime：
+6. autowhip runtime：
    1. enabled / disabled
    2. pending reason
    3. pending due time
@@ -476,7 +476,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 4. 下一条文本是不是会先被 request gate 吃掉。
 5. 下一条文本是不是会先被 legacy `/model` capture 兼容态吃掉。
 6. 现在是执行中、排队中，还是被本地 VS Code 暂停。
-7. auto-continue 当前是关闭、待触发，还是刚因 backoff 暂缓。
+7. autowhip 当前是关闭、待触发，还是刚因 backoff 暂缓。
 8. attachment 还在不在，以及当前是不是在等实例恢复。
 
 ### 4.12 `/mode` 是 surface 级 overlay，当前只负责记忆与清理切换
@@ -499,14 +499,15 @@ surface 不是单一枚举，而是五层正交状态叠加。
 8. `normal mode` 下 `/follow` 已退出长期路径；`vscode mode` 当前则固定走 follow-first，并把 `/use` 收窄到当前 instance 内的一次性 force-pick。
 9. 若当前仍有 running / dispatching / queued work，则 `/mode` 会直接拒绝，而不是进入半切换状态。
 
-### 4.13 `/autocontinue` 是 surface 级、内存态、跨 route 可查询的 overlay 开关
+### 4.13 `/autowhip` 是 surface 级、内存态、跨 route 可查询的 overlay 开关
 
-当前 `/autocontinue` 不要求 surface 已 attach：
+当前 `/autowhip` 不要求 surface 已 attach：
 
-1. detached surface 也可以直接 bare `/autocontinue` 查询并打开 on/off 参数卡；带参数时可直接切换。
-2. `PendingHeadless` 期间 `/autocontinue` 仍然允许，不会被顶层 gate 挡住。
-3. `Abandoning` 期间 `/autocontinue` 也仍然允许，用户可以查看或关闭当前 surface 的 auto-continue。
+1. detached surface 也可以直接 bare `/autowhip` 查询并打开 on/off 参数卡；带参数时可直接切换。
+2. `PendingHeadless` 期间 `/autowhip` 仍然允许，不会被顶层 gate 挡住。
+3. `Abandoning` 期间 `/autowhip` 也仍然允许，用户可以查看或关闭当前 surface 的 autowhip。
 4. daemon 重启后不恢复该开关；当前已接受这是内存态语义。
+5. slash/menu parser 当前仍兼容旧 `/autocontinue` / `autocontinue_*`，但 UI 与文档不再主动展示旧入口。
 
 ### 4.14 `/menu` 现在是阶段感知首页，不再是静态平铺目录
 
@@ -538,7 +539,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 5. `normal` working 首页与主路径里不再暴露 `/follow`。
 6. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
    1. `send settings`：`/reasoning`、`/model`、`/access`
-   2. `maintenance`：`/mode`、`/autocontinue`
+   2. `maintenance`：`/mode`、`/autowhip`
    3. 表单提交通过 card callback `submit_command_form` 拼回 canonical slash text，再复用文本命令解析链路。
 7. `maintenance` 分组里的 `/debug`、`/upgrade` 当前仍然是直接触发 daemon 动作的命令入口，不属于参数卡表单。
 8. 旧 `/model start_command_capture` 卡片只保留历史兼容：
@@ -548,16 +549,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
 9. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
 10. 同上下文菜单导航当前已经支持“替换当前卡片”而不是追加新卡，但只限窄范围：
    1. `/menu` 首页 <-> 二级分组页
-   2. 从 `/menu` 分组页打开 bare `/mode`、`/autocontinue`、`/reasoning`、`/access`、`/model`
+   2. 从 `/menu` 分组页打开 bare `/mode`、`/autowhip`、`/reasoning`、`/access`、`/model`
    3. bare 参数卡里的“返回上一层”
 11. 这条原地替换链路当前只在动作来自带 `CardDaemonLifecycleID` 的飞书卡片时启用：
    1. 网关通过 card callback 同步回包返回替换后的整张卡
    2. 同样的命令如果由 slash 文本或飞书后台 bot 菜单触发，仍按普通 append-only UIEvent 新发卡片
    3. `/help`、result/notice 类卡片不参与这条导航替换语义
 
-### 4.15 auto-continue 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
+### 4.15 autowhip 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
 
-当前 auto-continue queue item 增加了显式来源类型：
+当前 autowhip queue item 仍沿用显式来源类型：
 
 1. `SourceKind=user`
 2. `SourceKind=auto_continue`
@@ -567,7 +568,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 1. 普通用户输入 item：
    1. `SourceMessageID` / `SourceMessageIDs` 用于 pending、typing、revoke、reaction 投影。
    2. 最终回复默认 reply 到同一条原用户消息。
-2. auto-continue item：
+2. autowhip item：
    1. `SourceMessageID` 为空，不再触发 pending / typing / thumbs projection。
    2. `ReplyToMessageID` 单独保留原用户消息锚点。
    3. 最终回复继续 reply 到原用户消息。
@@ -736,18 +737,18 @@ E3 Running
 3. 对空 thread 首条消息，promote 会优先按 `Initiator.SurfaceSessionID` 命中。
 4. 若 queue item 来自 `R5`，turn.started 后 surface 必须切回 `pinned`，不会继续停在 `new_thread_ready`。
 5. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
-6. remote turn 在 `turn.completed` 时，若当前 item 满足 auto-continue 触发条件：
+6. remote turn 在 `turn.completed` 时，若当前 item 满足 autowhip 触发条件：
    1. surface 不会立刻同步 enqueue 新 item
    2. 只会把 surface 置入 `A2 Scheduled`
    3. 后续等 `Tick()` 到期后再真正 enqueue
-7. auto-continue 当前有两条独立触发通道：
+7. autowhip 当前有两条独立触发通道：
    1. `problem.Retryable=true` 的 retryable failure
-   2. final assistant 文本命中 incomplete-stop heuristics
+   2. final assistant 文本**不包含**收工口令 `老板不要再打我了，真的没有事情干了`
 8. `/stop` 命中 live remote work 时，会给当前 surface 打一次 `SuppressOnce`：
-   1. 本轮 turn 收尾时不会触发 auto-continue
-   2. suppress 只消费一次，之后 auto-continue 恢复正常评估
+   1. 本轮 turn 收尾时不会触发 autowhip
+   2. suppress 只消费一次，之后 autowhip 恢复正常评估
 9. 当前 backoff 固定为：
-   1. `incomplete_stop`: `3s -> 10s -> 30s`，最多 3 次
+   1. `incomplete_stop`（文本未出现收工口令）: `3s -> 10s -> 30s`，最多 3 次
    2. `retryable_failure`: `10s -> 30s -> 90s -> 300s`，最多 4 次
 
 ### 5.3 本地 VS Code 仲裁
@@ -961,7 +962,7 @@ transport degraded retained attachment
 | `/use` `/useall` | `normal`: `/use`=`/useall`，都会展示 global 最近 5 个 workspace 组，并可卡片内展开全部；`vscode`: 拒绝并提示先 `/list` | `normal`: `/use`=当前 workspace 最近 5 个，`/useall`=global 最近 5 个 workspace 组，卡片 `show_scoped_threads`=当前 workspace 全量，`show_all_thread_workspaces`=global 全量 workspace 组；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `normal`: `/use`=当前 workspace 最近 5 个，`/useall`=global 最近 5 个 workspace 组，卡片 `show_scoped_threads`=当前 workspace 全量，`show_all_thread_workspaces`=global 全量 workspace 组；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | 允许；若仅有 unsent draft 会先丢弃 |
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许 | 允许 | 允许 | 拒绝并提示迁移 |
 | `/mode` | 允许 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 | 允许；若有 queued/dispatching/running 则拒绝 |
-| `/autocontinue` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| `/autowhip` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/help` `/menu` `/debug` `/upgrade` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | 文本 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
 | 图片 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
@@ -969,7 +970,7 @@ transport degraded retained attachment
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/detach` | 允许但通常只提示已 detached | 允许 | 允许 | 允许 | 允许 | 允许；dispatching/running 时走 abandoning |
-| bare `/mode` / bare `/autocontinue` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
+| bare `/mode` / bare `/autowhip` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/model` `/reasoning` `/access` | 允许，但 detached 时只回恢复/参数卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/debug` `/upgrade` | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 |
 | 带参数 `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
@@ -978,11 +979,11 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autocontinue`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
 | `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。approval 走按钮确认；`request_user_input` 则走按钮或表单提交 |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `G4 CommandCapture` | 当前只可能来自旧 runtime 残留兼容态；下一条普通文本会被直接转换成 `/model <输入>` 并立即应用；图片会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` 并提示重新打开 `/model` 卡片 |
-| `E6 Abandoning` | 只允许 `/status`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
+| `E6 Abandoning` | 只允许 `/status`、`/autowhip`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
 | `G6 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
 
 retained-offline overlay 额外规则：

@@ -9,64 +9,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const autoContinuePromptText = "任务都完成了吗？如果没有就继续干，都完成了就可以停下来"
-
-var autoContinueCompletionPhrases = []string{
-	"已完成",
-	"已经完成",
-	"完成了",
-	"done",
-	"fixed",
-	"resolved",
-	"all set",
-	"tests passed",
-	"已提交",
-	"已推送",
-}
-
-var autoContinueNeedUserPhrases = []string{
-	"请确认",
-	"等你确认",
-	"需要授权",
-	"需要你",
-	"请提供",
-	"请回复",
-	"need approval",
-	"need your input",
-}
-
-var autoContinueStrongIncompletePhrases = []string{
-	"还需要",
-	"尚未",
-	"还没",
-	"未完成",
-	"没做完",
-	"remaining",
-	"still need",
-	"todo",
-}
-
-var autoContinueNextStepPhrases = []string{
-	"下一步",
-	"接下来",
-	"后续还要",
-	"i will next",
-	"next step",
-}
-
-var autoContinuePausePhrases = []string{
-	"先做到这里",
-	"暂时先",
-	"后面继续",
-	"稍后继续",
-}
-
-var autoContinueRemainingListPhrases = []string{
-	"还需要:",
-	"还需要：",
-	"todo:",
-	"remaining:",
-}
+const autoContinuePromptText = "你看还有没有别的任务需要完成，有就继续做，没有就说\"老板不要再打我了，真的没有事情干了\""
+const autoContinueStopPhrase = "老板不要再打我了，真的没有事情干了"
 
 func (s *Service) noteAutoContinueAction(surface *state.SurfaceConsoleRecord, action control.Action) {
 	if surface == nil {
@@ -124,53 +68,11 @@ func pendingTurnTextValue(pending map[string]*completedTextItem, instanceID, thr
 }
 
 func normalizeAutoContinueText(text string) string {
-	replacer := strings.NewReplacer(
-		"`", " ",
-		"*", " ",
-		"_", " ",
-		"#", " ",
-		"\r", " ",
-		"\n", " ",
-		"\t", " ",
-	)
-	return strings.Join(strings.Fields(strings.ToLower(replacer.Replace(strings.TrimSpace(text)))), " ")
+	return strings.Join(strings.Fields(strings.TrimSpace(text)), "")
 }
 
-func containsAnyPhrase(text string, phrases []string) bool {
-	for _, phrase := range phrases {
-		if phrase != "" && strings.Contains(text, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-func autoContinueIncompleteScore(text string, summary *control.FileChangeSummary) int {
-	normalized := normalizeAutoContinueText(text)
-	if normalized == "" {
-		return 0
-	}
-	if containsAnyPhrase(normalized, autoContinueCompletionPhrases) || containsAnyPhrase(normalized, autoContinueNeedUserPhrases) {
-		return -1
-	}
-
-	score := 0
-	if containsAnyPhrase(normalized, autoContinueStrongIncompletePhrases) {
-		score += 3
-	}
-	if containsAnyPhrase(normalized, autoContinueNextStepPhrases) {
-		score += 2
-	}
-	if containsAnyPhrase(normalized, autoContinuePausePhrases) {
-		score += 2
-	}
-	if containsAnyPhrase(normalized, autoContinueRemainingListPhrases) {
-		score++
-	}
-	if summary != nil && (containsAnyPhrase(normalized, autoContinueStrongIncompletePhrases) || containsAnyPhrase(normalized, autoContinueNextStepPhrases) || containsAnyPhrase(normalized, autoContinuePausePhrases)) {
-		score++
-	}
-	return score
+func autoContinueShouldWhip(text string) bool {
+	return !strings.Contains(normalizeAutoContinueText(text), autoContinueStopPhrase)
 }
 
 func autoContinueBackoff(reason state.AutoContinueReason, count int) (time.Duration, int, bool) {
@@ -213,7 +115,7 @@ func (s *Service) scheduleAutoContinue(surface *state.SurfaceConsoleRecord, item
 	count, delay, max, ok := s.nextAutoContinueAttempt(surface, reason)
 	if !ok {
 		s.resetAutoContinueProgress(surface)
-		return notice(surface, "auto_continue_backoff_exhausted", "auto-continue 已达到连续重试上限，已停止本轮自动继续。你可以手动继续，或在新的上下文里再次触发。")
+		return notice(surface, "auto_continue_backoff_exhausted", "autowhip 已达到连续触发上限，已停止本轮自动补打。你可以手动继续，或在新的上下文里再次触发。")
 	}
 
 	switch reason {
@@ -269,8 +171,7 @@ func (s *Service) maybeScheduleAutoContinueAfterRemoteTurn(surface *state.Surfac
 	if problem != nil && problem.Retryable {
 		return s.scheduleAutoContinue(surface, item, turnID, state.AutoContinueReasonRetryableFailure)
 	}
-	score := autoContinueIncompleteScore(finalText, summary)
-	if score >= 3 {
+	if autoContinueShouldWhip(finalText) {
 		return s.scheduleAutoContinue(surface, item, turnID, state.AutoContinueReasonIncompleteStop)
 	}
 	s.resetAutoContinueProgress(surface)

@@ -95,7 +95,7 @@ func formatSnapshot(snapshot control.Snapshot) string {
 		)))
 	}
 	if autoContinue := snapshotAutoContinueText(snapshot.AutoContinue); autoContinue != "" {
-		lines = append(lines, snapshotField("自动继续", autoContinue))
+		lines = append(lines, snapshotField("autowhip", autoContinue))
 	}
 	if snapshot.PendingHeadless.InstanceID != "" {
 		lines = append(lines, "")
@@ -163,9 +163,9 @@ func snapshotAutoContinueText(summary control.AutoContinueSummary) string {
 		label := summary.PendingReason
 		switch summary.PendingReason {
 		case "incomplete_stop":
-			label = "等待继续未完成任务"
+			label = "等待继续补打一轮"
 		case "retryable_failure":
-			label = "等待重试可恢复失败"
+			label = "等待重试上游不稳定"
 		}
 		parts = append(parts, label)
 	}

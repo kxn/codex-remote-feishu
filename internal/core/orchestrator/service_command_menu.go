@@ -244,8 +244,8 @@ func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) 
 		Title: "立即切换",
 		Entries: []control.CommandCatalogEntry{{
 			Buttons: []control.CommandCatalogButton{
-				choiceCommandButton("on", "/autocontinue on", enabled, "primary"),
-				choiceCommandButton("off", "/autocontinue off", !enabled, ""),
+				choiceCommandButton("on", "/autowhip on", enabled, "primary"),
+				choiceCommandButton("off", "/autowhip off", !enabled, ""),
 			},
 		}},
 	}}
@@ -258,11 +258,11 @@ func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) 
 		})
 	}
 	return control.CommandCatalog{
-		Title:          "自动续跑",
+		Title:          "autowhip",
 		Summary:        fmt.Sprintf("当前：`%s`。", statusText),
 		Interactive:    true,
 		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "自动续跑"),
+		Breadcrumbs:    commandBreadcrumbs(control.FeishuCommandGroupMaintenance, "autowhip"),
 		Sections:       sections,
 		RelatedButtons: commandBackButtons(control.FeishuCommandGroupMaintenance),
 	}

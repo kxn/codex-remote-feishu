@@ -317,7 +317,7 @@ func TestHandleGatewayActionKeepsParameterApplyAppendOnly(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/autocontinue on",
+		Text:             "/autowhip on",
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},

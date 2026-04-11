@@ -11,7 +11,7 @@ func SupportsInlineCardReplacement(action Action) bool {
 	case ActionModeCommand:
 		return isBareInlineCommand(action.Text, "/mode")
 	case ActionAutoContinueCommand:
-		return isBareInlineCommand(action.Text, "/autocontinue")
+		return isBareInlineCommand(action.Text, "/autowhip") || isBareInlineCommand(action.Text, "/autocontinue")
 	case ActionReasoningCommand:
 		return isBareInlineCommand(action.Text, "/reasoning")
 	case ActionAccessCommand:

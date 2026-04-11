@@ -176,22 +176,22 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 		return []control.UIEvent{commandCatalogEvent(surface, s.buildAutoContinueCatalog(surface))}
 	}
 	if len(parts) != 2 {
-		return notice(surface, "auto_continue_usage", "用法：`/autocontinue` 查看当前状态；`/autocontinue on`；`/autocontinue off`。")
+		return notice(surface, "auto_continue_usage", "用法：`/autowhip` 查看当前状态；`/autowhip on`；`/autowhip off`。")
 	}
 
 	switch strings.ToLower(parts[1]) {
 	case "on", "enable", "enabled", "true":
 		if surface.AutoContinue.Enabled {
-			return notice(surface, "auto_continue_enabled", "当前飞书会话的 auto-continue 已开启。")
+			return notice(surface, "auto_continue_enabled", "当前飞书会话的 autowhip 已开启。")
 		}
 		clearAutoContinueRuntime(surface)
 		surface.AutoContinue.Enabled = true
-		return notice(surface, "auto_continue_enabled", "已开启当前飞书会话的 auto-continue。daemon 重启后会恢复为关闭。")
+		return notice(surface, "auto_continue_enabled", "已开启当前飞书会话的 autowhip。daemon 重启后不会恢复之前的 autowhip 状态。")
 	case "off", "disable", "disabled", "false":
 		clearAutoContinueRuntime(surface)
-		return notice(surface, "auto_continue_disabled", "已关闭当前飞书会话的 auto-continue。")
+		return notice(surface, "auto_continue_disabled", "已关闭当前飞书会话的 autowhip。")
 	default:
-		return notice(surface, "auto_continue_usage", "用法：`/autocontinue` 查看当前状态；`/autocontinue on`；`/autocontinue off`。")
+		return notice(surface, "auto_continue_usage", "用法：`/autowhip` 查看当前状态；`/autowhip on`；`/autowhip off`。")
 	}
 }
 
