@@ -6,12 +6,60 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
+usage() {
+  cat <<'EOF'
+usage: scripts/check/smoke-install-release.sh [options]
+
+options:
+  --version <version>         production version fixture to test (default: v0.0.0)
+  --beta-version <version>    beta version fixture to test (default: v0.1.0-beta.1)
+  --prod-dist-dir <dir>       reuse an existing production artifact directory
+  --beta-dist-dir <dir>       reuse an existing beta artifact directory
+  -h, --help                  show this help
+EOF
+}
+
 install_bin_dir() {
   local h="$1"
   case "$(uname -s)" in
     Darwin) printf '%s\n' "${h}/Library/Application Support/codex-remote/bin" ;;
     *)      printf '%s\n' "${h}/.local/bin" ;;
   esac
+}
+
+detect_goos() {
+  case "$(uname -s)" in
+    Linux) printf '%s\n' "linux" ;;
+    Darwin) printf '%s\n' "darwin" ;;
+    *)
+      echo "unsupported operating system for smoke installer test: $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+detect_goarch() {
+  case "$(uname -m)" in
+    x86_64|amd64) printf '%s\n' "amd64" ;;
+    arm64|aarch64) printf '%s\n' "arm64" ;;
+    *)
+      echo "unsupported architecture for smoke installer test: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+current_asset_name() {
+  local version="$1"
+  local goos goarch extension
+  goos="$(detect_goos)"
+  goarch="$(detect_goarch)"
+  if [[ "${goos}" == "windows" ]]; then
+    extension="zip"
+  else
+    extension="tar.gz"
+  fi
+  printf 'codex-remote-feishu_%s_%s_%s.%s\n' "${version#v}" "${goos}" "${goarch}" "${extension}"
 }
 
 work_dir="$(mktemp -d)"
@@ -40,6 +88,75 @@ beta_dist_dir="${work_dir}/dist-beta"
 install_root="${work_dir}/install-root"
 track_install_root="${work_dir}/install-root-beta"
 home_dir="${work_dir}/home"
+admin_ui_built=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      version="${2:-}"
+      shift 2
+      ;;
+    --beta-version)
+      beta_version="${2:-}"
+      shift 2
+      ;;
+    --prod-dist-dir)
+      prod_dist_dir="${2:-}"
+      shift 2
+      ;;
+    --beta-dist-dir)
+      beta_dist_dir="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unexpected argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+ensure_admin_ui_dist() {
+  if [[ -f "${ROOT_DIR}/internal/app/daemon/adminui/dist/index.html" ]]; then
+    return
+  fi
+  if [[ "${admin_ui_built}" != "1" ]]; then
+    bash "${ROOT_DIR}/scripts/web/build-admin-ui.sh"
+    admin_ui_built=1
+  fi
+}
+
+ensure_dist_dir() {
+  local version_value="$1"
+  local target_dir="$2"
+  if [[ -d "${target_dir}" ]]; then
+    return
+  fi
+  ensure_admin_ui_dist
+  bash "${ROOT_DIR}/scripts/release/build-artifacts.sh" \
+    "${version_value}" \
+    "${target_dir}" \
+    --current-platform-only \
+    --skip-admin-ui-build
+}
+
+copy_current_platform_asset() {
+  local source_dir="$1"
+  local version_value="$2"
+  local target_dir="$3"
+  local asset_name
+  asset_name="$(current_asset_name "${version_value}")"
+  if [[ ! -f "${source_dir}/${asset_name}" ]]; then
+    echo "expected asset missing: ${source_dir}/${asset_name}" >&2
+    exit 1
+  fi
+  cp "${source_dir}/${asset_name}" "${target_dir}/"
+}
+
 port="${CODEX_REMOTE_SMOKE_PORT:-}"
 if [[ -z "${port}" ]]; then
   port="$(python3 - <<'PY'
@@ -98,12 +215,12 @@ cat > "${home_dir}/.config/codex-remote/config.json" <<EOF
 }
 EOF
 
-bash scripts/release/build-artifacts.sh "${version}" "${prod_dist_dir}"
-bash scripts/release/build-artifacts.sh "${beta_version}" "${beta_dist_dir}"
+ensure_dist_dir "${version}" "${prod_dist_dir}"
+ensure_dist_dir "${beta_version}" "${beta_dist_dir}"
 
 mkdir -p "${dist_dir}"
-cp "${prod_dist_dir}"/codex-remote-feishu_* "${dist_dir}/"
-cp "${beta_dist_dir}"/codex-remote-feishu_* "${dist_dir}/"
+copy_current_platform_asset "${prod_dist_dir}" "${version}" "${dist_dir}"
+copy_current_platform_asset "${beta_dist_dir}" "${beta_version}" "${dist_dir}"
 
 cat > "${dist_dir}/releases.json" <<EOF
 [

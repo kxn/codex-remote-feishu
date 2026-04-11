@@ -4,20 +4,108 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
-version="${1:-}"
-output_dir="${2:-dist}"
+usage() {
+  cat <<'EOF'
+usage: scripts/release/build-artifacts.sh <version> [output_dir] [options]
+
+options:
+  --platform <goos/goarch>   build only the selected platform; may be repeated
+  --current-platform-only    build only the current host platform
+  --skip-admin-ui-build      reuse the existing admin UI dist instead of rebuilding it
+  -h, --help                 show this help
+EOF
+}
+
+detect_goos() {
+  case "$(uname -s)" in
+    Linux) printf '%s\n' "linux" ;;
+    Darwin) printf '%s\n' "darwin" ;;
+    *)
+      echo "unsupported operating system for artifact build: $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+detect_goarch() {
+  case "$(uname -m)" in
+    x86_64|amd64) printf '%s\n' "amd64" ;;
+    arm64|aarch64) printf '%s\n' "arm64" ;;
+    *)
+      echo "unsupported architecture for artifact build: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+normalize_platform() {
+  case "$1" in
+    linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      echo "unsupported platform: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+version=""
+output_dir="dist"
+skip_admin_ui_build=0
+requested_platforms=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --platform)
+      requested_platforms+=("$(normalize_platform "${2:-}")")
+      shift 2
+      ;;
+    --current-platform-only)
+      requested_platforms+=("$(detect_goos)/$(detect_goarch)")
+      shift
+      ;;
+    --skip-admin-ui-build)
+      skip_admin_ui_build=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ -z "${version}" ]]; then
+        version="$1"
+      elif [[ "${output_dir}" == "dist" ]]; then
+        output_dir="$1"
+      else
+        echo "unexpected argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "${version}" ]]; then
-  echo "usage: $0 <version> [output_dir]" >&2
+  usage >&2
   exit 1
 fi
 
-bash "${ROOT_DIR}/scripts/web/build-admin-ui.sh"
+if [[ "${skip_admin_ui_build}" == "1" ]]; then
+  if [[ ! -f "${ROOT_DIR}/internal/app/daemon/adminui/dist/index.html" ]]; then
+    echo "admin UI dist is missing; run scripts/web/build-admin-ui.sh first or omit --skip-admin-ui-build" >&2
+    exit 1
+  fi
+else
+  bash "${ROOT_DIR}/scripts/web/build-admin-ui.sh"
+fi
 
 rm -rf "${output_dir}"
 mkdir -p "${output_dir}"
 
-platforms=(
+default_platforms=(
   "linux amd64"
   "linux arm64"
   "darwin amd64"
@@ -26,6 +114,16 @@ platforms=(
 )
 
 archives=()
+platforms=()
+
+if [[ "${#requested_platforms[@]}" -gt 0 ]]; then
+  for platform in "${requested_platforms[@]}"; do
+    read -r goos goarch <<<"${platform//\// }"
+    platforms+=("${goos} ${goarch}")
+  done
+else
+  platforms=("${default_platforms[@]}")
+fi
 
 for platform in "${platforms[@]}"; do
   read -r goos goarch <<<"${platform}"
@@ -72,5 +170,13 @@ fi
 
 (
   cd "${output_dir}"
-  ${checksum_cmd} ./*.tar.gz ./*.zip ./*.sh > checksums.txt
+  checksum_files=()
+  while IFS= read -r file; do
+    checksum_files+=("${file}")
+  done < <(find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sh' \) | sort)
+  if [[ "${#checksum_files[@]}" -eq 0 ]]; then
+    echo "no release artifacts found in ${output_dir}" >&2
+    exit 1
+  fi
+  ${checksum_cmd} "${checksum_files[@]}" > checksums.txt
 )

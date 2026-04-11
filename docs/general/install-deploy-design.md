@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-10`
-> Summary: 增补 Linux systemd user service、本地 binary 升级事务入口，以及 `codex.real` 子进程的定向 provider env 补齐规则。
+> Updated: `2026-04-11`
+> Summary: 增补 Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程的定向 provider env 补齐规则，以及 release smoke/test 复用正式产物的当前实现。
 
 ## 1. 范围
 
@@ -311,6 +311,7 @@ release 包内不再附带：
 - `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
 - workflow 显式区分 `production / beta / alpha` 三条 track
 - `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
+- workflow 会先算出本次发布版本，再构建正式 release 产物
 - GitHub 端生成 release notes 和 checksums
 - release notes 优先引用 `CHANGELOG.md` 中当前版本的人类整理摘要，再附带按提交分组的明细
 - GitHub 端创建并发布 GitHub Release
@@ -321,7 +322,7 @@ release 包内不再附带：
 
 release smoke test 必须覆盖真实产品路径：
 
-1. 构建 release 归档
+1. 复用当前 workflow 已构建好的正式 release 归档
 2. 通过本地 HTTP server 模拟 release 下载
 3. 执行 `install-release.sh`
 4. 确认：
@@ -330,6 +331,11 @@ release smoke test 必须覆盖真实产品路径：
    - `config.json` / `install-state.json` 被写入
    - daemon 成功启动
    - `/api/setup/bootstrap-state` 可访问
+
+当前 smoke 的额外约束：
+
+- 正式 release 归档只构建一次，不在 smoke 里重复全量打包
+- 若 smoke 还要验证 `--track beta|alpha` 的 release API 解析，只补一份“当前 runner 平台”的轻量 fixture，而不是再做一轮全平台构建
 
 ## 7. Docker 模型
 
