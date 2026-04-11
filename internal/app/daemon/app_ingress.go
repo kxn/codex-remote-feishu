@@ -235,7 +235,6 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	if inlineResult == nil {
 		a.handleUIEvents(ctx, events)
 	}
-	a.syncHeadlessRestoreHintAfterActionLocked(action, before)
 	var clearTargets map[string]bool
 	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
 		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
@@ -376,8 +375,6 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	if refreshSent {
 		a.markStartupThreadsRefreshRequestedLocked(hello.Instance.InstanceID)
 	}
-	a.refreshHeadlessRestoreHintsLocked()
-	a.syncHeadlessRestoreStateLocked()
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityLocked("")
 	a.handleUIEvents(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []control.UIEvent{}
@@ -401,7 +398,6 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	if a.shuttingDown {
 		return
 	}
-	refreshHeadlessRestoreHints := false
 	syncSurfaceResumeState := false
 	for _, event := range events {
 		now := time.Now().UTC()
@@ -435,32 +431,12 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 		a.handleUIEvents(ctx, uiEvents)
-		if eventAffectsHeadlessRestoreHints(event) {
-			refreshHeadlessRestoreHints = true
-		}
 		if eventAffectsSurfaceResumeState(event) {
 			syncSurfaceResumeState = true
 		}
 	}
-	if refreshHeadlessRestoreHints {
-		a.refreshHeadlessRestoreHintsForInstanceLocked(instanceID)
-		a.syncHeadlessRestoreStateLocked()
-	}
 	if syncSurfaceResumeState {
 		a.syncSurfaceResumeStateForInstanceLocked(instanceID, nil)
-	}
-}
-
-func eventAffectsHeadlessRestoreHints(event agentproto.Event) bool {
-	switch event.Kind {
-	case agentproto.EventThreadsSnapshot,
-		agentproto.EventThreadDiscovered,
-		agentproto.EventThreadFocused,
-		agentproto.EventItemCompleted,
-		agentproto.EventTurnCompleted:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -468,7 +444,9 @@ func eventAffectsSurfaceResumeState(event agentproto.Event) bool {
 	switch event.Kind {
 	case agentproto.EventThreadsSnapshot,
 		agentproto.EventThreadDiscovered,
-		agentproto.EventThreadFocused:
+		agentproto.EventThreadFocused,
+		agentproto.EventItemCompleted,
+		agentproto.EventTurnCompleted:
 		return true
 	default:
 		return false
@@ -579,6 +557,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
 	a.handleUIEvents(ctx, recoveryEvents)
+	a.syncSurfaceResumeStateLocked(nil)
 	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 const headlessRestoreRetryBackoff = 30 * time.Second
@@ -15,24 +16,34 @@ func (a *App) syncHeadlessRestoreStateLocked() {
 	if a.headlessRestoreState == nil {
 		a.headlessRestoreState = map[string]*headlessRestoreRecoveryState{}
 	}
-	entries := map[string]HeadlessRestoreHint{}
-	if a.headlessRestoreHints != nil {
-		entries = a.headlessRestoreHints.Entries()
+	entries := map[string]SurfaceResumeEntry{}
+	if a.surfaceResumeState != nil {
+		entries = a.surfaceResumeState.Entries()
 	}
-	for surfaceID, hint := range entries {
-		a.service.MaterializeSurface(surfaceID, hint.GatewayID, hint.ChatID, hint.ActorUserID)
-		current := a.headlessRestoreState[surfaceID]
-		if current == nil || !sameHeadlessRestoreHintContent(current.Hint, hint) {
-			a.headlessRestoreState[surfaceID] = &headlessRestoreRecoveryState{Hint: hint}
+	for surfaceID, entry := range entries {
+		if !surfaceResumeEntrySupportsHeadlessRestore(entry) {
+			delete(a.headlessRestoreState, surfaceID)
 			continue
 		}
-		current.Hint = hint
+		a.service.MaterializeSurface(surfaceID, entry.GatewayID, entry.ChatID, entry.ActorUserID)
+		current := a.headlessRestoreState[surfaceID]
+		if current == nil || !sameSurfaceResumeEntryContent(current.Entry, entry) {
+			a.headlessRestoreState[surfaceID] = &headlessRestoreRecoveryState{Entry: entry}
+			continue
+		}
+		current.Entry = entry
 	}
 	for surfaceID := range a.headlessRestoreState {
-		if _, ok := entries[surfaceID]; !ok {
+		if entry, ok := entries[surfaceID]; !ok || !surfaceResumeEntrySupportsHeadlessRestore(entry) {
 			delete(a.headlessRestoreState, surfaceID)
 		}
 	}
+}
+
+func surfaceResumeEntrySupportsHeadlessRestore(entry SurfaceResumeEntry) bool {
+	return state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeNormal &&
+		entry.ResumeHeadless &&
+		strings.TrimSpace(entry.ResumeThreadID) != ""
 }
 
 func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEvent {
@@ -55,9 +66,9 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEven
 			continue
 		}
 		restoreEvents, result := a.service.TryAutoRestoreHeadless(surfaceID, orchestrator.HeadlessRestoreAttempt{
-			ThreadID:    strings.TrimSpace(state.Hint.ThreadID),
-			ThreadTitle: strings.TrimSpace(state.Hint.ThreadTitle),
-			ThreadCWD:   strings.TrimSpace(state.Hint.ThreadCWD),
+			ThreadID:    strings.TrimSpace(state.Entry.ResumeThreadID),
+			ThreadTitle: strings.TrimSpace(state.Entry.ResumeThreadTitle),
+			ThreadCWD:   strings.TrimSpace(state.Entry.ResumeThreadCWD),
 		}, allowMissingThreadFailure)
 		a.applyHeadlessRestoreAttemptResultLocked(surfaceID, result, now)
 		events = append(events, restoreEvents...)

@@ -2,35 +2,71 @@ package daemon
 
 import (
 	"log"
+	"os"
+	"sort"
 	"strings"
-	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func (a *App) configureHeadlessRestoreHintsLocked(stateDir string) {
+func (a *App) migrateLegacyHeadlessRestoreHintsLocked(stateDir string) {
 	path := headlessRestoreHintsStatePath(stateDir)
 	store, err := loadHeadlessRestoreHintStore(path)
 	if err != nil {
-		log.Printf("load headless restore hints failed: path=%s err=%v", path, err)
-		store = &headlessRestoreHintStore{
-			path:    path,
-			entries: map[string]HeadlessRestoreHint{},
-		}
+		log.Printf("load legacy headless restore hints failed: path=%s err=%v", path, err)
+		return
 	}
-	a.headlessRestoreHints = store
-	a.refreshHeadlessRestoreHintsLocked()
-	a.syncHeadlessRestoreStateLocked()
+	entries := store.Entries()
+	if len(entries) == 0 || a.surfaceResumeState == nil {
+		return
+	}
+
+	surfaceIDs := make([]string, 0, len(entries))
+	for surfaceID := range entries {
+		surfaceIDs = append(surfaceIDs, surfaceID)
+	}
+	sort.Strings(surfaceIDs)
+
+	imported := false
+	keepLegacyFile := false
+	for _, surfaceID := range surfaceIDs {
+		hint := entries[surfaceID]
+		if a.legacyHeadlessRestoreHintCoveredLocked(hint) {
+			continue
+		}
+		if !a.importLegacyHeadlessRestoreHintLocked(hint) {
+			keepLegacyFile = true
+			log.Printf("keep unresolved legacy headless restore hint: surface=%s thread=%s", hint.SurfaceSessionID, hint.ThreadID)
+			continue
+		}
+		imported = true
+	}
+	if imported {
+		a.materializeSurfaceResumeStateLocked()
+		a.syncVSCodeResumeNoticeStateLocked(nil)
+		a.syncSurfaceResumeRecoveryStateLocked()
+		a.syncHeadlessRestoreStateLocked()
+		a.vscodeStartupCheckDue = storedVSCodeResumeExists(a.surfaceResumeState)
+	}
+	if keepLegacyFile {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Printf("remove migrated headless restore hints failed: path=%s err=%v", path, err)
+	}
 }
 
 func (a *App) HeadlessRestoreHint(surfaceID string) *HeadlessRestoreHint {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.headlessRestoreHints == nil {
+	if a.surfaceResumeState == nil {
 		return nil
 	}
-	hint, ok := a.headlessRestoreHints.Get(surfaceID)
+	entry, ok := a.surfaceResumeState.Get(surfaceID)
+	if !ok {
+		return nil
+	}
+	hint, ok := headlessRestoreHintFromSurfaceResumeEntry(entry)
 	if !ok {
 		return nil
 	}
@@ -38,145 +74,97 @@ func (a *App) HeadlessRestoreHint(surfaceID string) *HeadlessRestoreHint {
 	return &copy
 }
 
-func (a *App) refreshHeadlessRestoreHintsLocked() {
-	if a.headlessRestoreHints == nil {
-		return
-	}
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil {
-			continue
-		}
-		hint, ok := a.currentHeadlessRestoreHintLocked(surface.SurfaceSessionID)
-		if !ok {
-			continue
-		}
-		a.upsertHeadlessRestoreHintLocked(hint)
-	}
-}
-
-func (a *App) refreshHeadlessRestoreHintsForInstanceLocked(instanceID string) {
-	if a.headlessRestoreHints == nil {
-		return
-	}
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" {
-		return
-	}
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil || strings.TrimSpace(surface.AttachedInstanceID) != instanceID {
-			continue
-		}
-		hint, ok := a.currentHeadlessRestoreHintFromLiveSurfaceLocked(surface.SurfaceSessionID)
-		if !ok {
-			continue
-		}
-		a.upsertHeadlessRestoreHintLocked(hint)
-	}
-}
-
-func (a *App) syncHeadlessRestoreHintAfterActionLocked(action control.Action, before *control.Snapshot) {
-	if a.headlessRestoreHints == nil {
-		return
-	}
-	hint, ok := a.currentHeadlessRestoreHintFromLiveSurfaceLocked(action.SurfaceSessionID)
-	if ok {
-		a.upsertHeadlessRestoreHintLocked(hint)
-		a.syncHeadlessRestoreStateLocked()
-		return
-	}
-	if a.shouldClearHeadlessRestoreHintLocked(action, before) {
-		a.clearHeadlessRestoreHintLocked(action.SurfaceSessionID)
-	}
-	a.syncHeadlessRestoreStateLocked()
-}
-
-func (a *App) shouldClearHeadlessRestoreHintLocked(action control.Action, before *control.Snapshot) bool {
-	switch action.Kind {
-	case control.ActionDetach:
-		return true
-	case control.ActionKillInstance:
-		return snapshotCarriesHeadlessRestoreTarget(before)
-	case control.ActionModeCommand:
-		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
-		if after == nil || before == nil {
-			return false
-		}
-		return !strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode))
-	case control.ActionAttachInstance, control.ActionUseThread:
-		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
-		if after == nil {
-			return false
-		}
-		if snapshotHasPendingHeadlessTarget(after) {
-			return false
-		}
-		return strings.TrimSpace(after.Attachment.InstanceID) != "" &&
-			(!after.Attachment.Managed || !strings.EqualFold(strings.TrimSpace(after.Attachment.Source), "headless"))
-	default:
+func (a *App) legacyHeadlessRestoreHintCoveredLocked(hint HeadlessRestoreHint) bool {
+	if a.surfaceResumeState == nil {
 		return false
 	}
+	hint, ok := normalizeHeadlessRestoreHint(hint)
+	if !ok {
+		return false
+	}
+	entry, ok := a.surfaceResumeState.Get(hint.SurfaceSessionID)
+	if !ok {
+		return false
+	}
+	derived, ok := headlessRestoreHintFromSurfaceResumeEntry(entry)
+	return ok && sameHeadlessRestoreHintContent(derived, hint)
 }
 
-func (a *App) currentHeadlessRestoreHintLocked(surfaceID string) (HeadlessRestoreHint, bool) {
-	if hint, ok := a.currentHeadlessRestoreHintFromLiveSurfaceLocked(surfaceID); ok {
-		return hint, true
+func (a *App) importLegacyHeadlessRestoreHintLocked(hint HeadlessRestoreHint) bool {
+	if a.surfaceResumeState == nil {
+		return false
 	}
-	if a.surfaceResumeState != nil {
-		if entry, ok := a.surfaceResumeState.Get(surfaceID); ok {
-			if hint, ok := headlessRestoreHintFromSurfaceResumeEntry(entry); ok {
-				return hint, true
-			}
-		}
+	hint, ok := normalizeHeadlessRestoreHint(hint)
+	if !ok {
+		return false
 	}
-	return HeadlessRestoreHint{}, false
-}
 
-func (a *App) currentHeadlessRestoreHintFromLiveSurfaceLocked(surfaceID string) (HeadlessRestoreHint, bool) {
-	if surface := a.surfaceByIDLocked(surfaceID); surface != nil {
-		target, ok := a.currentSurfaceResumeTargetLocked(surface)
-		if !ok {
-			return HeadlessRestoreHint{}, false
-		}
-		entry := SurfaceResumeEntry{
-			SurfaceSessionID:  strings.TrimSpace(surface.SurfaceSessionID),
-			GatewayID:         strings.TrimSpace(surface.GatewayID),
-			ChatID:            strings.TrimSpace(surface.ChatID),
-			ActorUserID:       strings.TrimSpace(surface.ActorUserID),
-			ResumeThreadID:    target.ResumeThreadID,
-			ResumeThreadTitle: target.ResumeThreadTitle,
-			ResumeThreadCWD:   target.ResumeThreadCWD,
-			ResumeHeadless:    target.ResumeHeadless,
-		}
-		return headlessRestoreHintFromSurfaceResumeEntry(entry)
+	entry := SurfaceResumeEntry{
+		SurfaceSessionID:   hint.SurfaceSessionID,
+		GatewayID:          hint.GatewayID,
+		ChatID:             hint.ChatID,
+		ActorUserID:        hint.ActorUserID,
+		ProductMode:        string(state.ProductModeNormal),
+		ResumeThreadID:     hint.ThreadID,
+		ResumeThreadTitle:  firstNonEmpty(hint.ThreadTitle, hint.ThreadID),
+		ResumeThreadCWD:    state.NormalizeWorkspaceKey(hint.ThreadCWD),
+		ResumeWorkspaceKey: state.ResolveWorkspaceKey(hint.ThreadCWD),
+		ResumeRouteMode:    string(state.RouteModePinned),
+		ResumeHeadless:     true,
+		UpdatedAt:          hint.UpdatedAt,
 	}
-	return HeadlessRestoreHint{}, false
-}
 
-func (a *App) upsertHeadlessRestoreHintLocked(hint HeadlessRestoreHint) {
-	if a.headlessRestoreHints == nil {
-		return
-	}
-	if normalized, ok := normalizeHeadlessRestoreHint(hint); ok {
-		if current, exists := a.headlessRestoreHints.Get(normalized.SurfaceSessionID); exists && sameHeadlessRestoreHintContent(current, normalized) {
-			return
+	if existing, ok := a.surfaceResumeState.Get(hint.SurfaceSessionID); ok {
+		if state.NormalizeProductMode(state.ProductMode(existing.ProductMode)) == state.ProductModeVSCode {
+			return false
 		}
-		normalized.UpdatedAt = time.Now().UTC()
-		if err := a.headlessRestoreHints.Put(normalized); err != nil {
-			log.Printf("persist headless restore hint failed: surface=%s thread=%s err=%v", normalized.SurfaceSessionID, normalized.ThreadID, err)
+		entry = existing
+		entry.GatewayID = firstNonEmpty(strings.TrimSpace(entry.GatewayID), hint.GatewayID)
+		entry.ChatID = firstNonEmpty(strings.TrimSpace(entry.ChatID), hint.ChatID)
+		entry.ActorUserID = firstNonEmpty(strings.TrimSpace(entry.ActorUserID), hint.ActorUserID)
+		if strings.TrimSpace(entry.ProductMode) == "" {
+			entry.ProductMode = string(state.ProductModeNormal)
+		}
+		if strings.TrimSpace(entry.ResumeThreadID) == "" {
+			entry.ResumeThreadID = hint.ThreadID
+		}
+		if strings.TrimSpace(entry.ResumeThreadTitle) == "" {
+			entry.ResumeThreadTitle = firstNonEmpty(hint.ThreadTitle, hint.ThreadID)
+		}
+		if state.NormalizeWorkspaceKey(entry.ResumeThreadCWD) == "" {
+			entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(hint.ThreadCWD)
+		}
+		if state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) == "" {
+			entry.ResumeWorkspaceKey = state.ResolveWorkspaceKey(entry.ResumeThreadCWD, hint.ThreadCWD)
+		}
+		if strings.TrimSpace(entry.ResumeRouteMode) == "" {
+			entry.ResumeRouteMode = string(state.RouteModePinned)
+		}
+		entry.ResumeHeadless = true
+		if entry.UpdatedAt.IsZero() {
+			entry.UpdatedAt = hint.UpdatedAt
 		}
 	}
-}
 
-func (a *App) clearHeadlessRestoreHintLocked(surfaceID string) {
-	if a.headlessRestoreHints == nil {
-		return
+	normalized, ok := normalizeSurfaceResumeEntry(entry)
+	if !ok {
+		return false
 	}
-	if _, ok := a.headlessRestoreHints.Get(surfaceID); !ok {
-		return
+	derived, ok := headlessRestoreHintFromSurfaceResumeEntry(normalized)
+	if !ok || !sameHeadlessRestoreHintContent(derived, hint) {
+		return false
 	}
-	if err := a.headlessRestoreHints.Delete(surfaceID); err != nil {
-		log.Printf("clear headless restore hint failed: surface=%s err=%v", surfaceID, err)
+	if current, ok := a.surfaceResumeState.Get(normalized.SurfaceSessionID); ok && sameSurfaceResumeEntryContent(current, normalized) {
+		return true
 	}
+	if normalized.UpdatedAt.IsZero() {
+		normalized.UpdatedAt = hint.UpdatedAt
+	}
+	if err := a.surfaceResumeState.Put(normalized); err != nil {
+		log.Printf("migrate legacy headless restore hint failed: surface=%s thread=%s err=%v", normalized.SurfaceSessionID, normalized.ResumeThreadID, err)
+		return false
+	}
+	return true
 }
 
 func sameHeadlessRestoreHintContent(left, right HeadlessRestoreHint) bool {
@@ -203,30 +191,4 @@ func headlessRestoreHintFromSurfaceResumeEntry(entry SurfaceResumeEntry) (Headle
 		ThreadCWD:        state.NormalizeWorkspaceKey(entry.ResumeThreadCWD),
 	}
 	return normalizeHeadlessRestoreHint(hint)
-}
-
-func snapshotHasPendingHeadlessTarget(snapshot *control.Snapshot) bool {
-	return snapshot != nil &&
-		strings.TrimSpace(snapshot.PendingHeadless.InstanceID) != "" &&
-		strings.TrimSpace(snapshot.PendingHeadless.ThreadID) != ""
-}
-
-func snapshotHasAttachedHeadlessTarget(snapshot *control.Snapshot) bool {
-	return snapshot != nil &&
-		strings.TrimSpace(snapshot.Attachment.InstanceID) != "" &&
-		snapshot.Attachment.Managed &&
-		strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless") &&
-		strings.TrimSpace(snapshot.Attachment.SelectedThreadID) != ""
-}
-
-func snapshotCarriesHeadlessRestoreTarget(snapshot *control.Snapshot) bool {
-	if snapshot == nil {
-		return false
-	}
-	if snapshotHasPendingHeadlessTarget(snapshot) {
-		return true
-	}
-	return strings.TrimSpace(snapshot.Attachment.InstanceID) != "" &&
-		snapshot.Attachment.Managed &&
-		strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless")
 }

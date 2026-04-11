@@ -36,6 +36,7 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	a.surfaceResumeState = store
 	a.materializeSurfaceResumeStateLocked()
 	a.syncSurfaceResumeRecoveryStateLocked()
+	a.syncHeadlessRestoreStateLocked()
 	a.vscodeStartupCheckDue = storedVSCodeResumeExists(store)
 }
 
@@ -125,6 +126,7 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 	}
 	a.syncVSCodeResumeNoticeStateLocked(desired)
 	a.syncSurfaceResumeRecoveryStateLocked()
+	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTargets map[string]bool) {
@@ -166,6 +168,7 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 	}
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
+	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecord, clearResumeTarget bool) (SurfaceResumeEntry, bool) {
@@ -326,7 +329,6 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent 
 	sort.Strings(surfaceIDs)
 	allowMissingTargetFailure := a.initialThreadsRefreshRoundCompleteLocked()
 	events := []control.UIEvent{}
-	clearedHeadlessHint := false
 	for _, surfaceID := range surfaceIDs {
 		recovery := a.surfaceResumeRecovery[surfaceID]
 		if recovery == nil {
@@ -335,26 +337,22 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent 
 		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
 			continue
 		}
-		headlessFallbackAvailable := false
-		if a.headlessRestoreHints != nil {
-			_, headlessFallbackAvailable = a.headlessRestoreHints.Get(surfaceID)
+		workspaceKey := recovery.Entry.ResumeWorkspaceKey
+		if recovery.Entry.ResumeHeadless {
+			workspaceKey = ""
 		}
 		restoreEvents, result := a.service.TryAutoResumeNormalSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
 			InstanceID:   recovery.Entry.ResumeInstanceID,
 			ThreadID:     recovery.Entry.ResumeThreadID,
-			WorkspaceKey: recovery.Entry.ResumeWorkspaceKey,
+			WorkspaceKey: workspaceKey,
 		}, allowMissingTargetFailure)
 		switch result.Status {
 		case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
 			a.clearSurfaceResumeBackoffLocked(surfaceID)
-			if headlessFallbackAvailable {
-				a.clearHeadlessRestoreHintLocked(surfaceID)
-				clearedHeadlessHint = true
-			}
 			events = append(events, restoreEvents...)
 		case orchestrator.SurfaceResumeStatusFailed:
 			a.setSurfaceResumeBackoffLocked(surfaceID, result.FailureCode, now)
-			if headlessFallbackAvailable {
+			if recovery.Entry.ResumeHeadless {
 				continue
 			}
 			notice := orchestrator.NoticeForSurfaceResumeFailure(result.FailureCode)
@@ -366,9 +364,6 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []control.UIEvent 
 				})
 			}
 		}
-	}
-	if clearedHeadlessHint {
-		a.syncHeadlessRestoreStateLocked()
 	}
 	return events
 }
@@ -383,17 +378,10 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []control.UIEvent 
 	}
 	sort.Strings(surfaceIDs)
 	events := []control.UIEvent{}
-	clearedHeadlessHint := false
 	for _, surfaceID := range surfaceIDs {
 		recovery := a.surfaceResumeRecovery[surfaceID]
 		if recovery == nil || state.NormalizeProductMode(state.ProductMode(recovery.Entry.ProductMode)) != state.ProductModeVSCode {
 			continue
-		}
-		if a.headlessRestoreHints != nil {
-			if _, ok := a.headlessRestoreHints.Get(surfaceID); ok {
-				a.clearHeadlessRestoreHintLocked(surfaceID)
-				clearedHeadlessHint = true
-			}
 		}
 		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
 			continue
@@ -414,9 +402,6 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []control.UIEvent 
 				})
 			}
 		}
-	}
-	if clearedHeadlessHint {
-		a.syncHeadlessRestoreStateLocked()
 	}
 	return events
 }

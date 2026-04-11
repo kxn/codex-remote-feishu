@@ -13,7 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestEventAffectsHeadlessRestoreHints(t *testing.T) {
+func TestEventAffectsSurfaceResumeState(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -24,29 +24,6 @@ func TestEventAffectsHeadlessRestoreHints(t *testing.T) {
 		{name: "item delta", event: agentproto.Event{Kind: agentproto.EventItemDelta}, want: false},
 		{name: "item completed", event: agentproto.Event{Kind: agentproto.EventItemCompleted}, want: true},
 		{name: "turn completed", event: agentproto.Event{Kind: agentproto.EventTurnCompleted}, want: true},
-		{name: "thread focused", event: agentproto.Event{Kind: agentproto.EventThreadFocused}, want: true},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := eventAffectsHeadlessRestoreHints(tc.event); got != tc.want {
-				t.Fatalf("eventAffectsHeadlessRestoreHints(%s) = %t, want %t", tc.event.Kind, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestEventAffectsSurfaceResumeState(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		event agentproto.Event
-		want  bool
-	}{
-		{name: "item delta", event: agentproto.Event{Kind: agentproto.EventItemDelta}, want: false},
-		{name: "item completed", event: agentproto.Event{Kind: agentproto.EventItemCompleted}, want: false},
 		{name: "thread discovered", event: agentproto.Event{Kind: agentproto.EventThreadDiscovered}, want: true},
 		{name: "threads snapshot", event: agentproto.Event{Kind: agentproto.EventThreadsSnapshot}, want: true},
 	}
@@ -222,7 +199,7 @@ func TestAppRelayCallbacksUseIngressPump(t *testing.T) {
 	})
 }
 
-func TestRefreshHeadlessRestoreHintsForInstanceLockedScopesToAttachedInstance(t *testing.T) {
+func TestSyncSurfaceResumeStateForInstanceLockedScopesHeadlessRecoveryState(t *testing.T) {
 	t.Parallel()
 
 	app := newRestoreHintTestApp(t.TempDir())
@@ -261,19 +238,34 @@ func TestRefreshHeadlessRestoreHintsForInstanceLockedScopesToAttachedInstance(t 
 	})
 
 	app.mu.Lock()
-	app.clearHeadlessRestoreHintLocked("surface-1")
-	app.clearHeadlessRestoreHintLocked("surface-2")
-	app.syncHeadlessRestoreStateLocked()
-	app.refreshHeadlessRestoreHintsForInstanceLocked("inst-1")
-	_, hint1 := app.headlessRestoreHints.Get("surface-1")
-	_, hint2 := app.headlessRestoreHints.Get("surface-2")
+	if err := app.surfaceResumeState.Delete("surface-1"); err != nil {
+		app.mu.Unlock()
+		t.Fatalf("delete surface-1 resume state: %v", err)
+	}
+	if err := app.surfaceResumeState.Delete("surface-2"); err != nil {
+		app.mu.Unlock()
+		t.Fatalf("delete surface-2 resume state: %v", err)
+	}
+	delete(app.headlessRestoreState, "surface-1")
+	delete(app.headlessRestoreState, "surface-2")
+	app.syncSurfaceResumeStateForInstanceLocked("inst-1", nil)
+	_, entry1 := app.surfaceResumeState.Get("surface-1")
+	_, entry2 := app.surfaceResumeState.Get("surface-2")
+	_, recovery1 := app.headlessRestoreState["surface-1"]
+	_, recovery2 := app.headlessRestoreState["surface-2"]
 	app.mu.Unlock()
 
-	if !hint1 {
-		t.Fatal("expected scoped hint refresh to repopulate attached surface")
+	if !entry1 {
+		t.Fatal("expected scoped surface resume sync to repopulate attached surface")
 	}
-	if hint2 {
-		t.Fatal("expected scoped hint refresh to skip unrelated attached surface")
+	if entry2 {
+		t.Fatal("expected scoped surface resume sync to skip unrelated attached surface")
+	}
+	if !recovery1 {
+		t.Fatal("expected scoped sync to repopulate attached headless recovery state")
+	}
+	if recovery2 {
+		t.Fatal("expected scoped sync to skip unrelated headless recovery state")
 	}
 }
 

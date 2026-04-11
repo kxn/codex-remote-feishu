@@ -74,7 +74,7 @@ type managedHeadlessProcess struct {
 }
 
 type headlessRestoreRecoveryState struct {
-	Hint            HeadlessRestoreHint
+	Entry           SurfaceResumeEntry
 	NextAttemptAt   time.Time
 	LastAttemptAt   time.Time
 	LastFailureCode string
@@ -129,7 +129,6 @@ type App struct {
 	vscodeDetect           func() (vscodeDetectResponse, error)
 	vscodeCompatibility    vscodeCompatibilityCacheState
 	vscodeStartupCheckDue  bool
-	headlessRestoreHints   *headlessRestoreHintStore
 	headlessRestoreState   map[string]*headlessRestoreRecoveryState
 	startupRefreshPending  map[string]bool
 	startupRefreshSeen     bool
@@ -278,7 +277,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
-	a.configureHeadlessRestoreHintsLocked(cfg.Paths.StateDir)
+	a.migrateLegacyHeadlessRestoreHintsLocked(cfg.Paths.StateDir)
 	a.syncSurfaceResumeStateLocked(nil)
 }
 
