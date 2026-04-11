@@ -488,7 +488,7 @@ func TestDispatchingRemoteTurnOverridesStaleLocalClassification(t *testing.T) {
 		Online:                  true,
 		ObservedFocusedThreadID: "thread-1",
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
@@ -580,6 +580,18 @@ func TestApprovalRequestPromptUsesAttachedSurfaceForLocalTurn(t *testing.T) {
 	}
 	if len(record.Options) != 3 {
 		t.Fatalf("expected request options in state, got %#v", record)
+	}
+	if events[0].FeishuRequestContext == nil {
+		t.Fatalf("expected feishu request context, got %#v", events[0])
+	}
+	if events[0].FeishuRequestContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuRequestContext)
+	}
+	if events[0].FeishuRequestContext.RequestID != "req-1" || events[0].FeishuRequestContext.RequestType != "approval" {
+		t.Fatalf("unexpected request context payload: %#v", events[0].FeishuRequestContext)
+	}
+	if !events[0].FeishuRequestContext.Surface.RouteMutationBlocked || events[0].FeishuRequestContext.Surface.RouteMutationBlockedBy != "pending_request" {
+		t.Fatalf("expected pending request to block route mutation, got %#v", events[0].FeishuRequestContext.Surface)
 	}
 }
 
@@ -1197,12 +1209,13 @@ func TestLegacyPromptSelectionActionShowsExpiredNotice(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-1",
-		DisplayName:   "droid",
-		WorkspaceRoot: "/data/dl/droid",
-		WorkspaceKey:  "/data/dl/droid",
-		ShortName:     "droid",
-		Online:        true,
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
 		},
@@ -1268,6 +1281,18 @@ func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 	}
 	if events[0].CommandCatalog.Title != "命令菜单" {
 		t.Fatalf("unexpected menu catalog title: %#v", events[0].CommandCatalog)
+	}
+	if events[0].FeishuCommandContext == nil {
+		t.Fatalf("expected feishu command context, got %#v", events[0])
+	}
+	if events[0].FeishuCommandContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuCommandContext)
+	}
+	if events[0].FeishuCommandContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
+		t.Fatalf("unexpected callback payload owner: %#v", events[0].FeishuCommandContext)
+	}
+	if events[0].FeishuCommandContext.Surface.InlineReplaceFreshness != "daemon_lifecycle" || !events[0].FeishuCommandContext.Surface.InlineReplaceRequiresFreshness {
+		t.Fatalf("unexpected inline replace context: %#v", events[0].FeishuCommandContext.Surface)
 	}
 }
 

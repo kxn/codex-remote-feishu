@@ -68,7 +68,7 @@ func inboundMetaFromCardActionEvent(event *larkcallback.CardActionTriggerEvent) 
 			meta.OpenMessageID = strings.TrimSpace(event.Event.Context.OpenMessageID)
 		}
 		if event.Event.Action != nil {
-			meta.CardDaemonLifecycleID = strings.TrimSpace(stringMapValue(event.Event.Action.Value, "daemon_lifecycle_id"))
+			meta.CardDaemonLifecycleID = strings.TrimSpace(stringMapValue(event.Event.Action.Value, cardActionPayloadKeyDaemonLifecycleID))
 		}
 	}
 	return meta

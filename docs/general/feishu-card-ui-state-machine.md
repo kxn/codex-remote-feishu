@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-11`
-> Summary: 新增 Feishu 卡片 UI canonical 状态机，固化 owner 分类、callback payload 协议面、inline replace 边界、old-card 语义与双 guardrail 工作流。
+> Summary: 新增阶段 1 的显式 Feishu UI query/context 边界，并把 callback payload schema 收束到 adapter 单一 owner。
 
 ## 1. 文档定位
 
@@ -57,6 +57,7 @@
 - `orchestrator`
   - 负责 attach / use / follow / request gate / capture / new-thread 等产品状态
   - 负责生成 `SelectionPrompt` / `CommandCatalog` / `RequestPrompt` 的语义内容
+  - 当前还会在 `UIEvent` 上额外挂出显式 `Feishu*Context`，作为后续 UI controller 的稳定 query/policy 输入
 
 ## 3. 当前 owner 分类表
 
@@ -75,6 +76,10 @@
 补充规则：
 
 - `control.SelectionPrompt`、`control.CommandCatalog`、`control.RequestPrompt` 当前是**产品层拥有语义、Feishu 层拥有序列化**的 shared DTO。
+- 当前阶段 1 已把它们显式定义为 **Feishu-oriented transition DTO**：
+  - DTO 形状暂未迁出
+  - 但 `UIEvent` 现在已经携带独立的 `FeishuSelectionContext` / `FeishuCommandContext` / `FeishuRequestContext`
+  - 后续 controller 应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
 - 如果只是换卡片样式、按钮 payload、inline replace 策略，优先更新本文。
 - 如果改了 DTO 里的可选项语义、route 约束或 request gate 行为，必须同时更新 core 状态机文档。
 
@@ -88,6 +93,11 @@
 | --- | --- | --- |
 | `kind` | button/form `value.kind` | 决定 gateway 解析成哪种 `control.Action` |
 | `daemon_lifecycle_id` | projector stamp 到按钮/form | 允许 daemon 判定“这张卡是否来自当前 daemon 生命周期” |
+
+当前 owner：
+
+- callback payload schema 已收束到 [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
+- projector 与 gateway 现在共用这份 schema 常量/构造 helper，不再继续各自扩一份裸字符串约定
 
 ### 4.2 当前常见 payload 字段
 
@@ -192,9 +202,12 @@
 
 ### 7.1 当前关键实现文件
 
+- [internal/core/control/feishu_ui_boundary.go](../../internal/core/control/feishu_ui_boundary.go)
 - [internal/adapter/feishu/gateway_runtime.go](../../internal/adapter/feishu/gateway_runtime.go)
+- [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
 - [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
+- [internal/core/orchestrator/service_feishu_ui_context.go](../../internal/core/orchestrator/service_feishu_ui_context.go)
 - [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
 - [internal/app/daemon/app_inbound_lifecycle.go](../../internal/app/daemon/app_inbound_lifecycle.go)
 - [internal/core/control/inline_replacement.go](../../internal/core/control/inline_replacement.go)
@@ -207,6 +220,9 @@
   - 锁定 `SelectionPrompt` / `CommandCatalog` / `RequestPrompt` 的 lifecycle stamp 与 callback payload 结构
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件、无 lifecycle 导航仍异步 ack
+- [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
+- [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
+  - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据，而不改变现有 DTO 与用户可见行为
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
   - 锁定 daemon 侧 inline replace 结果，以及 old-card 导航/命令被拒绝而不是继续 replace
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)

@@ -248,6 +248,44 @@ func TestAttachFallsBackToActiveThreadWhenFocusedThreadUnknown(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSelectionEventCarriesFeishuSelectionContext(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt event, got %#v", events)
+	}
+	if events[0].FeishuSelectionContext == nil {
+		t.Fatalf("expected feishu selection context, got %#v", events[0])
+	}
+	if events[0].FeishuSelectionContext.DTOOwner != control.FeishuUIDTOwnerTransition {
+		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuSelectionContext)
+	}
+	if events[0].FeishuSelectionContext.PromptKind != control.SelectionPromptAttachWorkspace || events[0].FeishuSelectionContext.Layout != "grouped_attach_workspace" {
+		t.Fatalf("unexpected selection context: %#v", events[0].FeishuSelectionContext)
+	}
+	if events[0].FeishuSelectionContext.Surface.ProductMode != string(state.ProductModeNormal) || events[0].FeishuSelectionContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
+		t.Fatalf("unexpected surface context: %#v", events[0].FeishuSelectionContext.Surface)
+	}
+}
+
 func TestAttachBusyInstanceRejectsSecondSurface(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

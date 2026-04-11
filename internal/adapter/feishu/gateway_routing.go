@@ -17,7 +17,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	}
 	meta := inboundMetaFromCardActionEvent(event)
 	value := event.Event.Action.Value
-	kind := strings.TrimSpace(stringMapValue(value, "kind"))
+	kind := actionPayloadKind(value)
 	if kind == "" {
 		return control.Action{}, false
 	}
@@ -35,8 +35,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	}
 
 	switch kind {
-	case "attach_instance":
-		instanceID := strings.TrimSpace(stringMapValue(value, "instance_id"))
+	case cardActionKindAttachInstance:
+		instanceID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyInstanceID))
 		if instanceID == "" {
 			return control.Action{}, false
 		}
@@ -50,8 +50,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			InstanceID:       instanceID,
 			Inbound:          meta,
 		}, true
-	case "attach_workspace":
-		workspaceKey := strings.TrimSpace(stringMapValue(value, "workspace_key"))
+	case cardActionKindAttachWorkspace:
+		workspaceKey := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyWorkspaceKey))
 		if workspaceKey == "" {
 			return control.Action{}, false
 		}
@@ -65,8 +65,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			WorkspaceKey:     workspaceKey,
 			Inbound:          meta,
 		}, true
-	case "use_thread":
-		threadID := strings.TrimSpace(stringMapValue(value, "thread_id"))
+	case cardActionKindUseThread:
+		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
 		if threadID == "" {
 			return control.Action{}, false
 		}
@@ -78,10 +78,10 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ActorUserID:         operatorID,
 			MessageID:           messageID,
 			ThreadID:            threadID,
-			AllowCrossWorkspace: boolMapValue(value, "allow_cross_workspace"),
+			AllowCrossWorkspace: boolMapValue(value, cardActionPayloadKeyAllowCrossWorkspace),
 			Inbound:             meta,
 		}, true
-	case "show_scoped_threads":
+	case cardActionKindShowScopedThreads:
 		return control.Action{
 			Kind:             control.ActionShowScopedThreads,
 			GatewayID:        g.config.GatewayID,
@@ -91,7 +91,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_threads":
+	case cardActionKindShowThreads:
 		return control.Action{
 			Kind:             control.ActionShowThreads,
 			GatewayID:        g.config.GatewayID,
@@ -101,7 +101,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_all_threads":
+	case cardActionKindShowAllThreads:
 		return control.Action{
 			Kind:             control.ActionShowAllThreads,
 			GatewayID:        g.config.GatewayID,
@@ -111,7 +111,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_all_thread_workspaces":
+	case cardActionKindShowAllThreadWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowAllThreadWorkspaces,
 			GatewayID:        g.config.GatewayID,
@@ -121,7 +121,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_recent_thread_workspaces":
+	case cardActionKindShowRecentThreadWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowRecentThreadWorkspaces,
 			GatewayID:        g.config.GatewayID,
@@ -131,8 +131,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_workspace_threads":
-		workspaceKey := strings.TrimSpace(stringMapValue(value, "workspace_key"))
+	case cardActionKindShowWorkspaceThreads:
+		workspaceKey := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyWorkspaceKey))
 		if workspaceKey == "" {
 			return control.Action{}, false
 		}
@@ -146,7 +146,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			WorkspaceKey:     workspaceKey,
 			Inbound:          meta,
 		}, true
-	case "show_all_workspaces":
+	case cardActionKindShowAllWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowAllWorkspaces,
 			GatewayID:        g.config.GatewayID,
@@ -156,7 +156,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "show_recent_workspaces":
+	case cardActionKindShowRecentWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowRecentWorkspaces,
 			GatewayID:        g.config.GatewayID,
@@ -166,7 +166,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "resume_headless_thread":
+	case cardActionKindResumeHeadlessThread:
 		return control.Action{
 			Kind:             control.ActionRemovedCommand,
 			GatewayID:        g.config.GatewayID,
@@ -177,8 +177,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			Text:             "resume_headless_thread",
 			Inbound:          meta,
 		}, true
-	case "kick_thread_confirm":
-		threadID := strings.TrimSpace(stringMapValue(value, "thread_id"))
+	case cardActionKindKickThreadConfirm:
+		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
 		if threadID == "" {
 			return control.Action{}, false
 		}
@@ -192,7 +192,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ThreadID:         threadID,
 			Inbound:          meta,
 		}, true
-	case "kick_thread_cancel":
+	case cardActionKindKickThreadCancel:
 		return control.Action{
 			Kind:             control.ActionCancelKickThread,
 			GatewayID:        g.config.GatewayID,
@@ -202,9 +202,9 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			Inbound:          meta,
 		}, true
-	case "prompt_select":
-		promptID := strings.TrimSpace(stringMapValue(value, "prompt_id"))
-		optionID := strings.TrimSpace(stringMapValue(value, "option_id"))
+	case cardActionKindPromptSelect:
+		promptID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPromptID))
+		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
 		if promptID == "" || optionID == "" {
 			return control.Action{}, false
 		}
@@ -219,16 +219,16 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			OptionID:         optionID,
 			Inbound:          meta,
 		}, true
-	case "request_respond":
-		requestID := strings.TrimSpace(stringMapValue(value, "request_id"))
+	case cardActionKindRequestRespond:
+		requestID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestID))
 		if requestID == "" {
 			return control.Action{}, false
 		}
 		requestAnswers := requestAnswersFromValue(value)
-		optionID := strings.TrimSpace(stringMapValue(value, "request_option_id"))
+		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID))
 		if optionID == "" && len(requestAnswers) == 0 {
-			if value["approved"] != nil {
-				if boolMapValue(value, "approved") {
+			if value[cardActionPayloadKeyApproved] != nil {
+				if boolMapValue(value, cardActionPayloadKeyApproved) {
 					optionID = "accept"
 				} else {
 					optionID = "decline"
@@ -243,16 +243,16 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			RequestID:        requestID,
-			RequestType:      strings.TrimSpace(stringMapValue(value, "request_type")),
+			RequestType:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
 			RequestOptionID:  optionID,
 			RequestAnswers:   requestAnswers,
-			Approved:         boolMapValue(value, "approved"),
+			Approved:         boolMapValue(value, cardActionPayloadKeyApproved),
 			Inbound:          meta,
 		}, true
-	case "run_command":
-		commandText := strings.TrimSpace(stringMapValue(value, "command_text"))
+	case cardActionKindRunCommand:
+		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
 		if commandText == "" {
-			commandText = strings.TrimSpace(stringMapValue(value, "command"))
+			commandText = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandLegacy))
 		}
 		action, ok := parseTextAction(commandText)
 		if !ok {
@@ -265,8 +265,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		action.MessageID = messageID
 		action.Inbound = meta
 		return action, true
-	case "start_command_capture":
-		commandID := strings.TrimSpace(stringMapValue(value, "command_id"))
+	case cardActionKindStartCommandCapture:
+		commandID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandID))
 		if commandID == "" {
 			return control.Action{}, false
 		}
@@ -280,8 +280,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			CommandID:        commandID,
 			Inbound:          meta,
 		}, true
-	case "cancel_command_capture":
-		commandID := strings.TrimSpace(stringMapValue(value, "command_id"))
+	case cardActionKindCancelCommandCapture:
+		commandID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandID))
 		if commandID == "" {
 			return control.Action{}, false
 		}
@@ -295,17 +295,17 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			CommandID:        commandID,
 			Inbound:          meta,
 		}, true
-	case "submit_command_form":
-		commandText := strings.TrimSpace(stringMapValue(value, "command"))
+	case cardActionKindSubmitCommandForm:
+		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandLegacy))
 		if commandText == "" {
-			commandText = strings.TrimSpace(stringMapValue(value, "command_text"))
+			commandText = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
 		}
 		if commandText == "" {
 			return control.Action{}, false
 		}
-		fieldName := strings.TrimSpace(stringMapValue(value, "field_name"))
+		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
 		if fieldName == "" {
-			fieldName = "command_args"
+			fieldName = cardActionPayloadDefaultCommandFieldName
 		}
 		args := strings.TrimSpace(formStringValue(event.Event.Action.FormValue, fieldName))
 		if args == "" {
@@ -325,14 +325,14 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		action.MessageID = messageID
 		action.Inbound = meta
 		return action, true
-	case "submit_request_form":
-		requestID := strings.TrimSpace(stringMapValue(value, "request_id"))
+	case cardActionKindSubmitRequestForm:
+		requestID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestID))
 		if requestID == "" {
 			return control.Action{}, false
 		}
 		requestAnswers := requestAnswersFromFormValue(event.Event.Action.FormValue)
 		if len(requestAnswers) == 0 && strings.TrimSpace(event.Event.Action.InputValue) != "" {
-			fieldName := strings.TrimSpace(stringMapValue(value, "field_name"))
+			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
 			if fieldName != "" {
 				if requestAnswers == nil {
 					requestAnswers = map[string][]string{}
@@ -348,7 +348,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			RequestID:        requestID,
-			RequestType:      strings.TrimSpace(stringMapValue(value, "request_type")),
+			RequestType:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
 			RequestAnswers:   requestAnswers,
 			Inbound:          meta,
 		}, true
@@ -379,7 +379,7 @@ func requestAnswersFromValue(values map[string]interface{}) map[string][]string 
 	if len(values) == 0 {
 		return nil
 	}
-	raw, ok := values["request_answers"]
+	raw, ok := values[cardActionPayloadKeyRequestAnswers]
 	if !ok || raw == nil {
 		return nil
 	}

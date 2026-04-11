@@ -1467,6 +1467,16 @@ func TestHandleCardActionTriggerKeepsParameterApplyAsync(t *testing.T) {
 	}
 }
 
+func TestActionPayloadSubmitCommandFormDefaultsFieldName(t *testing.T) {
+	payload := actionPayloadSubmitCommandForm(control.FeishuCommandModel, "/model", "")
+	if payload[cardActionPayloadKeyKind] != cardActionKindSubmitCommandForm {
+		t.Fatalf("unexpected payload kind: %#v", payload)
+	}
+	if payload[cardActionPayloadKeyFieldName] != cardActionPayloadDefaultCommandFieldName {
+		t.Fatalf("expected default command field name, got %#v", payload)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsRemovedResumeHeadlessAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")

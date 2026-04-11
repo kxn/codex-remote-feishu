@@ -132,7 +132,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	current := s.normalizeSurfaceProductMode(surface)
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildModeCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandMode, "", s.buildModeCatalog(surface))}
 	}
 	if len(parts) != 2 {
 		return notice(surface, "surface_mode_usage", "用法：/mode 查看当前状态；/mode normal；/mode vscode。")
@@ -173,7 +173,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildAutoContinueCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandAutoContinue, "", s.buildAutoContinueCatalog(surface))}
 	}
 	if len(parts) != 2 {
 		return notice(surface, "auto_continue_usage", "用法：`/autowhip` 查看当前状态；`/autowhip on`；`/autowhip off`。")
@@ -198,7 +198,7 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
@@ -229,7 +229,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildReasoningCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandReasoning, "", s.buildReasoningCatalog(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
@@ -251,7 +251,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildAccessCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandAccess, "", s.buildAccessCatalog(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {

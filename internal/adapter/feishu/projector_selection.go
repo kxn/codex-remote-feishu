@@ -62,7 +62,7 @@ func attachInstanceSelectionPromptElements(prompt control.SelectionPrompt, daemo
 func attachWorkspaceSelectionPromptElements(prompt control.SelectionPrompt, daemonLifecycleID string) []map[string]any {
 	return buildAttachSelectionPromptElements(prompt, daemonLifecycleID, "当前工作区", func(option control.SelectionOption) bool {
 		switch strings.TrimSpace(option.ActionKind) {
-		case "show_all_workspaces", "show_recent_workspaces":
+		case cardActionKindShowAllWorkspaces, cardActionKindShowRecentWorkspaces:
 			return true
 		default:
 			return false
@@ -233,22 +233,25 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 	text := selectionOptionButtonText(prompt, option)
 	value := map[string]any{}
 	switch strings.TrimSpace(option.ActionKind) {
-	case "show_scoped_threads":
-		value = map[string]any{"kind": "show_scoped_threads"}
-	case "show_all_workspaces":
-		value = map[string]any{"kind": "show_all_workspaces"}
-	case "show_recent_workspaces":
-		value = map[string]any{"kind": "show_recent_workspaces"}
-	case "show_all_thread_workspaces":
-		value = map[string]any{"kind": "show_all_thread_workspaces"}
-	case "show_recent_thread_workspaces":
-		value = map[string]any{"kind": "show_recent_thread_workspaces"}
-	case "show_workspace_threads":
-		value = map[string]any{"kind": "show_workspace_threads", "workspace_key": strings.TrimSpace(option.OptionID)}
-	case "show_threads":
-		value = map[string]any{"kind": "show_threads"}
-	case "show_all_threads":
-		value = map[string]any{"kind": "show_all_threads"}
+	case cardActionKindShowScopedThreads:
+		value = actionPayloadNavigation(cardActionKindShowScopedThreads)
+	case cardActionKindShowAllWorkspaces:
+		value = actionPayloadNavigation(cardActionKindShowAllWorkspaces)
+	case cardActionKindShowRecentWorkspaces:
+		value = actionPayloadNavigation(cardActionKindShowRecentWorkspaces)
+	case cardActionKindShowAllThreadWorkspaces:
+		value = actionPayloadNavigation(cardActionKindShowAllThreadWorkspaces)
+	case cardActionKindShowRecentThreadWorkspaces:
+		value = actionPayloadNavigation(cardActionKindShowRecentThreadWorkspaces)
+	case cardActionKindShowWorkspaceThreads:
+		value = map[string]any{
+			cardActionPayloadKeyKind:         cardActionKindShowWorkspaceThreads,
+			cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(option.OptionID),
+		}
+	case cardActionKindShowThreads:
+		value = actionPayloadNavigation(cardActionKindShowThreads)
+	case cardActionKindShowAllThreads:
+		value = actionPayloadNavigation(cardActionKindShowAllThreads)
 	}
 	switch prompt.Kind {
 	case control.SelectionPromptAttachInstance:
@@ -256,44 +259,28 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 			if text == "选择" {
 				text = "接管"
 			}
-			value = map[string]any{
-				"kind":        "attach_instance",
-				"instance_id": strings.TrimSpace(option.OptionID),
-			}
+			value = actionPayloadAttachInstance(option.OptionID)
 		}
 	case control.SelectionPromptAttachWorkspace:
 		if len(value) == 0 {
 			if text == "选择" {
 				text = "接管"
 			}
-			value = map[string]any{
-				"kind":          "attach_workspace",
-				"workspace_key": strings.TrimSpace(option.OptionID),
-			}
+			value = actionPayloadAttachWorkspace(option.OptionID)
 		}
 	case control.SelectionPromptUseThread:
 		if len(value) == 0 {
-			value = map[string]any{
-				"kind":                  "use_thread",
-				"thread_id":             strings.TrimSpace(option.OptionID),
-				"allow_cross_workspace": option.AllowCrossWorkspace,
-			}
+			value = actionPayloadUseThread(option.OptionID, option.AllowCrossWorkspace)
 		}
 	case control.SelectionPromptKickThread:
 		if strings.TrimSpace(option.OptionID) == "cancel" {
-			value = map[string]any{"kind": "kick_thread_cancel"}
+			value = actionPayloadNavigation(cardActionKindKickThreadCancel)
 		} else {
-			value = map[string]any{
-				"kind":      "kick_thread_confirm",
-				"thread_id": strings.TrimSpace(option.OptionID),
-			}
+			value = actionPayloadKickThreadConfirm(option.OptionID)
 		}
 	}
 	if len(value) == 0 {
-		value = map[string]any{
-			"kind":      "use_thread",
-			"thread_id": strings.TrimSpace(option.OptionID),
-		}
+		value = actionPayloadUseThread(option.OptionID, false)
 	}
 	stampActionValue(value, daemonLifecycleID)
 	disabled := option.Disabled
@@ -317,16 +304,16 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 func selectionOptionButtonText(prompt control.SelectionPrompt, option control.SelectionOption) string {
 	text := strings.TrimSpace(option.ButtonLabel)
 	switch strings.TrimSpace(option.ActionKind) {
-	case "show_all_workspaces":
+	case cardActionKindShowAllWorkspaces:
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
 		return "查看全部 · " + base
-	case "show_recent_workspaces":
+	case cardActionKindShowRecentWorkspaces:
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
 		return "返回 · " + base
-	case "show_all_thread_workspaces":
+	case cardActionKindShowAllThreadWorkspaces:
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
 		return "查看全部 · " + base
-	case "show_recent_thread_workspaces":
+	case cardActionKindShowRecentThreadWorkspaces:
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
 		return "返回 · " + base
 	}
@@ -345,7 +332,7 @@ func selectionOptionButtonText(prompt control.SelectionPrompt, option control.Se
 	}
 	if prompt.Kind == control.SelectionPromptAttachWorkspace {
 		summary := firstNonEmpty(strings.TrimSpace(option.Label), text, "工作区")
-		if strings.TrimSpace(option.ActionKind) == "show_workspace_threads" {
+		if strings.TrimSpace(option.ActionKind) == cardActionKindShowWorkspaceThreads {
 			switch {
 			case option.IsCurrent:
 				return "当前 · " + summary
@@ -372,19 +359,19 @@ func selectionOptionButtonText(prompt control.SelectionPrompt, option control.Se
 		}
 		return text
 	}
-	if strings.TrimSpace(option.ActionKind) == "show_scoped_threads" {
+	if strings.TrimSpace(option.ActionKind) == cardActionKindShowScopedThreads {
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
 		return "查看全部 · " + base
 	}
-	if strings.TrimSpace(option.ActionKind) == "show_threads" {
+	if strings.TrimSpace(option.ActionKind) == cardActionKindShowThreads {
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近会话")
 		return "返回 · " + base
 	}
-	if strings.TrimSpace(option.ActionKind) == "show_all_threads" {
+	if strings.TrimSpace(option.ActionKind) == cardActionKindShowAllThreads {
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
 		return "返回 · " + base
 	}
-	if strings.TrimSpace(option.ActionKind) == "show_workspace_threads" {
+	if strings.TrimSpace(option.ActionKind) == cardActionKindShowWorkspaceThreads {
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "工作区全部会话")
 		return "查看全部 · " + base
 	}

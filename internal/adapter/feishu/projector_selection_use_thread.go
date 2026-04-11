@@ -76,7 +76,7 @@ func useThreadVSCodeInstanceElements(prompt control.SelectionPrompt, daemonLifec
 	unavailable := make([]control.SelectionOption, 0, len(prompt.Options))
 	for _, option := range prompt.Options {
 		switch strings.TrimSpace(option.ActionKind) {
-		case "show_scoped_threads", "show_threads":
+		case cardActionKindShowScopedThreads, cardActionKindShowThreads:
 			more = append(more, option)
 			continue
 		}
@@ -221,9 +221,9 @@ func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLif
 	groupIndex := map[string]int{}
 	for _, option := range prompt.Options {
 		switch strings.TrimSpace(option.ActionKind) {
-		case "show_scoped_threads":
+		case cardActionKindShowScopedThreads:
 			continue
-		case "show_threads", "show_all_threads", "show_all_thread_workspaces", "show_recent_thread_workspaces":
+		case cardActionKindShowThreads, cardActionKindShowAllThreads, cardActionKindShowAllThreadWorkspaces, cardActionKindShowRecentThreadWorkspaces:
 			moreOptions = append(moreOptions, option)
 			continue
 		}
@@ -380,7 +380,7 @@ func useThreadExpandedWorkspaceIndex(prompt control.SelectionPrompt, singleWorks
 		return false
 	}
 	for _, option := range moreOptions {
-		if strings.TrimSpace(option.ActionKind) == "show_recent_thread_workspaces" {
+		if strings.TrimSpace(option.ActionKind) == cardActionKindShowRecentThreadWorkspaces {
 			return true
 		}
 	}
@@ -471,15 +471,15 @@ func useThreadActionElement(prompt control.SelectionPrompt, option control.Selec
 
 func workspaceThreadsButton(label, workspaceKey, daemonLifecycleID string) map[string]any {
 	value := stampActionValue(map[string]any{
-		"kind":          "show_workspace_threads",
-		"workspace_key": strings.TrimSpace(workspaceKey),
+		cardActionPayloadKeyKind:         cardActionKindShowWorkspaceThreads,
+		cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(workspaceKey),
 	}, daemonLifecycleID)
 	return cardCallbackButtonElement(label, "default", value, false, "fill")
 }
 
 func useThreadSelectionOptionGroup(option control.SelectionOption) useThreadOptionGroup {
 	switch strings.TrimSpace(option.ActionKind) {
-	case "show_scoped_threads", "show_threads", "show_all_threads", "show_all_thread_workspaces", "show_recent_thread_workspaces":
+	case cardActionKindShowScopedThreads, cardActionKindShowThreads, cardActionKindShowAllThreads, cardActionKindShowAllThreadWorkspaces, cardActionKindShowRecentThreadWorkspaces:
 		return useThreadOptionGroupMore
 	}
 	if option.IsCurrent {

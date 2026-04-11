@@ -65,16 +65,12 @@ func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleR
 		Subtitle:    "回到跨工作区会话列表",
 		ActionKind:  "show_all_threads",
 	})
-	return []control.UIEvent{{
-		Kind:             control.UIEventSelectionPrompt,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		SelectionPrompt: &control.SelectionPrompt{
-			Kind:    control.SelectionPromptUseThread,
-			Layout:  "workspace_grouped_useall",
-			Title:   workspaceSelectionLabel(workspaceKey) + " 全部会话",
-			Options: options,
-		},
-	}}
+	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+		Kind:    control.SelectionPromptUseThread,
+		Layout:  "workspace_grouped_useall",
+		Title:   workspaceSelectionLabel(workspaceKey) + " 全部会话",
+		Options: options,
+	})}
 }
 
 func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) []control.UIEvent {
@@ -132,19 +128,15 @@ func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord
 			ActionKind:  presentation.returnActionKind,
 		})
 	}
-	return []control.UIEvent{{
-		Kind:             control.UIEventSelectionPrompt,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		SelectionPrompt: &control.SelectionPrompt{
-			Kind:         control.SelectionPromptUseThread,
-			Layout:       s.threadSelectionPromptLayout(surface, presentation),
-			Title:        presentation.title,
-			ContextTitle: s.threadSelectionContextTitle(surface, presentation),
-			ContextText:  s.threadSelectionContextText(surface, presentation),
-			ContextKey:   s.threadSelectionContextKey(surface, presentation),
-			Options:      options,
-		},
-	}}
+	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+		Kind:         control.SelectionPromptUseThread,
+		Layout:       s.threadSelectionPromptLayout(surface, presentation),
+		Title:        presentation.title,
+		ContextTitle: s.threadSelectionContextTitle(surface, presentation),
+		ContextText:  s.threadSelectionContextText(surface, presentation),
+		ContextKey:   s.threadSelectionContextKey(surface, presentation),
+		Options:      options,
+	})}
 }
 
 func (s *Service) threadSelectionPromptLayout(surface *state.SurfaceConsoleRecord, presentation threadSelectionPresentation) string {

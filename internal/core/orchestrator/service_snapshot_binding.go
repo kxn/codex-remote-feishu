@@ -76,12 +76,13 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 	}}
 }
 
-func commandCatalogEvent(surface *state.SurfaceConsoleRecord, catalog control.CommandCatalog) control.UIEvent {
+func (s *Service) commandCatalogEvent(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.CommandCatalog) control.UIEvent {
 	return control.UIEvent{
-		Kind:             control.UIEventCommandCatalog,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		CommandCatalog:   &catalog,
+		Kind:                 control.UIEventCommandCatalog,
+		GatewayID:            surface.GatewayID,
+		SurfaceSessionID:     surface.SurfaceSessionID,
+		CommandCatalog:       &catalog,
+		FeishuCommandContext: s.buildFeishuCommandContext(surface, view, menuStage, catalog),
 	}
 }
 

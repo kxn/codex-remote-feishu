@@ -80,10 +80,10 @@ func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleI
 		input["default_value"] = value
 	}
 	submitValue := stampActionValue(map[string]any{
-		"kind":       "submit_command_form",
-		"command_id": strings.TrimSpace(form.CommandID),
-		"command":    strings.TrimSpace(form.CommandText),
-		"field_name": strings.TrimSpace(field.Name),
+		cardActionPayloadKeyKind:          cardActionKindSubmitCommandForm,
+		cardActionPayloadKeyCommandID:     strings.TrimSpace(form.CommandID),
+		cardActionPayloadKeyCommandLegacy: strings.TrimSpace(form.CommandText),
+		cardActionPayloadKeyFieldName:     strings.TrimSpace(field.Name),
 	}, daemonLifecycleID)
 	formName := strings.TrimSpace(form.CommandID)
 	if formName == "" {
@@ -199,28 +199,19 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 			if label == "" {
 				label = commandText
 			}
-			payload = map[string]any{
-				"kind":         "run_command",
-				"command_text": commandText,
-			}
+			payload = actionPayloadRunCommand(commandText)
 		case control.CommandCatalogButtonStartCommandCapture:
 			commandID := strings.TrimSpace(button.CommandID)
 			if commandID == "" {
 				continue
 			}
-			payload = map[string]any{
-				"kind":       "start_command_capture",
-				"command_id": commandID,
-			}
+			payload = actionPayloadStartCommandCapture(commandID)
 		case control.CommandCatalogButtonCancelCommandCapture:
 			commandID := strings.TrimSpace(button.CommandID)
 			if commandID == "" {
 				continue
 			}
-			payload = map[string]any{
-				"kind":       "cancel_command_capture",
-				"command_id": commandID,
-			}
+			payload = actionPayloadCancelCommandCapture(commandID)
 		default:
 			continue
 		}

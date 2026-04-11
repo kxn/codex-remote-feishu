@@ -510,10 +510,10 @@ func (s *Service) startCommandCapture(surface *state.SurfaceConsoleRecord, actio
 	case control.FeishuCommandModel:
 		if s.root.Instances[surface.AttachedInstanceID] == nil {
 			def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandModel)
-			return []control.UIEvent{commandCatalogEvent(surface, s.buildAttachmentRequiredCatalog(surface, def))}
+			return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildAttachmentRequiredCatalog(surface, def))}
 		}
 		clearSurfaceCommandCapture(surface)
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
 	default:
 		return notice(surface, "command_capture_unsupported", "这个命令暂不支持 capture/apply 输入。")
 	}
@@ -526,7 +526,7 @@ func (s *Service) cancelCommandCapture(surface *state.SurfaceConsoleRecord, acti
 	clearSurfaceCommandCapture(surface)
 	switch action.CommandID {
 	case control.FeishuCommandModel:
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildModelCatalog(surface))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, control.FeishuCommandModel, "", s.buildModelCatalog(surface))}
 	default:
 		return nil
 	}

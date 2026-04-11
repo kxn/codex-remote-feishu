@@ -107,10 +107,10 @@ func requestPromptButton(prompt control.RequestPrompt, option control.RequestPro
 		buttonType = "default"
 	}
 	return cardCallbackButtonElement(label, buttonType, stampActionValue(map[string]any{
-		"kind":              "request_respond",
-		"request_id":        prompt.RequestID,
-		"request_type":      strings.TrimSpace(prompt.RequestType),
-		"request_option_id": strings.TrimSpace(option.OptionID),
+		cardActionPayloadKeyKind:            cardActionKindRequestRespond,
+		cardActionPayloadKeyRequestID:       prompt.RequestID,
+		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyRequestOptionID: strings.TrimSpace(option.OptionID),
 	}, daemonLifecycleID), false, "")
 }
 
@@ -120,24 +120,17 @@ func requestUserInputOptionButton(prompt control.RequestPrompt, question control
 		return nil
 	}
 	return cardCallbackButtonElement(label, "primary", stampActionValue(map[string]any{
-		"kind":         "request_respond",
-		"request_id":   prompt.RequestID,
-		"request_type": strings.TrimSpace(prompt.RequestType),
-		"request_answers": map[string]any{
+		cardActionPayloadKeyKind:        cardActionKindRequestRespond,
+		cardActionPayloadKeyRequestID:   prompt.RequestID,
+		cardActionPayloadKeyRequestType: strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyRequestAnswers: map[string]any{
 			strings.TrimSpace(question.ID): []any{label},
 		},
 	}, daemonLifecycleID), false, "")
 }
 
 func stampActionValue(value map[string]any, daemonLifecycleID string) map[string]any {
-	if len(value) == 0 {
-		return value
-	}
-	if strings.TrimSpace(daemonLifecycleID) == "" {
-		return value
-	}
-	value["daemon_lifecycle_id"] = strings.TrimSpace(daemonLifecycleID)
-	return value
+	return actionPayloadWithLifecycle(value, daemonLifecycleID)
 }
 
 func requestPromptContainsOption(options []control.RequestPromptOption, optionID string) bool {
@@ -218,9 +211,9 @@ func requestPromptFormElement(prompt control.RequestPrompt, daemonLifecycleID st
 		elements = append(elements, input)
 	}
 	elements = append(elements, cardFormSubmitButtonElement("提交答案", stampActionValue(map[string]any{
-		"kind":         "submit_request_form",
-		"request_id":   prompt.RequestID,
-		"request_type": strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyKind:        cardActionKindSubmitRequestForm,
+		cardActionPayloadKeyRequestID:   prompt.RequestID,
+		cardActionPayloadKeyRequestType: strings.TrimSpace(prompt.RequestType),
 	}, daemonLifecycleID)))
 	return map[string]any{
 		"tag":      "form",

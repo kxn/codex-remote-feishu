@@ -85,19 +85,15 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 	if contextTitle != "" && len(options) == 0 {
 		hint = "当前没有其他可接管实例。"
 	}
-	return []control.UIEvent{{
-		Kind:             control.UIEventSelectionPrompt,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		SelectionPrompt: &control.SelectionPrompt{
-			Kind:         control.SelectionPromptAttachInstance,
-			Layout:       "grouped_attach_instance",
-			Title:        "在线 VS Code 实例",
-			Hint:         hint,
-			ContextTitle: contextTitle,
-			ContextText:  contextText,
-			Options:      options,
-		},
-	}}
+	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+		Kind:         control.SelectionPromptAttachInstance,
+		Layout:       "grouped_attach_instance",
+		Title:        "在线 VS Code 实例",
+		Hint:         hint,
+		ContextTitle: contextTitle,
+		ContextText:  contextText,
+		Options:      options,
+	})}
 }
 
 type instanceSelectionEntry struct {
@@ -346,19 +342,15 @@ func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRec
 		title = "全部工作区"
 	}
 
-	return []control.UIEvent{{
-		Kind:             control.UIEventSelectionPrompt,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		SelectionPrompt: &control.SelectionPrompt{
-			Kind:         control.SelectionPromptAttachWorkspace,
-			Layout:       "grouped_attach_workspace",
-			Title:        title,
-			Hint:         hint,
-			ContextTitle: contextTitle,
-			ContextText:  contextText,
-			Options:      options,
-		},
-	}}
+	return []control.UIEvent{s.selectionPromptEvent(surface, control.SelectionPrompt{
+		Kind:         control.SelectionPromptAttachWorkspace,
+		Layout:       "grouped_attach_workspace",
+		Title:        title,
+		Hint:         hint,
+		ContextTitle: contextTitle,
+		ContextText:  contextText,
+		Options:      options,
+	})}
 }
 
 func filterWorkspaceSelectionEntriesByVisibleSet(entries []workspaceSelectionEntry, visible map[string]bool) []workspaceSelectionEntry {

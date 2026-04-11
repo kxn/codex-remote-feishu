@@ -320,9 +320,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionShowRecentWorkspaces:
 		return s.presentWorkspaceSelection(surface)
 	case control.ActionShowCommandHelp:
-		return []control.UIEvent{commandCatalogEvent(surface, control.FeishuCommandHelpCatalog())}
+		return []control.UIEvent{s.commandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
 	case control.ActionShowCommandMenu:
-		return []control.UIEvent{commandCatalogEvent(surface, s.buildCommandMenuCatalog(surface, action.Text))}
+		return []control.UIEvent{s.commandCatalogEvent(surface, parseCommandMenuView(action.Text), s.commandMenuStage(surface), s.buildCommandMenuCatalog(surface, action.Text))}
 	case control.ActionDebugCommand:
 		return []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,

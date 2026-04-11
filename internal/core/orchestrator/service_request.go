@@ -121,20 +121,16 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		CreatedAt:   s.now(),
 	}
 	surface.PendingRequests[event.RequestID] = record
-	return []control.UIEvent{{
-		Kind:             control.UIEventRequestPrompt,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		RequestPrompt: &control.RequestPrompt{
-			RequestID:   record.RequestID,
-			RequestType: record.RequestType,
-			Title:       record.Title,
-			Body:        record.Body,
-			ThreadID:    record.ThreadID,
-			ThreadTitle: threadTitle,
-			Options:     requestPromptOptionsToControl(record.Options),
-			Questions:   requestPromptQuestionsToControl(record.Questions),
-		},
-	}}
+	return []control.UIEvent{s.requestPromptEvent(surface, control.RequestPrompt{
+		RequestID:   record.RequestID,
+		RequestType: record.RequestType,
+		Title:       record.Title,
+		Body:        record.Body,
+		ThreadID:    record.ThreadID,
+		ThreadTitle: threadTitle,
+		Options:     requestPromptOptionsToControl(record.Options),
+		Questions:   requestPromptQuestionsToControl(record.Questions),
+	})}
 }
 
 func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event) []control.UIEvent {

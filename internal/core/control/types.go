@@ -458,23 +458,26 @@ type DaemonCommand struct {
 }
 
 type UIEvent struct {
-	Kind                 UIEventKind
-	GatewayID            string
-	SurfaceSessionID     string
-	DaemonLifecycleID    string
-	SourceMessageID      string
-	SourceMessagePreview string
-	Snapshot             *Snapshot
-	SelectionPrompt      *SelectionPrompt
-	CommandCatalog       *CommandCatalog
-	RequestPrompt        *RequestPrompt
-	PendingInput         *PendingInputState
-	Notice               *Notice
-	ThreadSelection      *ThreadSelectionChanged
-	Block                *render.Block
-	ImageOutput          *ImageOutput
-	FileChangeSummary    *FileChangeSummary
-	FinalTurnSummary     *FinalTurnSummary
-	Command              *agentproto.Command
-	DaemonCommand        *DaemonCommand
+	Kind                   UIEventKind
+	GatewayID              string
+	SurfaceSessionID       string
+	DaemonLifecycleID      string
+	SourceMessageID        string
+	SourceMessagePreview   string
+	Snapshot               *Snapshot
+	SelectionPrompt        *SelectionPrompt
+	FeishuSelectionContext *FeishuUISelectionContext
+	CommandCatalog         *CommandCatalog
+	FeishuCommandContext   *FeishuUICommandContext
+	RequestPrompt          *RequestPrompt
+	FeishuRequestContext   *FeishuUIRequestContext
+	PendingInput           *PendingInputState
+	Notice                 *Notice
+	ThreadSelection        *ThreadSelectionChanged
+	Block                  *render.Block
+	ImageOutput            *ImageOutput
+	FileChangeSummary      *FileChangeSummary
+	FinalTurnSummary       *FinalTurnSummary
+	Command                *agentproto.Command
+	DaemonCommand          *DaemonCommand
 }

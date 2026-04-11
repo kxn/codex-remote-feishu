@@ -1,0 +1,156 @@
+package feishu
+
+import "strings"
+
+const (
+	cardActionPayloadKeyKind                 = "kind"
+	cardActionPayloadKeyInstanceID           = "instance_id"
+	cardActionPayloadKeyWorkspaceKey         = "workspace_key"
+	cardActionPayloadKeyThreadID             = "thread_id"
+	cardActionPayloadKeyAllowCrossWorkspace  = "allow_cross_workspace"
+	cardActionPayloadKeyPromptID             = "prompt_id"
+	cardActionPayloadKeyOptionID             = "option_id"
+	cardActionPayloadKeyRequestID            = "request_id"
+	cardActionPayloadKeyRequestType          = "request_type"
+	cardActionPayloadKeyRequestOptionID      = "request_option_id"
+	cardActionPayloadKeyRequestAnswers       = "request_answers"
+	cardActionPayloadKeyCommandID            = "command_id"
+	cardActionPayloadKeyCommandText          = "command_text"
+	cardActionPayloadKeyCommandLegacy        = "command"
+	cardActionPayloadKeyFieldName            = "field_name"
+	cardActionPayloadKeyApproved             = "approved"
+	cardActionPayloadKeyDaemonLifecycleID    = "daemon_lifecycle_id"
+	cardActionPayloadDefaultCommandFieldName = "command_args"
+	cardActionKindAttachInstance             = "attach_instance"
+	cardActionKindAttachWorkspace            = "attach_workspace"
+	cardActionKindUseThread                  = "use_thread"
+	cardActionKindShowScopedThreads          = "show_scoped_threads"
+	cardActionKindShowThreads                = "show_threads"
+	cardActionKindShowAllThreads             = "show_all_threads"
+	cardActionKindShowAllThreadWorkspaces    = "show_all_thread_workspaces"
+	cardActionKindShowRecentThreadWorkspaces = "show_recent_thread_workspaces"
+	cardActionKindShowWorkspaceThreads       = "show_workspace_threads"
+	cardActionKindShowAllWorkspaces          = "show_all_workspaces"
+	cardActionKindShowRecentWorkspaces       = "show_recent_workspaces"
+	cardActionKindResumeHeadlessThread       = "resume_headless_thread"
+	cardActionKindKickThreadConfirm          = "kick_thread_confirm"
+	cardActionKindKickThreadCancel           = "kick_thread_cancel"
+	cardActionKindPromptSelect               = "prompt_select"
+	cardActionKindRequestRespond             = "request_respond"
+	cardActionKindRunCommand                 = "run_command"
+	cardActionKindStartCommandCapture        = "start_command_capture"
+	cardActionKindCancelCommandCapture       = "cancel_command_capture"
+	cardActionKindSubmitCommandForm          = "submit_command_form"
+	cardActionKindSubmitRequestForm          = "submit_request_form"
+)
+
+func actionPayloadKind(value map[string]any) string {
+	return strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyKind))
+}
+
+func actionPayloadWithLifecycle(value map[string]any, daemonLifecycleID string) map[string]any {
+	if len(value) == 0 {
+		return value
+	}
+	if strings.TrimSpace(daemonLifecycleID) == "" {
+		return value
+	}
+	value[cardActionPayloadKeyDaemonLifecycleID] = strings.TrimSpace(daemonLifecycleID)
+	return value
+}
+
+func actionPayloadNavigation(kind string) map[string]any {
+	return map[string]any{cardActionPayloadKeyKind: kind}
+}
+
+func actionPayloadAttachInstance(instanceID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:       cardActionKindAttachInstance,
+		cardActionPayloadKeyInstanceID: strings.TrimSpace(instanceID),
+	}
+}
+
+func actionPayloadAttachWorkspace(workspaceKey string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:         cardActionKindAttachWorkspace,
+		cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(workspaceKey),
+	}
+}
+
+func actionPayloadUseThread(threadID string, allowCrossWorkspace bool) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:                cardActionKindUseThread,
+		cardActionPayloadKeyThreadID:            strings.TrimSpace(threadID),
+		cardActionPayloadKeyAllowCrossWorkspace: allowCrossWorkspace,
+	}
+}
+
+func actionPayloadKickThreadConfirm(threadID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:     cardActionKindKickThreadConfirm,
+		cardActionPayloadKeyThreadID: strings.TrimSpace(threadID),
+	}
+}
+
+func actionPayloadPromptSelect(promptID, optionID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:     cardActionKindPromptSelect,
+		cardActionPayloadKeyPromptID: strings.TrimSpace(promptID),
+		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
+	}
+}
+
+func actionPayloadRunCommand(commandText string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:        cardActionKindRunCommand,
+		cardActionPayloadKeyCommandText: strings.TrimSpace(commandText),
+	}
+}
+
+func actionPayloadStartCommandCapture(commandID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:      cardActionKindStartCommandCapture,
+		cardActionPayloadKeyCommandID: strings.TrimSpace(commandID),
+	}
+}
+
+func actionPayloadCancelCommandCapture(commandID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:      cardActionKindCancelCommandCapture,
+		cardActionPayloadKeyCommandID: strings.TrimSpace(commandID),
+	}
+}
+
+func actionPayloadSubmitCommandForm(commandID, commandText, fieldName string) map[string]any {
+	fieldName = strings.TrimSpace(fieldName)
+	if fieldName == "" {
+		fieldName = cardActionPayloadDefaultCommandFieldName
+	}
+	return map[string]any{
+		cardActionPayloadKeyKind:          cardActionKindSubmitCommandForm,
+		cardActionPayloadKeyCommandID:     strings.TrimSpace(commandID),
+		cardActionPayloadKeyCommandLegacy: strings.TrimSpace(commandText),
+		cardActionPayloadKeyFieldName:     fieldName,
+	}
+}
+
+func actionPayloadRequestRespond(requestID, requestType, requestOptionID string, requestAnswers map[string]any) map[string]any {
+	payload := map[string]any{
+		cardActionPayloadKeyKind:            cardActionKindRequestRespond,
+		cardActionPayloadKeyRequestID:       strings.TrimSpace(requestID),
+		cardActionPayloadKeyRequestType:     strings.TrimSpace(requestType),
+		cardActionPayloadKeyRequestOptionID: strings.TrimSpace(requestOptionID),
+	}
+	if len(requestAnswers) != 0 {
+		payload[cardActionPayloadKeyRequestAnswers] = requestAnswers
+	}
+	return payload
+}
+
+func actionPayloadSubmitRequestForm(requestID, requestType string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:        cardActionKindSubmitRequestForm,
+		cardActionPayloadKeyRequestID:   strings.TrimSpace(requestID),
+		cardActionPayloadKeyRequestType: strings.TrimSpace(requestType),
+	}
+}
