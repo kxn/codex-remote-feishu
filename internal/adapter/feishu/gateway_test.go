@@ -1129,7 +1129,7 @@ func TestCallbackCardResponseBuildsReplacementCard(t *testing.T) {
 	if response == nil || response.Card == nil {
 		t.Fatalf("expected callback replacement response, got %#v", response)
 	}
-	if response.Card.Type != "card_json" {
+	if response.Card.Type != "raw" {
 		t.Fatalf("unexpected callback card type: %#v", response.Card)
 	}
 	data, ok := response.Card.Data.(map[string]any)

@@ -114,7 +114,8 @@ func callbackCardResponse(result *ActionResult) *larkcallback.CardActionTriggerR
 	}
 	return &larkcallback.CardActionTriggerResponse{
 		Card: &larkcallback.Card{
-			Type: "card_json",
+			// New-style card.action.trigger callback responses use `raw` for JSON cards.
+			Type: "raw",
 			Data: renderOperationCard(*card, cardEnvelopeV2),
 		},
 	}
