@@ -333,6 +333,108 @@ func TestHandleGatewayActionKeepsParameterApplyAppendOnly(t *testing.T) {
 	}
 }
 
+func TestHandleGatewayActionReplacesScopedThreadCardForCardNavigation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "dl",
+		WorkspaceRoot: "/data/dl",
+		WorkspaceKey:  "/data/dl",
+		ShortName:     "dl",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "会话1", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 1, 0, 0, time.UTC)},
+			"thread-2": {ThreadID: "thread-2", Name: "会话2", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 2, 0, 0, time.UTC)},
+			"thread-3": {ThreadID: "thread-3", Name: "会话3", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 3, 0, 0, time.UTC)},
+			"thread-4": {ThreadID: "thread-4", Name: "会话4", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 4, 0, 0, time.UTC)},
+			"thread-5": {ThreadID: "thread-5", Name: "会话5", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 5, 0, 0, time.UTC)},
+			"thread-6": {ThreadID: "thread-6", Name: "会话6", CWD: "/data/dl", LastUsedAt: time.Date(2026, 4, 10, 10, 6, 0, 0, time.UTC)},
+		},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowScopedThreads,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline replacement result, got %#v", result)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "当前工作区全部会话" {
+		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_threads", "", "") {
+		t.Fatalf("expected replacement scoped-all card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+}
+
+func TestHandleGatewayActionReplacesWorkspaceThreadCardForCardNavigation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "proj1",
+		WorkspaceRoot: "/data/dl/proj1",
+		WorkspaceKey:  "/data/dl/proj1",
+		ShortName:     "proj1",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "会话1", CWD: "/data/dl/proj1", LastUsedAt: time.Date(2026, 4, 10, 10, 1, 0, 0, time.UTC)},
+			"thread-2": {ThreadID: "thread-2", Name: "会话2", CWD: "/data/dl/proj1", LastUsedAt: time.Date(2026, 4, 10, 10, 2, 0, 0, time.UTC)},
+		},
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowWorkspaceThreads,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/proj1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline replacement result, got %#v", result)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "proj1 全部会话" {
+		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_all_threads", "", "") {
+		t.Fatalf("expected replacement workspace card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+}
+
 func TestDaemonHelloCanonicalizesWorkspaceMetadata(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }

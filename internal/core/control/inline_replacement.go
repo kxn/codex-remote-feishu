@@ -18,6 +18,11 @@ func SupportsInlineCardReplacement(action Action) bool {
 		return isBareInlineCommand(action.Text, "/access")
 	case ActionModelCommand:
 		return isBareInlineCommand(action.Text, "/model")
+	case ActionShowThreads,
+		ActionShowAllThreads,
+		ActionShowScopedThreads,
+		ActionShowWorkspaceThreads:
+		return true
 	default:
 		return false
 	}
