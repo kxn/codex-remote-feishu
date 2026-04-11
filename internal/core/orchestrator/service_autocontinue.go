@@ -79,6 +79,8 @@ func (s *Service) noteAutoContinueAction(surface *state.SurfaceConsoleRecord, ac
 		control.ActionNewThread,
 		control.ActionShowThreads,
 		control.ActionShowAllThreads,
+		control.ActionShowAllThreadWorkspaces,
+		control.ActionShowRecentThreadWorkspaces,
 		control.ActionShowScopedThreads,
 		control.ActionUseThread,
 		control.ActionFollowLocal,

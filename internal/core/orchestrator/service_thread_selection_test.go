@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -256,6 +257,178 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	}
 	if prompt.Options[0].GroupKey != "/data/dl" || prompt.Options[0].GroupLabel != "dl" || prompt.Options[0].AgeText == "" {
 		t.Fatalf("expected grouped workspace metadata on /useall options, got %#v", prompt.Options[0])
+	}
+}
+
+func TestPresentAllThreadSelectionLimitsToRecentFiveWorkspaceGroups(t *testing.T) {
+	now := time.Date(2026, 4, 11, 5, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	for i := 1; i <= 6; i++ {
+		workspaceKey := fmt.Sprintf("/data/dl/proj-%d", i)
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-%d", i),
+			DisplayName:   fmt.Sprintf("proj-%d", i),
+			WorkspaceRoot: workspaceKey,
+			WorkspaceKey:  workspaceKey,
+			ShortName:     fmt.Sprintf("proj-%d", i),
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-%d", i): {
+					ThreadID:   fmt.Sprintf("thread-%d", i),
+					Name:       fmt.Sprintf("会话-%d", i),
+					CWD:        workspaceKey,
+					LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+				},
+			},
+		})
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.Title != "全部会话" || prompt.Layout != "workspace_grouped_useall" {
+		t.Fatalf("unexpected prompt metadata: %#v", prompt)
+	}
+	if len(prompt.Options) != 6 {
+		t.Fatalf("expected five workspace groups plus expand action, got %#v", prompt.Options)
+	}
+	for index, want := range []string{"thread-6", "thread-5", "thread-4", "thread-3", "thread-2"} {
+		if prompt.Options[index].OptionID != want {
+			t.Fatalf("expected recent workspace thread order, got %#v", prompt.Options)
+		}
+	}
+	last := prompt.Options[len(prompt.Options)-1]
+	if last.ActionKind != "show_all_thread_workspaces" || last.ButtonLabel != "全部工作区" || !strings.Contains(last.Subtitle, "还有 1 个工作区未显示") {
+		t.Fatalf("expected trailing expand action, got %#v", last)
+	}
+}
+
+func TestPresentAllThreadWorkspacesShowsAllGroupsAndReturnAction(t *testing.T) {
+	now := time.Date(2026, 4, 11, 5, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	for i := 1; i <= 6; i++ {
+		workspaceKey := fmt.Sprintf("/data/dl/proj-%d", i)
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-%d", i),
+			DisplayName:   fmt.Sprintf("proj-%d", i),
+			WorkspaceRoot: workspaceKey,
+			WorkspaceKey:  workspaceKey,
+			ShortName:     fmt.Sprintf("proj-%d", i),
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-%d", i): {
+					ThreadID:   fmt.Sprintf("thread-%d", i),
+					Name:       fmt.Sprintf("会话-%d", i),
+					CWD:        workspaceKey,
+					LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+				},
+			},
+		})
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreadWorkspaces,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if len(prompt.Options) != 7 {
+		t.Fatalf("expected six workspace groups plus return action, got %#v", prompt.Options)
+	}
+	for index, want := range []string{"thread-6", "thread-5", "thread-4", "thread-3", "thread-2", "thread-1"} {
+		if prompt.Options[index].OptionID != want {
+			t.Fatalf("expected expanded workspace order, got %#v", prompt.Options)
+		}
+	}
+	last := prompt.Options[len(prompt.Options)-1]
+	if last.ActionKind != "show_recent_thread_workspaces" || last.ButtonLabel != "最近工作区" || !strings.Contains(last.Subtitle, "回到最近 5 个工作区") {
+		t.Fatalf("expected trailing return action, got %#v", last)
+	}
+}
+
+func TestPresentAllThreadSelectionDoesNotCountCurrentWorkspaceAgainstGroupLimit(t *testing.T) {
+	now := time.Date(2026, 4, 11, 5, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-current",
+		DisplayName:   "current",
+		WorkspaceRoot: "/data/dl/current",
+		WorkspaceKey:  "/data/dl/current",
+		ShortName:     "current",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-current": {
+				ThreadID:   "thread-current",
+				Name:       "当前会话",
+				CWD:        "/data/dl/current",
+				LastUsedAt: now.Add(30 * time.Minute),
+			},
+		},
+	})
+	for i := 1; i <= 5; i++ {
+		workspaceKey := fmt.Sprintf("/data/dl/proj-%d", i)
+		svc.UpsertInstance(&state.InstanceRecord{
+			InstanceID:    fmt.Sprintf("inst-%d", i),
+			DisplayName:   fmt.Sprintf("proj-%d", i),
+			WorkspaceRoot: workspaceKey,
+			WorkspaceKey:  workspaceKey,
+			ShortName:     fmt.Sprintf("proj-%d", i),
+			Online:        true,
+			Threads: map[string]*state.ThreadRecord{
+				fmt.Sprintf("thread-%d", i): {
+					ThreadID:   fmt.Sprintf("thread-%d", i),
+					Name:       fmt.Sprintf("会话-%d", i),
+					CWD:        workspaceKey,
+					LastUsedAt: now.Add(time.Duration(i) * time.Minute),
+				},
+			},
+		})
+	}
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-current",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowAllThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].SelectionPrompt == nil {
+		t.Fatalf("expected selection prompt, got %#v", events)
+	}
+	prompt := events[0].SelectionPrompt
+	if prompt.ContextKey != "/data/dl/current" || prompt.ContextTitle != "当前工作区" {
+		t.Fatalf("expected current workspace context, got %#v", prompt)
+	}
+	if len(prompt.Options) != 6 {
+		t.Fatalf("expected current workspace plus five other groups without expand action, got %#v", prompt.Options)
+	}
+	if prompt.Options[0].OptionID != "thread-current" {
+		t.Fatalf("expected current workspace thread to remain present, got %#v", prompt.Options[0])
+	}
+	for _, option := range prompt.Options {
+		if option.ActionKind == "show_all_thread_workspaces" {
+			t.Fatalf("did not expect expand action when only five non-current groups exist, got %#v", prompt.Options)
+		}
 	}
 }
 

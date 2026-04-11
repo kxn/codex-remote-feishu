@@ -824,6 +824,46 @@ func TestParseCardActionTriggerEventBuildsWorkspaceListNavigationActions(t *test
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsThreadWorkspaceNavigationActions(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-thread-workspaces", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	tests := []struct {
+		name string
+		kind string
+		want control.ActionKind
+	}{
+		{name: "show all", kind: "show_all_thread_workspaces", want: control.ActionShowAllThreadWorkspaces},
+		{name: "show recent", kind: "show_recent_thread_workspaces", want: control.ActionShowRecentThreadWorkspaces},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			event := &larkcallback.CardActionTriggerEvent{
+				Event: &larkcallback.CardActionTriggerRequest{
+					Operator: &larkcallback.Operator{UserID: &userID},
+					Action: &larkcallback.CallBackAction{
+						Value: map[string]interface{}{
+							"kind": tc.kind,
+						},
+					},
+					Context: &larkcallback.Context{
+						OpenChatID:    "oc_1",
+						OpenMessageID: "om-card-thread-workspaces",
+					},
+				},
+			}
+
+			action, ok := gateway.parseCardActionTriggerEvent(event)
+			if !ok {
+				t.Fatal("expected card callback to be parsed")
+			}
+			if action.Kind != tc.want {
+				t.Fatalf("unexpected thread workspace navigation action: %#v", action)
+			}
+		})
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")

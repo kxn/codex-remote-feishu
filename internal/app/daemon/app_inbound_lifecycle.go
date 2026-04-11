@@ -197,6 +197,10 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "查看最近会话", "/use"
 	case control.ActionShowAllThreads:
 		return "查看全部会话", "/useall"
+	case control.ActionShowAllThreadWorkspaces:
+		return "展开全部工作区会话", "/useall"
+	case control.ActionShowRecentThreadWorkspaces:
+		return "返回最近工作区会话", "/useall"
 	case control.ActionUseThread:
 		return "切换会话", "/use"
 	case control.ActionConfirmKickThread:

@@ -82,9 +82,10 @@ const (
 type threadSelectionDisplayMode string
 
 const (
-	threadSelectionDisplayRecent    threadSelectionDisplayMode = "recent"
-	threadSelectionDisplayAll       threadSelectionDisplayMode = "all"
-	threadSelectionDisplayScopedAll threadSelectionDisplayMode = "scoped_all"
+	threadSelectionDisplayRecent      threadSelectionDisplayMode = "recent"
+	threadSelectionDisplayAll         threadSelectionDisplayMode = "all"
+	threadSelectionDisplayAllExpanded threadSelectionDisplayMode = "all_expanded"
+	threadSelectionDisplayScopedAll   threadSelectionDisplayMode = "scoped_all"
 )
 
 type threadSelectionPresentation struct {
@@ -93,9 +94,10 @@ type threadSelectionPresentation struct {
 	limit               int
 	includeWorkspace    bool
 	allowCrossWorkspace bool
-	showScopedAllButton bool
-	scopedAllButtonText string
-	scopedAllStatus     string
+	showMoreButton      bool
+	showMoreActionKind  string
+	showMoreButtonText  string
+	showMoreStatus      string
 	returnActionKind    string
 	returnButtonText    string
 	returnStatus        string

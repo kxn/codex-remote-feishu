@@ -476,6 +476,109 @@ func TestProjectUseAllSelectionPromptLimitsWorkspaceToFiveAndAddsExpandButtons(t
 	}
 }
 
+func TestProjectUseAllSelectionPromptRendersWorkspaceGroupExpandAction(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Layout: "workspace_grouped_useall",
+			Kind:   control.SelectionPromptUseThread,
+			Title:  "全部会话",
+			Options: []control.SelectionOption{
+				{
+					Index:       1,
+					OptionID:    "thread-1",
+					Label:       "web-1",
+					ButtonLabel: "web-1",
+					GroupKey:    "/data/dl/web",
+					GroupLabel:  "web",
+					AgeText:     "2分前",
+					MetaText:    "2分前",
+				},
+				{
+					Index:       2,
+					Label:       "全部工作区",
+					ButtonLabel: "全部工作区",
+					MetaText:    "还有 3 个工作区未显示",
+					ActionKind:  "show_all_thread_workspaces",
+				},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardElements[3]["content"] != "**更多**" {
+		t.Fatalf("expected more header, got %#v", ops[0].CardElements)
+	}
+	actionRow := cardElementButtons(t, ops[0].CardElements[4])
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one expand action button, got %#v", ops[0].CardElements[4])
+	}
+	if cardButtonLabel(t, actionRow[0]) != "查看全部 · 全部工作区" {
+		t.Fatalf("unexpected expand button label: %#v", actionRow[0])
+	}
+	value := cardButtonPayload(t, actionRow[0])
+	if value["kind"] != "show_all_thread_workspaces" {
+		t.Fatalf("unexpected expand payload: %#v", value)
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
+	if renderedValue["kind"] != "show_all_thread_workspaces" {
+		t.Fatalf("unexpected rendered expand payload: %#v", renderedValue)
+	}
+}
+
+func TestProjectUseAllSelectionPromptRendersWorkspaceGroupReturnAction(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSelectionPrompt,
+		SelectionPrompt: &control.SelectionPrompt{
+			Layout: "workspace_grouped_useall",
+			Kind:   control.SelectionPromptUseThread,
+			Title:  "全部会话",
+			Options: []control.SelectionOption{
+				{
+					Index:       1,
+					OptionID:    "thread-1",
+					Label:       "web-1",
+					ButtonLabel: "web-1",
+					GroupKey:    "/data/dl/web",
+					GroupLabel:  "web",
+					AgeText:     "2分前",
+					MetaText:    "2分前",
+				},
+				{
+					Index:       2,
+					Label:       "最近工作区",
+					ButtonLabel: "最近工作区",
+					MetaText:    "回到最近 5 个工作区",
+					ActionKind:  "show_recent_thread_workspaces",
+				},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	actionRow := cardElementButtons(t, ops[0].CardElements[4])
+	if len(actionRow) != 1 {
+		t.Fatalf("expected one return action button, got %#v", ops[0].CardElements[4])
+	}
+	if cardButtonLabel(t, actionRow[0]) != "返回 · 最近工作区" {
+		t.Fatalf("unexpected return button label: %#v", actionRow[0])
+	}
+	value := cardButtonPayload(t, actionRow[0])
+	if value["kind"] != "show_recent_thread_workspaces" {
+		t.Fatalf("unexpected return payload: %#v", value)
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
+	if renderedValue["kind"] != "show_recent_thread_workspaces" {
+		t.Fatalf("unexpected rendered return payload: %#v", renderedValue)
+	}
+}
+
 func TestProjectVSCodeRecentSelectionPromptShowsInstanceSummaryAndMore(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

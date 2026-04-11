@@ -16,6 +16,10 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	return s.presentThreadSelectionMode(surface, mode)
 }
 
+func (s *Service) presentAllThreadWorkspaces(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.presentThreadSelectionMode(surface, threadSelectionDisplayAllExpanded)
+}
+
 func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	return s.presentThreadSelectionMode(surface, threadSelectionDisplayScopedAll)
 }
@@ -112,12 +116,12 @@ func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord
 			AllowCrossWorkspace: presentation.allowCrossWorkspace,
 		})
 	}
-	if presentation.showScopedAllButton {
+	if presentation.showMoreButton {
 		options = append(options, control.SelectionOption{
 			Index:       len(options) + 1,
-			ButtonLabel: presentation.scopedAllButtonText,
-			Subtitle:    presentation.scopedAllStatus,
-			ActionKind:  "show_scoped_threads",
+			ButtonLabel: presentation.showMoreButtonText,
+			Subtitle:    presentation.showMoreStatus,
+			ActionKind:  presentation.showMoreActionKind,
 		})
 	}
 	if strings.TrimSpace(presentation.returnActionKind) != "" {
@@ -276,6 +280,9 @@ func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConso
 		case threadSelectionDisplayAll:
 			presentation.title = "当前实例全部会话"
 			presentation.limit = len(views)
+		case threadSelectionDisplayAllExpanded:
+			presentation.title = "当前实例全部会话"
+			presentation.limit = len(views)
 		case threadSelectionDisplayScopedAll:
 			presentation.title = "当前实例全部会话"
 			presentation.limit = len(views)
@@ -284,23 +291,47 @@ func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConso
 			presentation.returnStatus = "回到当前实例最近 5 个会话"
 		default:
 			if len(views) > 5 {
-				presentation.showScopedAllButton = true
-				presentation.scopedAllButtonText = "当前实例全部会话"
-				presentation.scopedAllStatus = "展开当前实例内的全部会话"
+				presentation.showMoreButton = true
+				presentation.showMoreActionKind = "show_scoped_threads"
+				presentation.showMoreButtonText = "当前实例全部会话"
+				presentation.showMoreStatus = "展开当前实例内的全部会话"
 			}
 		}
 		return presentation
 	default:
 		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
-		if !attached || mode == threadSelectionDisplayAll {
+		if !attached || mode == threadSelectionDisplayAll || mode == threadSelectionDisplayAllExpanded {
 			views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
-			return threadSelectionPresentation{
+			currentWorkspaceKey := ""
+			if attached {
+				currentWorkspaceKey = s.surfaceCurrentWorkspaceKey(surface)
+			}
+			totalGroups := countThreadWorkspaceGroups(views, currentWorkspaceKey)
+			presentation := threadSelectionPresentation{
 				title:               "全部会话",
 				views:               views,
 				limit:               len(views),
 				includeWorkspace:    true,
 				allowCrossWorkspace: true,
 			}
+			if mode != threadSelectionDisplayAllExpanded {
+				filtered, visibleGroups := filterThreadViewsToRecentWorkspaceGroups(views, currentWorkspaceKey, workspaceSelectionRecentLimit)
+				presentation.views = filtered
+				presentation.limit = len(filtered)
+				if totalGroups > visibleGroups {
+					presentation.showMoreButton = true
+					presentation.showMoreActionKind = "show_all_thread_workspaces"
+					presentation.showMoreButtonText = "全部工作区"
+					presentation.showMoreStatus = fmt.Sprintf("还有 %d 个工作区未显示", totalGroups-visibleGroups)
+				}
+				return presentation
+			}
+			if totalGroups > workspaceSelectionRecentLimit {
+				presentation.returnActionKind = "show_recent_thread_workspaces"
+				presentation.returnButtonText = "最近工作区"
+				presentation.returnStatus = fmt.Sprintf("回到最近 %d 个工作区", workspaceSelectionRecentLimit)
+			}
+			return presentation
 		}
 		views := s.scopedMergedThreadViews(surface)
 		presentation := threadSelectionPresentation{
@@ -318,12 +349,56 @@ func (s *Service) resolveThreadSelectionPresentation(surface *state.SurfaceConso
 			return presentation
 		}
 		if len(views) > 5 {
-			presentation.showScopedAllButton = true
-			presentation.scopedAllButtonText = "当前工作区全部会话"
-			presentation.scopedAllStatus = "展开当前工作区内的全部会话"
+			presentation.showMoreButton = true
+			presentation.showMoreActionKind = "show_scoped_threads"
+			presentation.showMoreButtonText = "当前工作区全部会话"
+			presentation.showMoreStatus = "展开当前工作区内的全部会话"
 		}
 		return presentation
 	}
+}
+
+func countThreadWorkspaceGroups(views []*mergedThreadView, excludeWorkspaceKey string) int {
+	excludeWorkspaceKey = normalizeWorkspaceClaimKey(excludeWorkspaceKey)
+	seen := map[string]struct{}{}
+	for _, view := range views {
+		workspaceKey := normalizeWorkspaceClaimKey(mergedThreadWorkspaceClaimKey(view))
+		if workspaceKey == "" || workspaceKey == excludeWorkspaceKey {
+			continue
+		}
+		seen[workspaceKey] = struct{}{}
+	}
+	return len(seen)
+}
+
+func filterThreadViewsToRecentWorkspaceGroups(views []*mergedThreadView, excludeWorkspaceKey string, limit int) ([]*mergedThreadView, int) {
+	if len(views) == 0 {
+		return nil, 0
+	}
+	excludeWorkspaceKey = normalizeWorkspaceClaimKey(excludeWorkspaceKey)
+	seenGroups := map[string]struct{}{}
+	visibleGroups := map[string]struct{}{}
+	filtered := make([]*mergedThreadView, 0, len(views))
+	for _, view := range views {
+		workspaceKey := normalizeWorkspaceClaimKey(mergedThreadWorkspaceClaimKey(view))
+		if workspaceKey == "" {
+			continue
+		}
+		if workspaceKey == excludeWorkspaceKey {
+			filtered = append(filtered, view)
+			continue
+		}
+		if _, ok := seenGroups[workspaceKey]; !ok {
+			seenGroups[workspaceKey] = struct{}{}
+			if len(visibleGroups) < limit {
+				visibleGroups[workspaceKey] = struct{}{}
+			}
+		}
+		if _, ok := visibleGroups[workspaceKey]; ok {
+			filtered = append(filtered, view)
+		}
+	}
+	return filtered, len(visibleGroups)
 }
 
 func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]control.UIEvent, HeadlessRestoreResult) {

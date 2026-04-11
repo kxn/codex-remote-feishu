@@ -510,7 +510,7 @@ func useThreadWorkspaceGroupedElements(prompt control.SelectionPrompt, daemonLif
 		switch strings.TrimSpace(option.ActionKind) {
 		case "show_scoped_threads":
 			continue
-		case "show_threads", "show_all_threads":
+		case "show_threads", "show_all_threads", "show_all_thread_workspaces", "show_recent_thread_workspaces":
 			moreOptions = append(moreOptions, option)
 			continue
 		}
@@ -667,7 +667,7 @@ func workspaceThreadsButton(label, workspaceKey, daemonLifecycleID string) map[s
 
 func useThreadSelectionOptionGroup(option control.SelectionOption) useThreadOptionGroup {
 	switch strings.TrimSpace(option.ActionKind) {
-	case "show_scoped_threads", "show_threads", "show_all_threads":
+	case "show_scoped_threads", "show_threads", "show_all_threads", "show_all_thread_workspaces", "show_recent_thread_workspaces":
 		return useThreadOptionGroupMore
 	}
 	if option.IsCurrent {
@@ -762,6 +762,10 @@ func selectionOptionButton(prompt control.SelectionPrompt, option control.Select
 		value = map[string]any{"kind": "show_all_workspaces"}
 	case "show_recent_workspaces":
 		value = map[string]any{"kind": "show_recent_workspaces"}
+	case "show_all_thread_workspaces":
+		value = map[string]any{"kind": "show_all_thread_workspaces"}
+	case "show_recent_thread_workspaces":
+		value = map[string]any{"kind": "show_recent_thread_workspaces"}
 	case "show_workspace_threads":
 		value = map[string]any{"kind": "show_workspace_threads", "workspace_key": strings.TrimSpace(option.OptionID)}
 	case "show_threads":
@@ -840,6 +844,12 @@ func selectionOptionButtonText(prompt control.SelectionPrompt, option control.Se
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
 		return "查看全部 · " + base
 	case "show_recent_workspaces":
+		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
+		return "返回 · " + base
+	case "show_all_thread_workspaces":
+		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
+		return "查看全部 · " + base
+	case "show_recent_thread_workspaces":
 		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
 		return "返回 · " + base
 	}

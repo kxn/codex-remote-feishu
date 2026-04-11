@@ -44,6 +44,16 @@ func TestSupportsInlineCardReplacement(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "thread workspace expand",
+			action: Action{Kind: ActionShowAllThreadWorkspaces},
+			want:   true,
+		},
+		{
+			name:   "thread workspace collapse",
+			action: Action{Kind: ActionShowRecentThreadWorkspaces},
+			want:   true,
+		},
+		{
 			name:   "thread return action",
 			action: Action{Kind: ActionShowAllThreads},
 			want:   true,
