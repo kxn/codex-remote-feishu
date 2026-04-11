@@ -101,26 +101,14 @@ export function defaultStepFor(
   if (!started) {
     return "start";
   }
+  if (!runtimeRequirementsReady) {
+    return "start";
+  }
   if (!activeApp || !activeApp.wizard?.connectionVerifiedAt) {
     return "connect";
   }
-  if (!activeApp.wizard?.scopesExportedAt) {
-    return "permissions";
-  }
-  if (!activeApp.wizard?.eventsConfirmedAt) {
-    return "events";
-  }
-  if (!activeApp.wizard?.callbacksConfirmedAt) {
-    return "longConnection";
-  }
-  if (!activeApp.wizard?.menusConfirmedAt) {
-    return "menus";
-  }
   if (!activeApp.wizard?.publishedAt) {
-    return "publish";
-  }
-  if (!runtimeRequirementsReady) {
-    return "runtimeRequirements";
+    return "capability";
   }
   if (!autostartComplete) {
     return "autostart";
@@ -136,19 +124,9 @@ export function isStepReachable(stepID: StepID, bootstrap: BootstrapState | null
     case "start":
       return true;
     case "connect":
-      return true;
-    case "permissions":
-      return Boolean(activeApp?.wizard?.connectionVerifiedAt);
-    case "events":
-      return Boolean(activeApp?.wizard?.scopesExportedAt);
-    case "longConnection":
-      return Boolean(activeApp?.wizard?.eventsConfirmedAt);
-    case "menus":
-      return Boolean(activeApp?.wizard?.callbacksConfirmedAt);
-    case "publish":
-      return Boolean(activeApp?.wizard?.menusConfirmedAt);
-    case "runtimeRequirements":
-      return Boolean(activeApp?.wizard?.publishedAt);
+      return runtimeRequirementsReady;
+    case "capability":
+      return runtimeRequirementsReady && Boolean(activeApp?.wizard?.connectionVerifiedAt);
     case "autostart":
       return Boolean(activeApp?.wizard?.publishedAt) && runtimeRequirementsReady;
     case "vscode":
@@ -164,20 +142,10 @@ export function previousStepFor(stepID: StepID): StepID | null {
   switch (stepID) {
     case "connect":
       return "start";
-    case "permissions":
+    case "capability":
       return "connect";
-    case "events":
-      return "permissions";
-    case "longConnection":
-      return "events";
-    case "menus":
-      return "longConnection";
-    case "publish":
-      return "menus";
-    case "runtimeRequirements":
-      return "publish";
     case "autostart":
-      return "runtimeRequirements";
+      return "capability";
     case "vscode":
       return "autostart";
     case "finish":

@@ -119,9 +119,6 @@ export function SetupRoute() {
         Boolean(vscodeOutcome) || vscodeIsReady(vscodeState.data),
         setupStarted,
       );
-      if (current === "start" && fallback !== "start") {
-        return fallback;
-      }
       return isStepReachable(current, bootstrapState, nextActiveApp, Boolean(runtimeRequirementsState.data?.ready)) ? current : fallback;
     });
   }
@@ -145,13 +142,22 @@ export function SetupRoute() {
   }, []);
 
   const activeApp = useMemo(() => apps.find((app) => app.id === selectedID) ?? null, [apps, selectedID]);
-  const scopesJSON = useMemo(() => JSON.stringify(manifest?.scopesImport ?? { scopes: { tenant: [], user: [] } }, null, 2), [manifest]);
-
-  useEffect(() => {
-    if (apps.length > 0) {
-      setSetupStarted(true);
-    }
-  }, [apps.length]);
+  const basicScopesJSON = useMemo(() => {
+    const allTenantScopes = manifest?.scopesImport?.scopes?.tenant ?? [];
+    const basicTenantScopes = allTenantScopes.filter(
+      (scope) => scope !== "drive:drive" && scope !== "im:datasync.feed_card.time_sensitive:write",
+    );
+    return JSON.stringify(
+      {
+        scopes: {
+          tenant: basicTenantScopes,
+          user: manifest?.scopesImport?.scopes?.user ?? [],
+        },
+      },
+      null,
+      2,
+    );
+  }, [manifest]);
 
   useEffect(() => {
     setDraft(appToDraft(activeApp));
@@ -220,14 +226,9 @@ export function SetupRoute() {
   const currentStepIndex = wizardSteps.findIndex((step) => step.id === resolvedCurrentStep);
   const currentStepMeta = wizardSteps[currentStepIndex >= 0 ? currentStepIndex : 0];
   const stepCompletion = {
-    start: setupStarted || apps.length > 0,
+    start: runtimeRequirementsReady,
     connect: Boolean(activeApp?.wizard?.connectionVerifiedAt),
-    permissions: Boolean(activeApp?.wizard?.scopesExportedAt),
-    events: Boolean(activeApp?.wizard?.eventsConfirmedAt),
-    longConnection: Boolean(activeApp?.wizard?.callbacksConfirmedAt),
-    menus: Boolean(activeApp?.wizard?.menusConfirmedAt),
-    publish: Boolean(activeApp?.wizard?.publishedAt),
-    runtimeRequirements: runtimeRequirementsReady,
+    capability: Boolean(activeApp?.wizard?.publishedAt),
     autostart: autostartComplete,
     vscode: vscodeComplete,
   };
@@ -363,7 +364,7 @@ export function SetupRoute() {
       });
       setSetupStarted(true);
       resetFeishuConnectFlow("existing");
-      setCurrentStepHint("runtimeRequirements");
+      setCurrentStepHint("capability");
     });
   }
 
@@ -413,7 +414,7 @@ export function SetupRoute() {
       });
       setSetupStarted(true);
       resetFeishuConnectFlow("existing");
-      setCurrentStepHint("permissions");
+      setCurrentStepHint("capability");
     });
   }
 
@@ -455,8 +456,8 @@ export function SetupRoute() {
     await runAction("wizard-permissions", async () => {
       await sendJSON<FeishuAppResponse>(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/wizard`, "PATCH", { scopesExported: true });
       await loadData(activeApp.id);
-      setNotice({ tone: "good", message: "权限导入已记录，继续下一步。" });
-      setCurrentStepHint("events");
+      setNotice({ tone: "good", message: "基础权限已经记录，继续完成基础对话与交互。" });
+      setCurrentStepHint("capability");
     });
   }
 
@@ -472,8 +473,8 @@ export function SetupRoute() {
     await runAction("wizard-events", async () => {
       await sendJSON<FeishuAppResponse>(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/wizard`, "PATCH", { eventsConfirmed: true });
       await loadData(activeApp.id);
-      setNotice({ tone: "good", message: "事件订阅已记录，继续下一步。" });
-      setCurrentStepHint("longConnection");
+      setNotice({ tone: "good", message: "事件订阅已经记录，继续完成基础对话与交互。" });
+      setCurrentStepHint("capability");
     });
   }
 
@@ -489,8 +490,8 @@ export function SetupRoute() {
     await runAction("wizard-long-connection", async () => {
       await sendJSON<FeishuAppResponse>(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/wizard`, "PATCH", { callbacksConfirmed: true });
       await loadData(activeApp.id);
-      setNotice({ tone: "good", message: "回调长连接配置已记录，继续下一步。" });
-      setCurrentStepHint("menus");
+      setNotice({ tone: "good", message: "卡片回调配置已经记录，继续完成基础对话与交互。" });
+      setCurrentStepHint("capability");
     });
   }
 
@@ -506,8 +507,8 @@ export function SetupRoute() {
     await runAction("wizard-menus", async () => {
       await sendJSON<FeishuAppResponse>(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/wizard`, "PATCH", { menusConfirmed: true });
       await loadData(activeApp.id);
-      setNotice({ tone: "good", message: "机器人菜单配置已记录，继续下一步。" });
-      setCurrentStepHint("publish");
+      setNotice({ tone: "good", message: "飞书应用菜单已经记录，继续完成基础对话与交互。" });
+      setCurrentStepHint("capability");
     });
   }
 
@@ -529,8 +530,8 @@ export function SetupRoute() {
         );
         return;
       }
-      setNotice({ tone: "good", message: "发布验收通过，继续下一步。" });
-      setCurrentStepHint("runtimeRequirements");
+      setNotice({ tone: "good", message: "基础对话与交互已经就绪，可以继续后面的机器设置。" });
+      setCurrentStepHint("autostart");
     });
   }
 
@@ -554,7 +555,7 @@ export function SetupRoute() {
         tone: response.checks.some((check) => check.status === "warn") ? "warn" : "good",
         message: response.summary,
       });
-      setCurrentStepHint("autostart");
+      setCurrentStepHint("connect");
     });
   }
 
@@ -684,8 +685,8 @@ export function SetupRoute() {
   return (
     <>
       <ShellScaffold
-        routeLabel="Setup Wizard"
-        subtitle="向导一次只展示当前步骤。左侧只保留步骤名和状态，不提前暴露后面的配置细节。"
+        routeLabel="Setup"
+        subtitle="先确认这台机器是否已经准备好，再把飞书应用接进来。当前页只展示你现在要处理的步骤。"
         railToggleLabel="步骤导航"
         railClassName="wizard-rail"
         mainClassName="wizard-stage"
@@ -738,7 +739,7 @@ export function SetupRoute() {
                 onboardingSession={onboardingSession}
                 onboardingCompletion={onboardingCompletion}
                 onboardingNeedsManualRetry={onboardingNeedsManualRetry}
-                scopesJSON={scopesJSON}
+                scopesJSON={basicScopesJSON}
                 permissionsConfirmed={permissionsConfirmed}
                 eventsConfirmed={eventsConfirmed}
                 longConnectionConfirmed={longConnectionConfirmed}
@@ -773,7 +774,12 @@ export function SetupRoute() {
                 onLongConnectionConfirmedChange={setLongConnectionConfirmed}
                 onMenusConfirmedChange={setMenusConfirmed}
                 onVSCodeScenarioChange={setVSCodeScenario}
-                onCopyScopes={() => void copyText(scopesJSON, "权限配置 JSON 已复制。")}
+                onCopyScopes={() => void copyText(basicScopesJSON, "基础权限配置已复制。")}
+                onConfirmPermissions={() => void confirmPermissionsAndContinue()}
+                onConfirmEvents={() => void confirmEventsAndContinue()}
+                onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
+                onConfirmMenus={() => void confirmMenusAndContinue()}
+                onCheckPublish={() => void checkPublishAndContinue()}
                 busyAction={busyAction}
               />
               <div className="wizard-footer">
@@ -788,7 +794,7 @@ export function SetupRoute() {
                   <SetupStepSecondaryAction
                     currentStep={resolvedCurrentStep}
                     busyAction={busyAction}
-                    onCopyScopes={() => void copyText(scopesJSON, "权限配置 JSON 已复制。")}
+                    onCopyScopes={() => void copyText(basicScopesJSON, "基础权限配置已复制。")}
                     onSkipAutostart={() => {
                       setAutostartSkipped(true);
                       setNotice({ tone: "warn", message: "自动启动已跳过，可稍后在管理页再启用。" });
@@ -806,17 +812,11 @@ export function SetupRoute() {
                     autostart={autostart}
                     canContinueVSCode={vscodeCanContinue}
                     vscodePrimaryLabel={vscodePrimaryLabel}
+                    startReady={runtimeRequirementsReady}
                     onStart={() => {
                       setSetupStarted(true);
-                      setCurrentStepHint("connect");
+                      void checkRuntimeRequirementsAndContinue();
                     }}
-                    onTestAndContinue={() => void testAndContinue()}
-                    onConfirmPermissions={() => void confirmPermissionsAndContinue()}
-                    onConfirmEvents={() => void confirmEventsAndContinue()}
-                    onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
-                    onConfirmMenus={() => void confirmMenusAndContinue()}
-                    onCheckPublish={() => void checkPublishAndContinue()}
-                    onCheckRuntimeRequirements={() => void checkRuntimeRequirementsAndContinue()}
                     onContinueAutostart={() => void continueAutostart()}
                     onContinueVSCode={() => void continueVSCode()}
                     onFinishSetup={() => void finishSetup()}

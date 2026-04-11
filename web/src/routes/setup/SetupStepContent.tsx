@@ -55,6 +55,11 @@ type SetupStepContentProps = {
   onMenusConfirmedChange: (value: boolean) => void;
   onVSCodeScenarioChange: (value: VSCodeUsageScenario) => void;
   onCopyScopes: () => void;
+  onConfirmPermissions: () => void;
+  onConfirmEvents: () => void;
+  onConfirmLongConnection: () => void;
+  onConfirmMenus: () => void;
+  onCheckPublish: () => void;
   busyAction: string;
 };
 
@@ -64,14 +69,8 @@ type SetupStepPrimaryActionProps = {
   autostart: AutostartDetectResponse | null;
   canContinueVSCode: boolean;
   vscodePrimaryLabel: string;
+  startReady: boolean;
   onStart: () => void;
-  onTestAndContinue: () => void;
-  onConfirmPermissions: () => void;
-  onConfirmEvents: () => void;
-  onConfirmLongConnection: () => void;
-  onConfirmMenus: () => void;
-  onCheckPublish: () => void;
-  onCheckRuntimeRequirements: () => void;
   onContinueAutostart: () => void;
   onContinueVSCode: () => void;
   onFinishSetup: () => void;
@@ -84,6 +83,8 @@ type SetupStepSecondaryActionProps = {
   onSkipAutostart: () => void;
   onDeferVSCode: () => void;
 };
+
+type CapabilityStage = "permissions" | "events" | "longConnection" | "menus" | "publish" | "done";
 
 export function SetupStepContent({
   currentStep,
@@ -126,235 +127,36 @@ export function SetupStepContent({
   onMenusConfirmedChange,
   onVSCodeScenarioChange,
   onCopyScopes,
+  onConfirmPermissions,
+  onConfirmEvents,
+  onConfirmLongConnection,
+  onConfirmMenus,
+  onCheckPublish,
   busyAction,
 }: SetupStepContentProps) {
   const vscodeBundleDetected = Boolean(vscode?.latestBundleEntrypoint || vscode?.recordedBundleEntrypoint || vscode?.candidateBundleEntrypoints?.length);
+  const capabilityStage = currentCapabilityStage(activeApp);
+  const capabilityTasks = buildCapabilityTasks(activeApp);
+  const basicReady = capabilityStage === "done";
 
   switch (currentStep) {
     case "start":
       return (
         <div className="wizard-step-layout">
-          <div className="wizard-callout">
-            <h4>开始设置 Codex Remote</h4>
-            <p>这是一套分步向导。你现在只需要先把一个能正常工作的飞书应用接上，后面的步骤会一页一页继续做。</p>
-            <ul className="wizard-bullet-list">
-              <li>先创建并连接飞书应用。</li>
-              <li>再完成权限、事件、回调长连接、菜单和发布。</li>
-              <li>发布后先做一次运行环境检查，再按需处理自动启动和 VS Code。</li>
-            </ul>
-          </div>
-        </div>
-      );
-    case "connect":
-      return (
-        <FeishuConnectStep
-          apps={apps}
-          activeApp={activeApp}
-          draft={draft}
-          connectStage={connectStage}
-          connectMode={connectMode}
-          onboardingSession={onboardingSession}
-          onboardingCompletion={onboardingCompletion}
-          onboardingNeedsManualRetry={onboardingNeedsManualRetry}
-          busyAction={busyAction}
-          onNameChange={(value) => onDraftChange((current) => ({ ...current, name: value }))}
-          onAppIDChange={(value) => onDraftChange((current) => ({ ...current, appId: value }))}
-          onAppSecretChange={(value) => onDraftChange((current) => ({ ...current, appSecret: value }))}
-          onConnectModeChange={onConnectModeChange}
-          onContinueModeSelection={onContinueModeSelection}
-          onVerifyManual={onVerifyManual}
-          onBackToModeSelection={onBackToConnectModeSelection}
-          onRefreshOnboarding={onRefreshOnboarding}
-          onRestartOnboarding={onRestartOnboarding}
-          onSwitchToExistingFlow={onSwitchToExistingFlow}
-          onRetryOnboardingComplete={onRetryOnboardingComplete}
-          onContinueOnboardingNotice={onContinueOnboardingNotice}
-        />
-      );
-    case "permissions":
-      return (
-        <div className="wizard-step-layout">
-          <div className="wizard-link-row">
-            <a href={feishuAppConsoleURL(activeApp?.appId)} target="_blank" rel="noreferrer">
-              打开当前应用后台
-            </a>
-            <span>打开后点击左侧“权限管理”。</span>
-          </div>
-          <div className="manifest-block">
-            <h4>权限导入说明</h4>
-            <ul className="wizard-bullet-list">
-              <li>先点击“复制权限配置”。</li>
-              <li>去飞书后台打开“批量导入/导出权限”。</li>
-              <li>把下面这段 JSON 粘贴进去，然后点击“保存并申请开通”。</li>
-              <li>保存完成后回到这里，再点“继续”。</li>
-            </ul>
-          </div>
-          <textarea className="code-textarea" readOnly value={scopesJSON} />
-          <div className="button-row">
-            <button className="secondary-button" type="button" onClick={onCopyScopes} disabled={busyAction !== ""}>
-              复制权限配置
-            </button>
-          </div>
-          <label className="checkbox-card">
-            <input type="checkbox" checked={permissionsConfirmed} onChange={(event) => onPermissionsConfirmedChange(event.target.checked)} />
-            <div>
-              <strong>我已经在飞书后台完成权限导入</strong>
-              <p>飞书后台这个入口叫“批量导入/导出权限”。</p>
-            </div>
-          </label>
-        </div>
-      );
-    case "events":
-      return (
-        <div className="wizard-step-layout">
-          <div className="wizard-link-row">
-            <a href={feishuAppConsoleURL(activeApp?.appId)} target="_blank" rel="noreferrer">
-              打开当前应用后台
-            </a>
-            <span>打开后点击左侧“事件与回调”。</span>
-          </div>
-          <div className="manifest-block">
-            <h4>先保存事件订阅方式</h4>
-            <ul className="wizard-bullet-list">
-              <li>在“事件与回调”页点击“订阅方式”。</li>
-              <li>默认就是“长连接”，直接点击“保存”。</li>
-            </ul>
-          </div>
-          <div className="manifest-block">
-            <h4>按下面的事件列表完成订阅</h4>
-            <p>保存订阅方式后，再把下面这些事件全部订阅进去并保存。卡片回调不在这里，完成后再去下一页配置回调订阅方式。</p>
-          </div>
-          <ul className="token-list">
-            {manifest.events.map((item) => (
-              <li key={item.event}>
-                <code>{item.event}</code>
-                <span>{item.purpose || "需要手工订阅"}</span>
-              </li>
-            ))}
-          </ul>
-          <label className="checkbox-card">
-            <input type="checkbox" checked={eventsConfirmed} onChange={(event) => onEventsConfirmedChange(event.target.checked)} />
-            <div>
-              <strong>我已经完成事件订阅</strong>
-              <p>事件列表要和页面展示一致，订阅方式也要保存为长连接。</p>
-            </div>
-          </label>
-        </div>
-      );
-    case "longConnection":
-      return (
-        <div className="wizard-step-layout">
-          <div className="wizard-link-row">
-            <a href={feishuAppConsoleURL(activeApp?.appId)} target="_blank" rel="noreferrer">
-              打开当前应用后台
-            </a>
-            <span>打开后点击左侧“事件与回调”。</span>
-          </div>
-          <div className="manifest-block">
-            <h4>回调配置这一步怎么做</h4>
-            <ul className="wizard-bullet-list">
-              <li>在同一个“事件与回调”页面里找到“回调配置”。</li>
-              <li>点击“回调订阅方式”。</li>
-              <li>选择“长连接”，然后点击“保存”。</li>
-              <li>这里不需要填写 HTTP 回调 URL。</li>
-              <li>再把下面这些回调项按页面说明配置完成。</li>
-            </ul>
-          </div>
-          <div className="manifest-block">
-            <h4>当前需要的回调项</h4>
-            <p>这些回调项走回调 / 长连接配置语义，不和上一页的普通事件订阅混在一起。</p>
-          </div>
-          <ul className="token-list">
-            {manifest.callbacks.map((item) => (
-              <li key={item.callback}>
-                <code>{item.callback}</code>
-                <span>{item.purpose || "需要手工配置回调。"}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="manifest-block">
-            <h4>这一步为什么重要</h4>
-            <ul className="wizard-bullet-list">
-              <li>approval request 等卡片按钮要靠回调长连接进入服务。</li>
-              <li>如果这里没配好，用户点卡片会没有反应。</li>
-            </ul>
-          </div>
-          <label className="checkbox-card">
-            <input type="checkbox" checked={longConnectionConfirmed} onChange={(event) => onLongConnectionConfirmedChange(event.target.checked)} />
-            <div>
-              <strong>我已经完成回调长连接配置</strong>
-              <p>确认回调订阅方式已经保存为长连接，不填写 HTTP 回调 URL。</p>
-            </div>
-          </label>
-        </div>
-      );
-    case "menus":
-      return (
-        <div className="wizard-step-layout">
-          <div className="wizard-link-row">
-            <a href={feishuAppConsoleURL(activeApp?.appId)} target="_blank" rel="noreferrer">
-              打开当前应用后台
-            </a>
-            <span>打开后点击左侧“机器人”，进入自定义菜单区域。</span>
-          </div>
-          <div className="manifest-block">
-            <h4>这些菜单 key 会真正生效</h4>
-            <p>菜单的 key 必须和下面保持一致，否则用户点击后当前服务收不到正确事件。</p>
-          </div>
-          <ul className="token-list">
-            {manifest.menus.map((item) => (
-              <li key={item.key}>
-                <code>{item.key}</code>
-                <strong>{item.name}</strong>
-                <span>{item.description || "当前实现会处理这个菜单事件。"}</span>
-              </li>
-            ))}
-          </ul>
-          <label className="checkbox-card">
-            <input type="checkbox" checked={menusConfirmed} onChange={(event) => onMenusConfirmedChange(event.target.checked)} />
-            <div>
-              <strong>我已经完成菜单配置</strong>
-              <p>请再次确认所有 key 和页面展示完全一致。</p>
-            </div>
-          </label>
-        </div>
-      );
-    case "publish":
-      return (
-        <div className="wizard-step-layout">
-          <div className="wizard-link-row">
-            <a href={feishuAppConsoleURL(activeApp?.appId)} target="_blank" rel="noreferrer">
-              打开当前应用后台
-            </a>
-            <span>打开后点击左侧“版本管理与发布”。</span>
-          </div>
-          <div className="manifest-block">
-            <h4>这一步必须真的发版</h4>
-            <ul className="wizard-bullet-list">
-              <li>前面的权限、事件、回调长连接、菜单都只是配置准备。</li>
-              <li>只有在飞书后台真正发版后，这些变更才会生效。</li>
-              <li>发版完成以后，再回来点击“检查并继续”。</li>
-            </ul>
-          </div>
-        </div>
-      );
-    case "runtimeRequirements":
-      return (
-        <div className="wizard-step-layout">
-          {runtimeRequirementsError ? <div className="notice-banner warn">运行环境检查暂时不可用：{runtimeRequirementsError}</div> : null}
-          {!runtimeRequirements && !runtimeRequirementsError ? <div className="notice-banner warn">当前还没拿到运行环境检查结果，请先刷新状态后再继续。</div> : null}
+          {runtimeRequirementsError ? <div className="notice-banner warn">环境检查暂时不可用：{runtimeRequirementsError}</div> : null}
+          {!runtimeRequirements && !runtimeRequirementsError ? <div className="notice-banner warn">当前还没拿到环境检查结果，请先刷新状态后再继续。</div> : null}
           {runtimeRequirements ? (
             <>
               <div className={`notice-banner ${runtimeRequirements.ready ? (runtimeRequirements.checks.some((check) => check.status === "warn") ? "warn" : "good") : "danger"}`}>
                 {runtimeRequirements.summary}
               </div>
               <div className="manifest-block">
-                <h4>这一步在检查什么</h4>
+                <h4>先看一下这台机器能不能正常使用</h4>
                 <ul className="wizard-bullet-list">
-                  <li>当前 daemon 有没有可用的 headless 启动器。</li>
-                  <li>wrapper 实际将要启动哪个真实 <code>codex</code>。</li>
-                  <li>当前服务环境里能不能把它解析成可执行文件。</li>
-                  <li>是否存在明显配置风险，例如回指自身或只靠 PATH 解析。</li>
+                  <li>检查当前 daemon 有没有可用的 headless 启动器。</li>
+                  <li>检查 wrapper 实际会去启动哪个真实的 <code>codex</code>。</li>
+                  <li>检查当前服务环境里能不能把它解析成可执行文件。</li>
+                  <li>检查是否存在明显配置风险，例如回指自身或只靠 PATH 解析。</li>
                 </ul>
               </div>
               <div className="wizard-summary-grid">
@@ -405,6 +207,205 @@ export function SetupStepContent({
           ) : null}
         </div>
       );
+    case "connect":
+      return (
+        <FeishuConnectStep
+          apps={apps}
+          activeApp={activeApp}
+          draft={draft}
+          connectStage={connectStage}
+          connectMode={connectMode}
+          onboardingSession={onboardingSession}
+          onboardingCompletion={onboardingCompletion}
+          onboardingNeedsManualRetry={onboardingNeedsManualRetry}
+          busyAction={busyAction}
+          onNameChange={(value) => onDraftChange((current) => ({ ...current, name: value }))}
+          onAppIDChange={(value) => onDraftChange((current) => ({ ...current, appId: value }))}
+          onAppSecretChange={(value) => onDraftChange((current) => ({ ...current, appSecret: value }))}
+          onConnectModeChange={onConnectModeChange}
+          onContinueModeSelection={onContinueModeSelection}
+          onVerifyManual={onVerifyManual}
+          onBackToModeSelection={onBackToConnectModeSelection}
+          onRefreshOnboarding={onRefreshOnboarding}
+          onRestartOnboarding={onRestartOnboarding}
+          onSwitchToExistingFlow={onSwitchToExistingFlow}
+          onRetryOnboardingComplete={onRetryOnboardingComplete}
+          onContinueOnboardingNotice={onContinueOnboardingNotice}
+        />
+      );
+    case "capability":
+      return (
+        <div className="wizard-step-layout">
+          <div className={`notice-banner ${basicReady ? "good" : "danger"}`}>
+            {basicReady ? "现在已经可以开始使用。基础对话与交互已经准备好，增强项可以稍后再补。" : "现在还不能开始使用。请先把基础对话与交互准备好，再继续后面的机器设置。"}
+          </div>
+
+          <div className="wizard-summary-grid">
+            <div className="wizard-summary-card">
+              <strong>基础对话与交互</strong>
+              <p>{basicReady ? "已通过，现在就能开始对话。" : "必须先处理，当前还不能开始正常使用。"}</p>
+            </div>
+            <div className="wizard-summary-card">
+              <strong>单聊状态提醒</strong>
+              <p>可稍后处理。额外开通 <code>im:datasync.feed_card.time_sensitive:write</code> 后再补即可。</p>
+            </div>
+            <div className="wizard-summary-card">
+              <strong>Markdown 预览</strong>
+              <p>可稍后处理。额外开通 <code>drive:drive</code> 后再补即可。</p>
+            </div>
+          </div>
+
+          {activeApp ? (
+            <div className="wizard-link-row">
+              <a href={feishuAppConsoleURL(activeApp.appId)} target="_blank" rel="noreferrer">
+                打开当前飞书应用后台
+              </a>
+              <span>下面这些事情都在这个飞书应用的管理后台里完成。</span>
+            </div>
+          ) : null}
+
+          {!basicReady ? (
+            <>
+              <div className="manifest-block">
+                <h4>{capabilityStageTitle(capabilityStage)}</h4>
+                <p>{capabilityStageSummary(capabilityStage)}</p>
+                <ul className="wizard-bullet-list">
+                  {capabilityStageChecklist(capabilityStage).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {capabilityStage === "permissions" ? (
+                <>
+                  <textarea className="code-textarea" readOnly value={scopesJSON} />
+                  <div className="wizard-inline-actions">
+                    <button className="secondary-button" type="button" onClick={onCopyScopes} disabled={busyAction !== ""}>
+                      复制基础权限配置
+                    </button>
+                  </div>
+                  <label className="checkbox-card">
+                    <input type="checkbox" checked={permissionsConfirmed} onChange={(event) => onPermissionsConfirmedChange(event.target.checked)} />
+                    <div>
+                      <strong>我已经完成基础权限导入</strong>
+                      <p>飞书后台这个入口叫“批量导入/导出权限”。保存并申请开通后，再回来继续。</p>
+                    </div>
+                  </label>
+                  <div className="wizard-inline-actions">
+                    <button className="primary-button" type="button" onClick={onConfirmPermissions} disabled={busyAction !== ""}>
+                      记录并继续
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {capabilityStage === "events" ? (
+                <>
+                  <ul className="token-list">
+                    {manifest.events.map((item) => (
+                      <li key={item.event}>
+                        <code>{item.event}</code>
+                        <span>{item.purpose || "需要手工订阅。"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="checkbox-card">
+                    <input type="checkbox" checked={eventsConfirmed} onChange={(event) => onEventsConfirmedChange(event.target.checked)} />
+                    <div>
+                      <strong>我已经完成事件订阅</strong>
+                      <p>确认事件订阅方式已经保存为长连接，再回来继续。</p>
+                    </div>
+                  </label>
+                  <div className="wizard-inline-actions">
+                    <button className="primary-button" type="button" onClick={onConfirmEvents} disabled={busyAction !== ""}>
+                      记录并继续
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {capabilityStage === "longConnection" ? (
+                <>
+                  <ul className="token-list">
+                    {manifest.callbacks.map((item) => (
+                      <li key={item.callback}>
+                        <code>{item.callback}</code>
+                        <span>{item.purpose || "需要手工配置回调。"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="checkbox-card">
+                    <input type="checkbox" checked={longConnectionConfirmed} onChange={(event) => onLongConnectionConfirmedChange(event.target.checked)} />
+                    <div>
+                      <strong>我已经完成卡片回调配置</strong>
+                      <p>确认回调订阅方式已经保存为长连接，不需要填写 HTTP 回调 URL。</p>
+                    </div>
+                  </label>
+                  <div className="wizard-inline-actions">
+                    <button className="primary-button" type="button" onClick={onConfirmLongConnection} disabled={busyAction !== ""}>
+                      记录并继续
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {capabilityStage === "menus" ? (
+                <>
+                  <ul className="token-list">
+                    {manifest.menus.map((item) => (
+                      <li key={item.key}>
+                        <code>{item.key}</code>
+                        <strong>{item.name}</strong>
+                        <span>{item.description || "当前实现会处理这个菜单事件。"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="checkbox-card">
+                    <input type="checkbox" checked={menusConfirmed} onChange={(event) => onMenusConfirmedChange(event.target.checked)} />
+                    <div>
+                      <strong>我已经完成飞书应用菜单配置</strong>
+                      <p>请再次确认所有 key 和页面展示完全一致。</p>
+                    </div>
+                  </label>
+                  <div className="wizard-inline-actions">
+                    <button className="primary-button" type="button" onClick={onConfirmMenus} disabled={busyAction !== ""}>
+                      记录并继续
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {capabilityStage === "publish" ? (
+                <div className="wizard-inline-actions">
+                  <button className="primary-button" type="button" onClick={onCheckPublish} disabled={busyAction !== ""}>
+                    {busyAction === "publish-check" ? "正在检查..." : "检查并继续"}
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="manifest-block">
+                <h4>基础对话与交互包含这些事情</h4>
+                <ul className="wizard-bullet-list">
+                  {capabilityTasks.map((task) => (
+                    <li key={task.id}>
+                      {task.label}：{task.status}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          ) : (
+            <div className="manifest-block">
+              <h4>现在可以继续做机器设置</h4>
+              <ul className="wizard-bullet-list">
+                <li>基础权限、事件订阅、卡片回调、菜单和发布验收都已经处理完。</li>
+                <li>接下来可以按需处理自动启动和 VS Code。</li>
+                <li>单聊状态提醒和 Markdown 预览都不影响你现在开始使用。</li>
+              </ul>
+            </div>
+          )}
+        </div>
+      );
     case "autostart":
       return (
         <div className="wizard-step-layout">
@@ -423,7 +424,7 @@ export function SetupStepContent({
                     <p>{autostartSummary}</p>
                     <ul className="wizard-bullet-list">
                       <li>这一步只处理当前登录用户的自动启动。</li>
-                      <li>当前 issue 不会把未登录恢复建模成第二种 service manager。</li>
+                      <li>你也可以先跳过，后面回到管理页再启用。</li>
                     </ul>
                   </div>
                   {autostart.warning ? <div className="notice-banner warn">自动启动检测提示：{autostart.warning}</div> : null}
@@ -577,22 +578,21 @@ export function SetupStepContent({
       return (
         <div className="wizard-step-layout">
           <div className="manifest-block">
-            <h4>现在你可以开始第一次对话</h4>
+            <h4>已经可以开始第一次对话了</h4>
             <ul className="wizard-bullet-list">
-              <li>推荐先在飞书里打开“开发者小助手”。</li>
-              <li>找到刚完成发布或审批通过的应用。</li>
-              <li>点击“打开应用”后，先给机器人发一条测试消息完成第一次私聊。</li>
+              <li>推荐先在飞书里打开这次刚处理好的飞书应用。</li>
+              <li>先给它发一条测试消息，确认单聊和按钮交互都已经正常。</li>
               <li>如果你的工作台已经能看到该应用，也可以直接从工作台进入。</li>
             </ul>
           </div>
           <div className="wizard-summary-grid">
             <div className="wizard-summary-card">
-              <strong>飞书应用</strong>
+              <strong>当前飞书应用</strong>
               <p>{activeApp?.name || activeApp?.id || "未命名应用"}</p>
             </div>
             <div className="wizard-summary-card">
-              <strong>平台配置</strong>
-              <p>权限、事件、回调长连接、菜单、发布均已完成。</p>
+              <strong>基础对话与交互</strong>
+              <p>已经完成，可以开始正常对话。</p>
             </div>
             <div className="wizard-summary-card">
               <strong>自动启动</strong>
@@ -616,14 +616,8 @@ export function SetupStepPrimaryAction({
   autostart,
   canContinueVSCode,
   vscodePrimaryLabel,
+  startReady,
   onStart,
-  onTestAndContinue,
-  onConfirmPermissions,
-  onConfirmEvents,
-  onConfirmLongConnection,
-  onConfirmMenus,
-  onCheckPublish,
-  onCheckRuntimeRequirements,
   onContinueAutostart,
   onContinueVSCode,
   onFinishSetup,
@@ -632,47 +626,13 @@ export function SetupStepPrimaryAction({
     case "start":
       return (
         <button className="primary-button" type="button" onClick={onStart} disabled={busyAction !== ""}>
-          开始
+          {busyAction === "runtime-requirements-detect" ? "正在检查..." : startReady ? "继续" : "重新检查"}
         </button>
       );
     case "connect":
       return null;
-    case "permissions":
-      return (
-        <button className="primary-button" type="button" onClick={onConfirmPermissions} disabled={busyAction !== ""}>
-          继续
-        </button>
-      );
-    case "events":
-      return (
-        <button className="primary-button" type="button" onClick={onConfirmEvents} disabled={busyAction !== ""}>
-          继续
-        </button>
-      );
-    case "longConnection":
-      return (
-        <button className="primary-button" type="button" onClick={onConfirmLongConnection} disabled={busyAction !== ""}>
-          继续
-        </button>
-      );
-    case "menus":
-      return (
-        <button className="primary-button" type="button" onClick={onConfirmMenus} disabled={busyAction !== ""}>
-          继续
-        </button>
-      );
-    case "publish":
-      return (
-        <button className="primary-button" type="button" onClick={onCheckPublish} disabled={busyAction !== ""}>
-          检查并继续
-        </button>
-      );
-    case "runtimeRequirements":
-      return (
-        <button className="primary-button" type="button" onClick={onCheckRuntimeRequirements} disabled={busyAction !== ""}>
-          {busyAction === "runtime-requirements-detect" ? "正在检查..." : "检查并继续"}
-        </button>
-      );
+    case "capability":
+      return null;
     case "autostart":
       return (
         <button className="primary-button" type="button" onClick={onContinueAutostart} disabled={busyAction !== ""}>
@@ -701,7 +661,7 @@ export function SetupStepPrimaryAction({
 }
 
 export function SetupStepSecondaryAction({ currentStep, busyAction, onCopyScopes, onSkipAutostart, onDeferVSCode }: SetupStepSecondaryActionProps) {
-  if (currentStep === "connect") {
+  if (currentStep === "connect" || currentStep === "capability" || currentStep === "start") {
     return null;
   }
   if (currentStep === "autostart") {
@@ -718,14 +678,134 @@ export function SetupStepSecondaryAction({ currentStep, busyAction, onCopyScopes
       </button>
     );
   }
-  if (currentStep === "permissions") {
-    return (
-      <button className="secondary-button" type="button" onClick={onCopyScopes} disabled={busyAction !== ""}>
-        复制权限配置
-      </button>
-    );
+  if (currentStep === "finish") {
+    return null;
   }
-  return null;
+  return (
+    <button className="secondary-button" type="button" onClick={onCopyScopes} disabled={busyAction !== ""}>
+      复制基础权限配置
+    </button>
+  );
+}
+
+function currentCapabilityStage(activeApp: FeishuAppSummary | null): CapabilityStage {
+  if (!activeApp?.wizard?.scopesExportedAt) {
+    return "permissions";
+  }
+  if (!activeApp.wizard.eventsConfirmedAt) {
+    return "events";
+  }
+  if (!activeApp.wizard.callbacksConfirmedAt) {
+    return "longConnection";
+  }
+  if (!activeApp.wizard.menusConfirmedAt) {
+    return "menus";
+  }
+  if (!activeApp.wizard.publishedAt) {
+    return "publish";
+  }
+  return "done";
+}
+
+function buildCapabilityTasks(activeApp: FeishuAppSummary | null): Array<{ id: string; label: string; status: string }> {
+  return [
+    {
+      id: "permissions",
+      label: "基础权限导入",
+      status: activeApp?.wizard?.scopesExportedAt ? "已完成" : "待处理",
+    },
+    {
+      id: "events",
+      label: "事件订阅",
+      status: activeApp?.wizard?.eventsConfirmedAt ? "已完成" : "待处理",
+    },
+    {
+      id: "longConnection",
+      label: "卡片回调配置",
+      status: activeApp?.wizard?.callbacksConfirmedAt ? "已完成" : "待处理",
+    },
+    {
+      id: "menus",
+      label: "飞书应用菜单",
+      status: activeApp?.wizard?.menusConfirmedAt ? "已完成" : "待处理",
+    },
+    {
+      id: "publish",
+      label: "发布验收",
+      status: activeApp?.wizard?.publishedAt ? "已完成" : "待处理",
+    },
+  ];
+}
+
+function capabilityStageTitle(stage: CapabilityStage): string {
+  switch (stage) {
+    case "permissions":
+      return "先把基础权限导入好";
+    case "events":
+      return "继续把事件订阅配好";
+    case "longConnection":
+      return "继续把卡片回调配好";
+    case "menus":
+      return "继续把飞书应用菜单配好";
+    case "publish":
+      return "最后做一次发布验收";
+    default:
+      return "基础对话与交互已经准备好";
+  }
+}
+
+function capabilityStageSummary(stage: CapabilityStage): string {
+  switch (stage) {
+    case "permissions":
+      return "这一步做完以后，这个飞书应用才具备基础收发消息能力。";
+    case "events":
+      return "没有这一步，文本消息、撤回和 reaction 这些入口不会完整工作。";
+    case "longConnection":
+      return "没有这一步，飞书里的卡片按钮会点了没反应。";
+    case "menus":
+      return "没有这一步，飞书应用里的快捷入口不会按当前实现生效。";
+    case "publish":
+      return "前面的配置只是准备阶段，真正生效还需要在飞书后台完成发版并回来验收。";
+    default:
+      return "这一步已经完成。";
+  }
+}
+
+function capabilityStageChecklist(stage: CapabilityStage): string[] {
+  switch (stage) {
+    case "permissions":
+      return [
+        "打开飞书应用后台里的“权限管理”。",
+        "进入“批量导入/导出权限”。",
+        "粘贴当前页面提供的基础权限配置，然后点击“保存并申请开通”。",
+      ];
+    case "events":
+      return [
+        "打开飞书应用后台里的“事件与回调”。",
+        "先把事件订阅方式保存为长连接。",
+        "把页面列出的事件全部订阅进去并保存。",
+      ];
+    case "longConnection":
+      return [
+        "在同一个“事件与回调”页面里找到回调配置。",
+        "把回调订阅方式保存为长连接。",
+        "配置页面列出的卡片回调项，不需要填写 HTTP 回调 URL。",
+      ];
+    case "menus":
+      return [
+        "打开飞书应用后台里的机器人菜单配置。",
+        "按页面列出的 key 配好当前实现真正会处理的菜单。",
+        "确认 key 和这里展示完全一致，再回来继续。",
+      ];
+    case "publish":
+      return [
+        "打开飞书应用后台里的“版本管理与发布”。",
+        "把前面做的权限、事件、回调和菜单变更正式发版。",
+        "发版完成以后，再回来点击“检查并继续”。",
+      ];
+    default:
+      return [];
+  }
 }
 
 function runtimeRequirementStatusTone(status: string): "neutral" | "good" | "warn" | "danger" {
@@ -759,10 +839,10 @@ function runtimeRequirementSourceLabel(source?: string): string {
     case "env_override":
       return "环境变量覆盖";
     case "config":
-      return "配置文件";
-    case "default":
-      return "默认值";
+      return "本地配置";
+    case "install_state":
+      return "安装状态";
     default:
-      return "未说明";
+      return "未记录";
   }
 }

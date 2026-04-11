@@ -109,23 +109,29 @@ export function FeishuConnectStep({
   if (connectStage === "mode_select") {
     return (
       <div className="wizard-step-layout">
+        {activeApp ? (
+          <div className="wizard-status-card good">
+            <strong>当前正在处理：{activeApp.name || activeApp.appId || "当前飞书应用"}</strong>
+            <p>{activeApp.readOnly ? "这个飞书应用当前是只读接入。" : "如果你继续使用已有飞书应用，这次就会处理它。"}</p>
+          </div>
+        ) : null}
         <div className="manifest-block">
-          <h4>你想怎么接入飞书应用？</h4>
-          <p>先选一种方式。后面的权限、事件、菜单和发布流程保持不变。</p>
+          <h4>这次要处理哪个飞书应用？</h4>
+          <p>先选一种方式。后面的能力检查、自动启动和 VS Code 流程保持不变。</p>
         </div>
         <div className="choice-card-list" role="radiogroup" aria-label="飞书应用接入方式">
           <label className={`choice-card${connectMode === "new" ? " selected" : ""}`}>
             <input type="radio" name="feishu-connect-mode" checked={connectMode === "new"} onChange={() => onConnectModeChange("new")} />
             <div>
               <strong>新建飞书应用</strong>
-              <p>推荐。页面会给你一个二维码，扫码后自动创建应用并带回 App ID / App Secret。</p>
+              <p>推荐。页面会给你一个二维码，扫码后自动创建飞书应用并带回 App ID / App Secret。</p>
             </div>
           </label>
           <label className={`choice-card${connectMode === "existing" ? " selected" : ""}`}>
             <input type="radio" name="feishu-connect-mode" checked={connectMode === "existing"} onChange={() => onConnectModeChange("existing")} />
             <div>
-              <strong>接入已有应用</strong>
-              <p>如果你已经在飞书开放平台有应用，直接填写 App ID 和 App Secret。</p>
+              <strong>接入已有飞书应用</strong>
+              <p>如果你已经在飞书开放平台有飞书应用，直接填写 App ID 和 App Secret。</p>
             </div>
           </label>
         </div>
@@ -164,11 +170,17 @@ export function FeishuConnectStep({
         />
 
         <div className="wizard-info-stack">
+          {activeApp ? (
+            <div className="wizard-status-card good">
+              <strong>当前目标：{activeApp.name || activeApp.appId || "当前飞书应用"}</strong>
+              <p>{activeApp.readOnly ? "当前是只读接入；这里只会做连接验证。" : "如果你不改 App ID，这次会继续处理当前这个飞书应用。"}</p>
+            </div>
+          ) : null}
           <div className="manifest-block">
-            <h4>已有应用怎么接</h4>
+            <h4>已有飞书应用怎么接</h4>
             <ul className="wizard-bullet-list">
               <li>打开飞书开发者后台。</li>
-              <li>进入你的应用，打开“凭证与基础信息”。</li>
+              <li>进入你的飞书应用，打开“凭证与基础信息”。</li>
               <li>复制 App ID 和 App Secret，然后回来验证并继续。</li>
             </ul>
           </div>
@@ -209,7 +221,7 @@ export function FeishuConnectStep({
           </div>
           <div className="manifest-block">
             <h4>{onboardingGuide?.autoConfiguredSummary || "扫码创建已经完成"}</h4>
-            <p>机器人基础接入已经处理完成。下面给你一个明确的收口说明，避免流程看起来像是直接跳回去了。</p>
+            <p>飞书应用基础接入已经处理完成。下一步会进入能力检查，继续确认现在能不能开始使用。</p>
           </div>
         </div>
 
