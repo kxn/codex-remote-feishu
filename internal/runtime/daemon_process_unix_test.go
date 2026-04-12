@@ -111,6 +111,61 @@ func TestStartDetachedDaemonPropagatesXDGEnvFromPaths(t *testing.T) {
 	}
 }
 
+func TestStartDetachedDaemonReapsExitedChild(t *testing.T) {
+	tempDir := t.TempDir()
+	script := filepath.Join(tempDir, "child.sh")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write helper script: %v", err)
+	}
+
+	pid, err := StartDetachedDaemon(LaunchOptions{
+		BinaryPath: script,
+		Paths: Paths{
+			StateDir:      tempDir,
+			LogsDir:       tempDir,
+			DaemonLogFile: filepath.Join(tempDir, "daemon.log"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDetachedDaemon: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !processAlive(pid) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("expected detached child pid %d to be reaped after exit", pid)
+}
+
+func TestTerminateProcessReapsZombieChildImmediately(t *testing.T) {
+	tempDir := t.TempDir()
+	script := filepath.Join(tempDir, "child.sh")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write helper script: %v", err)
+	}
+
+	cmd := exec.Command(script)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	startedAt := time.Now()
+	if err := terminateProcess(cmd.Process.Pid, 500*time.Millisecond); err != nil {
+		t.Fatalf("terminateProcess: %v", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 250*time.Millisecond {
+		t.Fatalf("terminateProcess took %s for already-exited child, want under 250ms", elapsed)
+	}
+	if processAlive(cmd.Process.Pid) {
+		t.Fatalf("expected zombie child pid %d to be reaped", cmd.Process.Pid)
+	}
+}
+
 func helperRunDetached(t *testing.T) {
 	t.Helper()
 	script := os.Getenv("DETACHED_HELPER_SCRIPT")
