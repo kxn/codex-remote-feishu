@@ -279,6 +279,7 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 			ResumeWorkspaceKey: state.ResolveWorkspaceKey(workspaceKey, surface.ClaimedWorkspaceKey, surface.PreparedThreadCWD),
 			ResumeRouteMode:    strings.TrimSpace(string(surface.RouteMode)),
 		}
+		threadName := ""
 		if snapshot != nil {
 			target.ResumeHeadless = snapshot.Attachment.Managed && strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless")
 			target.ResumeThreadTitle = strings.TrimSpace(snapshot.Attachment.SelectedThreadTitle)
@@ -286,15 +287,11 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 		if target.ResumeThreadID != "" {
 			if inst := a.service.Instance(target.ResumeInstanceID); inst != nil {
 				if thread := inst.Threads[target.ResumeThreadID]; thread != nil {
-					if target.ResumeThreadTitle == "" {
-						target.ResumeThreadTitle = strings.TrimSpace(thread.Name)
-					}
+					threadName = strings.TrimSpace(thread.Name)
 					target.ResumeThreadCWD = state.ResolveWorkspaceKey(thread.CWD)
 				}
 			}
-			if target.ResumeThreadTitle == "" {
-				target.ResumeThreadTitle = target.ResumeThreadID
-			}
+			target.ResumeThreadTitle = storedResumeThreadTitle(target.ResumeThreadTitle, target.ResumeThreadID, target.ResumeThreadCWD, target.ResumeWorkspaceKey, threadName)
 		}
 		return target, true
 	}

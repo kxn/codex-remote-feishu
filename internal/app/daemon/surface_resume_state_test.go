@@ -91,7 +91,7 @@ func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *tes
 	if entry.ResumeInstanceID != "inst-headless-1" || entry.ResumeThreadID != "thread-1" {
 		t.Fatalf("unexpected persisted headless resume target: %#v", entry)
 	}
-	if !strings.Contains(entry.ResumeThreadTitle, "修复登录流程") || entry.ResumeThreadCWD != "/data/dl/droid" {
+	if entry.ResumeThreadTitle != "修复登录流程" || entry.ResumeThreadCWD != "/data/dl/droid" {
 		t.Fatalf("expected persisted headless thread metadata, got %#v", entry)
 	}
 	if !entry.ResumeHeadless {
