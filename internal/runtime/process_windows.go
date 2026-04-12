@@ -3,6 +3,7 @@
 package relayruntime
 
 import (
+	"fmt"
 	"os/exec"
 	"syscall"
 	"time"
@@ -43,8 +44,21 @@ func terminateProcess(pid int, grace time.Duration) error {
 	if err := windows.TerminateProcess(handle, 1); err != nil {
 		return err
 	}
-	_, _ = windows.WaitForSingleObject(handle, uint32(grace.Milliseconds()))
-	return nil
+	waitResult, err := windows.WaitForSingleObject(handle, uint32(grace.Milliseconds()))
+	if err != nil {
+		return err
+	}
+	switch waitResult {
+	case uint32(windows.WAIT_OBJECT_0):
+		return nil
+	case uint32(windows.WAIT_TIMEOUT):
+		if !processAlive(pid) {
+			return nil
+		}
+		return fmt.Errorf("process %d still alive after terminate timeout", pid)
+	default:
+		return fmt.Errorf("wait for process %d exit returned %d", pid, waitResult)
+	}
 }
 
 func prepareDetachedProcess(cmd *exec.Cmd) {

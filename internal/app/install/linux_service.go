@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var (
@@ -26,6 +27,11 @@ var defaultSystemdUserPATH = []string{
 	"/usr/bin",
 	"/sbin",
 	"/bin",
+}
+
+type systemdUserUnitState struct {
+	ActiveState string
+	MainPID     string
 }
 
 func runSystemctlUser(ctx context.Context, args ...string) (string, error) {
@@ -181,6 +187,63 @@ func systemdUserStart(ctx context.Context, state InstallState) error {
 func systemdUserStop(ctx context.Context, state InstallState) error {
 	_, err := systemctlUserRunner(ctx, "stop", systemdUserUnitName(state))
 	return err
+}
+
+func systemdUserStopAndWait(ctx context.Context, state InstallState, timeout, poll time.Duration) error {
+	if err := systemdUserStop(ctx, state); err != nil {
+		return err
+	}
+	if poll <= 0 {
+		poll = 100 * time.Millisecond
+	}
+	deadline := time.Now().Add(timeout)
+	unitName := systemdUserUnitName(state)
+	for {
+		current, err := systemdUserReadUnitState(ctx, state)
+		if err != nil {
+			return fmt.Errorf("confirm systemd user stop for %s: %w", unitName, err)
+		}
+		if systemdUserUnitStopped(current) {
+			return nil
+		}
+		if timeout <= 0 || time.Now().After(deadline) {
+			return fmt.Errorf("systemd user service %s still active after %s (active=%s mainPID=%s)", unitName, timeout, current.ActiveState, current.MainPID)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(poll):
+		}
+	}
+}
+
+func systemdUserReadUnitState(ctx context.Context, state InstallState) (systemdUserUnitState, error) {
+	output, err := systemctlUserRunner(ctx, "show", "--property=ActiveState", "--property=MainPID", "--value", systemdUserUnitName(state))
+	if err != nil {
+		return systemdUserUnitState{}, err
+	}
+	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(output), "\r\n", "\n"), "\n")
+	current := systemdUserUnitState{}
+	if len(lines) > 0 {
+		current.ActiveState = strings.TrimSpace(lines[0])
+	}
+	if len(lines) > 1 {
+		current.MainPID = strings.TrimSpace(lines[1])
+	}
+	if current.ActiveState == "" {
+		return systemdUserUnitState{}, fmt.Errorf("empty ActiveState")
+	}
+	return current, nil
+}
+
+func systemdUserUnitStopped(current systemdUserUnitState) bool {
+	switch strings.TrimSpace(strings.ToLower(current.ActiveState)) {
+	case "inactive", "failed":
+		pid := strings.TrimSpace(current.MainPID)
+		return pid == "" || pid == "0"
+	default:
+		return false
+	}
 }
 
 func systemdUserRestart(ctx context.Context, state InstallState) error {

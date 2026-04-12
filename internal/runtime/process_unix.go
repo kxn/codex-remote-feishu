@@ -4,6 +4,7 @@ package relayruntime
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -75,7 +76,10 @@ func terminateProcess(pid int, grace time.Duration) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return nil
+	if !processAlive(pid) {
+		return nil
+	}
+	return fmt.Errorf("process %d still alive after SIGKILL timeout", pid)
 }
 
 func reapExitedChild(pid int) (bool, error) {
