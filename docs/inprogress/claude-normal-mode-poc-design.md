@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-13`
-> Summary: 补充 backend 并行场景下的数据分区与产品语义，明确 workspace 共享与 thread/session 隔离规则。
+> Summary: 增加 `/mode codex|claude|vscode` 产品入口与 backend-aware 配置规则，明确切换时状态清理边界。
 
 ## 1. 背景
 
@@ -91,6 +91,21 @@
 2. 切换到不同 backend 实例时，不继承旧 backend 的 selected thread。
 3. 失败/降级提示必须指明“当前 backend 不支持”，避免误导为全局异常。
 
+## 5.5 backend-aware 配置模型（新增）
+
+### 配置原则
+
+1. workspace 级参数继续存在，但按 backend 命名空间隔离。
+2. `model`、`reasoning_effort`、`access_mode` 这类参数不能跨 backend 复用。
+3. surface 切换 backend 时，读取目标 backend 对应的 workspace 参数快照。
+
+### 推荐结构
+
+- 现有概念：`WorkspaceDefaults[workspace_key] -> ModelConfigRecord`
+- 目标概念：`WorkspaceDefaults[workspace_key][backend] -> BackendConfigRecord`
+
+其中 `BackendConfigRecord` 可先保持与当前 `ModelConfigRecord` 等价字段，再按 backend 逐步扩展。
+
 ## 6. 命令矩阵（PoC 版）
 
 | Command | Codex | Claude PoC | 处理策略 |
@@ -109,6 +124,32 @@
 3. `/new`：在当前 backend 新建会话，workspace 沿用当前 workspace。
 4. `/status`：建议在 attachment/instance 摘要中显示 backend 标识，避免误判上下文来源。
 
+## 6.2 `/mode` 入口语义（新增）
+
+### 用户可见模式
+
+1. `/mode codex`：进入 Codex normal 语义。
+2. `/mode claude`：进入 Claude normal 语义。
+3. `/mode vscode`：保持现有 vscode 模式语义。
+
+兼容规则：
+
+- `/mode normal` 视为 `/mode codex`（兼容旧命令，不再新增第四种语义）。
+
+### 切换行为
+
+当 surface 在 `codex <-> claude` 间切换时：
+
+1. 保留：`workspace` 相关信息（workspace key、workspace 级 backend 配置）。
+2. 清除：当前会话态（attached instance、selected thread、pending request、queue、active turn、staged inputs/images、resume target 中的 thread/session 部分）。
+3. 重建：目标 backend 的默认能力视图与命令可用性。
+
+### 设计原因
+
+- 用户需要主动感知“当前在用哪个 backend”。
+- backend 会话数据天然不兼容，切换时保留会话态会制造隐性串扰与误恢复。
+- workspace 是文件系统作用域，可共享，不应被切换动作清空。
+
 ## 7. 分阶段实施
 
 ## 阶段 A：兼容性护栏
@@ -117,6 +158,7 @@
 2. `onHello` 改为 capability-aware 初始化，不再无条件 `threads.refresh`。
 3. 修正 startup refresh pending 统计，只追踪已派发 refresh 的实例。
 4. 补充 backend 维度到 surface resume / instance snapshot 关键状态（至少写入并保留，不先改 UI）。
+5. `/mode` 切换实现为 provider-aware（`normal -> codex` 别名），并补齐切换时状态清理。
 
 交付物：
 
@@ -141,6 +183,7 @@
 2. `resume(session_id + cwd)` 成功路径与失败提示。
 3. `turn.steer` 显式降级。
 4. 后端并行时 `/list`/`/use` 不串 backend，会话选择与恢复可预期。
+5. `/mode codex|claude` 在产品侧可感知，且切换行为符合“保留 workspace、清空会话态”。
 
 交付物：
 
@@ -162,6 +205,7 @@
 5. 关闭 Claude 实例后，系统仍可按现有方式服务 Codex。
 6. 同 workspace 并存 Codex+Claude 时，`/list` 与 `/use` 不混 backend 数据。
 7. surface resume 不会把一个 backend 的会话误恢复到另一个 backend 实例。
+8. `/mode normal` 与 `/mode codex` 语义一致；`/mode claude` 切换后不会残留旧 backend 会话态。
 
 ## 9. 风险与回退
 
