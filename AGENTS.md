@@ -57,6 +57,12 @@ Trigger it for:
 - pull latest code, rebuild, and upgrade the locally installed daemon
 - requests to trigger the built-in local upgrade transaction from a repo build
 - Without explicit user approval in the current turn, do not automatically run repository-local upgrade flows such as `./upgrade-local.sh` or `codex-remote local-upgrade`, even if they seem like the natural next validation step.
+- Natural-language repo requests such as `本地升级`, `debug 一下`, or “看看这个 repo 绑定实例状态” are repository tasks:
+  - use the repo-bound helper path, not daemon slash commands
+  - upgrades go through `./upgrade-local.sh`
+  - status/debug HTTP requests go through `bash scripts/install/repo-target-request.sh admin ...` or `bash scripts/install/repo-install-target.sh --format shell`
+  - do not satisfy those natural-language requests by sending `/upgrade ...` or `/debug ...` to the daemon currently carrying the chat
+- Explicit slash commands such as `/upgrade`, `/upgrade local`, `/upgrade latest`, and `/debug` remain direct daemon actions on the daemon that received the slash command.
 
 For repository-local safe push after local commits, also use `.codex/skills/safe-push/`.
 

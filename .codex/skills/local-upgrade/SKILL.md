@@ -22,6 +22,15 @@ That script does all of the following:
 3. copy the new binary to the fixed local artifact path
 4. run `./bin/codex-remote local-upgrade`
 
+## Natural-Language Boundary
+
+- Natural-language repo requests such as `本地升级`, `debug 一下`, or `看下当前实例状态` are **repository tasks**, not daemon slash-command requests.
+- For those repo tasks:
+  - use `./upgrade-local.sh` for upgrade
+  - use `bash scripts/install/repo-install-target.sh --format shell` or `bash scripts/install/repo-target-request.sh ...` for bound-instance status/debug requests
+  - do **not** send `/upgrade ...` or `/debug ...` back into whichever daemon is currently hosting the Codex conversation
+- Explicit slash commands such as `/upgrade`, `/upgrade local`, `/upgrade latest`, and `/debug` remain direct daemon actions on the daemon that received that slash command.
+
 ## Variants
 
 - Different install base dir:
@@ -45,4 +54,14 @@ That script does all of the following:
 - The built-in CLI entry is `codex-remote local-upgrade`.
 - The fixed artifact path is `~/.local/share/codex-remote/local-upgrade/codex-remote` for the default base dir.
 - If the script says `install-state.json` is missing, bootstrap the local install first with `./setup.sh` or point `--base-dir` at the installed environment.
+- For repo-bound debug/status HTTP calls, prefer:
+
+```bash
+bash scripts/install/repo-target-request.sh admin /v1/status | jq .
+```
+
+```bash
+bash scripts/install/repo-target-request.sh admin /api/admin/bootstrap-state | jq .
+```
+
 - For explanation-only requests, `./upgrade-local.sh --help` is usually enough.
