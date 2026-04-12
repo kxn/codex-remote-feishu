@@ -91,6 +91,9 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	var calls []string
 	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "show" {
+			return "inactive\n0\n", nil
+		}
 		return "", nil
 	}
 	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
@@ -104,7 +107,11 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	if err := RunUpgradeHelperWithStatePath(context.Background(), statePath); err != nil {
 		t.Fatalf("RunUpgradeHelperWithStatePath: %v", err)
 	}
-	if got, want := calls, []string{"stop codex-remote.service", "start codex-remote.service"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+	if got, want := calls, []string{
+		"stop codex-remote.service",
+		"show --property=ActiveState --property=MainPID --value codex-remote.service",
+		"start codex-remote.service",
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)
 	}
 	raw, err := os.ReadFile(targetBinary)
@@ -174,6 +181,9 @@ func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testi
 	var calls []string
 	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "show" {
+			return "inactive\n0\n", nil
+		}
 		return "", nil
 	}
 	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
@@ -187,7 +197,11 @@ func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testi
 	if err := RunUpgradeHelperWithStatePath(context.Background(), statePath); err != nil {
 		t.Fatalf("RunUpgradeHelperWithStatePath: %v", err)
 	}
-	if got, want := calls, []string{"stop codex-remote-debug.service", "start codex-remote-debug.service"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+	if got, want := calls, []string{
+		"stop codex-remote-debug.service",
+		"show --property=ActiveState --property=MainPID --value codex-remote-debug.service",
+		"start codex-remote-debug.service",
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)
 	}
 }
@@ -232,6 +246,9 @@ func TestRunUpgradeHelperWithStatePathSystemdUserRollsBackOnObserveFailure(t *te
 	var calls []string
 	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "show" {
+			return "inactive\n0\n", nil
+		}
 		return "", nil
 	}
 	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error {
@@ -250,8 +267,10 @@ func TestRunUpgradeHelperWithStatePathSystemdUserRollsBackOnObserveFailure(t *te
 	}
 	if got, want := calls, []string{
 		"stop codex-remote.service",
+		"show --property=ActiveState --property=MainPID --value codex-remote.service",
 		"start codex-remote.service",
 		"stop codex-remote.service",
+		"show --property=ActiveState --property=MainPID --value codex-remote.service",
 		"start codex-remote.service",
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)

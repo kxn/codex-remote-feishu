@@ -241,7 +241,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relayruntime.Paths) error {
 	upgradeHelperSleepFunc(upgradeHelperStopDelay)
 	if effectiveServiceManager(stateValue) == ServiceManagerSystemdUser {
-		return systemdUserStop(ctx, stateValue)
+		return systemdUserStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
 	}
 
 	pid, err := upgradeHelperReadPIDFunc(paths.PIDFile)
