@@ -145,6 +145,9 @@ Trigger boundary note:
 
 For medium or large follow-up work in this repository:
 
+- Before starting code-related work, if the local worktree is clean, first sync to the latest safe state of the current branch.
+- Default rule for a clean worktree: do not start reading, assessing, or editing code against a known-stale local checkout.
+- If the worktree is not clean, do not pull blindly; either finish, shelve, or explicitly treat the local changes as the current working context.
 - Track it in GitHub Issues instead of a local `TODO.md` or similar scratch file.
 - Tiny fixes that can be completed immediately in the same task do not need an issue; just implement them directly.
 - This workflow applies whether the active issue was opened by the user, the repository owner, or any other contributor.
