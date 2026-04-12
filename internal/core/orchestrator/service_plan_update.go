@@ -94,10 +94,15 @@ func (s *Service) applyTurnPlanUpdate(instanceID string, event agentproto.Event)
 	if update == nil {
 		return nil
 	}
+	sourceMessageID := ""
+	if binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID); binding != nil {
+		sourceMessageID = binding.ReplyToMessageID
+	}
 	return []control.UIEvent{{
 		Kind:             control.UIEventPlanUpdated,
 		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
+		SourceMessageID:  sourceMessageID,
 		PlanUpdate:       update,
 	}}
 }

@@ -127,6 +127,26 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             legacyCardDocument(title, projectNoticeBody(*event.Notice), noticeThemeKey(*event.Notice), nil),
 		}}
+	case control.UIEventPlanUpdated:
+		if event.PlanUpdate == nil {
+			return nil
+		}
+		title := "计划更新"
+		body := planUpdateBody(*event.PlanUpdate)
+		elements := planUpdateElements(*event.PlanUpdate)
+		return []Operation{{
+			Kind:             OperationSendCard,
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			ReplyToMessageID: event.SourceMessageID,
+			CardTitle:        title,
+			CardBody:         body,
+			CardThemeKey:     cardThemeInfo,
+			CardElements:     elements,
+			cardEnvelope:     cardEnvelopeV2,
+			card:             rawCardDocument(title, body, cardThemeInfo, elements),
+		}}
 	case control.UIEventFeishuDirectSelectionPrompt:
 		var prompt *control.FeishuDirectSelectionPrompt
 		switch {
