@@ -176,9 +176,13 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 }
 
 func resolveUpgradeHelperBinary(statePath string) (string, error) {
+	helperBinary, execErr := executablePath()
+	if strings.TrimSpace(helperBinary) != "" {
+		return helperBinary, nil
+	}
 	stateValue, err := LoadState(statePath)
 	if err == nil {
-		helperBinary := firstNonEmpty(
+		helperBinary = firstNonEmpty(
 			strings.TrimSpace(stateValue.CurrentBinaryPath),
 			strings.TrimSpace(stateValue.InstalledBinary),
 		)
@@ -186,7 +190,7 @@ func resolveUpgradeHelperBinary(statePath string) (string, error) {
 			return helperBinary, nil
 		}
 	}
-	return executablePath()
+	return "", execErr
 }
 
 func defaultBinaryPath(goos string) string {

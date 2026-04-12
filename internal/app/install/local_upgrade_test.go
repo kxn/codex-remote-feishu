@@ -194,8 +194,8 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile helper: %v", err)
 	}
-	if string(helperRaw) != "stable-binary" {
-		t.Fatalf("helper binary content = %q, want stable-binary", string(helperRaw))
+	if string(helperRaw) != "cli-binary" {
+		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
 	}
 }
 
@@ -249,6 +249,13 @@ func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 	}
 	if startedBinary == "" {
 		t.Fatal("expected helper launcher to run")
+	}
+	helperRaw, err := os.ReadFile(startedBinary)
+	if err != nil {
+		t.Fatalf("ReadFile helper: %v", err)
+	}
+	if string(helperRaw) != "cli-binary" {
+		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
 	}
 }
 
@@ -308,6 +315,13 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 	}
 	if startedBinary == "" {
 		t.Fatal("expected helper launcher to run")
+	}
+	helperRaw, err := os.ReadFile(startedBinary)
+	if err != nil {
+		t.Fatalf("ReadFile helper: %v", err)
+	}
+	if string(helperRaw) != "cli-binary" {
+		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
 	}
 }
 
