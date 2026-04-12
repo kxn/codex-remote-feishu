@@ -35,12 +35,15 @@ type upgradeCommandMode string
 
 const (
 	upgradeCommandShowStatus upgradeCommandMode = "status"
+	upgradeCommandShowTrack  upgradeCommandMode = "track_show"
+	upgradeCommandSetTrack   upgradeCommandMode = "track_set"
 	upgradeCommandLatest     upgradeCommandMode = "latest"
 	upgradeCommandLocal      upgradeCommandMode = "local"
 )
 
 type parsedUpgradeCommand struct {
-	Mode upgradeCommandMode
+	Mode  upgradeCommandMode
+	Track install.ReleaseTrack
 }
 
 type upgradeCheckRequest struct {
@@ -81,28 +84,9 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 			FeishuDirectCommandCatalog: buildDebugStatusCatalog(stateValue, a.upgradeCheckInFlight),
 		}}
 	case debugCommandShowTrack:
-		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_status", buildTrackSummary(stateValue))}
+		return trackSummaryEvents(command.SurfaceSessionID, stateValue, true)
 	case debugCommandSetTrack:
-		if a.upgradeCheckInFlight {
-			return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_busy", "当前正在检查升级，暂时不能切换 track。")}
-		}
-		if pendingUpgradeBusy(stateValue.PendingUpgrade) {
-			return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_busy", "当前已有升级事务进行中，暂时不能切换 track。")}
-		}
-		if stateValue.CurrentTrack == parsed.Track {
-			return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_unchanged", fmt.Sprintf("当前 track 已经是 %s。", parsed.Track))}
-		}
-		stateValue.CurrentTrack = parsed.Track
-		stateValue.LastKnownLatestVersion = ""
-		if clearPendingCandidateOnTrackSwitch(stateValue.PendingUpgrade, parsed.Track) {
-			stateValue.PendingUpgrade = nil
-		}
-		now := time.Now().UTC()
-		a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
-		if err := a.writeUpgradeStateLocked(stateValue); err != nil {
-			return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_write_failed", fmt.Sprintf("切换 track 失败：%v", err))}
-		}
-		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_track_updated", fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /upgrade latest。", parsed.Track))}
+		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track, true)
 	case debugCommandUpgrade:
 		command.Text = "/upgrade latest"
 		return a.handleUpgradeLatestCommand(command, stateValue)
@@ -173,6 +157,10 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 			SurfaceSessionID:           command.SurfaceSessionID,
 			FeishuDirectCommandCatalog: buildUpgradeStatusCatalog(stateValue, a.upgradeCheckInFlight),
 		}}
+	case upgradeCommandShowTrack:
+		return trackSummaryEvents(command.SurfaceSessionID, stateValue, false)
+	case upgradeCommandSetTrack:
+		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track, false)
 	case upgradeCommandLatest:
 		return a.handleUpgradeLatestCommand(command, stateValue)
 	case upgradeCommandLocal:
@@ -597,15 +585,26 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 		return parsedUpgradeCommand{Mode: upgradeCommandShowStatus}, nil
 	case 2:
 		switch fields[1] {
+		case "track":
+			return parsedUpgradeCommand{Mode: upgradeCommandShowTrack}, nil
 		case "latest":
 			return parsedUpgradeCommand{Mode: upgradeCommandLatest}, nil
 		case "local":
 			return parsedUpgradeCommand{Mode: upgradeCommandLocal}, nil
 		default:
-			return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `latest` 或 `local`。")
+			return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `track`、`latest` 或 `local`。")
 		}
+	case 3:
+		if fields[1] != "track" {
+			return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `/upgrade`、`/upgrade track [alpha|beta|production]`、`/upgrade latest`、`/upgrade local`。")
+		}
+		track := install.ParseReleaseTrack(fields[2])
+		if track == "" {
+			return parsedUpgradeCommand{}, fmt.Errorf("track 只支持 alpha、beta、production。")
+		}
+		return parsedUpgradeCommand{Mode: upgradeCommandSetTrack, Track: track}, nil
 	default:
-		return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `/upgrade`、`/upgrade latest`、`/upgrade local`。")
+		return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `/upgrade`、`/upgrade track [alpha|beta|production]`、`/upgrade latest`、`/upgrade local`。")
 	}
 }
 
@@ -625,9 +624,8 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 		summaryLines = append(summaryLines, "待处理升级：无")
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
-	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
 	return &control.FeishuDirectCommandCatalog{
-		Title:        "Debug / Upgrade",
+		Title:        "Debug",
 		Summary:      strings.Join(summaryLines, "\n"),
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
@@ -636,20 +634,10 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 				Title: "快捷操作",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("查看 track", "/debug track", "", false),
 						runCommandButton("管理页外链", "/debug admin", "", false),
+						runCommandButton("升级状态", "/upgrade", "", false),
 						runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
 						runCommandButton("本地升级", "/upgrade local", "", false),
-					},
-				}},
-			},
-			{
-				Title: "切换 track",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("alpha", "/debug track alpha", "primary", currentTrack == string(install.ReleaseTrackAlpha)),
-						runCommandButton("beta", "/debug track beta", "", currentTrack == string(install.ReleaseTrackBeta)),
-						runCommandButton("production", "/debug track production", "", currentTrack == string(install.ReleaseTrackProduction)),
 					},
 				}},
 			},
@@ -657,7 +645,7 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
 					Commands:    []string{"/debug"},
-					Description: "输入 `/debug` 后面的参数，例如 `track beta`。",
+					Description: "输入 `/debug` 后面的参数，例如 `admin`。",
 					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandDebug, ""),
 				}},
 			},
@@ -682,6 +670,7 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 		summaryLines = append(summaryLines, "待处理升级：无")
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
+	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Upgrade",
 		Summary:      strings.Join(summaryLines, "\n"),
@@ -692,9 +681,19 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 				Title: "快捷操作",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
+						runCommandButton("查看 track", "/upgrade track", "", false),
 						runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
 						runCommandButton("本地升级", "/upgrade local", "", false),
-						runCommandButton("查看 track", "/debug track", "", false),
+					},
+				}},
+			},
+			{
+				Title: "切换 track",
+				Entries: []control.CommandCatalogEntry{{
+					Buttons: []control.CommandCatalogButton{
+						runCommandButton("alpha", "/upgrade track alpha", "primary", currentTrack == string(install.ReleaseTrackAlpha)),
+						runCommandButton("beta", "/upgrade track beta", "", currentTrack == string(install.ReleaseTrackBeta)),
+						runCommandButton("production", "/upgrade track production", "", currentTrack == string(install.ReleaseTrackProduction)),
 					},
 				}},
 			},
@@ -702,7 +701,7 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
 					Commands:    []string{"/upgrade"},
-					Description: "输入 `/upgrade` 后面的参数，例如 `latest` 或 `local`。",
+					Description: "输入 `/upgrade` 后面的参数，例如 `track beta`、`latest` 或 `local`。",
 					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandUpgrade, ""),
 				}},
 			},
@@ -732,7 +731,7 @@ func buildUpgradePromptCatalog(stateValue install.InstallState) *control.FeishuD
 				Description: "继续升级到当前 track 的最新版本。",
 				Buttons: []control.CommandCatalogButton{
 					{Label: "确认升级", CommandText: "/upgrade latest"},
-					{Label: "查看状态", CommandText: "/debug"},
+					{Label: "查看状态", CommandText: "/upgrade"},
 				},
 			}},
 		}},
@@ -865,6 +864,44 @@ func firstNonEmptyTrack(values ...install.ReleaseTrack) install.ReleaseTrack {
 		}
 	}
 	return ""
+}
+
+func trackSummaryEvents(surfaceID string, stateValue install.InstallState, legacyAlias bool) []control.UIEvent {
+	text := buildTrackSummary(stateValue)
+	if legacyAlias {
+		text = legacyTrackAliasMessage("/upgrade track", text)
+	}
+	return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_status", text)}
+}
+
+func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, nextTrack install.ReleaseTrack, legacyAlias bool) []control.UIEvent {
+	if a.upgradeCheckInFlight {
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前正在检查升级，暂时不能切换 track。", legacyAlias))}
+	}
+	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前已有升级事务进行中，暂时不能切换 track。", legacyAlias))}
+	}
+	if stateValue.CurrentTrack == nextTrack {
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unchanged", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("当前 track 已经是 %s。", nextTrack), legacyAlias))}
+	}
+	stateValue.CurrentTrack = nextTrack
+	stateValue.LastKnownLatestVersion = ""
+	if clearPendingCandidateOnTrackSwitch(stateValue.PendingUpgrade, nextTrack) {
+		stateValue.PendingUpgrade = nil
+	}
+	now := time.Now().UTC()
+	a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_write_failed", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("切换 track 失败：%v", err), legacyAlias))}
+	}
+	return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_updated", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /upgrade latest。", nextTrack), legacyAlias))}
+}
+
+func legacyTrackAliasMessage(replacement, body string, legacyAlias ...bool) string {
+	if len(legacyAlias) == 0 || !legacyAlias[0] {
+		return body
+	}
+	return fmt.Sprintf("`/debug track` 仍可兼容，后续请改用 `%s`。\n\n%s", replacement, body)
 }
 
 func debugUsageEvents(surfaceID, message string) []control.UIEvent {

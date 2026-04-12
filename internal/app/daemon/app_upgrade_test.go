@@ -64,7 +64,7 @@ func TestUpgradeLatestManualCheckPromptsIdleSurface(t *testing.T) {
 	}
 }
 
-func TestDebugTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
+func TestUpgradeTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
 
@@ -82,6 +82,30 @@ func TestDebugTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	}
 
 	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/upgrade track beta",
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.CurrentTrack != install.ReleaseTrackBeta {
+		t.Fatalf("current track = %q, want beta", updated.CurrentTrack)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected pending upgrade to be cleared, got %#v", updated.PendingUpgrade)
+	}
+}
+
+func TestDebugTrackCompatibilityAliasShowsGuidance(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionDebugCommand,
 		SurfaceSessionID: "feishu:chat:1",
 		ChatID:           "chat-1",
@@ -96,9 +120,20 @@ func TestDebugTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	if updated.CurrentTrack != install.ReleaseTrackBeta {
 		t.Fatalf("current track = %q, want beta", updated.CurrentTrack)
 	}
-	if updated.PendingUpgrade != nil {
-		t.Fatalf("expected pending upgrade to be cleared, got %#v", updated.PendingUpgrade)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, op := range gateway.snapshotOperations() {
+			if op.CardTitle != "Upgrade" {
+				continue
+			}
+			if strings.Contains(op.CardBody, "`/debug track` 仍可兼容") && strings.Contains(op.CardBody, "`/upgrade track beta`") {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
+	t.Fatal("timed out waiting for compatibility guidance notice")
 }
 
 func TestTickDoesNotAutoCheckOrPromptUpgrade(t *testing.T) {
@@ -334,18 +369,20 @@ func TestBuildDebugStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if catalog == nil || !catalog.Interactive {
 		t.Fatalf("expected interactive debug catalog, got %#v", catalog)
 	}
-	if len(catalog.Sections) != 3 {
-		t.Fatalf("expected quick actions + track + form sections, got %#v", catalog.Sections)
+	if len(catalog.Sections) != 2 {
+		t.Fatalf("expected quick actions + form sections, got %#v", catalog.Sections)
 	}
-	if catalog.Sections[1].Entries[0].Buttons[1].Disabled != true {
-		t.Fatalf("expected current beta track button to be disabled, got %#v", catalog.Sections[1].Entries[0].Buttons)
-	}
-	form := catalog.Sections[2].Entries[0].Form
+	form := catalog.Sections[1].Entries[0].Form
 	if form == nil || form.CommandText != "/debug" {
-		t.Fatalf("expected debug form entry, got %#v", catalog.Sections[2].Entries[0])
+		t.Fatalf("expected debug form entry, got %#v", catalog.Sections[1].Entries[0])
 	}
-	if got := catalog.Sections[0].Entries[0].Buttons[1].CommandText; got != "/debug admin" {
+	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/debug admin" {
 		t.Fatalf("expected debug catalog to expose admin link button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+	for _, button := range catalog.Sections[0].Entries[0].Buttons {
+		if button.CommandText == "/debug track" || strings.HasPrefix(button.CommandText, "/debug track ") {
+			t.Fatalf("debug catalog should not promote /debug track anymore: %#v", catalog.Sections[0].Entries[0].Buttons)
+		}
 	}
 	if !strings.Contains(catalog.Summary, "升级检查：仅手动触发") {
 		t.Fatalf("expected debug catalog summary to reflect manual-only checks, got %#v", catalog.Summary)
@@ -360,12 +397,18 @@ func TestBuildUpgradeStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if catalog == nil || !catalog.Interactive {
 		t.Fatalf("expected interactive upgrade catalog, got %#v", catalog)
 	}
-	if len(catalog.Sections) != 2 {
-		t.Fatalf("expected quick actions + form sections, got %#v", catalog.Sections)
+	if len(catalog.Sections) != 3 {
+		t.Fatalf("expected quick actions + track + form sections, got %#v", catalog.Sections)
 	}
-	form := catalog.Sections[1].Entries[0].Form
+	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/upgrade track" {
+		t.Fatalf("expected upgrade catalog to expose track button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+	if catalog.Sections[1].Entries[0].Buttons[2].Disabled != true {
+		t.Fatalf("expected current production track button to be disabled, got %#v", catalog.Sections[1].Entries[0].Buttons)
+	}
+	form := catalog.Sections[2].Entries[0].Form
 	if form == nil || form.CommandText != "/upgrade" {
-		t.Fatalf("expected upgrade form entry, got %#v", catalog.Sections[1].Entries[0])
+		t.Fatalf("expected upgrade form entry, got %#v", catalog.Sections[2].Entries[0])
 	}
 	if !strings.Contains(catalog.Summary, "本地升级产物：") {
 		t.Fatalf("expected upgrade summary to keep artifact path, got %#v", catalog.Summary)
@@ -382,6 +425,27 @@ func TestParseDebugCommandTextRecognizesAdmin(t *testing.T) {
 	}
 	if parsed.Mode != debugCommandAdmin {
 		t.Fatalf("mode = %q, want %q", parsed.Mode, debugCommandAdmin)
+	}
+}
+
+func TestParseUpgradeCommandTextRecognizesTrackCommands(t *testing.T) {
+	parsed, err := parseUpgradeCommandText("/upgrade track")
+	if err != nil {
+		t.Fatalf("parseUpgradeCommandText show: %v", err)
+	}
+	if parsed.Mode != upgradeCommandShowTrack {
+		t.Fatalf("show mode = %q, want %q", parsed.Mode, upgradeCommandShowTrack)
+	}
+
+	parsed, err = parseUpgradeCommandText("/upgrade track beta")
+	if err != nil {
+		t.Fatalf("parseUpgradeCommandText set: %v", err)
+	}
+	if parsed.Mode != upgradeCommandSetTrack {
+		t.Fatalf("set mode = %q, want %q", parsed.Mode, upgradeCommandSetTrack)
+	}
+	if parsed.Track != install.ReleaseTrackBeta {
+		t.Fatalf("track = %q, want beta", parsed.Track)
 	}
 }
 

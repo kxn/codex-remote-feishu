@@ -539,12 +539,16 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			CanonicalMenuKey: "upgrade",
 			ArgumentKind:     FeishuCommandArgumentChoice,
 			ArgumentFormHint: "latest",
-			ArgumentFormNote: "输入 latest 或 local。",
+			ArgumentFormNote: "例如 latest、local、track、track beta。",
 			ArgumentSubmit:   "执行",
-			Description:      "查看升级状态；`/upgrade latest` 检查或继续 release 升级，`/upgrade local` 使用固定本地 artifact 发起升级。",
-			Examples:         []string{"/upgrade latest", "/upgrade local"},
+			Description:      "查看升级状态、查看或切换当前 release track；`/upgrade latest` 检查或继续 release 升级，`/upgrade local` 使用固定本地 artifact 发起升级。",
+			Examples:         []string{"/upgrade latest", "/upgrade track beta", "/upgrade local"},
 			Options: []FeishuCommandOption{
 				commandOption("/upgrade", "upgrade", "latest", "latest", "检查或继续升级到当前 track 的最新 release。"),
+				commandOption("/upgrade", "upgrade", "track", "track", "查看当前 track。"),
+				commandOption("/upgrade track", "upgrade_track", "alpha", "track alpha", "切换到 alpha track。"),
+				commandOption("/upgrade track", "upgrade_track", "beta", "track beta", "切换到 beta track。"),
+				commandOption("/upgrade track", "upgrade_track", "production", "track production", "切换到 production track。"),
 				commandOption("/upgrade", "upgrade", "local", "local", "使用固定本地 artifact 发起升级。"),
 			},
 			ShowInHelp: true,
@@ -570,10 +574,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			CanonicalMenuKey: "debug",
 			ArgumentKind:     FeishuCommandArgumentText,
 			ArgumentFormHint: "admin",
-			ArgumentFormNote: "例如 admin、track、track alpha、track beta、track production。",
+			ArgumentFormNote: "例如 admin。",
 			ArgumentSubmit:   "执行",
-			Description:      "查看调试状态，切换当前 release track，或生成临时管理页外链。",
-			Examples:         []string{"/debug", "/debug admin", "/debug track beta"},
+			Description:      "查看调试状态，或生成临时管理页外链。历史兼容的 `/debug track` 请改用 `/upgrade track`。",
+			Examples:         []string{"/debug", "/debug admin"},
 			ShowInHelp:       true,
 			ShowInMenu:       true,
 		},
@@ -948,6 +952,14 @@ func buildMenuUpgradeText(value string) (string, bool) {
 	switch mode {
 	case "latest", "local":
 		return "/upgrade " + mode, true
+	case "track":
+		return "/upgrade track", true
+	case "track_alpha", "track-alpha":
+		return "/upgrade track alpha", true
+	case "track_beta", "track-beta":
+		return "/upgrade track beta", true
+	case "track_production", "track-production":
+		return "/upgrade track production", true
 	default:
 		return "", false
 	}
