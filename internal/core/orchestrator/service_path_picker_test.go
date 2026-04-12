@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func pathPickerViewFromEvent(t *testing.T, event control.UIEvent) *control.FeishuPathPickerView {
@@ -222,5 +223,126 @@ func TestOpenPathPickerRejectsStalePickerID(t *testing.T) {
 	}
 	if latest.PickerID == view.PickerID {
 		t.Fatalf("expected new picker id")
+	}
+}
+
+func TestPathPickerRejectsNonOwnerAndClearsGate(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "demo",
+		WorkspaceRoot: "/tmp/demo",
+		WorkspaceKey:  "/tmp/demo",
+		Threads:       map[string]*state.ThreadRecord{},
+		Online:        true,
+	})
+	root := t.TempDir()
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeDirectory,
+		RootPath: root,
+	})
+	view := singlePathPickerEvent(t, events)
+	rejectEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-2",
+		PickerID:         view.PickerID,
+	})
+	if len(rejectEvents) != 1 || rejectEvents[0].Notice == nil || rejectEvents[0].Notice.Code != "path_picker_unauthorized" {
+		t.Fatalf("expected unauthorized notice, got %#v", rejectEvents)
+	}
+	if svc.root.Surfaces["surface-1"].ActivePathPicker != nil {
+		t.Fatalf("expected unauthorized action to clear active picker")
+	}
+}
+
+func TestPathPickerExpiresAndClearsGate(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:        control.PathPickerModeDirectory,
+		RootPath:    root,
+		ExpireAfter: time.Second,
+	})
+	view := singlePathPickerEvent(t, events)
+	now = now.Add(2 * time.Second)
+	expiredEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerUp,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if len(expiredEvents) != 1 || expiredEvents[0].Notice == nil || expiredEvents[0].Notice.Code != "path_picker_expired" {
+		t.Fatalf("expected expired notice, got %#v", expiredEvents)
+	}
+	if svc.root.Surfaces["surface-1"].ActivePathPicker != nil {
+		t.Fatalf("expected expired picker to clear active state")
+	}
+}
+
+func TestPathPickerBlocksRouteMutationUntilCancelled(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "demo",
+		WorkspaceRoot: root,
+		WorkspaceKey:  root,
+		Threads:       map[string]*state.ThreadRecord{},
+		Online:        true,
+	})
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeDirectory,
+		RootPath: root,
+	})
+	view := singlePathPickerEvent(t, events)
+
+	blockedList := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	})
+	if len(blockedList) != 1 || blockedList[0].Notice == nil || blockedList[0].Notice.Code != "path_picker_active" {
+		t.Fatalf("expected path picker gate notice, got %#v", blockedList)
+	}
+
+	statusEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	})
+	if len(statusEvents) != 1 || statusEvents[0].Snapshot == nil || statusEvents[0].Snapshot.Gate.Kind != "path_picker" {
+		t.Fatalf("expected status snapshot to show path picker gate, got %#v", statusEvents)
+	}
+
+	cancelEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if len(cancelEvents) != 1 || cancelEvents[0].Notice == nil || cancelEvents[0].Notice.Code != "path_picker_cancelled" {
+		t.Fatalf("expected cancel notice, got %#v", cancelEvents)
+	}
+
+	listEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	})
+	if len(listEvents) != 1 || listEvents[0].FeishuSelectionView == nil {
+		t.Fatalf("expected /list to work again after cancel, got %#v", listEvents)
 	}
 }

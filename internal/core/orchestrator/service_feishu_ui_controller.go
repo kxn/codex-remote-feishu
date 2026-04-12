@@ -41,15 +41,15 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 	case control.FeishuUIIntentShowRecentThreadWorkspaces:
 		return s.presentThreadSelection(surface, true)
 	case control.FeishuUIIntentPathPickerEnter:
-		return s.handlePathPickerEnter(surface, intent.PickerID, intent.PickerEntry)
+		return s.handlePathPickerEnter(surface, intent.PickerID, intent.PickerEntry, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerUp:
-		return s.handlePathPickerUp(surface, intent.PickerID)
+		return s.handlePathPickerUp(surface, intent.PickerID, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerSelect:
-		return s.handlePathPickerSelect(surface, intent.PickerID, intent.PickerEntry)
+		return s.handlePathPickerSelect(surface, intent.PickerID, intent.PickerEntry, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerConfirm:
-		return s.handlePathPickerConfirm(surface, intent.PickerID)
+		return s.handlePathPickerConfirm(surface, intent.PickerID, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerCancel:
-		return s.handlePathPickerCancel(surface, intent.PickerID)
+		return s.handlePathPickerCancel(surface, intent.PickerID, intent.ActorUserID)
 	default:
 		return nil
 	}

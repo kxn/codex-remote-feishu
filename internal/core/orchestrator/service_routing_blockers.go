@@ -53,12 +53,15 @@ func surfaceHasRouteMutationRequestState(surface *state.SurfaceConsoleRecord) bo
 	if surface == nil {
 		return false
 	}
-	return surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil
+	return surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil || surface.ActivePathPicker != nil
 }
 
 func (s *Service) blockRouteMutationForRequestState(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	if surface == nil {
 		return nil
+	}
+	if surface.ActivePathPicker != nil {
+		return notice(surface, "path_picker_active", "当前正在进行路径选择，请先在卡片里确认或取消；如需查看状态，可继续使用 /status。")
 	}
 	if surface.ActiveRequestCapture != nil {
 		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
@@ -68,6 +71,45 @@ func (s *Service) blockRouteMutationForRequestState(surface *state.SurfaceConsol
 		return notice(surface, "request_pending", pendingRequestNoticeText(activePendingRequest(surface)))
 	}
 	return nil
+}
+
+func (s *Service) blockActionForActivePathPicker(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	if surface == nil || surface.ActivePathPicker == nil {
+		return nil
+	}
+	switch action.Kind {
+	case control.ActionStatus,
+		control.ActionTextMessage,
+		control.ActionImageMessage,
+		control.ActionReactionCreated,
+		control.ActionMessageRecalled,
+		control.ActionPathPickerEnter,
+		control.ActionPathPickerUp,
+		control.ActionPathPickerSelect,
+		control.ActionPathPickerConfirm,
+		control.ActionPathPickerCancel:
+		return nil
+	case control.ActionListInstances,
+		control.ActionAttachInstance,
+		control.ActionAttachWorkspace,
+		control.ActionShowAllWorkspaces,
+		control.ActionShowRecentWorkspaces,
+		control.ActionShowThreads,
+		control.ActionShowAllThreads,
+		control.ActionShowScopedThreads,
+		control.ActionShowWorkspaceThreads,
+		control.ActionShowAllThreadWorkspaces,
+		control.ActionShowRecentThreadWorkspaces,
+		control.ActionUseThread,
+		control.ActionConfirmKickThread,
+		control.ActionCancelKickThread,
+		control.ActionFollowLocal,
+		control.ActionNewThread,
+		control.ActionDetach:
+		return notice(surface, "path_picker_active", "当前正在进行路径选择，请先在卡片里确认或取消；如需查看状态，可继续使用 /status。")
+	default:
+		return nil
+	}
 }
 
 func (s *Service) blockNewThreadPreparation(surface *state.SurfaceConsoleRecord) []control.UIEvent {

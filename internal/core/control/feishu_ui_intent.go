@@ -34,6 +34,7 @@ type FeishuUIIntent struct {
 	WorkspaceKey string
 	PickerID     string
 	PickerEntry  string
+	ActorUserID  string
 }
 
 func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
@@ -77,15 +78,15 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 	case ActionShowRecentThreadWorkspaces:
 		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentThreadWorkspaces}, true
 	case ActionPathPickerEnter:
-		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerEnter, PickerID: action.PickerID, PickerEntry: action.PickerEntry}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerEnter, PickerID: action.PickerID, PickerEntry: action.PickerEntry, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerUp:
-		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerUp, PickerID: action.PickerID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerUp, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerSelect:
-		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerSelect, PickerID: action.PickerID, PickerEntry: action.PickerEntry}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerSelect, PickerID: action.PickerID, PickerEntry: action.PickerEntry, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerConfirm:
-		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerConfirm, PickerID: action.PickerID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerConfirm, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerCancel:
-		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerCancel, PickerID: action.PickerID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerCancel, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	}
 	return nil, false
 }

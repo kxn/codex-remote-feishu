@@ -75,8 +75,8 @@ func (s *Service) nextPathPickerToken() string {
 	return fmt.Sprintf("picker-%d", s.nextPathPickerID)
 }
 
-func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pickerID, entryName string) []control.UIEvent {
-	record, blocked := s.requireActivePathPicker(surface, pickerID)
+func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pickerID, entryName, actorUserID string) []control.UIEvent {
+	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -96,8 +96,8 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 }
 
-func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, pickerID string) []control.UIEvent {
-	record, blocked := s.requireActivePathPicker(surface, pickerID)
+func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []control.UIEvent {
+	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -125,8 +125,8 @@ func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, picker
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 }
 
-func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pickerID, entryName string) []control.UIEvent {
-	record, blocked := s.requireActivePathPicker(surface, pickerID)
+func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pickerID, entryName, actorUserID string) []control.UIEvent {
+	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -152,8 +152,8 @@ func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pi
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 }
 
-func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, pickerID string) []control.UIEvent {
-	record, blocked := s.requireActivePathPicker(surface, pickerID)
+func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []control.UIEvent {
+	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -165,8 +165,8 @@ func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, p
 	return notice(surface, "path_picker_confirmed", fmt.Sprintf("已确认路径：`%s`。", selectedPath))
 }
 
-func (s *Service) handlePathPickerCancel(surface *state.SurfaceConsoleRecord, pickerID string) []control.UIEvent {
-	_, blocked := s.requireActivePathPicker(surface, pickerID)
+func (s *Service) handlePathPickerCancel(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []control.UIEvent {
+	_, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -174,13 +174,22 @@ func (s *Service) handlePathPickerCancel(surface *state.SurfaceConsoleRecord, pi
 	return notice(surface, "path_picker_cancelled", "已取消路径选择。")
 }
 
-func (s *Service) requireActivePathPicker(surface *state.SurfaceConsoleRecord, pickerID string) (*state.ActivePathPickerRecord, []control.UIEvent) {
+func (s *Service) requireActivePathPicker(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*state.ActivePathPickerRecord, []control.UIEvent) {
 	if surface == nil || surface.ActivePathPicker == nil {
 		return nil, notice(surface, "path_picker_expired", "这个路径选择器已失效，请重新发起。")
 	}
 	record := surface.ActivePathPicker
+	if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(s.now()) {
+		clearSurfacePathPicker(surface)
+		return nil, notice(surface, "path_picker_expired", "这个路径选择器已过期，请重新发起。")
+	}
 	if strings.TrimSpace(pickerID) == "" || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
 		return nil, notice(surface, "path_picker_expired", "这个旧路径选择器已失效，请重新发起。")
+	}
+	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, surface.ActorUserID))
+	if ownerUserID := strings.TrimSpace(record.OwnerUserID); ownerUserID != "" && actorUserID != "" && ownerUserID != actorUserID {
+		clearSurfacePathPicker(surface)
+		return nil, notice(surface, "path_picker_unauthorized", "这个路径选择器只允许发起者本人操作，已自动失效，请重新发起。")
 	}
 	return record, nil
 }

@@ -312,6 +312,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	if blocked := s.pendingHeadlessActionBlocked(surface, action); blocked != nil {
 		return blocked
 	}
+	if blocked := s.blockActionForActivePathPicker(surface, action); blocked != nil {
+		return blocked
+	}
 	s.noteAutoContinueAction(surface, action)
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.applyFeishuUIIntent(surface, *intent)

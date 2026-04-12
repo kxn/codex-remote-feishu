@@ -132,6 +132,9 @@ func snapshotGateSummary(surface *state.SurfaceConsoleRecord) control.GateSummar
 	if surface.ActiveRequestCapture != nil {
 		return control.GateSummary{Kind: "request_capture"}
 	}
+	if surface.ActivePathPicker != nil {
+		return control.GateSummary{Kind: "path_picker"}
+	}
 	count := 0
 	for requestID, request := range surface.PendingRequests {
 		if request == nil {

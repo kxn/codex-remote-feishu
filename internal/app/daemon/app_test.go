@@ -301,6 +301,53 @@ func TestHandleGatewayActionRejectsOldNavigationCardAndShowsExpiredNotice(t *tes
 	}
 }
 
+func TestHandleGatewayActionRejectsOldPathPickerCardAndPreservesActivePicker(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: startedAt,
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	root := t.TempDir()
+	events := app.service.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeDirectory,
+		RootPath: root,
+	})
+	if len(events) != 1 || events[0].FeishuPathPickerView == nil {
+		t.Fatalf("expected active picker open event, got %#v", events)
+	}
+	pickerID := events[0].FeishuPathPickerView.PickerID
+	before := len(gateway.operations)
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionPathPickerUp,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         pickerID,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "older-life",
+		},
+	})
+
+	if result != nil {
+		t.Fatalf("expected old path picker card not to inline replace, got %#v", result)
+	}
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "重新发送对应命令获取新卡片")
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.Gate.Kind != "path_picker" {
+		t.Fatalf("expected old path picker card callback not to clear current gate, got %#v", snapshot)
+	}
+}
+
 func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
