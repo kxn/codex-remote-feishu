@@ -224,38 +224,54 @@ func systemdUserReadUnitState(ctx context.Context, state InstallState) (systemdU
 	}
 	lines := strings.Split(strings.ReplaceAll(strings.TrimSpace(output), "\r\n", "\n"), "\n")
 	current := systemdUserUnitState{}
+	var legacyValues []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if !strings.Contains(line, "=") {
+		if idx := strings.IndexByte(line, '='); idx > 0 {
+			key := strings.TrimSpace(line[:idx])
+			value := strings.TrimSpace(line[idx+1:])
+			switch key {
+			case "ActiveState":
+				current.ActiveState = value
+			case "MainPID":
+				current.MainPID = value
+			}
 			continue
 		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(key) {
-		case "ActiveState":
-			current.ActiveState = strings.TrimSpace(value)
-		case "MainPID":
-			current.MainPID = strings.TrimSpace(value)
-		}
+		legacyValues = append(legacyValues, line)
 	}
-	// Keep backward compatibility with stubs that return value-only lines.
-	if current.ActiveState == "" {
-		if len(lines) > 0 {
-			current.ActiveState = strings.TrimSpace(lines[0])
-		}
-		if len(lines) > 1 && current.MainPID == "" {
-			current.MainPID = strings.TrimSpace(lines[1])
-		}
+
+	if current.ActiveState == "" && len(legacyValues) > 0 {
+		current.ActiveState = legacyValues[0]
+	}
+	if current.MainPID == "" && len(legacyValues) > 1 {
+		current.MainPID = legacyValues[1]
+	}
+	// Some systemctl variants can emit value-only rows in unexpected order.
+	// If values look swapped, correct them before evaluating stop completion.
+	if looksNumericMainPID(current.ActiveState) && !looksNumericMainPID(current.MainPID) {
+		current.ActiveState, current.MainPID = current.MainPID, current.ActiveState
 	}
 	if current.ActiveState == "" {
 		return systemdUserUnitState{}, fmt.Errorf("empty ActiveState")
 	}
 	return current, nil
+}
+
+func looksNumericMainPID(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func systemdUserUnitStopped(current systemdUserUnitState) bool {
