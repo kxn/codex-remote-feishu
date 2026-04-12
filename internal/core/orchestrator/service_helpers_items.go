@@ -6,6 +6,47 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func (b *itemBuffer) replaceText(text string) {
+	if text == "" {
+		b.textChunks = nil
+		b.textValue = ""
+		return
+	}
+	b.textChunks = []string{text}
+	b.textValue = text
+}
+
+func (b *itemBuffer) appendText(text string) {
+	if text == "" {
+		return
+	}
+	b.textChunks = append(b.textChunks, text)
+	if len(b.textChunks) == 1 {
+		b.textValue = b.textChunks[0]
+		return
+	}
+	b.textValue = ""
+}
+
+func (b *itemBuffer) text() string {
+	if b == nil {
+		return ""
+	}
+	if b.textValue != "" {
+		return b.textValue
+	}
+	if len(b.textChunks) == 0 {
+		return ""
+	}
+	if len(b.textChunks) == 1 {
+		b.textValue = b.textChunks[0]
+		return b.textValue
+	}
+	b.textValue = strings.Join(b.textChunks, "")
+	b.textChunks = []string{b.textValue}
+	return b.textValue
+}
+
 func turnRenderKey(instanceID, threadID, turnID string) string {
 	return instanceID + "\x00" + threadID + "\x00" + turnID
 }

@@ -48,7 +48,8 @@ type itemBuffer struct {
 	TurnID     string
 	ItemID     string
 	ItemKind   string
-	Text       string
+	textChunks []string
+	textValue  string
 }
 
 type remoteTurnBinding struct {

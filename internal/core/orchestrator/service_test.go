@@ -179,6 +179,101 @@ func completeRemoteTurnWithFinalText(t *testing.T, svc *Service, turnID, status,
 	})
 }
 
+func TestItemBufferTextMaterializesLazily(t *testing.T) {
+	buf := &itemBuffer{}
+
+	buf.replaceText("hello")
+	buf.appendText(", ")
+	buf.appendText("world")
+
+	if buf.textValue != "" {
+		t.Fatalf("expected joined text cache to stay empty before materialization, got %q", buf.textValue)
+	}
+	if len(buf.textChunks) != 3 {
+		t.Fatalf("expected three text chunks before materialization, got %#v", buf.textChunks)
+	}
+
+	if got := buf.text(); got != "hello, world" {
+		t.Fatalf("buf.text() = %q, want %q", got, "hello, world")
+	}
+	if buf.textValue != "hello, world" {
+		t.Fatalf("expected joined text cache after materialization, got %q", buf.textValue)
+	}
+	if len(buf.textChunks) != 1 || buf.textChunks[0] != "hello, world" {
+		t.Fatalf("expected chunks to collapse after materialization, got %#v", buf.textChunks)
+	}
+}
+
+func TestCompleteItemUsesMaterializedBufferedText(t *testing.T) {
+	now := time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "plan",
+		Delta:    "hello",
+	}); len(events) != 0 {
+		t.Fatalf("expected no UI events on item delta, got %#v", events)
+	}
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "plan",
+		Delta:    " world",
+	}); len(events) != 0 {
+		t.Fatalf("expected no UI events on item delta, got %#v", events)
+	}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "plan",
+	})
+	found := false
+	for _, event := range events {
+		if event.Block != nil && event.Block.Text == "hello world" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected completed item to render full materialized text, got %#v", events)
+	}
+}
+
 func TestAttachPinsObservedFocusedThread(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

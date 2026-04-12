@@ -487,7 +487,7 @@ func (s *Service) trackItemStart(instanceID string, event agentproto.Event) {
 		buf.ItemKind = event.ItemKind
 	}
 	if text, _ := event.Metadata["text"].(string); text != "" {
-		buf.Text = text
+		buf.replaceText(text)
 	}
 }
 
@@ -499,7 +499,7 @@ func (s *Service) trackItemDelta(instanceID string, event agentproto.Event) {
 	if buf.ItemKind == "" {
 		buf.ItemKind = event.ItemKind
 	}
-	buf.Text += event.Delta
+	buf.appendText(event.Delta)
 }
 
 func (s *Service) completeItem(instanceID string, event agentproto.Event) []control.UIEvent {
@@ -527,22 +527,24 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []cont
 	if buf.ItemKind == "" {
 		buf.ItemKind = event.ItemKind
 	}
+	bufferText := buf.text()
 	if text, _ := event.Metadata["text"].(string); text != "" {
-		if buf.Text == "" || strings.TrimSpace(buf.Text) != strings.TrimSpace(text) {
-			buf.Text = text
+		if bufferText == "" || strings.TrimSpace(bufferText) != strings.TrimSpace(text) {
+			buf.replaceText(text)
+			bufferText = text
 		}
 		if buf.ItemKind == "" {
 			buf.ItemKind = "agent_message"
 		}
 	}
 	delete(s.itemBuffers, key)
-	if !rendersTextItem(buf.ItemKind) || strings.TrimSpace(buf.Text) == "" {
+	if !rendersTextItem(buf.ItemKind) || strings.TrimSpace(bufferText) == "" {
 		return nil
 	}
 	if buf.ItemKind == "agent_message" {
-		return s.storePendingTurnText(instanceID, event.ThreadID, event.TurnID, event.ItemID, buf.ItemKind, buf.Text)
+		return s.storePendingTurnText(instanceID, event.ThreadID, event.TurnID, event.ItemID, buf.ItemKind, bufferText)
 	}
-	return s.renderTextItem(instanceID, event.ThreadID, event.TurnID, event.ItemID, buf.Text, false)
+	return s.renderTextItem(instanceID, event.ThreadID, event.TurnID, event.ItemID, bufferText, false)
 }
 
 func (s *Service) storePendingTurnText(instanceID, threadID, turnID, itemID, itemKind, text string) []control.UIEvent {
