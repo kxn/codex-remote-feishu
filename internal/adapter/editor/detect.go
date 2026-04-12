@@ -7,6 +7,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/managedshim"
+	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
+)
+
+const (
+	ManagedShimKindTiny   = "tiny_shim"
+	ManagedShimKindLegacy = "legacy_copied_binary"
 )
 
 type VSCodeSettingsStatus struct {
@@ -17,12 +25,20 @@ type VSCodeSettingsStatus struct {
 }
 
 type ManagedShimStatus struct {
-	Entrypoint       string `json:"entrypoint"`
-	Exists           bool   `json:"exists"`
-	RealBinaryPath   string `json:"realBinaryPath,omitempty"`
-	RealBinaryExists bool   `json:"realBinaryExists"`
-	Installed        bool   `json:"installed"`
-	MatchesBinary    bool   `json:"matchesBinary"`
+	Entrypoint              string `json:"entrypoint"`
+	Exists                  bool   `json:"exists"`
+	Kind                    string `json:"kind,omitempty"`
+	RepoManaged             bool   `json:"repoManaged"`
+	RealBinaryPath          string `json:"realBinaryPath,omitempty"`
+	RealBinaryExists        bool   `json:"realBinaryExists"`
+	SidecarPath             string `json:"sidecarPath,omitempty"`
+	SidecarExists           bool   `json:"sidecarExists"`
+	SidecarValid            bool   `json:"sidecarValid"`
+	SidecarInstallStatePath string `json:"sidecarInstallStatePath,omitempty"`
+	SidecarConfigPath       string `json:"sidecarConfigPath,omitempty"`
+	SidecarInstanceID       string `json:"sidecarInstanceId,omitempty"`
+	Installed               bool   `json:"installed"`
+	MatchesBinary           bool   `json:"matchesBinary"`
 }
 
 func DetectVSCodeSettings(settingsPath, executable string) (VSCodeSettingsStatus, error) {
@@ -50,6 +66,7 @@ func DetectManagedShim(entrypointPath, wrapperBinary string) (ManagedShimStatus,
 	status := ManagedShimStatus{
 		Entrypoint:     entrypointPath,
 		RealBinaryPath: ManagedShimRealBinaryPath(entrypointPath),
+		SidecarPath:    ManagedShimSidecarPath(entrypointPath),
 	}
 	if strings.TrimSpace(entrypointPath) == "" {
 		return status, nil
@@ -65,15 +82,50 @@ func DetectManagedShim(entrypointPath, wrapperBinary string) (ManagedShimStatus,
 	} else if !os.IsNotExist(err) {
 		return status, err
 	}
-	status.Installed = status.Exists && status.RealBinaryExists
-	if status.Exists && strings.TrimSpace(wrapperBinary) != "" {
-		matches, err := sameFileContents(entrypointPath, wrapperBinary)
-		if err != nil {
-			return status, err
+	if _, err := os.Stat(status.SidecarPath); err == nil {
+		status.SidecarExists = true
+	} else if !os.IsNotExist(err) {
+		return status, err
+	}
+
+	switch {
+	case status.SidecarExists:
+		status.Kind = ManagedShimKindTiny
+		status.RepoManaged = true
+		sidecar, err := managedshim.ReadSidecar(status.SidecarPath)
+		if err == nil && managedshim.SidecarValid(sidecar) {
+			status.SidecarValid = true
+			status.SidecarInstallStatePath = sidecar.InstallStatePath
+			status.SidecarConfigPath = sidecar.ConfigPath
+			status.SidecarInstanceID = sidecar.InstanceID
 		}
-		status.MatchesBinary = matches
+		status.Installed = status.Exists && status.RealBinaryExists && status.SidecarValid
+		status.MatchesBinary = matchesEmbeddedManagedShim(entrypointPath)
+	case status.Exists && status.RealBinaryExists:
+		status.Kind = ManagedShimKindLegacy
+		status.RepoManaged = true
+		status.Installed = true
+		if strings.TrimSpace(wrapperBinary) != "" {
+			matches, err := sameFileContents(entrypointPath, wrapperBinary)
+			if err != nil {
+				return status, err
+			}
+			status.MatchesBinary = matches
+		}
 	}
 	return status, nil
+}
+
+func matchesEmbeddedManagedShim(path string) bool {
+	expected := managedshimembed.ExpectedSHA256()
+	if strings.TrimSpace(expected) == "" {
+		return false
+	}
+	got, err := fileDigestHex(path)
+	if err != nil {
+		return false
+	}
+	return got == expected
 }
 
 func sameCleanPath(left, right string) bool {
@@ -116,4 +168,22 @@ func fileDigest(path string) ([32]byte, error) {
 	var digest [32]byte
 	copy(digest[:], hasher.Sum(nil))
 	return digest, nil
+}
+
+func fileDigestHex(path string) (string, error) {
+	digest, err := fileDigest(path)
+	if err != nil {
+		return "", err
+	}
+	return fmtDigest(digest), nil
+}
+
+func fmtDigest(digest [32]byte) string {
+	const hex = "0123456789abcdef"
+	buf := make([]byte, len(digest)*2)
+	for i, b := range digest {
+		buf[i*2] = hex[b>>4]
+		buf[i*2+1] = hex[b&0x0f]
+	}
+	return string(buf)
 }

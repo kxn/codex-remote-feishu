@@ -263,7 +263,7 @@ func TestBootstrapAllocatesFallbackPortsWhenPreferredBundleBusy(t *testing.T) {
 	}
 }
 
-func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
+func TestBootstrapManagedShimInstallsTinyShimAndPreservesRealBinary(t *testing.T) {
 	baseDir := t.TempDir()
 	entrypoint := filepath.Join(baseDir, ".vscode-server", "extensions", "openai.chatgpt-test", "bin", "linux-x86_64", "codex")
 	sourceDir := filepath.Join(baseDir, "source-bin")
@@ -293,8 +293,8 @@ func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read bundle entrypoint: %v", err)
 	}
-	if string(raw) != "codex-remote" {
-		t.Fatalf("expected unified binary content in entrypoint, got %q", string(raw))
+	if string(raw) == "codex-remote" {
+		t.Fatalf("expected tiny shim payload instead of copied main binary")
 	}
 
 	realRaw, err := os.ReadFile(editor.ManagedShimRealBinaryPath(entrypoint))
@@ -305,9 +305,17 @@ func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
 		t.Fatalf("expected preserved real binary content, got %q", string(realRaw))
 	}
 
+	status, err := editor.DetectManagedShim(entrypoint, "")
+	if err != nil {
+		t.Fatalf("DetectManagedShim: %v", err)
+	}
+	if status.Kind != editor.ManagedShimKindTiny || !status.SidecarValid || !status.MatchesBinary {
+		t.Fatalf("unexpected managed shim status: %#v", status)
+	}
+
 	cfg := loadAppConfigForTest(t, state.ConfigPath)
-	if cfg.Wrapper.CodexRealBinary != editor.ManagedShimRealBinaryPath(entrypoint) {
-		t.Fatalf("expected config to point to managed shim real binary, got %s", cfg.Wrapper.CodexRealBinary)
+	if cfg.Wrapper.CodexRealBinary != "codex" {
+		t.Fatalf("expected managed shim config to keep shared codex path, got %s", cfg.Wrapper.CodexRealBinary)
 	}
 }
 

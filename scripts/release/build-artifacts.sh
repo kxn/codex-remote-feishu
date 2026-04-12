@@ -166,6 +166,7 @@ for platform in "${platforms[@]}"; do
 
   CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
     bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
+  bash "${ROOT_DIR}/scripts/managedshim/prepare-vscode-shim-embed.sh" "${goos}" "${goarch}"
 
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
     go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \

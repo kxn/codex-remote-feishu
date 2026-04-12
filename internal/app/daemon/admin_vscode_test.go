@@ -54,8 +54,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if _, err := os.Stat(entrypointV1 + ".real"); err != nil {
 		t.Fatalf("expected .real backup after shim install: %v", err)
 	}
-	if readFileString(t, entrypointV1) != "wrapper-binary" {
-		t.Fatalf("expected shimmed entrypoint to match wrapper binary")
+	if readFileString(t, entrypointV1) == "wrapper-binary" {
+		t.Fatalf("expected entrypoint to be tiny shim, not copied main binary")
 	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
@@ -65,8 +65,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if loaded.Config.Wrapper.IntegrationMode != "managed_shim" {
 		t.Fatalf("wrapper integration mode = %q, want managed_shim", loaded.Config.Wrapper.IntegrationMode)
 	}
-	if loaded.Config.Wrapper.CodexRealBinary != entrypointV1+".real" {
-		t.Fatalf("expected codexRealBinary to point at managed shim backup, got %q", loaded.Config.Wrapper.CodexRealBinary)
+	if loaded.Config.Wrapper.CodexRealBinary != "codex" {
+		t.Fatalf("expected shared codex path to stay unchanged, got %q", loaded.Config.Wrapper.CodexRealBinary)
 	}
 
 	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
@@ -99,8 +99,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if _, err := os.Stat(entrypointV2 + ".real"); err != nil {
 		t.Fatalf("expected .real backup on latest entrypoint: %v", err)
 	}
-	if readFileString(t, entrypointV2) != "wrapper-binary" {
-		t.Fatalf("expected latest entrypoint to match wrapper binary")
+	if readFileString(t, entrypointV2) == "wrapper-binary" {
+		t.Fatalf("expected latest entrypoint to be tiny shim, not copied main binary")
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
 		t.Fatalf("decode re-apply detect: %v", err)
@@ -113,8 +113,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAppConfigAtPath after re-apply: %v", err)
 	}
-	if loaded.Config.Wrapper.CodexRealBinary != entrypointV2+".real" {
-		t.Fatalf("expected codexRealBinary to move to latest managed shim backup, got %q", loaded.Config.Wrapper.CodexRealBinary)
+	if loaded.Config.Wrapper.CodexRealBinary != "codex" {
+		t.Fatalf("expected shared codex path to remain unchanged, got %q", loaded.Config.Wrapper.CodexRealBinary)
 	}
 
 	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/reinstall-shim", "")
@@ -316,6 +316,73 @@ func TestVSCodeDetectSupportsJSONCSettings(t *testing.T) {
 	}
 	if !detect.Settings.MatchesBinary {
 		t.Fatalf("expected settings to match current binary, got %#v", detect.Settings)
+	}
+}
+
+func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypointV1 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	writeExecutableFile(t, entrypointV1, "orig-v1")
+
+	app, configPath, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply v1 status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
+	writeExecutableFile(t, entrypointV2, "orig-v2")
+	now := time.Now().Add(time.Minute)
+	if err := os.Chtimes(filepath.Dir(filepath.Dir(filepath.Dir(entrypointV2))), now, now); err != nil {
+		t.Fatalf("Chtimes(v2 extension dir): %v", err)
+	}
+	if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		EntrypointPath:   entrypointV2,
+		InstallStatePath: installStatePath,
+		ConfigPath:       configPath,
+		InstanceID:       "stable",
+	}); err != nil {
+		t.Fatalf("PatchBundleEntrypoint(v2): %v", err)
+	}
+
+	if err := os.Remove(editor.ManagedShimSidecarPath(entrypointV1)); err != nil {
+		t.Fatalf("remove v1 sidecar: %v", err)
+	}
+	writeExecutableFile(t, entrypointV1, "wrapper-binary")
+
+	rec = performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.LatestBundleEntrypoint != entrypointV2 {
+		t.Fatalf("latest bundle entrypoint = %q, want %q", detect.LatestBundleEntrypoint, entrypointV2)
+	}
+	if !detect.NeedsShimReinstall {
+		t.Fatalf("expected historical recorded legacy shim to require reinstall, got %#v", detect)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/reinstall-shim", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reinstall status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	statusV1, err := editor.DetectManagedShim(entrypointV1, binaryPath)
+	if err != nil {
+		t.Fatalf("DetectManagedShim(v1): %v", err)
+	}
+	if statusV1.Kind != editor.ManagedShimKindTiny || !statusV1.SidecarValid || !statusV1.MatchesBinary {
+		t.Fatalf("expected recorded historical shim to migrate back to tiny shim, got %#v", statusV1)
 	}
 }
 

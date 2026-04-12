@@ -130,6 +130,10 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	if err != nil {
 		return vscodeDetectResponse{}, err
 	}
+	candidateStatuses, err := detectManagedShimStatuses(defaults.CandidateBundleEntrypoints, currentBinary)
+	if err != nil {
+		return vscodeDetectResponse{}, err
+	}
 	installStatePath := a.installStatePath()
 	installState, err := loadInstallStateIfPresent(installStatePath)
 	if err != nil {
@@ -158,7 +162,7 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	if len(defaults.CandidateBundleEntrypoints) > 0 {
 		latestEntrypoint = defaults.CandidateBundleEntrypoints[0]
 	}
-	latestShim, err := editor.DetectManagedShim(latestEntrypoint, currentBinary)
+	latestShim, err := lookupManagedShimStatus(candidateStatuses, latestEntrypoint, currentBinary)
 	if err != nil {
 		return vscodeDetectResponse{}, err
 	}
@@ -167,10 +171,11 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	var recordedShim *editor.ManagedShimStatus
 	if installState != nil && strings.TrimSpace(installState.BundleEntrypoint) != "" {
 		recordedEntrypoint = installState.BundleEntrypoint
-		status, err := editor.DetectManagedShim(recordedEntrypoint, currentBinary)
+		status, err := lookupManagedShimStatus(candidateStatuses, recordedEntrypoint, currentBinary)
 		if err != nil {
 			return vscodeDetectResponse{}, err
 		}
+		candidateStatuses[recordedEntrypoint] = status
 		recordedShim = &status
 	}
 
@@ -180,7 +185,7 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	}
 	recommendedMode := string(install.IntegrationManagedShim)
 	_ = admin
-	needsReinstall := computeShimReinstallNeed(currentMode, installState, latestEntrypoint, latestShim)
+	needsReinstall := computeShimReinstallNeed(currentMode, installState, latestEntrypoint, latestShim, candidateStatuses, loaded.Path, installStatePath)
 
 	return vscodeDetectResponse{
 		SSHSession:                 admin.sshSession,
@@ -223,6 +228,11 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 			StatePath: statePath,
 		}
 	}
+	install.ApplyStateMetadata(state, install.StateMetadataOptions{
+		StatePath:       statePath,
+		InstalledBinary: currentBinary,
+		CurrentVersion:  a.currentBinaryVersion(),
+	})
 	if strings.TrimSpace(state.VSCodeSettingsPath) == "" {
 		state.VSCodeSettingsPath = firstNonEmpty(strings.TrimSpace(req.SettingsPath), defaults.VSCodeSettingsPath)
 	}
@@ -237,8 +247,27 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 		if strings.TrimSpace(bundleEntrypoint) == "" {
 			return errors.New("no vscode extension bundle entrypoint detected")
 		}
-		if err := editor.PatchBundleEntrypoint(bundleEntrypoint, currentBinary); err != nil {
+		configPath := loadedConfigPath(a)
+		statuses, err := detectManagedShimStatuses(defaults.CandidateBundleEntrypoints, currentBinary)
+		if err != nil {
 			return err
+		}
+		if recorded := strings.TrimSpace(state.BundleEntrypoint); recorded != "" {
+			status, err := lookupManagedShimStatus(statuses, recorded, currentBinary)
+			if err != nil {
+				return err
+			}
+			statuses[recorded] = status
+		}
+		for _, target := range managedShimMigrationTargets(bundleEntrypoint, state.BundleEntrypoint, statuses, configPath, statePath) {
+			if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+				EntrypointPath:   target,
+				InstallStatePath: statePath,
+				ConfigPath:       configPath,
+				InstanceID:       state.InstanceID,
+			}); err != nil {
+				return err
+			}
 		}
 		if err := editor.ClearVSCodeSettingsExecutable(state.VSCodeSettingsPath); err != nil {
 			return err
@@ -254,6 +283,7 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 		StatePath:       statePath,
 		InstalledBinary: currentBinary,
 		CurrentVersion:  a.currentBinaryVersion(),
+		InstanceID:      state.InstanceID,
 	})
 	state.ConfigPath = loadedConfigPath(a)
 	state.InstalledBinary = currentBinary
@@ -285,6 +315,11 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 	if state == nil {
 		state = &install.InstallState{StatePath: statePath}
 	}
+	install.ApplyStateMetadata(state, install.StateMetadataOptions{
+		StatePath:       statePath,
+		InstalledBinary: currentBinary,
+		CurrentVersion:  a.currentBinaryVersion(),
+	})
 	target := strings.TrimSpace(bundleEntrypoint)
 	if target == "" && len(defaults.CandidateBundleEntrypoints) > 0 {
 		target = defaults.CandidateBundleEntrypoints[0]
@@ -295,8 +330,27 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 	if target == "" {
 		return errors.New("no vscode extension bundle entrypoint detected")
 	}
-	if err := editor.PatchBundleEntrypoint(target, currentBinary); err != nil {
+	configPath := loadedConfigPath(a)
+	statuses, err := detectManagedShimStatuses(defaults.CandidateBundleEntrypoints, currentBinary)
+	if err != nil {
 		return err
+	}
+	if recorded := strings.TrimSpace(state.BundleEntrypoint); recorded != "" {
+		status, err := lookupManagedShimStatus(statuses, recorded, currentBinary)
+		if err != nil {
+			return err
+		}
+		statuses[recorded] = status
+	}
+	for _, candidate := range managedShimMigrationTargets(target, state.BundleEntrypoint, statuses, configPath, statePath) {
+		if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+			EntrypointPath:   candidate,
+			InstallStatePath: statePath,
+			ConfigPath:       configPath,
+			InstanceID:       state.InstanceID,
+		}); err != nil {
+			return err
+		}
 	}
 	settingsPath := firstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)
 	if err := editor.ClearVSCodeSettingsExecutable(settingsPath); err != nil {
@@ -310,6 +364,7 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 		StatePath:       statePath,
 		InstalledBinary: currentBinary,
 		CurrentVersion:  a.currentBinaryVersion(),
+		InstanceID:      state.InstanceID,
 	})
 	state.BundleEntrypoint = target
 	state.InstalledBinary = currentBinary
@@ -326,6 +381,7 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 func (a *App) updateVSCodeConfig(mode, bundleEntrypoint string) error {
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()
+	_ = bundleEntrypoint
 
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
@@ -333,9 +389,6 @@ func (a *App) updateVSCodeConfig(mode, bundleEntrypoint string) error {
 	}
 	cfg := loaded.Config
 	cfg.Wrapper.IntegrationMode = mode
-	if modeIncludes(mode, install.IntegrationManagedShim) && strings.TrimSpace(bundleEntrypoint) != "" {
-		cfg.Wrapper.CodexRealBinary = editor.ManagedShimRealBinaryPath(bundleEntrypoint)
-	}
 	return config.WriteAppConfig(loaded.Path, cfg)
 }
 
@@ -409,31 +462,6 @@ func modeIncludes(mode string, target install.WrapperIntegrationMode) bool {
 	default:
 		return mode == string(target)
 	}
-}
-
-func computeShimReinstallNeed(currentMode string, installState *install.InstallState, latestEntrypoint string, latestShim editor.ManagedShimStatus) bool {
-	managedActive := modeIncludes(currentMode, install.IntegrationManagedShim)
-	if !managedActive && installState != nil {
-		for _, integration := range installState.Integrations {
-			if integration == install.IntegrationManagedShim {
-				managedActive = true
-				break
-			}
-		}
-	}
-	if !managedActive {
-		return false
-	}
-	if strings.TrimSpace(latestEntrypoint) == "" {
-		return false
-	}
-	if !latestShim.Installed || !latestShim.MatchesBinary {
-		return true
-	}
-	if installState == nil {
-		return false
-	}
-	return !samePlatformPath(latestEntrypoint, installState.BundleEntrypoint)
 }
 
 func samePlatformPath(left, right string) bool {

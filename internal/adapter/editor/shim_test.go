@@ -4,33 +4,26 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
 )
 
 func TestPatchBundleEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bin", "linux-x86_64", "codex")
-	wrapper := filepath.Join(dir, "wrapper", "codex-remote")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("mkdir entrypoint dir: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
-		t.Fatalf("mkdir wrapper dir: %v", err)
 	}
 	if err := os.WriteFile(path, []byte("original-codex"), 0o755); err != nil {
 		t.Fatalf("seed bundle entrypoint: %v", err)
 	}
-	if err := os.WriteFile(wrapper, []byte("codex-remote"), 0o755); err != nil {
-		t.Fatalf("seed wrapper binary: %v", err)
-	}
-	if err := PatchBundleEntrypoint(path, wrapper); err != nil {
+	if err := PatchBundleEntrypoint(PatchBundleEntrypointOptions{
+		EntrypointPath:   path,
+		InstallStatePath: filepath.Join(dir, "install-state.json"),
+		ConfigPath:       filepath.Join(dir, "config.json"),
+		InstanceID:       "stable",
+	}); err != nil {
 		t.Fatalf("patch bundle entrypoint: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read bundle entrypoint: %v", err)
-	}
-	if string(raw) != "codex-remote" {
-		t.Fatalf("expected copied wrapper binary, got %q", string(raw))
 	}
 
 	realPath := ManagedShimRealBinaryPath(path)
@@ -47,6 +40,17 @@ func TestPatchBundleEntrypoint(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("unexpected mode: %o", info.Mode().Perm())
+	}
+
+	status, err := DetectManagedShim(path, "")
+	if err != nil {
+		t.Fatalf("DetectManagedShim: %v", err)
+	}
+	if status.Kind != ManagedShimKindTiny || !status.Installed || !status.SidecarValid || !status.MatchesBinary {
+		t.Fatalf("unexpected shim status: %#v", status)
+	}
+	if _, ok := managedshimembed.Current(); !ok {
+		t.Fatal("expected embedded managed shim asset for host platform")
 	}
 }
 

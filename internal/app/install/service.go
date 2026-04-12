@@ -111,9 +111,6 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	cfg := existing.Config
 
 	codexRealBinary := opts.CodexRealBinary
-	if codexRealBinary == "" && hasIntegration(integrations, IntegrationManagedShim) && opts.BundleEntrypoint != "" {
-		codexRealBinary = editor.ManagedShimRealBinaryPath(opts.BundleEntrypoint)
-	}
 	if installedBinary == "" {
 		installedBinary = sourceBinary
 	}
@@ -143,7 +140,12 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		}
 	}
 	if hasIntegration(integrations, IntegrationManagedShim) {
-		if err := editor.PatchBundleEntrypoint(opts.BundleEntrypoint, installedBinary); err != nil {
+		if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+			EntrypointPath:   opts.BundleEntrypoint,
+			InstallStatePath: statePath,
+			ConfigPath:       configPath,
+			InstanceID:       instanceID,
+		}); err != nil {
 			return InstallState{}, err
 		}
 	}

@@ -2,32 +2,48 @@ package editor
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/managedshim"
+	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
 )
 
-func ManagedShimRealBinaryPath(entrypointPath string) string {
-	ext := filepath.Ext(entrypointPath)
-	if ext == "" {
-		return entrypointPath + ".real"
-	}
-	return strings.TrimSuffix(entrypointPath, ext) + ".real" + ext
+type PatchBundleEntrypointOptions struct {
+	EntrypointPath   string
+	InstallStatePath string
+	ConfigPath       string
+	InstanceID       string
 }
 
-func PatchBundleEntrypoint(entrypointPath, wrapperBinary string) error {
-	if strings.TrimSpace(entrypointPath) == "" {
+func ManagedShimRealBinaryPath(entrypointPath string) string {
+	return managedshim.RealBinaryPath(entrypointPath)
+}
+
+func ManagedShimSidecarPath(entrypointPath string) string {
+	return managedshim.SidecarPath(entrypointPath)
+}
+
+func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
+	entrypointPath := strings.TrimSpace(opts.EntrypointPath)
+	if entrypointPath == "" {
 		return fmt.Errorf("bundle entrypoint path is required")
 	}
-	if strings.TrimSpace(wrapperBinary) == "" {
-		return fmt.Errorf("wrapper binary path is required")
+	sidecar := managedshim.Sidecar{
+		InstallStatePath: opts.InstallStatePath,
+		ConfigPath:       opts.ConfigPath,
+		InstanceID:       opts.InstanceID,
+	}
+	if !managedshim.SidecarValid(sidecar) {
+		return fmt.Errorf("managed shim install requires install state path and config path")
 	}
 	if err := os.MkdirAll(filepath.Dir(entrypointPath), 0o755); err != nil {
 		return err
 	}
 
 	realBinaryPath := ManagedShimRealBinaryPath(entrypointPath)
+	renamedOriginal := false
 	if _, err := os.Stat(realBinaryPath); err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -38,30 +54,24 @@ func PatchBundleEntrypoint(entrypointPath, wrapperBinary string) error {
 		if err := os.Rename(entrypointPath, realBinaryPath); err != nil {
 			return err
 		}
-	}
-	return copyExecutable(wrapperBinary, entrypointPath)
-}
-
-func copyExecutable(sourcePath, targetPath string) error {
-	sourceFile, err := os.Open(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	info, err := sourceFile.Stat()
-	if err != nil {
-		return err
+		renamedOriginal = true
 	}
 
-	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
-	if err != nil {
-		return err
+	restoreOriginal := func() {
+		if !renamedOriginal {
+			return
+		}
+		_ = os.Remove(entrypointPath)
+		_ = os.Rename(realBinaryPath, entrypointPath)
 	}
-	defer targetFile.Close()
 
-	if _, err := io.Copy(targetFile, sourceFile); err != nil {
+	if err := managedshimembed.WriteExecutable(entrypointPath); err != nil {
+		restoreOriginal()
 		return err
 	}
-	return targetFile.Chmod(info.Mode().Perm())
+	if err := managedshim.WriteSidecar(ManagedShimSidecarPath(entrypointPath), sidecar); err != nil {
+		restoreOriginal()
+		return err
+	}
+	return nil
 }
