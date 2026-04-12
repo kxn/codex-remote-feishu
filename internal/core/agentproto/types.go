@@ -32,6 +32,7 @@ const (
 	EventConfigObserved           EventKind = "config.observed"
 	EventLocalInteractionObserved EventKind = "local.interaction.observed"
 	EventThreadTokenUsageUpdated  EventKind = "thread.token_usage.updated"
+	EventTurnPlanUpdated          EventKind = "turn.plan.updated"
 	EventTurnStarted              EventKind = "turn.started"
 	EventTurnCompleted            EventKind = "turn.completed"
 	EventItemStarted              EventKind = "item.started"
@@ -83,6 +84,7 @@ type Event struct {
 	Initiator       Initiator              `json:"initiator,omitempty"`
 	Problem         *ErrorInfo             `json:"problem,omitempty"`
 	TokenUsage      *ThreadTokenUsage      `json:"tokenUsage,omitempty"`
+	PlanSnapshot    *TurnPlanSnapshot      `json:"planSnapshot,omitempty"`
 	Metadata        map[string]any         `json:"metadata,omitempty"`
 	Threads         []ThreadSnapshotRecord `json:"threads,omitempty"`
 	FileChanges     []FileChangeRecord     `json:"fileChanges,omitempty"`

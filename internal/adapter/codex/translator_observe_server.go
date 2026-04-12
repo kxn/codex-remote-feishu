@@ -322,6 +322,21 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TurnID:     turnID,
 			TokenUsage: usage,
 		}}}, nil
+	case "turn/plan/updated":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
+		snapshot := extractTurnPlanSnapshot(message)
+		if snapshot == nil {
+			return Result{}, nil
+		}
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventTurnPlanUpdated,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			PlanSnapshot: snapshot,
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+		}}}, nil
 	case "turn/started":
 		threadID := lookupString(message, "params", "thread", "id")
 		if threadID == "" {
@@ -639,6 +654,36 @@ func codexErrorCode(value any) string {
 		}
 	}
 	return ""
+}
+
+func extractTurnPlanSnapshot(message map[string]any) *agentproto.TurnPlanSnapshot {
+	params := lookupMap(message, "params")
+	if len(params) == 0 {
+		return nil
+	}
+	snapshot := &agentproto.TurnPlanSnapshot{
+		Explanation: strings.TrimSpace(lookupStringFromAny(params["explanation"])),
+	}
+	rawPlan, _ := params["plan"].([]any)
+	for _, raw := range rawPlan {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		step := strings.TrimSpace(lookupStringFromAny(entry["step"]))
+		status := agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(entry["status"]))
+		if step == "" && status == "" {
+			continue
+		}
+		snapshot.Steps = append(snapshot.Steps, agentproto.TurnPlanStep{
+			Step:   step,
+			Status: status,
+		})
+	}
+	if snapshot.Explanation == "" && len(snapshot.Steps) == 0 {
+		return nil
+	}
+	return snapshot
 }
 
 func lookupBool(message map[string]any, path ...string) bool {

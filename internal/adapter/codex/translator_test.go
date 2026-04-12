@@ -198,6 +198,42 @@ func TestObserveThreadTokenUsageUpdated(t *testing.T) {
 	}
 }
 
+func TestObserveTurnPlanUpdated(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	result, err := tr.ObserveServer([]byte(`{"method":"turn/plan/updated","params":{"threadId":"thread-1","turnId":"turn-1","explanation":"先完成协议接入。","plan":[{"step":"接入结构化 plan 协议","status":"completed"},{"step":"做 orchestrator 去重","status":"inProgress"},{"step":"接入飞书卡片投影","status":"pending"}]}}`))
+	if err != nil {
+		t.Fatalf("observe server: %v", err)
+	}
+	if len(result.Events) != 1 {
+		t.Fatalf("expected one plan update event, got %#v", result.Events)
+	}
+	event := result.Events[0]
+	if event.Kind != agentproto.EventTurnPlanUpdated {
+		t.Fatalf("unexpected event kind: %#v", event)
+	}
+	if event.ThreadID != "thread-1" || event.TurnID != "turn-1" {
+		t.Fatalf("unexpected event target: %#v", event)
+	}
+	if event.PlanSnapshot == nil {
+		t.Fatalf("expected plan snapshot payload, got %#v", event)
+	}
+	if event.PlanSnapshot.Explanation != "先完成协议接入。" {
+		t.Fatalf("unexpected explanation: %#v", event.PlanSnapshot)
+	}
+	if len(event.PlanSnapshot.Steps) != 3 {
+		t.Fatalf("unexpected plan steps: %#v", event.PlanSnapshot)
+	}
+	if event.PlanSnapshot.Steps[0].Status != agentproto.TurnPlanStepStatusCompleted {
+		t.Fatalf("unexpected first status: %#v", event.PlanSnapshot.Steps)
+	}
+	if event.PlanSnapshot.Steps[1].Status != agentproto.TurnPlanStepStatusInProgress {
+		t.Fatalf("unexpected second status: %#v", event.PlanSnapshot.Steps)
+	}
+	if event.PlanSnapshot.Steps[2].Status != agentproto.TurnPlanStepStatusPending {
+		t.Fatalf("unexpected third status: %#v", event.PlanSnapshot.Steps)
+	}
+}
+
 func TestObserveLocalNewThreadStartMarksLocalInitiator(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"cwd":"/tmp/project"}}`)); err != nil {
