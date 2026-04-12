@@ -349,6 +349,7 @@ func TestProjectFinalAssistantBlockShowsElapsedWithoutFileSummary(t *testing.T) 
 
 func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 	projector := NewProjector()
+	contextWindow := 1000
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:            control.UIEventBlockCommitted,
 		SourceMessageID: "msg-usage",
@@ -358,7 +359,8 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 			Final: true,
 		},
 		FinalTurnSummary: &control.FinalTurnSummary{
-			Elapsed: 2100 * time.Millisecond,
+			Elapsed:            2100 * time.Millisecond,
+			ModelContextWindow: &contextWindow,
 			Usage: &control.FinalTurnUsage{
 				InputTokens:           150,
 				CachedInputTokens:     90,
@@ -374,7 +376,7 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 	if len(ops[0].CardElements) != 1 {
 		t.Fatalf("expected standalone usage footer, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **输入** 150  **缓存** 90 (60.0%)  **输出** 50  **推理** 20" {
+	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **输入** 150  **缓存** 90 (60.0%)  **输出** 50  **推理** 20  **上下文剩余(估算)** 85.0%" {
 		t.Fatalf("unexpected usage footer: %#v", ops[0].CardElements[0])
 	}
 }

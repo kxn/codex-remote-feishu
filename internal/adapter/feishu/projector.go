@@ -583,6 +583,9 @@ func formatFinalTurnSummaryLine(summary *control.FinalTurnSummary) string {
 			fmt.Sprintf("**输出** %d", usage.OutputTokens),
 			fmt.Sprintf("**推理** %d", usage.ReasoningOutputTokens),
 		)
+		if contextLeft := formatApproxContextLeftSummary(usage.InputTokens, summary.ModelContextWindow); contextLeft != "" {
+			parts = append(parts, fmt.Sprintf("**上下文剩余(估算)** %s", contextLeft))
+		}
 	}
 	return strings.Join(parts, "  ")
 }
@@ -592,6 +595,23 @@ func formatCachedUsageSummary(cachedInput, input int) string {
 		return fmt.Sprintf("%d", cachedInput)
 	}
 	return fmt.Sprintf("%d (%.1f%%)", cachedInput, float64(cachedInput)*100/float64(input))
+}
+
+func formatApproxContextLeftSummary(input int, modelContextWindow *int) string {
+	if modelContextWindow == nil || *modelContextWindow <= 0 {
+		return ""
+	}
+	if input <= 0 {
+		return "100.0%"
+	}
+	left := 100 * (1 - float64(input)/float64(*modelContextWindow))
+	if left < 0 {
+		left = 0
+	}
+	if left > 100 {
+		left = 100
+	}
+	return fmt.Sprintf("%.1f%%", left)
 }
 
 func formatElapsedDuration(value time.Duration) string {
