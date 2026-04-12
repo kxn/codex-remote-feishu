@@ -230,7 +230,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 		return err
 	}
 	if err := copyFile(targetBinary, stateValue.CurrentBinaryPath); err != nil {
-		return err
+		return fmt.Errorf("copy upgrade binary %s -> %s: %w", targetBinary, stateValue.CurrentBinaryPath, err)
 	}
 	if stateValue.PendingUpgrade.Source == UpgradeSourceRelease {
 		_ = updateCurrentReleaseLink(stateValue.VersionsRoot, firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)))
@@ -280,6 +280,11 @@ func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateVa
 
 func rollbackUpgradeState(ctx context.Context, statePath string, stateValue InstallState, cfg config.LoadedAppConfig, paths relayruntime.Paths, cause error) error {
 	stopErr := stopCurrentDaemon(ctx, stateValue, paths)
+	if stopErr != nil {
+		stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed
+		_ = WriteState(statePath, stateValue)
+		return fmt.Errorf("rollback stop failed after %v: %w", cause, stopErr)
+	}
 	if stateValue.RollbackCandidate != nil {
 		if err := restoreConfigSnapshots(stateValue.RollbackCandidate.ConfigSnapshots); err != nil {
 			stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed
@@ -291,7 +296,7 @@ func rollbackUpgradeState(ctx context.Context, statePath string, stateValue Inst
 		if err := copyFile(stateValue.RollbackCandidate.BinaryPath, stateValue.CurrentBinaryPath); err != nil {
 			stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed
 			_ = WriteState(statePath, stateValue)
-			return fmt.Errorf("rollback copy failed after %v: %w", cause, err)
+			return fmt.Errorf("rollback copy %s -> %s failed after %v: %w", stateValue.RollbackCandidate.BinaryPath, stateValue.CurrentBinaryPath, cause, err)
 		}
 	}
 	if stateValue.RollbackCandidate != nil {
@@ -306,9 +311,6 @@ func rollbackUpgradeState(ctx context.Context, statePath string, stateValue Inst
 		stateValue.PendingUpgrade.Phase = PendingUpgradePhaseFailed
 		_ = WriteState(statePath, stateValue)
 		return fmt.Errorf("restart rollback daemon failed after %v: %w", cause, err)
-	}
-	if stopErr != nil {
-		return fmt.Errorf("%w (rollback stop warning: %v)", cause, stopErr)
 	}
 	return cause
 }

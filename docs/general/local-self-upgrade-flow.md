@@ -248,6 +248,8 @@ upgrade-helper -state-path <statePath>
    - rollback candidate 已存在
 2. 把 phase 改成 `switching`
 3. 停掉当前 daemon/service
+   - 当前实现不会只看 `stop` 命令是否已发出
+   - 只有在 helper 确认旧 daemon/service 已真正退出后，才会继续进入 binary 切换
 4. 把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到 `CurrentBinaryPath`
 5. 把 phase 改成 `observing`
 6. 用新的 live binary 重新启动 daemon/service
@@ -281,6 +283,7 @@ upgrade-helper -state-path <statePath>
 回滚顺序是：
 
 1. 再次停止当前可能半起状态的 daemon
+   - 这里同样走严格 stop gate；如果 helper 不能确认它已经停干净，会直接把 phase 标成 `failed`，不会继续做 rollback copy
 2. 恢复升级前备份下来的 live config 快照
 3. 把 rollback bundle 里的旧 binary 复制回 `CurrentBinaryPath`
 4. 把 install-state 恢复到旧版本信息
