@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-12`
-> Summary: 新增本地自升级流程文档，并刷新文档索引。
+> Updated: `2026-04-13`
+> Summary: 新增 Claude normal-mode PoC 方案文档，并刷新文档索引。
 
 ## 1. 适用范围
 
@@ -137,6 +137,7 @@
 
 ### 6.3 `inprogress`
 
+- [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
