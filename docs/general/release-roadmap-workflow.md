@@ -1,8 +1,8 @@
 # Release Roadmap Workflow
 
 > Type: `general`
-> Updated: `2026-04-11`
-> Summary: 定义版本 milestone、release tracker、显式 production 版本号、release branch 目标分支和自动发版闸门之间的关系。
+> Updated: `2026-04-12`
+> Summary: 定义版本 milestone、release tracker、显式 production 版本号、release branch 目标分支、自动发版闸门，以及本地临时切到发布分支后的回切规则。
 
 ## 1. 目的
 
@@ -103,6 +103,12 @@ readiness 通过的条件是：
 2. 从 tracker issue 中读取版本号、发布轨道和发布分支
 3. 调用 release workflow，并 checkout 到目标发布分支
 4. 按 tracker 指定版本创建 release
+
+如果是仓库本地的手动发版动作，需要临时切到 `release branch` 做检查、打 tag、补 notes 或执行其他发布辅助操作：
+
+- 在切分支前先记录当前所在分支或起始 ref
+- 发版动作结束后，无论成功还是失败，都切回开始前的分支或 ref
+- 不要把仓库停留在临时发布分支，除非用户明确要求保留在那里
 
 ### 4.4 发布说明放在哪里
 
