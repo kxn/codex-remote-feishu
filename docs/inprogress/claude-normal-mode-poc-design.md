@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-13`
-> Summary: 将 Claude backend PoC 收敛为实例级兼容方案，明确 capability 路由、命令降级策略与分阶段实施计划。
+> Summary: 补充 backend 并行场景下的数据分区与产品语义，明确 workspace 共享与 thread/session 隔离规则。
 
 ## 1. 背景
 
@@ -19,6 +19,7 @@
 2. Codex 路径保持兼容，不因 Claude PoC 引入行为回归。
 3. Claude 仅覆盖 normal mode；vscode mode 显式不支持。
 4. 不支持能力返回明确 `command_rejected/problem + notice`。
+5. workspace 可跨 backend 共用，但会话数据必须按 backend 隔离。
 
 ## 3. 非目标
 
@@ -63,6 +64,33 @@
 - 新增 `claude` adapter（normal mode）。
 - 禁止在 codex translator 内堆 provider 分支。
 
+## 5.4 数据分区模型（新增）
+
+### 分区原则
+
+1. `workspace` 是文件系统作用域，允许 Codex/Claude 共享同一目录。
+2. `thread/session` 是 backend 作用域，必须隔离存储与展示。
+3. 任何“会话选择/恢复”都必须带 backend 维度，禁止只靠 thread id 判定。
+
+### 推荐键模型
+
+- 会话唯一键：`backend + instance_id + thread_id(session_id)`
+- workspace 键：保持现有 `workspace_key`
+- surface 恢复目标：至少携带 `resume_backend + resume_instance_id + resume_thread_id`
+
+### 存储与缓存规则
+
+1. instance 内的 `Threads` 只存本 backend 会话，不做跨 backend merge。
+2. `/list` 默认展示当前 attached instance 的会话视图。
+3. 若后续提供“同 workspace 汇总视图”，必须按 backend 分组展示，不得混排成单一列表。
+4. `/use <id>` 只在当前 backend 视图下解析；跨 backend 不自动跳转。
+
+### 状态机约束
+
+1. surface 当前 attached instance 决定本轮命令 backend。
+2. 切换到不同 backend 实例时，不继承旧 backend 的 selected thread。
+3. 失败/降级提示必须指明“当前 backend 不支持”，避免误导为全局异常。
+
 ## 6. 命令矩阵（PoC 版）
 
 | Command | Codex | Claude PoC | 处理策略 |
@@ -74,6 +102,13 @@
 | `turn.steer` | support | unsupported(v1) | 显式拒绝 + notice |
 | `vscode-mode path` | support | unsupported | 显式拒绝 + notice |
 
+## 6.1 并行产品语义（新增）
+
+1. `/list`：看“当前实例（当前 backend）”会话，不跨 backend 混看。
+2. `/use`：只消费当前 backend 会话 id；如果用户给了另一个 backend 的 id，返回明确提示。
+3. `/new`：在当前 backend 新建会话，workspace 沿用当前 workspace。
+4. `/status`：建议在 attachment/instance 摘要中显示 backend 标识，避免误判上下文来源。
+
 ## 7. 分阶段实施
 
 ## 阶段 A：兼容性护栏
@@ -81,6 +116,7 @@
 1. 把 hello capabilities 接入 instance runtime state。
 2. `onHello` 改为 capability-aware 初始化，不再无条件 `threads.refresh`。
 3. 修正 startup refresh pending 统计，只追踪已派发 refresh 的实例。
+4. 补充 backend 维度到 surface resume / instance snapshot 关键状态（至少写入并保留，不先改 UI）。
 
 交付物：
 
@@ -104,6 +140,7 @@
 1. `/new`、`/use`、`/list` 的 Claude 实例路径闭环。
 2. `resume(session_id + cwd)` 成功路径与失败提示。
 3. `turn.steer` 显式降级。
+4. 后端并行时 `/list`/`/use` 不串 backend，会话选择与恢复可预期。
 
 交付物：
 
@@ -123,6 +160,8 @@
 3. Claude 不支持命令均为显式可见失败，不出现 silent failure。
 4. `request` 与 `queue` 状态机在 reject 后可继续使用，不进入死状态。
 5. 关闭 Claude 实例后，系统仍可按现有方式服务 Codex。
+6. 同 workspace 并存 Codex+Claude 时，`/list` 与 `/use` 不混 backend 数据。
+7. surface resume 不会把一个 backend 的会话误恢复到另一个 backend 实例。
 
 ## 9. 风险与回退
 
@@ -134,4 +173,3 @@
 
 - 所有 provider-aware 分支保持“Codex 默认路径优先”。
 - 若 Claude 路径出现异常，可通过禁用 Claude 实例回退，不影响 Codex 运行。
-
