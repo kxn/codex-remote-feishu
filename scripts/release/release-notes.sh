@@ -77,55 +77,63 @@ print_section() {
   echo
 }
 
-echo "Release ${version}"
+echo "版本：${version}"
 echo
-echo "Track: ${track}."
+echo "发布路线：${track}"
 echo
 if [[ -n "${latest_tag}" ]]; then
-  echo "Changes since ${latest_tag}."
+  echo "变更范围：自 ${latest_tag} 以来。"
 else
-  echo "Initial release."
+  echo "这是首个版本。"
 fi
 echo
 if [[ -n "${changelog_section//[[:space:]]/}" ]]; then
-  echo "## Highlights"
+  echo "## 本次重点"
   echo
   printf '%s\n' "${changelog_section}"
   echo
 fi
-echo "## Install"
+echo "## 安装与升级"
 echo
-echo "Latest production install:"
+echo "默认安装最新正式版："
 echo
 echo '```bash'
 echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash"
 echo '```'
 echo
 if [[ "${track}" != "production" ]]; then
-  echo "Latest ${track} install:"
+  echo "如果你想提前体验最新 ${track} 版本："
   echo
   echo '```bash'
   echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track ${track}"
   echo '```'
   echo
 fi
-echo "The installer downloads the GitHub-built release archive, installs the binary, starts the local daemon, and opens or prints the WebSetup URL."
+echo "安装脚本会下载 GitHub 构建好的 release 包，安装二进制，启动本地后台服务，并打开或打印 WebSetup 地址。"
 echo
-echo "Pin this version:"
+echo "固定到这个版本："
 echo
 echo '```bash'
 echo "curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version ${version}"
 echo '```'
 echo
-echo "Manual archive install:"
+echo "手动解压归档安装："
 echo
 echo '```bash'
 echo "./codex-remote install -bootstrap-only -start-daemon"
 echo '```'
 echo
-echo "## Detailed Changes"
+echo "已经完成接入的用户，后续升级统一在飞书里发送："
 echo
-print_section "Breaking Changes" "${breaking[@]}"
-print_section "Features" "${features[@]}"
-print_section "Fixes" "${fixes[@]}"
-print_section "Maintenance" "${maintenance[@]}"
+echo '```text'
+echo "/upgrade latest"
+echo '```'
+echo
+echo "如果你默认安装的是正式版，这条命令会继续更新到最新正式版；如果你之前装的是 beta 或 alpha，它会继续沿着当前已安装的更新路线往前走。"
+echo
+echo "## 详细变更"
+echo
+print_section "不兼容变更" "${breaking[@]}"
+print_section "功能" "${features[@]}"
+print_section "修复" "${fixes[@]}"
+print_section "维护" "${maintenance[@]}"

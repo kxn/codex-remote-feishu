@@ -1,6 +1,6 @@
 # 快速开始
 
-## 方式一：macOS / Linux 一条命令安装
+## 方式一：macOS / Linux 一条命令安装最新正式版
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
@@ -12,15 +12,15 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 2. 下载 GitHub 构建好的 release 包
 3. 解压到本地 release 缓存目录
 4. 安装稳定路径下的 `codex-remote`
-5. 启动本地 daemon 并打印 WebSetup 地址
+5. 启动本地后台服务并打印 WebSetup 地址
 
 如果你想固定到某个版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version <version>
 ```
 
-如果你想安装某个 prerelease track 的最新版本，例如 `beta`：
+如果你明确想提前体验预发布版本，也可以额外指定：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
@@ -46,7 +46,7 @@ Windows PowerShell：
 
 ## 在 WebSetup 里完成首次配置
 
-daemon 启动后，打开命令输出里的 `/setup` 地址。
+后台服务启动后，打开命令输出里的 `/setup` 地址。
 
 推荐顺序：
 
@@ -60,7 +60,7 @@ daemon 启动后，打开命令输出里的 `/setup` 地址。
 
 ## Linux `systemd --user` 常驻服务
 
-如果你希望 Linux 上的 daemon 由长期运行的用户服务托管，而不是依赖 detached 进程：
+如果你希望 Linux 上的后台服务由长期运行的用户服务托管，而不是依赖普通后台进程：
 
 ```bash
 codex-remote service install-user
@@ -75,7 +75,7 @@ codex-remote service status
 loginctl enable-linger "$USER"
 ```
 
-## 升级到当前 track 的最新版本
+## 升级到后续新版本
 
 对于已经接入完成的用户，当前推荐的升级入口统一是：
 
@@ -83,10 +83,14 @@ loginctl enable-linger "$USER"
 /upgrade latest
 ```
 
-在飞书里发送这条命令即可。它适合：
+在飞书里发送这条命令即可。
+
+如果你默认安装的是正式版，这会继续升级到最新正式版；如果你之前装的是 `beta` 或 `alpha`，它也会继续沿着同一条更新路线往前走。
+
+它适合：
 
 - 检查是否有可用新版本
-- 开始升级到当前 track 的最新 release
+- 开始升级到后续新版本
 - 继续上一次未完成的升级
 
 ## 开始在飞书里使用

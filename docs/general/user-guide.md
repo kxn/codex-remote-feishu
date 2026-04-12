@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-04-11`
-> Summary: 同步当前 `v1.5.0` 的 normal-mode-first 产品定位、setup 里的二维码新建飞书 App 路径、运行环境检查步骤、按需 VS Code 接入路径，以及常见使用场景、命令帮助、后台恢复与文档预览的当前用户语义。
+> Updated: `2026-04-12`
+> Summary: 收敛正式版前的用户口径，统一默认正式版安装、`/upgrade latest` 升级方式、normal-mode-first 使用路径，以及按场景处理的 VS Code 接入说明。
 
 ## 1. 这是什么
 
@@ -112,12 +112,12 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 
 这条命令会：
 
-1. 下载适合当前平台的 release 包
+1. 下载适合当前平台的最新正式版 release 包
 2. 安装 `codex-remote`
 3. 启动本地后台服务
 4. 打印 WebSetup 地址
 
-如果你想安装某个 prerelease track 的最新版本，例如 `beta`：
+如果你明确想提前体验预发布版本，也可以额外指定：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
@@ -126,7 +126,7 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 如果你想固定到某个版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version <version>
 ```
 
 ### 5.2 手动安装 release 包
@@ -155,10 +155,12 @@ Windows PowerShell：
 
 在飞书里发送这条命令即可。
 
+如果你默认安装的是正式版，这条命令会继续升级到最新正式版；如果你之前装的是 `beta` 或 `alpha`，它也会继续沿着你当前这条更新路线往前走。
+
 这条入口适合：
 
-- 检查当前 track 是否有新版本
-- 开始升级到当前 track 的最新 release
+- 检查是否有可用新版本
+- 开始升级到后续新版本
 - 继续上一次未完成的升级
 
 当前用户文档不再要求你手动准备本地产物或执行仓库里的开发 helper。
@@ -198,39 +200,33 @@ Windows PowerShell：
 - `测试连接` 只表示当前保存的凭据可以和本机服务建立连接，不等于旧飞书会话已经自动切到新的机器人身份
 - 如果你把 `App ID` 改成了另一个飞书 App，旧会话不会自动迁移；需要到新机器人的聊天入口重新开始会话
 
-这个“运行环境检查”步骤会统一告诉你：
+这个“运行环境检查”步骤主要帮你确认三件事：
 
-- 当前 daemon 会用哪个 `codex-remote` 作为 headless 启动器
-- wrapper 实际会启动哪个真实 `codex`
-- 当前服务环境里能不能把它解析成可执行文件
-- 是否存在明显风险，例如只靠 `PATH` 解析，或者错误地回指 `codex-remote` 自己
+- 这台机器上是否真的能找到并运行 Codex
+- 当前这套安装是否已经具备正常工作的基础条件
+- 如果有明显风险，下一步应该先修什么
 
-它只检查基础运行条件，不检查 Codex 登录状态、账号配置或 provider 凭据。
+它关注的是本机运行条件，不会替你检查 Codex 登录状态、账号权限或 provider 配额。
 
-当前 setup 不再直接让你面对 `editor_settings` / `managed_shim` 这些内部模式名，而是先按场景引导：
+当前 setup 会先按场景引导你决定是否需要 VS Code：
 
 - 如果当前就是远程 SSH 机器：
-  - 页面只会提供“在这台远程机器上启用 VS Code”
-  - 这条路径只接管扩展入口，不去写 host 机器的 `settings.json`
+  - 页面会直接引导你在这台机器上完成 VS Code 接入
+  - 不需要自己先研究旧版设置项
 - 如果当前不是 SSH 机器：
-  - 页面会先问你以后主要怎么使用 VS Code 里的 Codex
-  - `要在当前这台机器上使用`
-    - 当前机器统一只接管扩展入口
-    - 不再写当前机器的 `settings.json`
-  - `主要去别的 SSH 机器上使用`
-    - 当前机器先跳过，不做接入
-    - 等你在目标 SSH 机器上安装 `codex-remote` 后，再去那台机器完成这一步
-    - 这样可以避免 host 设置影响后续 Remote SSH
+  - 页面会先问你以后主要是不是要在当前这台机器上通过 VS Code 使用 Codex
+  - 如果主要是在别的 SSH 机器上使用，就先跳过当前这台机器的 VS Code 接入，等到目标机器再处理
+  - 这样可以避免本机旧设置影响以后连接到远程机器
 
 如果你后续升级了 VS Code 扩展，页面可能会提示重新安装扩展入口。按提示处理即可。
 
-如果你是从旧版本升级上来的，当前机器还残留 `chatgpt.cliExecutable`，或者扩展升级后 managed shim 失效，那么：
+如果你是从旧版本升级上来的，或者扩展升级后原来的接入方式失效：
 
-- setup / 管理页会把它识别成“需要迁移 / 重新接入”
-- 飞书里的 `vscode` 模式也会在进入或重连恢复时直接发迁移卡片
-- 按卡片提示先关闭 VS Code，再点击按钮迁移；成功后重新打开 VS Code 即可
+- setup / 管理页会直接提示你“需要重新接入”
+- 飞书里的 `vscode` 模式也会给出迁移或修复卡片
+- 按提示先关闭 VS Code，再完成一次重新接入；成功后重新打开 VS Code 即可
 
-管理页里的 VS Code 区域也沿用同一套场景心智；高级处理只保留重新安装扩展入口和技术详情，不再提供 `settings.json` 模式。
+管理页里的 VS Code 区域也沿用同一套场景引导；大多数情况下，你只需要按提示重新接入，不需要手工改旧设置。
 
 首次在飞书里验证时，建议先发一次 `/help` 或 `menu`。当前 `/menu` 会按阶段重排首页：
 
@@ -555,7 +551,7 @@ bare `/access` 当前会返回 `full/confirm/clear` 参数卡；bare `/mode` 和
 
 ### 11.6 旧卡片过期时，直接重发命令
 
-如果 daemon 刚重启过，或者你点到的是很早之前留下来的旧卡片，系统可能会直接提示这是一张过期卡片或旧动作。
+如果后台服务刚重启过，或者你点到的是很早之前留下来的旧卡片，系统可能会直接提示这是一张过期卡片或旧动作。
 
 这时不要继续在旧卡片上尝试操作，直接重发对应命令即可，例如：
 
@@ -582,7 +578,7 @@ bare `/access` 当前会返回 `full/confirm/clear` 参数卡；bare `/mode` 和
 
 1. 你是否已经先切到 `/mode vscode`
 2. 你是否已经通过 `/list` 接管了目标 VS Code 实例
-3. VS Code 端是否真的已经接入本机 relay
+3. VS Code 这一端是否真的已经接到当前机器上的 `codex-remote`
 4. 当前实例里是否存在可观察到的活动对话
 
 如果暂时没有，等待即可；或者直接用 `/use` 手动指定当前实例里的会话。
@@ -616,7 +612,7 @@ bare `/access` 当前会返回 `full/confirm/clear` 参数卡；bare `/mode` 和
 
 ### 12.5 系统提示“旧卡片已过期”
 
-这通常表示你点到的是 daemon 上一个生命周期留下来的旧卡片，或者一张已经失效的历史按钮。
+这通常表示你点到的是后台服务上一次启动周期里留下来的旧卡片，或者一张已经失效的历史按钮。
 
 处理方式很简单：
 

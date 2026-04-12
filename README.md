@@ -31,9 +31,8 @@
   - `QUICKSTART.md`
   - `CHANGELOG.md`
 - 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
-- GitHub Releases 现在区分 `production / beta / alpha` 三条 track
-  - 默认在线安装入口始终指向最新 `production`
-  - 需要时可显式安装最新 `beta` / `alpha`
+- 默认安装入口始终指向最新正式版
+- 如果你明确想提前体验预发布版本，也可以单独安装 `beta` 或 `alpha`
 - 正式 release 构建与发布全部在 GitHub Actions 的 `Release` workflow 上完成
 
 ## 功能
@@ -85,10 +84,10 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 - 下载 GitHub 构建好的 release 包
 - 解压到本地 release 缓存目录
 - 安装稳定路径下的 `codex-remote`
-- 启动本地 daemon
+- 启动本地后台服务
 - 打开或打印 WebSetup 链接
 
-如果要安装某个 prerelease track 的最新版本：
+如果你明确想提前体验预发布版本，可以额外指定：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
@@ -97,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 如果要安装指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version <version>
 ```
 
 ## 手动安装 release 包
@@ -116,11 +115,11 @@ Windows PowerShell:
 .\codex-remote.exe install -bootstrap-only -start-daemon
 ```
 
-启动后打开输出中的 `/setup` 链接，后续飞书配置、normal mode 使用准备、以及按需的 VS Code detect/apply 和 shim 重装都在 WebSetup / Admin UI 完成。
+启动后打开输出中的 `/setup` 链接。后续飞书配置、`normal` 模式使用准备，以及按需的 VS Code 接入和重新接入，都在 WebSetup / Admin UI 完成。
 
 ## 当前用户升级方式
 
-如果你已经装好了 `v1.5.0`，后续要升级到当前 track 的最新版本，面向用户的推荐入口统一是：
+如果你已经完成安装并接入飞书，后续升级统一在飞书里发送：
 
 ```text
 /upgrade latest
@@ -128,26 +127,25 @@ Windows PowerShell:
 
 在已接入的飞书会话里发送这条命令即可。
 
-这条入口适合日常升级检查、继续上一次未完成的升级，以及把当前安装更新到最新 release。用户文档里不再要求你手动准备本地升级产物或执行仓库内 helper。
+如果你默认装的是正式版，这条命令会检查、开始或继续升级到最新正式版；如果你之前装的是 `beta` 或 `alpha`，它也会继续沿着你当前这条更新路线往前走。
+
+对于普通用户，这就是 `v1.5.0` 之后的统一升级入口，不需要再手动替换可执行文件，也不需要自己准备仓库里的开发 helper。
 
 ## WebSetup 与按需接入 VS Code
 
-release 安装器现在只做 bootstrap：
+release 安装器现在只负责把产品跑起来：
 
-- 复制或安装稳定二进制
-- 写统一配置 `config.json`
-- 保留旧版 `config.env` / `wrapper.env` / `services.env` 的迁移结果
-- 启动 daemon 与嵌入式 Web UI
+- 安装 `codex-remote`
+- 启动本地后台服务
+- 打开或打印 WebSetup 链接
 
 真正的产品配置入口已经收敛到 WebSetup / Admin UI：
 
-- 飞书 App 新增、验证、启停
-- 运行环境检查
-- 自动启动
-- 按需执行 VS Code `detect`
-- 按需执行 `editor_settings` apply
-- 按需执行 `managed_shim` apply
-- 按需执行扩展升级后的 `reinstall-shim`
+- 接入或验证飞书应用
+- 看运行环境检查结果
+- 按需开启自动启动
+- 只有需要时再接入 VS Code
+- 扩展升级后按提示重新接入 VS Code
 
 当前默认推荐顺序是：
 
@@ -157,15 +155,7 @@ release 安装器现在只做 bootstrap：
 
 换句话说，VS Code 接入现在是可选增强，不再是开始使用前的默认前提。
 
-VS Code 两种接管方式的区别：
-
-- `editor_settings`
-  - 修改 `settings.json` 的 `chatgpt.cliExecutable`
-  - 更适合本机桌面 VS Code
-- `managed_shim`
-  - 直接替换扩展 bundle 里的 `codex`
-  - 原始入口会保留成 `codex.real`
-  - 更适合 VS Code Remote
+当前页面会根据你是在本机 VS Code 还是 Remote SSH 场景，给出对应的接入方式。大多数用户不需要先理解内部接入模式名，只要按页面提示完成一次接入即可；如果后续扩展升级导致入口失效，再按提示重新接入。
 
 如果你是从源码仓库联调而不是从 release 包安装：
 
@@ -180,7 +170,7 @@ VS Code 两种接管方式的区别：
 
 ## Linux 常驻服务与用户升级
 
-如果你希望 Linux 上的正式常驻实例由 `systemd --user` 托管，而不是依赖 detached daemon：
+如果你希望 Linux 上的正式常驻实例由 `systemd --user` 托管，而不是依赖普通后台进程：
 
 ```bash
 codex-remote service install-user
@@ -197,13 +187,13 @@ loginctl enable-linger "$USER"
 
 这条路径保持运行身份为当前用户，并继续使用当前 XDG 配置/状态目录。
 
-完成安装并接入飞书后，用户日常升级到当前 track 的最新版本，直接在飞书里发送：
+完成安装并接入飞书后，用户日常升级统一直接在飞书里发送：
 
 ```text
 /upgrade latest
 ```
 
-如果当前有新版本可用，系统会在后台完成升级；如果上一次升级中断，这条命令也会用于继续或检查当前升级状态。
+如果默认安装的是正式版，这条命令会继续跟到最新正式版；如果你装的是 `beta` 或 `alpha`，它也会继续沿着原来的更新路线走。上一次升级如果中断了，这条命令同样可以继续或检查当前状态。
 
 ## 仓库内联调入口
 
