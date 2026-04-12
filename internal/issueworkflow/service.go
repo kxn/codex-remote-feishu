@@ -78,7 +78,7 @@ func (s *Service) Prepare(ctx context.Context, opts PrepareOptions) (PrepareResu
 		return result, err
 	}
 	result.Issue = &issue
-	result.Lint = BuildLintReport(issue)
+	result.Lint = BuildLintReport(issue, opts.WorkflowMode)
 	if opts.ClaimProcessing {
 		if hasLabel(issue.Labels, processingLabel) {
 			result.Status = PrepareStatusBlockedProcessingClaim
@@ -88,7 +88,7 @@ func (s *Service) Prepare(ctx context.Context, opts PrepareOptions) (PrepareResu
 			}
 			result.ProcessingAction = ProcessingActionClaimed
 			result.Issue.Labels = appendSortedUnique(result.Issue.Labels, processingLabel)
-			result.Lint = BuildLintReport(*result.Issue)
+			result.Lint = BuildLintReport(*result.Issue, opts.WorkflowMode)
 		}
 	}
 	if result.SnapshotPath == "" {
@@ -121,7 +121,7 @@ func (s *Service) Lint(ctx context.Context, opts LintOptions) (LintResult, error
 		return result, err
 	}
 	result.Issue = &issue
-	result.Lint = BuildLintReport(issue)
+	result.Lint = BuildLintReport(issue, opts.WorkflowMode)
 	return result, nil
 }
 
@@ -189,8 +189,8 @@ func (s *Service) Finish(ctx context.Context, opts FinishOptions) (FinishResult,
 	return result, nil
 }
 
-func BuildLintReport(issue Issue) LintReport {
-	report := LintReport{}
+func BuildLintReport(issue Issue, mode WorkflowMode) LintReport {
+	report := LintReport{WorkflowMode: normalizeWorkflowMode(mode)}
 	sections := scanSections(issue.Body)
 	for _, required := range requiredSections {
 		if !sections[required] {
@@ -251,6 +251,9 @@ func BuildLintReport(issue Issue) LintReport {
 			Message:  "issue has no area:* scope label",
 		})
 	}
+	if report.WorkflowMode == WorkflowModeFast {
+		return report
+	}
 	if !containsSection(report.PreferredMissing, "建议范围") && len(report.RequiredMissing) == 0 {
 		// no-op: explicit staged-plan section already present
 	} else if len(report.RequiredMissing) == 0 && len(report.StatusLabels) == 0 && containsSection(report.PreferredMissing, "建议范围") {
@@ -261,6 +264,15 @@ func BuildLintReport(issue Issue) LintReport {
 		})
 	}
 	return report
+}
+
+func normalizeWorkflowMode(mode WorkflowMode) WorkflowMode {
+	switch mode {
+	case WorkflowModeFast:
+		return WorkflowModeFast
+	default:
+		return WorkflowModeFull
+	}
 }
 
 func scanSections(body string) map[string]bool {

@@ -102,7 +102,7 @@ func TestPrepareClaimsProcessingAndWritesSnapshot(t *testing.T) {
 		Now:    func() time.Time { return time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC) },
 	}
 	snapshot := filepath.Join(root, ".codex", "state", "issue-workflow", "issue-22.json")
-	result, err := svc.Prepare(context.Background(), PrepareOptions{IssueNumber: 22, ClaimProcessing: true, SnapshotPath: snapshot})
+	result, err := svc.Prepare(context.Background(), PrepareOptions{IssueNumber: 22, ClaimProcessing: true, SnapshotPath: snapshot, WorkflowMode: WorkflowModeFull})
 	if err != nil {
 		t.Fatalf("Prepare error = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestPrepareStopsOnDirtyTrackedFiles(t *testing.T) {
 		GitHub: &fakeGitHubClient{},
 		Now:    time.Now,
 	}
-	result, err := svc.Prepare(context.Background(), PrepareOptions{IssueNumber: 22, ClaimProcessing: true})
+	result, err := svc.Prepare(context.Background(), PrepareOptions{IssueNumber: 22, ClaimProcessing: true, WorkflowMode: WorkflowModeFull})
 	if err != nil {
 		t.Fatalf("Prepare error = %v", err)
 	}
@@ -155,7 +155,7 @@ func TestBuildLintReportFlagsMissingSectionsAndStatusLabels(t *testing.T) {
 			"done",
 		}, "\n"),
 		Labels: []string{"status:blocked", "status:needs-investigation"},
-	})
+	}, WorkflowModeFull)
 	if !containsSection(report.RequiredMissing, "目标") {
 		t.Fatalf("required missing = %#v, want 目标", report.RequiredMissing)
 	}
@@ -213,6 +213,43 @@ func TestFinishRunsChecksAndReleasesProcessing(t *testing.T) {
 	if gh.commentedFile != commentFile || !gh.closed || len(gh.removedLabels) != 1 || gh.removedLabels[0] != "processing" {
 		t.Fatalf("unexpected github side effects: %#v", gh)
 	}
+}
+
+func TestBuildLintReportFastModeSkipsStagedPlanInfo(t *testing.T) {
+	issue := Issue{
+		Body: strings.Join([]string{
+			"## 背景",
+			"body",
+			"## 目标",
+			"goal",
+			"## 完成标准",
+			"done",
+		}, "\n"),
+		Labels: []string{"bug", "area:daemon"},
+	}
+	fullReport := BuildLintReport(issue, WorkflowModeFull)
+	fastReport := BuildLintReport(issue, WorkflowModeFast)
+	if fullReport.WorkflowMode != WorkflowModeFull {
+		t.Fatalf("full workflow mode = %q", fullReport.WorkflowMode)
+	}
+	if fastReport.WorkflowMode != WorkflowModeFast {
+		t.Fatalf("fast workflow mode = %q", fastReport.WorkflowMode)
+	}
+	if !hasFindingCode(fullReport.Findings, "missing-staged-plan-section") {
+		t.Fatalf("expected full mode to keep staged-plan info finding, got %#v", fullReport.Findings)
+	}
+	if hasFindingCode(fastReport.Findings, "missing-staged-plan-section") {
+		t.Fatalf("did not expect fast mode to require staged-plan info finding, got %#v", fastReport.Findings)
+	}
+}
+
+func hasFindingCode(findings []LintFinding, code string) bool {
+	for _, finding := range findings {
+		if finding.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestValidateDocMetadataRejectsWrongType(t *testing.T) {

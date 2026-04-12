@@ -50,11 +50,16 @@ func runPrepare(ctx context.Context, svc *issueworkflow.Service, args []string) 
 	comments := fs.Int("comments", 8, "recent comments to include in the snapshot")
 	claim := fs.Bool("claim-processing", true, "claim the processing label when available")
 	snapshotPath := fs.String("snapshot-file", "", "where to write the prepare snapshot JSON")
+	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
 		}
+		return 2, err
+	}
+	mode, err := parseWorkflowMode(*modeValue)
+	if err != nil {
 		return 2, err
 	}
 	repo, err := parseOptionalRepo(*repoValue)
@@ -67,6 +72,7 @@ func runPrepare(ctx context.Context, svc *issueworkflow.Service, args []string) 
 		CommentsLimit:   *comments,
 		ClaimProcessing: *claim,
 		SnapshotPath:    strings.TrimSpace(*snapshotPath),
+		WorkflowMode:    mode,
 	})
 	if err != nil {
 		return 1, err
@@ -88,11 +94,16 @@ func runLint(ctx context.Context, svc *issueworkflow.Service, args []string) (in
 	repoValue := fs.String("repo", "", "GitHub repo in owner/name form; defaults to origin remote")
 	issueNumber := fs.Int("issue", 0, "issue number")
 	comments := fs.Int("comments", 8, "recent comments to inspect")
+	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
 		}
+		return 2, err
+	}
+	mode, err := parseWorkflowMode(*modeValue)
+	if err != nil {
 		return 2, err
 	}
 	repo, err := parseOptionalRepo(*repoValue)
@@ -103,6 +114,7 @@ func runLint(ctx context.Context, svc *issueworkflow.Service, args []string) (in
 		Repo:          repo,
 		IssueNumber:   *issueNumber,
 		CommentsLimit: *comments,
+		WorkflowMode:  mode,
 	})
 	if err != nil {
 		return 1, err
@@ -168,6 +180,17 @@ func parseOptionalRepo(value string) (issueworkflow.Repo, error) {
 	return issueworkflow.ParseRepo(value)
 }
 
+func parseWorkflowMode(value string) (issueworkflow.WorkflowMode, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "full":
+		return issueworkflow.WorkflowModeFull, nil
+	case "fast":
+		return issueworkflow.WorkflowModeFast, nil
+	default:
+		return "", usageError("unsupported workflow mode %q", value)
+	}
+}
+
 func writeOutput[T any](out *os.File, value T, format string, render func(T) string) error {
 	switch format {
 	case "json":
@@ -227,7 +250,10 @@ func renderLint(result issueworkflow.LintResult) string {
 }
 
 func renderLintSummary(report issueworkflow.LintReport) []string {
-	lines := []string{fmt.Sprintf("recorded state: %s", report.CurrentRecordedState)}
+	lines := []string{
+		fmt.Sprintf("workflow mode: %s", report.WorkflowMode),
+		fmt.Sprintf("recorded state: %s", report.CurrentRecordedState),
+	}
 	if len(report.RequiredMissing) > 0 {
 		lines = append(lines, "missing required: "+strings.Join(report.RequiredMissing, ", "))
 	}

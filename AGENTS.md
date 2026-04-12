@@ -136,6 +136,18 @@ For medium or large follow-up work in this repository:
   - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number>`
   - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number>`
   - `bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> [--comment-file path] [--close]`
+- `full` workflow remains the default and keeps the existing behavior described below.
+- `fast` workflow is an explicit opt-in shortcut for already-clear, single-stage, low-risk issue execution.
+- User override phrases that force `fast` include:
+  - `workflow:fast`
+  - `fast path`
+  - `快速处理`
+  - `简化流程`
+- User override phrases that force `full` include:
+  - `workflow:full`
+  - `full path`
+  - `完整流程`
+  - `标准 issue workflow`
 - Default rule: use those commands for sync, claim, issue-shape checks, and cleanup instead of redoing raw `git` / `gh` sequences by hand each time. Keep model reasoning for semantic reassessment, planning, validation choice, and comment/body content.
 - Default lifecycle is:
   1. sync local tracked files to the latest safe state
@@ -148,6 +160,12 @@ For medium or large follow-up work in this repository:
 - Do not leave an outdated staged plan only in comments when the issue body can be refreshed cheaply and accurately.
 - Do not do a full open-issue sweep before every commit. Issue review happens when creating, picking up, or closing an issue, not as a mandatory pre-commit loop.
 - For existing issues created before the standard, do not run a one-time bulk cleanup pass. Normalize them only when they become active.
+- `fast` path boundaries:
+  - use it only when the issue is already implementable, the scope is small, and one implementation stage is enough
+  - keep `prepare` and `finish`
+  - still validate the changed behavior
+  - you may skip staged-plan authoring and mid-task body rewrites when no material plan change occurred
+  - if the issue turns out broader, blocked, cross-cutting, or needs staged rollout after all, immediately fall back to the unchanged `full` path
 - Use `processing` as a temporary single-worker claim while actively handling one issue in a turn:
   - after syncing local tracked files and before substantive issue assessment, first check whether the issue already has `processing`
   - if `processing` is already present, stop there and do not continue handling that issue in this turn
@@ -248,6 +266,16 @@ For staged delivery against an implementable issue:
    - Prefer tests and validation that exercise the changed behavior and runtime path, not only compilation or superficial smoke checks.
 9. After each stage-end commit, immediately reassess how that completed work affects the next stage before continuing.
 10. If implementation discovers a better stage split, update the plan first, then continue under the revised stages.
+
+For explicit `fast` path execution against an implementable issue:
+
+1. Keep the existing `full` workflow untouched; `fast` is an opt-in shortcut, not a rewrite of the default path.
+2. Run `prepare` first and verify the issue is still implementable now.
+3. Do not skip required issue sections, state checks, or validation of the changed behavior.
+4. You may skip staged-plan authoring when the work is clearly single-stage.
+5. You may skip issue body rewrites when the issue body is already accurate enough and no material plan change occurred.
+6. Use a single implementation pass: implement, validate, commit, close out.
+7. If new evidence shows the work is no longer single-stage or low-risk, switch back to the unchanged `full` workflow before continuing.
 
 If implementation reveals another medium or large follow-up task, open a new issue for it instead of leaving a local TODO note behind.
 

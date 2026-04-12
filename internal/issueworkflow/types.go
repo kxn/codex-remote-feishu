@@ -2,6 +2,13 @@ package issueworkflow
 
 import "time"
 
+type WorkflowMode string
+
+const (
+	WorkflowModeFull WorkflowMode = "full"
+	WorkflowModeFast WorkflowMode = "fast"
+)
+
 type Repo struct {
 	Owner string `json:"owner"`
 	Name  string `json:"name"`
@@ -63,6 +70,7 @@ type LintFinding struct {
 }
 
 type LintReport struct {
+	WorkflowMode         WorkflowMode  `json:"workflowMode,omitempty"`
 	CurrentRecordedState string        `json:"currentRecordedState"`
 	RequiredMissing      []string      `json:"requiredMissing,omitempty"`
 	PreferredMissing     []string      `json:"preferredMissing,omitempty"`
@@ -78,6 +86,7 @@ type PrepareOptions struct {
 	CommentsLimit   int
 	ClaimProcessing bool
 	SnapshotPath    string
+	WorkflowMode    WorkflowMode
 }
 
 type PrepareResult struct {
@@ -97,6 +106,7 @@ type LintOptions struct {
 	Repo          Repo
 	IssueNumber   int
 	CommentsLimit int
+	WorkflowMode  WorkflowMode
 }
 
 type LintResult struct {

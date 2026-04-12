@@ -16,6 +16,27 @@ Examples:
 
 Do not run a one-time cleanup pass over old issues. Normalize an issue only when it becomes active.
 
+## Workflow Modes
+
+`full` remains the default and keeps the existing workflow behavior unchanged.
+
+`fast` is an explicit opt-in shortcut for already-clear, single-stage, low-risk issue work.
+
+Treat these user phrases as a forced mode override:
+
+- force `fast`
+  - `workflow:fast`
+  - `fast path`
+  - `快速处理`
+  - `简化流程`
+- force `full`
+  - `workflow:full`
+  - `full path`
+  - `完整流程`
+  - `标准 issue workflow`
+
+If the user does not force `fast`, keep using the unchanged `full` flow.
+
 ## Fixed Entry Points
 
 Default to the bundled wrapper instead of redoing raw `git` / `gh` sequences by hand:
@@ -25,6 +46,15 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue 
 bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number>
 bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> [--comment-file path] [--close]
 ```
+
+When you intentionally want the helper output to match the chosen workflow mode, pass:
+
+```bash
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number> --mode fast
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number> --mode fast
+```
+
+`--mode full` keeps the legacy behavior.
 
 What each command owns:
 
@@ -162,6 +192,15 @@ If the issue was already implementable and still is after reassessment:
 - each stage should end with implementation, stage-scoped validation, and a local commit
 - validate the result
 - update any affected design or state-machine document required by repo rules
+
+For explicit `fast` path execution:
+
+- keep `prepare` and `finish`
+- keep required-section checks, current-state checks, and validation
+- skip staged-plan authoring when the work is clearly single-stage
+- skip mid-task body rewrites when the issue body is already accurate enough and no material plan change occurred
+- do one implementation pass: implement, validate, commit, close out
+- if the issue stops looking single-stage, low-risk, or already-clear, fall back to the unchanged `full` flow immediately
 
 ## Close-out Rules
 
