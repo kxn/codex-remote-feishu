@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -16,14 +17,22 @@ import (
 const ProductName = "codex-remote"
 
 func CurrentBinaryIdentity(version string) (agentproto.BinaryIdentity, error) {
+	return CurrentBinaryIdentityWithBranch(version, "")
+}
+
+func CurrentBinaryIdentityWithBranch(version, branch string) (agentproto.BinaryIdentity, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return agentproto.BinaryIdentity{}, err
 	}
-	return BinaryIdentityForPath(executable, version)
+	return BinaryIdentityForPathWithBranch(executable, version, branch)
 }
 
 func BinaryIdentityForPath(executable, version string) (agentproto.BinaryIdentity, error) {
+	return BinaryIdentityForPathWithBranch(executable, version, "")
+}
+
+func BinaryIdentityForPathWithBranch(executable, version, branch string) (agentproto.BinaryIdentity, error) {
 	executable = filepath.Clean(executable)
 	executable, err := filepath.EvalSymlinks(executable)
 	if err != nil {
@@ -35,14 +44,19 @@ func BinaryIdentityForPath(executable, version string) (agentproto.BinaryIdentit
 	}
 	return agentproto.BinaryIdentity{
 		Product:          ProductName,
-		Version:          version,
+		Version:          strings.TrimSpace(version),
+		Branch:           strings.TrimSpace(branch),
 		BuildFingerprint: fingerprint,
 		BinaryPath:       executable,
 	}, nil
 }
 
 func NewServerIdentity(version, configPath string, startedAt time.Time) (agentproto.ServerIdentity, error) {
-	binaryIdentity, err := CurrentBinaryIdentity(version)
+	return NewServerIdentityWithBranch(version, "", configPath, startedAt)
+}
+
+func NewServerIdentityWithBranch(version, branch, configPath string, startedAt time.Time) (agentproto.ServerIdentity, error) {
+	binaryIdentity, err := CurrentBinaryIdentityWithBranch(version, branch)
 	if err != nil {
 		return agentproto.ServerIdentity{}, err
 	}

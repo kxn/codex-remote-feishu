@@ -25,7 +25,7 @@ type runnableDaemon interface {
 	PprofURL() string
 }
 
-func RunMain(ctx context.Context, version string) error {
+func RunMain(ctx context.Context, version, branch string) error {
 	loadedConfig, err := config.LoadAppConfig()
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func RunMain(ctx context.Context, version string) error {
 	defer lock.Release()
 
 	startedAt := time.Now().UTC()
-	identity, err := relayruntime.NewServerIdentity(version, cfg.ConfigPath, startedAt)
+	identity, err := relayruntime.NewServerIdentityWithBranch(version, branch, cfg.ConfigPath, startedAt)
 	if err != nil {
 		return err
 	}

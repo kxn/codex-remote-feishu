@@ -27,6 +27,7 @@ type Capabilities struct {
 type BinaryIdentity struct {
 	Product          string `json:"product,omitempty"`
 	Version          string `json:"version,omitempty"`
+	Branch           string `json:"branch,omitempty"`
 	BuildFingerprint string `json:"buildFingerprint,omitempty"`
 	BinaryPath       string `json:"binaryPath,omitempty"`
 }
@@ -40,6 +41,7 @@ type InstanceHello struct {
 	Source           string `json:"source,omitempty"`
 	Managed          bool   `json:"managed,omitempty"`
 	Version          string `json:"version,omitempty"`
+	Branch           string `json:"branch,omitempty"`
 	BuildFingerprint string `json:"buildFingerprint,omitempty"`
 	BinaryPath       string `json:"binaryPath,omitempty"`
 	PID              int    `json:"pid,omitempty"`

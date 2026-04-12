@@ -17,7 +17,7 @@ func TestBinaryIdentityHelpersAndPersistence(t *testing.T) {
 		t.Fatalf("write binary: %v", err)
 	}
 
-	identity, err := BinaryIdentityForPath(binaryPath, "1.2.3")
+	identity, err := BinaryIdentityForPathWithBranch(binaryPath, "1.2.3", "release/1.5")
 	if err != nil {
 		t.Fatalf("BinaryIdentityForPath: %v", err)
 	}
@@ -26,6 +26,9 @@ func TestBinaryIdentityHelpersAndPersistence(t *testing.T) {
 	}
 	if identity.Version != "1.2.3" {
 		t.Fatalf("version = %q, want 1.2.3", identity.Version)
+	}
+	if identity.Branch != "release/1.5" {
+		t.Fatalf("branch = %q, want release/1.5", identity.Branch)
 	}
 	if !strings.HasPrefix(identity.BuildFingerprint, "sha256:") {
 		t.Fatalf("fingerprint = %q, want sha256 prefix", identity.BuildFingerprint)
@@ -39,7 +42,7 @@ func TestBinaryIdentityHelpersAndPersistence(t *testing.T) {
 	}
 
 	startedAt := time.Unix(1_700_000_000, 0).UTC()
-	serverIdentity, err := NewServerIdentity("9.9.9", filepath.Join(dir, "config.json"), startedAt)
+	serverIdentity, err := NewServerIdentityWithBranch("9.9.9", "master", filepath.Join(dir, "config.json"), startedAt)
 	if err != nil {
 		t.Fatalf("NewServerIdentity: %v", err)
 	}
@@ -48,6 +51,9 @@ func TestBinaryIdentityHelpersAndPersistence(t *testing.T) {
 	}
 	if serverIdentity.ConfigPath == "" || serverIdentity.PID != os.Getpid() {
 		t.Fatalf("unexpected server identity: %#v", serverIdentity)
+	}
+	if serverIdentity.Branch != "master" {
+		t.Fatalf("server branch = %q, want master", serverIdentity.Branch)
 	}
 	if !serverIdentity.StartedAt.Equal(startedAt) {
 		t.Fatalf("startedAt = %v, want %v", serverIdentity.StartedAt, startedAt)

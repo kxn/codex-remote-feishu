@@ -7,6 +7,7 @@ import (
 )
 
 var version = "dev"
+var branch = "dev"
 
 func main() {
 	args := append([]string{"install"}, os.Args[1:]...)
@@ -16,5 +17,6 @@ func main() {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Version: version,
+		Branch:  branch,
 	}))
 }

@@ -29,6 +29,19 @@ options:
 EOF
 }
 
+resolve_build_branch() {
+  if [[ -n "${CODEX_REMOTE_BUILD_BRANCH:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_BUILD_BRANCH}"
+    return
+  fi
+  local branch=""
+  if branch="$(git branch --show-current 2>/dev/null)" && [[ -n "${branch}" ]]; then
+    printf '%s\n' "${branch}"
+    return
+  fi
+  printf '%s\n' "dev"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --instance)
@@ -92,9 +105,10 @@ printf 'target admin: %s\n' "${CODEX_REMOTE_TARGET_ADMIN_URL}"
 
 printf '[3/5] build %s\n' "${BUILD_OUTPUT}"
 mkdir -p "${BIN_DIR}"
+BUILD_BRANCH="$(resolve_build_branch)"
 CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
   bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh"
-"${GO_BIN}" build -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
+"${GO_BIN}" build -ldflags "-X main.branch=${BUILD_BRANCH}" -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
 
 if [[ ! -f "${CODEX_REMOTE_TARGET_STATE_PATH}" ]]; then
   echo "install state not found: ${CODEX_REMOTE_TARGET_STATE_PATH}" >&2

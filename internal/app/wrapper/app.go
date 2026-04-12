@@ -49,6 +49,7 @@ type Config struct {
 	Source               string
 	Managed              bool
 	Version              string
+	Branch               string
 	BuildFingerprint     string
 	BinaryPath           string
 	ChildProxyEnv        []string
@@ -60,7 +61,7 @@ type Config struct {
 	RawLogPath           string
 }
 
-func LoadConfig(args []string) (Config, error) {
+func LoadConfig(args []string, version, branch string) (Config, error) {
 	loaded, err := config.LoadWrapperConfig()
 	if err != nil {
 		return Config{}, err
@@ -101,7 +102,7 @@ func LoadConfig(args []string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	binaryIdentity, err := relayruntime.CurrentBinaryIdentity("dev")
+	binaryIdentity, err := relayruntime.CurrentBinaryIdentityWithBranch(version, branch)
 	if err != nil {
 		return Config{}, err
 	}
@@ -118,7 +119,8 @@ func LoadConfig(args []string) (Config, error) {
 		ShortName:            shortName,
 		Source:               source,
 		Managed:              managed,
-		Version:              "dev",
+		Version:              firstNonEmpty(strings.TrimSpace(version), "dev"),
+		Branch:               firstNonEmpty(strings.TrimSpace(branch), "dev"),
 		BuildFingerprint:     binaryIdentity.BuildFingerprint,
 		BinaryPath:           binaryIdentity.BinaryPath,
 		ChildProxyEnv:        config.CaptureAndClearProxyEnv(),
@@ -164,6 +166,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		Identity: agentproto.BinaryIdentity{
 			Product:          relayruntime.ProductName,
 			Version:          a.config.Version,
+			Branch:           a.config.Branch,
 			BuildFingerprint: a.config.BuildFingerprint,
 			BinaryPath:       a.config.BinaryPath,
 		},
@@ -220,6 +223,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			Source:           a.config.Source,
 			Managed:          a.config.Managed,
 			Version:          a.config.Version,
+			Branch:           a.config.Branch,
 			BuildFingerprint: a.config.BuildFingerprint,
 			BinaryPath:       a.config.BinaryPath,
 			PID:              os.Getpid(),

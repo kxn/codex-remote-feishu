@@ -154,7 +154,7 @@ func (m *Manager) classifyWelcome(welcome agentproto.Welcome) ProbeResult {
 	if CompatibleIdentity(m.config.Identity, server) {
 		return ProbeResult{Status: ProbeCompatible, Welcome: welcome}
 	}
-	if server.Product == "" && server.Version == "" && server.BuildFingerprint == "" {
+	if server.Product == "" && server.Version == "" && server.Branch == "" && server.BuildFingerprint == "" {
 		return ProbeResult{Status: ProbeLegacy, Welcome: welcome}
 	}
 	return ProbeResult{Status: ProbeIncompatible, Welcome: welcome, Err: fmt.Errorf("relay version mismatch: local=%s remote=%s", identitySummary(m.config.Identity), identitySummary(server))}

@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -14,18 +15,14 @@ const (
 	snapshotStatusPreviewLimit = 24
 )
 
-func formatSnapshot(snapshot control.Snapshot, daemonVersion string) string {
-	return formatSnapshotWithGit(snapshot, daemonVersion, nil)
-}
-
-func formatSnapshotWithGit(snapshot control.Snapshot, daemonVersion string, readGitWorktree func(string) *gitWorktreeSummary) string {
+func formatSnapshot(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) string {
 	lines := []string{}
 	lines = append(lines, snapshotField("当前模式", formatNeutralTextTag(displaySnapshotMode(snapshot.ProductMode))))
-	if daemonVersion = strings.TrimSpace(daemonVersion); daemonVersion != "" {
-		lines = append(lines, snapshotField("当前版本", formatNeutralTextTag(daemonVersion)))
+	if daemonBinary = strings.TrimSpace(daemonBinary); daemonBinary != "" {
+		lines = append(lines, snapshotField("当前二进制", formatNeutralTextTag(daemonBinary)))
 	}
-	if strings.TrimSpace(snapshot.WorkspaceKey) != "" {
-		lines = append(lines, snapshotField("当前 workspace", formatNeutralTextTag(snapshot.WorkspaceKey)))
+	if currentDirectory = strings.TrimSpace(currentDirectory); currentDirectory != "" {
+		lines = append(lines, snapshotField("当前目录", currentDirectory))
 	}
 	if snapshot.Attachment.InstanceID == "" {
 		lines = append(lines, snapshotField("接管对象类型", "无"))
@@ -65,11 +62,11 @@ func formatSnapshotWithGit(snapshot control.Snapshot, daemonVersion string, read
 		}
 		lines = append(lines, "")
 		lines = append(lines, snapshotField("下条飞书消息", formatSnapshotEffectivePrompt(snapshot.NextPrompt)))
-		if snapshotShouldShowPromptCWD(snapshot.WorkspaceKey, snapshot.NextPrompt.CWD) {
+		if snapshotShouldShowPromptCWD(snapshotCurrentDirectory(snapshot), snapshot.NextPrompt.CWD) {
 			lines = append(lines, snapshotField("工作目录", formatNeutralTextTag(snapshot.NextPrompt.CWD)))
 		}
 	}
-	lines = append(lines, formatSnapshotGitFields(snapshot, readGitWorktree)...)
+	lines = append(lines, formatSnapshotGitFields(worktree)...)
 	if autoContinue := snapshotAutoContinueText(snapshot.AutoContinue); autoContinue != "" {
 		lines = append(lines, snapshotField("autowhip", autoContinue))
 	}
@@ -93,28 +90,24 @@ func formatSnapshotWithGit(snapshot control.Snapshot, daemonVersion string, read
 }
 
 func (p *Projector) formatSnapshot(snapshot control.Snapshot) string {
-	if p == nil {
-		return formatSnapshot(snapshot, "")
+	daemonBinary := ""
+	if p != nil {
+		daemonBinary = p.snapshotBinary
 	}
-	return formatSnapshotWithGit(snapshot, p.snapshotVersion, p.readGitWorktree)
+	var worktree *gitWorktreeSummary
+	if p != nil && p.readGitWorktree != nil {
+		if cwd := snapshotGitProbeCWD(snapshot); cwd != "" {
+			worktree = p.readGitWorktree(cwd)
+		}
+	}
+	return formatSnapshot(snapshot, daemonBinary, formatSnapshotCurrentDirectory(snapshotCurrentDirectory(snapshot), gitBranchFromWorktree(worktree)), worktree)
 }
 
-func formatSnapshotGitFields(snapshot control.Snapshot, readGitWorktree func(string) *gitWorktreeSummary) []string {
-	if readGitWorktree == nil {
-		return nil
-	}
-	cwd := snapshotGitProbeCWD(snapshot)
-	if cwd == "" {
-		return nil
-	}
-	worktree := readGitWorktree(cwd)
+func formatSnapshotGitFields(worktree *gitWorktreeSummary) []string {
 	if worktree == nil {
 		return nil
 	}
-	lines := make([]string, 0, 2)
-	if branch := strings.TrimSpace(worktree.Branch); branch != "" {
-		lines = append(lines, snapshotField("Git 分支", formatNeutralTextTag(branch)))
-	}
+	lines := make([]string, 0, 1)
 	if status := formatSnapshotGitWorktreeStatus(worktree); status != "" {
 		lines = append(lines, snapshotField("Git 工作区", status))
 	}
@@ -122,10 +115,10 @@ func formatSnapshotGitFields(snapshot control.Snapshot, readGitWorktree func(str
 }
 
 func snapshotGitProbeCWD(snapshot control.Snapshot) string {
-	if cwd := strings.TrimSpace(snapshot.NextPrompt.CWD); cwd != "" {
+	if cwd := strings.TrimSpace(snapshotCurrentDirectory(snapshot)); cwd != "" && filepath.IsAbs(cwd) {
 		return cwd
 	}
-	return strings.TrimSpace(snapshot.WorkspaceKey)
+	return ""
 }
 
 func formatSnapshotGitWorktreeStatus(summary *gitWorktreeSummary) string {
@@ -143,6 +136,36 @@ func formatSnapshotGitWorktreeStatus(summary *gitWorktreeSummary) string {
 		parts = append(parts, formatNeutralTextTag(fmt.Sprintf("%d未跟踪", summary.UntrackedCount)))
 	}
 	return strings.Join(parts, " ")
+}
+
+func snapshotCurrentDirectory(snapshot control.Snapshot) string {
+	return firstNonEmpty(
+		strings.TrimSpace(snapshot.NextPrompt.CWD),
+		strings.TrimSpace(snapshot.PendingHeadless.ThreadCWD),
+		strings.TrimSpace(snapshot.WorkspaceKey),
+	)
+}
+
+func gitBranchFromWorktree(worktree *gitWorktreeSummary) string {
+	if worktree == nil {
+		return ""
+	}
+	return strings.TrimSpace(worktree.Branch)
+}
+
+func formatSnapshotCurrentDirectory(path, gitBranch string) string {
+	path = strings.TrimSpace(path)
+	gitBranch = strings.TrimSpace(gitBranch)
+	switch {
+	case path != "" && gitBranch != "":
+		return formatNeutralTextTag(path) + " · Git " + formatNeutralTextTag(gitBranch)
+	case path != "":
+		return formatNeutralTextTag(path)
+	case gitBranch != "":
+		return "Git " + formatNeutralTextTag(gitBranch)
+	default:
+		return ""
+	}
 }
 
 func snapshotField(label, value string) string {

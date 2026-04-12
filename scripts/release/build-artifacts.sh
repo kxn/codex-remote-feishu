@@ -50,6 +50,23 @@ normalize_platform() {
   esac
 }
 
+resolve_build_branch() {
+  if [[ -n "${CODEX_REMOTE_BUILD_BRANCH:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_BUILD_BRANCH}"
+    return
+  fi
+  local branch=""
+  if branch="$(git branch --show-current 2>/dev/null)" && [[ -n "${branch}" ]]; then
+    printf '%s\n' "${branch}"
+    return
+  fi
+  if [[ -n "${GITHUB_REF_NAME:-}" ]]; then
+    printf '%s\n' "${GITHUB_REF_NAME}"
+    return
+  fi
+  printf '%s\n' "dev"
+}
+
 version=""
 output_dir="dist"
 skip_admin_ui_build=0
@@ -92,6 +109,8 @@ if [[ -z "${version}" ]]; then
   usage >&2
   exit 1
 fi
+
+build_branch="$(resolve_build_branch)"
 
 if [[ "${skip_admin_ui_build}" == "1" ]]; then
   if [[ ! -f "${ROOT_DIR}/internal/app/daemon/adminui/dist/index.html" ]]; then
@@ -140,7 +159,7 @@ for platform in "${platforms[@]}"; do
     bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
 
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-    go build -trimpath -ldflags "-X main.version=${version}" \
+    go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch}" \
     -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
 
   cp README.md QUICKSTART.md CHANGELOG.md "${staging_dir}/"

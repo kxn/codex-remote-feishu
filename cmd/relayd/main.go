@@ -7,6 +7,7 @@ import (
 )
 
 var version = "dev"
+var branch = "dev"
 
 func main() {
 	os.Exit(launcher.Main(launcher.Options{
@@ -15,5 +16,6 @@ func main() {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Version: version,
+		Branch:  branch,
 	}))
 }

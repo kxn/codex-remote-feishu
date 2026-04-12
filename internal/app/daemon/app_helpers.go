@@ -24,22 +24,24 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func formatStatusSnapshotVersion(identity agentproto.ServerIdentity) string {
+func formatStatusSnapshotBinary(identity agentproto.ServerIdentity) string {
+	branch := strings.TrimSpace(identity.Branch)
 	version := strings.TrimSpace(identity.Version)
 	fingerprint := strings.TrimSpace(identity.BuildFingerprint)
 	if len(fingerprint) > 10 {
 		fingerprint = fingerprint[:10]
 	}
-	switch {
-	case version != "" && version != "dev" && fingerprint != "":
-		return version + " / " + fingerprint
-	case version != "" && version != "dev":
-		return version
-	case version != "" && fingerprint != "":
-		return version + " / " + fingerprint
-	default:
-		return firstNonEmpty(version, fingerprint)
+	parts := make([]string, 0, 3)
+	if branch != "" {
+		parts = append(parts, branch)
 	}
+	if version != "" {
+		parts = append(parts, version)
+	}
+	if fingerprint != "" {
+		parts = append(parts, fingerprint)
+	}
+	return strings.Join(parts, " / ")
 }
 
 func (a *App) handleStatus(w http.ResponseWriter, _ *http.Request) {

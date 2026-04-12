@@ -89,7 +89,7 @@ func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody, "新建会话（等待首条消息）", "**工作目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>") {
+	if !containsAll(ops[0].CardBody, "新建会话（等待首条消息）", "**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>") {
 		t.Fatalf("expected snapshot body to show new-thread-ready target, got %#v", ops[0].CardBody)
 	}
 	if strings.Contains(ops[0].CardBody, "**目标：**") {
@@ -613,9 +613,9 @@ func TestProjectSnapshotIncludesEffectivePromptConfig(t *testing.T) {
 	}
 	if !containsAll(ops[0].CardBody,
 		"**当前模式：** <text_tag color='neutral'>vscode</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 		"**接管对象类型：** <text_tag color='neutral'>VS Code 实例</text_tag>",
 		"**下条飞书消息：** 模型 <text_tag color='neutral'>gpt-5.4</text_tag>，推理 <text_tag color='neutral'>medium</text_tag>，权限 <text_tag color='neutral'>confirm</text_tag>",
-		"**工作目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot body: %#v", ops[0])
 	}
@@ -660,7 +660,7 @@ func TestProjectSnapshotShowsClaimedWorkspace(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**当前 workspace：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 		"**接管对象类型：** 无",
 		"**已接管：** 无",
 	) {
@@ -693,7 +693,7 @@ func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**当前 workspace：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 		"**接管对象类型：** <text_tag color='neutral'>工作区</text_tag>",
 		"**已接管：** droid",
 		"**当前输入目标：** 未绑定会话",
@@ -731,9 +731,9 @@ func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshotDisplaysVersionLine(t *testing.T) {
+func TestProjectSnapshotDisplaysBinaryIdentityLine(t *testing.T) {
 	projector := NewProjector()
-	projector.SetSnapshotVersion("v1.2.3 / abcdef1234")
+	projector.SetSnapshotBinary("release/1.5 / v1.2.3 / abcdef1234")
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSnapshot,
 		Snapshot: &control.Snapshot{
@@ -743,8 +743,34 @@ func TestProjectSnapshotDisplaysVersionLine(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "**当前版本：** <text_tag color='neutral'>v1.2.3 / abcdef1234</text_tag>") {
-		t.Fatalf("expected snapshot version line, got %#v", ops[0].CardBody)
+	if !strings.Contains(ops[0].CardBody, "**当前二进制：** <text_tag color='neutral'>release/1.5 / v1.2.3 / abcdef1234</text_tag>") {
+		t.Fatalf("expected snapshot binary line, got %#v", ops[0].CardBody)
+	}
+}
+
+func TestProjectSnapshotDisplaysCurrentDirectoryWithGitBranch(t *testing.T) {
+	projector := NewProjector()
+	projector.readGitWorktree = func(cwd string) *gitWorktreeSummary {
+		if cwd != "/data/dl/droid" {
+			t.Fatalf("unexpected cwd: %q", cwd)
+		}
+		return &gitWorktreeSummary{Branch: "master"}
+	}
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode:  "normal",
+			WorkspaceKey: "/data/dl/droid",
+			NextPrompt: control.PromptRouteSummary{
+				CWD: "/data/dl/droid",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if !strings.Contains(ops[0].CardBody, "**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>master</text_tag>") {
+		t.Fatalf("expected current directory line, got %#v", ops[0].CardBody)
 	}
 }
 
@@ -769,7 +795,7 @@ func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**Git 分支：** <text_tag color='neutral'>feature/status-git</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>feature/status-git</text_tag>",
 		"**Git 工作区：** <text_tag color='neutral'>干净</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)
@@ -802,7 +828,7 @@ func TestProjectSnapshotDisplaysDirtyGitWorktreeSummary(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**Git 分支：** <text_tag color='neutral'>master</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>master</text_tag>",
 		"**Git 工作区：** <text_tag color='neutral'>有改动</text_tag> <text_tag color='neutral'>3修改</text_tag> <text_tag color='neutral'>1未跟踪</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)
@@ -891,8 +917,8 @@ func TestProjectSnapshotDisplaysSurfaceDefaultModel(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
+		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 		"**下条飞书消息：** 模型 <text_tag color='neutral'>gpt-5.4</text_tag>，推理 <text_tag color='neutral'>xhigh</text_tag>，权限 <text_tag color='neutral'>full</text_tag>",
-		"**工作目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)
 	}

@@ -239,7 +239,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		upgradePromptScanEvery: 5 * time.Second,
 		upgradeResultScanEvery: 5 * time.Second,
 	}
-	app.projector.SetSnapshotVersion(formatStatusSnapshotVersion(serverIdentity))
+	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
 	app.upgradeLookup = app.defaultReleaseLookup
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,

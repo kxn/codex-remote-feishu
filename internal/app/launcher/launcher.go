@@ -17,17 +17,18 @@ type Options struct {
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Version string
+	Branch  string
 
 	Runners RunnerSet
 }
 
 type RunnerSet struct {
-	RunDaemon        func(context.Context, string) error
+	RunDaemon        func(context.Context, string, string) error
 	RunInstall       func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunLocalUpgrade  func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunService       func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunUpgradeHelper func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunWrapper       func(context.Context, []string, io.Reader, io.Writer, io.Writer, string) (int, error)
+	RunWrapper       func(context.Context, []string, io.Reader, io.Writer, io.Writer, string, string) (int, error)
 }
 
 func Main(opts Options) int {
@@ -57,7 +58,7 @@ func Main(opts Options) int {
 
 	switch decision.Role {
 	case RoleDaemon:
-		if err := opts.Runners.RunDaemon(ctx, opts.Version); err != nil && err != context.Canceled {
+		if err := opts.Runners.RunDaemon(ctx, opts.Version, opts.Branch); err != nil && err != context.Canceled {
 			_, _ = fmt.Fprintf(opts.Stderr, "daemon error: %v\n", err)
 			return 1
 		}
@@ -87,7 +88,7 @@ func Main(opts Options) int {
 		}
 		return 0
 	case RoleWrapper:
-		exitCode, err := opts.Runners.RunWrapper(ctx, decision.Args, opts.Stdin, opts.Stdout, opts.Stderr, opts.Version)
+		exitCode, err := opts.Runners.RunWrapper(ctx, decision.Args, opts.Stdin, opts.Stdout, opts.Stderr, opts.Version, opts.Branch)
 		if err != nil && err != context.Canceled {
 			_, _ = fmt.Fprintf(opts.Stderr, "wrapper error: %v\n", err)
 			if exitCode == 0 {
@@ -114,6 +115,9 @@ func withDefaults(opts Options) Options {
 	}
 	if opts.Version == "" {
 		opts.Version = "dev"
+	}
+	if opts.Branch == "" {
+		opts.Branch = "dev"
 	}
 	if opts.Runners.RunDaemon == nil {
 		opts.Runners.RunDaemon = daemon.RunMain

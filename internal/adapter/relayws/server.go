@@ -196,7 +196,7 @@ func (s *Server) serveConn(ctx context.Context, cancel context.CancelFunc, conn 
 			}
 			serverIdentity := s.identity
 			var serverPtr *agentproto.ServerIdentity
-			if serverIdentity.Product != "" || serverIdentity.Version != "" || serverIdentity.BuildFingerprint != "" || serverIdentity.PID != 0 {
+			if serverIdentity.Product != "" || serverIdentity.Version != "" || serverIdentity.Branch != "" || serverIdentity.BuildFingerprint != "" || serverIdentity.PID != 0 {
 				serverPtr = &serverIdentity
 			}
 			payload, _ := agentproto.MarshalEnvelope(agentproto.Envelope{

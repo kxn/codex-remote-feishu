@@ -62,18 +62,18 @@ const maxEmbeddedFileSummaryRows = 6
 
 type Projector struct {
 	readGitWorktree func(string) *gitWorktreeSummary
-	snapshotVersion string
+	snapshotBinary  string
 }
 
 func NewProjector() *Projector {
 	return &Projector{readGitWorktree: inspectGitWorktreeSummary}
 }
 
-func (p *Projector) SetSnapshotVersion(version string) {
+func (p *Projector) SetSnapshotBinary(value string) {
 	if p == nil {
 		return
 	}
-	p.snapshotVersion = strings.TrimSpace(version)
+	p.snapshotBinary = strings.TrimSpace(value)
 }
 
 func (p *Projector) ProjectPreviewSupplements(gatewayID, surfaceSessionID, chatID, replyToMessageID string, supplements []PreviewSupplement) []Operation {
