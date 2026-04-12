@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       ref:
@@ -74,9 +77,13 @@ jobs:
       - name: Resolve source ref
         id: source_ref
         run: |
-          ref='${{ inputs.ref }}'
-          if [[ -z "${ref}" ]]; then
-            ref='${{ github.ref_name }}'
+          if [[ '${{ github.event_name }}' == 'release' ]]; then
+            ref='${{ github.event.release.tag_name }}'
+          else
+            ref='${{ inputs.ref }}'
+            if [[ -z "${ref}" ]]; then
+              ref='${{ github.ref_name }}'
+            fi
           fi
           echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
 
@@ -94,13 +101,112 @@ jobs:
       - name: Fetch tags
         run: git fetch --force --tags origin
 
+      - name: Resolve release metadata
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          event_name='${{ github.event_name }}'
+          create_release=false
+          upload_assets=false
+          run_packaging=false
+          latest_tag=''
+
+          if [[ "${event_name}" == "release" ]]; then
+            version='${{ github.event.release.tag_name }}'
+            if [[ ! "${version}" =~ ^v[0-9] ]]; then
+              echo "Release tag ${version} is invalid." >&2
+              exit 1
+            fi
+            case "${version}" in
+              v*.*.*-alpha.*)
+                track='alpha'
+                prerelease=true
+                ;;
+              v*.*.*-beta.*)
+                track='beta'
+                prerelease=true
+                ;;
+              v*.*.*)
+                track='production'
+                prerelease=false
+                ;;
+              *)
+                echo "Release tag ${version} does not match a supported track." >&2
+                exit 1
+                ;;
+            esac
+            asset_count="$(gh release view "${version}" --json assets --jq '.assets | length')"
+            if [[ "${asset_count}" == "0" ]]; then
+              upload_assets=true
+              run_packaging=true
+            fi
+          else
+            track='${{ inputs.track }}'
+            if [[ -n '${{ inputs.version }}' ]]; then
+              version='${{ inputs.version }}'
+            else
+              if [[ "${track}" == "production" ]]; then
+                echo "Production releases require an explicit version input." >&2
+                exit 1
+              fi
+              version="$(RELEASE_TRACK="${track}" BUMP_OVERRIDE='${{ inputs.bump }}' bash scripts/release/next-version.sh)"
+            fi
+            if [[ ! "${version}" =~ ^v[0-9] ]]; then
+              version="v${version}"
+            fi
+            case "${track}" in
+              production)
+                version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+                prerelease=false
+                ;;
+              beta|alpha)
+                version_pattern="^v[0-9]+\.[0-9]+\.[0-9]+-${track}\\.[0-9]+$"
+                prerelease=true
+                ;;
+              *)
+                echo "Unsupported release track: ${track}" >&2
+                exit 1
+                ;;
+            esac
+            if ! [[ "${version}" =~ ${version_pattern} ]]; then
+              echo "Version ${version} does not match track ${track}." >&2
+              exit 1
+            fi
+            latest_tag="$(
+              git tag --list 'v*' --sort=-version:refname |
+                grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+                grep -vx "${version}" |
+                head -n1 ||
+                true
+            )"
+            create_release=true
+            run_packaging=true
+          fi
+
+          echo "track=${track}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "latest_tag=${latest_tag}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          echo "create_release=${create_release}" >> "${GITHUB_OUTPUT}"
+          echo "upload_assets=${upload_assets}" >> "${GITHUB_OUTPUT}"
+          echo "run_packaging=${run_packaging}" >> "${GITHUB_OUTPUT}"
+
+      - name: Skip Published Release With Existing Assets
+        if: ${{ steps.version.outputs.run_packaging != 'true' }}
+        run: |
+          echo "Published release ${{ steps.version.outputs.version }} already has assets; skipping rebuild/upload."
+
       - name: Check public docs for machine-local paths
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: bash scripts/check/no-local-paths.sh
 
       - name: Check legacy names are gone
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: bash scripts/check/no-legacy-names.sh
 
       - name: Check formatting
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: |
           files="$(find cmd internal testkit -name '*.go' | sort)"
           output="$(gofmt -l ${files})"
@@ -110,67 +216,26 @@ jobs:
           fi
 
       - name: Check release track versioning
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: bash scripts/check/release-track-version.sh
 
       - name: Run tests
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: go test ./...
 
-      - name: Determine next version
-        id: version
-        run: |
-          track='${{ inputs.track }}'
-          if [[ -n '${{ inputs.version }}' ]]; then
-            version='${{ inputs.version }}'
-          else
-            if [[ "${track}" == "production" ]]; then
-              echo "Production releases require an explicit version input." >&2
-              exit 1
-            fi
-            version="$(RELEASE_TRACK="${track}" BUMP_OVERRIDE='${{ inputs.bump }}' bash scripts/release/next-version.sh)"
-          fi
-          if [[ ! "${version}" =~ ^v[0-9] ]]; then
-            version="v${version}"
-          fi
-          case "${track}" in
-            production)
-              version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
-              prerelease=false
-              ;;
-            beta|alpha)
-              version_pattern="^v[0-9]+\.[0-9]+\.[0-9]+-${track}\\.[0-9]+$"
-              prerelease=true
-              ;;
-            *)
-              echo "Unsupported release track: ${track}" >&2
-              exit 1
-              ;;
-          esac
-          if ! [[ "${version}" =~ ${version_pattern} ]]; then
-            echo "Version ${version} does not match track ${track}." >&2
-            exit 1
-          fi
-          latest_tag="$(
-            git tag --list 'v*' --sort=-version:refname |
-              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
-              grep -vx "${version}" |
-              head -n1 ||
-              true
-          )"
-          echo "track=${track}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "latest_tag=${latest_tag}" >> "${GITHUB_OUTPUT}"
-          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
-
       - name: Build artifacts
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: bash scripts/release/build-artifacts.sh "${{ steps.version.outputs.version }}"
 
       - name: Smoke test WebSetup release installer
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
         run: |
           bash scripts/check/smoke-install-release.sh \
             --version "${{ steps.version.outputs.version }}" \
             --prod-dist-dir dist
 
       - name: Generate release notes
+        if: ${{ steps.version.outputs.create_release == 'true' }}
         run: |
           RELEASE_TRACK="${{ steps.version.outputs.track }}" \
           VERSION="${{ steps.version.outputs.version }}" \
@@ -178,6 +243,7 @@ jobs:
           bash scripts/release/release-notes.sh > release-notes.md
 
       - name: Create GitHub release
+        if: ${{ steps.version.outputs.create_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -193,3 +259,10 @@ jobs:
             --notes-file release-notes.md \
             --target "${{ steps.source_ref.outputs.ref }}" \
             "${flags[@]}"
+
+      - name: Upload Assets To Published Release
+        if: ${{ steps.version.outputs.upload_assets == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.version.outputs.version }}" dist/* --clobber
