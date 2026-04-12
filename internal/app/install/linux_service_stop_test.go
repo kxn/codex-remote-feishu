@@ -60,6 +60,41 @@ func TestSystemdUserStopAndWaitReturnsTimeoutWhenServiceStaysActive(t *testing.T
 	}
 }
 
+func TestSystemdUserStopAndWaitHandlesSwappedLegacyShowValues(t *testing.T) {
+	originalRunner := systemctlUserRunner
+	defer func() { systemctlUserRunner = originalRunner }()
+
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "stop" {
+			return "", nil
+		}
+		// Simulate value-only output where lines arrive as MainPID then ActiveState.
+		return "0\ninactive\n", nil
+	}
+
+	err := systemdUserStopAndWait(context.Background(), InstallState{}, 50*time.Millisecond, time.Millisecond)
+	if err != nil {
+		t.Fatalf("systemdUserStopAndWait error = %v, want nil for swapped legacy values", err)
+	}
+}
+
+func TestSystemdUserStopAndWaitParsesKeyedShowOutput(t *testing.T) {
+	originalRunner := systemctlUserRunner
+	defer func() { systemctlUserRunner = originalRunner }()
+
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "stop" {
+			return "", nil
+		}
+		return "MainPID=0\nActiveState=inactive\n", nil
+	}
+
+	err := systemdUserStopAndWait(context.Background(), InstallState{}, 50*time.Millisecond, time.Millisecond)
+	if err != nil {
+		t.Fatalf("systemdUserStopAndWait error = %v, want nil for keyed output", err)
+	}
+}
+
 func TestStopCurrentDaemonDoesNotClearPIDFilesWhenTerminateFails(t *testing.T) {
 	originalSleep := upgradeHelperSleepFunc
 	originalReadPID := upgradeHelperReadPIDFunc

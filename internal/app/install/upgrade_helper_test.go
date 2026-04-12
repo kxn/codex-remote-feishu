@@ -110,7 +110,7 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	}
 	if got, want := calls, []string{
 		"stop codex-remote.service",
-		"show --property=ActiveState --property=MainPID --value codex-remote.service",
+		"show --property=ActiveState --property=MainPID codex-remote.service",
 		"start codex-remote.service",
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)
@@ -200,7 +200,7 @@ func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testi
 	}
 	if got, want := calls, []string{
 		"stop codex-remote-debug.service",
-		"show --property=ActiveState --property=MainPID --value codex-remote-debug.service",
+		"show --property=ActiveState --property=MainPID codex-remote-debug.service",
 		"start codex-remote-debug.service",
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)
@@ -268,10 +268,10 @@ func TestRunUpgradeHelperWithStatePathSystemdUserRollsBackOnObserveFailure(t *te
 	}
 	if got, want := calls, []string{
 		"stop codex-remote.service",
-		"show --property=ActiveState --property=MainPID --value codex-remote.service",
+		"show --property=ActiveState --property=MainPID codex-remote.service",
 		"start codex-remote.service",
 		"stop codex-remote.service",
-		"show --property=ActiveState --property=MainPID --value codex-remote.service",
+		"show --property=ActiveState --property=MainPID codex-remote.service",
 		"start codex-remote.service",
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("systemctl calls = %#v, want %#v", got, want)

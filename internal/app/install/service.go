@@ -230,16 +230,37 @@ func copyFile(sourcePath, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+	targetFile, err := os.CreateTemp(filepath.Dir(targetPath), "."+filepath.Base(targetPath)+".tmp-*")
 	if err != nil {
 		return err
 	}
-	defer targetFile.Close()
+	tempPath := targetFile.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tempPath)
+		}
+	}()
 
 	if _, err := io.Copy(targetFile, sourceFile); err != nil {
+		_ = targetFile.Close()
 		return err
 	}
-	return targetFile.Chmod(info.Mode().Perm())
+	if err := targetFile.Chmod(info.Mode().Perm()); err != nil {
+		_ = targetFile.Close()
+		return err
+	}
+	if err := targetFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, targetPath); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func resolveBinaryPath(opts Options) (string, error) {
