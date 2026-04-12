@@ -23,7 +23,7 @@ func RunService(args []string, _ io.Reader, stdout, _ io.Writer, _ string) error
 		return err
 	}
 	baseDir := flagSet.String("base-dir", defaults.BaseDir, "base directory for config and install state")
-	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance: stable or debug")
+	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance id")
 	statePath := flagSet.String("state-path", "", "path to install-state.json; empty derives from -base-dir and -instance")
 	if err := flagSet.Parse(args[1:]); err != nil {
 		if err == flag.ErrHelp {

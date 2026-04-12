@@ -87,9 +87,11 @@ Windows PowerShell:
 
 仓库中保留的联调入口已经收敛到现有单 binary 路径，它们不再是 release 包产品路径：
 
-- `setup.sh` / `setup.ps1`
-  - 源码仓库 helper
+- `setup.ps1`
+  - Windows 上的源码仓库 helper
   - 默认执行本地构建后再跑 `-bootstrap-only -start-daemon`
+- `go build -o ./bin/codex-remote ./cmd/codex-remote`
+  - Linux / macOS 上先构建本地二进制
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
   - 已经构建过本地二进制时，可直接重复 bootstrap
 - `./bin/codex-remote daemon`
@@ -280,7 +282,7 @@ release 包中的归档目录只是版本缓存位置，不是长期运行路径
 
 对仓库联调：
 
-- `setup.sh`
+- `go build -o ./bin/codex-remote ./cmd/codex-remote`
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
 - `codex-remote install -interactive`
 
@@ -393,7 +395,7 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 仓库联调：
 
 ```bash
-./setup.sh
+go build -o ./bin/codex-remote ./cmd/codex-remote
 ./bin/codex-remote install -bootstrap-only -start-daemon
 ./bin/codex-remote daemon
 ```

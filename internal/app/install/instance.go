@@ -3,6 +3,7 @@ package install
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -12,6 +13,8 @@ const (
 	productName       = "codex-remote"
 )
 
+var instanceIDPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$`)
+
 type instancePaths struct {
 	ConfigHome string
 	DataHome   string
@@ -19,24 +22,24 @@ type instancePaths struct {
 }
 
 func normalizeInstanceID(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
 	case "", defaultInstanceID:
 		return defaultInstanceID
-	case debugInstanceID:
-		return debugInstanceID
 	default:
-		return strings.ToLower(strings.TrimSpace(value))
+		return value
 	}
 }
 
 func parseInstanceID(value string) (string, error) {
 	instanceID := normalizeInstanceID(value)
-	switch instanceID {
-	case defaultInstanceID, debugInstanceID:
+	if isDefaultInstance(instanceID) {
 		return instanceID, nil
-	default:
-		return "", fmt.Errorf("unsupported instance %q (want stable or debug)", strings.TrimSpace(value))
 	}
+	if !instanceIDPattern.MatchString(instanceID) {
+		return "", fmt.Errorf("unsupported instance %q", strings.TrimSpace(value))
+	}
+	return instanceID, nil
 }
 
 func isDefaultInstance(instanceID string) bool {
@@ -57,6 +60,22 @@ func instanceNamespace(instanceID string) string {
 		return productName
 	}
 	return fmt.Sprintf("%s-%s", productName, instanceID)
+}
+
+func instanceIDFromNamespace(namespace string) (string, bool) {
+	namespace = strings.TrimSpace(namespace)
+	if namespace == productName {
+		return defaultInstanceID, true
+	}
+	prefix := productName + "-"
+	if !strings.HasPrefix(namespace, prefix) {
+		return "", false
+	}
+	instanceID, err := parseInstanceID(strings.TrimPrefix(namespace, prefix))
+	if err != nil || isDefaultInstance(instanceID) {
+		return "", false
+	}
+	return instanceID, true
 }
 
 func instancePathsForBaseDir(baseDir, instanceID string) instancePaths {
@@ -92,15 +111,14 @@ func inferBaseDirAndInstanceFromConfigPath(path string) (string, string, bool) {
 	if filepath.Base(configHome) == ".config" {
 		return filepath.Dir(configHome), defaultInstanceID, true
 	}
-	parent := filepath.Dir(configHome)
-	if filepath.Base(parent) != ".config" {
-		return "", "", false
+	if instanceID, ok := instanceIDFromNamespace(filepath.Base(configHome)); ok {
+		parent := filepath.Dir(configHome)
+		if filepath.Base(parent) != ".config" {
+			return "", "", false
+		}
+		return filepath.Dir(parent), instanceID, true
 	}
-	name := filepath.Base(configHome)
-	if name != instanceNamespace(debugInstanceID) {
-		return "", "", false
-	}
-	return filepath.Dir(parent), debugInstanceID, true
+	return "", "", false
 }
 
 func inferBaseDirAndInstanceFromStatePath(path string) (string, string, bool) {
@@ -120,18 +138,18 @@ func inferBaseDirAndInstanceFromStatePath(path string) (string, string, bool) {
 		}
 		return filepath.Dir(localHome), defaultInstanceID, true
 	}
-	parent := filepath.Dir(dataHome)
-	if filepath.Base(parent) != "share" {
-		return "", "", false
+	if instanceID, ok := instanceIDFromNamespace(filepath.Base(dataHome)); ok {
+		parent := filepath.Dir(dataHome)
+		if filepath.Base(parent) != "share" {
+			return "", "", false
+		}
+		localHome := filepath.Dir(parent)
+		if filepath.Base(localHome) != ".local" {
+			return "", "", false
+		}
+		return filepath.Dir(localHome), instanceID, true
 	}
-	localHome := filepath.Dir(parent)
-	if filepath.Base(localHome) != ".local" {
-		return "", "", false
-	}
-	if filepath.Base(dataHome) != instanceNamespace(debugInstanceID) {
-		return "", "", false
-	}
-	return filepath.Dir(localHome), debugInstanceID, true
+	return "", "", false
 }
 
 func inferInstanceID(configPath, statePath string) string {

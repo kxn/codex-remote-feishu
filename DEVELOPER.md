@@ -72,16 +72,18 @@ testkit/
 
 仓库 helper：
 
-- `setup.sh` / `setup.ps1`
-  - 源码仓库辅助脚本
+- `setup.ps1`
+  - Windows 上的源码仓库辅助脚本
   - 默认构建本地 binary 后启动同一套 WebSetup 流程
   - 如显式传参，则直接透传给 `codex-remote install`
+- `go build -o ./bin/codex-remote ./cmd/codex-remote`
+  - Linux / macOS 上先构建本地 binary
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
   - 已经构建过本地 binary 时，可直接重新 bootstrap 并确保本地 daemon 就绪
 - `./bin/codex-remote daemon`
   - 前台运行 daemon，方便直接观察启动过程和日志
 
-不要再把 `setup.sh` / `setup.ps1` 当成 release 包产品入口。
+不要把源码仓库 helper 当成 release 包产品入口。
 
 ## 关键文档
 
@@ -123,7 +125,8 @@ go build ./cmd/...
 源码仓库启动 WebSetup：
 
 ```bash
-./setup.sh
+go build -o ./bin/codex-remote ./cmd/codex-remote
+./bin/codex-remote install -bootstrap-only -start-daemon
 ```
 
 源码仓库直接跑单 binary：
@@ -158,7 +161,7 @@ make release-artifacts VERSION=v0.1.0
 - release / online installer 默认只做 bootstrap，不再在 CLI 里采集飞书凭证或 VS Code 路径
 - 默认在线安装入口保持 production-first，beta / alpha 必须显式通过 `--track` 选择
 - 飞书配置、VS Code detect/apply、shim 重装统一在 WebSetup / Admin UI 中完成
-- `setup.sh` / `setup.ps1` 默认走 `-bootstrap-only -start-daemon`
+- 仓库联调统一走本地构建 binary 的 `install -bootstrap-only -start-daemon`
 - 仓库里不再保留单独的 `install.sh` 生命周期脚本
 - `managed_shim` 会把扩展 bundle 中的 `codex` 重命名为 `codex.real`
 - 然后把统一二进制 `codex-remote` 复制到原始 `codex` 路径

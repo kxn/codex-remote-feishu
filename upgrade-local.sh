@@ -6,7 +6,7 @@ BIN_DIR="${ROOT_DIR}/bin"
 BUILD_OUTPUT="${BIN_DIR}/codex-remote"
 GO_BIN="${GO_BIN:-go}"
 BASE_DIR="${HOME}"
-INSTANCE="stable"
+INSTANCE=""
 UPGRADE_SLOT=""
 ALLOW_DIRTY=0
 
@@ -19,7 +19,7 @@ stage it into the fixed local-upgrade artifact path, and trigger the built-in
 local upgrade transaction against the installed daemon state.
 
 options:
-  --instance <id>   install instance to upgrade (stable or debug; default: stable)
+  --instance <id>   install instance to upgrade (default: repo-bound instance or stable)
   --base-dir <dir>  base dir used by the local install state (default: $HOME)
   --slot <slot>     optional explicit upgrade slot label
   --allow-dirty     skip the clean-worktree guard before git pull
@@ -81,10 +81,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${INSTANCE}" != "stable" && "${INSTANCE}" != "debug" ]]; then
-  echo "unsupported --instance: ${INSTANCE}" >&2
-  exit 1
+if [[ -z "${INSTANCE}" ]]; then
+  repo_instance_file="${ROOT_DIR}/.codex-remote/install-instance"
+  if [[ -f "${repo_instance_file}" ]]; then
+    INSTANCE="$(tr -d '[:space:]' < "${repo_instance_file}")"
+  fi
 fi
+INSTANCE="${INSTANCE:-stable}"
 
 cd "${ROOT_DIR}"
 
@@ -111,7 +114,7 @@ CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
 
 if [[ ! -f "${state_path}" ]]; then
   echo "install state not found: ${state_path}" >&2
-  echo "run ./setup.sh first or pass --base-dir for the installed environment" >&2
+  echo "build ./bin/codex-remote and run './bin/codex-remote install -bootstrap-only -start-daemon' first, or pass --base-dir for the installed environment" >&2
   exit 1
 fi
 
@@ -127,4 +130,4 @@ cmd=("${BUILD_OUTPUT}" local-upgrade "-instance" "${INSTANCE}" "-base-dir" "${BA
 if [[ -n "${UPGRADE_SLOT}" ]]; then
   cmd+=("-slot" "${UPGRADE_SLOT}")
 fi
-"${cmd[@]}"
+CODEX_REMOTE_REPO_ROOT="${ROOT_DIR}" "${cmd[@]}"

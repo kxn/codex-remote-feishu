@@ -17,7 +17,7 @@ func RunLocalUpgrade(args []string, _ io.Reader, stdout, _ io.Writer, _ string) 
 	flagSet := flag.NewFlagSet("local-upgrade", flag.ContinueOnError)
 	flagSet.SetOutput(stdout)
 
-	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance: stable or debug")
+	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance id")
 	baseDir := flagSet.String("base-dir", defaults.BaseDir, "base directory for config and install state")
 	statePathFlag := flagSet.String("state-path", "", "path to install-state.json; empty derives from -base-dir")
 	slot := flagSet.String("slot", "", "slot label for the local upgrade; empty derives local-<fingerprint>")

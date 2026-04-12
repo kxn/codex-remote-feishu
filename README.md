@@ -171,13 +171,14 @@ VS Code 两种接管方式的区别：
 
 如果你是从源码仓库联调而不是从 release 包安装：
 
-- `./setup.sh`
-  - 构建本地二进制
-  - 默认执行 `codex-remote install -bootstrap-only -start-daemon`
+- `go build -o ./bin/codex-remote ./cmd/codex-remote`
+  - 构建源码仓库本地二进制
+- `./bin/codex-remote install -bootstrap-only -start-daemon`
+  - 直接用本地构建的 binary 做 bootstrap 并拉起 daemon
 - `./setup.ps1`
-  - Windows 上的同等辅助脚本
+  - Windows 上的辅助脚本，会构建本地 binary 后执行相同 install 命令
 
-它们是仓库 helper，不是 release 包产品入口。
+这些都是源码仓库联调入口，不是 release 包产品入口。
 
 ## Linux 常驻服务与用户升级
 
@@ -210,11 +211,10 @@ loginctl enable-linger "$USER"
 
 源码仓库里不再保留单独的 `install.sh` 生命周期脚本。现在统一使用现有单 binary 入口：
 
-- `./setup.sh`
-  - 构建本地 `./bin/codex-remote`
-  - 默认执行 `codex-remote install -bootstrap-only -start-daemon`
 - `./setup.ps1`
   - Windows 上的同等辅助脚本
+- `go build -o ./bin/codex-remote ./cmd/codex-remote`
+  - 先构建本地 binary
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
   - 已经构建过二进制时，可直接重新 bootstrap 并确保本地 daemon 就绪
 - `./bin/codex-remote daemon`

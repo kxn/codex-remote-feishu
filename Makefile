@@ -44,7 +44,10 @@ release-track-version:
 	bash scripts/check/release-track-version.sh
 
 start:
-	./setup.sh
+	bash scripts/externalaccess/prepare-cloudflared-embed.sh
+	mkdir -p bin
+	$(GO) build -o ./bin/codex-remote ./cmd/codex-remote
+	./bin/codex-remote install -bootstrap-only -start-daemon
 
 stop:
 	@echo "install.sh has been removed." >&2
