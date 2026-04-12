@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-12`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并记录当前只保留 `config.json` 的配置基线、Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程 provider env 补齐规则，以及 release smoke/test 复用正式产物的当前实现。
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并记录当前只保留 `config.json` 的配置基线、Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程 provider env 补齐规则、release smoke/test 复用正式产物的当前实现，以及本地自升级流程专门文档入口。
 
 ## 1. 范围
 
@@ -286,6 +286,10 @@ Windows 下文件名为 `codex-remote.exe`。
 - 在 `systemd_user` 模式下，通过独立 transient unit 启动 helper，避免 stop 旧服务时把 helper 一并杀掉
 - helper 负责 stop old service -> switch stable binary -> start new service -> observe health
 - 新版本启动或健康检查失败时，自动回滚 binary 和 live config
+
+本地自升级链路的完整时序、helper 来源、路径布局和回滚细节，单独见：
+
+- [local-self-upgrade-flow.md](./local-self-upgrade-flow.md)
 
 ## 5. VS Code 接管模型
 

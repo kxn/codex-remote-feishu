@@ -53,6 +53,7 @@ That script does all of the following:
 
 - The built-in CLI entry is `codex-remote local-upgrade`.
 - The fixed artifact path is `~/.local/share/codex-remote/local-upgrade/codex-remote` for the default base dir.
+- For explanation or debugging of the current self-upgrade transaction, prefer `docs/general/local-self-upgrade-flow.md` before re-reading install code.
 - If the script says `install-state.json` is missing, bootstrap the local install first with `./setup.sh` or point `--base-dir` at the installed environment.
 - For repo-bound debug/status HTTP calls, prefer:
 
