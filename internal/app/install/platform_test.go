@@ -16,6 +16,18 @@ func TestDefaultVSCodeSettingsPathWindowsUsesAppData(t *testing.T) {
 	}
 }
 
+func TestDefaultInstallBinDirForDefaultInstanceUsesNamespacedDataDir(t *testing.T) {
+	linuxHome := filepath.Join(string(filepath.Separator), "home", "demo")
+	if got, want := defaultInstallBinDirForInstance("linux", linuxHome, defaultInstanceID), filepath.Join(linuxHome, ".local", "share", "codex-remote", "bin"); got != want {
+		t.Fatalf("linux defaultInstallBinDirForInstance()=%q, want %q", got, want)
+	}
+
+	darwinHome := filepath.Join(string(filepath.Separator), "Users", "demo")
+	if got, want := defaultInstallBinDirForInstance("darwin", darwinHome, defaultInstanceID), filepath.Join(darwinHome, "Library", "Application Support", "codex-remote", "bin"); got != want {
+		t.Fatalf("darwin defaultInstallBinDirForInstance()=%q, want %q", got, want)
+	}
+}
+
 func TestDetectBundleEntrypointsIgnoresRealBinary(t *testing.T) {
 	home := t.TempDir()
 	root := filepath.Join(home, ".vscode-server", "extensions")
