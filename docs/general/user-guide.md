@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-04-11`
-> Summary: 同步当前 normal-mode-first 产品定位、setup 里的二维码新建飞书应用路径、运行环境检查步骤、按需 VS Code 接入路径，以及常见使用场景、命令帮助、后台恢复与文档预览的当前用户语义。
+> Updated: `2026-04-13`
+> Summary: 同步当前 normal-mode-first 产品定位、setup 里的二维码新建飞书应用路径、运行环境检查步骤、按需 VS Code 接入路径，以及 `/upgrade latest` + `/upgrade track` 的当前升级语义和常见用户场景。
 
 ## 1. 这是什么
 
@@ -151,15 +151,25 @@ Windows PowerShell：
 
 ```text
 /upgrade latest
+/upgrade track
 ```
 
-在飞书里发送这条命令即可。
+在飞书里发送这些命令即可。
 
-这条入口适合：
+当前语义：
 
-- 检查当前 track 是否有新版本
-- 开始升级到当前 track 的最新 release
-- 继续上一次未完成的升级
+- `/upgrade latest`
+  - 检查当前 track 是否有新版本
+  - 开始升级到当前 track 的最新 release
+  - 继续上一次未完成的升级
+- `/upgrade track` / `/upgrade track <track>`
+  - 查看或切换升级渠道
+  - 旧 `/debug track ...` 仍可用，但会提示迁移到 `/upgrade track ...`
+
+不同构建 flavor 的可选能力会有差异：
+
+- release 用户常见的 shipping 构建：track 仅 `production` / `beta`，且不会开放 `/upgrade local`
+- 仓库联调常见的 dev 构建：可额外使用 `alpha`，并保留 `/upgrade local`
 
 当前用户文档不再要求你手动准备本地产物或执行仓库里的开发 helper。
 

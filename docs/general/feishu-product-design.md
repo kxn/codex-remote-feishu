@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-11`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、旧生命周期动作判定、卡片交互、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
+> Updated: `2026-04-13`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、旧生命周期动作判定、卡片交互、结构化计划更新卡、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -649,6 +649,24 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 图片不会吞掉 final text
 - final text 也不会把已经单独发出的图片重新包进 markdown
 - 若图片上传或构造 payload 失败，链路会给出可见提示，而不是静默丢失
+
+### 7.2.2 结构化计划更新卡
+
+当前 `turn/plan/updated` 会投影为 append-only 的“计划更新”卡片：
+
+- 若上游携带 `explanation`，卡片会展示说明文本
+- step 列表会带状态：
+  - `completed`
+  - `in_progress`
+  - `pending`
+- 同一个 live turn 内，若新快照与上一份完全一致，不会重复发卡
+- 只有 step 内容或状态发生变化时，才会追加发送新的计划更新卡
+
+当前边界：
+
+- 这条卡片只消费 `turn/plan/updated` 结构化快照
+- `item/plan/delta` 仍按普通文本 item 链路处理，不会混作 checklist 卡
+- 计划更新卡首版保持 append-only，不做 inline replace
 
 ### 7.3 最终回复
 

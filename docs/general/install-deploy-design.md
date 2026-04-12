@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-12`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并记录当前只保留 `config.json` 的配置基线、Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程 provider env 补齐规则、release smoke/test 复用正式产物的当前实现，以及本地自升级流程专门文档入口。
+> Updated: `2026-04-13`
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 入口语义、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
 
 ## 1. 范围
 
@@ -134,6 +134,31 @@ Windows PowerShell:
 
 这些能力主要用于源码仓库或定向调试，不再作为发布包默认路径。
 
+### 3.3 build flavor 与能力边界
+
+当前构建元数据额外引入了 `build flavor`，用于和 release track 解耦：
+
+- `shipping`
+  - release workflow 的默认构建 flavor
+- `dev`
+  - 源码仓库本地构建的默认 flavor
+
+当前由统一策略决定“这个构建能暴露什么能力”，而不是把能力边界硬编码在 track 逻辑里。
+
+当前策略基线：
+
+- shipping
+  - 允许切换的 release track 只有 `beta`、`production`
+  - 新安装默认/回退 track 收敛到 `production`
+  - 不暴露本地 binary 升级入口（`/upgrade local`）
+  - `pprof` 保留但默认关闭
+- dev
+  - 允许 track：`alpha`、`beta`、`production`
+  - 保留本地 binary 升级入口（`/upgrade local`）
+  - `pprof` 默认开启
+
+`/upgrade track`、帮助文案和卡片入口都会读取这套策略；旧 `/debug track` 仅作为兼容别名保留。
+
 ## 4. 默认布局
 
 ### 4.1 配置与状态
@@ -259,10 +284,12 @@ loginctl enable-linger "$USER"
 - release 升级
   - 用户发送 `/upgrade latest`
   - daemon 按当前 track 检查或继续升级到最新 release
+  - 用户发送 `/upgrade track` 或 `/upgrade track <track>` 可查看/切换升级渠道
+  - track 可选范围由 build flavor 策略决定（旧 `/debug track` 仅保留兼容）
   - daemon 不再后台自动检查 GitHub release，也不再主动弹出升级提示卡
 - 本地编译产物升级
   - 用户先把新编译的 binary 放到固定 artifact 路径
-  - 再发送 `/upgrade local`
+  - 再发送 `/upgrade local`（当前只在允许本地升级的 flavor 下开放）
 
 本地 artifact 路径按当前 install-state 推导，默认位于：
 
@@ -303,11 +330,19 @@ Windows 下文件名为 `codex-remote.exe`。
 
 ### 5.2 `managed_shim`
 
-直接接管扩展 bundle 里的 `codex` 入口：
+当前 `managed_shim` 已从“复制主 binary 到扩展入口”收敛为“tiny shim + sidecar 绑定”：
 
 1. 原始 `codex` 重命名为 `codex.real` 或 `codex.real.exe`
-2. 把统一二进制 `codex-remote` 复制到原始 `codex` 路径
-3. `config.json` 的 `wrapper.codexRealBinary` 自动指向保留的 `codex.real`
+2. 在原始入口路径写入独立 tiny shim（不再复制整份 `codex-remote`）
+3. 在入口旁写入 sidecar 绑定配置，记录该入口对应的 install target / state/config 定位信息
+4. 运行时由 tiny shim 读取 sidecar，再解析 install-state / config，定位该实例当前可用的 `codex-remote` 并 `exec`
+5. 若 sidecar 或目标安装失效，shim 会回退执行同目录 `codex.real`，避免 VS Code 入口直接不可用
+
+detect/apply/reinstall 的当前规则也同步收紧：
+
+- 每个扩展版本只按当前主机平台选择唯一入口（例如 Windows 只看 `windows-*`，不会误 patch `linux-*`）
+- 不再只处理“最新入口”，会一并处理当前实例已知的历史 repo-managed 入口
+- 若 probe 显示 live daemon 与当前 shim 版本不兼容或 fingerprint 不匹配，runtime manager 会拒绝替换，避免 stale shim 误停健康实例
 
 适用：
 
@@ -327,13 +362,14 @@ Windows 下文件名为 `codex-remote.exe`。
 
 - VS Code `settings.json` 中的 `chatgpt.cliExecutable`
 - `wrapper.integrationMode=editor_settings`
+- 历史扩展目录中的 repo-managed copied shim
 
 当前处理方式：
 
 1. detect 仍会识别这些 legacy 状态。
 2. 一旦用户执行迁移或重新接入，系统会：
-   - patch 最新检测到的扩展入口
-   - 更新 install-state / config
+   - 按当前平台 patch 目标入口，并把当前实例已知历史 repo-managed 入口统一迁到 tiny shim + sidecar 绑定模型
+   - 更新 install-state / config / sidecar 绑定信息
    - 清掉旧的 `chatgpt.cliExecutable`
 3. 迁移完成后，不再保留 `editor_settings` 作为产品可选路径。
 

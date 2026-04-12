@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-04-12`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令，以及 `thread/tokenUsage/updated` 的 usage 标准化事件。
+> Updated: `2026-04-13`
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件，以及 `turn/plan/updated` 的结构化计划快照事件。
 
 ## 1. 文档定位
 
@@ -42,6 +42,7 @@
 - `turn/steer`
 - `turn/interrupt`
 - `turn/started`
+- `turn/plan/updated`
 - `turn/completed`
 - `item/started`
 - `item/completed`
@@ -320,6 +321,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `config.observed`
 - `local.interaction.observed`
 - `turn.started`
+- `turn.plan.updated`
 - `turn.completed`
 - `item.started`
 - `item.delta`
@@ -376,6 +378,26 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - turn 是否应进入远端 queue 状态机
 - item 是否应进入 Feishu 主渲染面
 - 本地交互是否应触发 `paused_for_local`
+
+#### `planSnapshot`
+
+当前仅在 `turn.plan.updated` 上使用。
+
+字段形状：
+
+- `explanation`
+- `steps[]`
+  - `step`
+  - `status`
+    - `pending`
+    - `in_progress`
+    - `completed`
+
+当前语义：
+
+- wrapper 会把 native `turn/plan/updated` 标准化成 `turn.plan.updated + planSnapshot`
+- `item/plan/delta` 仍属于 `item.delta` 文本流，不会被折叠成 `planSnapshot`
+- orchestrator 在产品层按 live turn + surface 去重同内容快照，避免重复投影相同计划更新
 
 ### 5.2 Request 元数据
 

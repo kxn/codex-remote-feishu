@@ -374,6 +374,16 @@
       "recordedAt": "2026-04-09T16:33:22Z"
     },
     {
+      "number": 53,
+      "title": "[Work] 需要解决启动时候端口不可用的问题",
+      "updatedAt": "2026-04-12T16:25:11Z",
+      "closedAt": "2026-04-12T16:25:08Z",
+      "decision": "skip",
+      "reason": "closure only confirmed previously landed bootstrap port-allocation behavior and deferred diagnostics follow-up; no new durable doc delta in this close-out",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/53",
+      "recordedAt": "2026-04-12T16:29:58Z"
+    },
+    {
       "number": 55,
       "updatedAt": "2026-04-08T12:54:48Z",
       "decision": "skip",
@@ -1340,6 +1350,123 @@
       "reason": "current install-deploy-design and README already cover stable, beta, and master global instances with workspace binding",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/171",
       "recordedAt": "2026-04-12T09:42:55Z"
+    },
+    {
+      "number": 173,
+      "title": "升级 helper 在切换或回滚 binary 前未严格确认旧进程退出",
+      "updatedAt": "2026-04-12T15:41:18Z",
+      "closedAt": "2026-04-12T15:41:15Z",
+      "decision": "skip",
+      "reason": "upgrade stop/switch/rollback strict gate semantics were already synchronized into local-self-upgrade-flow doc",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/173",
+      "recordedAt": "2026-04-12T16:28:43Z"
+    },
+    {
+      "number": 174,
+      "title": "引入 build flavor，区分 shipping/dev 构建能力与默认诊断行为",
+      "updatedAt": "2026-04-12T12:08:52Z",
+      "closedAt": "2026-04-12T12:08:50Z",
+      "decision": "merge",
+      "reason": "build flavor capability boundaries and defaults were not documented in install/deploy baseline",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/174",
+      "recordedAt": "2026-04-12T16:25:21Z"
+    },
+    {
+      "number": 177,
+      "title": "[Feature] 抽出飞书卡片文件/目录选择器基础能力",
+      "updatedAt": "2026-04-12T16:30:11Z",
+      "closedAt": "2026-04-12T15:51:22Z",
+      "decision": "skip",
+      "reason": "latest issue update does not change durable behavior; path picker foundation remains fully covered by canonical remote-surface and Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/177",
+      "recordedAt": "2026-04-12T16:31:50Z"
+    },
+    {
+      "number": 178,
+      "title": "[Feature] 为 final turn 卡片补充 turn-level Token Usage / Context 元数据",
+      "updatedAt": "2026-04-12T14:16:09Z",
+      "closedAt": "2026-04-12T14:16:06Z",
+      "decision": "skip",
+      "reason": "final footer usage/context-left behavior is already documented in the Feishu product canonical doc",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/178",
+      "recordedAt": "2026-04-12T16:26:57Z"
+    },
+    {
+      "number": 179,
+      "title": "将 track 从 /debug 迁移到 /upgrade，并保留兼容别名",
+      "updatedAt": "2026-04-12T11:29:04Z",
+      "closedAt": "2026-04-12T11:29:02Z",
+      "decision": "merge",
+      "reason": "user-facing upgrade track command migration was not fully documented; synced canonical user and install docs",
+      "targetDocs": [
+        "docs/general/user-guide.md",
+        "docs/general/install-deploy-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/179",
+      "recordedAt": "2026-04-12T16:24:19Z"
+    },
+    {
+      "number": 180,
+      "title": "[Feature] 抽出 Token Usage 数据链路与 thread/turn 状态承载基础能力",
+      "updatedAt": "2026-04-12T12:39:57Z",
+      "closedAt": "2026-04-12T12:39:55Z",
+      "decision": "skip",
+      "reason": "duplicate follow-up of token-usage foundation with no additional durable doc delta beyond already synced protocol baseline",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/180",
+      "recordedAt": "2026-04-12T16:26:26Z"
+    },
+    {
+      "number": 181,
+      "title": "[Feature] 抽出 Token Usage 数据链路与 thread/turn 状态承载基础能力",
+      "updatedAt": "2026-04-12T11:54:30Z",
+      "closedAt": "2026-04-12T11:54:28Z",
+      "decision": "skip",
+      "reason": "durable token-usage protocol/state baseline was already captured in relay protocol docs during implementation",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/181",
+      "recordedAt": "2026-04-12T16:24:54Z"
+    },
+    {
+      "number": 182,
+      "title": "飞书展示 Codex 结构化 plan 更新卡片",
+      "updatedAt": "2026-04-12T12:37:08Z",
+      "closedAt": "2026-04-12T12:35:08Z",
+      "decision": "merge",
+      "reason": "structured turn plan update behavior lacked canonical protocol and Feishu product documentation",
+      "targetDocs": [
+        "docs/general/relay-protocol-spec.md",
+        "docs/general/feishu-product-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/182",
+      "recordedAt": "2026-04-12T16:25:59Z"
+    },
+    {
+      "number": 183,
+      "title": "[Bug] 用独立 tiny shim + sidecar 配置重构 VS Code 集成，避免旧 copied shim 误杀 live daemon",
+      "updatedAt": "2026-04-12T16:11:32Z",
+      "closedAt": "2026-04-12T15:04:38Z",
+      "decision": "merge",
+      "reason": "VS Code integration model changed to tiny-shim plus sidecar binding and needed canonical install/deploy documentation",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/183",
+      "recordedAt": "2026-04-12T16:27:53Z"
+    },
+    {
+      "number": 184,
+      "title": "Windows managed_shim detection can patch linux bundle entrypoint instead of the active VS Code entrypoint",
+      "updatedAt": "2026-04-12T15:15:27Z",
+      "closedAt": "2026-04-12T14:20:48Z",
+      "decision": "merge",
+      "reason": "managed shim docs needed explicit current-platform entrypoint selection to avoid mixed-platform false health",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/184",
+      "recordedAt": "2026-04-12T16:27:28Z"
     }
   ]
 }
