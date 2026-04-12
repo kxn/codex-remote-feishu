@@ -190,7 +190,7 @@ named instance <instanceId>:
 
 默认稳定安装目录按平台区分：
 
-- Linux: `~/.local/bin`
+- Linux: `~/.local/share/codex-remote/bin`
 - macOS: `~/Library/Application Support/codex-remote/bin`
 - Windows: `%LOCALAPPDATA%\\codex-remote\\bin`
 

@@ -23,7 +23,7 @@ install_bin_dir() {
   local h="$1"
   case "$(uname -s)" in
     Darwin) printf '%s\n' "${h}/Library/Application Support/codex-remote/bin" ;;
-    *)      printf '%s\n' "${h}/.local/bin" ;;
+    *)      printf '%s\n' "${h}/.local/share/codex-remote/bin" ;;
   esac
 }
 
