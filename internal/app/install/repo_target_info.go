@@ -191,6 +191,7 @@ func defaultRepoInstallTargetConfig(instanceID string) config.AppConfig {
 	}
 	cfg.Debug.Pprof.ListenHost = firstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
 	cfg.Debug.Pprof.ListenPort = ports.Pprof
+	applyBuildFlavorDebugDefaults(&cfg)
 	return cfg
 }
 

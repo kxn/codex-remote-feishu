@@ -190,7 +190,7 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 	}
 	track := stateValue.CurrentTrack
 	if track == "" {
-		track = install.ReleaseTrackAlpha
+		track = defaultUpgradeTrackForState(stateValue)
 	}
 	a.upgradeCheckInFlight = true
 	go a.runUpgradeCheck(upgradeCheckRequest{
@@ -204,6 +204,9 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 }
 
 func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValue install.InstallState) []control.UIEvent {
+	if !install.CurrentBuildAllowsLocalUpgrade() {
+		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_local_unsupported", "当前构建不支持 `/upgrade local`。如需本地升级，请使用 dev flavor 的源码构建。")}
+	}
 	if a.upgradeCheckInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_busy", "当前已有 release 检查在进行中，请稍后再试本地升级。")}
 	}
@@ -592,11 +595,11 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 		case "local":
 			return parsedUpgradeCommand{Mode: upgradeCommandLocal}, nil
 		default:
-			return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `track`、`latest` 或 `local`。")
+			return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradeSubcommandUsageSummary())
 		}
 	case 3:
 		if fields[1] != "track" {
-			return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `/upgrade`、`/upgrade track [alpha|beta|production]`、`/upgrade latest`、`/upgrade local`。")
+			return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradeCommandUsageSyntax())
 		}
 		track := install.ParseReleaseTrack(fields[2])
 		if track == "" {
@@ -604,7 +607,7 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 		}
 		return parsedUpgradeCommand{Mode: upgradeCommandSetTrack, Track: track}, nil
 	default:
-		return parsedUpgradeCommand{}, fmt.Errorf("`/upgrade` 只支持 `/upgrade`、`/upgrade track [alpha|beta|production]`、`/upgrade latest`、`/upgrade local`。")
+		return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradeCommandUsageSyntax())
 	}
 }
 
@@ -624,6 +627,14 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 		summaryLines = append(summaryLines, "待处理升级：无")
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
+	quickButtons := []control.CommandCatalogButton{
+		runCommandButton("管理页外链", "/debug admin", "", false),
+		runCommandButton("升级状态", "/upgrade", "", false),
+		runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
+	}
+	if install.CurrentBuildAllowsLocalUpgrade() {
+		quickButtons = append(quickButtons, runCommandButton("本地升级", "/upgrade local", "", false))
+	}
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Debug",
 		Summary:      strings.Join(summaryLines, "\n"),
@@ -633,12 +644,7 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 			{
 				Title: "快捷操作",
 				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("管理页外链", "/debug admin", "", false),
-						runCommandButton("升级状态", "/upgrade", "", false),
-						runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
-						runCommandButton("本地升级", "/upgrade local", "", false),
-					},
+					Buttons: quickButtons,
 				}},
 			},
 			{
@@ -659,7 +665,9 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 		fmt.Sprintf("当前 track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
 		fmt.Sprintf("当前版本：%s", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
 		fmt.Sprintf("最近检查：%s", formatOptionalTime(stateValue.LastCheckAt)),
-		fmt.Sprintf("本地升级产物：%s", install.LocalUpgradeArtifactPath(stateValue)),
+	}
+	if install.CurrentBuildAllowsLocalUpgrade() {
+		summaryLines = append(summaryLines, fmt.Sprintf("本地升级产物：%s", install.LocalUpgradeArtifactPath(stateValue)))
 	}
 	if latest := strings.TrimSpace(stateValue.LastKnownLatestVersion); latest != "" {
 		summaryLines = append(summaryLines, fmt.Sprintf("最近看到的最新版本：%s", latest))
@@ -671,6 +679,13 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 	}
 	summaryLines = append(summaryLines, upgradeCheckSummaryLine(checkInFlight))
 	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
+	quickButtons := []control.CommandCatalogButton{
+		runCommandButton("查看 track", "/upgrade track", "", false),
+		runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
+	}
+	if install.CurrentBuildAllowsLocalUpgrade() {
+		quickButtons = append(quickButtons, runCommandButton("本地升级", "/upgrade local", "", false))
+	}
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Upgrade",
 		Summary:      strings.Join(summaryLines, "\n"),
@@ -680,21 +695,13 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 			{
 				Title: "快捷操作",
 				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("查看 track", "/upgrade track", "", false),
-						runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
-						runCommandButton("本地升级", "/upgrade local", "", false),
-					},
+					Buttons: quickButtons,
 				}},
 			},
 			{
 				Title: "切换 track",
 				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("alpha", "/upgrade track alpha", "primary", currentTrack == string(install.ReleaseTrackAlpha)),
-						runCommandButton("beta", "/upgrade track beta", "", currentTrack == string(install.ReleaseTrackBeta)),
-						runCommandButton("production", "/upgrade track production", "", currentTrack == string(install.ReleaseTrackProduction)),
-					},
+					Buttons: buildTrackCommandButtons(currentTrack),
 				}},
 			},
 			{
@@ -742,6 +749,7 @@ func buildTrackSummary(stateValue install.InstallState) string {
 	lines := []string{
 		fmt.Sprintf("当前 track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
 		fmt.Sprintf("安装来源：%s", displayInstallSource(stateValue.InstallSource)),
+		fmt.Sprintf("当前构建允许的 track：%s", strings.Join(currentBuildTrackNames(), "、")),
 	}
 	if latest := strings.TrimSpace(stateValue.LastKnownLatestVersion); latest != "" {
 		lines = append(lines, fmt.Sprintf("最近看到的最新版本：%s", latest))
@@ -875,6 +883,9 @@ func trackSummaryEvents(surfaceID string, stateValue install.InstallState, legac
 }
 
 func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, nextTrack install.ReleaseTrack, legacyAlias bool) []control.UIEvent {
+	if !install.CurrentBuildAllowsReleaseTrack(nextTrack) {
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unsupported", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), unsupportedTrackMessage(nextTrack), legacyAlias))}
+	}
 	if a.upgradeCheckInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前正在检查升级，暂时不能切换 track。", legacyAlias))}
 	}
@@ -902,6 +913,57 @@ func legacyTrackAliasMessage(replacement, body string, legacyAlias ...bool) stri
 		return body
 	}
 	return fmt.Sprintf("`/debug track` 仍可兼容，后续请改用 `%s`。\n\n%s", replacement, body)
+}
+
+func defaultUpgradeTrackForState(stateValue install.InstallState) install.ReleaseTrack {
+	return install.DefaultTrackForInstallSource(stateValue.InstallSource)
+}
+
+func currentBuildTrackNames() []string {
+	values := install.CurrentBuildAllowedReleaseTracks()
+	names := make([]string, 0, len(values))
+	for _, track := range values {
+		names = append(names, string(track))
+	}
+	return names
+}
+
+func buildTrackCommandButtons(currentTrack string) []control.CommandCatalogButton {
+	allowed := install.CurrentBuildAllowedReleaseTracks()
+	buttons := make([]control.CommandCatalogButton, 0, len(allowed))
+	for i, track := range allowed {
+		style := ""
+		if i == 0 {
+			style = "primary"
+		}
+		buttons = append(buttons, runCommandButton(string(track), "/upgrade track "+string(track), style, currentTrack == string(track)))
+	}
+	return buttons
+}
+
+func unsupportedTrackMessage(track install.ReleaseTrack) string {
+	return fmt.Sprintf("当前构建不支持 %s track。可用 track：%s。", track, strings.Join(currentBuildTrackNames(), "、"))
+}
+
+func upgradeSubcommandUsageSummary() string {
+	parts := []string{"`track`", "`latest`"}
+	if install.CurrentBuildAllowsLocalUpgrade() {
+		parts = append(parts, "`local`")
+	}
+	return fmt.Sprintf("`/upgrade` 只支持 %s。", strings.Join(parts, "、"))
+}
+
+func upgradeCommandUsageSyntax() string {
+	segments := []string{"/upgrade"}
+	allowed := currentBuildTrackNames()
+	if len(allowed) > 0 {
+		segments = append(segments, fmt.Sprintf("`/upgrade track [%s]`", strings.Join(allowed, "|")))
+	}
+	segments = append(segments, "`/upgrade latest`")
+	if install.CurrentBuildAllowsLocalUpgrade() {
+		segments = append(segments, "`/upgrade local`")
+	}
+	return fmt.Sprintf("`/upgrade` 只支持 %s。", strings.Join(segments, "、"))
 }
 
 func debugUsageEvents(surfaceID, message string) []control.UIEvent {

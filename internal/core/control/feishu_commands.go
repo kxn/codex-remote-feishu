@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
+)
 
 const (
 	FeishuCommandGroupCurrentWork  = "current_work"
@@ -714,7 +718,7 @@ func FeishuCommandGroupByID(groupID string) (FeishuCommandGroup, bool) {
 func FeishuCommandDefinitions() []FeishuCommandDefinition {
 	defs := make([]FeishuCommandDefinition, 0, len(feishuCommandSpecs))
 	for _, spec := range feishuCommandSpecs {
-		defs = append(defs, cloneFeishuCommandDefinition(spec.definition))
+		defs = append(defs, runtimeFeishuCommandDefinition(spec))
 	}
 	return defs
 }
@@ -722,7 +726,7 @@ func FeishuCommandDefinitions() []FeishuCommandDefinition {
 func FeishuCommandDefinitionByID(commandID string) (FeishuCommandDefinition, bool) {
 	for _, spec := range feishuCommandSpecs {
 		if spec.definition.ID == commandID {
-			return cloneFeishuCommandDefinition(spec.definition), true
+			return runtimeFeishuCommandDefinition(spec), true
 		}
 	}
 	return FeishuCommandDefinition{}, false
@@ -734,7 +738,7 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 		if spec.definition.GroupID != groupID {
 			continue
 		}
-		defs = append(defs, cloneFeishuCommandDefinition(spec.definition))
+		defs = append(defs, runtimeFeishuCommandDefinition(spec))
 	}
 	return defs
 }
@@ -785,26 +789,27 @@ func buildFeishuCommandCatalog(title, summary string, interactive bool) FeishuDi
 	for _, group := range feishuCommandGroups {
 		entries := make([]CommandCatalogEntry, 0, len(feishuCommandSpecs))
 		for _, spec := range feishuCommandSpecs {
-			if spec.definition.GroupID != group.ID {
+			def := runtimeFeishuCommandDefinition(spec)
+			if def.GroupID != group.ID {
 				continue
 			}
-			if interactive && !spec.definition.ShowInMenu {
+			if interactive && !def.ShowInMenu {
 				continue
 			}
-			if !interactive && !spec.definition.ShowInHelp {
+			if !interactive && !def.ShowInHelp {
 				continue
 			}
 			entry := CommandCatalogEntry{
-				Title:       strings.TrimSpace(spec.definition.Title),
-				Commands:    []string{spec.definition.CanonicalSlash},
-				Description: spec.definition.Description,
-				Examples:    append([]string(nil), spec.definition.Examples...),
+				Title:       strings.TrimSpace(def.Title),
+				Commands:    []string{def.CanonicalSlash},
+				Description: def.Description,
+				Examples:    append([]string(nil), def.Examples...),
 			}
 			if interactive {
 				entry.Buttons = append(entry.Buttons, CommandCatalogButton{
-					Label:       catalogButtonLabel(spec.definition),
+					Label:       catalogButtonLabel(def),
 					Kind:        CommandCatalogButtonRunCommand,
-					CommandText: spec.definition.CanonicalSlash,
+					CommandText: def.CanonicalSlash,
 				})
 			}
 			entries = append(entries, entry)
@@ -845,6 +850,69 @@ func cloneFeishuCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefi
 		cloned.RecommendedMenu = &menu
 	}
 	return cloned
+}
+
+func runtimeFeishuCommandDefinition(spec feishuCommandSpec) FeishuCommandDefinition {
+	def := cloneFeishuCommandDefinition(spec.definition)
+	switch def.ID {
+	case FeishuCommandUpgrade:
+		return runtimeUpgradeCommandDefinition(def)
+	case FeishuCommandDebug:
+		return runtimeDebugCommandDefinition(def)
+	default:
+		return def
+	}
+}
+
+func runtimeUpgradeCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
+	policy := buildinfo.CurrentCapabilityPolicy()
+	formHints := []string{"track", "latest"}
+	examples := []string{"/upgrade latest"}
+	options := []FeishuCommandOption{
+		commandOption("/upgrade", "upgrade", "track", "track", "查看当前 track。"),
+		commandOption("/upgrade", "upgrade", "latest", "latest", "检查或继续升级到当前 track 的最新 release。"),
+	}
+	if trackExample := preferredUpgradeTrackExample(policy.AllowedReleaseTracks); trackExample != "" {
+		examples = append(examples, "/upgrade track "+trackExample)
+	}
+	for _, track := range policy.AllowedReleaseTracks {
+		track = strings.TrimSpace(track)
+		if track == "" {
+			continue
+		}
+		options = append(options, commandOption("/upgrade track", "upgrade_track", track, "track "+track, "切换到 "+track+" track。"))
+	}
+	description := "查看升级状态、查看或切换当前 release track；`/upgrade latest` 检查或继续 release 升级。"
+	if policy.AllowLocalUpgrade {
+		formHints = append(formHints, "local")
+		examples = append(examples, "/upgrade local")
+		options = append(options, commandOption("/upgrade", "upgrade", "local", "local", "使用固定本地 artifact 发起升级。"))
+		description += " `/upgrade local` 使用固定本地 artifact 发起升级。"
+	}
+	def.ArgumentFormHint = "track"
+	def.ArgumentFormNote = "例如 " + strings.Join(formHints, "、") + "。"
+	def.Description = description
+	def.Examples = examples
+	def.Options = options
+	return def
+}
+
+func runtimeDebugCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
+	def.ArgumentFormNote = "例如 admin。"
+	def.Description = "查看调试状态，或生成临时管理页外链。历史兼容的 `/debug track` 请改用 `/upgrade track`。"
+	def.Examples = []string{"/debug", "/debug admin"}
+	return def
+}
+
+func preferredUpgradeTrackExample(allowed []string) string {
+	for _, candidate := range []string{"beta", "production", "alpha"} {
+		for _, track := range allowed {
+			if strings.EqualFold(strings.TrimSpace(track), candidate) {
+				return candidate
+			}
+		}
+	}
+	return ""
 }
 
 func FeishuCommandForm(commandID string) (*CommandCatalogForm, bool) {

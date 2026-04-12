@@ -200,10 +200,7 @@ func inferReleaseTrack(currentVersion, installSource string) ReleaseTrack {
 	case string(ReleaseTrackAlpha):
 		return ReleaseTrackAlpha
 	}
-	if normalizeInstallSource(InstallSource(installSource)) == InstallSourceRelease {
-		return ReleaseTrackProduction
-	}
-	return ReleaseTrackAlpha
+	return DefaultTrackForInstallSource(normalizeInstallSource(InstallSource(installSource)))
 }
 
 func inferCurrentSlot(sourceBinary, versionsRoot string) string {

@@ -97,6 +97,7 @@ func applyInstanceConfigDefaults(cfg *config.AppConfig, instanceID string, newCo
 	}
 	cfg.Debug.Pprof.ListenHost = firstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
 	cfg.Debug.Pprof.ListenPort = ports.Pprof
+	applyBuildFlavorDebugDefaults(cfg)
 	return nil
 }
 
