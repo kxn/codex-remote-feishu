@@ -581,6 +581,8 @@ func (s *Service) flushPendingTurnTextIfTurnContinues(instanceID string, event a
 			return nil
 		}
 		return s.flushPendingTurnText(instanceID, event.ThreadID, event.TurnID, false)
+	case agentproto.EventTurnPlanUpdated:
+		return s.flushPendingTurnText(instanceID, event.ThreadID, event.TurnID, false)
 	case agentproto.EventRequestStarted, agentproto.EventRequestResolved:
 		return s.flushPendingTurnText(instanceID, event.ThreadID, event.TurnID, false)
 	default:

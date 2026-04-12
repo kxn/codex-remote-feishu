@@ -438,6 +438,7 @@ const (
 	UIEventFeishuDirectRequestPrompt   UIEventKind = "request.prompt"
 	UIEventPendingInput                UIEventKind = "pending.input.state"
 	UIEventNotice                      UIEventKind = "notice"
+	UIEventPlanUpdated                 UIEventKind = "plan.updated"
 	UIEventThreadSelectionChange       UIEventKind = "thread.selection.changed"
 	UIEventBlockCommitted              UIEventKind = "block.committed"
 	UIEventImageOutput                 UIEventKind = "image.output"
@@ -487,6 +488,7 @@ type UIEvent struct {
 	FeishuRequestContext        *FeishuUIRequestContext
 	PendingInput                *PendingInputState
 	Notice                      *Notice
+	PlanUpdate                  *PlanUpdate
 	ThreadSelection             *ThreadSelectionChanged
 	Block                       *render.Block
 	ImageOutput                 *ImageOutput

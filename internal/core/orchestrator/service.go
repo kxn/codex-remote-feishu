@@ -18,28 +18,29 @@ type Config struct {
 }
 
 type Service struct {
-	now              func() time.Time
-	config           Config
-	root             *state.Root
-	renderer         *renderer.Planner
-	nextQueueItemID  int
-	nextImageID      int
-	nextPromptID     int
-	nextHeadlessID   int
-	handoffUntil     map[string]time.Time
-	pausedUntil      map[string]time.Time
-	abandoningUntil  map[string]time.Time
-	itemBuffers      map[string]*itemBuffer
-	threadRefreshes  map[string]bool
-	pendingTurnText  map[string]*completedTextItem
-	turnFileChanges  map[string]*turnFileChangeSummary
-	pendingRemote    map[string]*remoteTurnBinding
-	activeRemote     map[string]*remoteTurnBinding
-	pendingSteers    map[string]*pendingSteerBinding
-	instanceClaims   map[string]*instanceClaimRecord
-	workspaceClaims  map[string]*workspaceClaimRecord
-	threadClaims     map[string]*threadClaimRecord
-	persistedThreads PersistedThreadCatalog
+	now               func() time.Time
+	config            Config
+	root              *state.Root
+	renderer          *renderer.Planner
+	nextQueueItemID   int
+	nextImageID       int
+	nextPromptID      int
+	nextHeadlessID    int
+	handoffUntil      map[string]time.Time
+	pausedUntil       map[string]time.Time
+	abandoningUntil   map[string]time.Time
+	itemBuffers       map[string]*itemBuffer
+	turnPlanSnapshots map[string]*turnPlanSnapshotRecord
+	threadRefreshes   map[string]bool
+	pendingTurnText   map[string]*completedTextItem
+	turnFileChanges   map[string]*turnFileChangeSummary
+	pendingRemote     map[string]*remoteTurnBinding
+	activeRemote      map[string]*remoteTurnBinding
+	pendingSteers     map[string]*pendingSteerBinding
+	instanceClaims    map[string]*instanceClaimRecord
+	workspaceClaims   map[string]*workspaceClaimRecord
+	threadClaims      map[string]*threadClaimRecord
+	persistedThreads  PersistedThreadCatalog
 }
 
 type itemBuffer struct {
@@ -50,6 +51,14 @@ type itemBuffer struct {
 	ItemKind   string
 	textChunks []string
 	textValue  string
+}
+
+type turnPlanSnapshotRecord struct {
+	SurfaceSessionID string
+	InstanceID       string
+	ThreadID         string
+	TurnID           string
+	Snapshot         *agentproto.TurnPlanSnapshot
 }
 
 type remoteTurnBinding struct {
@@ -148,23 +157,24 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		planner = renderer.NewPlanner()
 	}
 	return &Service{
-		now:             now,
-		config:          cfg,
-		root:            state.NewRoot(),
-		renderer:        planner,
-		handoffUntil:    map[string]time.Time{},
-		pausedUntil:     map[string]time.Time{},
-		abandoningUntil: map[string]time.Time{},
-		itemBuffers:     map[string]*itemBuffer{},
-		threadRefreshes: map[string]bool{},
-		pendingTurnText: map[string]*completedTextItem{},
-		turnFileChanges: map[string]*turnFileChangeSummary{},
-		pendingRemote:   map[string]*remoteTurnBinding{},
-		activeRemote:    map[string]*remoteTurnBinding{},
-		pendingSteers:   map[string]*pendingSteerBinding{},
-		instanceClaims:  map[string]*instanceClaimRecord{},
-		workspaceClaims: map[string]*workspaceClaimRecord{},
-		threadClaims:    map[string]*threadClaimRecord{},
+		now:               now,
+		config:            cfg,
+		root:              state.NewRoot(),
+		renderer:          planner,
+		handoffUntil:      map[string]time.Time{},
+		pausedUntil:       map[string]time.Time{},
+		abandoningUntil:   map[string]time.Time{},
+		itemBuffers:       map[string]*itemBuffer{},
+		turnPlanSnapshots: map[string]*turnPlanSnapshotRecord{},
+		threadRefreshes:   map[string]bool{},
+		pendingTurnText:   map[string]*completedTextItem{},
+		turnFileChanges:   map[string]*turnFileChangeSummary{},
+		pendingRemote:     map[string]*remoteTurnBinding{},
+		activeRemote:      map[string]*remoteTurnBinding{},
+		pendingSteers:     map[string]*pendingSteerBinding{},
+		instanceClaims:    map[string]*instanceClaimRecord{},
+		workspaceClaims:   map[string]*workspaceClaimRecord{},
+		threadClaims:      map[string]*threadClaimRecord{},
 	}
 }
 
@@ -514,6 +524,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return append(events, s.reevaluateFollowSurfaces(instanceID)...)
 	case agentproto.EventThreadTokenUsageUpdated:
 		return append(preface, s.applyThreadTokenUsageUpdate(instanceID, event)...)
+	case agentproto.EventTurnPlanUpdated:
+		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
+		return append(preface, s.applyTurnPlanUpdate(instanceID, event)...)
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		inst.ActiveTurnID = event.TurnID
@@ -563,6 +576,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			summary,
 			finalTurnSummaryForBinding(s.now().UTC(), s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID), thread),
 		)
+		deleteMatchingTurnPlanSnapshots(s.turnPlanSnapshots, instanceID, event.ThreadID, event.TurnID)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
 			if surface != nil {
