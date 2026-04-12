@@ -28,6 +28,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 
 	interactive := flagSet.Bool("interactive", false, "run interactive installer wizard")
 	bootstrapOnly := flagSet.Bool("bootstrap-only", false, "install binary and config only; do not patch VS Code integration")
+	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance: stable or debug")
 	startDaemon := flagSet.Bool("start-daemon", false, "ensure the local daemon is running after install")
 	baseDir := flagSet.String("base-dir", defaults.BaseDir, "base directory for config and install state")
 	installBinDir := flagSet.String("install-bin-dir", defaults.InstallBinDir, "target directory for installed binary; empty keeps source path")
@@ -72,11 +73,20 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	if err != nil {
 		return err
 	}
+	instanceID, err := parseInstanceID(*instanceIDFlag)
+	if err != nil {
+		return err
+	}
+	resolvedInstallBinDir := *installBinDir
+	if filepath.Clean(strings.TrimSpace(resolvedInstallBinDir)) == filepath.Clean(strings.TrimSpace(defaults.InstallBinDir)) {
+		resolvedInstallBinDir = defaultInstallBinDirForInstance(defaults.GOOS, defaults.HomeDir, instanceID)
+	}
 
 	service := NewService()
 	opts := Options{
+		InstanceID:         instanceID,
 		BaseDir:            *baseDir,
-		InstallBinDir:      *installBinDir,
+		InstallBinDir:      resolvedInstallBinDir,
 		BinaryPath:         *binaryPath,
 		ServiceManager:     serviceManager,
 		CurrentVersion:     *currentVersion,

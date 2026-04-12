@@ -197,3 +197,56 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 		t.Fatalf("helper binary content = %q, want stable-binary", string(helperRaw))
 	}
 }
+
+func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePathForInstance(baseDir, debugInstanceID)
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
+	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
+	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "cli-binary")
+
+	stateValue := InstallState{
+		InstanceID:        debugInstanceID,
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		CurrentTrack:      ReleaseTrackAlpha,
+		CurrentVersion:    "dev-old",
+		CurrentBinaryPath: currentBinary,
+		InstalledBinary:   currentBinary,
+		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "releases"),
+	}
+	if err := WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+	if got, want := LocalUpgradeArtifactPath(stateValue), artifactBinary; got != want {
+		t.Fatalf("artifact path = %q, want %q", got, want)
+	}
+
+	originalExec := executablePath
+	originalStart := upgradeHelperStartDetachedCommandFunc
+	executablePath = func() (string, error) { return helperBinary, nil }
+	var startedBinary string
+	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
+		startedBinary = opts.BinaryPath
+		return 321, nil
+	}
+	defer func() {
+		executablePath = originalExec
+		upgradeHelperStartDetachedCommandFunc = originalStart
+	}()
+
+	var stdout bytes.Buffer
+	if err := RunLocalUpgrade([]string{
+		"-instance", debugInstanceID,
+		"-base-dir", baseDir,
+		"-slot", "local-test",
+	}, strings.NewReader(""), &stdout, &bytes.Buffer{}, "vtest"); err != nil {
+		t.Fatalf("RunLocalUpgrade: %v", err)
+	}
+	if !strings.Contains(stdout.String(), statePath) {
+		t.Fatalf("stdout = %q, want debug state path", stdout.String())
+	}
+	if startedBinary == "" {
+		t.Fatal("expected helper launcher to run")
+	}
+}

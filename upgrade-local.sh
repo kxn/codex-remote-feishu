@@ -6,18 +6,20 @@ BIN_DIR="${ROOT_DIR}/bin"
 BUILD_OUTPUT="${BIN_DIR}/codex-remote"
 GO_BIN="${GO_BIN:-go}"
 BASE_DIR="${HOME}"
+INSTANCE="stable"
 UPGRADE_SLOT=""
 ALLOW_DIRTY=0
 
 usage() {
   cat <<'EOF'
-usage: ./upgrade-local.sh [--base-dir <dir>] [--slot <slot>] [--allow-dirty]
+usage: ./upgrade-local.sh [--instance <stable|debug>] [--base-dir <dir>] [--slot <slot>] [--allow-dirty]
 
 Pull the current branch to the latest upstream commit, rebuild ./bin/codex-remote,
 stage it into the fixed local-upgrade artifact path, and trigger the built-in
 local upgrade transaction against the installed daemon state.
 
 options:
+  --instance <id>   install instance to upgrade (stable or debug; default: stable)
   --base-dir <dir>  base dir used by the local install state (default: $HOME)
   --slot <slot>     optional explicit upgrade slot label
   --allow-dirty     skip the clean-worktree guard before git pull
@@ -25,8 +27,34 @@ options:
 EOF
 }
 
+instance_namespace() {
+  local instance="$1"
+  if [[ -z "${instance}" || "${instance}" == "stable" ]]; then
+    printf 'codex-remote'
+    return
+  fi
+  printf 'codex-remote-%s' "${instance}"
+}
+
+instance_state_root() {
+  local base_dir="$1"
+  local instance="$2"
+  local namespace
+  namespace="$(instance_namespace "${instance}")"
+  if [[ "${instance}" == "stable" ]]; then
+    printf '%s/.local/share/%s' "${base_dir}" "${namespace}"
+    return
+  fi
+  printf '%s/.local/share/%s/codex-remote' "${base_dir}" "${namespace}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --instance)
+      [[ $# -ge 2 ]] || { echo "missing value for --instance" >&2; exit 1; }
+      INSTANCE="$2"
+      shift 2
+      ;;
     --base-dir)
       [[ $# -ge 2 ]] || { echo "missing value for --base-dir" >&2; exit 1; }
       BASE_DIR="$2"
@@ -53,6 +81,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${INSTANCE}" != "stable" && "${INSTANCE}" != "debug" ]]; then
+  echo "unsupported --instance: ${INSTANCE}" >&2
+  exit 1
+fi
+
 cd "${ROOT_DIR}"
 
 if [[ "${ALLOW_DIRTY}" != "1" ]]; then
@@ -62,8 +95,9 @@ if [[ "${ALLOW_DIRTY}" != "1" ]]; then
   fi
 fi
 
-state_path="${BASE_DIR}/.local/share/codex-remote/install-state.json"
-artifact_dir="${BASE_DIR}/.local/share/codex-remote/local-upgrade"
+state_root="$(instance_state_root "${BASE_DIR}" "${INSTANCE}")"
+state_path="${state_root}/install-state.json"
+artifact_dir="${state_root}/local-upgrade"
 artifact_path="${artifact_dir}/codex-remote"
 
 printf '[1/4] git pull --ff-only\n'
@@ -89,7 +123,7 @@ chmod +x "${artifact_path}"
 printf '[4/4] request built-in local upgrade transaction\n'
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
 
-cmd=("${BUILD_OUTPUT}" local-upgrade "-base-dir" "${BASE_DIR}")
+cmd=("${BUILD_OUTPUT}" local-upgrade "-instance" "${INSTANCE}" "-base-dir" "${BASE_DIR}")
 if [[ -n "${UPGRADE_SLOT}" ]]; then
   cmd+=("-slot" "${UPGRADE_SLOT}")
 fi

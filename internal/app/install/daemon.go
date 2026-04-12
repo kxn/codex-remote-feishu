@@ -20,10 +20,7 @@ type daemonStatus struct {
 }
 
 func ensureDaemonReady(ctx context.Context, state InstallState, version string) (daemonStatus, error) {
-	paths, err := relayruntime.DefaultPaths()
-	if err != nil {
-		return daemonStatus{}, err
-	}
+	paths := RuntimePathsForState(state)
 	loaded, err := config.LoadAppConfigAtPath(state.ConfigPath)
 	if err != nil {
 		return daemonStatus{}, err
@@ -52,19 +49,19 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 				if _, err := installSystemdUserUnit(ctx, state); err != nil {
 					return 0, err
 				}
-				if err := systemdUserEnable(ctx); err != nil {
+				if err := systemdUserEnable(ctx, state); err != nil {
 					return 0, err
 				}
-				return 0, systemdUserStart(ctx)
+				return 0, systemdUserStart(ctx, state)
 			},
 			RestartFunc: func(ctx context.Context) error {
 				if _, err := installSystemdUserUnit(ctx, state); err != nil {
 					return err
 				}
-				if err := systemdUserEnable(ctx); err != nil {
+				if err := systemdUserEnable(ctx, state); err != nil {
 					return err
 				}
-				return systemdUserRestart(ctx)
+				return systemdUserRestart(ctx, state)
 			},
 		})
 	}

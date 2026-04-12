@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const systemdUserServiceName = "codex-remote.service"
-
 var (
 	serviceRuntimeGOOS  = runtime.GOOS
 	serviceUserHomeDir  = os.UserHomeDir
@@ -45,6 +43,7 @@ func ensureLinuxSystemdUserSupport() error {
 func normalizedServiceState(state InstallState) InstallState {
 	updated := state
 	ApplyStateMetadata(&updated, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
 		StatePath:      state.StatePath,
 		BaseDir:        state.BaseDir,
 		ServiceManager: state.ServiceManager,
@@ -66,7 +65,7 @@ func systemdUserServiceState(state InstallState) (InstallState, error) {
 	}
 	updated.ServiceManager = ServiceManagerSystemdUser
 	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		updated.ServiceUnitPath = systemdUserUnitPath(updated.BaseDir)
+		updated.ServiceUnitPath = systemdUserUnitPathForInstance(updated.BaseDir, updated.InstanceID)
 	}
 	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
 		return InstallState{}, fmt.Errorf("unable to resolve systemd user unit path")
@@ -84,13 +83,15 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		return "", fmt.Errorf("installed binary path is missing")
 	}
 
-	configHome := filepath.Join(state.BaseDir, ".config")
-	dataHome := filepath.Join(state.BaseDir, ".local", "share")
-	stateHome := filepath.Join(state.BaseDir, ".local", "state")
+	layout := installLayoutForInstance(state.BaseDir, state.InstanceID)
+	description := "codex-remote daemon"
+	if !isDefaultInstance(state.InstanceID) {
+		description = fmt.Sprintf("codex-remote daemon (%s)", state.InstanceID)
+	}
 
 	lines := []string{
 		"[Unit]",
-		"Description=codex-remote daemon",
+		"Description=" + description,
 		"After=network-online.target",
 		"Wants=network-online.target",
 		"",
@@ -98,9 +99,9 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		"Type=simple",
 		"WorkingDirectory=" + systemdEscapeValue(state.BaseDir),
 		"ExecStart=" + systemdEscapeExecWord(binaryPath) + " daemon",
-		"Environment=XDG_CONFIG_HOME=" + systemdEscapeValue(configHome),
-		"Environment=XDG_DATA_HOME=" + systemdEscapeValue(dataHome),
-		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(stateHome),
+		"Environment=XDG_CONFIG_HOME=" + systemdEscapeValue(layout.ConfigHome),
+		"Environment=XDG_DATA_HOME=" + systemdEscapeValue(layout.DataHome),
+		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(layout.StateHome),
 		"Restart=on-failure",
 		"RestartSec=2s",
 		"",
@@ -137,7 +138,7 @@ func uninstallSystemdUserUnit(ctx context.Context, state InstallState) error {
 	if err != nil {
 		return err
 	}
-	_, _ = systemctlUserRunner(ctx, "disable", "--now", systemdUserServiceName)
+	_, _ = systemctlUserRunner(ctx, "disable", "--now", systemdUserUnitName(state))
 	if err := serviceRemoveFile(state.ServiceUnitPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -145,33 +146,40 @@ func uninstallSystemdUserUnit(ctx context.Context, state InstallState) error {
 	return err
 }
 
-func systemdUserEnable(ctx context.Context) error {
-	_, err := systemctlUserRunner(ctx, "enable", systemdUserServiceName)
+func systemdUserUnitName(state InstallState) string {
+	if strings.TrimSpace(state.ServiceUnitPath) != "" {
+		return filepath.Base(strings.TrimSpace(state.ServiceUnitPath))
+	}
+	return systemdUserServiceNameForInstance(state.InstanceID)
+}
+
+func systemdUserEnable(ctx context.Context, state InstallState) error {
+	_, err := systemctlUserRunner(ctx, "enable", systemdUserUnitName(state))
 	return err
 }
 
-func systemdUserDisable(ctx context.Context) error {
-	_, err := systemctlUserRunner(ctx, "disable", systemdUserServiceName)
+func systemdUserDisable(ctx context.Context, state InstallState) error {
+	_, err := systemctlUserRunner(ctx, "disable", systemdUserUnitName(state))
 	return err
 }
 
-func systemdUserStart(ctx context.Context) error {
-	_, err := systemctlUserRunner(ctx, "start", systemdUserServiceName)
+func systemdUserStart(ctx context.Context, state InstallState) error {
+	_, err := systemctlUserRunner(ctx, "start", systemdUserUnitName(state))
 	return err
 }
 
-func systemdUserStop(ctx context.Context) error {
-	_, err := systemctlUserRunner(ctx, "stop", systemdUserServiceName)
+func systemdUserStop(ctx context.Context, state InstallState) error {
+	_, err := systemctlUserRunner(ctx, "stop", systemdUserUnitName(state))
 	return err
 }
 
-func systemdUserRestart(ctx context.Context) error {
-	_, err := systemctlUserRunner(ctx, "restart", systemdUserServiceName)
+func systemdUserRestart(ctx context.Context, state InstallState) error {
+	_, err := systemctlUserRunner(ctx, "restart", systemdUserUnitName(state))
 	return err
 }
 
-func systemdUserStatus(ctx context.Context) (string, error) {
-	return systemctlUserRunner(ctx, "status", "--no-pager", "--full", systemdUserServiceName)
+func systemdUserStatus(ctx context.Context, state InstallState) (string, error) {
+	return systemctlUserRunner(ctx, "status", "--no-pager", "--full", systemdUserUnitName(state))
 }
 
 func systemdEscapeValue(value string) string {

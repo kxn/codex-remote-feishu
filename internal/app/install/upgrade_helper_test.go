@@ -133,6 +133,65 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	}
 }
 
+func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json")
+	configPath := filepath.Join(dir, ".config", "codex-remote-debug", "codex-remote", "config.json")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName("linux")), "old-binary")
+	seedBinary(t, filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "releases", "v1.1.0", executableName("linux")), "new-binary")
+
+	cfg := config.DefaultAppConfig()
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	stateValue := InstallState{
+		InstanceID:        debugInstanceID,
+		BaseDir:           dir,
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerSystemdUser,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: currentBinary,
+		VersionsRoot:      filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "releases"),
+		PendingUpgrade: &PendingUpgrade{
+			Phase:         PendingUpgradePhasePrepared,
+			TargetVersion: "v1.1.0",
+		},
+	}
+	rollbackCandidate, err := PrepareRollbackCandidate(stateValue, "v1.1.0")
+	if err != nil {
+		t.Fatalf("PrepareRollbackCandidate: %v", err)
+	}
+	stateValue.RollbackCandidate = rollbackCandidate
+	if err := WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalRunner := systemctlUserRunner
+	originalObserve := upgradeHelperObserveFunc
+	originalSleep := upgradeHelperSleepFunc
+	var calls []string
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	}
+	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
+	upgradeHelperSleepFunc = func(time.Duration) {}
+	defer func() {
+		systemctlUserRunner = originalRunner
+		upgradeHelperObserveFunc = originalObserve
+		upgradeHelperSleepFunc = originalSleep
+	}()
+
+	if err := RunUpgradeHelperWithStatePath(context.Background(), statePath); err != nil {
+		t.Fatalf("RunUpgradeHelperWithStatePath: %v", err)
+	}
+	if got, want := calls, []string{"stop codex-remote-debug.service", "start codex-remote-debug.service"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("systemctl calls = %#v, want %#v", got, want)
+	}
+}
+
 func TestRunUpgradeHelperWithStatePathSystemdUserRollsBackOnObserveFailure(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "install-state.json")

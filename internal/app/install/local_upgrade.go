@@ -24,7 +24,7 @@ func LocalUpgradeArtifactPath(stateValue InstallState) string {
 		return filepath.Join(filepath.Dir(stateValue.StatePath), "local-upgrade", executableName(runtime.GOOS))
 	}
 	if strings.TrimSpace(stateValue.BaseDir) != "" {
-		layout := installLayoutForBaseDir(stateValue.BaseDir)
+		layout := installLayoutForInstance(stateValue.BaseDir, stateValue.InstanceID)
 		return filepath.Join(layout.StateDir, "local-upgrade", executableName(runtime.GOOS))
 	}
 	paths, err := relayruntime.DefaultPaths()
@@ -46,6 +46,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 	}
 	stateValue.StatePath = firstNonEmpty(strings.TrimSpace(stateValue.StatePath), statePath)
 	ApplyStateMetadata(&stateValue, StateMetadataOptions{
+		InstanceID:      stateValue.InstanceID,
 		StatePath:       stateValue.StatePath,
 		InstalledBinary: firstNonEmpty(strings.TrimSpace(stateValue.InstalledBinary), strings.TrimSpace(stateValue.CurrentBinaryPath)),
 		CurrentVersion:  stateValue.CurrentVersion,
@@ -116,7 +117,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		HelperBinary: helperPath,
 		StatePath:    statePath,
 		LogPath:      logPath,
-		Env:          append([]string{}, os.Environ()...),
+		Env:          append(append([]string{}, os.Environ()...), RuntimeEnvForState(stateValue)...),
 	})
 	if err != nil {
 		stateValue.PendingUpgrade = nil
@@ -230,7 +231,7 @@ func localUpgradeLogPath(stateValue InstallState) string {
 		return filepath.Join(filepath.Dir(stateValue.StatePath), "logs", "codex-remote-relayd.log")
 	}
 	if strings.TrimSpace(stateValue.BaseDir) != "" {
-		return filepath.Join(installLayoutForBaseDir(stateValue.BaseDir).StateDir, "logs", "codex-remote-relayd.log")
+		return filepath.Join(installLayoutForInstance(stateValue.BaseDir, stateValue.InstanceID).StateDir, "logs", "codex-remote-relayd.log")
 	}
 	paths, err := relayruntime.DefaultPaths()
 	if err == nil && strings.TrimSpace(paths.DaemonLogFile) != "" {

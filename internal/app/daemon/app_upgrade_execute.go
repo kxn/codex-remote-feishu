@@ -103,7 +103,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		HelperBinary: helperPath,
 		StatePath:    stateValue.StatePath,
 		LogPath:      logPath,
-		Env:          append([]string{}, os.Environ()...),
+		Env:          append(append([]string{}, os.Environ()...), install.RuntimeEnvForState(stateValue)...),
 	})
 	if err != nil {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("启动 upgrade helper 失败：%w", err))

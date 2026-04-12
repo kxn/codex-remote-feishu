@@ -28,8 +28,10 @@ func LoadState(path string) (InstallState, error) {
 		disk.ServicesConfigPath,
 		state.StatePath,
 		state.BaseDir,
+		state.InstanceID,
 	)
 	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
 		StatePath:      state.StatePath,
 		BaseDir:        state.BaseDir,
 		ServiceManager: state.ServiceManager,
@@ -53,7 +55,7 @@ func WriteState(path string, state InstallState) error {
 	return os.Rename(tempPath, path)
 }
 
-func normalizeInstallStateConfigPath(configPath, wrapperConfigPath, servicesConfigPath, statePath, baseDir string) string {
+func normalizeInstallStateConfigPath(configPath, wrapperConfigPath, servicesConfigPath, statePath, baseDir, instanceID string) string {
 	for _, candidate := range []string{configPath, wrapperConfigPath, servicesConfigPath} {
 		if normalized := normalizeInstallStateConfigPathValue(candidate); normalized != "" {
 			return normalized
@@ -66,7 +68,10 @@ func normalizeInstallStateConfigPath(configPath, wrapperConfigPath, servicesConf
 	if baseDir == "" {
 		return ""
 	}
-	return defaultConfigPath(baseDir)
+	if strings.TrimSpace(instanceID) == "" {
+		instanceID = inferInstanceID("", statePath)
+	}
+	return defaultConfigPathForInstance(baseDir, normalizeInstanceID(instanceID))
 }
 
 func normalizeInstallStateConfigPathValue(path string) string {

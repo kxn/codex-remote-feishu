@@ -17,7 +17,7 @@ func RunInteractiveWizard(in io.Reader, out io.Writer, defaults PlatformDefaults
 		opts.InstallBinDir = defaults.InstallBinDir
 	}
 	if strings.TrimSpace(opts.RelayServerURL) == "" {
-		opts.RelayServerURL = "ws://127.0.0.1:9500/ws/agent"
+		opts.RelayServerURL = relayServerURLForPort(instanceDefaultPorts(opts.InstanceID).Relay)
 	}
 	if strings.TrimSpace(opts.VSCodeSettingsPath) == "" {
 		opts.VSCodeSettingsPath = defaults.VSCodeSettingsPath
@@ -91,7 +91,7 @@ func RunInteractiveWizard(in io.Reader, out io.Writer, defaults PlatformDefaults
 
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "Relay 配置说明：")
-	fmt.Fprintln(out, "- 如果 relayd 跑在本机，保持默认 ws://127.0.0.1:9500/ws/agent 即可。")
+	fmt.Fprintf(out, "- 如果 relayd 跑在本机，保持默认 %s 即可。\n", relayServerURLForPort(instanceDefaultPorts(opts.InstanceID).Relay))
 	fmt.Fprintln(out, "- 只有在 relayd 跑在其他机器时，才需要改成对应地址。")
 	relayURL, err := promptString(reader, out, "Relay WebSocket 地址", opts.RelayServerURL)
 	if err != nil {

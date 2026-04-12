@@ -36,6 +36,31 @@ func TestApplyStateMetadataInfersLinuxServicePaths(t *testing.T) {
 	}
 }
 
+func TestApplyStateMetadataInfersDebugInstancePaths(t *testing.T) {
+	baseDir := filepath.Join(string(filepath.Separator), "tmp", "codex-remote-home")
+	state := InstallState{
+		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote-debug", "codex-remote", "config.json"),
+		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json"),
+		ServiceManager:  ServiceManagerSystemdUser,
+		InstalledBinary: filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote"),
+	}
+
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		ServiceManager: state.ServiceManager,
+	})
+
+	if state.BaseDir != baseDir {
+		t.Fatalf("BaseDir = %q, want %q", state.BaseDir, baseDir)
+	}
+	if state.InstanceID != debugInstanceID {
+		t.Fatalf("InstanceID = %q, want %q", state.InstanceID, debugInstanceID)
+	}
+	if state.ServiceUnitPath != filepath.Join(baseDir, ".config", "systemd", "user", "codex-remote-debug.service") {
+		t.Fatalf("ServiceUnitPath = %q", state.ServiceUnitPath)
+	}
+}
+
 func TestRunServiceStatusReportsDetachedManagerWithoutSystemd(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePath(baseDir)

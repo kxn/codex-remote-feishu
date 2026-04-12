@@ -13,6 +13,7 @@ import (
 )
 
 type Options struct {
+	InstanceID         string
 	BaseDir            string
 	InstallBinDir      string
 	BinaryPath         string
@@ -37,6 +38,7 @@ type Options struct {
 }
 
 type InstallState struct {
+	InstanceID             string                   `json:"instanceId,omitempty"`
 	BaseDir                string                   `json:"baseDir,omitempty"`
 	ConfigPath             string                   `json:"configPath,omitempty"`
 	StatePath              string                   `json:"statePath"`
@@ -67,7 +69,11 @@ func NewService() *Service {
 }
 
 func (s *Service) Bootstrap(opts Options) (InstallState, error) {
-	layout := installLayoutForBaseDir(opts.BaseDir)
+	instanceID, err := parseInstanceID(opts.InstanceID)
+	if err != nil {
+		return InstallState{}, err
+	}
+	layout := installLayoutForInstance(opts.BaseDir, instanceID)
 	configDir := layout.ConfigDir
 	stateDir := layout.StateDir
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -93,6 +99,10 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 
 	configPath := filepath.Join(configDir, "config.json")
 	statePath := layout.StatePath
+	configExists := false
+	if info, statErr := os.Stat(configPath); statErr == nil && !info.IsDir() {
+		configExists = true
+	}
 	existing, err := config.LoadAppConfigAtPath(configPath)
 	if err != nil {
 		return InstallState{}, err
@@ -112,6 +122,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		emptyIntegrationMode = "none"
 	}
 
+	applyInstanceConfigDefaults(&cfg, instanceID, !configExists)
 	cfg.Relay.ServerURL = firstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
 	cfg.Wrapper.CodexRealBinary = choosePreservedValue(codexRealBinary, cfg.Wrapper.CodexRealBinary)
 	cfg.Wrapper.NameMode = firstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
@@ -135,6 +146,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 
 	state := InstallState{
+		InstanceID:             instanceID,
 		BaseDir:                opts.BaseDir,
 		ConfigPath:             configPath,
 		StatePath:              statePath,
@@ -147,6 +159,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		BundleEntrypoint:       opts.BundleEntrypoint,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:      instanceID,
 		StatePath:       statePath,
 		SourceBinary:    sourceBinary,
 		InstalledBinary: installedBinary,

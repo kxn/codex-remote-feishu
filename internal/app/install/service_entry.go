@@ -22,32 +22,42 @@ func RunService(args []string, _ io.Reader, stdout, _ io.Writer, _ string) error
 	if err != nil {
 		return err
 	}
-	statePath := flagSet.String("state-path", defaultInstallStatePath(defaults.BaseDir), "path to install-state.json")
+	baseDir := flagSet.String("base-dir", defaults.BaseDir, "base directory for config and install state")
+	instanceIDFlag := flagSet.String("instance", defaultInstanceID, "install instance: stable or debug")
+	statePath := flagSet.String("state-path", "", "path to install-state.json; empty derives from -base-dir and -instance")
 	if err := flagSet.Parse(args[1:]); err != nil {
 		if err == flag.ErrHelp {
 			return nil
 		}
 		return err
 	}
+	instanceID, err := parseInstanceID(*instanceIDFlag)
+	if err != nil {
+		return err
+	}
+	resolvedStatePath := strings.TrimSpace(*statePath)
+	if resolvedStatePath == "" {
+		resolvedStatePath = defaultInstallStatePathForInstance(*baseDir, instanceID)
+	}
 
 	ctx := context.Background()
 	switch subcommand {
 	case "install-user":
-		return runServiceInstallUser(ctx, *statePath, stdout)
+		return runServiceInstallUser(ctx, resolvedStatePath, stdout)
 	case "uninstall-user":
-		return runServiceUninstallUser(ctx, *statePath, stdout)
+		return runServiceUninstallUser(ctx, resolvedStatePath, stdout)
 	case "enable":
-		return runServiceEnable(ctx, *statePath, stdout)
+		return runServiceEnable(ctx, resolvedStatePath, stdout)
 	case "disable":
-		return runServiceDisable(ctx, *statePath, stdout)
+		return runServiceDisable(ctx, resolvedStatePath, stdout)
 	case "start":
-		return runServiceStart(ctx, *statePath, stdout)
+		return runServiceStart(ctx, resolvedStatePath, stdout)
 	case "stop":
-		return runServiceStop(ctx, *statePath, stdout)
+		return runServiceStop(ctx, resolvedStatePath, stdout)
 	case "restart":
-		return runServiceRestart(ctx, *statePath, stdout)
+		return runServiceRestart(ctx, resolvedStatePath, stdout)
 	case "status":
-		return runServiceStatus(ctx, *statePath, stdout)
+		return runServiceStatus(ctx, resolvedStatePath, stdout)
 	default:
 		return fmt.Errorf("unsupported service subcommand %q", subcommand)
 	}
@@ -60,6 +70,7 @@ func loadServiceState(statePath string) (InstallState, error) {
 	}
 	state.StatePath = firstNonEmpty(strings.TrimSpace(state.StatePath), strings.TrimSpace(statePath))
 	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
 		StatePath:      state.StatePath,
 		BaseDir:        state.BaseDir,
 		ServiceManager: state.ServiceManager,
@@ -128,7 +139,7 @@ func runServiceEnable(ctx context.Context, statePath string, stdout io.Writer) e
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserEnable(ctx); err != nil {
+	if err := systemdUserEnable(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service enabled\n")
@@ -143,7 +154,7 @@ func runServiceDisable(ctx context.Context, statePath string, stdout io.Writer) 
 	if err := ensureSystemdUserConfigured(state); err != nil {
 		return err
 	}
-	if err := systemdUserDisable(ctx); err != nil {
+	if err := systemdUserDisable(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service disabled\n")
@@ -165,7 +176,7 @@ func runServiceStart(ctx context.Context, statePath string, stdout io.Writer) er
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserStart(ctx); err != nil {
+	if err := systemdUserStart(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service started\n")
@@ -180,7 +191,7 @@ func runServiceStop(ctx context.Context, statePath string, stdout io.Writer) err
 	if err := ensureSystemdUserConfigured(state); err != nil {
 		return err
 	}
-	if err := systemdUserStop(ctx); err != nil {
+	if err := systemdUserStop(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service stopped\n")
@@ -202,7 +213,7 @@ func runServiceRestart(ctx context.Context, statePath string, stdout io.Writer) 
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserRestart(ctx); err != nil {
+	if err := systemdUserRestart(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service restarted\n")
@@ -222,7 +233,7 @@ func runServiceStatus(ctx context.Context, statePath string, stdout io.Writer) e
 		_, err = io.WriteString(stdout, "systemd user service is not configured\n")
 		return err
 	}
-	output, err := systemdUserStatus(ctx)
+	output, err := systemdUserStatus(ctx, state)
 	if strings.TrimSpace(output) != "" {
 		if _, writeErr := io.WriteString(stdout, output+"\n"); writeErr != nil {
 			return writeErr

@@ -71,6 +71,7 @@ const (
 )
 
 type StateMetadataOptions struct {
+	InstanceID      string
 	StatePath       string
 	SourceBinary    string
 	InstalledBinary string
@@ -89,6 +90,15 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	if state == nil {
 		return
 	}
+
+	if strings.TrimSpace(state.InstanceID) == "" {
+		instanceID := inferInstanceID(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))
+		if strings.TrimSpace(opts.InstanceID) != "" {
+			instanceID = normalizeInstanceID(opts.InstanceID)
+		}
+		state.InstanceID = instanceID
+	}
+	state.InstanceID = normalizeInstanceID(state.InstanceID)
 
 	if strings.TrimSpace(state.BaseDir) == "" {
 		state.BaseDir = firstNonEmpty(
@@ -109,7 +119,10 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 		state.ServiceManager = ServiceManagerDetached
 	}
 	if effectiveServiceManager(*state) == ServiceManagerSystemdUser && strings.TrimSpace(state.ServiceUnitPath) == "" {
-		state.ServiceUnitPath = systemdUserUnitPath(firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))))
+		state.ServiceUnitPath = systemdUserUnitPathForInstance(
+			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
+			state.InstanceID,
+		)
 	}
 	if effectiveServiceManager(*state) != ServiceManagerSystemdUser {
 		state.ServiceUnitPath = ""

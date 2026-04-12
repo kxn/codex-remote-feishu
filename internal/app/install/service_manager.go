@@ -14,9 +14,12 @@ const (
 )
 
 type installLayout struct {
-	ConfigDir string
-	StateDir  string
-	StatePath string
+	ConfigDir  string
+	StateDir   string
+	StatePath  string
+	ConfigHome string
+	DataHome   string
+	StateHome  string
 }
 
 func ParseServiceManager(value, goos string) (ServiceManager, error) {
@@ -52,58 +55,48 @@ func effectiveServiceManager(state InstallState) ServiceManager {
 }
 
 func installLayoutForBaseDir(baseDir string) installLayout {
+	return installLayoutForInstance(baseDir, defaultInstanceID)
+}
+
+func installLayoutForInstance(baseDir, instanceID string) installLayout {
 	baseDir = filepath.Clean(strings.TrimSpace(baseDir))
-	configDir := filepath.Join(baseDir, ".config", "codex-remote")
-	stateDir := filepath.Join(baseDir, ".local", "share", "codex-remote")
+	paths := instancePathsForBaseDir(baseDir, instanceID)
+	configDir := filepath.Join(paths.ConfigHome, productName)
+	stateDir := filepath.Join(paths.DataHome, productName)
 	return installLayout{
-		ConfigDir: configDir,
-		StateDir:  stateDir,
-		StatePath: filepath.Join(stateDir, "install-state.json"),
+		ConfigDir:  configDir,
+		StateDir:   stateDir,
+		StatePath:  filepath.Join(stateDir, "install-state.json"),
+		ConfigHome: paths.ConfigHome,
+		DataHome:   paths.DataHome,
+		StateHome:  paths.StateHome,
 	}
 }
 
 func defaultInstallStatePath(baseDir string) string {
-	return installLayoutForBaseDir(baseDir).StatePath
+	return defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+}
+
+func defaultInstallStatePathForInstance(baseDir, instanceID string) string {
+	return installLayoutForInstance(baseDir, instanceID).StatePath
 }
 
 func defaultConfigPath(baseDir string) string {
-	return filepath.Join(installLayoutForBaseDir(baseDir).ConfigDir, "config.json")
+	return defaultConfigPathForInstance(baseDir, defaultInstanceID)
+}
+
+func defaultConfigPathForInstance(baseDir, instanceID string) string {
+	return filepath.Join(installLayoutForInstance(baseDir, instanceID).ConfigDir, "config.json")
 }
 
 func baseDirFromConfigPath(path string) (string, bool) {
-	path = filepath.Clean(strings.TrimSpace(path))
-	if path == "" {
-		return "", false
-	}
-	dir := filepath.Dir(path)
-	if filepath.Base(dir) != "codex-remote" {
-		return "", false
-	}
-	configHome := filepath.Dir(dir)
-	if filepath.Base(configHome) != ".config" {
-		return "", false
-	}
-	return filepath.Dir(configHome), true
+	baseDir, _, ok := inferBaseDirAndInstanceFromConfigPath(path)
+	return baseDir, ok
 }
 
 func baseDirFromInstallStatePath(path string) (string, bool) {
-	path = filepath.Clean(strings.TrimSpace(path))
-	if path == "" {
-		return "", false
-	}
-	dir := filepath.Dir(path)
-	if filepath.Base(dir) != "codex-remote" {
-		return "", false
-	}
-	dataHome := filepath.Dir(dir)
-	if filepath.Base(dataHome) != "share" {
-		return "", false
-	}
-	localHome := filepath.Dir(dataHome)
-	if filepath.Base(localHome) != ".local" {
-		return "", false
-	}
-	return filepath.Dir(localHome), true
+	baseDir, _, ok := inferBaseDirAndInstanceFromStatePath(path)
+	return baseDir, ok
 }
 
 func inferBaseDir(configPath, statePath string) string {
@@ -117,9 +110,13 @@ func inferBaseDir(configPath, statePath string) string {
 }
 
 func systemdUserUnitPath(baseDir string) string {
+	return systemdUserUnitPathForInstance(baseDir, defaultInstanceID)
+}
+
+func systemdUserUnitPathForInstance(baseDir, instanceID string) string {
 	baseDir = filepath.Clean(strings.TrimSpace(baseDir))
 	if baseDir == "" {
 		return ""
 	}
-	return filepath.Join(baseDir, ".config", "systemd", "user", "codex-remote.service")
+	return filepath.Join(baseDir, ".config", "systemd", "user", systemdUserServiceNameForInstance(instanceID))
 }

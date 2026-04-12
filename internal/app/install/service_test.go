@@ -117,6 +117,58 @@ func TestBootstrapSystemdUserPersistsLinuxServiceMetadata(t *testing.T) {
 	}
 }
 
+func TestBootstrapDebugInstanceUsesIsolatedPathsAndPorts(t *testing.T) {
+	baseDir := t.TempDir()
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary-bin")
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		InstanceID:    debugInstanceID,
+		BaseDir:       baseDir,
+		InstallBinDir: defaultInstallBinDirForInstance("linux", baseDir, debugInstanceID),
+		BinaryPath:    binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap debug instance: %v", err)
+	}
+
+	if state.InstanceID != debugInstanceID {
+		t.Fatalf("InstanceID = %q, want %q", state.InstanceID, debugInstanceID)
+	}
+	if state.ConfigPath != filepath.Join(baseDir, ".config", "codex-remote-debug", "codex-remote", "config.json") {
+		t.Fatalf("ConfigPath = %q", state.ConfigPath)
+	}
+	if state.StatePath != filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json") {
+		t.Fatalf("StatePath = %q", state.StatePath)
+	}
+	if state.ServiceUnitPath != "" {
+		t.Fatalf("ServiceUnitPath = %q, want empty for detached bootstrap", state.ServiceUnitPath)
+	}
+	if state.InstalledBinary != filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote") {
+		t.Fatalf("InstalledBinary = %q", state.InstalledBinary)
+	}
+
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	if cfg.Relay.ListenPort != 9600 {
+		t.Fatalf("Relay.ListenPort = %d, want 9600", cfg.Relay.ListenPort)
+	}
+	if cfg.Relay.ServerURL != "ws://127.0.0.1:9600/ws/agent" {
+		t.Fatalf("Relay.ServerURL = %q", cfg.Relay.ServerURL)
+	}
+	if cfg.Admin.ListenPort != 9601 {
+		t.Fatalf("Admin.ListenPort = %d, want 9601", cfg.Admin.ListenPort)
+	}
+	if cfg.Tool.ListenPort != 9602 {
+		t.Fatalf("Tool.ListenPort = %d, want 9602", cfg.Tool.ListenPort)
+	}
+	if cfg.ExternalAccess.ListenPort != 9612 {
+		t.Fatalf("ExternalAccess.ListenPort = %d, want 9612", cfg.ExternalAccess.ListenPort)
+	}
+	if cfg.Debug.Pprof == nil || cfg.Debug.Pprof.ListenPort != 17601 {
+		t.Fatalf("Debug.Pprof = %#v, want listen port 17601", cfg.Debug.Pprof)
+	}
+}
+
 func TestBootstrapManagedShimCopiesWrapperAndPreservesRealBinary(t *testing.T) {
 	baseDir := t.TempDir()
 	entrypoint := filepath.Join(baseDir, ".vscode-server", "extensions", "openai.chatgpt-test", "bin", "linux-x86_64", "codex")

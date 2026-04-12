@@ -143,3 +143,54 @@ func TestDetectAutostartReportsConfiguredDisabledState(t *testing.T) {
 		t.Fatalf("Status = %q, want disabled", status.Status)
 	}
 }
+
+func TestApplyAutostartDebugInstanceUsesDebugUnit(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePathForInstance(baseDir, debugInstanceID)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary")
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := systemctlUserRunner
+	serviceRuntimeGOOS = "linux"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		systemctlUserRunner = originalRunner
+	}()
+
+	var calls []string
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "is-enabled" {
+			return "enabled", nil
+		}
+		return "", nil
+	}
+
+	status, err := ApplyAutostart(AutostartApplyOptions{
+		InstanceID:      debugInstanceID,
+		StatePath:       statePath,
+		BaseDir:         baseDir,
+		InstalledBinary: binaryPath,
+		CurrentVersion:  "dev",
+	})
+	if err != nil {
+		t.Fatalf("ApplyAutostart: %v", err)
+	}
+	if status.ServiceUnitPath != filepath.Join(baseDir, ".config", "systemd", "user", "codex-remote-debug.service") {
+		t.Fatalf("ServiceUnitPath = %q", status.ServiceUnitPath)
+	}
+	if len(calls) != 3 || calls[0] != "daemon-reload" || calls[1] != "enable codex-remote-debug.service" || calls[2] != "is-enabled codex-remote-debug.service" {
+		t.Fatalf("systemctl calls = %#v", calls)
+	}
+
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if loaded.InstanceID != debugInstanceID {
+		t.Fatalf("InstanceID = %q, want %q", loaded.InstanceID, debugInstanceID)
+	}
+}

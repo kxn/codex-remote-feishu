@@ -37,6 +37,22 @@ func DetectPlatformDefaults() (PlatformDefaults, error) {
 }
 
 func defaultInstallBinDir(goos, homeDir string) string {
+	return defaultInstallBinDirForInstance(goos, homeDir, defaultInstanceID)
+}
+
+func defaultInstallBinDirForInstance(goos, homeDir, instanceID string) string {
+	if !isDefaultInstance(instanceID) {
+		switch goos {
+		case "darwin":
+			return filepath.Join(homeDir, "Library", "Application Support", instanceNamespace(instanceID), "bin")
+		case "windows":
+			if localAppData := os.Getenv("LOCALAPPDATA"); strings.TrimSpace(localAppData) != "" {
+				return filepath.Join(localAppData, instanceNamespace(instanceID), "bin")
+			}
+		default:
+			return filepath.Join(homeDir, ".local", "share", instanceNamespace(instanceID), "bin")
+		}
+	}
 	switch goos {
 	case "darwin":
 		return filepath.Join(homeDir, "Library", "Application Support", "codex-remote", "bin")

@@ -23,6 +23,7 @@ type AutostartStatus struct {
 }
 
 type AutostartApplyOptions struct {
+	InstanceID      string
 	StatePath       string
 	BaseDir         string
 	InstalledBinary string
@@ -48,13 +49,14 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 	if err != nil {
 		return AutostartStatus{}, err
 	}
+	instanceID := inferInstanceID("", trimmedStatePath)
 
 	status.Supported = true
 	status.Manager = ServiceManagerSystemdUser
 	status.CurrentManager = ServiceManagerDetached
 	status.Status = "disabled"
 	status.CanApply = true
-	status.ServiceUnitPath = systemdUserUnitPath(baseDir)
+	status.ServiceUnitPath = systemdUserUnitPathForInstance(baseDir, instanceID)
 	status.LingerHint = `如希望机器重启后在用户未登录前也恢复，需要额外手工执行 loginctl enable-linger "$USER"。`
 
 	state, err := loadAutostartStateIfPresent(trimmedStatePath)
@@ -63,6 +65,7 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 	}
 	if state != nil {
 		ApplyStateMetadata(state, StateMetadataOptions{
+			InstanceID:     state.InstanceID,
 			StatePath:      trimmedStatePath,
 			BaseDir:        baseDir,
 			ServiceManager: state.ServiceManager,
@@ -89,7 +92,7 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 	}
 
 	if status.Configured {
-		enabled, warning, detectErr := detectSystemdUserEnabled(context.Background())
+		enabled, warning, detectErr := detectSystemdUserEnabled(context.Background(), instanceID)
 		if detectErr != nil {
 			return AutostartStatus{}, detectErr
 		}
@@ -110,12 +113,16 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	}
 
 	statePath := strings.TrimSpace(opts.StatePath)
+	instanceID, err := parseInstanceID(opts.InstanceID)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
 	baseDir, err := resolveAutostartBaseDir(statePath, opts.BaseDir)
 	if err != nil {
 		return AutostartStatus{}, err
 	}
 	if statePath == "" {
-		statePath = defaultInstallStatePath(baseDir)
+		statePath = defaultInstallStatePathForInstance(baseDir, instanceID)
 	}
 
 	state, err := loadAutostartStateIfPresent(statePath)
@@ -127,6 +134,7 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	}
 
 	ApplyStateMetadata(state, StateMetadataOptions{
+		InstanceID:      instanceID,
 		StatePath:       statePath,
 		BaseDir:         baseDir,
 		InstalledBinary: strings.TrimSpace(opts.InstalledBinary),
@@ -150,7 +158,7 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	if err := WriteState(statePath, updated); err != nil {
 		return AutostartStatus{}, err
 	}
-	if err := systemdUserEnable(context.Background()); err != nil {
+	if err := systemdUserEnable(context.Background(), updated); err != nil {
 		return AutostartStatus{}, err
 	}
 	return DetectAutostart(statePath)
@@ -180,8 +188,10 @@ func loadAutostartStateIfPresent(path string) (*InstallState, error) {
 	return &state, nil
 }
 
-func detectSystemdUserEnabled(ctx context.Context) (bool, string, error) {
-	output, err := systemctlUserRunner(ctx, "is-enabled", systemdUserServiceName)
+func detectSystemdUserEnabled(ctx context.Context, instanceID string) (bool, string, error) {
+	output, err := systemctlUserRunner(ctx, "is-enabled", systemdUserUnitName(InstallState{
+		InstanceID: instanceID,
+	}))
 	switch strings.TrimSpace(output) {
 	case "enabled", "enabled-runtime":
 		return true, "", nil

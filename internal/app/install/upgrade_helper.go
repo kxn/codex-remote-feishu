@@ -70,10 +70,7 @@ func RunUpgradeHelperWithStatePath(ctx context.Context, statePath string) error 
 	if err != nil {
 		return err
 	}
-	paths, err := relayruntime.DefaultPaths()
-	if err != nil {
-		return err
-	}
+	paths := RuntimePathsForState(stateValue)
 
 	stateValue.PendingUpgrade.Phase = PendingUpgradePhaseSwitching
 	if err := WriteState(statePath, stateValue); err != nil {
@@ -244,7 +241,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relayruntime.Paths) error {
 	upgradeHelperSleepFunc(upgradeHelperStopDelay)
 	if effectiveServiceManager(stateValue) == ServiceManagerSystemdUser {
-		return systemdUserStop(ctx)
+		return systemdUserStop(ctx, stateValue)
 	}
 
 	pid, err := upgradeHelperReadPIDFunc(paths.PIDFile)
@@ -267,7 +264,7 @@ func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relay
 
 func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateValue InstallState, paths relayruntime.Paths) (int, error) {
 	if effectiveServiceManager(stateValue) == ServiceManagerSystemdUser {
-		return 0, systemdUserStart(ctx)
+		return 0, systemdUserStart(ctx, stateValue)
 	}
 	env := config.FilterEnvWithoutProxy(os.Environ())
 	if cfg.Config.Feishu.UseSystemProxy {
