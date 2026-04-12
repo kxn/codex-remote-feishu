@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -228,16 +229,50 @@ func copyFile(sourcePath, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+	tempFile, err := os.CreateTemp(filepath.Dir(targetPath), filepath.Base(targetPath)+".tmp-*")
 	if err != nil {
 		return err
 	}
-	defer targetFile.Close()
+	tempPath := tempFile.Name()
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+	}()
 
-	if _, err := io.Copy(targetFile, sourceFile); err != nil {
+	if _, err := io.Copy(tempFile, sourceFile); err != nil {
 		return err
 	}
-	return targetFile.Chmod(info.Mode().Perm())
+	if err := tempFile.Chmod(info.Mode().Perm()); err != nil {
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	if err := replaceFile(tempPath, targetPath); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func replaceFile(sourcePath, targetPath string) error {
+	if err := os.Rename(sourcePath, targetPath); err == nil {
+		return nil
+	} else if !os.IsExist(err) && runtime.GOOS != "windows" {
+		return err
+	}
+
+	if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(sourcePath, targetPath)
 }
 
 func resolveBinaryPath(opts Options) (string, error) {

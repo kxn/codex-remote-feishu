@@ -1,8 +1,10 @@
 package install
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,6 +19,45 @@ func stubInstancePortAvailability(t *testing.T, fn func(int) bool) {
 	t.Cleanup(func() {
 		instancePortAvailableFunc = original
 	})
+}
+
+func TestCopyFileReplacesTargetAtomically(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("open-file replacement semantics differ on windows")
+	}
+
+	baseDir := t.TempDir()
+	sourcePath := seedBinary(t, filepath.Join(baseDir, "source", "codex-remote"), "new-binary")
+	targetPath := seedBinary(t, filepath.Join(baseDir, "target", "codex-remote"), "old-binary")
+
+	targetFile, err := os.Open(targetPath)
+	if err != nil {
+		t.Fatalf("Open target: %v", err)
+	}
+	defer targetFile.Close()
+
+	if err := copyFile(sourcePath, targetPath); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+
+	currentRaw, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("ReadFile target: %v", err)
+	}
+	if string(currentRaw) != "new-binary" {
+		t.Fatalf("target content = %q, want new-binary", string(currentRaw))
+	}
+
+	if _, err := targetFile.Seek(0, 0); err != nil {
+		t.Fatalf("Seek old handle: %v", err)
+	}
+	oldRaw, err := io.ReadAll(targetFile)
+	if err != nil {
+		t.Fatalf("Read old handle: %v", err)
+	}
+	if string(oldRaw) != "old-binary" {
+		t.Fatalf("old handle content = %q, want old-binary", string(oldRaw))
+	}
 }
 
 func TestBootstrapWritesConfigsAndState(t *testing.T) {
