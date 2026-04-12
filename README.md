@@ -132,13 +132,15 @@ Windows PowerShell:
 
 这条入口适合日常升级检查、继续上一次未完成的升级，以及把当前安装更新到最新 release。用户文档里不再要求你手动准备本地升级产物或执行仓库内 helper。
 
+daemon 不会再后台自动检查并主动弹出 release 升级提示；release 升级只会在你手动发送 `/upgrade latest` 之后检查或继续。
+
 ## WebSetup 与按需接入 VS Code
 
 release 安装器现在只做 bootstrap：
 
 - 复制或安装稳定二进制
 - 写统一配置 `config.json`
-- 保留旧版 `config.env` / `wrapper.env` / `services.env` 的迁移结果
+- 保留已有 `config.json` 中的凭证与关键配置
 - 启动 daemon 与嵌入式 Web UI
 
 真正的产品配置入口已经收敛到 WebSetup / Admin UI：
@@ -206,6 +208,7 @@ loginctl enable-linger "$USER"
 ```
 
 如果当前有新版本可用，系统会在后台完成升级；如果上一次升级中断，这条命令也会用于继续或检查当前升级状态。
+daemon 不会在后台自动检查 release 并主动弹卡；升级只通过这条手动入口触发。
 
 ## 仓库内联调入口
 
@@ -234,7 +237,7 @@ stable 默认会写入：
 - `<baseDir>/.local/share/codex-remote-master/codex-remote/install-state.json`
 - `<baseDir>/.local/share/codex-remote-master/codex-remote/logs/codex-remote-relayd.log`
 
-如果本机还只有旧的 `config.env` / `wrapper.env` / `services.env`，bootstrap 或启动时会自动迁移到 `config.json`，并把旧文件备份成 `*.migrated-<timestamp>.bak`。
+当前磁盘配置入口只保留 `config.json`；旧的 `config.env` / `wrapper.env` / `services.env` 不再自动读取或迁移。
 
 ## 不再支持 Docker 部署
 

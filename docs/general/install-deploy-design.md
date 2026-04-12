@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-12`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并记录 Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程 provider env 补齐规则，以及 release smoke/test 复用正式产物的当前实现。
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并记录当前只保留 `config.json` 的配置基线、Linux systemd user service、本地 binary 升级事务入口、`codex.real` 子进程 provider env 补齐规则，以及 release smoke/test 复用正式产物的当前实现。
 
 ## 1. 范围
 
@@ -117,7 +117,8 @@ Windows PowerShell:
 意义是：
 
 - 写 `config.json`
-- 保留旧配置迁移与已有凭证
+- 保留已有 `config.json` 中的凭证与显式配置
+- 不再自动读取或迁移 `config.env` / `wrapper.env` / `services.env`
 - 写 `install-state.json`
 - 写当前安装来源、track、version、稳定入口路径和版本缓存根目录
 - 不直接改 VS Code
@@ -258,6 +259,7 @@ loginctl enable-linger "$USER"
 - release 升级
   - 用户发送 `/upgrade latest`
   - daemon 按当前 track 检查或继续升级到最新 release
+  - daemon 不再后台自动检查 GitHub release，也不再主动弹出升级提示卡
 - 本地编译产物升级
   - 用户先把新编译的 binary 放到固定 artifact 路径
   - 再发送 `/upgrade local`

@@ -86,13 +86,16 @@
     },
     {
       "number": 11,
-      "updatedAt": "2026-04-07T04:28:37Z",
+      "title": "[Work] 在 codex 因为错误停止 turn 的时候，飞书端没有任何反馈。",
+      "updatedAt": "2026-04-11T09:44:30Z",
+      "closedAt": "2026-04-07T04:28:37Z",
       "decision": "merge",
       "reason": "current feishu product doc was missing the durable turn-failure red-card behavior, so the issue is merged into the canonical product surface doc",
       "targetDocs": [
         "docs/general/feishu-product-design.md"
       ],
-      "recordedAt": "2026-04-09T16:26:58Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/11",
+      "recordedAt": "2026-04-12T09:39:11Z"
     },
     {
       "number": 13,
@@ -275,10 +278,13 @@
     },
     {
       "number": 40,
-      "updatedAt": "2026-04-08T04:23:02Z",
+      "title": "[Work] github issue 和文档需要实现同步机制",
+      "updatedAt": "2026-04-11T09:44:32Z",
+      "closedAt": "2026-04-08T04:23:02Z",
       "decision": "skip",
       "reason": "the repo-local issue-doc-sync workflow, tracked state cache, and sample validation already landed in the repository, so no extra doc extraction output is needed",
-      "recordedAt": "2026-04-09T16:40:03Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/40",
+      "recordedAt": "2026-04-12T09:39:13Z"
     },
     {
       "number": 41,
@@ -303,10 +309,13 @@
     },
     {
       "number": 44,
-      "updatedAt": "2026-04-09T04:16:47Z",
+      "title": "[Work] 需要一个自动升级功能",
+      "updatedAt": "2026-04-11T09:40:51Z",
+      "closedAt": "2026-04-09T04:16:47Z",
       "decision": "skip",
       "reason": "the issue was explicitly closed as half-done rather than as a settled product baseline, so it should not be synced into canonical docs yet",
-      "recordedAt": "2026-04-09T16:35:16Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/44",
+      "recordedAt": "2026-04-12T09:39:32Z"
     },
     {
       "number": 45,
@@ -373,10 +382,13 @@
     },
     {
       "number": 56,
-      "updatedAt": "2026-04-08T16:27:34Z",
+      "title": "Track delta coalescing and burst shedding for relay event flow",
+      "updatedAt": "2026-04-11T09:40:53Z",
+      "closedAt": "2026-04-08T16:27:34Z",
       "decision": "skip",
       "reason": "the durable result already lives in docs/implemented/relay-backpressure-hardening-design.md after this issue's own doc refresh",
-      "recordedAt": "2026-04-09T16:34:55Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/56",
+      "recordedAt": "2026-04-12T09:39:16Z"
     },
     {
       "number": 57,
@@ -401,195 +413,275 @@
     },
     {
       "number": 60,
-      "updatedAt": "2026-04-08T17:11:08Z",
+      "title": "[Work] 支持auto continue 功能",
+      "updatedAt": "2026-04-11T09:40:54Z",
+      "closedAt": "2026-04-08T17:11:08Z",
       "decision": "skip",
       "reason": "auto-continue behavior is already reflected in the current Feishu product and state-machine docs after this issue's own documentation update",
-      "recordedAt": "2026-04-09T16:34:55Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/60",
+      "recordedAt": "2026-04-12T09:39:21Z"
     },
     {
       "number": 61,
-      "updatedAt": "2026-04-08T16:35:59Z",
+      "title": "[Work] 撤回队列中的消息之后会显示这个",
+      "updatedAt": "2026-04-11T09:40:55Z",
+      "closedAt": "2026-04-08T16:35:59Z",
       "decision": "skip",
       "reason": "narrow gateway missing-message classification bugfix with no additional durable doc surface beyond current recalled-message behavior",
-      "recordedAt": "2026-04-09T16:34:55Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/61",
+      "recordedAt": "2026-04-12T09:39:18Z"
+    },
+    {
+      "number": 62,
+      "title": "[Work] 需要针对代码的 diff 生成预览 html 使得飞书端可以预览",
+      "updatedAt": "2026-04-11T09:40:57Z",
+      "closedAt": "2026-04-11T03:32:02Z",
+      "decision": "skip",
+      "reason": "the original diff-html preview proposal was superseded by issue #144, so syncing it would misrepresent the current product direction",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/62",
+      "recordedAt": "2026-04-12T09:42:24Z"
     },
     {
       "number": 63,
-      "updatedAt": "2026-04-09T00:43:00Z",
+      "title": "[Work] 飞书云盘上载预览文件管理需要重新review和设计",
+      "updatedAt": "2026-04-11T09:40:58Z",
+      "closedAt": "2026-04-09T00:43:00Z",
       "decision": "skip",
       "reason": "preview inventory remote-first semantics were already synced into the preview and admin docs by this issue itself",
-      "recordedAt": "2026-04-09T16:34:55Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/63",
+      "recordedAt": "2026-04-12T09:39:25Z"
     },
     {
       "number": 65,
       "title": "[Work] 重整飞书命令面：slash command、bot 菜单与 /menu 导航",
-      "updatedAt": "2026-04-09T17:31:06Z",
+      "updatedAt": "2026-04-11T09:40:59Z",
       "closedAt": "2026-04-09T17:31:06Z",
       "decision": "skip",
       "reason": "already covered by current feishu product docs and remote surface state machine",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/65",
-      "recordedAt": "2026-04-10T17:51:42Z"
+      "recordedAt": "2026-04-12T09:40:23Z"
     },
     {
       "number": 67,
-      "updatedAt": "2026-04-09T11:49:43Z",
+      "title": "[Work] Workspace 概念化",
+      "updatedAt": "2026-04-11T09:41:01Z",
+      "closedAt": "2026-04-09T11:49:43Z",
       "decision": "skip",
       "reason": "the final workspace-aware mother issue result already lives across the current draft redesign, product docs, user guide, and canonical state machine",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/67",
+      "recordedAt": "2026-04-12T09:40:04Z"
     },
     {
       "number": 68,
-      "updatedAt": "2026-04-09T05:52:04Z",
+      "title": "[Work] ProductMode / workspace claim 基础设施",
+      "updatedAt": "2026-04-11T09:41:02Z",
+      "closedAt": "2026-04-09T05:52:04Z",
       "decision": "skip",
       "reason": "current workspace-aware product docs and state machine already cover ProductMode and workspace-claim behavior",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/68",
+      "recordedAt": "2026-04-12T09:39:39Z"
     },
     {
       "number": 69,
-      "updatedAt": "2026-04-09T06:32:41Z",
+      "title": "[Work] normal mode workspace attach / switch",
+      "updatedAt": "2026-04-11T09:41:03Z",
+      "closedAt": "2026-04-09T06:32:41Z",
       "decision": "skip",
       "reason": "current workspace-aware docs and state machine already describe normal-mode workspace attach and switch behavior",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/69",
+      "recordedAt": "2026-04-12T09:39:47Z"
     },
     {
       "number": 70,
-      "updatedAt": "2026-04-09T07:04:22Z",
+      "title": "[Work] normal mode thread ownership",
+      "updatedAt": "2026-04-11T09:41:05Z",
+      "closedAt": "2026-04-09T07:04:22Z",
       "decision": "skip",
       "reason": "current workspace-aware docs and state machine already capture normal-mode thread ownership and workspace-scoped /use behavior",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/70",
+      "recordedAt": "2026-04-12T09:39:52Z"
     },
     {
       "number": 71,
-      "updatedAt": "2026-04-09T08:19:09Z",
+      "title": "[Work] vscode mode 产品收窄",
+      "updatedAt": "2026-04-11T09:41:06Z",
+      "closedAt": "2026-04-09T08:19:09Z",
       "decision": "skip",
       "reason": "current product docs already describe the narrowed vscode-mode behavior and its command constraints",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/71",
+      "recordedAt": "2026-04-12T09:39:55Z"
     },
     {
       "number": 72,
-      "updatedAt": "2026-04-09T09:30:21Z",
+      "title": "[Work] workspace-aware 状态机与文档同步",
+      "updatedAt": "2026-04-11T09:41:08Z",
+      "closedAt": "2026-04-09T09:30:21Z",
       "decision": "skip",
       "reason": "this issue itself synchronized the workspace-aware state machine, product docs, and help/menu copy, so no extra sync output is needed",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/72",
+      "recordedAt": "2026-04-12T09:39:58Z"
     },
     {
       "number": 73,
-      "updatedAt": "2026-04-09T09:04:51Z",
+      "title": "[Work] workspace identity 与 workspace defaults 迁移",
+      "updatedAt": "2026-04-11T09:41:09Z",
+      "closedAt": "2026-04-09T09:04:51Z",
       "decision": "skip",
       "reason": "current workspace-aware docs already cover workspace identity and workspace-default ownership after the migration",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/73",
+      "recordedAt": "2026-04-12T09:39:57Z"
     },
     {
       "number": 74,
-      "updatedAt": "2026-04-09T05:02:52Z",
+      "title": "[Work] 直接只读状态读取 codex sqlite 和数据获取更及时的 thread 信息",
+      "updatedAt": "2026-04-11T09:41:10Z",
+      "closedAt": "2026-04-09T05:02:52Z",
       "decision": "skip",
       "reason": "current Feishu product docs and state machine already describe sqlite freshness merged into /use candidate sourcing",
-      "recordedAt": "2026-04-09T16:35:16Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/74",
+      "recordedAt": "2026-04-12T09:39:37Z"
     },
     {
       "number": 75,
-      "updatedAt": "2026-04-09T03:12:39Z",
+      "title": "拆分 final preview 与 final 发送预算，避免 daemon.gateway_apply 在 turn 末尾被放大",
+      "updatedAt": "2026-04-11T09:41:11Z",
+      "closedAt": "2026-04-09T03:12:04Z",
       "decision": "skip",
       "reason": "preview/send timeout separation is already reflected in current Feishu product and relay error-reporting docs",
-      "recordedAt": "2026-04-09T16:35:16Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/75",
+      "recordedAt": "2026-04-12T09:39:28Z"
     },
     {
       "number": 76,
-      "updatedAt": "2026-04-09T06:50:10Z",
+      "title": "[Work] 支持 user-level systemd 常驻服务与本地升级回滚",
+      "updatedAt": "2026-04-11T09:41:13Z",
+      "closedAt": "2026-04-09T06:50:10Z",
       "decision": "skip",
       "reason": "current README, QUICKSTART, and install/deploy docs already cover the Linux systemd --user service path and local binary upgrade transaction",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/76",
+      "recordedAt": "2026-04-12T09:39:49Z"
     },
     {
       "number": 77,
-      "updatedAt": "2026-04-09T04:43:53Z",
+      "title": "[Work] final message 加上整个 turn 用时长度信息，写在最后 sumary 的后面",
+      "updatedAt": "2026-04-11T09:41:14Z",
+      "closedAt": "2026-04-09T04:43:20Z",
       "decision": "merge",
       "reason": "current Feishu product doc was missing the durable final-turn elapsed footer behavior, so the issue is merged into the canonical product surface doc",
       "targetDocs": [
         "docs/general/feishu-product-design.md"
       ],
-      "recordedAt": "2026-04-09T16:36:01Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/77",
+      "recordedAt": "2026-04-12T09:39:34Z"
     },
     {
       "number": 78,
-      "updatedAt": "2026-04-09T06:02:40Z",
+      "title": "[Work] 启动 codex real 的时候需要将实际的环境变量传过去",
+      "updatedAt": "2026-04-11T09:41:15Z",
+      "closedAt": "2026-04-09T06:02:40Z",
       "decision": "merge",
       "reason": "current install/deploy docs were missing the durable codex.real child-env rule for restoring the active provider env key, so this issue is merged into the canonical install/deploy doc",
       "targetDocs": [
         "docs/general/install-deploy-design.md"
       ],
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/78",
+      "recordedAt": "2026-04-12T09:39:41Z"
     },
     {
       "number": 79,
-      "updatedAt": "2026-04-09T06:18:25Z",
+      "title": "调研支持除了 linux 之外系统的当前用户自动启动方案",
+      "updatedAt": "2026-04-11T10:27:05Z",
+      "closedAt": "2026-04-09T06:18:25Z",
       "decision": "skip",
       "reason": "the research conclusion already lives in docs/draft/non-linux-user-autostart-research.md, so no extra sync doc entry is needed",
-      "recordedAt": "2026-04-09T16:40:04Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/79",
+      "recordedAt": "2026-04-12T09:39:44Z"
     },
     {
       "number": 82,
-      "updatedAt": "2026-04-09T11:34:26Z",
+      "title": "[Work] 在 websetup 设置vscode集成页面之前加上开机自动启动设置",
+      "updatedAt": "2026-04-11T09:41:18Z",
+      "closedAt": "2026-04-09T11:34:25Z",
       "decision": "skip",
       "reason": "current user guide and setup docs already reflect the added autostart step before VS Code setup",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/82",
+      "recordedAt": "2026-04-12T09:40:01Z"
     },
     {
       "number": 83,
       "title": "[Work] 实现有认证的反代功能",
-      "updatedAt": "2026-04-10T10:34:16Z",
+      "updatedAt": "2026-04-11T09:41:19Z",
       "closedAt": "2026-04-10T10:34:14Z",
       "decision": "skip",
       "reason": "already covered by authenticated external access foundation design doc",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/83",
-      "recordedAt": "2026-04-10T17:52:13Z"
+      "recordedAt": "2026-04-12T09:40:40Z"
     },
     {
       "number": 84,
-      "updatedAt": "2026-04-09T13:03:21Z",
+      "title": "[Work] 调研是否有办法生成macos和 windows tray icon 的binary",
+      "updatedAt": "2026-04-11T09:41:20Z",
+      "closedAt": "2026-04-09T13:03:21Z",
       "decision": "skip",
       "reason": "research-only tray feasibility conclusions do not describe current shipped product behavior and were intentionally split into follow-up implementation issues instead",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/84",
+      "recordedAt": "2026-04-12T09:40:06Z"
     },
     {
       "number": 85,
-      "updatedAt": "2026-04-09T13:45:00Z",
+      "title": "持久化 surface mode 并支持 daemon 重启后的 normal/vscode 恢复",
+      "updatedAt": "2026-04-11T09:41:22Z",
+      "closedAt": "2026-04-09T13:45:00Z",
       "decision": "skip",
       "reason": "the persisted mode and surface-resume behavior already lives in the canonical remote surface state machine after this mother issue closed",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/85",
+      "recordedAt": "2026-04-12T09:40:16Z"
     },
     {
       "number": 86,
-      "updatedAt": "2026-04-09T13:30:47Z",
+      "title": "阶段 2：实现 normal mode 的 daemon 重启恢复",
+      "updatedAt": "2026-04-11T09:41:23Z",
+      "closedAt": "2026-04-09T13:30:47Z",
       "decision": "skip",
       "reason": "current remote-surface-state-machine already captures the normal-mode daemon-restart recovery path introduced by this stage",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/86",
+      "recordedAt": "2026-04-12T09:40:11Z"
     },
     {
       "number": 87,
-      "updatedAt": "2026-04-09T13:06:39Z",
+      "title": "阶段 1：补充 persisted surface resume state 基础设施",
+      "updatedAt": "2026-04-11T09:41:24Z",
+      "closedAt": "2026-04-09T13:06:36Z",
       "decision": "skip",
       "reason": "current remote-surface-state-machine already captures the persisted surface-resume-state infrastructure introduced by this stage",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/87",
+      "recordedAt": "2026-04-12T09:40:09Z"
     },
     {
       "number": 88,
-      "updatedAt": "2026-04-09T13:42:46Z",
+      "title": "阶段 3：实现 vscode mode 的 daemon 重启恢复",
+      "updatedAt": "2026-04-11T09:41:26Z",
+      "closedAt": "2026-04-09T13:42:46Z",
       "decision": "skip",
       "reason": "current remote-surface-state-machine already captures the vscode-mode daemon-restart recovery path introduced by this stage",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/88",
+      "recordedAt": "2026-04-12T09:40:14Z"
     },
     {
       "number": 92,
-      "updatedAt": "2026-04-09T16:07:39Z",
+      "title": "收敛 VS Code 集成为 managed_shim-only，并在 vscode mode 提供 editor_settings 迁移卡片",
+      "updatedAt": "2026-04-11T09:41:27Z",
+      "closedAt": "2026-04-09T16:07:29Z",
       "decision": "skip",
       "reason": "current install/user/state-machine docs already cover the managed_shim-only VS Code integration path and migration-card behavior",
-      "recordedAt": "2026-04-09T16:40:05Z"
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/92",
+      "recordedAt": "2026-04-12T09:40:18Z"
     },
     {
       "number": 93,
       "title": "web setup 新增运行环境检查页，统一判定 headless 基础可用性",
-      "updatedAt": "2026-04-09T16:14:28Z",
+      "updatedAt": "2026-04-11T09:41:28Z",
+      "closedAt": "2026-04-09T16:14:28Z",
       "decision": "merge",
       "reason": "processed out of order as the latest canonical setup baseline; older issues must be compared against the current docs and must not overwrite the runtime-requirements setup design that was already merged during implementation",
       "targetDocs": [
@@ -597,102 +689,112 @@
         "docs/draft/web-setup-wizard-redesign.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/93",
-      "recordedAt": "2026-04-09T16:17:29Z"
+      "recordedAt": "2026-04-12T09:40:20Z"
     },
     {
       "number": 94,
       "title": "重构内置升级事务：移除外部 systemd 升级脚本，统一 /upgrade local 与 release 升级入口",
-      "updatedAt": "2026-04-10T01:30:25Z",
+      "updatedAt": "2026-04-11T09:41:29Z",
       "closedAt": "2026-04-10T01:30:25Z",
       "decision": "skip",
       "reason": "already covered by current install deploy design for unified local and release upgrade flow",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/94",
-      "recordedAt": "2026-04-10T17:51:46Z"
+      "recordedAt": "2026-04-12T09:40:26Z"
     },
     {
       "number": 95,
       "title": "[Work] 收敛飞书菜单卡片密度与布局",
-      "updatedAt": "2026-04-10T01:27:21Z",
+      "updatedAt": "2026-04-11T09:41:31Z",
       "closedAt": "2026-04-10T01:26:05Z",
       "decision": "skip",
       "reason": "already covered by current feishu product docs for compact menu and command cards",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/95",
-      "recordedAt": "2026-04-10T17:51:44Z"
+      "recordedAt": "2026-04-12T09:40:25Z"
     },
     {
       "number": 96,
       "title": "[Work] 跟进菜单卡片反馈：收敛首页层级并评估表单输入卡",
-      "updatedAt": "2026-04-10T01:57:37Z",
+      "updatedAt": "2026-04-11T09:41:32Z",
       "closedAt": "2026-04-10T01:57:36Z",
       "decision": "skip",
       "reason": "already covered by current feishu menu home and command form docs",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/96",
-      "recordedAt": "2026-04-10T17:51:48Z"
+      "recordedAt": "2026-04-12T09:40:27Z"
     },
     {
       "number": 97,
       "title": "[Work] 为 /model 接入飞书原生表单输入卡",
-      "updatedAt": "2026-04-10T03:47:38Z",
+      "updatedAt": "2026-04-11T09:41:33Z",
       "closedAt": "2026-04-10T03:47:38Z",
       "decision": "skip",
       "reason": "already covered by current parameter card and command form docs",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/97",
-      "recordedAt": "2026-04-10T17:51:51Z"
+      "recordedAt": "2026-04-12T09:40:29Z"
     },
     {
       "number": 98,
       "title": "[Work] Script relay diagnostics and issue-doc-sync runner",
-      "updatedAt": "2026-04-10T04:19:52Z",
+      "updatedAt": "2026-04-11T09:41:35Z",
       "closedAt": "2026-04-10T04:19:52Z",
       "decision": "skip",
       "reason": "operational tooling only and no additional durable product doc is needed",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/98",
-      "recordedAt": "2026-04-10T17:51:52Z"
+      "recordedAt": "2026-04-12T09:40:30Z"
     },
     {
       "number": 99,
       "title": "[Work] Refine /use and /useall session cards",
-      "updatedAt": "2026-04-10T05:02:49Z",
+      "updatedAt": "2026-04-11T09:41:36Z",
       "closedAt": "2026-04-10T05:02:49Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for use and useall cards",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/99",
-      "recordedAt": "2026-04-10T17:51:55Z"
+      "recordedAt": "2026-04-12T09:40:31Z"
     },
     {
       "number": 100,
       "title": "[Work] Align /useall workspace filtering with /list",
-      "updatedAt": "2026-04-10T05:32:40Z",
+      "updatedAt": "2026-04-11T09:41:37Z",
       "closedAt": "2026-04-10T05:32:40Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for useall filtering behavior",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/100",
-      "recordedAt": "2026-04-10T17:51:56Z"
+      "recordedAt": "2026-04-12T09:40:32Z"
     },
     {
       "number": 101,
       "title": "[Work] Refine /useall grouped workspace card layout",
-      "updatedAt": "2026-04-10T06:12:28Z",
+      "updatedAt": "2026-04-11T09:41:38Z",
       "closedAt": "2026-04-10T06:12:27Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for grouped useall layout",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/101",
-      "recordedAt": "2026-04-10T17:51:58Z"
+      "recordedAt": "2026-04-12T09:40:33Z"
     },
     {
       "number": 102,
       "title": "[Work] Limit /useall workspace groups and add per-workspace expand",
-      "updatedAt": "2026-04-10T06:59:58Z",
+      "updatedAt": "2026-04-11T09:41:40Z",
       "closedAt": "2026-04-10T06:59:58Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for useall group limiting and expand behavior",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/102",
-      "recordedAt": "2026-04-10T17:52:00Z"
+      "recordedAt": "2026-04-12T09:40:34Z"
+    },
+    {
+      "number": 103,
+      "title": "[Work] 飞书交互卡片升级到 Card JSON 2.0 / V2",
+      "updatedAt": "2026-04-11T09:41:41Z",
+      "closedAt": "2026-04-10T19:09:22Z",
+      "decision": "skip",
+      "reason": "current Card JSON V2 behavior already lives in the Feishu card UI state-machine docs and current adapter-facing documentation",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/103",
+      "recordedAt": "2026-04-12T09:42:14Z"
     },
     {
       "number": 104,
       "title": "[Work] 支持将 Codex image_generation 结果直接回显到飞书会话",
-      "updatedAt": "2026-04-10T08:20:12Z",
+      "updatedAt": "2026-04-11T09:41:42Z",
       "closedAt": "2026-04-10T08:20:10Z",
       "decision": "merge",
       "reason": "merged image_generation feishu image echo behavior into canonical feishu product docs",
@@ -700,22 +802,22 @@
         "docs/general/feishu-product-design.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/104",
-      "recordedAt": "2026-04-10T17:52:02Z"
+      "recordedAt": "2026-04-12T09:40:35Z"
     },
     {
       "number": 105,
       "title": "[Work] 支持将 Codex request_user_input 交互同步到飞书端",
-      "updatedAt": "2026-04-10T09:09:21Z",
+      "updatedAt": "2026-04-11T09:41:43Z",
       "closedAt": "2026-04-10T09:09:19Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for request_user_input feishu flow",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/105",
-      "recordedAt": "2026-04-10T17:52:06Z"
+      "recordedAt": "2026-04-12T09:40:37Z"
     },
     {
       "number": 106,
       "title": "[Work] 支持将 dynamic_tool_call 的结构化/图片结果回显到飞书端",
-      "updatedAt": "2026-04-10T09:41:15Z",
+      "updatedAt": "2026-04-11T09:41:45Z",
       "closedAt": "2026-04-10T09:41:13Z",
       "decision": "merge",
       "reason": "merged dynamic tool text image and structured result projection into canonical feishu product docs",
@@ -723,22 +825,32 @@
         "docs/general/feishu-product-design.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/106",
-      "recordedAt": "2026-04-10T17:52:08Z"
+      "recordedAt": "2026-04-12T09:40:38Z"
     },
     {
       "number": 111,
       "title": "[Work] 支持 Feishu 同上下文展开卡原地更新（/menu、/use、/useall）",
-      "updatedAt": "2026-04-10T08:55:35Z",
+      "updatedAt": "2026-04-11T09:41:46Z",
       "closedAt": "2026-04-10T08:55:33Z",
       "decision": "skip",
       "reason": "already covered by current remote surface state machine for same-context card replacement",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/111",
-      "recordedAt": "2026-04-10T17:52:04Z"
+      "recordedAt": "2026-04-12T09:40:36Z"
+    },
+    {
+      "number": 112,
+      "title": "[Work] 需要短时间将管理页面暴露到外网的能力",
+      "updatedAt": "2026-04-11T09:41:48Z",
+      "closedAt": "2026-04-11T03:06:39Z",
+      "decision": "skip",
+      "reason": "current authenticated external access foundation doc already covers /debug admin as the first consumer and its final constraints",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/112",
+      "recordedAt": "2026-04-12T09:42:22Z"
     },
     {
       "number": 113,
       "title": "[Work] localhost admin 界面支持移动版",
-      "updatedAt": "2026-04-10T11:04:27Z",
+      "updatedAt": "2026-04-11T09:41:49Z",
       "closedAt": "2026-04-10T11:04:25Z",
       "decision": "merge",
       "reason": "merged shared mobile shell and relative path constraints into web docs",
@@ -747,12 +859,12 @@
         "docs/draft/web-setup-wizard-redesign.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/113",
-      "recordedAt": "2026-04-10T17:52:15Z"
+      "recordedAt": "2026-04-12T09:40:41Z"
     },
     {
       "number": 114,
       "title": "[Work] localhost admin 在添加飞书app的时候需要支持扫码流程",
-      "updatedAt": "2026-04-10T09:57:07Z",
+      "updatedAt": "2026-04-11T09:41:51Z",
       "closedAt": "2026-04-10T09:57:05Z",
       "decision": "merge",
       "reason": "merged admin qr onboarding path into admin redesign and user guide docs",
@@ -761,12 +873,12 @@
         "docs/general/user-guide.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/114",
-      "recordedAt": "2026-04-10T17:52:11Z"
+      "recordedAt": "2026-04-12T09:40:39Z"
     },
     {
       "number": 115,
       "title": "Refine websetup/webadmin Feishu QR onboarding flow",
-      "updatedAt": "2026-04-10T12:09:53Z",
+      "updatedAt": "2026-04-11T09:41:52Z",
       "closedAt": "2026-04-10T12:09:50Z",
       "decision": "merge",
       "reason": "merged qr onboarding notice stage and runtime requirements fast track into web docs and user guide",
@@ -776,12 +888,12 @@
         "docs/general/user-guide.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/115",
-      "recordedAt": "2026-04-10T17:52:17Z"
+      "recordedAt": "2026-04-12T09:40:42Z"
     },
     {
       "number": 116,
       "title": "[Bug] 飞书过程文本投影滞后于已完成 assistant item",
-      "updatedAt": "2026-04-10T17:34:30Z",
+      "updatedAt": "2026-04-11T09:41:53Z",
       "closedAt": "2026-04-10T17:34:27Z",
       "decision": "merge",
       "reason": "merged early process text projection behavior into canonical feishu product docs",
@@ -789,7 +901,445 @@
         "docs/general/feishu-product-design.md"
       ],
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/116",
-      "recordedAt": "2026-04-10T17:52:19Z"
+      "recordedAt": "2026-04-12T09:40:43Z"
+    },
+    {
+      "number": 117,
+      "title": "[Work] 飞书卡片 V2：统一 card model 与 renderer 基础层",
+      "updatedAt": "2026-04-11T09:41:54Z",
+      "closedAt": "2026-04-10T18:03:56Z",
+      "decision": "skip",
+      "reason": "this phase result is already subsumed by the completed Card JSON V2 migration and current Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/117",
+      "recordedAt": "2026-04-12T09:42:09Z"
+    },
+    {
+      "number": 118,
+      "title": "[Work] 飞书卡片 V2：迁移展示型卡片到普通发送 V2 路径",
+      "updatedAt": "2026-04-11T09:41:56Z",
+      "closedAt": "2026-04-10T18:14:23Z",
+      "decision": "skip",
+      "reason": "this phase result is already subsumed by the completed Card JSON V2 migration and current Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/118",
+      "recordedAt": "2026-04-12T09:42:10Z"
+    },
+    {
+      "number": 119,
+      "title": "[Work] 飞书卡片 V2：迁移选择卡与命令菜单按钮卡",
+      "updatedAt": "2026-04-11T09:41:57Z",
+      "closedAt": "2026-04-10T18:41:29Z",
+      "decision": "skip",
+      "reason": "this phase result is already subsumed by the completed Card JSON V2 migration and current Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/119",
+      "recordedAt": "2026-04-12T09:42:11Z"
+    },
+    {
+      "number": 120,
+      "title": "[Work] 飞书卡片 V2：迁移表单卡与 request 回调链路",
+      "updatedAt": "2026-04-11T09:41:58Z",
+      "closedAt": "2026-04-10T18:54:39Z",
+      "decision": "skip",
+      "reason": "this phase result is already subsumed by the completed Card JSON V2 migration and current Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/120",
+      "recordedAt": "2026-04-12T09:42:12Z"
+    },
+    {
+      "number": 121,
+      "title": "[Work] 飞书卡片 V2：切换普通发送默认路径并完成验收",
+      "updatedAt": "2026-04-11T09:42:00Z",
+      "closedAt": "2026-04-10T19:05:02Z",
+      "decision": "skip",
+      "reason": "this phase result is already subsumed by the completed Card JSON V2 migration and current Feishu card state-machine docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/121",
+      "recordedAt": "2026-04-12T09:42:13Z"
+    },
+    {
+      "number": 122,
+      "title": "[Work] 飞书卡片 V2：将 legacy-compatible card model 升级为原生 V2 model",
+      "updatedAt": "2026-04-11T09:42:01Z",
+      "closedAt": "2026-04-10T23:09:08Z",
+      "decision": "skip",
+      "reason": "the native V2 model cleanup is already reflected by the final Card JSON V2 docs and current adapter boundaries",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/122",
+      "recordedAt": "2026-04-12T09:42:16Z"
+    },
+    {
+      "number": 123,
+      "title": "[Bug] 收敛飞书命令入口并统一应统一的 ack/处理语义",
+      "updatedAt": "2026-04-11T09:42:02Z",
+      "closedAt": "2026-04-10T22:42:27Z",
+      "decision": "skip",
+      "reason": "current Feishu product and card UI state-machine docs already describe the unified command entry and callback handling semantics",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/123",
+      "recordedAt": "2026-04-12T09:42:15Z"
+    },
+    {
+      "number": 124,
+      "title": "[Research] 评估将飞书能力以本地 MCP 形式暴露给 Codex",
+      "updatedAt": "2026-04-11T09:42:04Z",
+      "closedAt": "2026-04-10T23:34:16Z",
+      "decision": "skip",
+      "reason": "the research conclusions were already carried into follow-up issues and current architecture docs, so no extra sync output is needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/124",
+      "recordedAt": "2026-04-12T09:42:17Z"
+    },
+    {
+      "number": 125,
+      "title": "[Research] 基于最新 upstream Codex 梳理 app-server 中 MCP call / 授权确认 / elicitation 的协议与时序",
+      "updatedAt": "2026-04-11T10:25:54Z",
+      "closedAt": "2026-04-10T23:36:43Z",
+      "decision": "skip",
+      "reason": "the issue itself produced docs/general/codex-mcp-app-server-protocol.md, so no extra sync output is needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/125",
+      "recordedAt": "2026-04-12T09:42:18Z"
+    },
+    {
+      "number": 126,
+      "title": "[Work] 建立统一 Web 设计规范并约束后续页面改动",
+      "updatedAt": "2026-04-11T09:42:06Z",
+      "closedAt": "2026-04-10T23:44:26Z",
+      "decision": "skip",
+      "reason": "the issue itself produced docs/general/web-design-guidelines.md and related index and agent wiring, so no extra sync output is needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/126",
+      "recordedAt": "2026-04-12T09:42:19Z"
+    },
+    {
+      "number": 127,
+      "title": "[Feature] daemon 内建 Feishu tool service 基础设施与 surface 上下文透传",
+      "updatedAt": "2026-04-11T09:42:08Z",
+      "closedAt": "2026-04-11T04:55:00Z",
+      "decision": "skip",
+      "reason": "current architecture doc already covers the daemon local tool service and workspace surface-context baseline",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/127",
+      "recordedAt": "2026-04-12T09:42:26Z"
+    },
+    {
+      "number": 128,
+      "title": "[Feature] 为当前接入 surface 提供 Feishu IM 文件发送 tool",
+      "updatedAt": "2026-04-11T09:42:09Z",
+      "closedAt": "2026-04-11T07:11:12Z",
+      "decision": "skip",
+      "reason": "current architecture doc already covers the surface-aware feishu_send_im_file tool path",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/128",
+      "recordedAt": "2026-04-12T09:42:30Z"
+    },
+    {
+      "number": 131,
+      "title": "[Cleanup] 硬化 Feishu V2 card model 边界，隔离 legacy compat helper",
+      "updatedAt": "2026-04-11T09:42:10Z",
+      "closedAt": "2026-04-10T23:58:48Z",
+      "decision": "skip",
+      "reason": "maintainability-only Feishu V2 boundary cleanup with no additional durable product behavior beyond the current V2 docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/131",
+      "recordedAt": "2026-04-12T09:42:20Z"
+    },
+    {
+      "number": 135,
+      "title": "PRD: redesign Web setup/admin workflow around detection-driven onboarding",
+      "updatedAt": "2026-04-11T09:45:56Z",
+      "closedAt": "2026-04-11T09:39:31Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin draft docs already capture the detection-driven onboarding PRD baseline",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/135",
+      "recordedAt": "2026-04-12T09:42:37Z"
+    },
+    {
+      "number": 136,
+      "title": "[Work] 仅在等待用户输入时给飞书单聊机器人打即时提醒",
+      "updatedAt": "2026-04-11T09:42:13Z",
+      "closedAt": "2026-04-11T01:13:40Z",
+      "decision": "skip",
+      "reason": "current deploy and setup docs already cover the optional single-chat waiting reminder capability",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/136",
+      "recordedAt": "2026-04-12T09:42:21Z"
+    },
+    {
+      "number": 137,
+      "title": "[Work] 梳理飞书权限并按系统功能分组用于 Setup 按需开通",
+      "updatedAt": "2026-04-11T09:42:14Z",
+      "closedAt": "2026-04-11T09:38:11Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin docs already cover the grouped capability-based permission presentation",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/137",
+      "recordedAt": "2026-04-12T09:42:36Z"
+    },
+    {
+      "number": 138,
+      "title": "Unify surface resume and headless restore persistence into a single recovery source",
+      "updatedAt": "2026-04-11T09:42:16Z",
+      "closedAt": "2026-04-11T03:26:18Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures surface resume state as the single persisted recovery source",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/138",
+      "recordedAt": "2026-04-12T09:42:23Z"
+    },
+    {
+      "number": 139,
+      "title": "Phase 1: redesign setup/admin truth model and onboarding status APIs",
+      "updatedAt": "2026-04-11T09:45:57Z",
+      "closedAt": "2026-04-11T09:39:44Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin docs already capture the setup and admin truth-model baseline introduced by this phase",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/139",
+      "recordedAt": "2026-04-12T09:42:38Z"
+    },
+    {
+      "number": 140,
+      "title": "Phase 2: redesign setup flow around detection-driven onboarding",
+      "updatedAt": "2026-04-11T09:40:08Z",
+      "closedAt": "2026-04-11T09:40:08Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin docs already capture the detection-driven setup flow introduced by this phase",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/140",
+      "recordedAt": "2026-04-12T09:42:39Z"
+    },
+    {
+      "number": 141,
+      "title": "Phase 3: add admin bot onboarding subflow and steady-state status matrix",
+      "updatedAt": "2026-04-11T09:40:35Z",
+      "closedAt": "2026-04-11T09:40:35Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin docs already capture the admin bot onboarding subflow and steady-state status matrix",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/141",
+      "recordedAt": "2026-04-12T09:42:41Z"
+    },
+    {
+      "number": 142,
+      "title": "Phase 4: strengthen bot capability detection and smoke-test evidence",
+      "updatedAt": "2026-04-11T09:40:19Z",
+      "closedAt": "2026-04-11T09:40:19Z",
+      "decision": "skip",
+      "reason": "current web onboarding and admin docs already capture the strengthened bot capability detection and smoke evidence flow",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/142",
+      "recordedAt": "2026-04-12T09:42:40Z"
+    },
+    {
+      "number": 143,
+      "title": "Enable inline V2 replacement for first-priority navigation cards",
+      "updatedAt": "2026-04-11T09:42:19Z",
+      "closedAt": "2026-04-11T03:37:50Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI and remote surface state-machine docs already capture the first-priority inline replacement behavior",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/143",
+      "recordedAt": "2026-04-12T09:42:25Z"
+    },
+    {
+      "number": 145,
+      "title": "Limit /useall to recent workspace groups by default",
+      "updatedAt": "2026-04-11T09:42:21Z",
+      "closedAt": "2026-04-11T05:26:29Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already captures limiting /useall to recent workspace groups with explicit expansion",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/145",
+      "recordedAt": "2026-04-12T09:42:27Z"
+    },
+    {
+      "number": 146,
+      "title": "Setup current UI: align visible flow with approved onboarding mock",
+      "updatedAt": "2026-04-11T09:42:22Z",
+      "closedAt": "2026-04-11T06:27:52Z",
+      "decision": "skip",
+      "reason": "current web admin redesign docs already reflect the approved steady-state setup and admin visible flow",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/146",
+      "recordedAt": "2026-04-12T09:42:28Z"
+    },
+    {
+      "number": 147,
+      "title": "[Work] 将 autocontinue 改为全小写 autowhip 并切换为哨兵抽打逻辑",
+      "updatedAt": "2026-04-11T09:42:23Z",
+      "closedAt": "2026-04-11T06:34:30Z",
+      "decision": "skip",
+      "reason": "current product and state-machine docs already reflect the autowhip rename and behavior",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/147",
+      "recordedAt": "2026-04-12T09:42:29Z"
+    },
+    {
+      "number": 148,
+      "title": "Phase 3a: replace admin visible flow with steady-state UI on top of existing APIs",
+      "updatedAt": "2026-04-11T09:42:24Z",
+      "closedAt": "2026-04-11T07:17:05Z",
+      "decision": "skip",
+      "reason": "current web admin redesign docs already reflect the steady-state admin visible flow on top of existing APIs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/148",
+      "recordedAt": "2026-04-12T09:42:31Z"
+    },
+    {
+      "number": 149,
+      "title": "[Refactor] 拆分 internal/app/daemon 大包并收束 App 职责",
+      "updatedAt": "2026-04-11T09:42:26Z",
+      "closedAt": "2026-04-11T07:57:15Z",
+      "decision": "skip",
+      "reason": "maintainability-only daemon package refactor with no new durable user-facing behavior to sync into docs",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/149",
+      "recordedAt": "2026-04-12T09:42:32Z"
+    },
+    {
+      "number": 154,
+      "title": "Add roadmap-driven production release scaffolding",
+      "updatedAt": "2026-04-11T09:42:27Z",
+      "closedAt": "2026-04-11T08:25:24Z",
+      "decision": "skip",
+      "reason": "the issue itself produced docs/general/release-roadmap-workflow.md and release scaffolding, so no extra sync output is needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/154",
+      "recordedAt": "2026-04-12T09:42:33Z"
+    },
+    {
+      "number": 155,
+      "title": "[Refactor] 拆分飞书卡片 UI 导航层与主状态机边界",
+      "updatedAt": "2026-04-11T16:33:56Z",
+      "closedAt": "2026-04-11T16:33:53Z",
+      "decision": "skip",
+      "reason": "the final Feishu UI boundary result already lives in docs/general/feishu-card-ui-state-machine.md and docs/general/remote-surface-state-machine.md",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/155",
+      "recordedAt": "2026-04-12T09:42:50Z"
+    },
+    {
+      "number": 156,
+      "title": "收敛配置来源并移除 legacy env 配置文件链路",
+      "updatedAt": "2026-04-11T09:42:28Z",
+      "closedAt": "2026-04-11T09:04:08Z",
+      "decision": "merge",
+      "reason": "current install docs still needed the durable config.json-only configuration rule after removing legacy env file loading",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md",
+        "README.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/156",
+      "recordedAt": "2026-04-12T09:42:34Z"
+    },
+    {
+      "number": 158,
+      "title": "[Bug] 修复 release 升级跨设备落盘失败并禁用自动升级弹卡",
+      "updatedAt": "2026-04-11T10:33:54Z",
+      "closedAt": "2026-04-11T10:33:51Z",
+      "decision": "merge",
+      "reason": "current install docs needed to record that release upgrade checks and prompts are manual-only and no longer background-driven",
+      "targetDocs": [
+        "docs/general/install-deploy-design.md",
+        "README.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/158",
+      "recordedAt": "2026-04-12T09:42:42Z"
+    },
+    {
+      "number": 159,
+      "title": "[Refactor][Phase 0] 盘点 Feishu UI 导航边界并建立双状态机 guardrail",
+      "updatedAt": "2026-04-11T12:26:28Z",
+      "closedAt": "2026-04-11T12:26:25Z",
+      "decision": "skip",
+      "reason": "the issue itself established the Feishu card UI state-machine guardrail and current docs already carry it",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/159",
+      "recordedAt": "2026-04-12T09:42:43Z"
+    },
+    {
+      "number": 160,
+      "title": "[Refactor][Phase 1] 抽出 Feishu UI 只读 query、policy 与 DTO/协议边界",
+      "updatedAt": "2026-04-11T13:35:03Z",
+      "closedAt": "2026-04-11T13:35:01Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI state-machine already captures the extracted query, policy, and DTO boundary baseline",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/160",
+      "recordedAt": "2026-04-12T09:42:44Z"
+    },
+    {
+      "number": 161,
+      "title": "[Refactor][Phase 2] 引入 Feishu UI controller 接管纯导航",
+      "updatedAt": "2026-04-11T14:20:34Z",
+      "closedAt": "2026-04-11T14:20:32Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI state-machine already captures the Feishu UI controller boundary for pure navigation",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/161",
+      "recordedAt": "2026-04-12T09:42:45Z"
+    },
+    {
+      "number": 162,
+      "title": "[Refactor][Phase 3] 迁移 workspace/thread 选择卡的视图装配归属",
+      "updatedAt": "2026-04-11T15:18:26Z",
+      "closedAt": "2026-04-11T15:18:24Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI state-machine already captures the selection card view-assembly owner split",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/162",
+      "recordedAt": "2026-04-12T09:42:46Z"
+    },
+    {
+      "number": 163,
+      "title": "[Refactor][Phase 4] 迁移 /menu 与参数卡的 UI owner",
+      "updatedAt": "2026-04-11T15:52:43Z",
+      "closedAt": "2026-04-11T15:52:41Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI state-machine already captures the menu and config card UI-owner split",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/163",
+      "recordedAt": "2026-04-12T09:42:47Z"
+    },
+    {
+      "number": 164,
+      "title": "[Refactor][Phase 5] 统一卡片生命周期、旧卡失效与 inline replace 策略",
+      "updatedAt": "2026-04-11T16:19:11Z",
+      "closedAt": "2026-04-11T16:19:09Z",
+      "decision": "skip",
+      "reason": "current Feishu card UI state-machine already captures the unified inline-replace and old-card lifecycle strategy",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/164",
+      "recordedAt": "2026-04-12T09:42:48Z"
+    },
+    {
+      "number": 165,
+      "title": "[Refactor][Phase 6] 清理旧结构并同步双状态机文档",
+      "updatedAt": "2026-04-11T16:32:44Z",
+      "closedAt": "2026-04-11T16:32:41Z",
+      "decision": "skip",
+      "reason": "the final dual-state-machine docs already include the cleanup and synced ownership results from this phase",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/165",
+      "recordedAt": "2026-04-12T09:42:49Z"
+    },
+    {
+      "number": 166,
+      "title": "[Refactor] 显式标记剩余 Feishu direct DTO，降低 owner 误导",
+      "updatedAt": "2026-04-11T22:52:59Z",
+      "closedAt": "2026-04-11T22:52:57Z",
+      "decision": "skip",
+      "reason": "documentation and naming cleanup only; current state-machine docs already describe the retained direct DTO boundary",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/166",
+      "recordedAt": "2026-04-12T09:42:51Z"
+    },
+    {
+      "number": 168,
+      "title": "[Bugfix] 吸收 release/1.5 的 surface resume 修复到 master",
+      "updatedAt": "2026-04-12T02:36:43Z",
+      "closedAt": "2026-04-12T02:36:41Z",
+      "decision": "skip",
+      "reason": "current remote-surface-state-machine already reflects the absorbed surface resume fixes on master",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/168",
+      "recordedAt": "2026-04-12T09:42:52Z"
+    },
+    {
+      "number": 169,
+      "title": "Support per-user multi-instance systemd deployment for stable/debug daemon",
+      "updatedAt": "2026-04-12T02:47:53Z",
+      "closedAt": "2026-04-12T02:47:51Z",
+      "decision": "skip",
+      "reason": "current install-deploy-design already covers stable and debug multi-instance systemd deployment",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/169",
+      "recordedAt": "2026-04-12T09:42:53Z"
+    },
+    {
+      "number": 170,
+      "title": "Support repo-bound multi-instance dev installs with automatic port allocation",
+      "updatedAt": "2026-04-12T03:53:50Z",
+      "closedAt": "2026-04-12T03:53:48Z",
+      "decision": "skip",
+      "reason": "current install-deploy-design and README already cover repo-bound instance selection and automatic port allocation",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/170",
+      "recordedAt": "2026-04-12T09:42:54Z"
+    },
+    {
+      "number": 171,
+      "title": "Support global stable/beta/master instances with workspace bindings",
+      "updatedAt": "2026-04-12T07:18:04Z",
+      "closedAt": "2026-04-12T05:09:26Z",
+      "decision": "skip",
+      "reason": "current install-deploy-design and README already cover stable, beta, and master global instances with workspace binding",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/171",
+      "recordedAt": "2026-04-12T09:42:55Z"
     }
   ]
 }
