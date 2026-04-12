@@ -55,7 +55,7 @@ export function FeishuConnectStep({
   const verifyActionLabel = isSetupSurface ? "验证并继续" : "保存并验证";
   const onboardingGuide = onboardingCompletion?.guide;
   const extraSetupNotice = isSetupSurface && apps.length > 1
-    ? [{ tone: "warn" as const, message: "当前 setup 只继续处理一个应用。更多应用的新增、切换和运行管理请到本地管理页进行。" }]
+    ? [{ tone: "warn" as const, message: "这次安装只处理一个飞书应用。更多应用的新增、切换和管理，请到本地管理页操作。" }]
     : [];
 
   function applyCredentialField(field: "appId" | "appSecret", value: string) {
@@ -79,7 +79,7 @@ export function FeishuConnectStep({
           className="wizard-form-stack"
           notices={[
             ...extraSetupNotice,
-            { tone: "warn" as const, message: isSetupSurface ? "当前应用由运行时环境变量接管，setup 页面会直接对它做连接测试，但不会修改本地配置。" : "当前应用由运行时环境变量接管，管理页只能做连接测试，不能修改本地配置。" },
+            { tone: "warn" as const, message: isSetupSurface ? "这个飞书应用的信息由当前运行配置提供。这里可以测试连接，但不能改它的内容。" : "这个飞书应用的信息由当前运行配置提供。管理页里可以测试连接，但不能改它的内容。" },
           ]}
           values={draft}
           readOnly
@@ -93,8 +93,8 @@ export function FeishuConnectStep({
 
         <div className="wizard-info-stack">
           <div className="manifest-block">
-            <h4>当前是只读接入</h4>
-            <p>{isSetupSurface ? "这个飞书应用来自当前运行时环境变量。setup 只能做连接测试，不能修改本地配置。" : "这个飞书应用来自当前运行时环境变量。管理页只能做连接测试，不能修改本地配置。"}</p>
+            <h4>这个飞书应用当前不能在这里修改</h4>
+            <p>{isSetupSurface ? "它已经由当前运行配置接入好了。这里可以先测试是否连通，然后继续后面的安装。" : "它已经由当前运行配置接入好了。管理页里可以测试是否连通，但不能在这里修改。"}</p>
           </div>
           <div className="wizard-inline-actions">
             <button className="primary-button" type="button" onClick={onVerifyManual} disabled={busyAction !== ""}>
@@ -112,26 +112,26 @@ export function FeishuConnectStep({
         {activeApp ? (
           <div className="wizard-status-card good">
             <strong>当前正在处理：{activeApp.name || activeApp.appId || "当前飞书应用"}</strong>
-            <p>{activeApp.readOnly ? "这个飞书应用当前是只读接入。" : "如果你继续使用已有飞书应用，这次就会处理它。"}</p>
+            <p>{activeApp.readOnly ? "这个飞书应用当前只能做连接测试。" : "如果继续使用已有飞书应用，这次会处理它。"}</p>
           </div>
         ) : null}
         <div className="manifest-block">
           <h4>这次要处理哪个飞书应用？</h4>
-          <p>先选一种方式。后面的能力检查、自动启动和 VS Code 流程保持不变。</p>
+          <p>先决定是新建一个飞书应用，还是接入你已经在用的那个。后面的安装步骤不会受这里影响。</p>
         </div>
         <div className="choice-card-list" role="radiogroup" aria-label="飞书应用接入方式">
           <label className={`choice-card${connectMode === "new" ? " selected" : ""}`}>
             <input type="radio" name="feishu-connect-mode" checked={connectMode === "new"} onChange={() => onConnectModeChange("new")} />
             <div>
               <strong>新建飞书应用</strong>
-              <p>推荐。页面会给你一个二维码，扫码后自动创建飞书应用并带回 App ID / App Secret。</p>
+              <p>推荐。页面会给你一个二维码，扫码后自动创建飞书应用，并把需要的信息带回来。</p>
             </div>
           </label>
           <label className={`choice-card${connectMode === "existing" ? " selected" : ""}`}>
             <input type="radio" name="feishu-connect-mode" checked={connectMode === "existing"} onChange={() => onConnectModeChange("existing")} />
             <div>
               <strong>接入已有飞书应用</strong>
-              <p>如果你已经在飞书开放平台有飞书应用，直接填写 App ID 和 App Secret。</p>
+              <p>如果你已经有飞书应用，直接填写对应信息继续。</p>
             </div>
           </label>
         </div>
@@ -173,7 +173,7 @@ export function FeishuConnectStep({
           {activeApp ? (
             <div className="wizard-status-card good">
               <strong>当前目标：{activeApp.name || activeApp.appId || "当前飞书应用"}</strong>
-              <p>{activeApp.readOnly ? "当前是只读接入；这里只会做连接验证。" : "如果你不改 App ID，这次会继续处理当前这个飞书应用。"}</p>
+              <p>{activeApp.readOnly ? "当前只能做连接验证。" : "如果你不改 App ID，这次会继续处理当前这个飞书应用。"}</p>
             </div>
           ) : null}
           <div className="manifest-block">
@@ -221,7 +221,7 @@ export function FeishuConnectStep({
           </div>
           <div className="manifest-block">
             <h4>{onboardingGuide?.autoConfiguredSummary || "扫码创建已经完成"}</h4>
-            <p>飞书应用基础接入已经处理完成。下一步会进入能力检查，继续确认现在能不能开始使用。</p>
+            <p>飞书应用已经接好了。下一步会继续确认现在能不能开始正常使用。</p>
           </div>
         </div>
 
@@ -252,7 +252,7 @@ export function FeishuConnectStep({
       <div className="wizard-form-stack">
         <div className="wizard-qr-card">
           <h4>扫码创建飞书应用</h4>
-          <p>{isSetupSurface ? "请使用飞书手机客户端扫码完成应用创建与授权。拿到凭据后，页面会自动继续连接测试。" : "请使用飞书手机客户端扫码完成应用创建与授权。拿到凭据后，页面会自动保存并继续连接测试。"}</p>
+          <p>{isSetupSurface ? "请使用飞书手机客户端扫码完成创建。处理完成后，页面会自动继续下一步。" : "请使用飞书手机客户端扫码完成创建。处理完成后，页面会自动保存并继续下一步。"}</p>
           {onboardingSession?.qrCodeDataUrl ? (
             <img className="wizard-qr-image" src={onboardingSession.qrCodeDataUrl} alt="飞书应用创建二维码" />
           ) : (
@@ -274,8 +274,8 @@ export function FeishuConnectStep({
           <>
             <div className="manifest-block">
               <h4>正在等待扫码</h4>
-              <p>扫完以后，这里会自动显示新应用的名称和 App ID，并继续做连接测试。</p>
-              <p>页面会每 {pollIntervalSeconds} 秒自动检查一次扫码结果；如果你怀疑卡住了，也可以手动刷新。</p>
+              <p>扫完以后，这里会自动显示新应用信息，并继续处理。</p>
+              <p>页面会每 {pollIntervalSeconds} 秒自动检查一次；如果你怀疑卡住了，也可以手动刷新。</p>
             </div>
             <div className="wizard-inline-actions">
               <button className="secondary-button" type="button" onClick={onRefreshOnboarding} disabled={busyAction !== ""}>
@@ -299,7 +299,7 @@ export function FeishuConnectStep({
             </div>
             <div className="manifest-block">
               <h4>{onboardingNeedsManualRetry ? "连接测试还没有通过" : "凭据已经拿到，正在完成连接测试"}</h4>
-              <p>{onboardingNeedsManualRetry ? "飞书应用已经创建好了。你可以直接重试连接测试，或者改成手动填写。" : "如果长时间没有自动继续，可以手动重试连接测试。"}</p>
+              <p>{onboardingNeedsManualRetry ? "飞书应用已经创建好了。你可以直接重试，或者改成手动填写。" : "如果长时间没有自动继续，可以手动重试。"}</p>
             </div>
             <div className="wizard-inline-actions">
               <button className="primary-button" type="button" onClick={onRetryOnboardingComplete} disabled={busyAction !== ""}>

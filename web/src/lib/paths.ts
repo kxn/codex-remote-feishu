@@ -60,3 +60,8 @@ export function currentRouteIsSetup(pathname: string = window.location.pathname)
   const normalized = pathname.replace(/\/+$/, "");
   return normalized.endsWith("/setup");
 }
+
+export function currentRouteIsSetupMock(pathname: string = window.location.pathname): boolean {
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized.endsWith("/setup-mock");
+}

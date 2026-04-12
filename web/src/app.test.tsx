@@ -23,4 +23,13 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "环境检查" })).toBeInTheDocument();
   });
+
+  it("renders the setup mock route without backend requests", async () => {
+    window.history.replaceState({}, "", "/setup-mock");
+
+    render(<App />);
+
+    expect(await screen.findByText("场景预设")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "扫码等待中" })).toBeInTheDocument();
+  });
 });

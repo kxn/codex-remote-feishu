@@ -19,11 +19,12 @@ import type {
 } from "../lib/types";
 import { BlockingModal, ErrorState, LoadingState, Panel, ShellScaffold, StatusBadge } from "../components/ui";
 import { relativeLocalPath } from "../lib/paths";
-import {
-  SetupStepContent,
-  SetupStepPrimaryAction,
-  SetupStepSecondaryAction,
-} from "./setup/SetupStepContent";
+import { StepEnvCheck } from "./setup/StepEnvCheck";
+import { StepCapabilityCheck } from "./setup/StepCapabilityCheck";
+import { StepAutostart } from "./setup/StepAutostart";
+import { StepVSCode } from "./setup/StepVSCode";
+import { StepFinish } from "./setup/StepFinish";
+import { FeishuConnectStep } from "./setup/FeishuConnectStep";
 import {
   appToDraft,
   autostartIsComplete,
@@ -277,9 +278,9 @@ export function SetupRoute() {
     }
   }
 
-  function resetFeishuConnectFlow(nextMode?: FeishuConnectMode) {
+  function resetFeishuConnectFlow(nextMode?: FeishuConnectMode | null) {
     setFeishuConnectStage("mode_select");
-    setFeishuConnectMode(nextMode ?? (apps.length > 0 ? "existing" : "new"));
+    setFeishuConnectMode(nextMode === undefined ? (apps.length > 0 ? "existing" : "new") : nextMode);
     setOnboardingSession(null);
     setOnboardingCompletion(null);
     setOnboardingNeedsManualRetry(false);
@@ -585,7 +586,7 @@ export function SetupRoute() {
 
   function missingBundleMessage(remoteMachine: boolean): string {
     if (remoteMachine) {
-      return "还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装，然后再回来继续。";
+      return "还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次远程 VS Code 窗口，并确保 Codex 扩展已经安装，然后再回来继续。";
     }
     return "还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装，然后再回来继续。";
   }
@@ -613,7 +614,7 @@ export function SetupRoute() {
         showBlockingError("这一步还没有完成", missingBundleMessage(true));
         return;
       }
-      await applyVSCodeMode("已接管这台远程机器上的 VS Code 扩展入口。以后如果扩展升级，回到管理页重新安装扩展入口即可。");
+      await applyVSCodeMode("这台远程机器的 VS Code 接入已经处理好了。以后如果扩展升级，回到管理页重新处理一次即可。");
       return;
     }
     if (!vscodeScenario) {
@@ -622,7 +623,7 @@ export function SetupRoute() {
     }
     if (vscodeScenario === "remote_only") {
       setVSCodeOutcome("remote_only_skip");
-      setNotice({ tone: "warn", message: "已跳过当前机器的 VS Code 接入。等你在目标 SSH 机器上安装 codex-remote 后，再在那里完成 VS Code 接入即可。" });
+      setNotice({ tone: "warn", message: "已跳过当前机器的 VS Code 设置。等你真正要使用的远程机器安装完成后，再去那边处理即可。" });
       setCurrentStepHint("finish");
       return;
     }
@@ -636,7 +637,7 @@ export function SetupRoute() {
       showBlockingError("这一步还没有完成", missingBundleMessage(false));
       return;
     }
-    await applyVSCodeMode("已接管这台机器上的 VS Code 扩展入口。当前策略不会写本机 settings.json；如果扩展升级，回到管理页重新安装扩展入口即可。");
+    await applyVSCodeMode("这台机器的 VS Code 接入已经处理好了。如果以后扩展升级导致失效，回到管理页重新处理一次即可。");
   }
 
   async function finishSetup() {
@@ -655,6 +656,10 @@ export function SetupRoute() {
   }
 
   function goToPreviousStep() {
+    if (resolvedCurrentStep === "connect" && feishuConnectStage !== "mode_select") {
+      resetFeishuConnectFlow(null);
+      return;
+    }
     const previous = previousStepFor(resolvedCurrentStep);
     if (previous) {
       setCurrentStepHint(previous);
@@ -665,7 +670,7 @@ export function SetupRoute() {
     return (
       <ShellScaffold
         routeLabel="Setup Completed"
-        subtitle="当前 setup access 已关闭。远程 SSH 场景下，正式管理页仍然只允许 localhost 访问。"
+        subtitle="当前安装页已经关闭。后续请回到本地管理页继续操作。"
         railToggleLabel="状态说明"
         railClassName="wizard-rail"
         railContent={<div className="wizard-rail-note">setup 已完成，后续请回到本地管理页继续操作。</div>}
@@ -724,64 +729,81 @@ export function SetupRoute() {
           </header>
 
           {notice ? <div className={`notice-banner ${notice.tone}`}>{notice.message}</div> : null}
-          {!bootstrap && !error ? <LoadingState title="正在初始化 Setup 页面" description="读取 bootstrap、飞书应用、运行环境检查、manifest、自动启动和 VS Code 检测结果。" /> : null}
-          {error ? <ErrorState title="无法加载 Setup 状态" description="setup shell 已就位，但当前状态读取失败。" detail={error} /> : null}
+          {!bootstrap && !error ? <LoadingState title="正在初始化 Setup 页面" description="正在读取安装所需的状态信息，请稍候。" /> : null}
+          {error ? <ErrorState title="无法加载 Setup 状态" description="当前安装页打开了，但状态信息读取失败。" detail={error} /> : null}
           {bootstrap && manifest ? (
             <Panel title={currentStepMeta.label} description={currentStepMeta.summary} className="wizard-panel">
-              <SetupStepContent
-                currentStep={resolvedCurrentStep}
-                apps={apps}
-                activeApp={activeApp}
-                manifest={manifest}
-                draft={draft}
-                connectStage={feishuConnectStage}
-                connectMode={feishuConnectMode}
-                onboardingSession={onboardingSession}
-                onboardingCompletion={onboardingCompletion}
-                onboardingNeedsManualRetry={onboardingNeedsManualRetry}
-                scopesJSON={basicScopesJSON}
-                permissionsConfirmed={permissionsConfirmed}
-                eventsConfirmed={eventsConfirmed}
-                longConnectionConfirmed={longConnectionConfirmed}
-                menusConfirmed={menusConfirmed}
-                runtimeRequirements={runtimeRequirements}
-                runtimeRequirementsError={runtimeRequirementsError}
-                autostart={autostart}
-                autostartError={autostartError}
-                autostartSummary={autostartSummary}
-                vscodeScenario={vscodeScenario}
-                vscodeSummary={vscodeSummary}
-                vscode={vscode}
-                vscodeError={vscodeError}
-                onDraftChange={setDraft}
-                onConnectModeChange={setFeishuConnectMode}
-                onContinueModeSelection={() => void continueFeishuConnectModeSelection()}
-                onVerifyManual={() => void testAndContinue()}
-                onBackToConnectModeSelection={() => resetFeishuConnectFlow()}
-                onRefreshOnboarding={() => void runAction("refresh-feishu-onboarding", async () => refreshFeishuOnboarding())}
-                onRestartOnboarding={() => void startFeishuOnboarding()}
-                onSwitchToExistingFlow={() => {
-                  setFeishuConnectMode("existing");
-                  setFeishuConnectStage("existing_manual");
-                  setOnboardingSession(null);
-                  setOnboardingCompletion(null);
-                  setOnboardingNeedsManualRetry(false);
-                }}
-                onRetryOnboardingComplete={() => void retryOnboardingComplete()}
-                onContinueOnboardingNotice={() => void continueOnboardingNotice()}
-                onPermissionsConfirmedChange={setPermissionsConfirmed}
-                onEventsConfirmedChange={setEventsConfirmed}
-                onLongConnectionConfirmedChange={setLongConnectionConfirmed}
-                onMenusConfirmedChange={setMenusConfirmed}
-                onVSCodeScenarioChange={setVSCodeScenario}
-                onCopyScopes={() => void copyText(basicScopesJSON, "基础权限配置已复制。")}
-                onConfirmPermissions={() => void confirmPermissionsAndContinue()}
-                onConfirmEvents={() => void confirmEventsAndContinue()}
-                onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
-                onConfirmMenus={() => void confirmMenusAndContinue()}
-                onCheckPublish={() => void checkPublishAndContinue()}
-                busyAction={busyAction}
-              />
+              {resolvedCurrentStep === "start" && (
+                 <StepEnvCheck runtimeRequirements={runtimeRequirements} runtimeRequirementsError={runtimeRequirementsError} />
+              )}
+              {resolvedCurrentStep === "connect" && (
+                 <FeishuConnectStep
+                  apps={apps}
+                  activeApp={activeApp}
+                  draft={draft}
+                  connectStage={feishuConnectStage}
+                  connectMode={feishuConnectMode}
+                  onboardingSession={onboardingSession}
+                  onboardingCompletion={onboardingCompletion}
+                  onboardingNeedsManualRetry={onboardingNeedsManualRetry}
+                  busyAction={busyAction}
+                  onNameChange={(value) => setDraft((current) => ({ ...current, name: value }))}
+                  onAppIDChange={(value) => setDraft((current) => ({ ...current, appId: value }))}
+                  onAppSecretChange={(value) => setDraft((current) => ({ ...current, appSecret: value }))}
+                  onConnectModeChange={setFeishuConnectMode}
+                  onContinueModeSelection={() => void continueFeishuConnectModeSelection()}
+                  onVerifyManual={() => void testAndContinue()}
+                  onBackToModeSelection={() => resetFeishuConnectFlow(null)}
+                  onRefreshOnboarding={() => void runAction("refresh-feishu-onboarding", async () => refreshFeishuOnboarding())}
+                  onRestartOnboarding={() => void startFeishuOnboarding()}
+                  onSwitchToExistingFlow={() => {
+                    setFeishuConnectMode("existing");
+                    setFeishuConnectStage("existing_manual");
+                    setOnboardingSession(null);
+                    setOnboardingCompletion(null);
+                    setOnboardingNeedsManualRetry(false);
+                  }}
+                  onRetryOnboardingComplete={() => void retryOnboardingComplete()}
+                  onContinueOnboardingNotice={() => void continueOnboardingNotice()}
+                 />
+              )}
+              {resolvedCurrentStep === "capability" && (
+                 <StepCapabilityCheck
+                  activeApp={activeApp}
+                  manifest={manifest}
+                  scopesJSON={basicScopesJSON}
+                  permissionsConfirmed={permissionsConfirmed}
+                  eventsConfirmed={eventsConfirmed}
+                  longConnectionConfirmed={longConnectionConfirmed}
+                  menusConfirmed={menusConfirmed}
+                  busyAction={busyAction}
+                  onPermissionsConfirmedChange={setPermissionsConfirmed}
+                  onEventsConfirmedChange={setEventsConfirmed}
+                  onLongConnectionConfirmedChange={setLongConnectionConfirmed}
+                  onMenusConfirmedChange={setMenusConfirmed}
+                  onCopyScopes={() => void copyText(basicScopesJSON, "基础权限配置已复制。")}
+                  onConfirmPermissions={() => void confirmPermissionsAndContinue()}
+                  onConfirmEvents={() => void confirmEventsAndContinue()}
+                  onConfirmLongConnection={() => void confirmLongConnectionAndContinue()}
+                  onConfirmMenus={() => void confirmMenusAndContinue()}
+                  onCheckPublish={() => void checkPublishAndContinue()}
+                 />
+              )}
+              {resolvedCurrentStep === "autostart" && (
+                 <StepAutostart autostart={autostart} autostartError={autostartError} autostartSummary={autostartSummary} />
+              )}
+              {resolvedCurrentStep === "vscode" && (
+                 <StepVSCode 
+                   vscode={vscode} 
+                   vscodeError={vscodeError} 
+                   vscodeScenario={vscodeScenario} 
+                   vscodeBundleDetected={vscodeBundleDetected} 
+                   onVSCodeScenarioChange={setVSCodeScenario} 
+                 />
+              )}
+              {resolvedCurrentStep === "finish" && (
+                 <StepFinish activeApp={activeApp} autostartSummary={autostartSummary} vscodeSummary={vscodeSummary} />
+              )}
               <div className="wizard-footer">
                 <div className="wizard-footer-left">
                   {resolvedCurrentStep !== "start" ? (
@@ -791,36 +813,39 @@ export function SetupRoute() {
                   ) : null}
                 </div>
                 <div className="wizard-footer-right">
-                  <SetupStepSecondaryAction
-                    currentStep={resolvedCurrentStep}
-                    busyAction={busyAction}
-                    onCopyScopes={() => void copyText(basicScopesJSON, "基础权限配置已复制。")}
-                    onSkipAutostart={() => {
-                      setAutostartSkipped(true);
-                      setNotice({ tone: "warn", message: "自动启动已跳过，可稍后在管理页再启用。" });
-                      setCurrentStepHint("vscode");
-                    }}
-                    onDeferVSCode={() => {
-                      setVSCodeOutcome("deferred");
-                      setNotice({ tone: "warn", message: "VS Code 已跳过；如果以后要用，可以随时在管理页继续处理。" });
-                      setCurrentStepHint("finish");
-                    }}
-                  />
-                  <SetupStepPrimaryAction
-                    currentStep={resolvedCurrentStep}
-                    busyAction={busyAction}
-                    autostart={autostart}
-                    canContinueVSCode={vscodeCanContinue}
-                    vscodePrimaryLabel={vscodePrimaryLabel}
-                    startReady={runtimeRequirementsReady}
-                    onStart={() => {
-                      setSetupStarted(true);
-                      void checkRuntimeRequirementsAndContinue();
-                    }}
-                    onContinueAutostart={() => void continueAutostart()}
-                    onContinueVSCode={() => void continueVSCode()}
-                    onFinishSetup={() => void finishSetup()}
-                  />
+                  {/* Secondary Actions */}
+                  {resolvedCurrentStep === "autostart" && (
+                    <button className="secondary-button" type="button" onClick={() => { setAutostartSkipped(true); setCurrentStepHint("vscode"); }} disabled={busyAction !== ""}>
+                      跳过这一步
+                    </button>
+                  )}
+                  {resolvedCurrentStep === "vscode" && (
+                    <button className="secondary-button" type="button" onClick={() => { setVSCodeOutcome("deferred"); setNotice({ tone: "warn", message: "已跳过 VS Code 设置" }); setCurrentStepHint("finish"); }} disabled={busyAction !== ""}>
+                      跳过 VS Code
+                    </button>
+                  )}
+                  
+                  {/* Primary Actions */}
+                  {resolvedCurrentStep === "start" && (
+                    <button className="primary-button" type="button" onClick={() => void checkRuntimeRequirementsAndContinue()} disabled={busyAction !== ""}>
+                      {busyAction === "runtime-requirements-detect" ? "正在检查..." : runtimeRequirementsReady ? "继续" : "重新检查"}
+                    </button>
+                  )}
+                  {resolvedCurrentStep === "autostart" && (
+                    <button className="primary-button" type="button" onClick={() => void continueAutostart()} disabled={busyAction !== ""}>
+                      {busyAction === "autostart-apply" ? "正在启用..." : (!autostart?.supported || autostart.status === "enabled" ? "继续" : "启用自动启动")}
+                    </button>
+                  )}
+                  {resolvedCurrentStep === "vscode" && (
+                    <button className="primary-button" type="button" onClick={() => void continueVSCode()} disabled={busyAction !== "" || !vscodeCanContinue}>
+                      {vscodePrimaryLabel}
+                    </button>
+                  )}
+                  {resolvedCurrentStep === "finish" && (
+                    <button className="primary-button" type="button" onClick={() => void finishSetup()} disabled={busyAction !== ""}>
+                      完成并进入本地管理页
+                    </button>
+                  )}
                 </div>
               </div>
             </Panel>

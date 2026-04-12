@@ -164,8 +164,7 @@ describe("SetupRoute", () => {
     expect(await screen.findByText("扫码创建已经完成，大部分基础配置已自动处理。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "下一步" }));
 
-    expect(await screen.findByText("基础对话与交互")).toBeInTheDocument();
-    expect(screen.getByText("现在已经可以开始使用。基础对话与交互已经准备好，增强项可以稍后再补。")).toBeInTheDocument();
+    expect(await screen.findByText("核心聊天与交互")).toBeInTheDocument();
     expect(calls.some((call) => call.path === "/api/setup/feishu/onboarding/sessions")).toBe(true);
     expect(calls.some((call) => call.path === "/api/setup/feishu/onboarding/sessions/sess-1/complete")).toBe(true);
   });
@@ -195,11 +194,50 @@ describe("SetupRoute", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "继续" }));
 
-    expect(await screen.findByText("当前应用由运行时环境变量接管，setup 页面会直接对它做连接测试，但不会修改本地配置。")).toBeInTheDocument();
+    expect(await screen.findByText("这个飞书应用的信息由当前运行配置提供。这里可以测试连接，但不能改它的内容。")).toBeInTheDocument();
     expect(screen.getByLabelText("显示名称")).toBeDisabled();
     expect(screen.getByLabelText("App ID")).toBeDisabled();
     expect(screen.getByLabelText("App Secret")).toBeDisabled();
     expect(screen.getByRole("button", { name: "测试并继续" })).toBeEnabled();
+  });
+
+  it("returns from qr onboarding to mode selection and does not reuse stale qr state", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/apps": { body: { apps: [] } },
+      "/api/setup/feishu/manifest": { body: { manifest: makeManifest() } },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/setup/runtime-requirements/detect": { body: makeRuntimeRequirementsDetect() },
+      "/api/setup/feishu/onboarding/sessions": {
+        status: 201,
+        body: {
+          session: {
+            id: "sess-back",
+            status: "pending",
+            qrCodeDataUrl: "data:image/png;base64,abc",
+            appId: "",
+            displayName: "",
+          },
+        },
+      },
+    });
+
+    render(<SetupRoute />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "继续" }));
+    await user.click(await screen.findByRole("button", { name: "下一步" }));
+
+    expect(await screen.findByText("扫码创建飞书应用")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(await screen.findByText("这次要处理哪个飞书应用？")).toBeInTheDocument();
+    expect(screen.queryByText("扫码创建飞书应用")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下一步" })).toBeDisabled();
+
+    expect(calls.filter((call) => call.path === "/api/setup/feishu/onboarding/sessions").length).toBe(1);
   });
 
   it("blocks capability continue until permission import is confirmed", async () => {
@@ -227,7 +265,7 @@ describe("SetupRoute", () => {
     await user.click(await screen.findByRole("button", { name: "继续" }));
     await user.click(screen.getByRole("button", { name: /能力检查/ }));
 
-    expect(await screen.findByText("先把基础权限导入好")).toBeInTheDocument();
+    expect(await screen.findByText("必须先修好")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "记录并继续" }));
 
     const dialog = await screen.findByRole("dialog");
@@ -273,12 +311,8 @@ describe("SetupRoute", () => {
     await user.click(await screen.findByRole("button", { name: "继续" }));
     await user.click(screen.getByRole("button", { name: /能力检查/ }));
 
-    expect(await screen.findByText("继续把飞书应用菜单配好")).toBeInTheDocument();
-    expect(screen.getByText("threads")).toBeInTheDocument();
-    expect(screen.getByText("切换会话")).toBeInTheDocument();
-    expect(screen.getByText("展示最近可见会话，并切换后续输入目标。")).toBeInTheDocument();
-    expect(screen.getByText("reason_high")).toBeInTheDocument();
-    expect(screen.getByText("只覆盖下一条消息的推理强度为 high。")).toBeInTheDocument();
+    expect(await screen.findByText("核对机器人快捷面板事件 Key 设置。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "记录并继续" })).toBeInTheDocument();
   });
 
   it("rechecks environment before continuing and blocks when runtime requirements fail", async () => {
@@ -493,7 +527,7 @@ describe("SetupRoute", () => {
     await user.click(screen.getByRole("radio", { name: /主要去别的 SSH 机器上使用/ }));
     await user.click(screen.getByRole("button", { name: "我会去目标 SSH 机器上处理" }));
 
-    expect(await screen.findByText("已跳过当前机器的 VS Code 接入。等你在目标 SSH 机器上安装 codex-remote 后，再在那里完成 VS Code 接入即可。")).toBeInTheDocument();
+    expect(await screen.findByText("已跳过当前机器的 VS Code 设置。等你真正要使用的远程机器安装完成后，再去那边处理即可。")).toBeInTheDocument();
     expect(screen.getByText("当前机器未接入；你选择稍后在目标 SSH 机器上处理")).toBeInTheDocument();
     expect(calls.some((call) => call.path === "/api/setup/vscode/apply")).toBe(false);
   });
@@ -578,7 +612,7 @@ describe("SetupRoute", () => {
     await user.click(screen.getByRole("radio", { name: /要在当前这台机器上使用/ }));
     await user.click(screen.getByRole("button", { name: "在这台机器上启用 VS Code" }));
 
-    expect(await screen.findByText("已接管这台机器上的 VS Code 扩展入口。当前策略不会写本机 settings.json；如果扩展升级，回到管理页重新安装扩展入口即可。")).toBeInTheDocument();
+    expect(await screen.findByText("这台机器的 VS Code 接入已经处理好了。如果以后扩展升级导致失效，回到管理页重新处理一次即可。")).toBeInTheDocument();
     expect(screen.getByText("已在这台机器上接入（扩展入口）")).toBeInTheDocument();
     expect(calls.some((call) => call.path === "/api/setup/vscode/apply")).toBe(true);
   });
@@ -635,8 +669,8 @@ describe("SetupRoute", () => {
     await user.click(await screen.findByRole("button", { name: "继续" }));
     await user.click(screen.getByRole("button", { name: /VS Code/ }));
 
-    expect(await screen.findByText("检测到当前是远程 SSH 机器")).toBeInTheDocument();
-    expect(screen.getByText("还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装，然后再回来继续。")).toBeInTheDocument();
+    expect(await screen.findByText("检测到你正在远程机器上完成设置")).toBeInTheDocument();
+    expect(screen.getByText("还没检测到这台机器上的 VS Code 扩展。请先在这台机器上打开一次远程 VS Code 窗口，并确保 Codex 扩展已经安装，然后再回来继续。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "在这台远程机器上启用 VS Code" })).toBeDisabled();
   });
 });
