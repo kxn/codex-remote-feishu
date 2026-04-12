@@ -21,6 +21,7 @@ type VSCodeSettingsStatus struct {
 	Path          string `json:"path"`
 	Exists        bool   `json:"exists"`
 	CLIExecutable string `json:"cliExecutable,omitempty"`
+	ParseError    string `json:"parseError,omitempty"`
 	MatchesBinary bool   `json:"matchesBinary"`
 }
 
@@ -54,7 +55,8 @@ func DetectVSCodeSettings(settingsPath, executable string) (VSCodeSettingsStatus
 
 	settings, err := decodeVSCodeSettings(raw)
 	if err != nil {
-		return status, err
+		status.ParseError = err.Error()
+		return status, nil
 	}
 	value, _ := settings["chatgpt.cliExecutable"].(string)
 	status.CLIExecutable = strings.TrimSpace(value)

@@ -130,4 +130,59 @@ func TestDetectVSCodeSettingsSupportsJSONC(t *testing.T) {
 	if !status.MatchesBinary {
 		t.Fatalf("expected settings to match binary, got %#v", status)
 	}
+	if status.ParseError != "" {
+		t.Fatalf("expected no parse error, got %q", status.ParseError)
+	}
+}
+
+func TestDetectVSCodeSettingsNormalizesInvalidWindowsPathEscapes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	exePath := `C:\Users\demo\bin\codex-remote.exe`
+	raw := []byte("{\n  \"chatgpt.cliExecutable\": \"C:\\Users\\demo\\bin\\codex-remote.exe\",\n  \"editor.fontSize\": 14\n}\n")
+	// Deliberately degrade to historical invalid JSON escape form: C:\Users\... (single backslashes).
+	raw = []byte(strings.ReplaceAll(string(raw), `\\`, `\`))
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+
+	status, err := DetectVSCodeSettings(path, exePath)
+	if err != nil {
+		t.Fatalf("detect settings: %v", err)
+	}
+	if !status.Exists {
+		t.Fatalf("expected settings to exist, got %#v", status)
+	}
+	if status.CLIExecutable != exePath {
+		t.Fatalf("cli executable = %q, want %q", status.CLIExecutable, exePath)
+	}
+	if !status.MatchesBinary {
+		t.Fatalf("expected settings to match binary, got %#v", status)
+	}
+	if status.ParseError != "" {
+		t.Fatalf("expected recoverable invalid escape to be normalized, got parse error %q", status.ParseError)
+	}
+}
+
+func TestDetectVSCodeSettingsKeepsDetectPathWhenJSONIsUnrecoverable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	raw := []byte("{\n  \"editor.fontSize\": 14,,\n}\n")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+
+	status, err := DetectVSCodeSettings(path, "/usr/local/bin/codex-remote")
+	if err != nil {
+		t.Fatalf("detect settings: %v", err)
+	}
+	if !status.Exists {
+		t.Fatalf("expected settings to exist, got %#v", status)
+	}
+	if status.ParseError == "" {
+		t.Fatalf("expected parse error for unrecoverable malformed JSON, got %#v", status)
+	}
+	if status.CLIExecutable != "" || status.MatchesBinary {
+		t.Fatalf("expected malformed settings to avoid false positive executable match, got %#v", status)
+	}
 }
