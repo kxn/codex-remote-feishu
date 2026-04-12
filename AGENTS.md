@@ -261,6 +261,19 @@ When a change is intentionally committed during task work:
   - only then does it push
 - If rebase conflicts or tests fail, stop and handle that manually; do not try to script conflict resolution into the helper.
 
+## Branch Restoration Rule
+
+For repository-local operations that temporarily switch away from the current branch or ref:
+
+- Before switching, record the starting branch or exact ref.
+- If the task only needs a temporary branch change, treat returning to that starting branch/ref as part of the operation, not as optional cleanup.
+- This applies in particular to:
+  - local release or publish flows that need to check out a release branch
+  - temporary `cherry-pick` work on another branch
+  - cross-branch validation, comparison, or backport work that checks out another branch and then returns
+- After the temporary operation finishes, return to the recorded starting branch/ref on every normal exit path, whether the operation succeeded or failed.
+- Do not leave the repository parked on the temporary branch unless the user explicitly asks to stay there.
+
 ## File Length Gate Rule
 
 For repository file-length enforcement:
