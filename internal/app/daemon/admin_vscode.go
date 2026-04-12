@@ -122,7 +122,7 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 		return vscodeDetectResponse{}, err
 	}
 	admin := a.snapshotAdminRuntime()
-	defaults, err := install.DetectPlatformDefaults()
+	defaults, err := a.platformDefaults()
 	if err != nil {
 		return vscodeDetectResponse{}, err
 	}
@@ -200,7 +200,7 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 }
 
 func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
-	defaults, err := install.DetectPlatformDefaults()
+	defaults, err := a.platformDefaults()
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 }
 
 func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
-	defaults, err := install.DetectPlatformDefaults()
+	defaults, err := a.platformDefaults()
 	if err != nil {
 		return err
 	}
@@ -456,6 +456,13 @@ func loadedConfigPath(a *App) string {
 		return ""
 	}
 	return loaded.Path
+}
+
+func (a *App) platformDefaults() (install.PlatformDefaults, error) {
+	if a.detectPlatformDefaults != nil {
+		return a.detectPlatformDefaults()
+	}
+	return install.DetectPlatformDefaults()
 }
 
 func (a *App) currentBinaryVersion() string {

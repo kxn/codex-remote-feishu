@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -25,7 +26,9 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
 	entrypointV1 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	windowsSibling := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "windows-x86_64", "codex.exe")
 	writeExecutableFile(t, entrypointV1, "orig-v1")
+	writeExecutableFile(t, windowsSibling, "orig-win-v1")
 
 	app, configPath, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
 
@@ -67,7 +70,9 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	}
 
 	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
+	windowsSiblingV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "windows-x86_64", "codex.exe")
 	writeExecutableFile(t, entrypointV2, "orig-v2")
+	writeExecutableFile(t, windowsSiblingV2, "orig-win-v2")
 	now := time.Now().Add(time.Minute)
 	if err := os.Chtimes(filepath.Dir(filepath.Dir(filepath.Dir(entrypointV2))), now, now); err != nil {
 		t.Fatalf("Chtimes(new extension dir): %v", err)
@@ -123,6 +128,96 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	}
 	if !strings.Contains(string(rawState), entrypointV2) {
 		t.Fatalf("expected install-state to record latest bundle entrypoint, got %s", string(rawState))
+	}
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(windowsSiblingV2)); !os.IsNotExist(err) {
+		t.Fatalf("expected non-current-platform sibling to stay untouched, stat err=%v", err)
+	}
+}
+
+func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote.exe")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	linuxEntrypoint := filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	windowsEntrypoint := filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-1", "bin", "windows-x86_64", "codex.exe")
+	writeExecutableFile(t, linuxEntrypoint, "wrapper-binary")
+	writeExecutableFile(t, linuxEntrypoint+".real", "orig-linux")
+	writeExecutableFile(t, windowsEntrypoint, "orig-windows")
+
+	app, configPath, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+	settingsPath := filepath.Join(home, "AppData", "Roaming", "Code", "User", "settings.json")
+	app.detectPlatformDefaults = func() (install.PlatformDefaults, error) {
+		return install.PlatformDefaults{
+			GOOS:                       "windows",
+			HomeDir:                    home,
+			BaseDir:                    home,
+			VSCodeSettingsPath:         settingsPath,
+			CandidateBundleEntrypoints: []string{windowsEntrypoint},
+			DefaultIntegrations:        install.DefaultIntegrations("windows"),
+		}, nil
+	}
+	if err := install.WriteState(installStatePath, install.InstallState{
+		StatePath:              installStatePath,
+		VSCodeSettingsPath:     settingsPath,
+		BundleEntrypoint:       linuxEntrypoint,
+		Integrations:           []install.WrapperIntegrationMode{install.IntegrationManagedShim},
+		InstalledBinary:        binaryPath,
+		CurrentBinaryPath:      binaryPath,
+		InstalledWrapperBinary: binaryPath,
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.LatestBundleEntrypoint != windowsEntrypoint {
+		t.Fatalf("latest bundle entrypoint = %q, want %q", detect.LatestBundleEntrypoint, windowsEntrypoint)
+	}
+	if detect.RecordedBundleEntrypoint != linuxEntrypoint {
+		t.Fatalf("recorded bundle entrypoint = %q, want %q", detect.RecordedBundleEntrypoint, linuxEntrypoint)
+	}
+	if !detect.NeedsShimReinstall {
+		t.Fatalf("expected detect to require reinstall when recorded linux entrypoint differs, got %#v", detect)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	windowsRealBinary := editor.ManagedShimRealBinaryPath(windowsEntrypoint)
+	if _, err := os.Stat(windowsRealBinary); err != nil {
+		t.Fatalf("expected .real.exe backup after windows shim apply: %v", err)
+	}
+	if readFileString(t, windowsEntrypoint) != "wrapper-binary" {
+		t.Fatalf("expected windows entrypoint to match wrapper binary")
+	}
+	if readFileString(t, linuxEntrypoint) != "wrapper-binary" {
+		t.Fatalf("expected stale linux entrypoint to remain unchanged")
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if loaded.Config.Wrapper.CodexRealBinary != windowsRealBinary {
+		t.Fatalf("expected codexRealBinary to point at windows managed shim backup, got %q", loaded.Config.Wrapper.CodexRealBinary)
+	}
+
+	state, err := install.LoadState(installStatePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if state.BundleEntrypoint != windowsEntrypoint {
+		t.Fatalf("expected install-state to move to windows entrypoint, got %q", state.BundleEntrypoint)
 	}
 }
 

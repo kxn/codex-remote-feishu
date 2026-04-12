@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -133,6 +134,7 @@ type App struct {
 	vscodeResumeNotices    map[string]bool
 	vscodeMigrationPrompts map[string]string
 	vscodeDetect           func() (vscodeDetectResponse, error)
+	detectPlatformDefaults func() (install.PlatformDefaults, error)
 	vscodeCompatibility    vscodeCompatibilityCacheState
 	vscodeStartupCheckDue  bool
 	headlessRestoreState   map[string]*headlessRestoreRecoveryState
