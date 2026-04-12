@@ -19,6 +19,15 @@ var (
 	systemctlUserRunner = runSystemctlUser
 )
 
+var defaultSystemdUserPATH = []string{
+	"/usr/local/sbin",
+	"/usr/local/bin",
+	"/usr/sbin",
+	"/usr/bin",
+	"/sbin",
+	"/bin",
+}
+
 func runSystemctlUser(ctx context.Context, args ...string) (string, error) {
 	commandArgs := append([]string{"--user"}, args...)
 	cmd := exec.CommandContext(ctx, "systemctl", commandArgs...)
@@ -99,6 +108,7 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		"Type=simple",
 		"WorkingDirectory=" + systemdEscapeValue(state.BaseDir),
 		"ExecStart=" + systemdEscapeExecWord(binaryPath) + " daemon",
+		"Environment=PATH=" + systemdEscapeValue(systemdUserServicePATH()),
 		"Environment=XDG_CONFIG_HOME=" + systemdEscapeValue(layout.ConfigHome),
 		"Environment=XDG_DATA_HOME=" + systemdEscapeValue(layout.DataHome),
 		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(layout.StateHome),
@@ -194,4 +204,38 @@ func systemdEscapeValue(value string) string {
 
 func systemdEscapeExecWord(value string) string {
 	return systemdEscapeValue(value)
+}
+
+func systemdUserServicePATH() string {
+	parts := normalizePathList(os.Getenv("PATH"))
+	if len(parts) == 0 {
+		return strings.Join(defaultSystemdUserPATH, string(os.PathListSeparator))
+	}
+	return strings.Join(parts, string(os.PathListSeparator))
+}
+
+func normalizePathList(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	parts := strings.Split(value, string(os.PathListSeparator))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		part = filepath.Clean(part)
+		key := part
+		if serviceRuntimeGOOS == "windows" {
+			key = strings.ToLower(key)
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	return out
 }

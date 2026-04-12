@@ -51,6 +51,10 @@ func StartDetachedCommand(opts DetachedCommandOptions) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}
+	go func() {
+		// Detached children still need a parent-side wait to avoid zombie buildup.
+		_ = cmd.Wait()
+	}()
 	return cmd.Process.Pid, nil
 }
 

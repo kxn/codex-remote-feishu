@@ -11,6 +11,8 @@ import (
 
 func TestRunServiceInstallUserWritesUnitAndState(t *testing.T) {
 	baseDir := t.TempDir()
+	servicePath := filepath.Join(baseDir, "shell-bin") + string(os.PathListSeparator) + "/usr/bin"
+	t.Setenv("PATH", servicePath)
 	statePath := defaultInstallStatePath(baseDir)
 	state := InstallState{
 		BaseDir:         baseDir,
@@ -59,6 +61,9 @@ func TestRunServiceInstallUserWritesUnitAndState(t *testing.T) {
 	unitText := string(unitRaw)
 	if !strings.Contains(unitText, "ExecStart=") || !strings.Contains(unitText, "daemon") {
 		t.Fatalf("unit content missing ExecStart daemon: %s", unitText)
+	}
+	if !strings.Contains(unitText, "Environment=PATH="+systemdEscapeValue(servicePath)) {
+		t.Fatalf("unit content missing PATH env: %s", unitText)
 	}
 	if !strings.Contains(unitText, "XDG_STATE_HOME=") {
 		t.Fatalf("unit content missing XDG env: %s", unitText)
@@ -123,6 +128,38 @@ func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T)
 	}
 	if !strings.Contains(unitText, `ExecStart=/tmp/codex\\x20remote/bin/codex-remote daemon`) {
 		t.Fatalf("unit missing escaped ExecStart path: %s", unitText)
+	}
+}
+
+func TestRenderSystemdUserUnitFallsBackToDefaultPATHWhenEnvironmentEmpty(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "linux"
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+	}()
+
+	t.Setenv("PATH", "")
+
+	state := InstallState{
+		BaseDir:         filepath.Join(string(filepath.Separator), "tmp", "codex-remote"),
+		StatePath:       filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".local", "share", "codex-remote", "install-state.json"),
+		ConfigPath:      filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".config", "codex-remote", "config.json"),
+		InstalledBinary: filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "bin", "codex-remote"),
+		ServiceManager:  ServiceManagerSystemdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	unitText, err := renderSystemdUserUnit(state)
+	if err != nil {
+		t.Fatalf("renderSystemdUserUnit: %v", err)
+	}
+	wantPath := strings.Join(defaultSystemdUserPATH, string(os.PathListSeparator))
+	if !strings.Contains(unitText, "Environment=PATH="+systemdEscapeValue(wantPath)) {
+		t.Fatalf("unit missing fallback PATH env: %s", unitText)
 	}
 }
 
