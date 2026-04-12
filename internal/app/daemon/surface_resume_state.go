@@ -171,9 +171,9 @@ func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, 
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
-	entry.ResumeThreadTitle = strings.TrimSpace(entry.ResumeThreadTitle)
 	entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(entry.ResumeThreadCWD)
 	entry.ResumeWorkspaceKey = state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey)
+	entry.ResumeThreadTitle = normalizeResumeThreadTitle(entry.ResumeThreadTitle, entry.ResumeThreadID, entry.ResumeThreadCWD, entry.ResumeWorkspaceKey)
 	entry.ResumeRouteMode = strings.TrimSpace(entry.ResumeRouteMode)
 	if entry.SurfaceSessionID == "" {
 		return SurfaceResumeEntry{}, false

@@ -162,8 +162,8 @@ func normalizeHeadlessRestoreHint(hint HeadlessRestoreHint) (HeadlessRestoreHint
 	hint.ChatID = strings.TrimSpace(hint.ChatID)
 	hint.ActorUserID = strings.TrimSpace(hint.ActorUserID)
 	hint.ThreadID = strings.TrimSpace(hint.ThreadID)
-	hint.ThreadTitle = strings.TrimSpace(hint.ThreadTitle)
 	hint.ThreadCWD = strings.TrimSpace(hint.ThreadCWD)
+	hint.ThreadTitle = normalizeResumeThreadTitle(hint.ThreadTitle, hint.ThreadID, hint.ThreadCWD, "")
 	if hint.SurfaceSessionID == "" || hint.ThreadID == "" {
 		return HeadlessRestoreHint{}, false
 	}
