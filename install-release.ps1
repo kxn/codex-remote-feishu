@@ -11,6 +11,45 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:HttpClientAvailable = $null
+
+function Test-HttpClientAvailable {
+  if ($null -ne $script:HttpClientAvailable) {
+    return [bool]$script:HttpClientAvailable
+  }
+  $handlerType = "System.Net.Http.HttpClientHandler" -as [type]
+  if ($null -eq $handlerType) {
+    try {
+      Add-Type -AssemblyName "System.Net.Http" -ErrorAction Stop
+    } catch {
+      # Ignore and fall through to Invoke-WebRequest fallback.
+    }
+    $handlerType = "System.Net.Http.HttpClientHandler" -as [type]
+  }
+  $script:HttpClientAvailable = ($null -ne $handlerType)
+  return [bool]$script:HttpClientAvailable
+}
+
+function Get-AuthToken {
+  foreach ($candidate in @($env:CODEX_REMOTE_GITHUB_TOKEN, $env:GITHUB_TOKEN, $env:GH_TOKEN)) {
+    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+      return $candidate.Trim()
+    }
+  }
+  return ""
+}
+
+function Get-RequestHeaders([string]$Url) {
+  $headers = @{}
+  if ($Url -like "https://api.github.com/*") {
+    $headers["Accept"] = "application/vnd.github+json"
+  }
+  $token = Get-AuthToken
+  if (-not [string]::IsNullOrWhiteSpace($token)) {
+    $headers["Authorization"] = "Bearer $token"
+  }
+  return $headers
+}
 
 function Show-Usage {
   @'
@@ -109,19 +148,16 @@ function Get-GoArch {
 }
 
 function Add-AuthHeader([System.Net.Http.HttpRequestMessage]$Request) {
-  $token = ""
-  foreach ($candidate in @($env:CODEX_REMOTE_GITHUB_TOKEN, $env:GITHUB_TOKEN, $env:GH_TOKEN)) {
-    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-      $token = $candidate.Trim()
-      break
-    }
-  }
+  $token = Get-AuthToken
   if (-not [string]::IsNullOrWhiteSpace($token)) {
     $Request.Headers.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue -ArgumentList "Bearer", $token
   }
 }
 
 function Invoke-HttpRequest([string]$Url) {
+  if (-not (Test-HttpClientAvailable)) {
+    throw "System.Net.Http.HttpClient is unavailable in this PowerShell runtime."
+  }
   $handler = New-Object System.Net.Http.HttpClientHandler
   if ($Url -match '^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)') {
     $handler.UseProxy = $false
@@ -142,6 +178,21 @@ function Invoke-HttpRequest([string]$Url) {
 }
 
 function Invoke-TextRequest([string]$Url) {
+  if (-not (Test-HttpClientAvailable)) {
+    $headers = Get-RequestHeaders $Url
+    $params = @{
+      Uri         = $Url
+      Method      = "Get"
+      ErrorAction = "Stop"
+      UserAgent   = "codex-remote-feishu-install"
+      Headers     = $headers
+    }
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+      $params["UseBasicParsing"] = $true
+    }
+    $response = Invoke-WebRequest @params
+    return [string]$response.Content
+  }
   $response = Invoke-HttpRequest $Url
   try {
     return $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
@@ -151,12 +202,27 @@ function Invoke-TextRequest([string]$Url) {
 }
 
 function Invoke-DownloadRequest([string]$Url, [string]$OutFile) {
+  $directory = Split-Path -Parent $OutFile
+  if (-not [string]::IsNullOrWhiteSpace($directory)) {
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+  }
+  if (-not (Test-HttpClientAvailable)) {
+    $headers = Get-RequestHeaders $Url
+    $params = @{
+      Uri         = $Url
+      OutFile     = $OutFile
+      ErrorAction = "Stop"
+      UserAgent   = "codex-remote-feishu-install"
+      Headers     = $headers
+    }
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+      $params["UseBasicParsing"] = $true
+    }
+    Invoke-WebRequest @params | Out-Null
+    return
+  }
   $response = Invoke-HttpRequest $Url
   try {
-    $directory = Split-Path -Parent $OutFile
-    if (-not [string]::IsNullOrWhiteSpace($directory)) {
-      New-Item -ItemType Directory -Force -Path $directory | Out-Null
-    }
     $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
     try {
       $file = [System.IO.File]::Open($OutFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
