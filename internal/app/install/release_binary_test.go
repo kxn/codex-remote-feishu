@@ -2,6 +2,7 @@ package install
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"net/http"
@@ -96,6 +97,36 @@ func TestEnsureReleaseBinaryFallsBackWhenRenameHitsCrossDeviceLink(t *testing.T)
 	}
 }
 
+func TestReleaseAssetNameUsesZipForWindowsAndTarGzElsewhere(t *testing.T) {
+	if got := releaseAssetName("v1.2.3", "windows", "amd64"); got != "codex-remote-feishu_1.2.3_windows_amd64.zip" {
+		t.Fatalf("windows asset name = %q", got)
+	}
+	if got := releaseAssetName("v1.2.3", "linux", "amd64"); got != "codex-remote-feishu_1.2.3_linux_amd64.tar.gz" {
+		t.Fatalf("linux asset name = %q", got)
+	}
+	if got := releaseAssetName("v1.2.3", "darwin", "arm64"); got != "codex-remote-feishu_1.2.3_darwin_arm64.tar.gz" {
+		t.Fatalf("darwin asset name = %q", got)
+	}
+}
+
+func TestExtractReleaseArchiveSupportsZipForWindows(t *testing.T) {
+	targetDir := t.TempDir()
+	archivePath := filepath.Join(t.TempDir(), "release.zip")
+	packageDir := releasePackageDir("v1.2.3", "windows", "amd64")
+	writeReleaseZip(t, archivePath, packageDir, executableName("windows"), "release-binary")
+
+	if err := extractReleaseArchive(archivePath, targetDir, "windows"); err != nil {
+		t.Fatalf("extractReleaseArchive: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(targetDir, packageDir, executableName("windows")))
+	if err != nil {
+		t.Fatalf("ReadFile binary: %v", err)
+	}
+	if string(raw) != "release-binary" {
+		t.Fatalf("binary contents = %q", string(raw))
+	}
+}
+
 func writeReleaseArchive(t *testing.T, archivePath, packageDir, binaryName, content string) {
 	t.Helper()
 
@@ -126,6 +157,35 @@ func writeReleaseArchive(t *testing.T, archivePath, packageDir, binaryName, cont
 		t.Fatalf("WriteHeader file: %v", err)
 	}
 	if _, err := tarWriter.Write([]byte(content)); err != nil {
+		t.Fatalf("Write file contents: %v", err)
+	}
+}
+
+func writeReleaseZip(t *testing.T, archivePath, packageDir, binaryName, content string) {
+	t.Helper()
+
+	file, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile archive: %v", err)
+	}
+	defer file.Close()
+
+	zipWriter := zip.NewWriter(file)
+	defer zipWriter.Close()
+
+	dirHeader := &zip.FileHeader{Name: packageDir + "/"}
+	dirHeader.SetMode(0o755 | os.ModeDir)
+	if _, err := zipWriter.CreateHeader(dirHeader); err != nil {
+		t.Fatalf("CreateHeader dir: %v", err)
+	}
+
+	fileHeader := &zip.FileHeader{Name: filepath.ToSlash(filepath.Join(packageDir, binaryName))}
+	fileHeader.SetMode(0o755)
+	writer, err := zipWriter.CreateHeader(fileHeader)
+	if err != nil {
+		t.Fatalf("CreateHeader file: %v", err)
+	}
+	if _, err := writer.Write([]byte(content)); err != nil {
 		t.Fatalf("Write file contents: %v", err)
 	}
 }
