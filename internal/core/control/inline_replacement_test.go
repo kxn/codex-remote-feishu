@@ -153,3 +153,69 @@ func TestAllowsInlineCardReplacementForPathPickerNavigation(t *testing.T) {
 		t.Fatal("expected inline replacement for path picker navigation")
 	}
 }
+
+func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
+	tests := []struct {
+		name   string
+		action Action
+		want   bool
+	}{
+		{
+			name: "status from stamped card callback",
+			action: Action{
+				Kind:    ActionStatus,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "list from stamped card callback",
+			action: Action{
+				Kind:    ActionListInstances,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "bare menu navigation stays inline policy path",
+			action: Action{
+				Kind:    ActionShowCommandMenu,
+				Text:    "/menu maintenance",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
+			name: "parameter apply does not become submission anchor",
+			action: Action{
+				Kind:    ActionModeCommand,
+				Text:    "/mode vscode",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
+			name: "unstamped status stays async",
+			action: Action{
+				Kind: ActionStatus,
+			},
+			want: false,
+		},
+		{
+			name: "debug with form args stays async",
+			action: Action{
+				Kind:    ActionDebugCommand,
+				Text:    "/debug admin",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := AllowsCommandSubmissionAnchorReplacement(tt.action); got != tt.want {
+				t.Fatalf("AllowsCommandSubmissionAnchorReplacement(%#v) = %v, want %v", tt.action, got, tt.want)
+			}
+		})
+	}
+}

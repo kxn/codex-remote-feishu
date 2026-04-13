@@ -73,3 +73,35 @@ func AllowsInlineCardReplacement(action Action) bool {
 	}
 	return action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""
 }
+
+// AllowsCommandSubmissionAnchorReplacement returns whether this card-triggered
+// command should synchronously return a lightweight "已提交" replacement card
+// while keeping command results append-only.
+func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
+	if AllowsInlineCardReplacement(action) {
+		return false
+	}
+	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
+		return false
+	}
+	switch action.Kind {
+	case ActionListInstances,
+		ActionShowThreads,
+		ActionShowAllThreads,
+		ActionStatus,
+		ActionStop,
+		ActionNewThread,
+		ActionFollowLocal,
+		ActionDetach:
+		return true
+	case ActionUpgradeCommand, ActionDebugCommand:
+		return isSingleTokenSlashCommand(action.Text)
+	default:
+		return false
+	}
+}
+
+func isSingleTokenSlashCommand(text string) bool {
+	fields := strings.Fields(strings.TrimSpace(text))
+	return len(fields) == 1 && strings.HasPrefix(fields[0], "/")
+}

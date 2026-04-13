@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -234,6 +235,10 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	events := a.applyIngressActionLocked(action)
 	inlineResult := a.inlineCardActionResultLocked(action, events)
 	if inlineResult == nil {
+		inlineResult = a.commandSubmissionAnchorResultLocked(action)
+	}
+	inlineNavigationReplace := inlineResult != nil && control.AllowsInlineCardReplacement(action)
+	if !inlineNavigationReplace {
 		a.handleUIEvents(ctx, events)
 	}
 	var clearTargets map[string]bool
@@ -277,6 +282,68 @@ func (a *App) inlineCardActionResultLocked(action control.Action, events []contr
 		return nil
 	}
 	return &feishu.ActionResult{ReplaceCurrentCard: &ops[0]}
+}
+
+func (a *App) commandSubmissionAnchorResultLocked(action control.Action) *feishu.ActionResult {
+	if !control.AllowsCommandSubmissionAnchorReplacement(action) {
+		return nil
+	}
+	commandText := commandSubmissionAnchorCommandText(action)
+	if commandText == "" {
+		return nil
+	}
+	catalog := control.FeishuDirectCommandCatalog{
+		Title:        "命令已提交",
+		Summary:      fmt.Sprintf("已执行 `%s`，结果会显示在下方。", commandText),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		RelatedButtons: []control.CommandCatalogButton{{
+			Label:       "重新打开菜单",
+			Kind:        control.CommandCatalogButtonRunCommand,
+			CommandText: "/menu",
+		}},
+	}
+	event := control.UIEvent{
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		GatewayID:                  action.GatewayID,
+		SurfaceSessionID:           action.SurfaceSessionID,
+		DaemonLifecycleID:          a.daemonLifecycleID,
+		FeishuDirectCommandCatalog: &catalog,
+	}
+	ops := a.projector.Project(a.service.SurfaceChatID(action.SurfaceSessionID), event)
+	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard {
+		return nil
+	}
+	return &feishu.ActionResult{ReplaceCurrentCard: &ops[0]}
+}
+
+func commandSubmissionAnchorCommandText(action control.Action) string {
+	switch action.Kind {
+	case control.ActionListInstances:
+		return "/list"
+	case control.ActionShowThreads:
+		return "/use"
+	case control.ActionShowAllThreads:
+		return "/useall"
+	case control.ActionStatus:
+		return "/status"
+	case control.ActionStop:
+		return "/stop"
+	case control.ActionNewThread:
+		return "/new"
+	case control.ActionFollowLocal:
+		return "/follow"
+	case control.ActionDetach:
+		return "/detach"
+	case control.ActionUpgradeCommand, control.ActionDebugCommand:
+		fields := strings.Fields(strings.TrimSpace(action.Text))
+		if len(fields) == 1 {
+			return fields[0]
+		}
+		return ""
+	default:
+		return ""
+	}
 }
 
 func (a *App) ensureSurfaceRouteForNotice(action control.Action) {

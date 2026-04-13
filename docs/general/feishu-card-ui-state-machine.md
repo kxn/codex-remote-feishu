@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-13`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界，以及 `request_user_input` 多题分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、`request_user_input` 多题分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义，以及“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append）。
 
 ## 1. 文档定位
 
@@ -52,7 +52,9 @@
   - 负责 old-card / old-message 生命周期判定
   - 负责在 ingress 层统一把动作交给主 `ApplySurfaceAction()` 入口；`FeishuUIIntent` 分流发生在 service 内，避免绕开 request/path-picker 等产品门禁
   - 负责只在安全条件下把同上下文导航转成 `ReplaceCurrentCard`
-  - 当前只有当 action 命中 **inline-replace allow-list**（并非所有 `FeishuUIIntent`）、且 controller 产出的 `UIEvent` 显式标记 `InlineReplaceCurrentCard` 时，才会真正发 inline replace
+  - 当前有两条 replace 路径：
+    - inline navigation：当 action 命中 **inline-replace allow-list**（并非所有 `FeishuUIIntent`）、且 controller 产出的 `UIEvent` 显式标记 `InlineReplaceCurrentCard`
+    - command submission anchor：当 action 命中提交态锚点 allow-list（如 `/status`、`/list`）时，daemon 回一张轻量“命令已提交”替换卡，同时保留原结果 append
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
@@ -176,11 +178,16 @@
 
 ### 5.1 同步 replace 的必要条件
 
-当前 `gateway` 只会在同时满足下面三条时，同步等待 handler 结果并返回 callback replace：
+当前 `gateway` 会在命中以下任一路径时，同步等待 handler 结果并返回 callback replace：
 
-1. callback payload 带有非空 `daemon_lifecycle_id`
-2. action 命中 `control.InlineCardReplacementPolicy(action)`
-3. daemon 侧产出的单个 `UIEvent` 显式标记 `InlineReplaceCurrentCard == true`
+1. inline navigation 路径
+  - callback payload 带有非空 `daemon_lifecycle_id`
+  - action 命中 `control.InlineCardReplacementPolicy(action)`
+  - daemon 侧产出的单个 `UIEvent` 显式标记 `InlineReplaceCurrentCard == true`
+2. command submission anchor 路径
+  - callback payload 带有非空 `daemon_lifecycle_id`
+  - action 命中 `control.AllowsCommandSubmissionAnchorReplacement(action)`
+  - daemon 返回轻量“命令已提交”替换卡（并且不会吞掉原事件 append）
 
 少任一条，都不会同步等待 replace。
 
@@ -225,6 +232,11 @@
 - `/help` 这类静态帮助/目录卡，即使底层仍是 `FeishuDirectCommandCatalog`，当前也不属于 replaceable UI navigation
 - request approve / request submit 的处理结果
 - 各类 notice、final reply、补充预览、状态类卡片
+
+当前新增补充：
+
+- stamped 菜单命令里的非 inline 命令（例如 `/status`、`/list`、`/stop`、`/new`、`/follow`、`/detach`）会先同步 replace 为“命令已提交”锚点卡，再继续 append 原命令结果卡。
+- 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。
 
 ## 6. 当前 freshness / old-card 语义
 
@@ -309,7 +321,7 @@
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
   - 锁定 `FeishuPathPickerView` 的按钮 payload、`daemon_lifecycle_id` stamp 与 enter/select 按钮区分
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
-  - 锁定 callback payload 解析、同步等待 replace 的触发条件、无 lifecycle 导航仍异步 ack
+  - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack
 - [internal/adapter/feishu/gateway_path_picker_test.go](../../internal/adapter/feishu/gateway_path_picker_test.go)
   - 锁定 `path_picker_*` callback payload 能正确回到 `control.Action`
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
@@ -319,7 +331,7 @@
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
   - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据；selection/command view 的 UI owner 已切到 read model，但用户可见行为保持不变
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
-  - 锁定 daemon ingress 统一入口下的 inline replace 结果、`/help` 保持 append-only、active path picker 会阻断 competing `/menu`、same-daemon pure navigation 采用 current-surface rerender，以及 old-card 导航/命令被拒绝而不是继续 replace
+  - 锁定 daemon ingress 统一入口下的 inline replace 结果、菜单命令提交态锚点（replace 提交态 + append 结果）、`/help` 保持 append-only、active path picker 会阻断 competing `/menu`、same-daemon pure navigation 采用 current-surface rerender，以及 old-card 导航/命令被拒绝而不是继续 replace
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)
