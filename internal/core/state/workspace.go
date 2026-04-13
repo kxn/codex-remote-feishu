@@ -1,6 +1,7 @@
 package state
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -14,7 +15,7 @@ func NormalizeWorkspaceKey(value string) string {
 	if normalized == "." {
 		return ""
 	}
-	return normalized
+	return filepath.ToSlash(normalized)
 }
 
 func ResolveWorkspaceKey(values ...string) string {
@@ -43,8 +44,8 @@ func WorkspaceShortName(value string) string {
 	if key == "" {
 		return ""
 	}
-	short := strings.TrimSpace(filepath.Base(key))
-	if short == "" || short == "." || short == string(filepath.Separator) {
+	short := strings.TrimSpace(path.Base(key))
+	if short == "" || short == "." || short == "/" {
 		return key
 	}
 	return short

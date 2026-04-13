@@ -118,6 +118,9 @@ func snapshotGitProbeCWD(snapshot control.Snapshot) string {
 	if cwd := strings.TrimSpace(snapshotCurrentDirectory(snapshot)); cwd != "" && filepath.IsAbs(cwd) {
 		return cwd
 	}
+	if cwd := strings.TrimSpace(snapshotCurrentDirectory(snapshot)); strings.HasPrefix(cwd, "/") {
+		return cwd
+	}
 	return ""
 }
 

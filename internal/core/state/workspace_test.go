@@ -22,9 +22,8 @@ func TestWorkspaceShortName(t *testing.T) {
 	if got := WorkspaceShortName("/data/dl/work/../droid/"); got != "droid" {
 		t.Fatalf("WorkspaceShortName() = %q, want %q", got, "droid")
 	}
-	wantRoot := string(filepath.Separator)
-	if got := WorkspaceShortName("/"); got != wantRoot {
-		t.Fatalf("WorkspaceShortName(root) = %q, want %q", got, wantRoot)
+	if got := WorkspaceShortName("/"); got != "/" {
+		t.Fatalf("WorkspaceShortName(root) = %q, want /", got)
 	}
 }
 

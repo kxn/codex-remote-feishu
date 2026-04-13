@@ -52,7 +52,7 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
-	if _, err := os.Stat(entrypointV1 + ".real"); err != nil {
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypointV1)); err != nil {
 		t.Fatalf("expected .real backup after shim install: %v", err)
 	}
 	if readFileString(t, entrypointV1) == "wrapper-binary" {
@@ -97,7 +97,7 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("re-apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
-	if _, err := os.Stat(entrypointV2 + ".real"); err != nil {
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypointV2)); err != nil {
 		t.Fatalf("expected .real backup on latest entrypoint: %v", err)
 	}
 	if readFileString(t, entrypointV2) == "wrapper-binary" {

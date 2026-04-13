@@ -30,7 +30,7 @@ func TestVSCodeApplyManagedShimClearsLegacySettingsOverride(t *testing.T) {
 	}
 	writeLegacyVSCodeSettings(t, defaults.VSCodeSettingsPath, binaryPath)
 
-	entrypoint := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypoint, "orig")
 
 	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, true)
@@ -71,7 +71,7 @@ func TestDaemonModeSwitchToVSCodePromptsMigrationForLegacySettings(t *testing.T)
 	}
 	writeLegacyVSCodeSettings(t, defaults.VSCodeSettingsPath, binaryPath)
 
-	entrypoint := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypoint, "orig")
 
 	gateway := &recordingGateway{}
@@ -113,7 +113,7 @@ func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testi
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
-	entrypointV1 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypointV1 := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypointV1, "orig-v1")
 	putSurfaceResumeStateForTest(t, filepath.Join(home, ".local", "state", "codex-remote"), SurfaceResumeEntry{
 		SurfaceSessionID:   "surface-1",
@@ -135,7 +135,7 @@ func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testi
 		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
 
-	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
+	entrypointV2 := testVSCodeBundleEntrypoint(home, ".vscode-server", "2")
 	writeExecutableFile(t, entrypointV2, "orig-v2")
 	now := time.Now().Add(time.Minute)
 	if err := os.Chtimes(filepath.Dir(filepath.Dir(filepath.Dir(entrypointV2))), now, now); err != nil {
@@ -181,7 +181,7 @@ func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing
 	}
 	writeLegacyVSCodeSettings(t, defaults.VSCodeSettingsPath, binaryPath)
 
-	entrypoint := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypoint, "orig")
 
 	gateway := &recordingGateway{}
