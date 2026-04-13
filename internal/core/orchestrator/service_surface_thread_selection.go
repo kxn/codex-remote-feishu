@@ -150,7 +150,7 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 			return nil, notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
 		}
 		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
-			return nil, notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。你可以直接 /new、发送 /useall 查看其他 workspace 的会话，或先 /list 切换工作区。", workspaceKey))
+			return nil, notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。你可以直接发送文本开启新会话（或 /new 先进入待命），发送 /useall 查看其他 workspace 的会话，或先 /list 切换工作区。", workspaceKey))
 		}
 		return nil, notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
 	}

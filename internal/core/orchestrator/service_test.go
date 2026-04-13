@@ -854,7 +854,7 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 	if prompt.Layout != "grouped_attach_workspace" || prompt.ContextTitle != "当前工作区" {
 		t.Fatalf("unexpected workspace prompt metadata: %#v", prompt)
 	}
-	if !strings.Contains(prompt.ContextText, "droid · 5分前") || !strings.Contains(prompt.ContextText, "/use 或 /new") {
+	if !strings.Contains(prompt.ContextText, "droid · 5分前") || !strings.Contains(prompt.ContextText, "同工作区内继续工作可 /use，或直接发送文本（也可 /new）") {
 		t.Fatalf("expected current workspace summary, got %#v", prompt.ContextText)
 	}
 	if len(prompt.Options) != 2 {

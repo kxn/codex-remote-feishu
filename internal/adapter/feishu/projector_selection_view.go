@@ -365,7 +365,7 @@ func workspaceSelectionContextText(label, ageText string) string {
 	if age := strings.TrimSpace(ageText); age != "" {
 		parts[0] += " · " + age
 	}
-	parts = append(parts, "同工作区内继续工作请直接 /use 或 /new")
+	parts = append(parts, "同工作区内继续工作可 /use，或直接发送文本（也可 /new）")
 	return strings.Join(parts, "\n")
 }
 

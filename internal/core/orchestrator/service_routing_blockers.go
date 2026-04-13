@@ -212,7 +212,7 @@ func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []con
 			return nil
 		}
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			return notice(surface, "thread_unbound", "当前还没有绑定会话；请先 /use 选择一个会话，或执行 /new 准备新会话。")
+			return notice(surface, "thread_unbound", "当前还没有绑定会话；请先 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。")
 		}
 		return notice(surface, "thread_unbound", "当前还没有绑定会话，请先 /use 选择一个会话，或执行 /follow 进入跟随模式。")
 	}

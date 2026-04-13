@@ -87,21 +87,21 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 	}
 
 	noticeCode := "workspace_attached"
-	noticeText := fmt.Sprintf("已接管工作区 %s。请继续 /use 选择一个会话，或 /new 准备新会话。", workspaceKey)
+	noticeText := fmt.Sprintf("已接管工作区 %s。请继续 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。", workspaceKey)
 	if currentWorkspace != "" && currentWorkspace != workspaceKey {
 		noticeCode = "workspace_switched"
-		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话，或 /new 准备新会话。", workspaceKey)
+		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。", workspaceKey)
 	}
 	visibleThreadCount := len(workspaceVisibleThreads(inst, workspaceKey))
 	if mode == attachWorkspaceModeSurfaceResume {
 		noticeCode = "surface_resume_workspace_attached"
 		if visibleThreadCount == 0 {
-			noticeText = fmt.Sprintf("之前的会话暂未恢复，已先回到工作区 %s。当前还没有可见会话；你可以直接 /new 准备新会话，或稍后发送 /use。", workspaceKey)
+			noticeText = fmt.Sprintf("之前的会话暂未恢复，已先回到工作区 %s。当前还没有可见会话；你可以直接发送文本开启新会话（或 /new 先进入待命），也可稍后发送 /use。", workspaceKey)
 		} else {
-			noticeText = fmt.Sprintf("之前的会话当前不可见，已先回到工作区 %s。请继续 /use 选择要恢复的会话，或 /new 准备新会话。", workspaceKey)
+			noticeText = fmt.Sprintf("之前的会话当前不可见，已先回到工作区 %s。请继续 /use 选择要恢复的会话，或直接发送文本开启新会话（也可 /new 先进入待命）。", workspaceKey)
 		}
 	} else if visibleThreadCount == 0 {
-		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话；你可以直接 /new 准备新会话，或稍后发送 /use。", workspaceKey)
+		noticeText = fmt.Sprintf("已接管工作区 %s。当前还没有可见会话；你可以直接发送文本开启新会话（或 /new 先进入待命），也可稍后发送 /use。", workspaceKey)
 	}
 	events = append(events, control.UIEvent{
 		Kind:             control.UIEventNotice,
@@ -220,7 +220,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		if productMode == state.ProductModeVSCode {
 			text = fmt.Sprintf("%s 当前没有可用会话，请等待 VS Code 切到会话后再 /use，或直接 /detach。", text)
 		} else {
-			text = fmt.Sprintf("%s 当前工作区还没有可用会话；你可以稍后再 /use，或直接 /new 准备新会话。", text)
+			text = fmt.Sprintf("%s 当前工作区还没有可用会话；你可以稍后再 /use，或直接发送文本开启新会话（也可 /new 先进入待命）。", text)
 		}
 	}
 	events = append(events, control.UIEvent{

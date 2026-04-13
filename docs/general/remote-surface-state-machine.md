@@ -268,7 +268,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. 对 `normal mode` / managed headless 来说，这里的“可见 thread”当前还要求 `thread.CWD` 必须落在该 instance 的 `WorkspaceRoot` 之下；若某个 `threads.snapshot` 混入了别的 workspace 的 thread，它不会再参与 workspace 归并、`/use` 候选或 current/free-visible 解析。
 2. normal mode `/list` 的 Feishu 卡片当前走专用 `grouped_attach_workspace` 布局，不再复用通用 selection 模板。
    1. 若 surface 当前已 attach workspace，会先在卡片顶部投影一个“当前工作区”摘要。
-   2. 当前工作区摘要只显示 `workspace label + 最近活跃时间 + /use / /new 提示`，不会再把当前 workspace 混进可点击列表。
+   2. 当前工作区摘要只显示 `workspace label + 最近活跃时间 + /use / 直接发文本（也可 /new）提示`，不会再把当前 workspace 混进可点击列表。
    3. 默认只展示其余 workspace 中最近使用的 5 个；若超过 5 个，会在卡片底部追加一个 `show_all_workspaces` 按钮切到“全部工作区”视图。
    4. “全部工作区”视图会保留同样的 current-summary 与分组样式，并在底部追加一个 `show_recent_workspaces` 按钮返回默认视图。
    5. 其余 workspace 按“可接管 / 其他状态”分组展示；按钮使用全宽动作前缀文案，例如 `接管 · web`、`切换 · web`、`不可接管 · ops`。
@@ -288,7 +288,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. 第二个 normal-mode surface 如果试图通过 `/list` attach/switch 到同 workspace，或 `/use` / headless 恢复到该 workspace，会直接收到 `workspace_busy`。
 3. 同一个 instance 仍然只能被一个飞书 surface attach；也就是说 instance claim 还在，只是已经退回到 workspace claim 之后。
 4. 不会进入“workspace 仲裁层已经冲突，但仍然 attach 成功”的半 attach 状态。
-5. normal mode 的 `/list` attach/switch 不会自动抢默认 thread；用户会明确落到 `R1`，然后继续 `/use` 或点 thread 卡片。
+5. normal mode 的 `/list` attach/switch 不会自动抢默认 thread；用户会明确落到 `R1`，然后继续 `/use`、点 thread 卡片，或直接发送文本开启新会话（等价隐式 `/new` 首条文本路径）。
 6. 如果当前 surface 已 attach 且没有其他可切换 workspace，卡片仍会保留“当前工作区”摘要，并在底部给出“当前没有其他可接管工作区”的短提示，不会出现空白卡片。
 7. managed headless instance 一旦已经被 retarget 到某个精确 workspace，后续 `thread.focused` / `threads.snapshot` 里的更宽父目录 `cwd` 当前不会再把它的 `WorkspaceRoot` 回退成父目录，避免 `/status` 与 `/use` 再次出现“实例显示是 A，实际 thread 在 B”的分裂态。
 
@@ -612,6 +612,7 @@ R0 Detached
   -- daemon startup latent vscode surface + exact instance resume --> R3 FollowWaiting 或 R4 FollowBound
 
 R1 AttachedUnbound
+  -- 普通文本(normal mode，workspace 已知) --> 隐式进入 R5 并立刻消费首条文本（R5 + E1/E2）
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
   -- /use(thread，normal mode 且目标在其他 workspace) --> 拒绝 + migration to /list
   -- /use(thread，normal mode 且需要切换实例但仍在当前 workspace) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
@@ -844,7 +845,7 @@ daemon startup 的 normal resume 额外规则：
 6. visible thread 不可见但 workspace attach fallback 成功时：
    1. 进入 `R1 AttachedUnbound`
    2. 只发一条 “已先回到工作区” notice
-   3. 明确提示后续 `/use` 或 `/new`
+   3. 明确提示后续 `/use`，或直接发送文本开启新会话（也可 `/new` 先进入待命）
 7. 若首轮 refresh 已完成，但 visible/workspace 路径仍无法恢复：
    1. 若 `ResumeHeadless=false`：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
    2. 若 `ResumeHeadless=true`：继续交给 headless auto-restore 链路；normal resume 自己不额外发失败提示

@@ -93,7 +93,7 @@ func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 		FeishuDirectSelectionPrompt: &control.FeishuDirectSelectionPrompt{
 			Kind:         control.SelectionPromptAttachWorkspace,
 			ContextTitle: "当前工作区",
-			ContextText:  "droid · 5分前\n同工作区内继续工作请直接 /use 或 /new",
+			ContextText:  "droid · 5分前\n同工作区内继续工作可 /use，或直接发送文本（也可 /new）",
 			Options: []control.SelectionOption{
 				{
 					Index:       1,
@@ -124,7 +124,7 @@ func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 	if ops[0].CardElements[0]["content"] != "**当前工作区**" {
 		t.Fatalf("unexpected first element: %#v", ops[0].CardElements[0])
 	}
-	if ops[0].CardElements[1]["content"] != "droid · 5分前\n同工作区内继续工作请直接 /use 或 /new" {
+	if ops[0].CardElements[1]["content"] != "droid · 5分前\n同工作区内继续工作可 /use，或直接发送文本（也可 /new）" {
 		t.Fatalf("unexpected context summary: %#v", ops[0].CardElements[1])
 	}
 	if ops[0].CardElements[2]["content"] != "**可接管**" {
