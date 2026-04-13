@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-13`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、`request_user_input` 多题分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、显式“提交已有答案（可留空）”路径，以及“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append）。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、`request_user_input` 多题分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、显式“提交已有答案（可留空）”路径、题级回答进度与已答/待答状态展示，以及“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append）。
 
 ## 1. 文档定位
 
@@ -164,6 +164,13 @@
   - `request_user_input` 当前只会为“需要手填”的问题渲染 form input（纯选项题不再渲染自由输入框）
   - 多题场景会额外渲染“提交已有答案（可留空）”按钮，并通过 `request_option_id=submit_with_unanswered` 把“允许未答题提交”的意图显式传回 orchestrator
   - 若表单没有字段值，再回退 `input_value`
+
+`request_user_input` 卡片当前额外的可视语义：
+
+- 卡片顶部会展示 `回答进度 x/y`
+- 每道题都会展示 `状态：已回答/待回答`
+- 对于非私密题，已暂存答案会显示为 `当前答案：...`
+- 对 direct-options 题，若已有已答值，已选项保持 `primary`，其他选项降为 `default`，用于降低误触成本
 
 ### 4.4 当前 surface 解析规则
 

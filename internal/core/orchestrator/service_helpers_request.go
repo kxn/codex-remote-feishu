@@ -115,7 +115,8 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 	}
 	out := make([]control.RequestPromptQuestion, 0, len(questions))
 	for _, question := range questions {
-		if strings.TrimSpace(question.ID) == "" {
+		questionID := strings.TrimSpace(question.ID)
+		if questionID == "" {
 			continue
 		}
 		options := make([]control.RequestPromptQuestionOption, 0, len(question.Options))
@@ -129,15 +130,22 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 				Description: strings.TrimSpace(option.Description),
 			})
 		}
+		draftAnswer := strings.TrimSpace(draftAnswers[questionID])
+		answered := draftAnswer != ""
+		defaultValue := strings.TrimSpace(question.DefaultValue)
+		if !question.Secret {
+			defaultValue = firstNonEmpty(draftAnswer, defaultValue)
+		}
 		out = append(out, control.RequestPromptQuestion{
-			ID:             strings.TrimSpace(question.ID),
+			ID:             questionID,
 			Header:         strings.TrimSpace(question.Header),
 			Question:       strings.TrimSpace(question.Question),
+			Answered:       answered,
 			AllowOther:     question.AllowOther,
 			Secret:         question.Secret,
 			Options:        options,
 			Placeholder:    strings.TrimSpace(question.Placeholder),
-			DefaultValue:   firstNonEmpty(strings.TrimSpace(draftAnswers[strings.TrimSpace(question.ID)]), strings.TrimSpace(question.DefaultValue)),
+			DefaultValue:   defaultValue,
 			DirectResponse: question.DirectResponse,
 		})
 	}

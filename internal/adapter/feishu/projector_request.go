@@ -67,7 +67,13 @@ func requestPromptElements(prompt control.FeishuDirectRequestPrompt, daemonLifec
 }
 
 func requestUserInputPromptElements(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, len(prompt.Questions)*3+1)
+	elements := make([]map[string]any, 0, len(prompt.Questions)*3+2)
+	if progress := requestPromptProgressMarkdown(prompt); progress != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": progress,
+		})
+	}
 	for index, question := range prompt.Questions {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
@@ -127,7 +133,12 @@ func requestUserInputOptionButton(prompt control.FeishuDirectRequestPrompt, ques
 	if label == "" {
 		return nil
 	}
-	return cardCallbackButtonElement(label, "primary", stampActionValue(map[string]any{
+	buttonType := "primary"
+	selectedAnswer := strings.TrimSpace(question.DefaultValue)
+	if selectedAnswer != "" && !strings.EqualFold(selectedAnswer, label) {
+		buttonType = "default"
+	}
+	return cardCallbackButtonElement(label, buttonType, stampActionValue(map[string]any{
 		cardActionPayloadKeyKind:        cardActionKindRequestRespond,
 		cardActionPayloadKeyRequestID:   prompt.RequestID,
 		cardActionPayloadKeyRequestType: strings.TrimSpace(prompt.RequestType),
@@ -151,13 +162,21 @@ func requestPromptContainsOption(options []control.RequestPromptOption, optionID
 }
 
 func requestPromptQuestionMarkdown(index int, question control.RequestPromptQuestion) string {
-	lines := make([]string, 0, 6)
+	lines := make([]string, 0, 8)
 	title := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question))
 	if title != "" {
 		lines = append(lines, fmt.Sprintf("**问题 %d** %s", index+1, title))
 	}
+	if question.Answered {
+		lines = append(lines, "状态：已回答")
+	} else {
+		lines = append(lines, "状态：待回答")
+	}
 	if question.Header != "" && strings.TrimSpace(question.Question) != "" && strings.TrimSpace(question.Question) != strings.TrimSpace(question.Header) {
 		lines = append(lines, strings.TrimSpace(question.Question))
+	}
+	if value := strings.TrimSpace(question.DefaultValue); value != "" {
+		lines = append(lines, "当前答案："+value)
 	}
 	if len(question.Options) != 0 {
 		lines = append(lines, "")
@@ -179,6 +198,19 @@ func requestPromptQuestionMarkdown(index int, question control.RequestPromptQues
 		lines = append(lines, "该答案按私密输入处理，不会在飞书卡片正文中回显。")
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func requestPromptProgressMarkdown(prompt control.FeishuDirectRequestPrompt) string {
+	if len(prompt.Questions) == 0 {
+		return ""
+	}
+	answered := 0
+	for _, question := range prompt.Questions {
+		if question.Answered {
+			answered++
+		}
+	}
+	return fmt.Sprintf("**回答进度** %d/%d", answered, len(prompt.Questions))
 }
 
 func requestPromptNeedsForm(prompt control.FeishuDirectRequestPrompt) bool {

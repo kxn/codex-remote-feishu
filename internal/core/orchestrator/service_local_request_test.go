@@ -1094,6 +1094,37 @@ func TestRespondRequestUserInputAllowsSubmitWithUnansweredAfterConfirm(t *testin
 	}
 }
 
+func TestRequestPromptQuestionsToControlHidesSecretDefaultWhileKeepingAnsweredState(t *testing.T) {
+	questions := []state.RequestPromptQuestionRecord{
+		{
+			ID:       "model",
+			Header:   "模型",
+			Question: "请选择模型",
+		},
+		{
+			ID:       "token",
+			Header:   "令牌",
+			Question: "请输入令牌",
+			Secret:   true,
+		},
+	}
+	drafts := map[string]string{
+		"model": "gpt-5.4",
+		"token": "secret-token",
+	}
+
+	got := requestPromptQuestionsToControl(questions, drafts)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 converted questions, got %#v", got)
+	}
+	if !got[0].Answered || got[0].DefaultValue != "gpt-5.4" {
+		t.Fatalf("expected non-secret question to keep answered default value, got %#v", got[0])
+	}
+	if !got[1].Answered || got[1].DefaultValue != "" {
+		t.Fatalf("expected secret question to keep answered=true but hide default value, got %#v", got[1])
+	}
+}
+
 func TestPendingRequestBlocksTextUntilHandled(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

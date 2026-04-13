@@ -312,6 +312,7 @@ type RequestPromptQuestion struct {
 	ID             string
 	Header         string
 	Question       string
+	Answered       bool
 	AllowOther     bool
 	Secret         bool
 	Options        []RequestPromptQuestionOption
