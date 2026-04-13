@@ -4,6 +4,6 @@ package launcher
 
 import "context"
 
-func registerPlatformConsoleCloseBridge(context.CancelFunc) (func(), error) {
+func registerPlatformConsoleCloseBridge(func()) (func(), error) {
 	return nil, nil
 }

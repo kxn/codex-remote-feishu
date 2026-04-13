@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
 func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
@@ -378,6 +379,57 @@ func TestDaemonShutdownForceKillsConnectedWrapperAfterTimeout(t *testing.T) {
 	}
 	if stoppedGrace != 0 {
 		t.Fatalf("expected force kill grace 0, got %s", stoppedGrace)
+	}
+}
+
+func TestDaemonConsoleCloseShutdownSkipsSlowGraceAndStillStopsManagedHeadless(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{KillGrace: time.Second})
+	app.shutdownGracePeriod = time.Hour
+	app.shutdownNoticeTimeout = time.Hour
+	app.gatewayStopTimeout = time.Hour
+
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Source:        "headless",
+		Managed:       true,
+		PID:           4321,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.managedHeadless["inst-headless-1"] = &managedHeadlessProcess{
+		InstanceID: "inst-headless-1",
+		PID:        4321,
+		Status:     managedHeadlessStatusBusy,
+	}
+	app.setGatewayRuntime(func() {}, make(chan struct{}))
+
+	stoppedPID := 0
+	app.stopProcess = func(pid int, _ time.Duration) error {
+		stoppedPID = pid
+		return nil
+	}
+
+	ctx, setMode := shutdownctx.WithHolder(context.Background())
+	setMode(shutdownctx.ModeConsoleClose)
+
+	start := time.Now()
+	if err := app.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("expected console-close shutdown fast path, took %s", time.Since(start))
+	}
+	if stoppedPID != 4321 {
+		t.Fatalf("expected managed headless pid 4321 to stop, got %d", stoppedPID)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected console-close shutdown to skip final notices, got %#v", gateway.operations)
 	}
 }
 

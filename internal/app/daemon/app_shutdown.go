@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
 const daemonShutdownNoticeText = "daemon 正在关闭，当前飞书窗口会暂时离线。若稍后完成重启或升级，请重新发送消息或命令继续使用。"
@@ -23,7 +24,7 @@ type relayShutdownObservedInstance struct {
 	PID int
 }
 
-func (a *App) Shutdown(_ context.Context) error {
+func (a *App) Shutdown(ctx context.Context) error {
 	a.shutdownMu.Lock()
 	if a.shutdownStarted {
 		a.shutdownMu.Unlock()
@@ -32,40 +33,20 @@ func (a *App) Shutdown(_ context.Context) error {
 	a.shutdownStarted = true
 	a.shutdownMu.Unlock()
 
-	events := a.beginShutdownNotices()
-	handledRelayTargets, relayDrainErr := a.shutdownRelayInstances()
+	if shutdownMode(ctx) == shutdownctx.ModeConsoleClose {
+		return a.shutdownForConsoleClose()
+	}
 
-	a.stopIngressPump()
-	if a.relay != nil {
-		_ = a.relay.Close()
-	}
-	if a.relayServer != nil {
-		_ = a.relayServer.Close()
-	}
-	if a.apiServer != nil {
-		_ = a.apiServer.Close()
-	}
-	if a.toolServer != nil {
-		_ = a.toolServer.Close()
-	}
-	if a.pprofServer != nil {
-		_ = a.pprofServer.Close()
-	}
-	a.mu.Lock()
-	a.removeToolServiceStateLocked()
-	a.clearWorkspaceSurfaceContextFilesLocked()
-	a.shutdownExternalAccessLocked("daemon_shutdown")
-	a.mu.Unlock()
-	a.clearListeners()
+	events := a.beginShutdownNotices()
+	handledRelayTargets, relayDrainErr := a.shutdownRelayInstancesWithTimeout(a.shutdownDrainTimeoutValue(), a.shutdownDrainPollValue())
+
+	a.stopIngressAndServers()
 
 	a.deliverShutdownNotices(events)
-	a.stopGatewayRuntime()
+	a.stopGatewayRuntime(true)
 	cleanupErr := a.shutdownManagedHeadless(handledRelayTargets)
 
-	if a.rawLogger != nil {
-		_ = a.rawLogger.Close()
-	}
-	return errors.Join(relayDrainErr, cleanupErr)
+	return a.finishShutdown(relayDrainErr, cleanupErr)
 }
 
 func (a *App) setGatewayRuntime(cancel context.CancelFunc, done chan struct{}) {
@@ -75,7 +56,18 @@ func (a *App) setGatewayRuntime(cancel context.CancelFunc, done chan struct{}) {
 	a.gatewayRunDone = done
 }
 
-func (a *App) stopGatewayRuntime() {
+func (a *App) shutdownForConsoleClose() error {
+	a.mu.Lock()
+	a.shuttingDown = true
+	a.mu.Unlock()
+	handledRelayTargets, relayDrainErr := a.shutdownRelayInstancesWithTimeout(250*time.Millisecond, 25*time.Millisecond)
+	cleanupErr := a.shutdownManagedHeadless(handledRelayTargets)
+	a.stopIngressAndServers()
+	a.stopGatewayRuntime(false)
+	return a.finishShutdown(relayDrainErr, cleanupErr)
+}
+
+func (a *App) stopGatewayRuntime(wait bool) {
 	a.shutdownMu.Lock()
 	cancel := a.gatewayRunCancel
 	done := a.gatewayRunDone
@@ -86,7 +78,7 @@ func (a *App) stopGatewayRuntime() {
 	if cancel != nil {
 		cancel()
 	}
-	if done == nil {
+	if done == nil || !wait {
 		return
 	}
 
@@ -201,7 +193,7 @@ func (a *App) shutdownDrainPollValue() time.Duration {
 	return a.shutdownDrainPoll
 }
 
-func (a *App) shutdownRelayInstances() (map[string]struct{}, error) {
+func (a *App) shutdownRelayInstancesWithTimeout(drainTimeout, poll time.Duration) (map[string]struct{}, error) {
 	targets := a.collectRelayShutdownTargets()
 	if len(targets) == 0 {
 		return nil, nil
@@ -224,7 +216,7 @@ func (a *App) shutdownRelayInstances() (map[string]struct{}, error) {
 		log.Printf("daemon shutdown: requested wrapper exit: instance=%s pid=%d", target.InstanceID, target.PID)
 	}
 
-	remaining := a.waitForRelayShutdownTargets(targets)
+	remaining := a.waitForRelayShutdownTargetsWithTimeout(targets, drainTimeout, poll)
 	handled := make(map[string]struct{}, len(targets))
 	remainingSet := make(map[string]relayShutdownTarget, len(remaining))
 	for _, target := range remaining {
@@ -298,10 +290,17 @@ func (a *App) snapshotRelayInstancesForShutdown() map[string]relayShutdownObserv
 }
 
 func (a *App) waitForRelayShutdownTargets(targets []relayShutdownTarget) []relayShutdownTarget {
+	return a.waitForRelayShutdownTargetsWithTimeout(targets, a.shutdownDrainTimeoutValue(), a.shutdownDrainPollValue())
+}
+
+func (a *App) waitForRelayShutdownTargetsWithTimeout(targets []relayShutdownTarget, drainTimeout, poll time.Duration) []relayShutdownTarget {
 	if len(targets) == 0 {
 		return nil
 	}
-	deadline := time.Now().Add(a.shutdownDrainTimeoutValue())
+	if drainTimeout <= 0 {
+		return a.remainingRelayShutdownTargets(targets)
+	}
+	deadline := time.Now().Add(drainTimeout)
 	for {
 		remaining := a.remainingRelayShutdownTargets(targets)
 		if len(remaining) == 0 {
@@ -310,7 +309,10 @@ func (a *App) waitForRelayShutdownTargets(targets []relayShutdownTarget) []relay
 		if !time.Now().Before(deadline) {
 			return remaining
 		}
-		sleepFor := a.shutdownDrainPollValue()
+		sleepFor := poll
+		if sleepFor <= 0 {
+			sleepFor = 10 * time.Millisecond
+		}
 		if remainingBudget := time.Until(deadline); remainingBudget < sleepFor {
 			sleepFor = remainingBudget
 		}
@@ -319,6 +321,38 @@ func (a *App) waitForRelayShutdownTargets(targets []relayShutdownTarget) []relay
 		}
 		time.Sleep(sleepFor)
 	}
+}
+
+func (a *App) stopIngressAndServers() {
+	a.stopIngressPump()
+	if a.relay != nil {
+		_ = a.relay.Close()
+	}
+	if a.relayServer != nil {
+		_ = a.relayServer.Close()
+	}
+	if a.apiServer != nil {
+		_ = a.apiServer.Close()
+	}
+	if a.toolServer != nil {
+		_ = a.toolServer.Close()
+	}
+	if a.pprofServer != nil {
+		_ = a.pprofServer.Close()
+	}
+	a.mu.Lock()
+	a.removeToolServiceStateLocked()
+	a.clearWorkspaceSurfaceContextFilesLocked()
+	a.shutdownExternalAccessLocked("daemon_shutdown")
+	a.mu.Unlock()
+	a.clearListeners()
+}
+
+func (a *App) finishShutdown(errs ...error) error {
+	if a.rawLogger != nil {
+		_ = a.rawLogger.Close()
+	}
+	return errors.Join(errs...)
 }
 
 func (a *App) remainingRelayShutdownTargets(targets []relayShutdownTarget) []relayShutdownTarget {

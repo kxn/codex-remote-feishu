@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
 func TestDetect(t *testing.T) {
@@ -310,8 +312,8 @@ func TestNewMainContextCancelsWhenPlatformBridgeFires(t *testing.T) {
 		registerPlatformShutdownBridge = original
 	}()
 
-	var bridgeCancel context.CancelFunc
-	registerPlatformShutdownBridge = func(cancel context.CancelFunc) (func(), error) {
+	var bridgeCancel func()
+	registerPlatformShutdownBridge = func(cancel func()) (func(), error) {
 		bridgeCancel = cancel
 		return nil, nil
 	}
@@ -335,6 +337,9 @@ func TestNewMainContextCancelsWhenPlatformBridgeFires(t *testing.T) {
 	if err := ctx.Err(); err == nil {
 		t.Fatal("expected context to be canceled by platform bridge")
 	}
+	if shutdownctx.ModeFrom(ctx) != shutdownctx.ModeConsoleClose {
+		t.Fatalf("expected shutdown mode console_close, got %q", shutdownctx.ModeFrom(ctx))
+	}
 }
 
 func TestNewMainContextRunsBridgeCleanupOnStop(t *testing.T) {
@@ -344,7 +349,7 @@ func TestNewMainContextRunsBridgeCleanupOnStop(t *testing.T) {
 	}()
 
 	cleanupCalled := false
-	registerPlatformShutdownBridge = func(context.CancelFunc) (func(), error) {
+	registerPlatformShutdownBridge = func(func()) (func(), error) {
 		return func() {
 			cleanupCalled = true
 		}, nil
@@ -366,7 +371,7 @@ func TestMainReportsSignalSetupError(t *testing.T) {
 		registerPlatformShutdownBridge = original
 	}()
 
-	registerPlatformShutdownBridge = func(context.CancelFunc) (func(), error) {
+	registerPlatformShutdownBridge = func(func()) (func(), error) {
 		return nil, errors.New("bridge setup failed")
 	}
 

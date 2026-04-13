@@ -19,6 +19,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
 type HeadlessRuntimeConfig struct {
@@ -421,10 +422,14 @@ func (a *App) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		_ = a.Shutdown(context.Background())
+		_ = a.Shutdown(ctx)
 		return nil
 	case err := <-errCh:
 		_ = a.Shutdown(context.Background())
 		return err
 	}
+}
+
+func shutdownMode(ctx context.Context) shutdownctx.Mode {
+	return shutdownctx.ModeFrom(ctx)
 }

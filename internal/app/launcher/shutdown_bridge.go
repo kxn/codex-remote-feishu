@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
 var registerPlatformShutdownBridge = registerPlatformConsoleCloseBridge
@@ -13,9 +15,13 @@ func newMainContext(parent context.Context) (context.Context, context.CancelFunc
 	if parent == nil {
 		parent = context.Background()
 	}
+	parent, setMode := shutdownctx.WithHolder(parent)
 
 	ctx, stopSignals := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
-	unregister, err := registerPlatformShutdownBridge(stopSignals)
+	unregister, err := registerPlatformShutdownBridge(func() {
+		setMode(shutdownctx.ModeConsoleClose)
+		stopSignals()
+	})
 	if err != nil {
 		stopSignals()
 		return nil, nil, err

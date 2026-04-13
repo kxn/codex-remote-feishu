@@ -3,7 +3,6 @@
 package launcher
 
 import (
-	"context"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -24,7 +23,7 @@ var setConsoleCtrlHandler = func(handler uintptr, add bool) error {
 	return syscall.EINVAL
 }
 
-func registerPlatformConsoleCloseBridge(cancel context.CancelFunc) (func(), error) {
+func registerPlatformConsoleCloseBridge(cancel func()) (func(), error) {
 	if cancel == nil {
 		return nil, nil
 	}
