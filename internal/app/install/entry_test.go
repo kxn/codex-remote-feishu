@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -73,7 +74,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	installBinDir := filepath.Join(baseDir, "installed-bin")
-	selfBinary := filepath.Join(baseDir, "self", executableName("linux"))
+	selfBinary := filepath.Join(baseDir, "self", executableName(runtime.GOOS))
 	if err := os.MkdirAll(filepath.Dir(selfBinary), 0o755); err != nil {
 		t.Fatalf("mkdir self binary dir: %v", err)
 	}
@@ -97,7 +98,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 		t.Fatalf("RunMain default binary source: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(installBinDir, executableName("linux")))
+	raw, err := os.ReadFile(filepath.Join(installBinDir, executableName(runtime.GOOS)))
 	if err != nil {
 		t.Fatalf("read installed binary: %v", err)
 	}
@@ -109,7 +110,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 func TestRunMainRejectsUnrunnableBinarySource(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
-	binaryPath := filepath.Join(baseDir, "bin", executableName("linux"))
+	binaryPath := filepath.Join(baseDir, "bin", executableName(runtime.GOOS))
 	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 		t.Fatalf("mkdir binary dir: %v", err)
 	}
@@ -174,8 +175,8 @@ func TestRunMainReusesExistingInstalledBinaryDirWhenInstallBinDirOmitted(t *test
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	customInstallDir := filepath.Join(baseDir, "systemd-dev", "bin")
-	existingBinaryPath := seedBinary(t, filepath.Join(customInstallDir, executableName("linux")), "old-binary")
-	sourceBinaryPath := seedBinary(t, filepath.Join(repoRoot, "bin", executableName("linux")), "new-binary")
+	existingBinaryPath := seedBinary(t, filepath.Join(customInstallDir, executableName(runtime.GOOS)), "old-binary")
+	sourceBinaryPath := seedBinary(t, filepath.Join(repoRoot, "bin", executableName(runtime.GOOS)), "new-binary")
 	if err := writeRepoInstallBinding(repoRoot, repoInstallBinding{
 		InstanceID: defaultInstanceID,
 		BaseDir:    baseDir,

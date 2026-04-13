@@ -313,8 +313,15 @@ func writeLegacyVSCodeSettings(t *testing.T, path, binaryPath string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll(settings dir): %v", err)
 	}
-	raw := "{\n  \"chatgpt.cliExecutable\": \"" + binaryPath + "\",\n  \"editor.fontSize\": 14\n}\n"
-	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+	raw, err := json.MarshalIndent(map[string]any{
+		"chatgpt.cliExecutable": binaryPath,
+		"editor.fontSize":       14,
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal(settings): %v", err)
+	}
+	raw = append(raw, '\n')
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatalf("WriteFile(settings): %v", err)
 	}
 }

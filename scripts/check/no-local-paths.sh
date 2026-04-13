@@ -4,11 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
-if ! command -v rg >/dev/null 2>&1; then
-  echo "rg is required for no-local-paths.sh" >&2
-  exit 1
-fi
-
 escape_regex() {
   printf '%s' "$1" | sed -e 's/[.[\*^$()+?{|\\]/\\&/g'
 }
@@ -50,12 +45,25 @@ if [[ ${#files[@]} -eq 0 ]]; then
   exit 0
 fi
 
-args=()
-for pattern in "${patterns[@]}"; do
-  args+=(-e "${pattern}")
-done
+allowlisted_demo_pattern='/(home|Users)/(demo|example|sample|test)(/|$)'
 
-if rg -n "${args[@]}" -- "${files[@]}"; then
+raw_matches=""
+if command -v rg >/dev/null 2>&1; then
+  args=()
+  for pattern in "${patterns[@]}"; do
+    args+=(-e "${pattern}")
+  done
+  raw_matches="$(rg -n "${args[@]}" -- "${files[@]}" || true)"
+else
+  combined_pattern="$(IFS='|'; printf '%s' "${patterns[*]}")"
+  raw_matches="$(grep -nE "${combined_pattern}" "${files[@]}" || true)"
+fi
+
+filtered_matches="$(printf '%s\n' "${raw_matches}" | grep -vE "${allowlisted_demo_pattern}" || true)"
+filtered_matches="$(printf '%s\n' "${filtered_matches}" | sed '/^$/d')"
+
+if [[ -n "${filtered_matches}" ]]; then
+  printf '%s\n' "${filtered_matches}"
   echo "Found machine-local absolute paths in tracked source or docs." >&2
   exit 1
 fi

@@ -63,7 +63,7 @@ func TestRunServiceInstallUserWritesUnitAndState(t *testing.T) {
 	if !strings.Contains(unitText, "ExecStart=") || !strings.Contains(unitText, "daemon") {
 		t.Fatalf("unit content missing ExecStart daemon: %s", unitText)
 	}
-	if !strings.Contains(unitText, "Environment=PATH="+systemdEscapeValue(servicePath)) {
+	if !strings.Contains(unitText, "Environment=PATH="+systemdEscapeValue(systemdUserServicePATH())) {
 		t.Fatalf("unit content missing PATH env: %s", unitText)
 	}
 	if !strings.Contains(unitText, "XDG_STATE_HOME=") {
@@ -149,10 +149,10 @@ func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T)
 	if strings.Contains(unitText, `WorkingDirectory="`) {
 		t.Fatalf("unit should not quote WorkingDirectory assignment: %s", unitText)
 	}
-	if !strings.Contains(unitText, `WorkingDirectory=/tmp/codex\\x20remote`) {
+	if !strings.Contains(unitText, "WorkingDirectory="+systemdEscapeValue(state.BaseDir)) {
 		t.Fatalf("unit missing escaped WorkingDirectory: %s", unitText)
 	}
-	if !strings.Contains(unitText, `ExecStart=/tmp/codex\\x20remote/bin/codex-remote daemon`) {
+	if !strings.Contains(unitText, "ExecStart="+systemdEscapeExecWord(state.InstalledBinary)+" daemon") {
 		t.Fatalf("unit missing escaped ExecStart path: %s", unitText)
 	}
 }

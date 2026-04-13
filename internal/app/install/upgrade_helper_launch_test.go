@@ -45,16 +45,16 @@ func TestStartUpgradeHelperProcessUsesDetachedCommandForDetachedService(t *testi
 	if result.UnitName != "" {
 		t.Fatalf("unit name = %q, want empty for detached helper", result.UnitName)
 	}
-	if detached.BinaryPath != testutil.WorkspacePath("tmp", "helper") {
+	if !testutil.SamePath(detached.BinaryPath, testutil.WorkspacePath("tmp", "helper")) {
 		t.Fatalf("binary = %q, want %q", detached.BinaryPath, testutil.WorkspacePath("tmp", "helper"))
 	}
 	if got, want := strings.Join(detached.Args, "\x00"), strings.Join([]string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")}, "\x00"); got != want {
 		t.Fatalf("args = %#v, want %#v", detached.Args, []string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")})
 	}
-	if detached.WorkDir != testutil.WorkspacePath("tmp", "work") {
+	if !testutil.SamePath(detached.WorkDir, testutil.WorkspacePath("tmp", "work")) {
 		t.Fatalf("workdir = %q, want %q", detached.WorkDir, testutil.WorkspacePath("tmp", "work"))
 	}
-	if detached.StdoutPath != testutil.WorkspacePath("tmp", "helper.log") || detached.StderrPath != testutil.WorkspacePath("tmp", "helper.log") {
+	if !testutil.SamePath(detached.StdoutPath, testutil.WorkspacePath("tmp", "helper.log")) || !testutil.SamePath(detached.StderrPath, testutil.WorkspacePath("tmp", "helper.log")) {
 		t.Fatalf("stdout/stderr = %q %q, want helper log", detached.StdoutPath, detached.StderrPath)
 	}
 }
@@ -97,16 +97,16 @@ func TestStartUpgradeHelperProcessUsesSystemdRunForSystemdUser(t *testing.T) {
 	if result.UnitName != transient.UnitName {
 		t.Fatalf("result unit name = %q, want %q", result.UnitName, transient.UnitName)
 	}
-	if transient.BinaryPath != testutil.WorkspacePath("tmp", "helper") {
+	if !testutil.SamePath(transient.BinaryPath, testutil.WorkspacePath("tmp", "helper")) {
 		t.Fatalf("binary = %q, want %q", transient.BinaryPath, testutil.WorkspacePath("tmp", "helper"))
 	}
 	if got, want := strings.Join(transient.Args, "\x00"), strings.Join([]string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")}, "\x00"); got != want {
 		t.Fatalf("args = %#v, want %#v", transient.Args, []string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")})
 	}
-	if transient.WorkDir != testutil.WorkspacePath("tmp", "work") {
+	if !testutil.SamePath(transient.WorkDir, testutil.WorkspacePath("tmp", "work")) {
 		t.Fatalf("workdir = %q, want %q", transient.WorkDir, testutil.WorkspacePath("tmp", "work"))
 	}
-	if transient.LogPath != testutil.WorkspacePath("tmp", "helper.log") {
+	if !testutil.SamePath(transient.LogPath, testutil.WorkspacePath("tmp", "helper.log")) {
 		t.Fatalf("log path = %q, want %q", transient.LogPath, testutil.WorkspacePath("tmp", "helper.log"))
 	}
 	if !strings.HasPrefix(transient.UnitName, "codex-remote-upgrade-helper-") || filepath.Ext(transient.UnitName) != ".service" {

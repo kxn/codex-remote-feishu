@@ -450,7 +450,7 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	if root == "" || cwd == "" {
 		return true
 	}
-	return cwd == root || strings.HasPrefix(cwd, root+string(filepath.Separator))
+	return cwd == root || strings.HasPrefix(cwd, root+"/")
 }
 
 func (s *Service) workspaceOnlineInstances(workspaceKey string) []*state.InstanceRecord {
