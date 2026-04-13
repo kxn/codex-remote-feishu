@@ -219,7 +219,7 @@ try {
     CODEX_REMOTE_BASE_URL = ("http://127.0.0.1:{0}" -f $port)
     CODEX_REMOTE_INSTALL_ROOT = $installRoot
     CODEX_REMOTE_RELEASES_API_URL = $null
-    CODEX_REMOTE_SKIP_SETUP = "1"
+    CODEX_REMOTE_SKIP_SETUP = $null
   }
 
   & (Join-Path $RootDir "install-release.ps1")
