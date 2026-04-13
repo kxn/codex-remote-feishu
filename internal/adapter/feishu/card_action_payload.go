@@ -14,6 +14,7 @@ const (
 	cardActionPayloadKeyRequestType          = "request_type"
 	cardActionPayloadKeyRequestOptionID      = "request_option_id"
 	cardActionPayloadKeyRequestAnswers       = "request_answers"
+	cardActionPayloadKeyRequestRevision      = "request_revision"
 	cardActionPayloadKeyCommandID            = "command_id"
 	cardActionPayloadKeyCommandText          = "command_text"
 	cardActionPayloadKeyCommandLegacy        = "command"

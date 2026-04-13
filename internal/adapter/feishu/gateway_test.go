@@ -1579,6 +1579,7 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAction(t *testing.T) {
 					"request_id":        "req-1",
 					"request_type":      "approval",
 					"request_option_id": "acceptForSession",
+					"request_revision":  2,
 				},
 			},
 			Context: &larkcallback.Context{
@@ -1597,6 +1598,9 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAction(t *testing.T) {
 	}
 	if action.RequestID != "req-1" || action.RequestType != "approval" || action.RequestOptionID != "acceptForSession" {
 		t.Fatalf("unexpected request respond payload: %#v", action)
+	}
+	if action.RequestRevision != 2 {
+		t.Fatalf("expected request revision to be parsed, got %#v", action)
 	}
 }
 
@@ -1640,9 +1644,10 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAnswers(t *testing.T) {
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "request_respond",
-					"request_id":   "req-ui-1",
-					"request_type": "request_user_input",
+					"kind":             "request_respond",
+					"request_id":       "req-ui-1",
+					"request_type":     "request_user_input",
+					"request_revision": "7",
 					"request_answers": map[string]interface{}{
 						"model": []interface{}{"gpt-5.4"},
 					},
@@ -1665,6 +1670,9 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAnswers(t *testing.T) {
 	if got := action.RequestAnswers["model"]; len(got) != 1 || got[0] != "gpt-5.4" {
 		t.Fatalf("unexpected request answers payload: %#v", action.RequestAnswers)
 	}
+	if action.RequestRevision != 7 {
+		t.Fatalf("expected string request revision to be parsed, got %#v", action)
+	}
 }
 
 func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) {
@@ -1680,6 +1688,7 @@ func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) 
 					"request_id":        "req-ui-2",
 					"request_type":      "request_user_input",
 					"request_option_id": "submit_with_unanswered",
+					"request_revision":  5,
 				},
 				FormValue: map[string]interface{}{
 					"model": "gpt-5.4",
@@ -1705,6 +1714,9 @@ func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) 
 	}
 	if got := action.RequestAnswers["notes"]; len(got) != 1 || got[0] != "请用中文回复" {
 		t.Fatalf("unexpected form request answers: %#v", action.RequestAnswers)
+	}
+	if action.RequestRevision != 5 {
+		t.Fatalf("expected form request revision to be parsed, got %#v", action)
 	}
 }
 

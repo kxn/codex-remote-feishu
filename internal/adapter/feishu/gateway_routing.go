@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
@@ -246,6 +247,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			RequestType:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
 			RequestOptionID:  optionID,
 			RequestAnswers:   requestAnswers,
+			RequestRevision:  intMapValue(value, cardActionPayloadKeyRequestRevision),
 			Approved:         boolMapValue(value, cardActionPayloadKeyApproved),
 			Inbound:          meta,
 		}, true
@@ -352,6 +354,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			RequestType:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
 			RequestOptionID:  requestOptionID,
 			RequestAnswers:   requestAnswers,
+			RequestRevision:  intMapValue(value, cardActionPayloadKeyRequestRevision),
 			Inbound:          meta,
 		}, true
 	case cardActionKindPathPickerEnter, cardActionKindPathPickerSelect:
@@ -660,6 +663,38 @@ func boolMapValue(values map[string]interface{}, key string) bool {
 	}
 	current, _ := value.(bool)
 	return current
+}
+
+func intMapValue(values map[string]interface{}, key string) int {
+	if len(values) == 0 {
+		return 0
+	}
+	value, ok := values[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch current := value.(type) {
+	case int:
+		return current
+	case int64:
+		return int(current)
+	case float64:
+		return int(current)
+	case float32:
+		return int(current)
+	case string:
+		current = strings.TrimSpace(current)
+		if current == "" {
+			return 0
+		}
+		value, err := strconv.Atoi(current)
+		if err != nil {
+			return 0
+		}
+		return value
+	default:
+		return 0
+	}
 }
 
 func ResolveReceiveTarget(chatID, actorUserID string) (string, string) {

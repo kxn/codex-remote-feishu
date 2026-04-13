@@ -93,6 +93,7 @@ type Action struct {
 	RequestType         string
 	RequestOptionID     string
 	RequestAnswers      map[string][]string
+	RequestRevision     int
 	Approved            bool
 	CommandID           string
 	InstanceID          string
@@ -326,6 +327,7 @@ type RequestPromptQuestion struct {
 type FeishuDirectRequestPrompt struct {
 	RequestID                          string
 	RequestType                        string
+	RequestRevision                    int
 	Title                              string
 	Body                               string
 	ThreadID                           string

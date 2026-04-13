@@ -18,31 +18,32 @@ type Config struct {
 }
 
 type Service struct {
-	now                 func() time.Time
-	config              Config
-	root                *state.Root
-	renderer            *renderer.Planner
-	nextQueueItemID     int
-	nextImageID         int
-	nextPromptID        int
-	nextPathPickerID    int
-	nextHeadlessID      int
-	handoffUntil        map[string]time.Time
-	pausedUntil         map[string]time.Time
-	abandoningUntil     map[string]time.Time
-	itemBuffers         map[string]*itemBuffer
-	turnPlanSnapshots   map[string]*turnPlanSnapshotRecord
-	threadRefreshes     map[string]bool
-	pendingTurnText     map[string]*completedTextItem
-	turnFileChanges     map[string]*turnFileChangeSummary
-	pendingRemote       map[string]*remoteTurnBinding
-	activeRemote        map[string]*remoteTurnBinding
-	pendingSteers       map[string]*pendingSteerBinding
-	instanceClaims      map[string]*instanceClaimRecord
-	workspaceClaims     map[string]*workspaceClaimRecord
-	threadClaims        map[string]*threadClaimRecord
-	persistedThreads    PersistedThreadCatalog
-	pathPickerConsumers map[string]PathPickerConsumer
+	now                  func() time.Time
+	config               Config
+	root                 *state.Root
+	renderer             *renderer.Planner
+	nextQueueItemID      int
+	nextImageID          int
+	nextPromptID         int
+	nextRequestCommandID int
+	nextPathPickerID     int
+	nextHeadlessID       int
+	handoffUntil         map[string]time.Time
+	pausedUntil          map[string]time.Time
+	abandoningUntil      map[string]time.Time
+	itemBuffers          map[string]*itemBuffer
+	turnPlanSnapshots    map[string]*turnPlanSnapshotRecord
+	threadRefreshes      map[string]bool
+	pendingTurnText      map[string]*completedTextItem
+	turnFileChanges      map[string]*turnFileChangeSummary
+	pendingRemote        map[string]*remoteTurnBinding
+	activeRemote         map[string]*remoteTurnBinding
+	pendingSteers        map[string]*pendingSteerBinding
+	instanceClaims       map[string]*instanceClaimRecord
+	workspaceClaims      map[string]*workspaceClaimRecord
+	threadClaims         map[string]*threadClaimRecord
+	persistedThreads     PersistedThreadCatalog
+	pathPickerConsumers  map[string]PathPickerConsumer
 }
 
 type itemBuffer struct {

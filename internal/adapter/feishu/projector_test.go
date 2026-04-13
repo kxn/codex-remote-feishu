@@ -1512,11 +1512,12 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectRequestPrompt,
 		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
-			RequestID:   "req-ui-1",
-			RequestType: "request_user_input",
-			Title:       "需要补充输入",
-			Body:        "本地 Codex 正在等待你补充参数或说明。",
-			ThreadTitle: "droid · 修复登录流程",
+			RequestID:       "req-ui-1",
+			RequestType:     "request_user_input",
+			RequestRevision: 3,
+			Title:           "需要补充输入",
+			Body:            "本地 Codex 正在等待你补充参数或说明。",
+			ThreadTitle:     "droid · 修复登录流程",
 			Questions: []control.RequestPromptQuestion{
 				{
 					ID:             "model",
@@ -1558,6 +1559,9 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	if value["kind"] != "request_respond" || len(modelAnswers) != 1 || modelAnswers[0] != "gpt-5.4" {
 		t.Fatalf("unexpected request option payload: %#v", value)
 	}
+	if value["request_revision"] != 3 {
+		t.Fatalf("expected request option to carry request revision, got %#v", value)
+	}
 	form, _ := ops[0].CardElements[4]["elements"].([]map[string]any)
 	if len(form) != 2 {
 		t.Fatalf("expected one input and one submit button, got %#v", ops[0].CardElements[4])
@@ -1565,6 +1569,9 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	submitValue := cardButtonPayload(t, form[1])
 	if submitValue["kind"] != "submit_request_form" || submitValue["request_id"] != "req-ui-1" || submitValue["request_option_id"] != "submit" {
 		t.Fatalf("unexpected request form payload: %#v", submitValue)
+	}
+	if submitValue["request_revision"] != 3 {
+		t.Fatalf("expected request form to carry request revision, got %#v", submitValue)
 	}
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected request_user_input prompt to use structured V2 send path, got %#v", ops[0])
@@ -1584,6 +1591,9 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	if renderedValue["kind"] != "request_respond" || len(renderedModelAnswers) != 1 || renderedModelAnswers[0] != "gpt-5.4" {
 		t.Fatalf("unexpected rendered direct-response payload: %#v", renderedValue)
 	}
+	if renderedValue["request_revision"] != 3 {
+		t.Fatalf("expected rendered direct-response payload to carry request revision, got %#v", renderedValue)
+	}
 	renderedForm := renderedElements[5]
 	if renderedForm["tag"] != "form" {
 		t.Fatalf("expected rendered V2 request form, got %#v", renderedForm)
@@ -1598,6 +1608,9 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
 	if renderedSubmitValue["kind"] != "submit_request_form" || renderedSubmitValue["request_id"] != "req-ui-1" || renderedSubmitValue["request_option_id"] != "submit" {
 		t.Fatalf("unexpected rendered request form payload: %#v", renderedSubmitValue)
+	}
+	if renderedSubmitValue["request_revision"] != 3 {
+		t.Fatalf("expected rendered request form payload to carry request revision, got %#v", renderedSubmitValue)
 	}
 }
 
@@ -1655,6 +1668,7 @@ func TestProjectRequestUserInputPromptRendersConfirmSubmitActions(t *testing.T) 
 		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
 			RequestID:                          "req-ui-3",
 			RequestType:                        "request_user_input",
+			RequestRevision:                    4,
 			SubmitWithUnansweredConfirmPending: true,
 			SubmitWithUnansweredMissingLabels:  []string{"推理强度"},
 			Questions: []control.RequestPromptQuestion{
@@ -1701,9 +1715,15 @@ func TestProjectRequestUserInputPromptRendersConfirmSubmitActions(t *testing.T) 
 	if cancelValue["kind"] != "request_respond" || cancelValue["request_option_id"] != "cancel_submit_with_unanswered" {
 		t.Fatalf("unexpected cancel submit payload: %#v", cancelValue)
 	}
+	if cancelValue["request_revision"] != 4 {
+		t.Fatalf("expected cancel action to carry request revision, got %#v", cancelValue)
+	}
 	confirmValue := cardButtonPayload(t, confirmRow[1])
 	if confirmValue["kind"] != "request_respond" || confirmValue["request_option_id"] != "confirm_submit_with_unanswered" {
 		t.Fatalf("unexpected confirm submit payload: %#v", confirmValue)
+	}
+	if confirmValue["request_revision"] != 4 {
+		t.Fatalf("expected confirm action to carry request revision, got %#v", confirmValue)
 	}
 }
 

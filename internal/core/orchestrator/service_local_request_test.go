@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -771,7 +772,7 @@ func TestRequestUserInputPromptUsesQuestionsAndStoresState(t *testing.T) {
 	}
 }
 
-func TestRespondRequestUserInputOptionDispatchesAnswersAndClearsState(t *testing.T) {
+func TestRespondRequestUserInputOptionDispatchesAnswersAndKeepsPendingStateUntilResolved(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -822,8 +823,9 @@ func TestRespondRequestUserInputOptionDispatchesAnswersAndClearsState(t *testing
 	if _, ok := answers["model"]; !ok {
 		t.Fatalf("unexpected request user input response payload: %#v", events[0].Command.Request.Response)
 	}
-	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 0 {
-		t.Fatalf("expected request state to clear immediately after submit, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.PendingDispatchCommandID == "" || record.PendingDispatchCommandID != events[0].Command.CommandID {
+		t.Fatalf("expected request state to remain pending dispatch until resolved, got %#v", record)
 	}
 }
 
@@ -951,8 +953,9 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 	if _, ok := answers["effort"]; !ok {
 		t.Fatalf("expected merged effort answer in response payload, got %#v", events[0].Command.Request.Response)
 	}
-	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 0 {
-		t.Fatalf("expected pending request to clear after complete answers, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.PendingDispatchCommandID == "" {
+		t.Fatalf("expected pending request to remain until response resolves, got %#v", record)
 	}
 }
 
@@ -1102,8 +1105,206 @@ func TestRespondRequestUserInputAllowsSubmitWithUnansweredAfterConfirm(t *testin
 	if len(effortList) != 0 {
 		t.Fatalf("expected unanswered question to submit empty answers, got %#v", answers["effort"])
 	}
-	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 0 {
-		t.Fatalf("expected pending request to clear after submit_with_unanswered, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.PendingDispatchCommandID == "" {
+		t.Fatalf("expected pending request to remain until unanswered submit resolves, got %#v", record)
+	}
+}
+
+func TestRespondRequestUserInputDispatchFailureRestoresPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestRevision:  1,
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected submit to dispatch a command, got %#v", events)
+	}
+	restore := svc.HandleCommandDispatchFailure("surface-1", events[0].Command.CommandID, errors.New("relay unavailable"))
+	if len(restore) != 2 || restore[0].FeishuDirectRequestPrompt == nil || restore[1].Notice == nil {
+		t.Fatalf("expected prompt refresh and notice after dispatch failure, got %#v", restore)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.PendingDispatchCommandID != "" || record.CardRevision != 2 {
+		t.Fatalf("expected request to be restored with bumped revision, got %#v", record)
+	}
+	if restore[0].FeishuDirectRequestPrompt.RequestRevision != 2 {
+		t.Fatalf("expected refreshed prompt revision, got %#v", restore[0].FeishuDirectRequestPrompt)
+	}
+	if restore[1].Notice.Code != "dispatch_failed" {
+		t.Fatalf("expected dispatch_failed notice, got %#v", restore[1].Notice)
+	}
+}
+
+func TestRespondRequestUserInputRejectsStaleRequestRevision(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}}},
+			},
+		},
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestRevision:  1,
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestRevision:  1,
+		RequestOptionID:  "submit",
+	})
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.CardRevision != 2 {
+		t.Fatalf("expected explicit submit to enter confirm state with bumped revision, got %#v", record)
+	}
+	stale := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestRevision:  1,
+		RequestAnswers: map[string][]string{
+			"effort": {"high"},
+		},
+	})
+	if len(stale) != 1 || stale[0].Notice == nil || stale[0].Notice.Code != "request_card_expired" {
+		t.Fatalf("expected stale request revision to be rejected, got %#v", stale)
+	}
+}
+
+func TestRespondRequestUserInputCommandRejectedRestoresPendingRequest(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestRevision:  1,
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected submit to dispatch a command, got %#v", events)
+	}
+	restore := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{
+		CommandID: events[0].Command.CommandID,
+		Accepted:  false,
+		Error:     "translator failed",
+	})
+	if len(restore) != 2 || restore[0].FeishuDirectRequestPrompt == nil || restore[1].Notice == nil {
+		t.Fatalf("expected prompt refresh and notice after command reject, got %#v", restore)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if record == nil || record.PendingDispatchCommandID != "" || record.CardRevision != 2 {
+		t.Fatalf("expected request to be restored after command reject, got %#v", record)
+	}
+	if restore[1].Notice.Code != "command_rejected" {
+		t.Fatalf("expected command_rejected notice, got %#v", restore[1].Notice)
 	}
 }
 

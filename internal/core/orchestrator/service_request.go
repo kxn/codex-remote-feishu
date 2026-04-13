@@ -5,6 +5,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -30,23 +31,30 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 	if request == nil {
 		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
 	}
+	if request.PendingDispatchCommandID != "" {
+		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待本地 Codex 处理。")
+	}
+	if action.RequestRevision != 0 && action.RequestRevision != request.CardRevision {
+		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
+	}
 	requestType := normalizeRequestType(firstNonEmpty(action.RequestType, request.RequestType))
 	if requestType == "" {
 		requestType = "approval"
 	}
-	response, clearOnDispatch, errNotice := s.buildRequestResponse(surface, request, action, requestType)
-	if errNotice != nil {
-		return errNotice
+	response, _, followup := s.buildRequestResponse(surface, request, action, requestType)
+	if followup != nil {
+		return followup
 	}
-	if clearOnDispatch {
-		delete(surface.PendingRequests, request.RequestID)
-		clearSurfaceRequestCaptureByRequestID(surface, request.RequestID)
+	if response == nil {
+		return nil
 	}
+	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
 	return []control.UIEvent{{
 		Kind:             control.UIEventAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command: &agentproto.Command{
-			Kind: agentproto.CommandRequestRespond,
+			CommandID: request.PendingDispatchCommandID,
+			Kind:      agentproto.CommandRequestRespond,
 			Origin: agentproto.Origin{
 				Surface:   surface.SurfaceSessionID,
 				UserID:    surface.ActorUserID,
@@ -115,17 +123,18 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		return notice(surface, "request_unsupported", fmt.Sprintf("飞书端暂不支持处理 %s 类型的请求。", requestType))
 	}
 	record := &state.RequestPromptRecord{
-		RequestID:   event.RequestID,
-		RequestType: requestType,
-		InstanceID:  instanceID,
-		ThreadID:    event.ThreadID,
-		TurnID:      event.TurnID,
-		ItemID:      strings.TrimSpace(metadataString(event.Metadata, "itemId")),
-		Title:       title,
-		Body:        body,
-		Options:     options,
-		Questions:   questions,
-		CreatedAt:   s.now(),
+		RequestID:    event.RequestID,
+		RequestType:  requestType,
+		InstanceID:   instanceID,
+		ThreadID:     event.ThreadID,
+		TurnID:       event.TurnID,
+		ItemID:       strings.TrimSpace(metadataString(event.Metadata, "itemId")),
+		Title:        title,
+		Body:         body,
+		Options:      options,
+		Questions:    questions,
+		CardRevision: 1,
+		CreatedAt:    s.now(),
 	}
 	surface.PendingRequests[event.RequestID] = record
 	return []control.UIEvent{s.requestPromptEvent(surface, record, threadTitle)}
@@ -248,6 +257,7 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 				return nil, false, notice(surface, "request_invalid", "留空提交确认已失效，请先点击“提交答案”。")
 			}
 			clearRequestUserInputSubmitConfirmState(request)
+			bumpRequestCardRevision(request)
 			return nil, false, []control.UIEvent{s.requestPromptEvent(surface, request, "")}
 		}
 		if requestUserInputConfirmSubmitWithUnanswered(action.RequestOptionID) && !request.SubmitWithUnansweredConfirmPending {
@@ -262,6 +272,7 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 		if !complete {
 			if submitIntent {
 				setRequestUserInputSubmitConfirmState(request, missingLabels)
+				bumpRequestCardRevision(request)
 				return nil, false, []control.UIEvent{s.requestPromptEvent(surface, request, "")}
 			}
 			if len(action.RequestAnswers) == 0 {
@@ -403,6 +414,21 @@ func clearRequestUserInputSubmitConfirmState(request *state.RequestPromptRecord)
 	request.SubmitWithUnansweredMissingLabels = nil
 }
 
+func bumpRequestCardRevision(request *state.RequestPromptRecord) {
+	if request == nil {
+		return
+	}
+	request.CardRevision++
+	if request.CardRevision <= 0 {
+		request.CardRevision = 1
+	}
+}
+
+func (s *Service) nextRequestDispatchCommandID() string {
+	s.nextRequestCommandID++
+	return "reqcmd-" + strconv.Itoa(s.nextRequestCommandID)
+}
+
 func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, threadTitleHint string) control.UIEvent {
 	threadTitle := strings.TrimSpace(threadTitleHint)
 	if threadTitle == "" {
@@ -416,6 +442,7 @@ func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record
 	return s.feishuDirectRequestPromptEvent(surface, control.FeishuDirectRequestPrompt{
 		RequestID:                          record.RequestID,
 		RequestType:                        record.RequestType,
+		RequestRevision:                    record.CardRevision,
 		Title:                              record.Title,
 		Body:                               record.Body,
 		ThreadID:                           record.ThreadID,

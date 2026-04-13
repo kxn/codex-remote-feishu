@@ -256,17 +256,19 @@ type RequestPromptQuestionRecord struct {
 }
 
 type RequestPromptRecord struct {
-	RequestID    string
-	RequestType  string
-	InstanceID   string
-	ThreadID     string
-	TurnID       string
-	ItemID       string
-	Title        string
-	Body         string
-	Options      []RequestPromptOptionRecord
-	Questions    []RequestPromptQuestionRecord
-	DraftAnswers map[string]string
+	RequestID                string
+	RequestType              string
+	InstanceID               string
+	ThreadID                 string
+	TurnID                   string
+	ItemID                   string
+	Title                    string
+	Body                     string
+	Options                  []RequestPromptOptionRecord
+	Questions                []RequestPromptQuestionRecord
+	DraftAnswers             map[string]string
+	CardRevision             int
+	PendingDispatchCommandID string
 	// SubmitWithUnansweredConfirmPending marks request_user_input cards that are
 	// waiting for explicit user confirmation before submitting unanswered fields.
 	SubmitWithUnansweredConfirmPending bool

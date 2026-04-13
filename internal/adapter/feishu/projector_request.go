@@ -140,6 +140,7 @@ func requestPromptButton(prompt control.FeishuDirectRequestPrompt, option contro
 		cardActionPayloadKeyRequestID:       prompt.RequestID,
 		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
 		cardActionPayloadKeyRequestOptionID: strings.TrimSpace(option.OptionID),
+		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 	}, daemonLifecycleID), false, "")
 }
 
@@ -154,9 +155,10 @@ func requestUserInputOptionButton(prompt control.FeishuDirectRequestPrompt, ques
 		buttonType = "default"
 	}
 	return cardCallbackButtonElement(label, buttonType, stampActionValue(map[string]any{
-		cardActionPayloadKeyKind:        cardActionKindRequestRespond,
-		cardActionPayloadKeyRequestID:   prompt.RequestID,
-		cardActionPayloadKeyRequestType: strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyKind:            cardActionKindRequestRespond,
+		cardActionPayloadKeyRequestID:       prompt.RequestID,
+		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 		cardActionPayloadKeyRequestAnswers: map[string]any{
 			strings.TrimSpace(question.ID): []any{label},
 		},
@@ -280,6 +282,7 @@ func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLi
 		cardActionPayloadKeyRequestID:       prompt.RequestID,
 		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
 		cardActionPayloadKeyRequestOptionID: requestUserInputSubmitOptionID,
+		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 	}, daemonLifecycleID)))
 	return map[string]any{
 		"tag":      "form",
@@ -309,12 +312,14 @@ func requestPromptSubmitConfirmActionRow(prompt control.FeishuDirectRequestPromp
 			cardActionPayloadKeyRequestID:       prompt.RequestID,
 			cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
 			cardActionPayloadKeyRequestOptionID: requestUserInputCancelSubmitWithUnansweredOptionID,
+			cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 		}, daemonLifecycleID), false, ""),
 		cardCallbackButtonElement("确认提交已有答案", "primary", stampActionValue(map[string]any{
 			cardActionPayloadKeyKind:            cardActionKindRequestRespond,
 			cardActionPayloadKeyRequestID:       prompt.RequestID,
 			cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
 			cardActionPayloadKeyRequestOptionID: requestUserInputConfirmSubmitWithUnansweredOptionID,
+			cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 		}, daemonLifecycleID), false, ""),
 	})
 }

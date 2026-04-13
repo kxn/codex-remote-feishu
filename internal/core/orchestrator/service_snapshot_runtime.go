@@ -160,6 +160,9 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 
 func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) []control.UIEvent {
 	surface := s.root.Surfaces[surfaceID]
+	if events := s.restorePendingRequestDispatch(surface, commandID, "dispatch_failed"); len(events) != 0 {
+		return events
+	}
 	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 		Code:             "dispatch_failed",
 		Layer:            "daemon",
@@ -225,6 +228,9 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 	}
 	binding := s.pendingRemote[instanceID]
 	if binding == nil || binding.CommandID != ack.CommandID {
+		if surface := s.findAttachedSurface(instanceID); surface != nil {
+			return s.restorePendingRequestDispatch(surface, ack.CommandID, "command_rejected")
+		}
 		return nil
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
@@ -240,6 +246,35 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 	notice := NoticeForProblem(commandAckProblem(surface.SurfaceSessionID, ack))
 	notice.Code = "command_rejected"
 	return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
+}
+
+func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRecord, commandID, noticeCode string) []control.UIEvent {
+	if surface == nil || strings.TrimSpace(commandID) == "" {
+		return nil
+	}
+	for _, request := range surface.PendingRequests {
+		if request == nil || request.PendingDispatchCommandID != commandID {
+			continue
+		}
+		request.PendingDispatchCommandID = ""
+		bumpRequestCardRevision(request)
+		noticeText := "请求提交失败，请在最新卡片上重试。"
+		if noticeCode == "command_rejected" {
+			noticeText = "本地 Codex 拒绝了这次请求提交，请在最新卡片上重试。"
+		}
+		return []control.UIEvent{
+			s.requestPromptEvent(surface, request, ""),
+			{
+				Kind:             control.UIEventNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code: noticeCode,
+					Text: noticeText,
+				},
+			},
+		}
+	}
+	return nil
 }
 
 func (s *Service) pendingSteerForCommand(instanceID, commandID string) (string, *pendingSteerBinding) {
