@@ -762,7 +762,7 @@ func TestRequestUserInputPromptUsesQuestionsAndStoresState(t *testing.T) {
 	if prompt.RequestType != "request_user_input" || len(prompt.Questions) != 2 {
 		t.Fatalf("unexpected request prompt: %#v", prompt)
 	}
-	if prompt.Questions[0].DirectResponse || !prompt.Questions[1].Secret {
+	if !prompt.Questions[0].DirectResponse || !prompt.Questions[1].Secret {
 		t.Fatalf("unexpected request prompt questions: %#v", prompt.Questions)
 	}
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
@@ -875,6 +875,149 @@ func TestRespondRequestUserInputRejectsInvalidOptionAnswer(t *testing.T) {
 	}
 	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 1 {
 		t.Fatalf("expected invalid submit to keep pending request state, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	}
+}
+
+func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}, {"label": "medium"}}},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
+		t.Fatalf("expected partial request_saved notice, got %#v", events)
+	}
+	pending := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
+	if pending == nil || pending.DraftAnswers["model"] != "gpt-5.4" {
+		t.Fatalf("expected partial answer to persist in pending request, got %#v", pending)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestAnswers: map[string][]string{
+			"effort": {"high"},
+		},
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected final answer to dispatch command, got %#v", events)
+	}
+	answers, _ := events[0].Command.Request.Response["answers"].(map[string]any)
+	if _, ok := answers["model"]; !ok {
+		t.Fatalf("expected merged model answer in response payload, got %#v", events[0].Command.Request.Response)
+	}
+	if _, ok := answers["effort"]; !ok {
+		t.Fatalf("expected merged effort answer in response payload, got %#v", events[0].Command.Request.Response)
+	}
+	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 0 {
+		t.Fatalf("expected pending request to clear after complete answers, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	}
+}
+
+func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "notes", "header": "备注", "question": "补充说明"},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
+		t.Fatalf("expected option-only partial submit to be saved, got %#v", events)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestAnswers: map[string][]string{
+			"notes": {"请用中文回复"},
+		},
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected merged submit to dispatch command, got %#v", events)
+	}
+	answers, _ := events[0].Command.Request.Response["answers"].(map[string]any)
+	if _, ok := answers["model"]; !ok {
+		t.Fatalf("expected saved model answer in merged response payload, got %#v", events[0].Command.Request.Response)
+	}
+	if _, ok := answers["notes"]; !ok {
+		t.Fatalf("expected notes answer in merged response payload, got %#v", events[0].Command.Request.Response)
 	}
 }
 

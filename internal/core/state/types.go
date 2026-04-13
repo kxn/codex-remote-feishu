@@ -256,17 +256,18 @@ type RequestPromptQuestionRecord struct {
 }
 
 type RequestPromptRecord struct {
-	RequestID   string
-	RequestType string
-	InstanceID  string
-	ThreadID    string
-	TurnID      string
-	ItemID      string
-	Title       string
-	Body        string
-	Options     []RequestPromptOptionRecord
-	Questions   []RequestPromptQuestionRecord
-	CreatedAt   time.Time
+	RequestID    string
+	RequestType  string
+	InstanceID   string
+	ThreadID     string
+	TurnID       string
+	ItemID       string
+	Title        string
+	Body         string
+	Options      []RequestPromptOptionRecord
+	Questions    []RequestPromptQuestionRecord
+	DraftAnswers map[string]string
+	CreatedAt    time.Time
 }
 
 type RequestCaptureRecord struct {

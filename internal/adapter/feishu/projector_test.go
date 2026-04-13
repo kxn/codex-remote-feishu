@@ -1556,10 +1556,10 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 		t.Fatalf("unexpected request option payload: %#v", value)
 	}
 	form, _ := ops[0].CardElements[3]["elements"].([]map[string]any)
-	if len(form) != 3 {
-		t.Fatalf("expected two inputs and one submit button, got %#v", ops[0].CardElements[2])
+	if len(form) != 2 {
+		t.Fatalf("expected one input and one submit button, got %#v", ops[0].CardElements[3])
 	}
-	submitValue := cardButtonPayload(t, form[2])
+	submitValue := cardButtonPayload(t, form[1])
 	if submitValue["kind"] != "submit_request_form" || submitValue["request_id"] != "req-ui-1" {
 		t.Fatalf("unexpected request form payload: %#v", submitValue)
 	}
@@ -1583,13 +1583,13 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 		t.Fatalf("expected rendered V2 request form, got %#v", renderedForm)
 	}
 	renderedFormElements, _ := renderedForm["elements"].([]map[string]any)
-	if len(renderedFormElements) != 3 {
-		t.Fatalf("expected rendered request form to keep two inputs and submit button, got %#v", renderedForm)
+	if len(renderedFormElements) != 2 {
+		t.Fatalf("expected rendered request form to keep one input and submit button, got %#v", renderedForm)
 	}
-	if renderedFormElements[2]["action_type"] != nil || renderedFormElements[2]["form_action_type"] != "submit" {
-		t.Fatalf("expected rendered request form submit button to use V2 form_action_type, got %#v", renderedFormElements[2])
+	if renderedFormElements[1]["action_type"] != nil || renderedFormElements[1]["form_action_type"] != "submit" {
+		t.Fatalf("expected rendered request form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
 	}
-	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[2])
+	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
 	if renderedSubmitValue["kind"] != "submit_request_form" || renderedSubmitValue["request_id"] != "req-ui-1" {
 		t.Fatalf("unexpected rendered request form payload: %#v", renderedSubmitValue)
 	}

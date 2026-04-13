@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-13`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 `/debug` `/upgrade` 的菜单入口；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、normal `/list` 对 recoverable-only workspace 的恢复入口、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 的飞书回传路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 `/debug` `/upgrade` 的菜单入口；同时记录 `/use` / `/useall` 的 scoped/global 展示规则、normal `/list` 对 recoverable-only workspace 的恢复入口、Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与凑齐后提交路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -1009,7 +1009,7 @@ transport degraded retained attachment
 | 覆盖状态 | 当前行为 |
 | --- | --- |
 | `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效 |
-| `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。approval 走按钮确认；`request_user_input` 则走按钮或表单提交 |
+| `G2 PendingRequest` | 普通文本、图片、`/new` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。approval 走按钮确认；`request_user_input` 现在支持“分题暂存”：按钮/表单先记录局部答案，待问题凑齐后才真正 dispatch request response 并清 gate |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `G4 CommandCapture` | 当前只可能来自旧 runtime 残留兼容态；下一条普通文本会被直接转换成 `/model <输入>` 并立即应用；图片会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` 并提示重新打开 `/model` 卡片 |
 | `G5 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片、revoke/reaction；`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
@@ -1044,7 +1044,7 @@ retained-offline overlay 额外规则：
 | `show_all_threads` | `ActionShowAllThreads` | 打开 `/useall` 的默认 cross-workspace 总览；也用于单-workspace 全量视图返回总览 |
 | `show_all_thread_workspaces` | `ActionShowAllThreadWorkspaces` | 把 `/useall` grouped 总览从“最近 5 个工作区”展开到“全部工作区” |
 | `show_recent_thread_workspaces` | `ActionShowRecentThreadWorkspaces` | 从“全部工作区”视图返回 `/useall` 默认最近 5 个工作区总览 |
-| `request_respond` | `ActionRespondRequest` | approval 与单题 `request_user_input` 的按钮回传入口 |
+| `request_respond` | `ActionRespondRequest` | approval 与 `request_user_input` 的按钮回传入口；`request_user_input` 支持分题局部提交并在 pending request 上暂存答案 |
 | `submit_request_form` | `ActionRespondRequest` | `request_user_input` 的表单提交入口；按 `question.id -> answers[]` 回传 |
 | `resume_headless_thread` | `ActionRemovedCommand` | 历史兼容入口，统一回迁移提示 |
 | `kick_thread_confirm` | `ActionConfirmKickThread` | 强踢前再次校验实时状态 |
@@ -1149,7 +1149,7 @@ retained-offline overlay 额外规则：
 3. 有没有让未冻结草稿在 route change 时静默改投目标。
 4. 有没有把 UI helper 状态重新变回服务端持久 modal state。
 5. 有没有让 `R5 NewThreadReady` 在首条消息失败后落回无恢复路径的状态。
-6. `request_user_input` 的按钮/表单提交后，是否会在本地立即清掉 stale pending request，并确保 turn 完成、切线程、重连时不会残留旧问题卡。
+6. `request_user_input` 的按钮/表单提交后，是否符合“局部答案先暂存、凑齐再清 pending request”的现状语义，并确保 turn 完成、切线程、重连时不会残留旧问题卡。
 
 ## 11. 待讨论取舍
 

@@ -88,7 +88,9 @@ func requestUserInputPromptElements(prompt control.FeishuDirectRequestPrompt, da
 		}
 	}
 	if requestPromptNeedsForm(prompt) {
-		elements = append(elements, requestPromptFormElement(prompt, daemonLifecycleID))
+		if form := requestPromptFormElement(prompt, daemonLifecycleID); len(form) != 0 {
+			elements = append(elements, form)
+		}
 	}
 	elements = append(elements, map[string]any{
 		"tag":     "markdown",
@@ -175,16 +177,23 @@ func requestPromptQuestionMarkdown(index int, question control.RequestPromptQues
 
 func requestPromptNeedsForm(prompt control.FeishuDirectRequestPrompt) bool {
 	for _, question := range prompt.Questions {
-		if len(question.Options) == 0 || question.AllowOther || !question.DirectResponse {
+		if requestPromptQuestionNeedsFormInput(question) {
 			return true
 		}
 	}
 	return false
 }
 
+func requestPromptQuestionNeedsFormInput(question control.RequestPromptQuestion) bool {
+	return len(question.Options) == 0 || question.AllowOther || !question.DirectResponse
+}
+
 func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Questions)+1)
 	for _, question := range prompt.Questions {
+		if !requestPromptQuestionNeedsFormInput(question) {
+			continue
+		}
 		name := strings.TrimSpace(question.ID)
 		if name == "" {
 			continue
@@ -209,6 +218,9 @@ func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLi
 			input["default_value"] = value
 		}
 		elements = append(elements, input)
+	}
+	if len(elements) == 0 {
+		return nil
 	}
 	elements = append(elements, cardFormSubmitButtonElement("提交答案", stampActionValue(map[string]any{
 		cardActionPayloadKeyKind:        cardActionKindSubmitRequestForm,

@@ -129,7 +129,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		ThreadID:    record.ThreadID,
 		ThreadTitle: threadTitle,
 		Options:     requestPromptOptionsToControl(record.Options),
-		Questions:   requestPromptQuestionsToControl(record.Questions),
+		Questions:   requestPromptQuestionsToControl(record.Questions, record.DraftAnswers),
 	})}
 }
 
@@ -245,9 +245,24 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 			"decision": decision,
 		}, false, nil
 	case "request_user_input":
-		response, errText := buildRequestUserInputResponse(request, action.RequestAnswers)
+		response, complete, missingLabels, errText := buildRequestUserInputResponse(request, action.RequestAnswers)
 		if errText != "" {
 			return nil, false, notice(surface, "request_invalid", errText)
+		}
+		if !complete {
+			if len(action.RequestAnswers) == 0 {
+				if len(missingLabels) != 0 {
+					return nil, false, notice(surface, "request_invalid", fmt.Sprintf("问题“%s”还没有填写答案。", missingLabels[0]))
+				}
+				return nil, false, notice(surface, "request_invalid", "当前没有可提交的答案。")
+			}
+			if len(missingLabels) == 0 {
+				return nil, false, notice(surface, "request_saved", "已记录当前答案，请继续补全其他问题后再提交。")
+			}
+			if len(missingLabels) == 1 {
+				return nil, false, notice(surface, "request_saved", fmt.Sprintf("已记录当前答案。还差 1 个问题：%s。", missingLabels[0]))
+			}
+			return nil, false, notice(surface, "request_saved", fmt.Sprintf("已记录当前答案。还差 %d 个问题待填写。", len(missingLabels)))
 		}
 		return response, true, nil
 	default:
@@ -255,11 +270,13 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 	}
 }
 
-func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswers map[string][]string) (map[string]any, string) {
+func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswers map[string][]string) (map[string]any, bool, []string, string) {
 	if request == nil || len(request.Questions) == 0 {
-		return nil, "这个问题请求缺少有效的问题定义，当前无法提交。"
+		return nil, false, nil, "这个问题请求缺少有效的问题定义，当前无法提交。"
 	}
-	answers := map[string]any{}
+	if request.DraftAnswers == nil {
+		request.DraftAnswers = map[string]string{}
+	}
 	for _, question := range request.Questions {
 		questionID := strings.TrimSpace(question.ID)
 		if questionID == "" {
@@ -267,23 +284,43 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 		}
 		answerText := firstTrimmedAnswer(rawAnswers[questionID])
 		if answerText == "" {
-			label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
-			return nil, fmt.Sprintf("问题“%s”还没有填写答案。", label)
+			continue
 		}
 		if canonical, ok := canonicalQuestionOptionAnswer(question, answerText); ok {
 			answerText = canonical
 		} else if len(question.Options) != 0 && !question.AllowOther {
 			label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
-			return nil, fmt.Sprintf("问题“%s”的答案不在可选项中。", label)
+			return nil, false, nil, fmt.Sprintf("问题“%s”的答案不在可选项中。", label)
 		}
-		answers[questionID] = map[string]any{
-			"answers": []string{answerText},
+		request.DraftAnswers[questionID] = answerText
+	}
+	answers := map[string]any{}
+	missingLabels := make([]string, 0, len(request.Questions))
+	for _, question := range request.Questions {
+		questionID := strings.TrimSpace(question.ID)
+		if questionID == "" {
+			continue
 		}
+		answerText := strings.TrimSpace(request.DraftAnswers[questionID])
+		if answerText == "" {
+			missingLabels = append(missingLabels, firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID))
+			continue
+		}
+		if canonical, ok := canonicalQuestionOptionAnswer(question, answerText); ok {
+			answerText = canonical
+		} else if len(question.Options) != 0 && !question.AllowOther {
+			label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
+			return nil, false, nil, fmt.Sprintf("问题“%s”的答案不在可选项中。", label)
+		}
+		answers[questionID] = map[string]any{"answers": []string{answerText}}
 	}
 	if len(answers) == 0 {
-		return nil, "当前没有可提交的答案。"
+		return nil, false, missingLabels, "当前没有可提交的答案。"
 	}
-	return map[string]any{"answers": answers}, ""
+	if len(missingLabels) != 0 {
+		return nil, false, missingLabels, ""
+	}
+	return map[string]any{"answers": answers}, true, nil, ""
 }
 
 func firstTrimmedAnswer(values []string) string {

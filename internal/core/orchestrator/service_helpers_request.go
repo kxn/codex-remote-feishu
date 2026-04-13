@@ -109,7 +109,7 @@ func requestPromptOptionsToControl(options []state.RequestPromptOptionRecord) []
 	return out
 }
 
-func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionRecord) []control.RequestPromptQuestion {
+func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionRecord, draftAnswers map[string]string) []control.RequestPromptQuestion {
 	if len(questions) == 0 {
 		return nil
 	}
@@ -137,7 +137,7 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 			Secret:         question.Secret,
 			Options:        options,
 			Placeholder:    strings.TrimSpace(question.Placeholder),
-			DefaultValue:   strings.TrimSpace(question.DefaultValue),
+			DefaultValue:   firstNonEmpty(strings.TrimSpace(draftAnswers[strings.TrimSpace(question.ID)]), strings.TrimSpace(question.DefaultValue)),
 			DirectResponse: question.DirectResponse,
 		})
 	}
@@ -222,7 +222,6 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 		return nil
 	}
 	questions := make([]state.RequestPromptQuestionRecord, 0, len(values))
-	directResponse := len(values) == 1
 	for _, value := range values {
 		record, ok := value.(map[string]any)
 		if !ok {
@@ -289,6 +288,10 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 			lookupStringFromAny(record["placeholder"]),
 			lookupStringFromAny(record["inputPlaceholder"]),
 		)
+		directResponse := lookupBoolFromAny(record["directResponse"])
+		if !directResponse && record["directResponse"] == nil {
+			directResponse = len(options) != 0
+		}
 		if placeholder == "" && len(options) != 0 {
 			labels := make([]string, 0, len(options))
 			for _, option := range options {
@@ -305,7 +308,7 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 			Options:        options,
 			Placeholder:    placeholder,
 			DefaultValue:   strings.TrimSpace(lookupStringFromAny(record["defaultValue"])),
-			DirectResponse: directResponse && len(options) != 0,
+			DirectResponse: directResponse,
 		})
 	}
 	return questions
