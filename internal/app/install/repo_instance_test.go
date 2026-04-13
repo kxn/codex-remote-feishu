@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestParseInstanceIDAcceptsCustomInstance(t *testing.T) {
@@ -105,7 +107,7 @@ func TestResolveInstallInstanceSelectionDetectsRepoRootFromWorkingDirectory(t *t
 	if err != nil {
 		t.Fatalf("resolveInstallInstanceSelection() error = %v", err)
 	}
-	if selection.RepoRoot != repoRoot {
+	if !testutil.SamePath(selection.RepoRoot, repoRoot) {
 		t.Fatalf("RepoRoot = %q, want %q", selection.RepoRoot, repoRoot)
 	}
 	if selection.BaseDir != "/data/dl" {

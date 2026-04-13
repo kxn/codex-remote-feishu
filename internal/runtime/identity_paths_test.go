@@ -144,6 +144,7 @@ func TestDefaultPathsAndHelpers(t *testing.T) {
 	t.Run("home fallback", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
 		t.Setenv("XDG_CONFIG_HOME", "")
 		t.Setenv("XDG_DATA_HOME", "")
 		t.Setenv("XDG_STATE_HOME", "")
@@ -157,10 +158,11 @@ func TestDefaultPathsAndHelpers(t *testing.T) {
 		}
 	})
 
-	if got := WrapperRawLogFile("/tmp/logs", 123); got != "/tmp/logs/codex-remote-wrapper-123-raw.ndjson" {
+	logsDir := filepath.Join(string(filepath.Separator), "tmp", "logs")
+	if got := WrapperRawLogFile(logsDir, 123); got != filepath.Join(logsDir, "codex-remote-wrapper-123-raw.ndjson") {
 		t.Fatalf("WrapperRawLogFile = %q", got)
 	}
-	if got := WrapperRawLogFile("/tmp/logs", 0); got != "/tmp/logs/codex-remote-wrapper-unknown-raw.ndjson" {
+	if got := WrapperRawLogFile(logsDir, 0); got != filepath.Join(logsDir, "codex-remote-wrapper-unknown-raw.ndjson") {
 		t.Fatalf("WrapperRawLogFile unknown = %q", got)
 	}
 }

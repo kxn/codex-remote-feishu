@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func newServiceForTest(now *time.Time) *Service {
@@ -680,7 +681,7 @@ func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-1" || surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+	if surface.AttachedInstanceID != "inst-1" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/droid") {
 		t.Fatalf("expected workspace attach to claim droid, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
@@ -750,7 +751,7 @@ func TestAttachWorkspaceSwitchClearsPinnedThread(t *testing.T) {
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-2" || surface.ClaimedWorkspaceKey != "/data/dl/web" {
+	if surface.AttachedInstanceID != "inst-2" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/web") {
 		t.Fatalf("expected workspace switch to move to web, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
@@ -813,7 +814,7 @@ func TestAttachWorkspaceSwitchBlockedByQueuedWork(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if surface.AttachedInstanceID != "inst-1" || surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+	if surface.AttachedInstanceID != "inst-1" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/droid") {
 		t.Fatalf("expected blocked switch to keep current workspace, got %#v", surface)
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_switch_queued" {
@@ -869,11 +870,11 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	}
 	for _, option := range prompt.Options {
 		switch option.OptionID {
-		case "/data/dl/droid":
+		case testutil.RootedPath("data", "dl", "droid"):
 			if !option.Disabled || option.ButtonLabel != "" || !strings.Contains(option.MetaText, "当前被其他飞书会话接管") {
 				t.Fatalf("expected busy workspace to be disabled, got %#v", option)
 			}
-		case "/data/dl/web":
+		case testutil.RootedPath("data", "dl", "web"):
 			if option.Disabled {
 				t.Fatalf("expected free workspace to remain selectable, got %#v", option)
 			}
@@ -956,10 +957,10 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 	if len(prompt.Options) != 2 {
 		t.Fatalf("expected current workspace to be summarized instead of listed, got %#v", prompt.Options)
 	}
-	if prompt.Options[0].OptionID != "/data/dl/web" || prompt.Options[0].Disabled || prompt.Options[0].ButtonLabel != "切换" || prompt.Options[0].MetaText != "2分前 · 有 VS Code 活动" {
+	if !testutil.SamePath(prompt.Options[0].OptionID, "/data/dl/web") || prompt.Options[0].Disabled || prompt.Options[0].ButtonLabel != "切换" || prompt.Options[0].MetaText != "2分前 · 有 VS Code 活动" {
 		t.Fatalf("expected attachable workspace first with compact meta, got %#v", prompt.Options[0])
 	}
-	if prompt.Options[1].OptionID != "/data/dl/ops" || !prompt.Options[1].Disabled || prompt.Options[1].MetaText != "1小时前 · 当前被其他飞书会话接管" {
+	if !testutil.SamePath(prompt.Options[1].OptionID, "/data/dl/ops") || !prompt.Options[1].Disabled || prompt.Options[1].MetaText != "1小时前 · 当前被其他飞书会话接管" {
 		t.Fatalf("expected busy workspace in unavailable section, got %#v", prompt.Options[1])
 	}
 }
@@ -1005,7 +1006,7 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 	for _, option := range prompt.Options {
 		got[option.OptionID] = true
 	}
-	if !got["/data/dl/atlas"] || !got["/data/dl/harbor"] || got["/data/dl"] {
+	if !got[testutil.RootedPath("data", "dl", "atlas")] || !got[testutil.RootedPath("data", "dl", "harbor")] || got[testutil.RootedPath("data", "dl")] {
 		t.Fatalf("expected thread cwd workspaces only, got %#v", prompt.Options)
 	}
 }
@@ -1051,7 +1052,7 @@ func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 		t.Fatalf("expected one recoverable workspace option, got %#v", prompt.Options)
 	}
 	option := prompt.Options[0]
-	if option.OptionID != "/data/dl/picdetect" || option.ActionKind != "show_workspace_threads" || option.ButtonLabel != "恢复" || option.Disabled {
+	if !testutil.SamePath(option.OptionID, "/data/dl/picdetect") || option.ActionKind != "show_workspace_threads" || option.ButtonLabel != "恢复" || option.Disabled {
 		t.Fatalf("expected persisted-only workspace to route to workspace thread list, got %#v", option)
 	}
 	if option.MetaText != "3分前 · 后台可恢复" {
@@ -1148,7 +1149,7 @@ func TestBuildWorkspaceSelectionModelKeepsSemanticEntries(t *testing.T) {
 	if len(model.Entries) != 6 {
 		t.Fatalf("expected semantic entries for all workspaces, got %#v", model.Entries)
 	}
-	if model.Entries[0].WorkspaceKey != "/data/dl/proj-0" || !model.Entries[0].Attachable || model.Entries[0].RecoverableOnly {
+	if !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/proj-0") || !model.Entries[0].Attachable || model.Entries[0].RecoverableOnly {
 		t.Fatalf("unexpected first workspace entry: %#v", model.Entries[0])
 	}
 }
@@ -1226,7 +1227,7 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-headless-1" || surface.ClaimedWorkspaceKey != "/data/dl/atlas" {
+	if surface.AttachedInstanceID != "inst-headless-1" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/atlas") {
 		t.Fatalf("expected workspace attach to resolve via thread cwd, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {

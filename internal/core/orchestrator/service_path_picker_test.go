@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 type fakePathPickerConsumer struct {
@@ -56,7 +57,7 @@ func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *test
 		RootPath: root,
 	})
 	view := singlePathPickerEvent(t, events)
-	if !view.CanConfirm || view.CurrentPath != root {
+	if !view.CanConfirm || !testutil.SamePath(view.CurrentPath, root) {
 		t.Fatalf("unexpected initial picker view: %#v", view)
 	}
 
@@ -67,7 +68,7 @@ func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *test
 		PickerEntry:      "alpha",
 	})
 	entered := singlePathPickerEvent(t, enterEvents)
-	if entered.CurrentPath != filepath.Join(root, "alpha") || !entered.CanGoUp {
+	if !testutil.SamePath(entered.CurrentPath, filepath.Join(root, "alpha")) || !entered.CanGoUp {
 		t.Fatalf("unexpected entered picker view: %#v", entered)
 	}
 
@@ -77,7 +78,7 @@ func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *test
 		PickerID:         view.PickerID,
 	})
 	back := singlePathPickerEvent(t, upEvents)
-	if back.CurrentPath != root {
+	if !testutil.SamePath(back.CurrentPath, root) {
 		t.Fatalf("expected to return to root, got %#v", back)
 	}
 
@@ -123,7 +124,7 @@ func TestOpenPathPickerFileModeSelectsFileAndRejectsDirectorySelection(t *testin
 		PickerEntry:      "file.txt",
 	})
 	selected := singlePathPickerEvent(t, selectEvents)
-	if selected.SelectedPath != filepath.Join(root, "file.txt") || !selected.CanConfirm {
+	if !testutil.SamePath(selected.SelectedPath, filepath.Join(root, "file.txt")) || !selected.CanConfirm {
 		t.Fatalf("unexpected selected picker view: %#v", selected)
 	}
 
@@ -473,7 +474,7 @@ func TestPathPickerConfirmHandsValidatedResultToConsumer(t *testing.T) {
 		t.Fatalf("expected one consumer confirm call, got %#v", consumer.confirmed)
 	}
 	result := consumer.confirmed[0]
-	if result.SelectedPath != filepath.Join(root, "file.txt") || result.RootPath != root || result.Mode != control.PathPickerModeFile {
+	if !testutil.SamePath(result.SelectedPath, filepath.Join(root, "file.txt")) || !testutil.SamePath(result.RootPath, root) || result.Mode != control.PathPickerModeFile {
 		t.Fatalf("unexpected consumer confirm result: %#v", result)
 	}
 	if result.ConsumerMeta["flow"] != "send_file" || result.OwnerUserID != "user-1" {
@@ -508,7 +509,7 @@ func TestPathPickerCancelHandsControlToConsumer(t *testing.T) {
 	if len(cancelEvents) != 1 || cancelEvents[0].Notice == nil || cancelEvents[0].Notice.Code != "consumer_cancelled" {
 		t.Fatalf("expected consumer cancel event, got %#v", cancelEvents)
 	}
-	if len(consumer.cancelled) != 1 || consumer.cancelled[0].RootPath != root {
+	if len(consumer.cancelled) != 1 || !testutil.SamePath(consumer.cancelled[0].RootPath, root) {
 		t.Fatalf("unexpected consumer cancel result: %#v", consumer.cancelled)
 	}
 }

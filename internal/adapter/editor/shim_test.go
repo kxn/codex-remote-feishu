@@ -3,6 +3,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
@@ -38,7 +39,7 @@ func TestPatchBundleEntrypoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat bundle entrypoint: %v", err)
 	}
-	if info.Mode().Perm() != 0o755 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
 		t.Fatalf("unexpected mode: %o", info.Mode().Perm())
 	}
 

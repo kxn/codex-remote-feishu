@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
@@ -56,7 +57,7 @@ func TestEnsureSiblingExtractsEmbeddedAsset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat extracted asset: %v", err)
 	}
-	if info.Mode()&0o111 == 0 {
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
 		t.Fatalf("extracted asset mode = %v, want executable", info.Mode())
 	}
 }

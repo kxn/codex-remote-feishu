@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -812,8 +813,9 @@ func TestProjectSnapshotDisplaysBinaryIdentityLine(t *testing.T) {
 
 func TestProjectSnapshotDisplaysCurrentDirectoryWithGitBranch(t *testing.T) {
 	projector := NewProjector()
-	projector.readGitWorktree = func(cwd string) *gitWorktreeSummary {
-		if cwd != "/data/dl/droid" {
+	cwd := filepath.Join(string(filepath.Separator), "data", "dl", "droid")
+	projector.readGitWorktree = func(got string) *gitWorktreeSummary {
+		if got != cwd {
 			t.Fatalf("unexpected cwd: %q", cwd)
 		}
 		return &gitWorktreeSummary{Branch: "master"}
@@ -822,24 +824,25 @@ func TestProjectSnapshotDisplaysCurrentDirectoryWithGitBranch(t *testing.T) {
 		Kind: control.UIEventSnapshot,
 		Snapshot: &control.Snapshot{
 			ProductMode:  "normal",
-			WorkspaceKey: "/data/dl/droid",
+			WorkspaceKey: cwd,
 			NextPrompt: control.PromptRouteSummary{
-				CWD: "/data/dl/droid",
+				CWD: cwd,
 			},
 		},
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>master</text_tag>") {
+	if !strings.Contains(ops[0].CardBody, "**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>master</text_tag>") {
 		t.Fatalf("expected current directory line, got %#v", ops[0].CardBody)
 	}
 }
 
 func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 	projector := NewProjector()
-	projector.readGitWorktree = func(cwd string) *gitWorktreeSummary {
-		if cwd != "/data/dl/droid" {
+	cwd := filepath.Join(string(filepath.Separator), "data", "dl", "droid")
+	projector.readGitWorktree = func(got string) *gitWorktreeSummary {
+		if got != cwd {
 			t.Fatalf("unexpected cwd: %q", cwd)
 		}
 		return &gitWorktreeSummary{Branch: "feature/status-git"}
@@ -847,9 +850,9 @@ func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSnapshot,
 		Snapshot: &control.Snapshot{
-			WorkspaceKey: "/data/dl/droid",
+			WorkspaceKey: cwd,
 			NextPrompt: control.PromptRouteSummary{
-				CWD: "/data/dl/droid",
+				CWD: cwd,
 			},
 		},
 	})
@@ -857,7 +860,7 @@ func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>feature/status-git</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>feature/status-git</text_tag>",
 		"**Git 工作区：** <text_tag color='neutral'>干净</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)
@@ -866,8 +869,9 @@ func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 
 func TestProjectSnapshotDisplaysDirtyGitWorktreeSummary(t *testing.T) {
 	projector := NewProjector()
-	projector.readGitWorktree = func(cwd string) *gitWorktreeSummary {
-		if cwd != "/data/dl/droid" {
+	cwd := filepath.Join(string(filepath.Separator), "data", "dl", "droid")
+	projector.readGitWorktree = func(got string) *gitWorktreeSummary {
+		if got != cwd {
 			t.Fatalf("unexpected cwd: %q", cwd)
 		}
 		return &gitWorktreeSummary{
@@ -880,9 +884,9 @@ func TestProjectSnapshotDisplaysDirtyGitWorktreeSummary(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventSnapshot,
 		Snapshot: &control.Snapshot{
-			WorkspaceKey: "/data/dl/ignored",
+			WorkspaceKey: filepath.Join(string(filepath.Separator), "data", "dl", "ignored"),
 			NextPrompt: control.PromptRouteSummary{
-				CWD: "/data/dl/droid",
+				CWD: cwd,
 			},
 		},
 	})
@@ -890,7 +894,7 @@ func TestProjectSnapshotDisplaysDirtyGitWorktreeSummary(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag> · Git <text_tag color='neutral'>master</text_tag>",
+		"**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>master</text_tag>",
 		"**Git 工作区：** <text_tag color='neutral'>有改动</text_tag> <text_tag color='neutral'>3修改</text_tag> <text_tag color='neutral'>1未跟踪</text_tag>",
 	) {
 		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)

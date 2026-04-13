@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestLocalPauseWithoutQueuedMessagesDoesNotEmitResumeNotice(t *testing.T) {
@@ -254,13 +255,13 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if prompt.Title != "全部会话" || prompt.Hint != "" || prompt.Layout != "workspace_grouped_useall" {
 		t.Fatalf("unexpected all-session prompt metadata: %#v", prompt)
 	}
-	if prompt.ContextTitle != "当前工作区" || prompt.ContextKey != "/data/dl" || !strings.Contains(prompt.ContextText, "dl ·") {
+	if prompt.ContextTitle != "当前工作区" || !testutil.SamePath(prompt.ContextKey, "/data/dl") || !strings.Contains(prompt.ContextText, "dl ·") {
 		t.Fatalf("expected attached /useall prompt to expose current workspace summary, got %#v", prompt)
 	}
 	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
 		t.Fatalf("expected all sessions sorted by recency, got %#v", prompt.Options)
 	}
-	if prompt.Options[0].GroupKey != "/data/dl" || prompt.Options[0].GroupLabel != "dl" || prompt.Options[0].AgeText == "" {
+	if !testutil.SamePath(prompt.Options[0].GroupKey, "/data/dl") || prompt.Options[0].GroupLabel != "dl" || prompt.Options[0].AgeText == "" {
 		t.Fatalf("expected grouped workspace metadata on /useall options, got %#v", prompt.Options[0])
 	}
 }
@@ -355,7 +356,7 @@ func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testin
 	if len(model.Entries) != 6 {
 		t.Fatalf("expected semantic views for all workspace groups, got %#v", model.Entries)
 	}
-	if model.Entries[0].ThreadID != "thread-6" || model.Entries[0].WorkspaceKey != "/data/dl/proj-6" || !model.Entries[0].AllowCrossWorkspace {
+	if model.Entries[0].ThreadID != "thread-6" || !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/proj-6") || !model.Entries[0].AllowCrossWorkspace {
 		t.Fatalf("unexpected first semantic thread view: %#v", model.Entries[0])
 	}
 
@@ -484,7 +485,7 @@ func TestPresentAllThreadSelectionDoesNotCountCurrentWorkspaceAgainstGroupLimit(
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.ContextKey != "/data/dl/current" || prompt.ContextTitle != "当前工作区" {
+	if !testutil.SamePath(prompt.ContextKey, "/data/dl/current") || prompt.ContextTitle != "当前工作区" {
 		t.Fatalf("expected current workspace context, got %#v", prompt)
 	}
 	if len(prompt.Options) != 6 {
@@ -802,7 +803,7 @@ func TestThreadsSnapshotDoesNotBroadenManagedHeadlessWorkspaceRoot(t *testing.T)
 	})
 
 	inst := svc.root.Instances["inst-headless-1"]
-	if inst.WorkspaceRoot != "/data/dl/atlas" || inst.WorkspaceKey != "/data/dl/atlas" || inst.DisplayName != "atlas" {
+	if !testutil.SamePath(inst.WorkspaceRoot, "/data/dl/atlas") || !testutil.SamePath(inst.WorkspaceKey, "/data/dl/atlas") || inst.DisplayName != "atlas" {
 		t.Fatalf("expected managed headless workspace metadata to stay on the precise workspace, got %#v", inst)
 	}
 }

@@ -184,7 +184,7 @@ func TestAdminInstancesSnapshotFiltersManagedHeadlessButKeepsVSCode(t *testing.T
 	if len(summaries) != 1 {
 		t.Fatalf("expected only vscode summary, got %#v", summaries)
 	}
-	if summaries[0].InstanceID != "inst-offline" || summaries[0].Source != "" || summaries[0].WorkspaceRoot != "/data/dl/droid" {
+	if summaries[0].InstanceID != "inst-offline" || summaries[0].Source != "" || summaries[0].WorkspaceRoot != filepath.Join(string(filepath.Separator), "data", "dl", "droid") {
 		t.Fatalf("unexpected vscode-only summary: %#v", summaries)
 	}
 }

@@ -4,11 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestResolveWorkspaceKey(t *testing.T) {
-	if got := ResolveWorkspaceKey("", " /data/dl/work/../droid/ "); got != "/data/dl/droid" {
-		t.Fatalf("ResolveWorkspaceKey() = %q, want %q", got, "/data/dl/droid")
+	want := testutil.RootedPath("data", "dl", "droid")
+	if got := ResolveWorkspaceKey("", " /data/dl/work/../droid/ "); got != want {
+		t.Fatalf("ResolveWorkspaceKey() = %q, want %q", got, want)
 	}
 	if got := ResolveWorkspaceKey("   "); got != "" {
 		t.Fatalf("ResolveWorkspaceKey() = %q, want empty", got)
@@ -19,8 +22,9 @@ func TestWorkspaceShortName(t *testing.T) {
 	if got := WorkspaceShortName("/data/dl/work/../droid/"); got != "droid" {
 		t.Fatalf("WorkspaceShortName() = %q, want %q", got, "droid")
 	}
-	if got := WorkspaceShortName("/"); got != "/" {
-		t.Fatalf("WorkspaceShortName(root) = %q, want %q", got, "/")
+	wantRoot := string(filepath.Separator)
+	if got := WorkspaceShortName("/"); got != wantRoot {
+		t.Fatalf("WorkspaceShortName(root) = %q, want %q", got, wantRoot)
 	}
 }
 
@@ -39,7 +43,7 @@ func TestResolveWorkspaceRootOnHostResolvesSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveWorkspaceRootOnHost() error = %v", err)
 	}
-	if resolved != target {
+	if !testutil.SamePath(resolved, target) {
 		t.Fatalf("ResolveWorkspaceRootOnHost() = %q, want %q", resolved, target)
 	}
 }

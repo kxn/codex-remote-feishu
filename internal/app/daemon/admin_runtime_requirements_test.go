@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
@@ -43,7 +44,7 @@ func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
 	if payload.CodexRealBinary != codexPath {
 		t.Fatalf("codex real binary = %q, want %q", payload.CodexRealBinary, codexPath)
 	}
-	if payload.ResolvedCodexRealBinary != codexPath {
+	if !testutil.SamePath(payload.ResolvedCodexRealBinary, codexPath) {
 		t.Fatalf("resolved codex real binary = %q, want %q", payload.ResolvedCodexRealBinary, codexPath)
 	}
 	if payload.LookupMode != "absolute" {
@@ -84,7 +85,7 @@ func TestAdminRuntimeRequirementsWarnWhenCodexComesFromPATH(t *testing.T) {
 	if payload.LookupMode != "path_search" {
 		t.Fatalf("lookup mode = %q, want path_search", payload.LookupMode)
 	}
-	if payload.ResolvedCodexRealBinary != codexPath {
+	if !testutil.SamePath(payload.ResolvedCodexRealBinary, codexPath) {
 		t.Fatalf("resolved codex real binary = %q, want %q", payload.ResolvedCodexRealBinary, codexPath)
 	}
 	if got := checkStatusByID(payload.Checks, "lookup_mode"); got != runtimeRequirementStatusWarn {

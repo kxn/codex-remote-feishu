@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 type fakeCreateFolderCall struct {
@@ -216,13 +217,7 @@ func TestDriveMarkdownPreviewerPersistsCacheAndReusesUpload(t *testing.T) {
 			api2.createFolderCalls, api2.uploadFileCalls, api2.queryMetaURLCalls, api2.grantPermissionCalls)
 	}
 
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatalf("read preview state: %v", err)
-	}
-	if !strings.Contains(string(raw), docPath) {
-		t.Fatalf("expected state file to contain source path %q, got %s", docPath, string(raw))
-	}
+	assertPreviewStateContainsSourcePath(t, statePath, docPath)
 }
 
 func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinks(t *testing.T) {
@@ -260,13 +255,25 @@ func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinks(t *testing.T) {
 	if api.uploadFileCalls[0].Content != "<!doctype html><title>mock</title><h1>Mock</h1>" {
 		t.Fatalf("unexpected uploaded content: %#v", api.uploadFileCalls[0])
 	}
-	raw, err := os.ReadFile(previewer.config.StatePath)
+	assertPreviewStateContainsSourcePath(t, previewer.config.StatePath, htmlPath)
+}
+
+func assertPreviewStateContainsSourcePath(t *testing.T, statePath, wantPath string) {
+	t.Helper()
+	raw, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("read preview state: %v", err)
 	}
-	if !strings.Contains(string(raw), htmlPath) {
-		t.Fatalf("expected state file to contain source path %q, got %s", htmlPath, string(raw))
+	var state previewState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("decode preview state: %v", err)
 	}
+	for _, file := range state.Files {
+		if file != nil && testutil.SamePath(file.Path, wantPath) {
+			return
+		}
+	}
+	t.Fatalf("expected state file to contain source path %q, got %s", wantPath, string(raw))
 }
 
 func TestDriveMarkdownPreviewerUploadsNewVersionWhenMarkdownChanges(t *testing.T) {

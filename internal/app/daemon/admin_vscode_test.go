@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
-	entrypointV1 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
-	windowsSibling := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "windows-x86_64", "codex.exe")
+	entrypointV1 := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	windowsSibling := testNonCurrentPlatformBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypointV1, "orig-v1")
 	writeExecutableFile(t, windowsSibling, "orig-win-v1")
 
@@ -69,8 +70,8 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 		t.Fatalf("expected shared codex path to stay unchanged, got %q", loaded.Config.Wrapper.CodexRealBinary)
 	}
 
-	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
-	windowsSiblingV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "windows-x86_64", "codex.exe")
+	entrypointV2 := testVSCodeBundleEntrypoint(home, ".vscode-server", "2")
+	windowsSiblingV2 := testNonCurrentPlatformBundleEntrypoint(home, ".vscode-server", "2")
 	writeExecutableFile(t, entrypointV2, "orig-v2")
 	writeExecutableFile(t, windowsSiblingV2, "orig-win-v2")
 	now := time.Now().Add(time.Minute)
@@ -263,7 +264,7 @@ func TestVSCodeApplyAllAliasesBoth(t *testing.T) {
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
-	entrypoint := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypoint, "orig")
 
 	app, configPath, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
@@ -296,7 +297,11 @@ func TestVSCodeDetectSupportsJSONCSettings(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(settings dir): %v", err)
 	}
-	rawSettings := "{\n  // existing vscode config\n  \"chatgpt.cliExecutable\": \"" + binaryPath + "\",\n}\n"
+	quotedBinaryPath, err := json.Marshal(binaryPath)
+	if err != nil {
+		t.Fatalf("Marshal(binaryPath): %v", err)
+	}
+	rawSettings := "{\n  // existing vscode config\n  \"chatgpt.cliExecutable\": " + string(quotedBinaryPath) + ",\n}\n"
 	if err := os.WriteFile(settingsPath, []byte(rawSettings), 0o644); err != nil {
 		t.Fatalf("WriteFile(settings): %v", err)
 	}
@@ -327,7 +332,7 @@ func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
-	entrypointV1 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex")
+	entrypointV1 := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypointV1, "orig-v1")
 
 	app, configPath, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
@@ -337,7 +342,7 @@ func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing
 		t.Fatalf("apply v1 status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
 
-	entrypointV2 := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
+	entrypointV2 := testVSCodeBundleEntrypoint(home, ".vscode-server", "2")
 	writeExecutableFile(t, entrypointV2, "orig-v2")
 	now := time.Now().Add(time.Minute)
 	if err := os.Chtimes(filepath.Dir(filepath.Dir(filepath.Dir(entrypointV2))), now, now); err != nil {
@@ -422,6 +427,35 @@ func newVSCodeAdminTestAppWithGateway(t *testing.T, gateway feishu.Gateway, home
 		SSHSession:      sshSession,
 	})
 	return app, configPath, installStatePath
+}
+
+func testVSCodeBundleEntrypoint(home, extensionRoot, version string) string {
+	return filepath.Join(home, extensionRoot, "extensions", "openai.chatgpt-"+version, "bin", testCurrentPlatformBundleDir(), executableName("codex"))
+}
+
+func testNonCurrentPlatformBundleEntrypoint(home, extensionRoot, version string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(home, extensionRoot, "extensions", "openai.chatgpt-"+version, "bin", "linux-x86_64", "codex")
+	}
+	return filepath.Join(home, extensionRoot, "extensions", "openai.chatgpt-"+version, "bin", "windows-x86_64", "codex.exe")
+}
+
+func testCurrentPlatformBundleDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "windows-" + testBundleArchSuffix()
+	case "darwin":
+		return "darwin-" + testBundleArchSuffix()
+	default:
+		return "linux-" + testBundleArchSuffix()
+	}
+}
+
+func testBundleArchSuffix() string {
+	if runtime.GOARCH == "arm64" {
+		return "arm64"
+	}
+	return "x86_64"
 }
 
 func writeExecutableFile(t *testing.T, path, content string) {
