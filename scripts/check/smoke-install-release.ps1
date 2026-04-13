@@ -219,7 +219,7 @@ try {
     CODEX_REMOTE_BASE_URL = ("http://127.0.0.1:{0}" -f $port)
     CODEX_REMOTE_INSTALL_ROOT = $installRoot
     CODEX_REMOTE_RELEASES_API_URL = $null
-    CODEX_REMOTE_SKIP_SETUP = $null
+    CODEX_REMOTE_SKIP_SETUP = "1"
   }
 
   & (Join-Path $RootDir "install-release.ps1")
@@ -320,6 +320,17 @@ try {
   }
   Stop-CodexRemoteProcesses $localAppData
   if (Test-Path -LiteralPath $workDir) {
-    Remove-Item -LiteralPath $workDir -Force -Recurse
+    for ($i = 0; $i -lt 3; $i++) {
+      try {
+        Remove-Item -LiteralPath $workDir -Force -Recurse -ErrorAction Stop
+        break
+      } catch {
+        if ($i -eq 2) {
+          Write-Warning ("cleanup skipped for locked path: {0}" -f $workDir)
+        } else {
+          Start-Sleep -Milliseconds 300
+        }
+      }
+    }
   }
 }
