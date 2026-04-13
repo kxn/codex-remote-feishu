@@ -613,6 +613,7 @@ func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *te
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	placeholderCWD := "/tmp/droid-placeholder"
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",
 		DisplayName:   "dl",
@@ -622,7 +623,7 @@ func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *te
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-6d13": {ThreadID: "thread-6d13", Name: "主线程", CWD: "/data/dl"},
-			"thread-81a0": {ThreadID: "thread-81a0", Name: "占位线程", CWD: "/home/dl/droid"},
+			"thread-81a0": {ThreadID: "thread-81a0", Name: "占位线程", CWD: placeholderCWD},
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
@@ -641,7 +642,7 @@ func TestLocalPlaceholderInteractionDoesNotStealSelectionFromRunningThread(t *te
 	later := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventLocalInteractionObserved,
 		ThreadID: "thread-81a0",
-		CWD:      "/home/dl/droid",
+		CWD:      placeholderCWD,
 		Action:   "turn_start",
 	})
 	if len(later) != 0 {

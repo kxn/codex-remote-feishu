@@ -29,7 +29,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u al
 ```bash
 ps -ef | rg 'relayd|relay-wrapper' | rg -v rg
 ss -ltnp | rg '9500|9501'
-tail -n 200 /home/dl/.local/share/codex-relay/logs/relayd.log
+tail -n 200 "${XDG_STATE_HOME:-$HOME/.local/state}/codex-relay/logs/relayd.log"
 ```
 
 ## Symptom shortcuts

@@ -46,9 +46,9 @@ func TestRunInteractiveWizardManagedShimBlankCodexBinaryUsesAutoResolution(t *te
 func TestRunInteractiveWizardHonorsExplicitIntegrationSeed(t *testing.T) {
 	defaults := PlatformDefaults{
 		GOOS:                "darwin",
-		BaseDir:             "/Users/demo",
-		InstallBinDir:       "/Users/demo/Library/Application Support/codex-remote/bin",
-		VSCodeSettingsPath:  "/Users/demo/Library/Application Support/Code/User/settings.json",
+		BaseDir:             "/tmp/demo-home",
+		InstallBinDir:       "/tmp/demo-home/Library/Application Support/codex-remote/bin",
+		VSCodeSettingsPath:  "/tmp/demo-home/Library/Application Support/Code/User/settings.json",
 		DefaultIntegrations: []WrapperIntegrationMode{IntegrationManagedShim},
 	}
 	input := strings.Join([]string{
