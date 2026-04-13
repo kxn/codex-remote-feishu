@@ -137,6 +137,34 @@
    - 给用户可恢复的默认行为
    - 在文档和 notice 中说明
 
+## 5.7 建议状态结构（深化）
+
+本阶段不要求一次性重命名所有类型，但建议把 backend 维度明确塞进现有状态结构，而不是靠 `Instance.Source` 事后推断。
+
+建议最小扩展：
+
+- `state.InstanceRecord`
+  - 新增 `Backend string`
+  - `Source` 继续保留，表达运行来源，例如 `vscode/headless/claude`
+- `state.ThreadRecord`
+  - 不必单独存 backend，默认继承所属 instance backend
+- `SurfaceResumeEntry`
+  - 新增 `ResumeBackend`
+- `WorkspaceDefaults`
+  - 从单层配置升级为 `workspace -> backend -> config`
+
+推荐解释：
+
+- `Backend` 表达“这是谁的会话协议面”，候选值：
+  - `codex`
+  - `claude`
+- `Source` 表达“这个实例从哪里来”，候选值继续包括：
+  - `vscode`
+  - `headless`
+  - `claude`
+
+这样可以避免把“来源”和“后端”混成一个字段。
+
 ## 6. 命令矩阵（PoC 版）
 
 | Command | Codex | Claude PoC | 处理策略 |
@@ -147,6 +175,23 @@
 | `threads.refresh` | support | optional | 按 capability 检查，不支持则拒绝 |
 | `turn.steer` | support | unsupported(v1) | 显式拒绝 + notice |
 | `vscode-mode path` | support | unsupported | 显式拒绝 + notice |
+
+## 6.0 dispatch 决策顺序（深化）
+
+任一发往 agent 的命令，在 daemon/orchestrator 侧都按以下顺序决策：
+
+1. 确定目标 surface 当前 attached instance。
+2. 读取 instance backend 与 capabilities。
+3. 检查该命令是否被当前 mode 允许。
+4. 检查该命令是否被当前 backend capability 允许。
+5. 若允许，正常派发。
+6. 若不允许，走统一 reject/problem + notice，不尝试跨 backend fallback。
+
+这个顺序的目的是防止：
+
+- mode 说可以，但 backend 不支持
+- backend 支持，但当前 mode 不该开放
+- 当前实例不支持，系统却偷偷落到别的实例
 
 ## 6.1 并行产品语义（新增）
 
@@ -175,6 +220,23 @@
 2. 清除：当前会话态（attached instance、selected thread、pending request、queue、active turn、staged inputs/images、resume target 中的 thread/session 部分）。
 3. 重建：目标 backend 的默认能力视图与命令可用性。
 
+进一步细化：
+
+- 若当前 surface 仍有 active turn / pending request / dispatching queue：
+  - 默认拒绝切换
+  - 提示用户先等待完成、`/stop` 或 `/detach`
+- 切换成功后：
+  - `SelectedThreadID = ""`
+  - `AttachedInstanceID = ""`
+  - `PendingRequests = nil`
+  - `ActiveRequestCapture/ActiveCommandCapture = nil`
+  - `QueueItems` 清空
+  - `RouteMode` 回到“仅保留 workspace、未选会话”的初始 normal 态
+- 若切到 `claude`：
+  - 命令可见性立即切成 Claude 能力矩阵
+- 若切回 `codex`：
+  - 恢复 Codex normal 命令矩阵与 workspace 下的 Codex 默认配置
+
 ### 设计原因
 
 - 用户需要主动感知“当前在用哪个 backend”。
@@ -191,11 +253,13 @@
 4. 补充 backend 维度到 surface resume / instance snapshot 关键状态（至少写入并保留，不先改 UI）。
 5. `/mode` 切换实现为 provider-aware（`normal -> codex` 别名），并补齐切换时状态清理。
 6. 盘点并实现旧版本状态的读取兼容或迁移规则。
+7. 明确 `Backend` 与 `Source` 的状态职责，避免后续再混字段语义。
 
 交付物：
 
 - capability 持久化与查询接口
 - capability-aware `onHello` 分支
+- backend-aware 基础状态结构草图落地
 - 回归测试（Codex-only 不回归）
 
 ## 阶段 B：Claude bridge 契约（PoC）
@@ -216,11 +280,13 @@
 3. `turn.steer` 显式降级。
 4. 后端并行时 `/list`/`/use` 不串 backend，会话选择与恢复可预期。
 5. `/mode codex|claude` 在产品侧可感知，且切换行为符合“保留 workspace、清空会话态”。
+6. workspace 参数读写切到 backend-aware 结构，至少兼容 `codex` 与 `claude` 两套默认值。
 
 交付物：
 
 - normal mode e2e 测试样例
 - Feishu 可见提示文案
+- `/mode` 切换状态清理测试
 
 ## 阶段 D：稳定化与文档收口
 
@@ -239,6 +305,7 @@
 7. surface resume 不会把一个 backend 的会话误恢复到另一个 backend 实例。
 8. `/mode normal` 与 `/mode codex` 语义一致；`/mode claude` 切换后不会残留旧 backend 会话态。
 9. 旧版本持久化数据升级后仍可正常进入 Codex 路径，且不会因缺失 backend 字段崩坏。
+10. `Backend` 与 `Source` 的职责在代码与产品文案中不混淆。
 
 ## 9. 风险与回退
 
