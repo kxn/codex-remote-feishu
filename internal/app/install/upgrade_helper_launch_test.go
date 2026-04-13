@@ -48,8 +48,8 @@ func TestStartUpgradeHelperProcessUsesDetachedCommandForDetachedService(t *testi
 	if !testutil.SamePath(detached.BinaryPath, testutil.WorkspacePath("tmp", "helper")) {
 		t.Fatalf("binary = %q, want %q", detached.BinaryPath, testutil.WorkspacePath("tmp", "helper"))
 	}
-	if got, want := strings.Join(detached.Args, "\x00"), strings.Join([]string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")}, "\x00"); got != want {
-		t.Fatalf("args = %#v, want %#v", detached.Args, []string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")})
+	if len(detached.Args) != 3 || detached.Args[0] != "upgrade-helper" || detached.Args[1] != "-state-path" || !testutil.SamePath(detached.Args[2], testutil.WorkspacePath("tmp", "install-state.json")) {
+		t.Fatalf("args = %#v, want upgrade-helper -state-path <state-path>", detached.Args)
 	}
 	if !testutil.SamePath(detached.WorkDir, testutil.WorkspacePath("tmp", "work")) {
 		t.Fatalf("workdir = %q, want %q", detached.WorkDir, testutil.WorkspacePath("tmp", "work"))
@@ -100,8 +100,8 @@ func TestStartUpgradeHelperProcessUsesSystemdRunForSystemdUser(t *testing.T) {
 	if !testutil.SamePath(transient.BinaryPath, testutil.WorkspacePath("tmp", "helper")) {
 		t.Fatalf("binary = %q, want %q", transient.BinaryPath, testutil.WorkspacePath("tmp", "helper"))
 	}
-	if got, want := strings.Join(transient.Args, "\x00"), strings.Join([]string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")}, "\x00"); got != want {
-		t.Fatalf("args = %#v, want %#v", transient.Args, []string{"upgrade-helper", "-state-path", testutil.WorkspacePath("tmp", "install-state.json")})
+	if len(transient.Args) != 3 || transient.Args[0] != "upgrade-helper" || transient.Args[1] != "-state-path" || !testutil.SamePath(transient.Args[2], testutil.WorkspacePath("tmp", "install-state.json")) {
+		t.Fatalf("args = %#v, want upgrade-helper -state-path <state-path>", transient.Args)
 	}
 	if !testutil.SamePath(transient.WorkDir, testutil.WorkspacePath("tmp", "work")) {
 		t.Fatalf("workdir = %q, want %q", transient.WorkDir, testutil.WorkspacePath("tmp", "work"))

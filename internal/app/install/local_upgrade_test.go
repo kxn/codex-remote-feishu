@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
+	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
 )
 
 func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testing.T) {
@@ -72,12 +74,12 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	if len(startedArgs) != 0 {
 		t.Fatalf("helper args = %#v, want empty direct-exec shim", startedArgs)
 	}
-	sidecarRaw, err := os.ReadFile(UpgradeShimSidecarPath(startedBinary))
+	sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(startedBinary))
 	if err != nil {
-		t.Fatalf("ReadFile sidecar: %v", err)
+		t.Fatalf("ReadSidecar: %v", err)
 	}
-	if !bytes.Contains(sidecarRaw, []byte(statePath)) {
-		t.Fatalf("sidecar = %q, want state path", string(sidecarRaw))
+	if !testutil.SamePath(sidecar.InstallStatePath, statePath) {
+		t.Fatalf("sidecar installStatePath = %q, want %q", sidecar.InstallStatePath, statePath)
 	}
 
 	updated, err := LoadState(statePath)
@@ -93,7 +95,7 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	if updated.PendingUpgrade.TargetSlot != slot {
 		t.Fatalf("pending target slot = %q, want %q", updated.PendingUpgrade.TargetSlot, slot)
 	}
-	if updated.PendingUpgrade.TargetBinaryPath != targetBinary {
+	if !testutil.SamePath(updated.PendingUpgrade.TargetBinaryPath, targetBinary) {
 		t.Fatalf("pending target binary = %q, want %q", updated.PendingUpgrade.TargetBinaryPath, targetBinary)
 	}
 	if updated.PendingUpgrade.HelperUnitName != "" {
@@ -196,10 +198,10 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	if len(helperRaw) == 0 {
 		t.Fatal("expected helper shim binary to be non-empty")
 	}
-	if sidecarRaw, err := os.ReadFile(UpgradeShimSidecarPath(startedBinary)); err != nil {
-		t.Fatalf("ReadFile sidecar: %v", err)
-	} else if !bytes.Contains(sidecarRaw, []byte(statePath)) {
-		t.Fatalf("sidecar = %q, want state path", string(sidecarRaw))
+	if sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(startedBinary)); err != nil {
+		t.Fatalf("ReadSidecar: %v", err)
+	} else if !testutil.SamePath(sidecar.InstallStatePath, statePath) {
+		t.Fatalf("sidecar installStatePath = %q, want %q", sidecar.InstallStatePath, statePath)
 	}
 }
 

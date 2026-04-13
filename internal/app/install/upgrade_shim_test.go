@@ -1,12 +1,13 @@
 package install
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
+	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
 	upgradeshimembed "github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed"
 )
 
@@ -37,11 +38,11 @@ func TestWriteUpgradeShimEntrypointWritesExecutableAndSidecar(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("expected extracted shim executable to be non-empty")
 	}
-	sidecarRaw, err := os.ReadFile(UpgradeShimSidecarPath(entrypoint))
+	sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(entrypoint))
 	if err != nil {
-		t.Fatalf("ReadFile sidecar: %v", err)
+		t.Fatalf("ReadSidecar: %v", err)
 	}
-	if !bytes.Contains(sidecarRaw, []byte(statePath)) {
-		t.Fatalf("sidecar = %q, want state path", string(sidecarRaw))
+	if !testutil.SamePath(sidecar.InstallStatePath, statePath) {
+		t.Fatalf("sidecar installStatePath = %q, want %q", sidecar.InstallStatePath, statePath)
 	}
 }

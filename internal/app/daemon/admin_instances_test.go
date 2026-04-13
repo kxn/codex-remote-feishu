@@ -209,7 +209,7 @@ func TestCreateManagedHeadlessInstanceSetsExplicitDaemonOwnedLifetime(t *testing
 	if summary.InstanceID == "" || captured.InstanceID != summary.InstanceID {
 		t.Fatalf("expected launched instance id to match summary, got summary=%#v launch=%#v", summary, captured)
 	}
-	if captured.WorkDir != workspaceRoot {
+	if !testutil.SamePath(captured.WorkDir, workspaceRoot) {
 		t.Fatalf("expected managed headless workdir = %q, got %#v", workspaceRoot, captured)
 	}
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") ||
