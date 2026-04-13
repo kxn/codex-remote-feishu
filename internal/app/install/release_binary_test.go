@@ -2,6 +2,7 @@ package install
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"net/http"
@@ -96,6 +97,34 @@ func TestEnsureReleaseBinaryFallsBackWhenRenameHitsCrossDeviceLink(t *testing.T)
 	}
 }
 
+func TestReleaseAssetNameWindowsUsesZip(t *testing.T) {
+	got := releaseAssetName("v1.2.3", "windows", "amd64")
+	want := "codex-remote-feishu_1.2.3_windows_amd64.zip"
+	if got != want {
+		t.Fatalf("releaseAssetName = %q, want %q", got, want)
+	}
+}
+
+func TestExtractReleaseArchiveSupportsWindowsZip(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "fixture.zip")
+	packageDir := "codex-remote-feishu_1.2.3_windows_amd64"
+	writeReleaseZipArchive(t, archivePath, packageDir, "codex-remote.exe", "release-binary")
+
+	outDir := filepath.Join(dir, "out")
+	if err := extractReleaseArchive(archivePath, outDir, "windows"); err != nil {
+		t.Fatalf("extractReleaseArchive(windows): %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(outDir, packageDir, "codex-remote.exe"))
+	if err != nil {
+		t.Fatalf("ReadFile extracted binary: %v", err)
+	}
+	if string(raw) != "release-binary" {
+		t.Fatalf("binary contents = %q", string(raw))
+	}
+}
+
 func writeReleaseArchive(t *testing.T, archivePath, packageDir, binaryName, content string) {
 	t.Helper()
 
@@ -126,6 +155,40 @@ func writeReleaseArchive(t *testing.T, archivePath, packageDir, binaryName, cont
 		t.Fatalf("WriteHeader file: %v", err)
 	}
 	if _, err := tarWriter.Write([]byte(content)); err != nil {
+		t.Fatalf("Write file contents: %v", err)
+	}
+}
+
+func writeReleaseZipArchive(t *testing.T, archivePath, packageDir, binaryName, content string) {
+	t.Helper()
+
+	file, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile archive: %v", err)
+	}
+	defer file.Close()
+
+	zipWriter := zip.NewWriter(file)
+	defer zipWriter.Close()
+
+	dirHeader := &zip.FileHeader{
+		Name: packageDir + "/",
+	}
+	dirHeader.SetMode(0o755 | os.ModeDir)
+	if _, err := zipWriter.CreateHeader(dirHeader); err != nil {
+		t.Fatalf("CreateHeader dir: %v", err)
+	}
+
+	fileHeader := &zip.FileHeader{
+		Name:   filepath.ToSlash(filepath.Join(packageDir, binaryName)),
+		Method: zip.Deflate,
+	}
+	fileHeader.SetMode(0o755)
+	entry, err := zipWriter.CreateHeader(fileHeader)
+	if err != nil {
+		t.Fatalf("CreateHeader file: %v", err)
+	}
+	if _, err := entry.Write([]byte(content)); err != nil {
 		t.Fatalf("Write file contents: %v", err)
 	}
 }

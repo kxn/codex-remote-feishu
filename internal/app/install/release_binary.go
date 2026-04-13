@@ -2,6 +2,7 @@ package install
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -61,7 +62,7 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 	if err := downloadFile(ctx, client, assetURL, archivePath); err != nil {
 		return "", err
 	}
-	if err := extractTarGz(archivePath, tempDir); err != nil {
+	if err := extractReleaseArchive(archivePath, tempDir, goos); err != nil {
 		return "", err
 	}
 
@@ -83,7 +84,7 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 }
 
 func releaseAssetName(version, goos, goarch string) string {
-	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s.tar.gz", strings.TrimPrefix(version, "v"), goos, goarch)
+	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s.%s", strings.TrimPrefix(version, "v"), goos, goarch, releaseArchiveExtension(goos))
 }
 
 func releasePackageDir(version, goos, goarch string) string {
@@ -99,6 +100,13 @@ func releaseAssetURL(repository, baseURL, version, assetName string) string {
 		repo = defaultReleaseRepository
 	}
 	return fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", repo, version, assetName)
+}
+
+func releaseArchiveExtension(goos string) string {
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		return "zip"
+	}
+	return "tar.gz"
 }
 
 func updateCurrentReleaseLink(versionsRoot, version string) error {
@@ -186,6 +194,68 @@ func extractTarGz(archivePath, targetDir string) error {
 			}
 		}
 	}
+}
+
+func extractReleaseArchive(archivePath, targetDir, goos string) error {
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		return extractZip(archivePath, targetDir)
+	}
+	return extractTarGz(archivePath, targetDir)
+}
+
+func extractZip(archivePath, targetDir string) error {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	cleanTarget := filepath.Clean(targetDir)
+	targetPrefix := cleanTarget + string(filepath.Separator)
+
+	for _, file := range reader.File {
+		name := filepath.Clean(file.Name)
+		if name == "." {
+			continue
+		}
+		path := filepath.Join(cleanTarget, name)
+		if path != cleanTarget && !strings.HasPrefix(path, targetPrefix) {
+			return fmt.Errorf("archive entry escaped target dir: %s", file.Name)
+		}
+
+		info := file.FileInfo()
+		if info.IsDir() {
+			if err := os.MkdirAll(path, info.Mode().Perm()); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		source, err := file.Open()
+		if err != nil {
+			return err
+		}
+		target, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			source.Close()
+			return err
+		}
+		if _, err := io.Copy(target, source); err != nil {
+			target.Close()
+			source.Close()
+			return err
+		}
+		if err := target.Close(); err != nil {
+			source.Close()
+			return err
+		}
+		if err := source.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func moveReleasePackageDir(sourceDir, targetDir string) error {
