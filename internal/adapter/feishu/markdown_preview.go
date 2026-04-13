@@ -128,8 +128,11 @@ type PreviewDriveCleanupResult struct {
 }
 
 type driveAPIError struct {
-	Code int
-	Msg  string
+	API       string
+	Code      int
+	Msg       string
+	RequestID string
+	LogID     string
 }
 
 func (e *driveAPIError) Error() string {

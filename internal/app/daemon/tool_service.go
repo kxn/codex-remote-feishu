@@ -342,6 +342,7 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 		Path:             path,
 	})
 	if err != nil {
+		_ = a.observeFeishuPermissionError(resolved.GatewayID, err)
 		var sendErr *feishu.IMFileSendError
 		if errors.As(err, &sendErr) {
 			switch sendErr.Code {

@@ -138,8 +138,8 @@ func TestDetectVSCodeSettingsSupportsJSONC(t *testing.T) {
 func TestDetectVSCodeSettingsNormalizesInvalidWindowsPathEscapes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	exePath := `C:\Users\demo\bin\codex-remote.exe`
-	raw := []byte("{\n  \"chatgpt.cliExecutable\": \"C:\\Users\\demo\\bin\\codex-remote.exe\",\n  \"editor.fontSize\": 14\n}\n")
+	exePath := `C:\Tools\codex-remote.exe`
+	raw := []byte("{\n  \"chatgpt.cliExecutable\": \"C:\\Tools\\codex-remote.exe\",\n  \"editor.fontSize\": 14\n}\n")
 	raw = []byte(strings.ReplaceAll(string(raw), `\\`, `\`))
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatalf("seed settings: %v", err)

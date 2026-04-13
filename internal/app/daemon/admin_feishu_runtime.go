@@ -248,6 +248,7 @@ func (a *App) applyRuntimeFeishuConfig(cfg config.AppConfig, gatewayID string) e
 	if err := controller.RemoveApp(context.Background(), gatewayID); err != nil {
 		return err
 	}
+	a.clearFeishuPermissionGaps(gatewayID)
 	a.clearFeishuRuntimeApplyPending(gatewayID)
 	return nil
 }

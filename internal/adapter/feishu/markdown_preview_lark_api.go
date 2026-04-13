@@ -32,7 +32,13 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		return previewRemoteNode{}, err
 	}
 	if !resp.Success() {
-		return previewRemoteNode{}, &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return previewRemoteNode{}, &driveAPIError{
+			API:       "drive.v1.file.create_folder",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	if resp.Data == nil {
 		return previewRemoteNode{}, fmt.Errorf("missing create folder response data")
@@ -59,7 +65,13 @@ func (a *larkDrivePreviewAPI) UploadFile(ctx context.Context, parentToken, fileN
 		return "", err
 	}
 	if !resp.Success() {
-		return "", &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return "", &driveAPIError{
+			API:       "drive.v1.file.upload_all",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	if resp.Data == nil {
 		return "", fmt.Errorf("missing upload file response data")
@@ -83,7 +95,13 @@ func (a *larkDrivePreviewAPI) QueryMetaURL(ctx context.Context, token, docType s
 		return "", err
 	}
 	if !resp.Success() {
-		return "", &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return "", &driveAPIError{
+			API:       "drive.v1.meta.batch_query",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	if resp.Data == nil || len(resp.Data.Metas) == 0 || resp.Data.Metas[0] == nil {
 		return "", fmt.Errorf("missing meta url for token %s", token)
@@ -106,7 +124,13 @@ func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docTyp
 		return err
 	}
 	if !resp.Success() {
-		return &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return &driveAPIError{
+			API:       "drive.v1.permission_member.create",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	return nil
 }
@@ -120,7 +144,13 @@ func (a *larkDrivePreviewAPI) DeleteFile(ctx context.Context, token, docType str
 		return err
 	}
 	if !resp.Success() {
-		return &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return &driveAPIError{
+			API:       "drive.v1.file.delete",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	return nil
 }
@@ -140,7 +170,13 @@ func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string)
 			return nil, err
 		}
 		if !resp.Success() {
-			return nil, &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+			return nil, &driveAPIError{
+				API:       "drive.v1.file.list",
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: strings.TrimSpace(resp.RequestId()),
+				LogID:     strings.TrimSpace(resp.RequestId()),
+			}
 		}
 		if resp.Data != nil {
 			for _, file := range resp.Data.Files {
@@ -175,7 +211,13 @@ func (a *larkDrivePreviewAPI) ListPermissionMembers(ctx context.Context, token, 
 		return nil, err
 	}
 	if !resp.Success() {
-		return nil, &driveAPIError{Code: resp.Code, Msg: resp.Msg}
+		return nil, &driveAPIError{
+			API:       "drive.v1.permission_member.list",
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: strings.TrimSpace(resp.RequestId()),
+			LogID:     strings.TrimSpace(resp.RequestId()),
+		}
 	}
 	values := map[string]bool{}
 	if resp.Data == nil {

@@ -70,6 +70,11 @@ func formatSnapshot(snapshot control.Snapshot, daemonBinary, currentDirectory st
 	if autoContinue := snapshotAutoContinueText(snapshot.AutoContinue); autoContinue != "" {
 		lines = append(lines, snapshotField("autowhip", autoContinue))
 	}
+	if permissionGaps := formatSnapshotPermissionGaps(snapshot.PermissionGaps); len(permissionGaps) != 0 {
+		lines = append(lines, "")
+		lines = append(lines, "**已知缺权限：**")
+		lines = append(lines, permissionGaps...)
+	}
 	if snapshot.PendingHeadless.InstanceID != "" {
 		lines = append(lines, "")
 		lines = append(lines, "**后台恢复中：**")
@@ -87,6 +92,31 @@ func formatSnapshot(snapshot control.Snapshot, daemonBinary, currentDirectory st
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func formatSnapshotPermissionGaps(gaps []control.PermissionGapSummary) []string {
+	if len(gaps) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(gaps)*2)
+	for _, gap := range gaps {
+		scope := strings.TrimSpace(gap.Scope)
+		if scope == "" {
+			continue
+		}
+		line := "- " + formatNeutralTextTag(scope)
+		if source := strings.TrimSpace(gap.SourceAPI); source != "" {
+			line += " · 来源 " + formatNeutralTextTag(source)
+		}
+		if !gap.LastSeenAt.IsZero() {
+			line += " · 最近命中 " + formatNeutralTextTag(gap.LastSeenAt.Format("2006-01-02 15:04:05 MST"))
+		}
+		lines = append(lines, line)
+		if url := strings.TrimSpace(gap.ApplyURL); url != "" {
+			lines = append(lines, "  申请链接: "+formatNeutralTextTag(url))
+		}
+	}
+	return lines
 }
 
 func (p *Projector) formatSnapshot(snapshot control.Snapshot) string {

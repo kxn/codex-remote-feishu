@@ -118,43 +118,48 @@ type App struct {
 	shutdownStarted   bool
 	shuttingDown      bool
 
-	commandSeq    uint64
-	mu            sync.Mutex
-	shutdownMu    sync.Mutex
-	adminConfigMu sync.Mutex
-	adminFeishuMu sync.RWMutex
-	listenMu      sync.Mutex
-	ingressRunMu  sync.Mutex
-	relayConnMu   sync.Mutex
+	commandSeq         uint64
+	mu                 sync.Mutex
+	shutdownMu         sync.Mutex
+	adminConfigMu      sync.Mutex
+	adminFeishuMu      sync.RWMutex
+	listenMu           sync.Mutex
+	ingressRunMu       sync.Mutex
+	relayConnMu        sync.Mutex
+	feishuPermissionMu sync.RWMutex
 
-	pendingGatewayNotices  map[string][]control.UIEvent
-	headlessRuntime        HeadlessRuntimeConfig
-	surfaceResumeState     *surfaceResumeStore
-	surfaceResumeRecovery  map[string]*surfaceResumeRecoveryState
-	vscodeResumeNotices    map[string]bool
-	vscodeMigrationPrompts map[string]string
-	vscodeDetect           func() (vscodeDetectResponse, error)
-	detectPlatformDefaults func() (install.PlatformDefaults, error)
-	vscodeCompatibility    vscodeCompatibilityCacheState
-	vscodeStartupCheckDue  bool
-	headlessRestoreState   map[string]*headlessRestoreRecoveryState
-	startupRefreshPending  map[string]bool
-	startupRefreshSeen     bool
-	managedHeadless        map[string]*managedHeadlessProcess
-	startHeadless          func(relayruntime.HeadlessLaunchOptions) (int, error)
-	stopProcess            func(int, time.Duration) error
-	sendAgentCommand       func(string, agentproto.Command) error
-	ingress                *ingressPump
-	ingressCancel          context.CancelFunc
-	ingressStarted         bool
-	ingressWG              sync.WaitGroup
-	gatewayRunCancel       context.CancelFunc
-	gatewayRunDone         chan struct{}
-	relayConnections       map[string]*relayConnectionState
-	feishuRuntimeApply     map[string]feishuRuntimeApplyPendingState
-	feishuTimeSensitive    map[string]feishuTimeSensitiveState
-	feishuOnboarding       map[string]*feishuOnboardingSession
-	feishuSetup            feishuSetupClient
+	pendingGatewayNotices           map[string][]control.UIEvent
+	headlessRuntime                 HeadlessRuntimeConfig
+	surfaceResumeState              *surfaceResumeStore
+	surfaceResumeRecovery           map[string]*surfaceResumeRecoveryState
+	vscodeResumeNotices             map[string]bool
+	vscodeMigrationPrompts          map[string]string
+	vscodeDetect                    func() (vscodeDetectResponse, error)
+	detectPlatformDefaults          func() (install.PlatformDefaults, error)
+	vscodeCompatibility             vscodeCompatibilityCacheState
+	vscodeStartupCheckDue           bool
+	headlessRestoreState            map[string]*headlessRestoreRecoveryState
+	startupRefreshPending           map[string]bool
+	startupRefreshSeen              bool
+	managedHeadless                 map[string]*managedHeadlessProcess
+	startHeadless                   func(relayruntime.HeadlessLaunchOptions) (int, error)
+	stopProcess                     func(int, time.Duration) error
+	sendAgentCommand                func(string, agentproto.Command) error
+	ingress                         *ingressPump
+	ingressCancel                   context.CancelFunc
+	ingressStarted                  bool
+	ingressWG                       sync.WaitGroup
+	gatewayRunCancel                context.CancelFunc
+	gatewayRunDone                  chan struct{}
+	relayConnections                map[string]*relayConnectionState
+	feishuRuntimeApply              map[string]feishuRuntimeApplyPendingState
+	feishuTimeSensitive             map[string]feishuTimeSensitiveState
+	feishuPermissionGaps            map[string]map[string]*feishuPermissionGapRecord
+	feishuPermissionRefreshEvery    time.Duration
+	feishuPermissionNextRefresh     time.Time
+	feishuPermissionRefreshInFlight bool
+	feishuOnboarding                map[string]*feishuOnboardingSession
+	feishuSetup                     feishuSetupClient
 
 	adminAuth             *adminauth.Manager
 	admin                 adminRuntimeState
@@ -205,41 +210,43 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		panic(err)
 	}
 	app := &App{
-		service:                orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
-		projector:              feishu.NewProjector(),
-		gateway:                gateway,
-		serverIdentity:         serverIdentity,
-		daemonStartedAt:        daemonStartedAt,
-		daemonLifecycleID:      daemonLifecycleID(serverIdentity, daemonStartedAt),
-		pendingGatewayNotices:  map[string][]control.UIEvent{},
-		surfaceResumeRecovery:  map[string]*surfaceResumeRecoveryState{},
-		vscodeResumeNotices:    map[string]bool{},
-		vscodeMigrationPrompts: map[string]string{},
-		headlessRestoreState:   map[string]*headlessRestoreRecoveryState{},
-		startupRefreshPending:  map[string]bool{},
-		managedHeadless:        map[string]*managedHeadlessProcess{},
-		startHeadless:          relayruntime.StartDetachedWrapper,
-		stopProcess:            relayruntime.TerminateProcess,
-		ingress:                newIngressPump(),
-		relayConnections:       map[string]*relayConnectionState{},
-		feishuRuntimeApply:     map[string]feishuRuntimeApplyPendingState{},
-		feishuTimeSensitive:    map[string]feishuTimeSensitiveState{},
-		feishuOnboarding:       map[string]*feishuOnboardingSession{},
-		feishuSetup:            newLiveFeishuSetupClient(),
-		adminAuth:              authManager,
-		workspaceContextRoots:  map[string]string{},
-		shutdownGracePeriod:    5 * time.Second,
-		shutdownNoticeTimeout:  2 * time.Second,
-		gatewayStopTimeout:     3 * time.Second,
-		shutdownDrainTimeout:   3 * time.Second,
-		shutdownDrainPoll:      50 * time.Millisecond,
-		shutdownForceKillGrace: 0,
-		gatewayApplyTimeout:    30 * time.Second,
-		finalPreviewTimeout:    90 * time.Second,
-		upgradeCheckInterval:   3 * time.Hour,
-		upgradeStartupDelay:    1 * time.Minute,
-		upgradePromptScanEvery: 5 * time.Second,
-		upgradeResultScanEvery: 5 * time.Second,
+		service:                      orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
+		projector:                    feishu.NewProjector(),
+		gateway:                      gateway,
+		serverIdentity:               serverIdentity,
+		daemonStartedAt:              daemonStartedAt,
+		daemonLifecycleID:            daemonLifecycleID(serverIdentity, daemonStartedAt),
+		pendingGatewayNotices:        map[string][]control.UIEvent{},
+		surfaceResumeRecovery:        map[string]*surfaceResumeRecoveryState{},
+		vscodeResumeNotices:          map[string]bool{},
+		vscodeMigrationPrompts:       map[string]string{},
+		headlessRestoreState:         map[string]*headlessRestoreRecoveryState{},
+		startupRefreshPending:        map[string]bool{},
+		managedHeadless:              map[string]*managedHeadlessProcess{},
+		startHeadless:                relayruntime.StartDetachedWrapper,
+		stopProcess:                  relayruntime.TerminateProcess,
+		ingress:                      newIngressPump(),
+		relayConnections:             map[string]*relayConnectionState{},
+		feishuRuntimeApply:           map[string]feishuRuntimeApplyPendingState{},
+		feishuTimeSensitive:          map[string]feishuTimeSensitiveState{},
+		feishuPermissionGaps:         map[string]map[string]*feishuPermissionGapRecord{},
+		feishuPermissionRefreshEvery: defaultFeishuPermissionRefreshEvery,
+		feishuOnboarding:             map[string]*feishuOnboardingSession{},
+		feishuSetup:                  newLiveFeishuSetupClient(),
+		adminAuth:                    authManager,
+		workspaceContextRoots:        map[string]string{},
+		shutdownGracePeriod:          5 * time.Second,
+		shutdownNoticeTimeout:        2 * time.Second,
+		gatewayStopTimeout:           3 * time.Second,
+		shutdownDrainTimeout:         3 * time.Second,
+		shutdownDrainPoll:            50 * time.Millisecond,
+		shutdownForceKillGrace:       0,
+		gatewayApplyTimeout:          30 * time.Second,
+		finalPreviewTimeout:          90 * time.Second,
+		upgradeCheckInterval:         3 * time.Hour,
+		upgradeStartupDelay:          1 * time.Minute,
+		upgradePromptScanEvery:       5 * time.Second,
+		upgradeResultScanEvery:       5 * time.Second,
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
 	app.upgradeLookup = app.defaultReleaseLookup

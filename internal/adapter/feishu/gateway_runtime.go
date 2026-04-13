@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
@@ -167,7 +168,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return err
 		}
 		if !resp.Success() {
-			return fmt.Errorf("send text failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
 			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
@@ -207,7 +208,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return err
 		}
 		if !resp.Success() {
-			return fmt.Errorf("send card failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
 			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
@@ -248,7 +249,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return err
 		}
 		if !resp.Success() {
-			return fmt.Errorf("send image failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
 			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
@@ -271,7 +272,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			if ignoredMissingReactionError(resp.Code, resp.Msg) {
 				return nil
 			}
-			return fmt.Errorf("add reaction failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v1.message_reaction.create", resp.ApiResp, resp.CodeError)
 		}
 		g.mu.Lock()
 		if resp.Data != nil && resp.Data.ReactionId != nil {
@@ -300,7 +301,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 				g.mu.Unlock()
 				return nil
 			}
-			return fmt.Errorf("remove reaction failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v1.message_reaction.delete", resp.ApiResp, resp.CodeError)
 		}
 		g.mu.Lock()
 		delete(g.reactions, reactionKey(operation.MessageID, operation.EmojiType))
@@ -317,7 +318,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return err
 		}
 		if !resp.Success() {
-			return fmt.Errorf("set time sensitive failed: code=%d msg=%s", resp.Code, resp.Msg)
+			return newAPIError("im.v2.feed_card.bot_time_sensitive", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil && len(resp.Data.FailedUserReasons) != 0 {
 			reason := resp.Data.FailedUserReasons[0]
@@ -610,7 +611,7 @@ func (g *LiveGateway) uploadImagePath(ctx context.Context, path string) (string,
 		return "", err
 	}
 	if !resp.Success() {
-		return "", fmt.Errorf("upload image failed: code=%d msg=%s", resp.Code, resp.Msg)
+		return "", newAPIError("im.v1.image.create", resp.ApiResp, resp.CodeError)
 	}
 	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
 		return "", fmt.Errorf("upload image failed: missing image key")
@@ -629,7 +630,7 @@ func (g *LiveGateway) uploadImageBytes(ctx context.Context, data []byte) (string
 		return "", err
 	}
 	if !resp.Success() {
-		return "", fmt.Errorf("upload image failed: code=%d msg=%s", resp.Code, resp.Msg)
+		return "", newAPIError("im.v1.image.create", resp.ApiResp, resp.CodeError)
 	}
 	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
 		return "", fmt.Errorf("upload image failed: missing image key")
@@ -706,6 +707,17 @@ func replyRespMsg(resp *larkim.ReplyMessageResp) string {
 		return ""
 	}
 	return resp.Msg
+}
+
+func replyRespError(resp *larkim.ReplyMessageResp) error {
+	if resp == nil || resp.Success() {
+		return nil
+	}
+	return newAPIError("im.v1.message.reply", resp.ApiResp, larkcore.CodeError{
+		Code: resp.Code,
+		Msg:  resp.Msg,
+		Err:  resp.CodeError.Err,
+	})
 }
 
 func ignoredMissingReactionError(_ int, msg string) bool {

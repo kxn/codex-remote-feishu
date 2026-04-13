@@ -160,8 +160,21 @@ type Snapshot struct {
 	Gate             GateSummary
 	Dispatch         DispatchSummary
 	AutoContinue     AutoContinueSummary
+	PermissionGaps   []PermissionGapSummary
 	Instances        []InstanceSummary
 	Threads          []ThreadSummary
+}
+
+type PermissionGapSummary struct {
+	Scope        string
+	ScopeType    string
+	ApplyURL     string
+	SourceAPI    string
+	ErrorCode    int
+	FirstSeenAt  time.Time
+	LastSeenAt   time.Time
+	LastVerified time.Time
+	HitCount     int
 }
 
 type AttachmentSummary struct {

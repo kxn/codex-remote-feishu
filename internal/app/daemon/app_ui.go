@@ -147,6 +147,9 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 		}
 	}
 	event.DaemonLifecycleID = a.daemonLifecycleID
+	if event.Snapshot != nil {
+		a.populateSnapshotFeishuPermissionGaps(event.Snapshot, event.SurfaceSessionID)
+	}
 	operations := a.projector.Project(chatID, event)
 	operations = append(operations, previewSupplementOps...)
 	for i := range operations {
@@ -165,7 +168,14 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 	}
 	applyCtx, applyCancel := a.newTimeoutContext(ctx, a.gatewayApplyTimeout)
 	defer applyCancel()
-	return a.gateway.Apply(applyCtx, operations)
+	if err := a.gateway.Apply(applyCtx, operations); err != nil {
+		if a.observeFeishuPermissionError(gatewayID, err) {
+			log.Printf("feishu permission gap observed during ui delivery: gateway=%s surface=%s event=%s err=%v", gatewayID, event.SurfaceSessionID, event.Kind, err)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

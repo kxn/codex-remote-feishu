@@ -104,7 +104,7 @@ func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IM
 	if !resp.Success() {
 		return result, &IMFileSendError{
 			Code: IMFileSendErrorSendFailed,
-			Err:  fmt.Errorf("send file failed: code=%d msg=%s", resp.Code, resp.Msg),
+			Err:  newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError),
 		}
 	}
 	messageID := ""
@@ -158,7 +158,7 @@ func (g *LiveGateway) uploadFilePath(ctx context.Context, path string) (string, 
 	if !resp.Success() {
 		return "", "", &IMFileSendError{
 			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: code=%d msg=%s", resp.Code, resp.Msg),
+			Err:  newAPIError("im.v1.file.create", resp.ApiResp, resp.CodeError),
 		}
 	}
 	if resp.Data == nil {
