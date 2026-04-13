@@ -71,11 +71,7 @@ func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceCons
 	if view.Workspace != nil {
 		context.Layout = "grouped_attach_workspace"
 		context.Title = "工作区列表"
-		context.ViewMode = "recent"
-		if view.Workspace.Expanded {
-			context.Title = "全部工作区"
-			context.ViewMode = "all"
-		}
+		context.ViewMode = "paged"
 		if view.Workspace.Current != nil {
 			context.ContextTitle = "当前工作区"
 			context.ContextText = workspaceSelectionContextText(view.Workspace.Current.WorkspaceLabel, view.Workspace.Current.AgeText)

@@ -99,6 +99,9 @@ type Action struct {
 	InstanceID          string
 	WorkspaceKey        string
 	ThreadID            string
+	ViewMode            string
+	Page                int
+	ReturnPage          int
 	PickerID            string
 	PickerEntry         string
 	AllowCrossWorkspace bool
@@ -140,6 +143,7 @@ type FeishuDirectSelectionPrompt struct {
 	PromptID     string
 	Kind         SelectionPromptKind
 	Layout       string
+	ViewMode     string
 	CreatedAt    time.Time
 	ExpiresAt    time.Time
 	Title        string
@@ -147,6 +151,9 @@ type FeishuDirectSelectionPrompt struct {
 	ContextTitle string
 	ContextText  string
 	ContextKey   string
+	Page         int
+	TotalPages   int
+	ReturnPage   int
 	Options      []SelectionOption
 }
 

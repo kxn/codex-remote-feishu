@@ -22,10 +22,11 @@ type FeishuSelectionView struct {
 }
 
 type FeishuWorkspaceSelectionView struct {
-	Expanded    bool
-	RecentLimit int
-	Current     *FeishuWorkspaceSelectionCurrent
-	Entries     []FeishuWorkspaceSelectionEntry
+	Page       int
+	PageSize   int
+	TotalPages int
+	Current    *FeishuWorkspaceSelectionCurrent
+	Entries    []FeishuWorkspaceSelectionEntry
 }
 
 type FeishuWorkspaceSelectionCurrent struct {
@@ -46,6 +47,10 @@ type FeishuWorkspaceSelectionEntry struct {
 
 type FeishuThreadSelectionView struct {
 	Mode             FeishuThreadSelectionViewMode
+	Page             int
+	PageSize         int
+	TotalPages       int
+	ReturnPage       int
 	RecentLimit      int
 	CurrentWorkspace *FeishuThreadSelectionWorkspaceContext
 	CurrentInstance  *FeishuThreadSelectionInstanceContext

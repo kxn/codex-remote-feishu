@@ -81,9 +81,9 @@
 | 交互面 | 当前 owner | 当前边界 |
 | --- | --- | --- |
 | `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；不再直接进入主 reducer，也不改 core route |
-| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理工作区列表展开/收起；不改变 attach 状态 |
-| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理最近会话与“当前工作区全部会话”的视图切换；真正接管 thread 不在这里发生 |
-| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/useall` 里的 workspace-group 展开/返回；不直接改变 selected thread |
+| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/list` 工作区分页导航；不改变 attach 状态 |
+| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 thread 列表分页与 scoped/all 视图切换；真正接管 thread 不在这里发生 |
+| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/useall` 工作区总览分页、单 workspace 详情分页与“返回分组”；不直接改变 selected thread |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡 |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；真正应用参数后仍进入产品状态变更，因此 apply 继续保持 append-only |
@@ -131,6 +131,7 @@
 
 - callback payload schema 已收束到 [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
 - projector 与 gateway 现在共用这份 schema 常量/构造 helper，不再继续各自扩一份裸字符串约定
+- 分页导航当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view 并 inline replace 原卡。
 
 ### 4.2 当前常见 payload 字段
 
@@ -139,7 +140,10 @@
 | `attach_instance` | `instance_id` | 接管指定实例 |
 | `attach_workspace` | `workspace_key` | 接管指定工作区 |
 | `use_thread` | `thread_id`、`allow_cross_workspace` | 选择 thread，必要时允许跨 workspace |
-| `show_workspace_threads` | `workspace_key` | 展开某个 workspace 下的全部会话 |
+| `show_threads` / `show_all_threads` / `show_scoped_threads` | `view_mode`、`page` | 在当前 same-context thread 列表里切页；`view_mode` 用于保持 scoped / VS Code / 当前视图模式 |
+| `show_all_workspaces` / `show_recent_workspaces` | `page` | 在 `/list` 工作区卡片里切页 |
+| `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | 在 `/useall` 工作区总览里切页 |
+| `show_workspace_threads` | `workspace_key`、`page`、`return_page` | 进入某个 workspace 的会话详情，或在详情里切页；`return_page` 用于“返回分组”回到原总览页 |
 | `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
 | `path_picker_enter` | `picker_id`、`entry_name` | 进入当前 active picker 里的一个子目录 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
@@ -241,6 +245,12 @@
   - view/session 策略：`surface_state_rederived`
   - 不要求额外 view token
 - 这意味着同 daemon 生命周期里的旧卡/并发点击，如果仍属于 pure navigation，不会因为“旧 view”被拒绝；它们会基于**当前** surface state 重新生成卡片。
+- 本次新增的分页/返回分组按钮也沿用这条 replace 边界：
+  - `/list` 上一页 / 下一页
+  - `/useall` 总览上一页 / 下一页
+  - `/useall` 单 workspace 详情上一页 / 下一页 / 返回分组
+  - attached `/use` 与 VS Code `/use` 的上一页 / 下一页
+  都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 
 ### 5.3 当前明确保持 append-only 的动作
 

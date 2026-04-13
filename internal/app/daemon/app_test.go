@@ -537,8 +537,8 @@ func TestHandleGatewayActionReplacesScopedThreadCardForCardNavigation(t *testing
 	if result.ReplaceCurrentCard.CardTitle != "当前工作区全部会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_threads", "", "") {
-		t.Fatalf("expected replacement scoped-all card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	if operationHasActionValue(*result.ReplaceCurrentCard, "show_threads", "", "") {
+		t.Fatalf("did not expect replacement scoped-all card to append old return action, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
 
@@ -583,8 +583,8 @@ func TestHandleGatewayActionReplacesWorkspaceThreadCardForCardNavigation(t *test
 	if result.ReplaceCurrentCard.CardTitle != "proj1 全部会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_all_threads", "", "") {
-		t.Fatalf("expected replacement workspace card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	if result.ReplaceCurrentCard.CardTitle != "proj1 全部会话" {
+		t.Fatalf("unexpected replacement workspace card title, got %#v", result.ReplaceCurrentCard)
 	}
 }
 
@@ -632,11 +632,14 @@ func TestHandleGatewayActionReplacesExpandedWorkspaceListCardForCardNavigation(t
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "全部工作区" {
+	if result.ReplaceCurrentCard.CardTitle != "工作区列表" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_workspaces", "", "") {
-		t.Fatalf("expected expanded workspace card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	if operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_workspaces", "", "") {
+		t.Fatalf("did not expect expanded workspace card to include old return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if operationHasActionValue(*result.ReplaceCurrentCard, "show_all_workspaces", "", "") {
+		t.Fatalf("did not expect next-page navigation when all workspaces fit on one page, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
 
@@ -687,8 +690,11 @@ func TestHandleGatewayActionReplacesExpandedThreadWorkspaceCardForCardNavigation
 	if result.ReplaceCurrentCard.CardTitle != "全部会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_thread_workspaces", "", "") {
-		t.Fatalf("expected expanded thread workspace card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	if operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_thread_workspaces", "", "") {
+		t.Fatalf("did not expect expanded thread workspace card to include old return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "show_all_thread_workspaces", "", "") {
+		t.Fatalf("expected expanded thread workspace card to include next-page navigation, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
 

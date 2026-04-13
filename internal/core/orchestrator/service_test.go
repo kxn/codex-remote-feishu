@@ -963,7 +963,7 @@ func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 	}
 }
 
-func TestListWorkspacesShowsRecentFiveWithExpandAction(t *testing.T) {
+func TestListWorkspacesShowsPagedEntries(t *testing.T) {
 	now := time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	for i := 0; i < 6; i++ {
@@ -1000,17 +1000,14 @@ func TestListWorkspacesShowsRecentFiveWithExpandAction(t *testing.T) {
 	if prompt.Title != "工作区列表" {
 		t.Fatalf("unexpected prompt title: %#v", prompt)
 	}
+	if prompt.Page != 1 || prompt.TotalPages != 1 {
+		t.Fatalf("expected single-page workspace prompt, got %#v", prompt)
+	}
 	if len(prompt.Options) != 6 {
-		t.Fatalf("expected 5 workspaces plus expand action, got %#v", prompt.Options)
+		t.Fatalf("expected all workspaces on first page, got %#v", prompt.Options)
 	}
-	for i := 0; i < 5; i++ {
-		if prompt.Options[i].ActionKind == "show_all_workspaces" {
-			t.Fatalf("expand action appeared before recent workspaces: %#v", prompt.Options)
-		}
-	}
-	last := prompt.Options[5]
-	if last.ActionKind != "show_all_workspaces" || last.ButtonLabel != "全部工作区" || last.MetaText != "还有 1 个工作区未显示" {
-		t.Fatalf("unexpected expand option: %#v", last)
+	if prompt.Options[5].ActionKind != "" {
+		t.Fatalf("did not expect synthetic expand action in paged list, got %#v", prompt.Options[5])
 	}
 }
 
@@ -1042,11 +1039,11 @@ func TestBuildWorkspaceSelectionModelKeepsSemanticEntries(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-	}), false)
+	}), 1)
 	if len(events) != 0 || model == nil {
 		t.Fatalf("expected workspace selection model, got model=%#v events=%#v", model, events)
 	}
-	if model.Expanded || model.RecentLimit != workspaceSelectionRecentLimit {
+	if model.Page != 1 || model.PageSize != workspaceSelectionPageSize || model.TotalPages != 1 {
 		t.Fatalf("unexpected workspace selection view metadata: %#v", model)
 	}
 	if len(model.Entries) != 6 {
@@ -1057,7 +1054,7 @@ func TestBuildWorkspaceSelectionModelKeepsSemanticEntries(t *testing.T) {
 	}
 }
 
-func TestShowAllWorkspacesExpandsListAndOffersReturn(t *testing.T) {
+func TestShowAllWorkspacesUsesSamePagedWorkspacePrompt(t *testing.T) {
 	now := time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	for i := 0; i < 6; i++ {
@@ -1091,15 +1088,14 @@ func TestShowAllWorkspacesExpandsListAndOffersReturn(t *testing.T) {
 		t.Fatalf("expected one workspace selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Title != "全部工作区" {
+	if prompt.Title != "工作区列表" {
 		t.Fatalf("unexpected prompt title: %#v", prompt)
 	}
-	if len(prompt.Options) != 7 {
-		t.Fatalf("expected all workspaces plus return action, got %#v", prompt.Options)
+	if prompt.Page != 1 || prompt.TotalPages != 1 {
+		t.Fatalf("expected single-page workspace prompt, got %#v", prompt)
 	}
-	last := prompt.Options[6]
-	if last.ActionKind != "show_recent_workspaces" || last.ButtonLabel != "最近工作区" || last.MetaText != "回到最近 5 个工作区" {
-		t.Fatalf("unexpected return option: %#v", last)
+	if len(prompt.Options) != 6 {
+		t.Fatalf("expected workspace entries without return option, got %#v", prompt.Options)
 	}
 }
 
@@ -1194,14 +1190,14 @@ func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
 		t.Fatalf("expected workspace thread selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Title != "picdetect 全部会话" || len(prompt.Options) != 2 {
+	if prompt.Title != "picdetect 全部会话" || len(prompt.Options) != 1 {
 		t.Fatalf("unexpected persisted-only workspace prompt: %#v", prompt)
 	}
 	if prompt.Options[0].OptionID != "thread-picdetect" || !prompt.Options[0].AllowCrossWorkspace {
 		t.Fatalf("expected persisted-only thread option to remain recoverable, got %#v", prompt.Options[0])
 	}
-	if prompt.Options[1].ActionKind != "show_all_threads" {
-		t.Fatalf("expected trailing return action, got %#v", prompt.Options[1])
+	if prompt.ContextKey != "/data/dl/picdetect" || prompt.ReturnPage != 0 {
+		t.Fatalf("expected workspace detail prompt metadata, got %#v", prompt)
 	}
 }
 

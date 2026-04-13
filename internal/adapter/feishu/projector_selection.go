@@ -52,6 +52,9 @@ func selectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonL
 			"content": renderSystemInlineTags(hint),
 		})
 	}
+	if footer := selectionPromptPaginationFooter(prompt, daemonLifecycleID); len(footer) != 0 {
+		elements = append(elements, footer)
+	}
 	return elements
 }
 
@@ -234,24 +237,21 @@ func selectionOptionButton(prompt control.FeishuDirectSelectionPrompt, option co
 	value := map[string]any{}
 	switch strings.TrimSpace(option.ActionKind) {
 	case cardActionKindShowScopedThreads:
-		value = actionPayloadNavigation(cardActionKindShowScopedThreads)
+		value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, prompt.Page)
 	case cardActionKindShowAllWorkspaces:
-		value = actionPayloadNavigation(cardActionKindShowAllWorkspaces)
+		value = actionPayloadNavigationPage(cardActionKindShowAllWorkspaces, prompt.Page)
 	case cardActionKindShowRecentWorkspaces:
-		value = actionPayloadNavigation(cardActionKindShowRecentWorkspaces)
+		value = actionPayloadNavigationPage(cardActionKindShowRecentWorkspaces, prompt.Page)
 	case cardActionKindShowAllThreadWorkspaces:
-		value = actionPayloadNavigation(cardActionKindShowAllThreadWorkspaces)
+		value = actionPayloadNavigationPage(cardActionKindShowAllThreadWorkspaces, prompt.Page)
 	case cardActionKindShowRecentThreadWorkspaces:
-		value = actionPayloadNavigation(cardActionKindShowRecentThreadWorkspaces)
+		value = actionPayloadNavigationPage(cardActionKindShowRecentThreadWorkspaces, prompt.Page)
 	case cardActionKindShowWorkspaceThreads:
-		value = map[string]any{
-			cardActionPayloadKeyKind:         cardActionKindShowWorkspaceThreads,
-			cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(option.OptionID),
-		}
+		value = actionPayloadWorkspaceThreads(strings.TrimSpace(option.OptionID), 1, prompt.Page)
 	case cardActionKindShowThreads:
-		value = actionPayloadNavigation(cardActionKindShowThreads)
+		value = actionPayloadThreadNavigation(cardActionKindShowThreads, prompt.ViewMode, prompt.Page)
 	case cardActionKindShowAllThreads:
-		value = actionPayloadNavigation(cardActionKindShowAllThreads)
+		value = actionPayloadThreadNavigation(cardActionKindShowAllThreads, prompt.ViewMode, prompt.Page)
 	}
 	switch prompt.Kind {
 	case control.SelectionPromptAttachInstance:
@@ -299,6 +299,55 @@ func selectionOptionButton(prompt control.FeishuDirectSelectionPrompt, option co
 	}
 	button := cardCallbackButtonElement(text, buttonType, value, disabled, width)
 	return button
+}
+
+func selectionPromptPaginationFooter(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) map[string]any {
+	if prompt.TotalPages <= 1 {
+		return nil
+	}
+	buttons := []map[string]any{}
+	if prompt.Page > 1 {
+		if button := selectionPromptPageButton(prompt, daemonLifecycleID, prompt.Page-1, true); len(button) != 0 {
+			buttons = append(buttons, button)
+		}
+	}
+	if prompt.Page < prompt.TotalPages {
+		if button := selectionPromptPageButton(prompt, daemonLifecycleID, prompt.Page+1, false); len(button) != 0 {
+			buttons = append(buttons, button)
+		}
+	}
+	return cardButtonGroupElement(buttons)
+}
+
+func selectionPromptPageButton(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string, page int, previous bool) map[string]any {
+	label := "下一页"
+	if previous {
+		label = "上一页"
+	}
+	var value map[string]any
+	switch prompt.Kind {
+	case control.SelectionPromptAttachWorkspace:
+		value = actionPayloadNavigationPage(cardActionKindShowAllWorkspaces, page)
+	case control.SelectionPromptUseThread:
+		switch strings.TrimSpace(prompt.ViewMode) {
+		case string(control.FeishuThreadSelectionNormalWorkspaceView):
+			value = actionPayloadWorkspaceThreads(prompt.ContextKey, page, prompt.ReturnPage)
+		case string(control.FeishuThreadSelectionNormalGlobalAll), string(control.FeishuThreadSelectionNormalGlobalRecent):
+			value = actionPayloadNavigationPage(cardActionKindShowAllThreadWorkspaces, page)
+		case string(control.FeishuThreadSelectionNormalScopedAll):
+			value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, page)
+		case string(control.FeishuThreadSelectionNormalScopedRecent), string(control.FeishuThreadSelectionVSCodeRecent):
+			value = actionPayloadThreadNavigation(cardActionKindShowThreads, prompt.ViewMode, page)
+		case string(control.FeishuThreadSelectionVSCodeAll), string(control.FeishuThreadSelectionVSCodeScopedAll):
+			value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, page)
+		default:
+			value = actionPayloadThreadNavigation(cardActionKindShowThreads, prompt.ViewMode, page)
+		}
+	default:
+		return nil
+	}
+	stampActionValue(value, daemonLifecycleID)
+	return cardCallbackButtonElement(label, "default", value, false, "fill")
 }
 
 func selectionOptionButtonText(prompt control.FeishuDirectSelectionPrompt, option control.SelectionOption) string {

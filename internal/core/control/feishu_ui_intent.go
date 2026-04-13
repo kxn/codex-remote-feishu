@@ -32,7 +32,10 @@ const (
 type FeishuUIIntent struct {
 	Kind         FeishuUIIntentKind
 	RawText      string
+	ViewMode     string
 	WorkspaceKey string
+	Page         int
+	ReturnPage   int
 	PickerID     string
 	PickerEntry  string
 	ActorUserID  string
@@ -67,21 +70,21 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 			return &FeishuUIIntent{Kind: FeishuUIIntentShowVerboseCatalog, RawText: action.Text}, true
 		}
 	case ActionShowRecentWorkspaces:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentWorkspaces}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentWorkspaces, Page: action.Page}, true
 	case ActionShowAllWorkspaces:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllWorkspaces}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllWorkspaces, Page: action.Page}, true
 	case ActionShowThreads:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowThreads}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowThreads, ViewMode: action.ViewMode, Page: action.Page}, true
 	case ActionShowAllThreads:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreads}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreads, ViewMode: action.ViewMode, Page: action.Page}, true
 	case ActionShowScopedThreads:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowScopedThreads}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowScopedThreads, ViewMode: action.ViewMode, Page: action.Page}, true
 	case ActionShowWorkspaceThreads:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceThreads, WorkspaceKey: action.WorkspaceKey}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceThreads, WorkspaceKey: action.WorkspaceKey, Page: action.Page, ReturnPage: action.ReturnPage}, true
 	case ActionShowAllThreadWorkspaces:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreadWorkspaces}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreadWorkspaces, Page: action.Page}, true
 	case ActionShowRecentThreadWorkspaces:
-		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentThreadWorkspaces}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentThreadWorkspaces, Page: action.Page}, true
 	case ActionPathPickerEnter:
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerEnter, PickerID: action.PickerID, PickerEntry: action.PickerEntry, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerUp:

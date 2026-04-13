@@ -90,6 +90,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowThreads:
@@ -100,6 +102,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllThreads:
@@ -110,6 +114,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllThreadWorkspaces:
@@ -120,6 +126,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowRecentThreadWorkspaces:
@@ -130,6 +137,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowWorkspaceThreads:
@@ -145,6 +153,8 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			WorkspaceKey:     workspaceKey,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			ReturnPage:       intMapValue(value, cardActionPayloadKeyReturnPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllWorkspaces:
@@ -155,6 +165,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowRecentWorkspaces:
@@ -165,6 +176,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindResumeHeadlessThread:
@@ -676,25 +688,41 @@ func intMapValue(values map[string]interface{}, key string) int {
 	switch current := value.(type) {
 	case int:
 		return current
+	case int8:
+		return int(current)
+	case int16:
+		return int(current)
+	case int32:
+		return int(current)
 	case int64:
 		return int(current)
-	case float64:
+	case uint:
+		return int(current)
+	case uint8:
+		return int(current)
+	case uint16:
+		return int(current)
+	case uint32:
+		return int(current)
+	case uint64:
 		return int(current)
 	case float32:
+		return int(current)
+	case float64:
 		return int(current)
 	case string:
 		current = strings.TrimSpace(current)
 		if current == "" {
 			return 0
 		}
-		value, err := strconv.Atoi(current)
-		if err != nil {
-			return 0
+		parsed, err := strconv.Atoi(current)
+		if err == nil {
+			return parsed
 		}
-		return value
 	default:
 		return 0
 	}
+	return 0
 }
 
 func ResolveReceiveTarget(chatID, actorUserID string) (string, string) {

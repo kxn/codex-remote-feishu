@@ -133,7 +133,7 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 	}
 }
 
-func TestPresentThreadSelectionShowsMostRecentFive(t *testing.T) {
+func TestPresentThreadSelectionShowsPagedMostRecentThreads(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	inst := &state.InstanceRecord{
@@ -168,16 +168,16 @@ func TestPresentThreadSelectionShowsMostRecentFive(t *testing.T) {
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
 	if len(prompt.Options) != 6 {
-		t.Fatalf("expected recent prompt plus scoped-all button, got %#v", prompt.Options)
+		t.Fatalf("expected first page of recent threads, got %#v", prompt.Options)
 	}
-	if prompt.Title != "最近会话" || prompt.Hint != "" {
+	if prompt.Title != "最近会话" || prompt.Hint != "" || prompt.Page != 1 || prompt.TotalPages != 1 {
 		t.Fatalf("unexpected recent prompt metadata: %#v", prompt)
 	}
-	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[4].OptionID != "thread-2" {
+	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[5].OptionID != "thread-1" {
 		t.Fatalf("expected most recent sessions first, got %#v", prompt.Options)
 	}
-	if prompt.Options[5].ActionKind != "show_scoped_threads" || prompt.Options[5].ButtonLabel != "当前工作区全部会话" {
-		t.Fatalf("expected trailing scoped-all action, got %#v", prompt.Options[5])
+	if prompt.Options[5].ActionKind != "" {
+		t.Fatalf("did not expect trailing synthetic action, got %#v", prompt.Options[5])
 	}
 }
 
@@ -215,14 +215,14 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Title != "当前工作区全部会话" || len(prompt.Options) != 7 {
+	if prompt.Title != "当前工作区全部会话" || len(prompt.Options) != 6 {
 		t.Fatalf("expected all current-workspace sessions, got %#v", prompt)
 	}
 	if prompt.Options[0].OptionID != "thread-6" || prompt.Options[5].OptionID != "thread-1" {
 		t.Fatalf("expected scoped-all prompt to keep recency order, got %#v", prompt.Options)
 	}
-	if prompt.Options[6].ActionKind != "show_threads" || prompt.Options[6].ButtonLabel != "最近会话" {
-		t.Fatalf("expected trailing return-to-recent action, got %#v", prompt.Options[6])
+	if prompt.Page != 1 || prompt.TotalPages != 1 || prompt.ViewMode != string(control.FeishuThreadSelectionNormalScopedAll) {
+		t.Fatalf("expected paged scoped prompt metadata, got %#v", prompt)
 	}
 }
 
@@ -258,15 +258,15 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if prompt.ContextTitle != "当前工作区" || !testutil.SamePath(prompt.ContextKey, "/data/dl") || !strings.Contains(prompt.ContextText, "dl ·") {
 		t.Fatalf("expected attached /useall prompt to expose current workspace summary, got %#v", prompt)
 	}
-	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
-		t.Fatalf("expected all sessions sorted by recency, got %#v", prompt.Options)
+	if len(prompt.Options) != 0 {
+		t.Fatalf("expected grouped overview to defer current workspace threads to context action, got %#v", prompt.Options)
 	}
-	if !testutil.SamePath(prompt.Options[0].GroupKey, "/data/dl") || prompt.Options[0].GroupLabel != "dl" || prompt.Options[0].AgeText == "" {
-		t.Fatalf("expected grouped workspace metadata on /useall options, got %#v", prompt.Options[0])
+	if prompt.Page != 1 || prompt.TotalPages != 1 {
+		t.Fatalf("expected single-page grouped overview, got %#v", prompt)
 	}
 }
 
-func TestPresentAllThreadSelectionLimitsToRecentFiveWorkspaceGroups(t *testing.T) {
+func TestPresentAllThreadSelectionUsesThreeWorkspaceGroupsPerPage(t *testing.T) {
 	now := time.Date(2026, 4, 11, 5, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	for i := 1; i <= 6; i++ {
@@ -303,17 +303,16 @@ func TestPresentAllThreadSelectionLimitsToRecentFiveWorkspaceGroups(t *testing.T
 	if prompt.Title != "全部会话" || prompt.Layout != "workspace_grouped_useall" {
 		t.Fatalf("unexpected prompt metadata: %#v", prompt)
 	}
-	if len(prompt.Options) != 6 {
-		t.Fatalf("expected five workspace groups plus expand action, got %#v", prompt.Options)
+	if len(prompt.Options) != 3 {
+		t.Fatalf("expected first page with three workspace groups, got %#v", prompt.Options)
 	}
-	for index, want := range []string{"thread-6", "thread-5", "thread-4", "thread-3", "thread-2"} {
+	for index, want := range []string{"thread-6", "thread-5", "thread-4"} {
 		if prompt.Options[index].OptionID != want {
 			t.Fatalf("expected recent workspace thread order, got %#v", prompt.Options)
 		}
 	}
-	last := prompt.Options[len(prompt.Options)-1]
-	if last.ActionKind != "show_all_thread_workspaces" || last.ButtonLabel != "全部工作区" || !strings.Contains(last.Subtitle, "还有 1 个工作区未显示") {
-		t.Fatalf("expected trailing expand action, got %#v", last)
+	if prompt.Page != 1 || prompt.TotalPages != 2 {
+		t.Fatalf("expected paged workspace-group prompt, got %#v", prompt)
 	}
 }
 
@@ -346,15 +345,15 @@ func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testin
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	model, events := svc.buildThreadSelectionModel(surface, threadSelectionDisplayAll)
+	model, events := svc.buildThreadSelectionModel(surface, threadSelectionDisplayAll, 1)
 	if len(events) != 0 || model == nil {
 		t.Fatalf("expected thread selection model, got model=%#v events=%#v", model, events)
 	}
 	if model.Mode != control.FeishuThreadSelectionNormalGlobalRecent {
 		t.Fatalf("expected recent grouped mode for /useall entry view, got %#v", model)
 	}
-	if len(model.Entries) != 6 {
-		t.Fatalf("expected semantic views for all workspace groups, got %#v", model.Entries)
+	if len(model.Entries) != 3 {
+		t.Fatalf("expected semantic views for first page workspace groups, got %#v", model.Entries)
 	}
 	if model.Entries[0].ThreadID != "thread-6" || !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/proj-6") || !model.Entries[0].AllowCrossWorkspace {
 		t.Fatalf("unexpected first semantic thread view: %#v", model.Entries[0])
@@ -368,19 +367,15 @@ func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testin
 	if !ok {
 		t.Fatalf("expected selection view to be projectable, got %#v", model)
 	}
-	if len(prompt.Options) != 6 {
-		t.Fatalf("expected five visible groups plus expand action, got %#v", prompt.Options)
+	if len(prompt.Options) != 3 {
+		t.Fatalf("expected projected first page workspace groups, got %#v", prompt.Options)
 	}
-	if prompt.Options[4].OptionID != "thread-2" {
-		t.Fatalf("expected prompt projection to keep only recent five workspace groups, got %#v", prompt.Options)
-	}
-	last := prompt.Options[len(prompt.Options)-1]
-	if last.ActionKind != "show_all_thread_workspaces" || last.ButtonLabel != "全部工作区" {
-		t.Fatalf("expected prompt projection to append expand action, got %#v", last)
+	if prompt.Page != 1 || prompt.TotalPages != 2 || prompt.Options[2].OptionID != "thread-4" {
+		t.Fatalf("expected prompt projection to keep current page metadata, got %#v", prompt)
 	}
 }
 
-func TestPresentAllThreadWorkspacesShowsAllGroupsAndReturnAction(t *testing.T) {
+func TestPresentAllThreadWorkspacesUsesPagedWorkspaceOverview(t *testing.T) {
 	now := time.Date(2026, 4, 11, 5, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	for i := 1; i <= 6; i++ {
@@ -414,17 +409,16 @@ func TestPresentAllThreadWorkspacesShowsAllGroupsAndReturnAction(t *testing.T) {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if len(prompt.Options) != 7 {
-		t.Fatalf("expected six workspace groups plus return action, got %#v", prompt.Options)
+	if len(prompt.Options) != 3 {
+		t.Fatalf("expected first overview page with three workspace groups, got %#v", prompt.Options)
 	}
-	for index, want := range []string{"thread-6", "thread-5", "thread-4", "thread-3", "thread-2", "thread-1"} {
+	for index, want := range []string{"thread-6", "thread-5", "thread-4"} {
 		if prompt.Options[index].OptionID != want {
-			t.Fatalf("expected expanded workspace order, got %#v", prompt.Options)
+			t.Fatalf("expected paged workspace order, got %#v", prompt.Options)
 		}
 	}
-	last := prompt.Options[len(prompt.Options)-1]
-	if last.ActionKind != "show_recent_thread_workspaces" || last.ButtonLabel != "最近工作区" || !strings.Contains(last.Subtitle, "回到最近 5 个工作区") {
-		t.Fatalf("expected trailing return action, got %#v", last)
+	if prompt.Page != 1 || prompt.TotalPages != 2 {
+		t.Fatalf("expected paged workspace overview metadata, got %#v", prompt)
 	}
 }
 
@@ -488,16 +482,11 @@ func TestPresentAllThreadSelectionDoesNotCountCurrentWorkspaceAgainstGroupLimit(
 	if !testutil.SamePath(prompt.ContextKey, "/data/dl/current") || prompt.ContextTitle != "当前工作区" {
 		t.Fatalf("expected current workspace context, got %#v", prompt)
 	}
-	if len(prompt.Options) != 6 {
-		t.Fatalf("expected current workspace plus five other groups without expand action, got %#v", prompt.Options)
+	if len(prompt.Options) != 3 {
+		t.Fatalf("expected current workspace context plus first page of three other groups, got %#v", prompt.Options)
 	}
-	if prompt.Options[0].OptionID != "thread-current" {
-		t.Fatalf("expected current workspace thread to remain present, got %#v", prompt.Options[0])
-	}
-	for _, option := range prompt.Options {
-		if option.ActionKind == "show_all_thread_workspaces" {
-			t.Fatalf("did not expect expand action when only five non-current groups exist, got %#v", prompt.Options)
-		}
+	if prompt.Page != 1 || prompt.TotalPages != 2 {
+		t.Fatalf("expected paged grouped prompt metadata, got %#v", prompt)
 	}
 }
 
@@ -557,14 +546,14 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 		t.Fatalf("expected workspace selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Layout != "workspace_grouped_useall" || prompt.Title != "web 全部会话" || len(prompt.Options) != 4 {
+	if prompt.Layout != "workspace_grouped_useall" || prompt.Title != "web 全部会话" || len(prompt.Options) != 3 {
 		t.Fatalf("unexpected workspace-all prompt: %#v", prompt)
 	}
 	if prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-3" || prompt.Options[2].OptionID != "thread-1" {
 		t.Fatalf("expected workspace-all prompt to keep recency order, got %#v", prompt.Options)
 	}
-	if prompt.Options[3].ActionKind != "show_all_threads" || prompt.Options[3].ButtonLabel != "全部会话" {
-		t.Fatalf("expected trailing return-to-global action, got %#v", prompt.Options[3])
+	if prompt.ContextKey != "/data/dl/web" || prompt.Page != 1 || prompt.TotalPages != 1 {
+		t.Fatalf("expected workspace detail metadata, got %#v", prompt)
 	}
 }
 

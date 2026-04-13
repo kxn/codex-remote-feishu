@@ -1125,7 +1125,7 @@ func TestShowAllThreadsAttachedNormalShowsCrossWorkspaceSessions(t *testing.T) {
 		t.Fatalf("expected selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Title != "全部会话" || len(prompt.Options) != 2 {
+	if prompt.Title != "全部会话" || len(prompt.Options) != 1 {
 		t.Fatalf("expected cross-workspace all-session prompt, got %#v", prompt)
 	}
 	if prompt.ContextTitle != "当前工作区" || prompt.ContextKey != "/data/dl/droid" {
@@ -1301,7 +1301,7 @@ func TestShowAllThreadsAttachedVSCodeShowsCurrentInstanceAllSessions(t *testing.
 	if prompt.ContextTitle != "当前实例" || prompt.ContextText != "droid · 当前跟随中" {
 		t.Fatalf("expected current instance summary, got %#v", prompt)
 	}
-	if len(prompt.Options) != 3 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
+	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "thread-2" || prompt.Options[1].OptionID != "thread-1" {
 		t.Fatalf("expected only current instance sessions in recency order, got %#v", prompt.Options)
 	}
 	if prompt.Options[0].Label != "整理日志" || prompt.Options[0].MetaText != "VS Code 当前焦点 · 1分前" {
@@ -1310,8 +1310,8 @@ func TestShowAllThreadsAttachedVSCodeShowsCurrentInstanceAllSessions(t *testing.
 	if prompt.Options[1].Label != "当前实例会话" || prompt.Options[1].MetaText != "当前跟随中 · 3分前" {
 		t.Fatalf("expected current thread metadata, got %#v", prompt.Options[1])
 	}
-	if prompt.Options[2].ActionKind != "show_threads" || prompt.Options[2].ButtonLabel != "最近会话" {
-		t.Fatalf("expected expanded vscode view to include return action, got %#v", prompt.Options[2])
+	if prompt.Page != 1 || prompt.TotalPages != 1 || prompt.ViewMode != string(control.FeishuThreadSelectionVSCodeAll) {
+		t.Fatalf("expected paged vscode all-thread metadata, got %#v", prompt)
 	}
 }
 

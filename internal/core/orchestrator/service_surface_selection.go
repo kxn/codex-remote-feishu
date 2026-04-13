@@ -185,17 +185,17 @@ func (s *Service) instanceSelectionContextText(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	return s.presentWorkspaceSelectionMode(surface, false)
+	return s.presentWorkspaceSelectionPage(surface, 1)
 }
 
 func (s *Service) presentAllWorkspaceSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	return s.presentWorkspaceSelectionMode(surface, true)
+	return s.presentWorkspaceSelectionPage(surface, 1)
 }
 
-const workspaceSelectionRecentLimit = 5
+const workspaceSelectionPageSize = 8
 
-func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRecord, expanded bool) []control.UIEvent {
-	model, events := s.buildWorkspaceSelectionModel(surface, expanded)
+func (s *Service) presentWorkspaceSelectionPage(surface *state.SurfaceConsoleRecord, page int) []control.UIEvent {
+	model, events := s.buildWorkspaceSelectionModel(surface, page)
 	if len(events) != 0 {
 		return events
 	}
@@ -208,7 +208,7 @@ func (s *Service) presentWorkspaceSelectionMode(surface *state.SurfaceConsoleRec
 	})}
 }
 
-func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleRecord, expanded bool) (*control.FeishuWorkspaceSelectionView, []control.UIEvent) {
+func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleRecord, page int) (*control.FeishuWorkspaceSelectionView, []control.UIEvent) {
 	grouped := map[string][]*state.InstanceRecord{}
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
@@ -279,13 +279,16 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 	}
 
 	sortWorkspaceSelectionEntries(entries)
+	page, totalPages := paginatePage(page, len(entries), workspaceSelectionPageSize)
+	start, end := pageBounds(page, workspaceSelectionPageSize, len(entries))
 	model := &control.FeishuWorkspaceSelectionView{
-		Expanded:    expanded,
-		RecentLimit: workspaceSelectionRecentLimit,
-		Current:     current,
-		Entries:     make([]control.FeishuWorkspaceSelectionEntry, 0, len(entries)),
+		Page:       page,
+		PageSize:   workspaceSelectionPageSize,
+		TotalPages: totalPages,
+		Current:    current,
+		Entries:    make([]control.FeishuWorkspaceSelectionEntry, 0, maxInt(end-start, 0)),
 	}
-	for _, entry := range entries {
+	for _, entry := range entries[start:end] {
 		model.Entries = append(model.Entries, control.FeishuWorkspaceSelectionEntry{
 			WorkspaceKey:      entry.workspaceKey,
 			WorkspaceLabel:    entry.label,

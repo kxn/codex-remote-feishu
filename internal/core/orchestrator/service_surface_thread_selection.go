@@ -13,19 +13,23 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	if showAll {
 		mode = threadSelectionDisplayAll
 	}
-	return s.presentThreadSelectionMode(surface, mode)
+	return s.presentThreadSelectionMode(surface, mode, 1)
 }
 
 func (s *Service) presentAllThreadWorkspaces(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	return s.presentThreadSelectionMode(surface, threadSelectionDisplayAllExpanded)
+	return s.presentThreadSelectionMode(surface, threadSelectionDisplayAllExpanded, 1)
 }
 
 func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	return s.presentThreadSelectionMode(surface, threadSelectionDisplayScopedAll)
+	return s.presentThreadSelectionMode(surface, threadSelectionDisplayScopedAll, 1)
 }
 
 func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleRecord, workspaceKey string) []control.UIEvent {
-	model, events := s.buildWorkspaceThreadSelectionModel(surface, workspaceKey)
+	return s.presentWorkspaceThreadSelectionPage(surface, workspaceKey, 1, 1)
+}
+
+func (s *Service) presentWorkspaceThreadSelectionPage(surface *state.SurfaceConsoleRecord, workspaceKey string, page, returnPage int) []control.UIEvent {
+	model, events := s.buildWorkspaceThreadSelectionModel(surface, workspaceKey, page, returnPage)
 	if len(events) != 0 {
 		return events
 	}
@@ -38,7 +42,13 @@ func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleR
 	})}
 }
 
-func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConsoleRecord, workspaceKey string) (*control.FeishuThreadSelectionView, []control.UIEvent) {
+const (
+	threadSelectionPageSize         = 8
+	threadWorkspaceGroupPageSize    = 3
+	threadWorkspaceGroupPreviewSize = 2
+)
+
+func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConsoleRecord, workspaceKey string, page, returnPage int) (*control.FeishuThreadSelectionView, []control.UIEvent) {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
 		return nil, notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /useall。")
@@ -54,23 +64,28 @@ func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConso
 	if len(filtered) == 0 {
 		return nil, notice(surface, "no_visible_threads", fmt.Sprintf("当前工作区 %s 还没有可恢复会话。", workspaceKey))
 	}
+	page, totalPages := paginatePage(page, len(filtered), threadSelectionPageSize)
+	start, end := pageBounds(page, threadSelectionPageSize, len(filtered))
 	model := &control.FeishuThreadSelectionView{
-		Mode:        control.FeishuThreadSelectionNormalWorkspaceView,
-		RecentLimit: workspaceSelectionRecentLimit,
+		Mode:       control.FeishuThreadSelectionNormalWorkspaceView,
+		Page:       page,
+		PageSize:   threadSelectionPageSize,
+		TotalPages: totalPages,
+		ReturnPage: returnPage,
 		Workspace: &control.FeishuThreadSelectionWorkspaceContext{
 			WorkspaceKey:   workspaceKey,
 			WorkspaceLabel: workspaceSelectionLabel(workspaceKey),
 		},
-		Entries: make([]control.FeishuThreadSelectionEntry, 0, len(filtered)),
+		Entries: make([]control.FeishuThreadSelectionEntry, 0, maxInt(end-start, 0)),
 	}
-	for _, view := range filtered {
+	for _, view := range filtered[start:end] {
 		model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
 	}
 	return model, nil
 }
 
-func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) []control.UIEvent {
-	model, events := s.buildThreadSelectionModel(surface, mode)
+func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page int) []control.UIEvent {
+	model, events := s.buildThreadSelectionModel(surface, mode, page)
 	if len(events) != 0 {
 		return events
 	}
@@ -83,7 +98,7 @@ func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord
 	})}
 }
 
-func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode) (*control.FeishuThreadSelectionView, []control.UIEvent) {
+func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page int) (*control.FeishuThreadSelectionView, []control.UIEvent) {
 	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return nil, notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
 	}
@@ -91,7 +106,7 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 	if surface != nil {
 		productMode = s.normalizeSurfaceProductMode(surface)
 	}
-	model := &control.FeishuThreadSelectionView{RecentLimit: workspaceSelectionRecentLimit}
+	model := &control.FeishuThreadSelectionView{}
 	switch productMode {
 	case state.ProductModeVSCode:
 		views := s.scopedMergedThreadViews(surface)
@@ -111,7 +126,12 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 		default:
 			model.Mode = control.FeishuThreadSelectionVSCodeRecent
 		}
-		for _, view := range views {
+		page, totalPages := paginatePage(page, len(views), threadSelectionPageSize)
+		start, end := pageBounds(page, threadSelectionPageSize, len(views))
+		model.Page = page
+		model.PageSize = threadSelectionPageSize
+		model.TotalPages = totalPages
+		for _, view := range views[start:end] {
 			model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
 		}
 	default:
@@ -130,7 +150,19 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 			} else {
 				model.Mode = control.FeishuThreadSelectionNormalGlobalRecent
 			}
-			for _, view := range views {
+			currentWorkspaceKey := ""
+			currentThreadID := ""
+			if model.CurrentWorkspace != nil {
+				currentWorkspaceKey = strings.TrimSpace(model.CurrentWorkspace.WorkspaceKey)
+			}
+			if surface != nil {
+				currentThreadID = strings.TrimSpace(surface.SelectedThreadID)
+			}
+			model.PageSize = threadWorkspaceGroupPageSize
+			groupedViews := paginateThreadSelectionWorkspaceGroups(views, currentWorkspaceKey, currentThreadID, page, threadWorkspaceGroupPageSize, threadWorkspaceGroupPreviewSize)
+			model.Page = groupedViews.Page
+			model.TotalPages = groupedViews.TotalPages
+			for _, view := range groupedViews.Entries {
 				model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
 			}
 		} else {
@@ -140,12 +172,22 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 			} else {
 				model.Mode = control.FeishuThreadSelectionNormalScopedRecent
 			}
-			for _, view := range views {
+			page, totalPages := paginatePage(page, len(views), threadSelectionPageSize)
+			start, end := pageBounds(page, threadSelectionPageSize, len(views))
+			model.Page = page
+			model.PageSize = threadSelectionPageSize
+			model.TotalPages = totalPages
+			for _, view := range views[start:end] {
 				model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
 			}
 		}
 	}
 	if len(model.Entries) == 0 {
+		if model.Mode == control.FeishuThreadSelectionNormalGlobalAll || model.Mode == control.FeishuThreadSelectionNormalGlobalRecent {
+			if model.CurrentWorkspace != nil {
+				return model, nil
+			}
+		}
 		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 			return nil, notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
 		}
@@ -155,6 +197,100 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 		return nil, notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
 	}
 	return model, nil
+}
+
+type pagedThreadGroupResult struct {
+	Page       int
+	TotalPages int
+	Entries    []*mergedThreadView
+}
+
+func paginateThreadSelectionWorkspaceGroups(views []*mergedThreadView, excludeWorkspaceKey, currentThreadID string, page, groupPageSize, previewLimit int) pagedThreadGroupResult {
+	type workspaceGroup struct {
+		key     string
+		entries []*mergedThreadView
+	}
+	excludeWorkspaceKey = normalizeWorkspaceClaimKey(excludeWorkspaceKey)
+	groups := make([]workspaceGroup, 0)
+	groupIndex := map[string]int{}
+	currentEntries := make([]*mergedThreadView, 0)
+	for _, view := range views {
+		if view == nil {
+			continue
+		}
+		workspaceKey := normalizeWorkspaceClaimKey(mergedThreadWorkspaceClaimKey(view))
+		if workspaceKey != "" && workspaceKey == excludeWorkspaceKey {
+			if strings.TrimSpace(view.ThreadID) != "" && strings.TrimSpace(view.ThreadID) == strings.TrimSpace(currentThreadID) {
+				currentEntries = append(currentEntries, view)
+			}
+			continue
+		}
+		if workspaceKey == "" {
+			continue
+		}
+		index, ok := groupIndex[workspaceKey]
+		if !ok {
+			index = len(groups)
+			groupIndex[workspaceKey] = index
+			groups = append(groups, workspaceGroup{key: workspaceKey})
+		}
+		groups[index].entries = append(groups[index].entries, view)
+	}
+	page, totalPages := paginatePage(page, len(groups), groupPageSize)
+	start, end := pageBounds(page, groupPageSize, len(groups))
+	result := pagedThreadGroupResult{
+		Page:       page,
+		TotalPages: totalPages,
+		Entries:    append([]*mergedThreadView(nil), currentEntries...),
+	}
+	for _, group := range groups[start:end] {
+		limit := len(group.entries)
+		if previewLimit > 0 && limit > previewLimit {
+			limit = previewLimit
+		}
+		result.Entries = append(result.Entries, group.entries[:limit]...)
+	}
+	return result
+}
+
+func pageBounds(page, pageSize, total int) (int, int) {
+	page, _ = paginatePage(page, total, pageSize)
+	if total <= 0 {
+		return 0, 0
+	}
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return start, end
+}
+
+func paginatePage(page, total, pageSize int) (int, int) {
+	if pageSize <= 0 {
+		pageSize = 1
+	}
+	totalPages := 1
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if page <= 0 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	return page, totalPages
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func (s *Service) threadSelectionViewEntry(surface *state.SurfaceConsoleRecord, view *mergedThreadView, allowCrossWorkspace bool) control.FeishuThreadSelectionEntry {

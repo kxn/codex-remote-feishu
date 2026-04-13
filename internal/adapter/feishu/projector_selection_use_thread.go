@@ -7,6 +7,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
+const useThreadWorkspacePreviewLimit = 2
+
 func useThreadSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
 	if useThreadPromptUsesVSCodeInstanceLayout(prompt) {
 		return useThreadVSCodeInstanceElements(prompt, daemonLifecycleID)
@@ -57,6 +59,9 @@ func useThreadSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt
 			"tag":     "markdown",
 			"content": renderSystemInlineTags(hint),
 		})
+	}
+	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
+		elements = append(elements, footer)
 	}
 	return elements
 }
@@ -191,6 +196,9 @@ func useThreadVSCodeInstanceElements(prompt control.FeishuDirectSelectionPrompt,
 			"content": renderSystemInlineTags(hint),
 		})
 	}
+	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
+		elements = append(elements, footer)
+	}
 	return elements
 }
 
@@ -284,7 +292,7 @@ func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPromp
 		}
 		if contextKey := strings.TrimSpace(prompt.ContextKey); contextKey != "" {
 			label := "查看当前工作区全部会话"
-			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, contextKey, daemonLifecycleID)}); len(button) != 0 {
+			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
 		}
@@ -325,8 +333,8 @@ func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPromp
 			continue
 		}
 		visible := available
-		if !singleWorkspaceView && len(visible) > 5 {
-			visible = visible[:5]
+		if !singleWorkspaceView && len(visible) > useThreadWorkspacePreviewLimit {
+			visible = visible[:useThreadWorkspacePreviewLimit]
 		}
 		for index, option := range visible {
 			meta := strings.TrimSpace(firstNonEmpty(option.MetaText, "时间未知"))
@@ -336,9 +344,9 @@ func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPromp
 			})
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 		}
-		if !singleWorkspaceView && len(available) > 5 {
-			label := "查看" + firstNonEmpty(strings.TrimSpace(group.Label), strings.TrimSpace(group.Key)) + "全部会话"
-			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, group.Key, daemonLifecycleID)}); len(button) != 0 {
+		if !singleWorkspaceView && len(available) > useThreadWorkspacePreviewLimit {
+			label := "展开 " + firstNonEmpty(strings.TrimSpace(group.Label), strings.TrimSpace(group.Key))
+			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, group.Key, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
 		}
@@ -365,6 +373,9 @@ func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPromp
 			"tag":     "markdown",
 			"content": renderSystemInlineTags(hint),
 		})
+	}
+	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
+		elements = append(elements, footer)
 	}
 	return elements
 }
@@ -413,7 +424,7 @@ func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt,
 		})
 	}
 	if contextKey := strings.TrimSpace(prompt.ContextKey); contextKey != "" {
-		if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton("查看当前工作区全部会话", contextKey, daemonLifecycleID)}); len(button) != 0 {
+		if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton("查看当前工作区全部会话", contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 			elements = append(elements, button)
 		}
 	}
@@ -443,7 +454,7 @@ func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt,
 		if availableCount > 1 {
 			buttonLabel = fmt.Sprintf("查看全部 · %s (%d)", label, availableCount)
 		}
-		elements = append(elements, workspaceThreadsButton(buttonLabel, group.Key, daemonLifecycleID))
+		elements = append(elements, workspaceThreadsButton(buttonLabel, group.Key, prompt.Page, daemonLifecycleID))
 	}
 
 	if len(moreOptions) > 0 {
@@ -462,6 +473,9 @@ func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt,
 			"content": renderSystemInlineTags(hint),
 		})
 	}
+	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
+		elements = append(elements, footer)
+	}
 	return elements
 }
 
@@ -469,11 +483,53 @@ func useThreadActionElement(prompt control.FeishuDirectSelectionPrompt, option c
 	return selectionOptionButton(prompt, option, daemonLifecycleID)
 }
 
-func workspaceThreadsButton(label, workspaceKey, daemonLifecycleID string) map[string]any {
-	value := stampActionValue(map[string]any{
-		cardActionPayloadKeyKind:         cardActionKindShowWorkspaceThreads,
-		cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(workspaceKey),
-	}, daemonLifecycleID)
+func workspaceThreadsButton(label, workspaceKey string, returnPage int, daemonLifecycleID string) map[string]any {
+	value := stampActionValue(actionPayloadWorkspaceThreads(workspaceKey, 1, returnPage), daemonLifecycleID)
+	return cardCallbackButtonElement(label, "default", value, false, "fill")
+}
+
+func useThreadPromptFooter(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) map[string]any {
+	buttons := []map[string]any{}
+	if strings.TrimSpace(prompt.ViewMode) == string(control.FeishuThreadSelectionNormalWorkspaceView) {
+		if prompt.ReturnPage > 0 {
+			backValue := stampActionValue(actionPayloadNavigationPage(cardActionKindShowAllThreadWorkspaces, prompt.ReturnPage), daemonLifecycleID)
+			buttons = append(buttons, cardCallbackButtonElement("返回分组", "default", backValue, false, "fill"))
+		}
+	}
+	if prompt.TotalPages > 1 {
+		if prompt.Page > 1 {
+			if button := useThreadPageButton(prompt, daemonLifecycleID, prompt.Page-1, true); len(button) != 0 {
+				buttons = append(buttons, button)
+			}
+		}
+		if prompt.Page < prompt.TotalPages {
+			if button := useThreadPageButton(prompt, daemonLifecycleID, prompt.Page+1, false); len(button) != 0 {
+				buttons = append(buttons, button)
+			}
+		}
+	}
+	return cardButtonGroupElement(buttons)
+}
+
+func useThreadPageButton(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string, page int, previous bool) map[string]any {
+	label := "下一页"
+	if previous {
+		label = "上一页"
+	}
+	var value map[string]any
+	switch strings.TrimSpace(prompt.ViewMode) {
+	case string(control.FeishuThreadSelectionNormalWorkspaceView):
+		value = actionPayloadWorkspaceThreads(prompt.ContextKey, page, prompt.ReturnPage)
+	case string(control.FeishuThreadSelectionNormalGlobalAll), string(control.FeishuThreadSelectionNormalGlobalRecent):
+		value = actionPayloadNavigationPage(cardActionKindShowAllThreadWorkspaces, page)
+	case string(control.FeishuThreadSelectionNormalScopedAll):
+		value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, page)
+	case string(control.FeishuThreadSelectionVSCodeAll), string(control.FeishuThreadSelectionVSCodeScopedAll):
+		value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, page)
+	default:
+		value = actionPayloadThreadNavigation(cardActionKindShowThreads, prompt.ViewMode, page)
+	}
+	stampActionValue(value, daemonLifecycleID)
 	return cardCallbackButtonElement(label, "default", value, false, "fill")
 }
 

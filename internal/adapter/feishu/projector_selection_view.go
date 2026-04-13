@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -21,14 +20,9 @@ func FeishuDirectSelectionPromptFromView(view control.FeishuSelectionView, ctx *
 }
 
 func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView, ctx *control.FeishuUISelectionContext) control.FeishuDirectSelectionPrompt {
-	limit := len(view.Entries)
-	if !view.Expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
-		limit = view.RecentLimit
-	}
-	entries := view.Entries[:limit]
-	available := make([]control.SelectionOption, 0, len(entries))
-	unavailable := make([]control.SelectionOption, 0, len(entries))
-	for _, entry := range entries {
+	available := make([]control.SelectionOption, 0, len(view.Entries))
+	unavailable := make([]control.SelectionOption, 0, len(view.Entries))
+	for _, entry := range view.Entries {
 		disabled := entry.Busy || (!entry.Attachable && !entry.RecoverableOnly)
 		buttonLabel := ""
 		actionKind := ""
@@ -61,7 +55,7 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 		available = append(available, option)
 	}
 
-	options := make([]control.SelectionOption, 0, len(available)+len(unavailable)+1)
+	options := make([]control.SelectionOption, 0, len(available)+len(unavailable))
 	appendIndexed := func(entries []control.SelectionOption) {
 		for _, option := range entries {
 			option.Index = len(options) + 1
@@ -71,39 +65,20 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 	appendIndexed(available)
 	appendIndexed(unavailable)
 
-	hiddenCount := len(view.Entries) - limit
-	if !view.Expanded && hiddenCount > 0 {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			Label:       "全部工作区",
-			ButtonLabel: "全部工作区",
-			ActionKind:  "show_all_workspaces",
-			MetaText:    fmt.Sprintf("还有 %d 个工作区未显示", hiddenCount),
-		})
-	} else if view.Expanded && len(view.Entries) > view.RecentLimit {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			Label:       "最近工作区",
-			ButtonLabel: "最近工作区",
-			ActionKind:  "show_recent_workspaces",
-			MetaText:    fmt.Sprintf("回到最近 %d 个工作区", view.RecentLimit),
-		})
-	}
-
 	hint := ""
 	if view.Current != nil && len(options) == 0 {
 		hint = "当前没有其他可接管工作区。"
 	}
 
 	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptAttachWorkspace,
-		Layout:  "grouped_attach_workspace",
-		Title:   "工作区列表",
-		Hint:    hint,
-		Options: options,
-	}
-	if view.Expanded {
-		prompt.Title = "全部工作区"
+		Kind:       control.SelectionPromptAttachWorkspace,
+		Layout:     "grouped_attach_workspace",
+		Title:      "工作区列表",
+		Hint:       hint,
+		ViewMode:   "paged",
+		Page:       view.Page,
+		TotalPages: view.TotalPages,
+		Options:    options,
 	}
 	if view.Current != nil {
 		prompt.ContextTitle = "当前工作区"
@@ -120,80 +95,59 @@ func threadSelectionPromptFromView(view control.FeishuThreadSelectionView) contr
 	switch view.Mode {
 	case control.FeishuThreadSelectionNormalWorkspaceView:
 		return threadWorkspacePromptFromView(view)
-	case control.FeishuThreadSelectionNormalGlobalRecent:
-		return threadGlobalPromptFromView(view, false)
-	case control.FeishuThreadSelectionNormalGlobalAll:
-		return threadGlobalPromptFromView(view, true)
-	case control.FeishuThreadSelectionNormalScopedAll:
-		return threadScopedPromptFromView(view, true)
-	case control.FeishuThreadSelectionNormalScopedRecent:
-		return threadScopedPromptFromView(view, false)
+	case control.FeishuThreadSelectionNormalGlobalRecent, control.FeishuThreadSelectionNormalGlobalAll:
+		return threadGlobalPromptFromView(view)
+	case control.FeishuThreadSelectionNormalScopedAll, control.FeishuThreadSelectionNormalScopedRecent:
+		return threadScopedPromptFromView(view)
 	case control.FeishuThreadSelectionVSCodeAll, control.FeishuThreadSelectionVSCodeScopedAll:
-		return threadVSCodePromptFromView(view, true)
+		return threadVSCodePromptFromView(view)
 	default:
-		return threadVSCodePromptFromView(view, false)
+		return threadVSCodePromptFromView(view)
 	}
 }
 
 func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
-	options := make([]control.SelectionOption, 0, len(view.Entries)+1)
+	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
 	}
-	options = append(options, control.SelectionOption{
-		Index:       len(options) + 1,
-		ButtonLabel: "全部会话",
-		Subtitle:    "回到跨工作区会话列表",
-		ActionKind:  "show_all_threads",
-	})
 	title := "全部会话"
 	if view.Workspace != nil {
 		title = firstNonEmpty(strings.TrimSpace(view.Workspace.WorkspaceLabel), strings.TrimSpace(view.Workspace.WorkspaceKey), "工作区") + " 全部会话"
 	}
 	return control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptUseThread,
-		Layout:  "workspace_grouped_useall",
-		Title:   title,
+		Kind:       control.SelectionPromptUseThread,
+		Layout:     "workspace_grouped_useall",
+		Title:      title,
+		ViewMode:   string(view.Mode),
+		Page:       view.Page,
+		TotalPages: view.TotalPages,
+		ReturnPage: view.ReturnPage,
+		ContextKey: strings.TrimSpace(firstNonEmpty(
+			func() string {
+				if view.Workspace == nil {
+					return ""
+				}
+				return view.Workspace.WorkspaceKey
+			}(),
+		)),
 		Options: options,
 	}
 }
 
-func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
-	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
-	excludeWorkspaceKey := ""
-	if view.CurrentWorkspace != nil {
-		excludeWorkspaceKey = strings.TrimSpace(view.CurrentWorkspace.WorkspaceKey)
-	}
-	if !expanded {
-		filtered, _ := filterThreadSelectionEntriesToRecentWorkspaceGroups(entries, excludeWorkspaceKey, view.RecentLimit)
-		entries = filtered
-	}
-	options := make([]control.SelectionOption, 0, len(entries)+1)
-	for _, entry := range entries {
+func threadGlobalPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+	options := make([]control.SelectionOption, 0, len(view.Entries))
+	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, true))
 	}
-	totalGroups := countThreadSelectionEntryWorkspaceGroups(view.Entries, excludeWorkspaceKey)
-	visibleGroups := countThreadSelectionEntryWorkspaceGroups(entries, excludeWorkspaceKey)
-	if !expanded && totalGroups > visibleGroups {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "全部工作区",
-			Subtitle:    fmt.Sprintf("还有 %d 个工作区未显示", totalGroups-visibleGroups),
-			ActionKind:  "show_all_thread_workspaces",
-		})
-	} else if expanded && totalGroups > view.RecentLimit {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "最近工作区",
-			Subtitle:    fmt.Sprintf("回到最近 %d 个工作区", view.RecentLimit),
-			ActionKind:  "show_recent_thread_workspaces",
-		})
-	}
 	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptUseThread,
-		Layout:  "workspace_grouped_useall",
-		Title:   "全部会话",
-		Options: options,
+		Kind:       control.SelectionPromptUseThread,
+		Layout:     "workspace_grouped_useall",
+		Title:      "全部会话",
+		ViewMode:   string(view.Mode),
+		Page:       view.Page,
+		TotalPages: view.TotalPages,
+		Options:    options,
 	}
 	if view.CurrentWorkspace != nil {
 		prompt.ContextTitle = "当前工作区"
@@ -207,76 +161,42 @@ func threadGlobalPromptFromView(view control.FeishuThreadSelectionView, expanded
 	return prompt
 }
 
-func threadScopedPromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
-	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
-	limit := len(entries)
-	if !expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
-		limit = view.RecentLimit
-	}
-	options := make([]control.SelectionOption, 0, limit+1)
-	for _, entry := range entries[:limit] {
+func threadScopedPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+	options := make([]control.SelectionOption, 0, len(view.Entries))
+	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
 	}
-	if !expanded && len(entries) > limit {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "当前工作区全部会话",
-			Subtitle:    "展开当前工作区内的全部会话",
-			ActionKind:  "show_scoped_threads",
-		})
-	} else if expanded {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "最近会话",
-			Subtitle:    fmt.Sprintf("回到当前工作区最近 %d 个会话", view.RecentLimit),
-			ActionKind:  "show_threads",
-		})
-	}
 	title := "最近会话"
-	if expanded {
+	if view.Mode == control.FeishuThreadSelectionNormalScopedAll {
 		title = "当前工作区全部会话"
 	}
 	return control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptUseThread,
-		Title:   title,
-		Options: options,
+		Kind:       control.SelectionPromptUseThread,
+		Title:      title,
+		ViewMode:   string(view.Mode),
+		Page:       view.Page,
+		TotalPages: view.TotalPages,
+		Options:    options,
 	}
 }
 
-func threadVSCodePromptFromView(view control.FeishuThreadSelectionView, expanded bool) control.FeishuDirectSelectionPrompt {
-	entries := append([]control.FeishuThreadSelectionEntry(nil), view.Entries...)
-	limit := len(entries)
-	if !expanded && view.RecentLimit > 0 && limit > view.RecentLimit {
-		limit = view.RecentLimit
-	}
-	options := make([]control.SelectionOption, 0, limit+1)
-	for _, entry := range entries[:limit] {
+func threadVSCodePromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+	options := make([]control.SelectionOption, 0, len(view.Entries))
+	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
 	}
-	if !expanded && len(entries) > limit {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "当前实例全部会话",
-			Subtitle:    "展开当前实例内的全部会话",
-			ActionKind:  "show_scoped_threads",
-		})
-	} else if expanded {
-		options = append(options, control.SelectionOption{
-			Index:       len(options) + 1,
-			ButtonLabel: "最近会话",
-			Subtitle:    fmt.Sprintf("回到当前实例最近 %d 个会话", view.RecentLimit),
-			ActionKind:  "show_threads",
-		})
-	}
 	title := "最近会话"
-	if expanded {
+	if view.Mode == control.FeishuThreadSelectionVSCodeAll || view.Mode == control.FeishuThreadSelectionVSCodeScopedAll {
 		title = "当前实例全部会话"
 	}
 	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptUseThread,
-		Layout:  "vscode_instance_threads",
-		Title:   title,
-		Options: options,
+		Kind:       control.SelectionPromptUseThread,
+		Layout:     "vscode_instance_threads",
+		Title:      title,
+		ViewMode:   string(view.Mode),
+		Page:       view.Page,
+		TotalPages: view.TotalPages,
+		Options:    options,
 	}
 	if view.CurrentInstance != nil {
 		prompt.ContextTitle = "当前实例"
@@ -367,47 +287,4 @@ func workspaceSelectionContextText(label, ageText string) string {
 	}
 	parts = append(parts, "同工作区内继续工作可 /use，或直接发送文本（也可 /new）")
 	return strings.Join(parts, "\n")
-}
-
-func countThreadSelectionEntryWorkspaceGroups(entries []control.FeishuThreadSelectionEntry, excludeWorkspaceKey string) int {
-	excludeWorkspaceKey = strings.TrimSpace(excludeWorkspaceKey)
-	seen := map[string]struct{}{}
-	for _, entry := range entries {
-		workspaceKey := strings.TrimSpace(entry.WorkspaceKey)
-		if workspaceKey == "" || workspaceKey == excludeWorkspaceKey {
-			continue
-		}
-		seen[workspaceKey] = struct{}{}
-	}
-	return len(seen)
-}
-
-func filterThreadSelectionEntriesToRecentWorkspaceGroups(entries []control.FeishuThreadSelectionEntry, excludeWorkspaceKey string, limit int) ([]control.FeishuThreadSelectionEntry, int) {
-	if len(entries) == 0 {
-		return nil, 0
-	}
-	excludeWorkspaceKey = strings.TrimSpace(excludeWorkspaceKey)
-	seenGroups := map[string]struct{}{}
-	visibleGroups := map[string]struct{}{}
-	filtered := make([]control.FeishuThreadSelectionEntry, 0, len(entries))
-	for _, entry := range entries {
-		workspaceKey := strings.TrimSpace(entry.WorkspaceKey)
-		if workspaceKey == "" {
-			continue
-		}
-		if workspaceKey == excludeWorkspaceKey {
-			filtered = append(filtered, entry)
-			continue
-		}
-		if _, ok := seenGroups[workspaceKey]; !ok {
-			seenGroups[workspaceKey] = struct{}{}
-			if len(visibleGroups) < limit {
-				visibleGroups[workspaceKey] = struct{}{}
-			}
-		}
-		if _, ok := visibleGroups[workspaceKey]; ok {
-			filtered = append(filtered, entry)
-		}
-	}
-	return filtered, len(visibleGroups)
 }

@@ -27,21 +27,25 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 	case control.FeishuUIIntentShowVerboseCatalog:
 		return []control.UIEvent{s.commandViewEvent(surface, s.buildVerboseCommandView(surface))}
 	case control.FeishuUIIntentShowRecentWorkspaces:
-		return s.presentWorkspaceSelection(surface)
+		return s.presentWorkspaceSelectionPage(surface, intent.Page)
 	case control.FeishuUIIntentShowAllWorkspaces:
-		return s.presentAllWorkspaceSelection(surface)
+		return s.presentWorkspaceSelectionPage(surface, intent.Page)
 	case control.FeishuUIIntentShowThreads:
-		return s.presentThreadSelection(surface, false)
+		return s.presentThreadSelectionMode(surface, threadSelectionDisplayRecent, intent.Page)
 	case control.FeishuUIIntentShowAllThreads:
-		return s.presentThreadSelection(surface, true)
+		return s.presentThreadSelectionMode(surface, threadSelectionDisplayAll, intent.Page)
 	case control.FeishuUIIntentShowScopedThreads:
-		return s.presentScopedThreadSelection(surface)
+		mode := threadSelectionDisplayScopedAll
+		if intent.ViewMode == string(control.FeishuThreadSelectionVSCodeAll) || intent.ViewMode == string(control.FeishuThreadSelectionVSCodeScopedAll) {
+			mode = threadSelectionDisplayScopedAll
+		}
+		return s.presentThreadSelectionMode(surface, mode, intent.Page)
 	case control.FeishuUIIntentShowWorkspaceThreads:
-		return s.presentWorkspaceThreadSelection(surface, intent.WorkspaceKey)
+		return s.presentWorkspaceThreadSelectionPage(surface, intent.WorkspaceKey, intent.Page, intent.ReturnPage)
 	case control.FeishuUIIntentShowAllThreadWorkspaces:
-		return s.presentAllThreadWorkspaces(surface)
+		return s.presentThreadSelectionMode(surface, threadSelectionDisplayAllExpanded, intent.Page)
 	case control.FeishuUIIntentShowRecentThreadWorkspaces:
-		return s.presentThreadSelection(surface, true)
+		return s.presentThreadSelectionMode(surface, threadSelectionDisplayAllExpanded, intent.Page)
 	case control.FeishuUIIntentPathPickerEnter:
 		return s.handlePathPickerEnter(surface, intent.PickerID, intent.PickerEntry, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerUp:

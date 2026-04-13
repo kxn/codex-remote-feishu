@@ -7,6 +7,9 @@ const (
 	cardActionPayloadKeyInstanceID           = "instance_id"
 	cardActionPayloadKeyWorkspaceKey         = "workspace_key"
 	cardActionPayloadKeyThreadID             = "thread_id"
+	cardActionPayloadKeyViewMode             = "view_mode"
+	cardActionPayloadKeyPage                 = "page"
+	cardActionPayloadKeyReturnPage           = "return_page"
 	cardActionPayloadKeyAllowCrossWorkspace  = "allow_cross_workspace"
 	cardActionPayloadKeyPromptID             = "prompt_id"
 	cardActionPayloadKeyOptionID             = "option_id"
@@ -69,6 +72,36 @@ func actionPayloadWithLifecycle(value map[string]any, daemonLifecycleID string) 
 
 func actionPayloadNavigation(kind string) map[string]any {
 	return map[string]any{cardActionPayloadKeyKind: kind}
+}
+
+func actionPayloadNavigationPage(kind string, page int) map[string]any {
+	payload := actionPayloadNavigation(kind)
+	if page > 0 {
+		payload[cardActionPayloadKeyPage] = page
+	}
+	return payload
+}
+
+func actionPayloadThreadNavigation(kind, viewMode string, page int) map[string]any {
+	payload := actionPayloadNavigationPage(kind, page)
+	if strings.TrimSpace(viewMode) != "" {
+		payload[cardActionPayloadKeyViewMode] = strings.TrimSpace(viewMode)
+	}
+	return payload
+}
+
+func actionPayloadWorkspaceThreads(workspaceKey string, page, returnPage int) map[string]any {
+	payload := map[string]any{
+		cardActionPayloadKeyKind:         cardActionKindShowWorkspaceThreads,
+		cardActionPayloadKeyWorkspaceKey: strings.TrimSpace(workspaceKey),
+	}
+	if page > 0 {
+		payload[cardActionPayloadKeyPage] = page
+	}
+	if returnPage > 0 {
+		payload[cardActionPayloadKeyReturnPage] = returnPage
+	}
+	return payload
 }
 
 func actionPayloadAttachInstance(instanceID string) map[string]any {
