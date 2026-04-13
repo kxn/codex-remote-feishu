@@ -169,7 +169,7 @@
   - 表单“提交答案”按钮带 `request_option_id=submit`
   - 当本次提交后仍有未答题，orchestrator 会把 request 切到“确认留空提交”状态并刷新 request 卡片
   - request 卡的按钮与表单提交都会携带 `request_revision`
-    - 只要当前 request 因为“进入确认态”“取消确认态”“提交失败恢复”而刷新，revision 就会递增
+    - 只要当前 request 因为“局部答案已保存”“进入确认态”“取消确认态”“提交失败恢复”而刷新，revision 就会递增
     - 同 daemon 生命周期里的旧 request 卡，如果 revision 落后于当前 pending request，会收到 `request_card_expired`，不会再改写当前草稿状态
   - 确认态按钮用 `request_respond` 回传：
     - `request_option_id=confirm_submit_with_unanswered`：确认留空提交

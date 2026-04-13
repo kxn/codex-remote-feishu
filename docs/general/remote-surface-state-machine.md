@@ -1044,7 +1044,7 @@ retained-offline overlay 额外规则：
 | `show_all_threads` | `ActionShowAllThreads` | 打开 `/useall` 的默认 cross-workspace 总览；也用于单-workspace 全量视图返回总览 |
 | `show_all_thread_workspaces` | `ActionShowAllThreadWorkspaces` | 把 `/useall` grouped 总览从“最近 5 个工作区”展开到“全部工作区” |
 | `show_recent_thread_workspaces` | `ActionShowRecentThreadWorkspaces` | 从“全部工作区”视图返回 `/useall` 默认最近 5 个工作区总览 |
-| `request_respond` | `ActionRespondRequest` | approval 与 `request_user_input` 的按钮回传入口；`request_user_input` 支持分题局部提交并在 pending request 上暂存答案，`request_option_id=submit` 触发“提交答案”语义，若有未答题会进入确认态；`request_option_id=confirm_submit_with_unanswered` 会确认留空提交，`request_option_id=cancel_submit_with_unanswered` 退出确认态，`request_option_id=submit_with_unanswered` 保持兼容 |
+| `request_respond` | `ActionRespondRequest` | approval 与 `request_user_input` 的按钮回传入口；`request_user_input` 支持分题局部提交并在 pending request 上暂存答案，局部保存后会刷新当前 request 卡并递增 `request_revision`；`request_option_id=submit` 触发“提交答案”语义，若有未答题会进入确认态；`request_option_id=confirm_submit_with_unanswered` 会确认留空提交，`request_option_id=cancel_submit_with_unanswered` 退出确认态，`request_option_id=submit_with_unanswered` 保持兼容 |
 | `submit_request_form` | `ActionRespondRequest` | `request_user_input` 的表单提交入口；按 `question.id -> answers[]` 回传；表单“提交答案”会带 `request_option_id=submit`；若提交后仍有未答题，request 会切到确认态，等待 `confirm_submit_with_unanswered` 或 `cancel_submit_with_unanswered` |
 | `resume_headless_thread` | `ActionRemovedCommand` | 历史兼容入口，统一回迁移提示 |
 | `kick_thread_confirm` | `ActionConfirmKickThread` | 强踢前再次校验实时状态 |

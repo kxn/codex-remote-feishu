@@ -923,12 +923,21 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 			"model": {"gpt-5.4"},
 		},
 	})
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
-		t.Fatalf("expected partial answer to be saved first, got %#v", events)
+	if len(events) != 2 || events[0].FeishuDirectRequestPrompt == nil || events[1].Notice == nil || events[1].Notice.Code != "request_saved" {
+		t.Fatalf("expected partial answer save to refresh prompt and notice, got %#v", events)
+	}
+	if events[0].FeishuDirectRequestPrompt.RequestRevision != 2 {
+		t.Fatalf("expected partial answer save to bump prompt revision, got %#v", events[0].FeishuDirectRequestPrompt)
+	}
+	if !events[0].FeishuDirectRequestPrompt.Questions[0].Answered || events[0].FeishuDirectRequestPrompt.Questions[0].DefaultValue != "gpt-5.4" {
+		t.Fatalf("expected refreshed prompt to show saved answer, got %#v", events[0].FeishuDirectRequestPrompt.Questions[0])
 	}
 	pending := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
 	if pending == nil || pending.DraftAnswers["model"] != "gpt-5.4" {
 		t.Fatalf("expected partial answer to persist in pending request, got %#v", pending)
+	}
+	if pending.CardRevision != 2 {
+		t.Fatalf("expected partial answer save to bump record revision, got %#v", pending)
 	}
 	if pending.SubmitWithUnansweredConfirmPending {
 		t.Fatalf("expected partial answer save to keep request in answering state, got %#v", pending)
@@ -1002,8 +1011,8 @@ func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T
 			"model": {"gpt-5.4"},
 		},
 	})
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
-		t.Fatalf("expected option-only partial submit to be saved, got %#v", events)
+	if len(events) != 2 || events[0].FeishuDirectRequestPrompt == nil || events[1].Notice == nil || events[1].Notice.Code != "request_saved" {
+		t.Fatalf("expected option-only partial submit to refresh prompt and notice, got %#v", events)
 	}
 
 	events = svc.ApplySurfaceAction(control.Action{
@@ -1070,7 +1079,7 @@ func TestRespondRequestUserInputAllowsSubmitWithUnansweredAfterConfirm(t *testin
 			"model": {"gpt-5.4"},
 		},
 	})
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
+	if len(events) != 2 || events[0].FeishuDirectRequestPrompt == nil || events[1].Notice == nil || events[1].Notice.Code != "request_saved" {
 		t.Fatalf("expected first step to save partial answer, got %#v", events)
 	}
 
@@ -1222,11 +1231,11 @@ func TestRespondRequestUserInputRejectsStaleRequestRevision(t *testing.T) {
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		RequestID:        "req-ui-1",
-		RequestRevision:  1,
+		RequestRevision:  2,
 		RequestOptionID:  "submit",
 	})
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
-	if record == nil || record.CardRevision != 2 {
+	if record == nil || record.CardRevision != 3 {
 		t.Fatalf("expected explicit submit to enter confirm state with bumped revision, got %#v", record)
 	}
 	stale := svc.ApplySurfaceAction(control.Action{

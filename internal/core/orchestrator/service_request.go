@@ -269,28 +269,29 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 		if errText != "" {
 			return nil, false, notice(surface, "request_invalid", errText)
 		}
-		if !complete {
-			if submitIntent {
-				setRequestUserInputSubmitConfirmState(request, missingLabels)
-				bumpRequestCardRevision(request)
-				return nil, false, []control.UIEvent{s.requestPromptEvent(surface, request, "")}
-			}
-			if len(action.RequestAnswers) == 0 {
-				if len(missingLabels) != 0 {
-					return nil, false, notice(surface, "request_invalid", fmt.Sprintf("问题“%s”还没有填写答案。", missingLabels[0]))
+			if !complete {
+				if submitIntent {
+					setRequestUserInputSubmitConfirmState(request, missingLabels)
+					bumpRequestCardRevision(request)
+					return nil, false, []control.UIEvent{s.requestPromptEvent(surface, request, "")}
 				}
-				return nil, false, notice(surface, "request_invalid", "当前没有可提交的答案。")
+				if len(action.RequestAnswers) == 0 {
+					if len(missingLabels) != 0 {
+						return nil, false, notice(surface, "request_invalid", fmt.Sprintf("问题“%s”还没有填写答案。", missingLabels[0]))
+					}
+					return nil, false, notice(surface, "request_invalid", "当前没有可提交的答案。")
+				}
+				bumpRequestCardRevision(request)
+				if len(missingLabels) == 0 {
+					return nil, false, s.requestPromptRefreshWithNotice(surface, request, "request_saved", "已记录当前答案，请继续补全其他问题后再提交。")
+				}
+				if len(missingLabels) == 1 {
+					return nil, false, s.requestPromptRefreshWithNotice(surface, request, "request_saved", fmt.Sprintf("已记录当前答案。还差 1 个问题：%s。", missingLabels[0]))
+				}
+				return nil, false, s.requestPromptRefreshWithNotice(surface, request, "request_saved", fmt.Sprintf("已记录当前答案。还差 %d 个问题待填写。", len(missingLabels)))
 			}
-			if len(missingLabels) == 0 {
-				return nil, false, notice(surface, "request_saved", "已记录当前答案，请继续补全其他问题后再提交。")
-			}
-			if len(missingLabels) == 1 {
-				return nil, false, notice(surface, "request_saved", fmt.Sprintf("已记录当前答案。还差 1 个问题：%s。", missingLabels[0]))
-			}
-			return nil, false, notice(surface, "request_saved", fmt.Sprintf("已记录当前答案。还差 %d 个问题待填写。", len(missingLabels)))
-		}
-		clearRequestUserInputSubmitConfirmState(request)
-		return response, true, nil
+			clearRequestUserInputSubmitConfirmState(request)
+			return response, true, nil
 	default:
 		return nil, false, notice(surface, "request_unsupported", fmt.Sprintf("飞书端暂不支持处理 %s 类型的请求。", requestType))
 	}
@@ -452,6 +453,12 @@ func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record
 		SubmitWithUnansweredConfirmPending: record.SubmitWithUnansweredConfirmPending,
 		SubmitWithUnansweredMissingLabels:  append([]string(nil), record.SubmitWithUnansweredMissingLabels...),
 	})
+}
+
+func (s *Service) requestPromptRefreshWithNotice(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, code, text string) []control.UIEvent {
+	events := []control.UIEvent{s.requestPromptEvent(surface, record, "")}
+	events = append(events, notice(surface, code, text)...)
+	return events
 }
 
 func firstTrimmedAnswer(values []string) string {
