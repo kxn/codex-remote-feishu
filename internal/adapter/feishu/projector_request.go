@@ -7,6 +7,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
+const requestUserInputSubmitWithUnansweredOptionID = "submit_with_unanswered"
+
 func requestPromptBody(prompt control.FeishuDirectRequestPrompt) string {
 	lines := []string{}
 	if prompt.ThreadTitle != "" {
@@ -90,6 +92,10 @@ func requestUserInputPromptElements(prompt control.FeishuDirectRequestPrompt, da
 	if requestPromptNeedsForm(prompt) {
 		if form := requestPromptFormElement(prompt, daemonLifecycleID); len(form) != 0 {
 			elements = append(elements, form)
+		}
+	} else if requestPromptShouldRenderPartialSubmit(prompt) {
+		if row := requestPromptPartialSubmitActionRow(prompt, daemonLifecycleID); len(row) != 0 {
+			elements = append(elements, row)
 		}
 	}
 	elements = append(elements, map[string]any{
@@ -188,8 +194,12 @@ func requestPromptQuestionNeedsFormInput(question control.RequestPromptQuestion)
 	return len(question.Options) == 0 || question.AllowOther || !question.DirectResponse
 }
 
+func requestPromptShouldRenderPartialSubmit(prompt control.FeishuDirectRequestPrompt) bool {
+	return len(prompt.Questions) > 1
+}
+
 func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {
-	elements := make([]map[string]any, 0, len(prompt.Questions)+1)
+	elements := make([]map[string]any, 0, len(prompt.Questions)+2)
 	for _, question := range prompt.Questions {
 		if !requestPromptQuestionNeedsFormInput(question) {
 			continue
@@ -227,11 +237,35 @@ func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLi
 		cardActionPayloadKeyRequestID:   prompt.RequestID,
 		cardActionPayloadKeyRequestType: strings.TrimSpace(prompt.RequestType),
 	}, daemonLifecycleID)))
+	if requestPromptShouldRenderPartialSubmit(prompt) {
+		partialSubmit := cardFormSubmitButtonElement("提交已有答案（可留空）", stampActionValue(map[string]any{
+			cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
+			cardActionPayloadKeyRequestID:       prompt.RequestID,
+			cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+			cardActionPayloadKeyRequestOptionID: requestUserInputSubmitWithUnansweredOptionID,
+		}, daemonLifecycleID))
+		if len(partialSubmit) != 0 {
+			partialSubmit["name"] = "submit_with_unanswered"
+			partialSubmit["type"] = "default"
+			elements = append(elements, partialSubmit)
+		}
+	}
 	return map[string]any{
 		"tag":      "form",
 		"name":     "request_form_" + strings.TrimSpace(prompt.RequestID),
 		"elements": elements,
 	}
+}
+
+func requestPromptPartialSubmitActionRow(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {
+	return cardButtonGroupElement([]map[string]any{
+		cardCallbackButtonElement("提交已有答案（可留空）", "default", stampActionValue(map[string]any{
+			cardActionPayloadKeyKind:            cardActionKindRequestRespond,
+			cardActionPayloadKeyRequestID:       prompt.RequestID,
+			cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+			cardActionPayloadKeyRequestOptionID: requestUserInputSubmitWithUnansweredOptionID,
+		}, daemonLifecycleID), false, ""),
+	})
 }
 
 func requestPromptQuestionHint(prompt control.FeishuDirectRequestPrompt) string {
@@ -243,10 +277,16 @@ func requestPromptQuestionHint(prompt control.FeishuDirectRequestPrompt) string 
 		}
 	}
 	if hasDirect && requestPromptNeedsForm(prompt) {
-		return "可直接点击按钮回答单选题；如果需要补充文字或填写其他答案，请在下方表单里提交。"
+		return "可直接点击按钮回答单选题；如果需要补充文字或填写其他答案，请在下方表单里提交。若仍有未答题，可用“提交已有答案（可留空）”继续。"
 	}
 	if hasDirect {
+		if requestPromptShouldRenderPartialSubmit(prompt) {
+			return "点击按钮可逐题作答；若决定跳过剩余问题，可点击“提交已有答案（可留空）”。"
+		}
 		return "点击按钮即可将答案直接回传给当前 turn。"
+	}
+	if requestPromptShouldRenderPartialSubmit(prompt) {
+		return "填写后点击“提交答案”；若仍有未答题，可点击“提交已有答案（可留空）”。"
 	}
 	return "填写后点击“提交答案”，答案会直接回传给当前 turn。"
 }

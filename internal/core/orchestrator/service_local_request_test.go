@@ -1021,6 +1021,79 @@ func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T
 	}
 }
 
+func TestRespondRequestUserInputAllowsSubmitWithUnansweredAfterConfirm(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-ui-1",
+		Metadata: map[string]any{
+			"requestType": "request_user_input",
+			"questions": []map[string]any{
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}, {"label": "medium"}}},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestAnswers: map[string][]string{
+			"model": {"gpt-5.4"},
+		},
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_saved" {
+		t.Fatalf("expected first step to save partial answer, got %#v", events)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-ui-1",
+		RequestOptionID:  "submit_with_unanswered",
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected submit_with_unanswered to dispatch response, got %#v", events)
+	}
+	answers, _ := events[0].Command.Request.Response["answers"].(map[string]any)
+	model, _ := answers["model"].(map[string]any)
+	modelList, _ := model["answers"].([]string)
+	if len(modelList) != 1 || modelList[0] != "gpt-5.4" {
+		t.Fatalf("expected answered question to keep selected answer, got %#v", answers["model"])
+	}
+	effort, _ := answers["effort"].(map[string]any)
+	effortList, _ := effort["answers"].([]string)
+	if len(effortList) != 0 {
+		t.Fatalf("expected unanswered question to submit empty answers, got %#v", answers["effort"])
+	}
+	if len(svc.root.Surfaces["surface-1"].PendingRequests) != 0 {
+		t.Fatalf("expected pending request to clear after submit_with_unanswered, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+	}
+}
+
 func TestPendingRequestBlocksTextUntilHandled(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

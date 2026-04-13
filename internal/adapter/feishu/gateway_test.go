@@ -1676,9 +1676,10 @@ func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) 
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_request_form",
-					"request_id":   "req-ui-2",
-					"request_type": "request_user_input",
+					"kind":              "submit_request_form",
+					"request_id":        "req-ui-2",
+					"request_type":      "request_user_input",
+					"request_option_id": "submit_with_unanswered",
 				},
 				FormValue: map[string]interface{}{
 					"model": "gpt-5.4",
@@ -1698,6 +1699,9 @@ func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) 
 	}
 	if action.Kind != control.ActionRespondRequest || action.RequestID != "req-ui-2" {
 		t.Fatalf("unexpected action: %#v", action)
+	}
+	if action.RequestOptionID != "submit_with_unanswered" {
+		t.Fatalf("unexpected request option id: %#v", action)
 	}
 	if got := action.RequestAnswers["notes"]; len(got) != 1 || got[0] != "请用中文回复" {
 		t.Fatalf("unexpected form request answers: %#v", action.RequestAnswers)

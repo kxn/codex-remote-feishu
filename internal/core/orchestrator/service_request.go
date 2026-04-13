@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const requestUserInputSubmitWithUnansweredOptionID = "submit_with_unanswered"
+
 func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	if surface == nil || action.RequestID == "" {
 		return nil
@@ -245,7 +247,8 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 			"decision": decision,
 		}, false, nil
 	case "request_user_input":
-		response, complete, missingLabels, errText := buildRequestUserInputResponse(request, action.RequestAnswers)
+		allowSubmitWithUnanswered := requestUserInputAllowSubmitWithUnanswered(action.RequestOptionID)
+		response, complete, missingLabels, errText := buildRequestUserInputResponse(request, action.RequestAnswers, allowSubmitWithUnanswered)
 		if errText != "" {
 			return nil, false, notice(surface, "request_invalid", errText)
 		}
@@ -270,7 +273,7 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 	}
 }
 
-func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswers map[string][]string) (map[string]any, bool, []string, string) {
+func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswers map[string][]string, allowSubmitWithUnanswered bool) (map[string]any, bool, []string, string) {
 	if request == nil || len(request.Questions) == 0 {
 		return nil, false, nil, "这个问题请求缺少有效的问题定义，当前无法提交。"
 	}
@@ -304,6 +307,9 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 		answerText := strings.TrimSpace(request.DraftAnswers[questionID])
 		if answerText == "" {
 			missingLabels = append(missingLabels, firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID))
+			if allowSubmitWithUnanswered {
+				answers[questionID] = map[string]any{"answers": []string{}}
+			}
 			continue
 		}
 		if canonical, ok := canonicalQuestionOptionAnswer(question, answerText); ok {
@@ -317,10 +323,23 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 	if len(answers) == 0 {
 		return nil, false, missingLabels, "当前没有可提交的答案。"
 	}
-	if len(missingLabels) != 0 {
+	if len(missingLabels) != 0 && !allowSubmitWithUnanswered {
 		return nil, false, missingLabels, ""
 	}
 	return map[string]any{"answers": answers}, true, nil, ""
+}
+
+func requestUserInputAllowSubmitWithUnanswered(optionID string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(optionID))
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	normalized = strings.ReplaceAll(normalized, "_", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	switch normalized {
+	case "submitwithunanswered", "allowunanswered", "submitpartial", "proceedwithunanswered":
+		return true
+	default:
+		return false
+	}
 }
 
 func firstTrimmedAnswer(values []string) string {

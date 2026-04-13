@@ -330,6 +330,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		if requestID == "" {
 			return control.Action{}, false
 		}
+		requestOptionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID))
 		requestAnswers := requestAnswersFromFormValue(event.Event.Action.FormValue)
 		if len(requestAnswers) == 0 && strings.TrimSpace(event.Event.Action.InputValue) != "" {
 			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
@@ -349,6 +350,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			RequestID:        requestID,
 			RequestType:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
+			RequestOptionID:  requestOptionID,
 			RequestAnswers:   requestAnswers,
 			Inbound:          meta,
 		}, true
