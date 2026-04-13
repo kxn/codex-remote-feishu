@@ -60,6 +60,9 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	if captured.WorkDir != "/data/dl/droid" || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
 		t.Fatalf("unexpected preselected headless launch opts: %#v", captured)
 	}
+	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
+		t.Fatalf("expected explicit daemon-owned lifetime for managed headless launch, got %#v", captured.Env)
+	}
 	if containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless") {
 		t.Fatalf("did not expect default headless display override when thread cwd is known, got %#v", captured.Env)
 	}
@@ -488,7 +491,9 @@ func TestDaemonPrewarmsManagedHeadlessToMinIdle(t *testing.T) {
 	if launches[0].WorkDir != stateDir {
 		t.Fatalf("expected prewarm workdir to use state dir, got %#v", launches[0])
 	}
-	if !containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") || !containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") {
+	if !containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") ||
+		!containsEnvEntry(launches[0].Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") ||
+		!containsEnvEntry(launches[0].Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
 		t.Fatalf("expected managed headless prewarm env, got %#v", launches[0].Env)
 	}
 	if len(app.managedHeadless) != 1 {

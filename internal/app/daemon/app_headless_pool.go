@@ -227,6 +227,7 @@ func (a *App) startPoolManagedHeadlessLocked(now time.Time, seq int) (string, er
 		"CODEX_REMOTE_INSTANCE_ID="+instanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED=1",
+		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless",
 	)
 	pid, err := a.startHeadless(controlToHeadlessLaunch(cfg, env, workDir, instanceID))

@@ -125,6 +125,7 @@ func (a *App) createManagedHeadlessInstance(workspaceRoot, displayName string) (
 		"CODEX_REMOTE_INSTANCE_ID="+instanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED=1",
+		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME="+displayName,
 	)
 	pid, err := a.startHeadless(controlToHeadlessLaunch(cfg, env, normalizedRoot, instanceID))

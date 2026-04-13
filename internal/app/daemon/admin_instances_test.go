@@ -192,6 +192,33 @@ func TestAdminInstancesSnapshotFiltersManagedHeadlessButKeepsVSCode(t *testing.T
 	}
 }
 
+func TestCreateManagedHeadlessInstanceSetsExplicitDaemonOwnedLifetime(t *testing.T) {
+	app := newManagedInstancesAdminTestApp(t)
+	workspaceRoot := t.TempDir()
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4321, nil
+	}
+
+	summary, err := app.createManagedHeadlessInstance(workspaceRoot, "Alpha")
+	if err != nil {
+		t.Fatalf("createManagedHeadlessInstance: %v", err)
+	}
+	if summary.InstanceID == "" || captured.InstanceID != summary.InstanceID {
+		t.Fatalf("expected launched instance id to match summary, got summary=%#v launch=%#v", summary, captured)
+	}
+	if captured.WorkDir != workspaceRoot {
+		t.Fatalf("expected managed headless workdir = %q, got %#v", workspaceRoot, captured)
+	}
+	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_SOURCE=headless") ||
+		!containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_MANAGED=1") ||
+		!containsEnvEntry(captured.Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
+		t.Fatalf("expected explicit daemon-owned managed headless env, got %#v", captured.Env)
+	}
+}
+
 func newManagedInstancesAdminTestApp(t *testing.T) *App {
 	t.Helper()
 

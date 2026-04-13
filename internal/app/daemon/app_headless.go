@@ -57,6 +57,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 		"CODEX_REMOTE_INSTANCE_ID="+command.InstanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED=1",
+		"CODEX_REMOTE_LIFETIME=daemon-owned",
 	)
 	if strings.TrimSpace(command.ThreadCWD) == "" {
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
