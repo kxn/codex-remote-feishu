@@ -188,7 +188,7 @@ function Invoke-HttpRequest([string]$Url) {
   Add-AuthHeader $request
 
   $response = $client.SendAsync($request).GetAwaiter().GetResult()
-  $response.EnsureSuccessStatusCode()
+  [void]$response.EnsureSuccessStatusCode()
   return $response
 }
 
