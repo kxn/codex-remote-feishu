@@ -613,6 +613,7 @@ R0 Detached
 
 R1 AttachedUnbound
   -- 普通文本(normal mode，workspace 已知) --> 隐式进入 R5 并立刻消费首条文本（R5 + E1/E2）
+  -- 图片消息(normal mode，workspace 已知) --> 隐式进入 R5，并先停留在 D1 StagedImages（不会仅凭图片创建新 thread）
   -- /use(thread，同 instance 可见) --> R2 AttachedPinned
   -- /use(thread，normal mode 且目标在其他 workspace) --> 拒绝 + migration to /list
   -- /use(thread，normal mode 且需要切换实例但仍在当前 workspace) --> detach 语义清理后 -> R2 AttachedPinned 或 G1 PendingHeadlessStarting
@@ -662,11 +663,12 @@ R5 NewThreadReady
 补充说明：
 
 1. `R5` 下首条文本 queued 后，第二条文本与新图片都会被拒绝，直到该新 thread 真正落地。
-2. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
-3. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
+2. 若是在 `R1 AttachedUnbound` 下先发图片，当前实现会先隐式进入 `R5` 并把图片保留为 staged；随后第一条文本会按“新 thread 首条输入”把 staged image + 文本一起发送。
+3. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
+4. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
    1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
    2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
-4. normal mode detached/global `/use` 与 `/useall` 的 resolver 顺序当前是：
+5. normal mode detached/global `/use` 与 `/useall` 的 resolver 顺序当前是：
    1. 当前 attached instance 内可见 thread。
    2. free existing visible instance。
    3. reusable managed headless。

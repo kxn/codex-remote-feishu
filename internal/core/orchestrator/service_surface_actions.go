@@ -107,22 +107,28 @@ func (s *Service) prepareNewThreadBase(surface *state.SurfaceConsoleRecord, inst
 }
 
 func (s *Service) maybePrepareImplicitNewThreadFromUnboundText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, text string) []control.UIEvent {
-	if surface == nil || inst == nil {
-		return nil
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-		return nil
-	}
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
-	if surface.RouteMode != state.RouteModeUnbound {
-		return nil
-	}
-	if strings.TrimSpace(surface.SelectedThreadID) != "" {
-		return nil
-	}
+	return s.maybePrepareImplicitNewThreadFromUnbound(surface, inst)
+}
 
+func (s *Service) maybePrepareImplicitNewThreadFromUnboundImage(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []control.UIEvent {
+	return s.maybePrepareImplicitNewThreadFromUnbound(surface, inst)
+}
+
+func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []control.UIEvent {
+	if surface == nil || inst == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		return nil
+	}
+	if surface.RouteMode != state.RouteModeUnbound || strings.TrimSpace(surface.SelectedThreadID) != "" {
+		return nil
+	}
+	if strings.TrimSpace(surface.PreparedThreadCWD) != "" {
+		surface.RouteMode = state.RouteModeNewThreadReady
+		surface.PreparedAt = s.now()
+		return nil
+	}
 	cwd, threadID, ok := s.prepareNewThreadBase(surface, inst)
 	if !ok {
 		return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
@@ -130,7 +136,6 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnboundText(surface *state.Su
 	if blocked := s.blockNewThreadPreparation(surface); blocked != nil {
 		return blocked
 	}
-
 	s.releaseSurfaceThreadClaim(surface)
 	surface.RouteMode = state.RouteModeNewThreadReady
 	surface.PreparedThreadCWD = cwd
@@ -400,6 +405,9 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
+	}
+	if blocked := s.maybePrepareImplicitNewThreadFromUnboundImage(surface, inst); blocked != nil {
+		return blocked
 	}
 	if blocked := s.unboundInputBlocked(surface); blocked != nil {
 		return blocked

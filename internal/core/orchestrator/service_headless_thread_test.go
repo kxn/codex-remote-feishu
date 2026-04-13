@@ -719,6 +719,67 @@ func TestTextMessageNormalWorkspaceUnboundImplicitlyCreatesNewThread(t *testing.
 	}
 }
 
+func TestImageThenTextNormalWorkspaceUnboundUsesImplicitNewThreadFlow(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 52, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", WorkspaceKey: "/data/dl/droid"})
+
+	imageEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionImageMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-img",
+		LocalPath:        "/tmp/diagram.png",
+		MIMEType:         "image/png",
+	})
+	if len(imageEvents) != 1 || imageEvents[0].PendingInput == nil || imageEvents[0].PendingInput.Status != string(state.ImageStaged) {
+		t.Fatalf("expected unbound image to stage input via implicit new-thread-ready route, got %#v", imageEvents)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) != "/data/dl/droid" {
+		t.Fatalf("expected image staging to prepare new-thread-ready route, got %#v", surface)
+	}
+	if surface.ActiveQueueItemID != "" || len(surface.QueueItems) != 0 {
+		t.Fatalf("expected image-only input not to create remote turn yet, got %#v", surface)
+	}
+
+	textEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-text",
+		Text:             "结合图片给建议",
+	})
+	sawPromptSend := false
+	for _, event := range textEvents {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			sawPromptSend = true
+			if !event.Command.Target.CreateThreadIfMissing || event.Command.Target.CWD != "/data/dl/droid" {
+				t.Fatalf("expected staged image follow-up text to create thread in workspace, got %#v", event.Command.Target)
+			}
+		}
+	}
+	if !sawPromptSend {
+		t.Fatalf("expected staged image + first text to dispatch prompt send, got %#v", textEvents)
+	}
+
+	surface = svc.root.Surfaces["surface-1"]
+	if surface.ActiveQueueItemID == "" {
+		t.Fatalf("expected active create-thread queue item after first text, got %#v", surface)
+	}
+	item := surface.QueueItems[surface.ActiveQueueItemID]
+	if item == nil || len(item.Inputs) != 2 || item.Inputs[0].Type != agentproto.InputLocalImage || item.Inputs[1].Type != agentproto.InputText {
+		t.Fatalf("expected first create-thread input to include staged image + text, got %#v", item)
+	}
+}
+
 func TestShowThreadsDetachedShowsGlobalMergedRecentThreads(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
