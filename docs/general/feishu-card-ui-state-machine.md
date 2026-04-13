@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness，以及“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回）。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回），以及无回调的 `exec_command` 共享更新卡（首次 reply，后续 `message.patch` 同卡更新，正文出现后终结）。
 
 ## 1. 文档定位
 
@@ -48,6 +48,7 @@
 - `gateway`
   - 负责把 Feishu callback 解析成 `control.Action`
   - 负责决定 callback 是同步等待 replace，还是立即 ack 后异步处理
+  - 对无 callback 的共享更新卡，负责执行首次发送与后续 `message.patch`
 - `daemon`
   - 负责 old-card / old-message 生命周期判定
   - 负责在 ingress 层统一把动作交给主 `ApplySurfaceAction()` 入口；`FeishuUIIntent` 分流发生在 service 内，避免绕开 request/path-picker 等产品门禁
@@ -64,6 +65,7 @@
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单
+  - 对 `exec_command` 进度卡，负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新
   - 当前是 selection 与 command/config cards 最终 projection 的 owner：
     [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
     负责把 `FeishuSelectionView` 投影成当前仍被卡片 renderer 消费的 `FeishuDirectSelectionPrompt`
@@ -271,6 +273,11 @@
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。
+- `exec_command` 进度卡不走 callback replace，也不属于旧卡 freshness 判定面：
+  - 第一次以 reply card 形式追加到源消息下
+  - 若同一 turn 内继续收到同一条 `command_execution` 的完成态，则改用 `message.patch` 更新同一消息
+  - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
+  - 若整轮没有正文且命令仍未收敛，turn 完成时会补一次最终状态后停止更新
 
 ## 6. 当前 freshness / old-card 语义
 
@@ -336,6 +343,7 @@
 - [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
 - [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
+- [internal/core/orchestrator/service_exec_command_progress.go](../../internal/core/orchestrator/service_exec_command_progress.go)
 - [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
 - [internal/adapter/feishu/projector_command_view.go](../../internal/adapter/feishu/projector_command_view.go)
 - [internal/adapter/feishu/projector_path_picker.go](../../internal/adapter/feishu/projector_path_picker.go)
@@ -359,13 +367,17 @@
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
   - 锁定 `FeishuPathPickerView` 的按钮 payload、`daemon_lifecycle_id` stamp 与 enter/select 按钮区分
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
-  - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack
+  - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack，以及共享更新卡的 `message.patch` 出站路径
+- [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
+  - 锁定 `exec_command` 进度卡首次 reply 与后续 update 的投影边界
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
   - 锁定 message.delete 出站能力与“消息已不存在”类错误的静默降级
 - [internal/adapter/feishu/gateway_path_picker_test.go](../../internal/adapter/feishu/gateway_path_picker_test.go)
   - 锁定 `path_picker_*` callback payload 能正确回到 `control.Action`
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
   - 锁定 workspace selection read model 保留全量语义条目，再由 projection 决定 recent/all 可见范围
+- [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
+  - 锁定 `exec_command` 进度卡只在非 quiet verbosity 下出现、正文出现后终止、同卡更新不复活、turn 完成时补最终态
 - [internal/core/orchestrator/service_path_picker_test.go](../../internal/core/orchestrator/service_path_picker_test.go)
   - 锁定路径规范化、root 边界、symlink escape、owner / expire / active picker gate、consumer handoff
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)

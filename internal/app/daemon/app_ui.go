@@ -176,8 +176,31 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 		}
 		return err
 	}
+	a.recordUIEventDelivery(event, operations)
 	a.traceAssistantBlock(event)
 	return nil
+}
+
+func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.Operation) {
+	if event.ExecCommandProgress == nil {
+		return
+	}
+	for _, operation := range operations {
+		if operation.Kind != feishu.OperationSendCard {
+			continue
+		}
+		if strings.TrimSpace(operation.MessageID) == "" {
+			continue
+		}
+		a.service.RecordExecCommandProgressMessage(
+			event.SurfaceSessionID,
+			event.ExecCommandProgress.ThreadID,
+			event.ExecCommandProgress.TurnID,
+			event.ExecCommandProgress.ItemID,
+			operation.MessageID,
+		)
+		return
+	}
 }
 
 func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

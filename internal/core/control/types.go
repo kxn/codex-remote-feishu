@@ -463,6 +463,17 @@ type ImageOutput struct {
 	ImageBase64 string
 }
 
+type ExecCommandProgress struct {
+	ThreadID  string
+	TurnID    string
+	ItemID    string
+	MessageID string
+	Command   string
+	CWD       string
+	Status    string
+	Final     bool
+}
+
 type UIEventKind string
 
 const (
@@ -477,6 +488,7 @@ const (
 	UIEventThreadSelectionChange       UIEventKind = "thread.selection.changed"
 	UIEventBlockCommitted              UIEventKind = "block.committed"
 	UIEventImageOutput                 UIEventKind = "image.output"
+	UIEventExecCommandProgress         UIEventKind = "exec_command.progress"
 	UIEventAgentCommand                UIEventKind = "agent.command"
 	UIEventDaemonCommand               UIEventKind = "daemon.command"
 )
@@ -529,6 +541,7 @@ type UIEvent struct {
 	ThreadSelection             *ThreadSelectionChanged
 	Block                       *render.Block
 	ImageOutput                 *ImageOutput
+	ExecCommandProgress         *ExecCommandProgress
 	FileChangeSummary           *FileChangeSummary
 	FinalTurnSummary            *FinalTurnSummary
 	Command                     *agentproto.Command

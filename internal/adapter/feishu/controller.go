@@ -129,7 +129,7 @@ func (c *MultiGatewayController) Start(ctx context.Context, handler ActionHandle
 }
 
 func (c *MultiGatewayController) Apply(ctx context.Context, operations []Operation) error {
-	grouped := map[string][]Operation{}
+	grouped := map[string][]int{}
 
 	c.mu.RLock()
 	workerCount := len(c.workers)
@@ -141,7 +141,7 @@ func (c *MultiGatewayController) Apply(ctx context.Context, operations []Operati
 	}
 	c.mu.RUnlock()
 
-	for _, operation := range operations {
+	for i, operation := range operations {
 		gatewayID := strings.TrimSpace(operation.GatewayID)
 		if gatewayID == "" {
 			if workerCount != 1 {
@@ -149,19 +149,26 @@ func (c *MultiGatewayController) Apply(ctx context.Context, operations []Operati
 			}
 			gatewayID = soleGatewayID
 		}
-		grouped[gatewayID] = append(grouped[gatewayID], operation)
+		grouped[gatewayID] = append(grouped[gatewayID], i)
 	}
 
-	for gatewayID, group := range grouped {
+	for gatewayID, indexes := range grouped {
 		c.mu.RLock()
 		worker := c.workers[gatewayID]
 		c.mu.RUnlock()
 		if worker == nil || worker.runtime == nil {
 			return fmt.Errorf("gateway apply failed: gateway %s is not running", gatewayID)
 		}
+		group := make([]Operation, 0, len(indexes))
+		for _, index := range indexes {
+			group = append(group, operations[index])
+		}
 		if err := worker.runtime.Apply(ctx, group); err != nil {
 			c.updateWorkerError(gatewayID, err)
 			return err
+		}
+		for i, index := range indexes {
+			operations[index] = group[i]
 		}
 	}
 	return nil

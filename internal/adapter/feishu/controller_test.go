@@ -79,6 +79,50 @@ func TestMultiGatewayControllerRoutesApplyByGatewayID(t *testing.T) {
 	}
 }
 
+func TestMultiGatewayControllerPropagatesMutatedOperationsBackToCaller(t *testing.T) {
+	controller := NewMultiGatewayController()
+	runtime := newFakeGatewayRuntime("app-1")
+	runtime.applyFn = func(_ context.Context, operations []Operation) error {
+		operations[0].MessageID = "om-progress-1"
+		return nil
+	}
+	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
+		return runtime
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := controller.UpsertApp(ctx, GatewayAppConfig{
+		GatewayID: "app-1",
+		AppID:     "cli_app-1",
+		AppSecret: "secret_app-1",
+		Enabled:   true,
+	}); err != nil {
+		t.Fatalf("UpsertApp: %v", err)
+	}
+
+	go func() {
+		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
+	}()
+	waitFakeGatewayStarted(t, runtime)
+
+	operations := []Operation{{
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		Kind:             OperationSendCard,
+		CardTitle:        "执行命令",
+		CardBody:         "处理中",
+		CardThemeKey:     cardThemeInfo,
+	}}
+	if err := controller.Apply(context.Background(), operations); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if operations[0].MessageID != "om-progress-1" {
+		t.Fatalf("expected mutated operation to propagate back to caller, got %#v", operations)
+	}
+}
+
 func TestMultiGatewayControllerRoutesPreviewByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
 	runtimes := map[string]*fakeGatewayRuntime{}
@@ -319,6 +363,7 @@ type fakeGatewayRuntime struct {
 	mu              sync.Mutex
 	stateHook       func(GatewayState, error)
 	applyCalls      [][]Operation
+	applyFn         func(context.Context, []Operation) error
 	sendIMFileCalls []IMFileSendRequest
 	sendIMFileFn    func(context.Context, IMFileSendRequest) (IMFileSendResult, error)
 }
@@ -347,8 +392,12 @@ func (f *fakeGatewayRuntime) Start(ctx context.Context, _ ActionHandler) error {
 
 func (f *fakeGatewayRuntime) Apply(_ context.Context, operations []Operation) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	fn := f.applyFn
 	f.applyCalls = append(f.applyCalls, append([]Operation(nil), operations...))
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(context.Background(), operations)
+	}
 	return nil
 }
 

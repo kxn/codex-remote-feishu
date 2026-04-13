@@ -141,7 +141,8 @@ func (g *LiveGateway) emitState(state GatewayState, err error) {
 }
 
 func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
-	for _, operation := range operations {
+	for i := range operations {
+		operation := &operations[i]
 		if operation.GatewayID != "" && normalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
 			return fmt.Errorf("gateway apply mismatch: operation gateway=%s gateway=%s", operation.GatewayID, g.config.GatewayID)
 		}
@@ -152,7 +153,7 @@ func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 	return nil
 }
 
-func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
+func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error {
 	switch operation.Kind {
 	case OperationSendText:
 		body, _ := json.Marshal(map[string]string{"text": operation.Text})
@@ -171,11 +172,12 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+			operation.MessageID = stringPtr(resp.Data.MessageId)
+			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil
 	case OperationSendCard:
-		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(operation, operation.ordinaryCardEnvelope()), maxFeishuCardBytes))
+		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(*operation, operation.ordinaryCardEnvelope()), maxFeishuCardBytes))
 		if err != nil {
 			return err
 		}
@@ -190,7 +192,8 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "interactive", string(card))
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
-					g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+					operation.MessageID = stringPtr(resp.Data.MessageId)
+					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
 			}
@@ -211,7 +214,8 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+			operation.MessageID = stringPtr(resp.Data.MessageId)
+			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil
 	case OperationUpdateCard:
@@ -219,7 +223,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		if messageID == "" {
 			return fmt.Errorf("update card failed: missing message id")
 		}
-		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(operation, operation.ordinaryCardEnvelope()), maxFeishuCardBytes))
+		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(*operation, operation.ordinaryCardEnvelope()), maxFeishuCardBytes))
 		if err != nil {
 			return err
 		}
@@ -239,7 +243,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send image failed: missing receive target")
 		}
-		imageKey, err := g.uploadOperationImage(ctx, operation)
+		imageKey, err := g.uploadOperationImage(ctx, *operation)
 		if err != nil {
 			return err
 		}
@@ -248,7 +252,8 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "image", string(body))
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
-					g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+					operation.MessageID = stringPtr(resp.Data.MessageId)
+					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
 			}
@@ -269,7 +274,8 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation Operation) error {
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			g.recordSurfaceMessage(stringPtr(resp.Data.MessageId), operation.SurfaceSessionID)
+			operation.MessageID = stringPtr(resp.Data.MessageId)
+			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil
 	case OperationDeleteMessage:

@@ -355,6 +355,33 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			ImagePath:        strings.TrimSpace(event.ImageOutput.SavedPath),
 			ImageBase64:      strings.TrimSpace(event.ImageOutput.ImageBase64),
 		}}
+	case control.UIEventExecCommandProgress:
+		if event.ExecCommandProgress == nil {
+			return nil
+		}
+		progress := *event.ExecCommandProgress
+		body := execCommandProgressBody(progress)
+		theme := execCommandProgressTheme(progress)
+		operation := Operation{
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			MessageID:        progress.MessageID,
+			ReplyToMessageID: event.SourceMessageID,
+			CardTitle:        "执行命令",
+			CardBody:         body,
+			CardThemeKey:     theme,
+			CardUpdateMulti:  true,
+			cardEnvelope:     cardEnvelopeV2,
+			card:             rawCardDocument("执行命令", body, theme, nil),
+		}
+		if strings.TrimSpace(progress.MessageID) != "" {
+			operation.Kind = OperationUpdateCard
+			operation.ReplyToMessageID = ""
+		} else {
+			operation.Kind = OperationSendCard
+		}
+		return []Operation{operation}
 	case control.UIEventThreadSelectionChange:
 		if event.ThreadSelection == nil {
 			return nil
@@ -373,6 +400,37 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}}
 	default:
 		return nil
+	}
+}
+
+func execCommandProgressBody(progress control.ExecCommandProgress) string {
+	status := "进行中"
+	switch strings.ToLower(strings.TrimSpace(progress.Status)) {
+	case "completed", "ok", "success", "succeeded":
+		status = "已完成"
+	case "failed", "error":
+		status = "已失败"
+	case "interrupted", "cancelled", "canceled":
+		status = "已中断"
+	}
+	body := []string{"**状态**：" + status}
+	if command := strings.TrimSpace(progress.Command); command != "" {
+		body = append(body, "**命令**：`"+command+"`")
+	}
+	if cwd := strings.TrimSpace(progress.CWD); cwd != "" {
+		body = append(body, "**目录**：`"+cwd+"`")
+	}
+	return strings.Join(body, "\n")
+}
+
+func execCommandProgressTheme(progress control.ExecCommandProgress) string {
+	switch strings.ToLower(strings.TrimSpace(progress.Status)) {
+	case "failed", "error", "interrupted", "cancelled", "canceled":
+		return cardThemeError
+	case "completed", "ok", "success", "succeeded":
+		return cardThemeSuccess
+	default:
+		return cardThemeInfo
 	}
 }
 

@@ -599,6 +599,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			summary,
 			finalTurnSummaryForBinding(s.now().UTC(), s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID), thread),
 		)
+		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)
 		deleteMatchingTurnPlanSnapshots(s.turnPlanSnapshots, instanceID, event.ThreadID, event.TurnID)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
@@ -610,12 +611,14 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(events, s.completeRemoteTurn(instanceID, event.ThreadID, event.TurnID, event.Status, event.ErrorMessage, event.Problem, finalText, summary)...))
 	case agentproto.EventItemStarted:
 		s.trackItemStart(instanceID, event)
-		return s.filterEventsForSurfaceVisibility(preface)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.handleExecCommandItemStarted(instanceID, event)...))
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
-		return s.filterEventsForSurfaceVisibility(preface)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.handleExecCommandItemDelta(instanceID, event)...))
 	case agentproto.EventItemCompleted:
-		return s.filterEventsForSurfaceVisibility(append(preface, s.completeItem(instanceID, event)...))
+		events := append(preface, s.handleExecCommandItemCompleted(instanceID, event)...)
+		events = append(events, s.completeItem(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestStarted:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.presentRequestPrompt(instanceID, event)...))
 	case agentproto.EventRequestResolved:

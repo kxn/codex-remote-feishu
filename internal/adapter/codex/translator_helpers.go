@@ -215,6 +215,25 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 				metadata["text"] = text
 			}
 		}
+	case "command_execution":
+		if command := firstNonEmptyString(
+			lookupStringFromAny(item["command"]),
+			lookupStringFromAny(item["cmd"]),
+		); command != "" {
+			metadata["command"] = command
+		}
+		if cwd := firstNonEmptyString(
+			lookupStringFromAny(item["cwd"]),
+			lookupStringFromAny(item["workdir"]),
+			lookupStringFromAny(item["workingDirectory"]),
+		); cwd != "" {
+			metadata["cwd"] = cwd
+		}
+		if exitCode := lookupIntFromAny(item["exitCode"]); exitCode != 0 || item["exitCode"] != nil {
+			metadata["exitCode"] = exitCode
+		} else if exitCode := lookupIntFromAny(item["exit_code"]); exitCode != 0 || item["exit_code"] != nil {
+			metadata["exitCode"] = exitCode
+		}
 	}
 	return metadata
 }

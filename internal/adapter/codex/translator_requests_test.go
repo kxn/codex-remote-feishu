@@ -421,6 +421,43 @@ func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	}
 }
 
+func TestObserveCommandExecutionItemsCarryCommandMetadata(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	started, err := tr.ObserveServer([]byte(`{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"cmd-1","type":"commandExecution","status":"inProgress","command":"npm test","cwd":"/tmp/project"}}}`))
+	if err != nil {
+		t.Fatalf("observe command execution started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one command execution started event, got %#v", started.Events)
+	}
+	startedEvent := started.Events[0]
+	if startedEvent.Kind != agentproto.EventItemStarted || startedEvent.ItemKind != "command_execution" {
+		t.Fatalf("unexpected started event: %#v", startedEvent)
+	}
+	if startedEvent.Metadata["command"] != "npm test" || startedEvent.Metadata["cwd"] != "/tmp/project" {
+		t.Fatalf("expected command metadata on start, got %#v", startedEvent.Metadata)
+	}
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"cmd-1","type":"command_execution","status":"failed","command":"npm test","cwd":"/tmp/project","exitCode":1}}}`))
+	if err != nil {
+		t.Fatalf("observe command execution completed: %v", err)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one command execution completed event, got %#v", completed.Events)
+	}
+	completedEvent := completed.Events[0]
+	if completedEvent.Kind != agentproto.EventItemCompleted || completedEvent.ItemKind != "command_execution" || completedEvent.Status != "failed" {
+		t.Fatalf("unexpected completed event: %#v", completedEvent)
+	}
+	if completedEvent.Metadata["command"] != "npm test" || completedEvent.Metadata["cwd"] != "/tmp/project" {
+		t.Fatalf("expected command metadata on completion, got %#v", completedEvent.Metadata)
+	}
+	if completedEvent.Metadata["exitCode"] != 1 {
+		t.Fatalf("expected exitCode metadata on completion, got %#v", completedEvent.Metadata)
+	}
+}
+
 func TestObserveClientThreadNameSetResponseEmitsThreadDiscovered(t *testing.T) {
 	tr := NewTranslator("inst-1")
 

@@ -187,8 +187,21 @@ type SurfaceConsoleRecord struct {
 	ActiveRequestCapture *RequestCaptureRecord
 	ActiveCommandCapture *CommandCaptureRecord
 	ActivePathPicker     *ActivePathPickerRecord
+	ActiveExecProgress   *ExecCommandProgressRecord
 	LastSelection        *SelectionAnnouncementRecord
 	AutoContinue         AutoContinueRuntimeRecord
+}
+
+type ExecCommandProgressRecord struct {
+	InstanceID    string
+	ThreadID      string
+	TurnID        string
+	ItemID        string
+	MessageID     string
+	Command       string
+	CWD           string
+	Status        string
+	LastEmittedAt time.Time
 }
 
 type AutoContinueRuntimeRecord struct {
