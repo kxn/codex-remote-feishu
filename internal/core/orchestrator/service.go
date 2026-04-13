@@ -309,45 +309,47 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	if surface.Abandoning {
 		switch action.Kind {
 		case control.ActionStatus:
-			return []control.UIEvent{{Kind: control.UIEventSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
+			return s.filterEventsForSurfaceVisibility([]control.UIEvent{{Kind: control.UIEventSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}})
 		case control.ActionAutoContinueCommand:
-			return s.handleAutoContinueCommand(surface, action)
+			return s.filterEventsForSurfaceVisibility(s.handleAutoContinueCommand(surface, action))
 		case control.ActionDetach:
-			return notice(surface, "detach_pending", "当前仍在等待已发出的 turn 收尾，请稍后再试。")
+			return s.filterEventsForSurfaceVisibility(notice(surface, "detach_pending", "当前仍在等待已发出的 turn 收尾，请稍后再试。"))
 		default:
-			return notice(surface, "detach_pending", "当前会话正在等待已发出的 turn 收尾，暂时不能执行新的操作。")
+			return s.filterEventsForSurfaceVisibility(notice(surface, "detach_pending", "当前会话正在等待已发出的 turn 收尾，暂时不能执行新的操作。"))
 		}
 	}
 	if blocked := s.pendingHeadlessActionBlocked(surface, action); blocked != nil {
-		return blocked
+		return s.filterEventsForSurfaceVisibility(blocked)
 	}
 	if blocked := s.blockActionForActivePathPicker(surface, action); blocked != nil {
-		return blocked
+		return s.filterEventsForSurfaceVisibility(blocked)
 	}
 	s.noteAutoContinueAction(surface, action)
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
-		return s.applyFeishuUIIntent(surface, *intent)
+		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, *intent))
 	}
+	var events []control.UIEvent
 	switch action.Kind {
 	case control.ActionListInstances:
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			return s.presentWorkspaceSelection(surface)
+			events = s.presentWorkspaceSelection(surface)
+			break
 		}
-		return s.presentInstanceSelection(surface)
+		events = s.presentInstanceSelection(surface)
 	case control.ActionNewThread:
-		return s.prepareNewThread(surface)
+		events = s.prepareNewThread(surface)
 	case control.ActionKillInstance:
-		return s.killHeadlessInstance(surface)
+		events = s.killHeadlessInstance(surface)
 	case control.ActionRemovedCommand:
-		return s.handleRemovedCommand(surface, action)
+		events = s.handleRemovedCommand(surface, action)
 	case control.ActionAttachInstance:
-		return s.attachInstance(surface, action.InstanceID)
+		events = s.attachInstance(surface, action.InstanceID)
 	case control.ActionAttachWorkspace:
-		return s.attachWorkspace(surface, action.WorkspaceKey)
+		events = s.attachWorkspace(surface, action.WorkspaceKey)
 	case control.ActionShowCommandHelp:
-		return []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
+		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
 	case control.ActionDebugCommand:
-		return []control.UIEvent{{
+		events = []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,
 			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -361,7 +363,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 			},
 		}}
 	case control.ActionUpgradeCommand:
-		return []control.UIEvent{{
+		events = []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,
 			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -375,33 +377,33 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 			},
 		}}
 	case control.ActionStartCommandCapture:
-		return s.startCommandCapture(surface, action)
+		events = s.startCommandCapture(surface, action)
 	case control.ActionCancelCommandCapture:
-		return s.cancelCommandCapture(surface, action)
+		events = s.cancelCommandCapture(surface, action)
 	case control.ActionModelCommand:
-		return s.handleModelCommand(surface, action)
+		events = s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:
-		return s.handleReasoningCommand(surface, action)
+		events = s.handleReasoningCommand(surface, action)
 	case control.ActionAccessCommand:
-		return s.handleAccessCommand(surface, action)
+		events = s.handleAccessCommand(surface, action)
 	case control.ActionVerboseCommand:
-		return s.handleVerboseCommand(surface, action)
+		events = s.handleVerboseCommand(surface, action)
 	case control.ActionAutoContinueCommand:
-		return s.handleAutoContinueCommand(surface, action)
+		events = s.handleAutoContinueCommand(surface, action)
 	case control.ActionModeCommand:
-		return s.handleModeCommand(surface, action)
+		events = s.handleModeCommand(surface, action)
 	case control.ActionRespondRequest:
-		return s.respondRequest(surface, action)
+		events = s.respondRequest(surface, action)
 	case control.ActionUseThread:
-		return s.useThread(surface, action.ThreadID, action.AllowCrossWorkspace)
+		events = s.useThread(surface, action.ThreadID, action.AllowCrossWorkspace)
 	case control.ActionConfirmKickThread:
-		return s.confirmKickThread(surface, action.ThreadID)
+		events = s.confirmKickThread(surface, action.ThreadID)
 	case control.ActionCancelKickThread:
-		return notice(surface, "kick_cancelled", "已取消强踢。")
+		events = notice(surface, "kick_cancelled", "已取消强踢。")
 	case control.ActionFollowLocal:
-		return s.followLocal(surface)
+		events = s.followLocal(surface)
 	case control.ActionVSCodeMigrate:
-		return []control.UIEvent{{
+		events = []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,
 			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -414,24 +416,25 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 			},
 		}}
 	case control.ActionTextMessage:
-		return s.handleText(surface, action)
+		events = s.handleText(surface, action)
 	case control.ActionImageMessage:
-		return s.stageImage(surface, action)
+		events = s.stageImage(surface, action)
 	case control.ActionReactionCreated:
-		return s.handleReactionCreated(surface, action)
+		events = s.handleReactionCreated(surface, action)
 	case control.ActionMessageRecalled:
-		return s.handleMessageRecalled(surface, action.TargetMessageID)
+		events = s.handleMessageRecalled(surface, action.TargetMessageID)
 	case control.ActionSelectPrompt:
-		return notice(surface, "selection_expired", "这个旧卡片已失效，请重新发送 /list、/use 或 /useall。")
+		events = notice(surface, "selection_expired", "这个旧卡片已失效，请重新发送 /list、/use 或 /useall。")
 	case control.ActionStop:
-		return s.stopSurface(surface)
+		events = s.stopSurface(surface)
 	case control.ActionStatus:
-		return []control.UIEvent{{Kind: control.UIEventSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
+		events = []control.UIEvent{{Kind: control.UIEventSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
 	case control.ActionDetach:
-		return s.detach(surface)
+		events = s.detach(surface)
 	default:
 		return nil
 	}
+	return s.filterEventsForSurfaceVisibility(events)
 }
 
 func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []control.UIEvent {
@@ -454,10 +457,10 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			thread.CWD = event.CWD
 		}
 		s.touchThread(thread)
-		return append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
 	case agentproto.EventConfigObserved:
 		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort, event.AccessMode)
-		return preface
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
@@ -481,7 +484,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		}
 		thread.Loaded = true
 		s.touchThread(thread)
-		return append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
 	case agentproto.EventThreadsSnapshot:
 		delete(s.threadRefreshes, instanceID)
 		nextThreads := map[string]*state.ThreadRecord{}
@@ -525,7 +528,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		}
 		inst.Threads = nextThreads
 		events := append(preface, s.reconcileInstanceSurfaceThreads(instanceID)...)
-		return append(events, s.threadFocusEvents(instanceID, "")...)
+		return s.filterEventsForSurfaceVisibility(append(events, s.threadFocusEvents(instanceID, "")...))
 	case agentproto.EventLocalInteractionObserved:
 		if event.ThreadID != "" {
 			inst.ObservedFocusedThreadID = event.ThreadID
@@ -536,12 +539,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			s.touchThread(thread)
 		}
 		events := append(preface, s.pauseForLocal(instanceID)...)
-		return append(events, s.reevaluateFollowSurfaces(instanceID)...)
+		return s.filterEventsForSurfaceVisibility(append(events, s.reevaluateFollowSurfaces(instanceID)...))
 	case agentproto.EventThreadTokenUsageUpdated:
-		return append(preface, s.applyThreadTokenUsageUpdate(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadTokenUsageUpdate(instanceID, event)...))
 	case agentproto.EventTurnPlanUpdated:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
-		return append(preface, s.applyTurnPlanUpdate(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnPlanUpdate(instanceID, event)...))
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		inst.ActiveTurnID = event.TurnID
@@ -563,9 +566,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 				s.touchThread(thread)
 			}
 			events := append(preface, s.pauseForLocal(instanceID)...)
-			return append(events, s.reevaluateFollowSurfaces(instanceID)...)
+			return s.filterEventsForSurfaceVisibility(append(events, s.reevaluateFollowSurfaces(instanceID)...))
 		}
-		return append(preface, s.markRemoteTurnRunning(instanceID, event.Initiator, event.ThreadID, event.TurnID)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.markRemoteTurnRunning(instanceID, event.Initiator, event.ThreadID, event.TurnID)...))
 	case agentproto.EventTurnCompleted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		inst.ActiveTurnID = ""
@@ -597,25 +600,25 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			if surface != nil {
 				events = append(events, s.finishSurfaceAfterWork(surface)...)
 			}
-			return events
+			return s.filterEventsForSurfaceVisibility(events)
 		}
-		return append(events, s.completeRemoteTurn(instanceID, event.ThreadID, event.TurnID, event.Status, event.ErrorMessage, event.Problem, finalText, summary)...)
+		return s.filterEventsForSurfaceVisibility(append(events, s.completeRemoteTurn(instanceID, event.ThreadID, event.TurnID, event.Status, event.ErrorMessage, event.Problem, finalText, summary)...))
 	case agentproto.EventItemStarted:
 		s.trackItemStart(instanceID, event)
-		return preface
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
-		return preface
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventItemCompleted:
-		return append(preface, s.completeItem(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.completeItem(instanceID, event)...))
 	case agentproto.EventRequestStarted:
-		return append(preface, s.presentRequestPrompt(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.presentRequestPrompt(instanceID, event)...))
 	case agentproto.EventRequestResolved:
-		return append(preface, s.resolveRequestPrompt(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.resolveRequestPrompt(instanceID, event)...))
 	case agentproto.EventSystemError:
-		return append(preface, s.handleProblem(instanceID, problemFromEvent(event))...)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProblem(instanceID, problemFromEvent(event))...))
 	default:
-		return preface
+		return s.filterEventsForSurfaceVisibility(preface)
 	}
 }
 
@@ -720,5 +723,5 @@ func (s *Service) Tick(now time.Time) []control.UIEvent {
 		}
 		events = append(events, s.maybeDispatchPendingAutoContinue(surface, now)...)
 	}
-	return events
+	return s.filterEventsForSurfaceVisibility(events)
 }

@@ -633,6 +633,91 @@ func TestApplySurfaceActionVerboseCommandUpdatesSurface(t *testing.T) {
 	}
 }
 
+func TestQuietVerbosityHidesPlanButKeepsFinal(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityQuiet
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	planEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventTurnPlanUpdated,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		PlanSnapshot: &agentproto.TurnPlanSnapshot{
+			Explanation: "先分析问题。",
+			Steps: []agentproto.TurnPlanStep{
+				{Step: "分析", Status: agentproto.TurnPlanStepStatusInProgress},
+			},
+		},
+	})
+	if len(planEvents) != 0 {
+		t.Fatalf("expected quiet verbosity to suppress plan events, got %#v", planEvents)
+	}
+
+	finished := completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "最终结果", nil)
+	foundFinal := false
+	for _, event := range finished {
+		if event.Kind == control.UIEventBlockCommitted && event.Block != nil && event.Block.Final && event.Block.Text == "最终结果" {
+			foundFinal = true
+		}
+		if event.Kind == control.UIEventPlanUpdated {
+			t.Fatalf("did not expect quiet verbosity to leak plan event in final sequence: %#v", finished)
+		}
+	}
+	if !foundFinal {
+		t.Fatalf("expected final block to remain visible, got %#v", finished)
+	}
+}
+
+func TestNormalVerbosityKeepsPlanUpdates(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	planEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventTurnPlanUpdated,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		PlanSnapshot: &agentproto.TurnPlanSnapshot{
+			Explanation: "先分析问题。",
+			Steps: []agentproto.TurnPlanStep{
+				{Step: "分析", Status: agentproto.TurnPlanStepStatusInProgress},
+			},
+		},
+	})
+	if len(planEvents) != 1 || planEvents[0].Kind != control.UIEventPlanUpdated {
+		t.Fatalf("expected normal verbosity to keep plan event, got %#v", planEvents)
+	}
+}
+
+func TestVerbosityFilterNeverDropsDaemonOrAgentCommands(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].Verbosity = state.SurfaceVerbosityQuiet
+
+	events := svc.filterEventsForSurfaceVisibility([]control.UIEvent{
+		{
+			Kind:             control.UIEventAgentCommand,
+			SurfaceSessionID: "surface-1",
+			Command:          &agentproto.Command{Kind: agentproto.CommandPromptSend},
+		},
+		{
+			Kind:             control.UIEventDaemonCommand,
+			SurfaceSessionID: "surface-1",
+			DaemonCommand:    &control.DaemonCommand{Kind: control.DaemonCommandDebug},
+		},
+	})
+	if len(events) != 2 {
+		t.Fatalf("expected control-flow commands to bypass verbosity filter, got %#v", events)
+	}
+}
+
 func TestAttachBusyInstanceRejectsSecondSurface(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -7,7 +7,7 @@ import (
 
 func (s *Service) ApplyFeishuUIIntent(action control.Action, intent control.FeishuUIIntent) []control.UIEvent {
 	surface := s.ensureSurface(action)
-	return s.applyFeishuUIIntent(surface, intent)
+	return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, intent))
 }
 
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, intent control.FeishuUIIntent) []control.UIEvent {
