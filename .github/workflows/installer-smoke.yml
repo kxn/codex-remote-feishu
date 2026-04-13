@@ -1,0 +1,150 @@
+name: Installer Smoke
+
+on:
+  push:
+    paths:
+      - ".github/workflows/installer-smoke.yml"
+      - "install-release.sh"
+      - "install-release.ps1"
+      - "scripts/check/smoke-install-release.sh"
+      - "scripts/check/smoke-install-release.ps1"
+      - "scripts/release/build-artifacts.sh"
+      - "scripts/web/build-admin-ui.sh"
+      - "internal/app/install/**"
+      - "internal/app/launcher/**"
+      - "internal/config/**"
+      - "QUICKSTART.md"
+      - "CHANGELOG.md"
+  pull_request:
+    paths:
+      - ".github/workflows/installer-smoke.yml"
+      - "install-release.sh"
+      - "install-release.ps1"
+      - "scripts/check/smoke-install-release.sh"
+      - "scripts/check/smoke-install-release.ps1"
+      - "scripts/release/build-artifacts.sh"
+      - "scripts/web/build-admin-ui.sh"
+      - "internal/app/install/**"
+      - "internal/app/launcher/**"
+      - "internal/config/**"
+      - "QUICKSTART.md"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-fixtures:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build production fixture
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: shipping
+        run: bash scripts/release/build-artifacts.sh v0.0.0 dist-production
+
+      - name: Build beta fixture
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: shipping
+        run: bash scripts/release/build-artifacts.sh v0.1.0-beta.1 dist-beta --skip-admin-ui-build
+
+      - name: Upload production fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-prod
+          path: dist-production
+          if-no-files-found: error
+
+      - name: Upload beta fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-beta
+          path: dist-beta
+          if-no-files-found: error
+
+  smoke-unix:
+    needs: build-fixtures
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download production fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-prod
+          path: ${{ runner.temp }}/installer-smoke/prod
+
+      - name: Download beta fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-beta
+          path: ${{ runner.temp }}/installer-smoke/beta
+
+      - name: Smoke test shell installer
+        run: |
+          bash scripts/check/smoke-install-release.sh \
+            --version v0.0.0 \
+            --beta-version v0.1.0-beta.1 \
+            --prod-dist-dir "${RUNNER_TEMP}/installer-smoke/prod" \
+            --beta-dist-dir "${RUNNER_TEMP}/installer-smoke/beta"
+
+  smoke-windows:
+    needs: build-fixtures
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download production fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-prod
+          path: ${{ runner.temp }}\installer-smoke\prod
+
+      - name: Download beta fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-beta
+          path: ${{ runner.temp }}\installer-smoke\beta
+
+      - name: Smoke test PowerShell installer
+        shell: pwsh
+        run: |
+          ./scripts/check/smoke-install-release.ps1 `
+            -Version v0.0.0 `
+            -BetaVersion v0.1.0-beta.1 `
+            -ProdDistDir "$env:RUNNER_TEMP\installer-smoke\prod" `
+            -BetaDistDir "$env:RUNNER_TEMP\installer-smoke\beta"

@@ -104,10 +104,14 @@
 
 ## 5. 安装
 
-### 5.1 macOS / Linux 一条命令安装
+### 5.1 一条命令安装
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1 | iex
 ```
 
 这条命令会：
@@ -123,10 +127,18 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
 ```
 
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Track beta
+```
+
 如果你想固定到某个版本：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Version <version>
 ```
 
 ### 5.2 手动安装 release 包

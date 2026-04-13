@@ -88,6 +88,7 @@ beta_dist_dir="${work_dir}/dist-beta"
 install_root="${work_dir}/install-root"
 track_install_root="${work_dir}/install-root-beta"
 home_dir="${work_dir}/home"
+repo_root_sentinel="${work_dir}/repo-root"
 admin_ui_built=0
 
 while [[ $# -gt 0 ]]; do
@@ -119,6 +120,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+mkdir -p "${repo_root_sentinel}"
 
 ensure_admin_ui_dist() {
   if [[ -f "${ROOT_DIR}/internal/app/daemon/adminui/dist/index.html" ]]; then
@@ -259,6 +262,9 @@ done
 curl --noproxy '*' -fsS "http://127.0.0.1:${port}/" >/dev/null
 
 HOME="${home_dir}" \
+CODEX_REMOTE_REPO_ROOT="${repo_root_sentinel}" \
+CODEX_REMOTE_CONFIG="" \
+CODEX_REMOTE_INSTANCE_ID="" \
 CODEX_REMOTE_VERSION="${version}" \
 CODEX_REMOTE_BASE_URL="http://127.0.0.1:${port}" \
 CODEX_REMOTE_INSTALL_ROOT="${install_root}" \
@@ -279,6 +285,9 @@ installed_version="$("${expected_dir}/codex-remote" version)"
 [[ "${installed_version}" == "${version}" ]]
 
 HOME="${home_dir}" \
+CODEX_REMOTE_REPO_ROOT="${repo_root_sentinel}" \
+CODEX_REMOTE_CONFIG="" \
+CODEX_REMOTE_INSTANCE_ID="" \
 CODEX_REMOTE_BASE_URL="http://127.0.0.1:${port}" \
 CODEX_REMOTE_RELEASES_API_URL="http://127.0.0.1:${port}/releases.json" \
 CODEX_REMOTE_INSTALL_ROOT="${track_install_root}" \

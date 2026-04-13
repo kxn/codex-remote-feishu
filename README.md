@@ -32,7 +32,7 @@
   - `QUICKSTART.md`
   - `CHANGELOG.md`
   - `deploy/`
-- 在线安装脚本 `install-release.sh` 单独作为 release 资产和仓库入口提供
+- 在线安装脚本 `install-release.sh` / `install-release.ps1` 单独作为 release 资产和仓库入口提供
 - GitHub Releases 现在区分 `production / beta / alpha` 三条 track
   - 默认在线安装入口始终指向最新 `production`
   - 需要时可显式安装最新 `beta` / `alpha`
@@ -75,10 +75,16 @@
 
 ## 一条命令安装
 
-macOS / Linux 可以直接执行：
+macOS / Linux：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash
+```
+
+Windows PowerShell：
+
+```powershell
+irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1 | iex
 ```
 
 这个脚本会自动：
@@ -96,10 +102,18 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --track beta
 ```
 
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Track beta
+```
+
 如果要安装指定版本：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.sh | bash -s -- --version v1.0.0
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Version <version>
 ```
 
 ## 手动安装 release 包

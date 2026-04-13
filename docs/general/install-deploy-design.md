@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-13`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 入口语义、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 入口语义、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
 
 ## 1. 范围
 
@@ -16,7 +16,7 @@
 
 ## 2. 当前产品入口
 
-### 2.1 `install-release.sh`
+### 2.1 `install-release.sh` / `install-release.ps1`
 
 在线安装入口，面向最终用户。
 
@@ -24,9 +24,9 @@
 
 - 解析平台和架构
 - 默认下载 GitHub Releases 中最新 `production` 平台包
-- 支持显式安装指定版本，或按 `--track production|beta|alpha` 解析该 track 的最新 release
+- 支持显式安装指定版本，或按 `production|beta|alpha` track 解析该 track 的最新 release
 - 解压到本地 release cache
-- 执行：
+- 执行统一的：
 
 ```bash
 codex-remote install -bootstrap-only -start-daemon
@@ -36,10 +36,12 @@ codex-remote install -bootstrap-only -start-daemon
 
 - Linux: `~/.local/share/codex-remote/releases`
 - macOS: `~/Library/Application Support/codex-remote/releases`
+- Windows: `%LOCALAPPDATA%\codex-remote\releases`
 
 它必须兼容：
 
 - `curl | bash`
+- `irm | iex`
 - 指定版本安装
 - 指定 track 的最新 release 安装
 - CI 中通过本地 HTTP server 做 smoke test
@@ -403,6 +405,7 @@ detect/apply/reinstall 的当前规则也同步收紧：
 另外单独生成：
 
 - `codex-remote-feishu-install.sh`
+- `codex-remote-feishu-install.ps1`
 - `checksums.txt`
 
 release 包内不再附带：
@@ -427,11 +430,11 @@ release 包内不再附带：
 
 ### 6.3 smoke test 要求
 
-release smoke test 必须覆盖真实产品路径：
+release / installer smoke test 必须覆盖真实产品路径：
 
 1. 复用当前 workflow 已构建好的正式 release 归档
 2. 通过本地 HTTP server 模拟 release 下载
-3. 执行 `install-release.sh`
+3. 在对应平台执行在线安装脚本
 4. 确认：
    - 归档内容正确
    - 二进制版本号正确
