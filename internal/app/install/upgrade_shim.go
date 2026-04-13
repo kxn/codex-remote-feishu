@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
 	upgradeshimembed "github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed"
@@ -39,4 +41,26 @@ func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 		return err
 	}
 	return upgradeshim.WriteSidecar(UpgradeShimSidecarPath(entrypointPath), sidecar)
+}
+
+func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
+	statePath = filepath.Clean(strings.TrimSpace(statePath))
+	if statePath == "" {
+		return "", fmt.Errorf("state path is required")
+	}
+	helperDir := filepath.Join(filepath.Dir(statePath), "upgrade-helper")
+	if err := os.MkdirAll(helperDir, 0o755); err != nil {
+		return "", err
+	}
+	name := "codex-remote-upgrade-shim"
+	ext := filepath.Ext(executableName(runtime.GOOS))
+	entrypointPath := filepath.Join(helperDir, fmt.Sprintf("%s-%d%s", name, time.Now().UTC().UnixNano(), ext))
+	if err := WriteUpgradeShimEntrypoint(UpgradeShimEntrypointOptions{
+		EntrypointPath:   entrypointPath,
+		InstallStatePath: statePath,
+		InstanceID:       instanceID,
+	}); err != nil {
+		return "", err
+	}
+	return entrypointPath, nil
 }

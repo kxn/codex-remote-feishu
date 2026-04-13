@@ -60,15 +60,10 @@ func RunLocalUpgrade(args []string, _ io.Reader, stdout, _ io.Writer, _ string) 
 		return fmt.Errorf("local upgrade artifact is missing: %s", artifactPath)
 	}
 
-	helperBinary, err := resolveUpgradeHelperBinary(stateValue.StatePath)
-	if err != nil {
-		return err
-	}
 	resolvedSlot, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
 		StatePath:    stateValue.StatePath,
 		SourceBinary: artifactPath,
 		Slot:         *slot,
-		HelperBinary: helperBinary,
 	})
 	if err != nil {
 		return err

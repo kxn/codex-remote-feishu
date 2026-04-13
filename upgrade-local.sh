@@ -108,6 +108,7 @@ mkdir -p "${BIN_DIR}"
 BUILD_BRANCH="$(resolve_build_branch)"
 CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
   bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh"
+bash "${ROOT_DIR}/scripts/upgradeshim/prepare-upgrade-shim-embed.sh"
 "${GO_BIN}" build -ldflags "-X main.branch=${BUILD_BRANCH}" -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
 
 if [[ ! -f "${CODEX_REMOTE_TARGET_STATE_PATH}" ]]; then

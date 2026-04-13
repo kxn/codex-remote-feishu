@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,7 +88,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("写入 prepared journal 失败：%w", err))
 		return
 	}
-	helperPath, err := a.copyUpgradeHelperBinaryLocked(stateValue)
+	helperPath, err := a.prepareUpgradeHelperShimLocked(stateValue)
 	if err != nil {
 		a.upgradeStartInFlight = false
 		a.mu.Unlock()
@@ -104,6 +103,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		StatePath:    stateValue.StatePath,
 		LogPath:      logPath,
 		Env:          append(append([]string{}, os.Environ()...), install.RuntimeEnvForState(stateValue)...),
+		DirectExec:   true,
 	})
 	if err != nil {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("启动 upgrade helper 失败：%w", err))
@@ -137,21 +137,8 @@ func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) 
 	}
 }
 
-func (a *App) copyUpgradeHelperBinaryLocked(stateValue install.InstallState) (string, error) {
-	helperDir := filepath.Join(filepath.Dir(a.installStatePath()), "upgrade-helper")
-	if err := os.MkdirAll(helperDir, 0o755); err != nil {
-		return "", err
-	}
-	name := "codex-remote-upgrade-helper"
-	sourceBinary := firstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), strings.TrimSpace(a.serverIdentity.BinaryPath))
-	if ext := filepath.Ext(sourceBinary); ext != "" {
-		name += ext
-	}
-	helperPath := filepath.Join(helperDir, fmt.Sprintf("%s-%d", name, time.Now().UTC().UnixNano()))
-	if err := copyFileLocal(sourceBinary, helperPath); err != nil {
-		return "", err
-	}
-	return helperPath, nil
+func (a *App) prepareUpgradeHelperShimLocked(stateValue install.InstallState) (string, error) {
+	return install.PrepareUpgradeHelperShim(a.installStatePath(), stateValue.InstanceID)
 }
 
 func (a *App) upgradeHelperLogPathLocked() string {
@@ -209,29 +196,4 @@ func buildUpgradeResultText(stateValue install.InstallState) string {
 	default:
 		return "升级失败。"
 	}
-}
-
-func copyFileLocal(sourcePath, targetPath string) error {
-	sourceFile, err := os.Open(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	info, err := sourceFile.Stat()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-		return err
-	}
-	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	defer targetFile.Close()
-	if _, err := io.Copy(targetFile, sourceFile); err != nil {
-		return err
-	}
-	return targetFile.Chmod(info.Mode().Perm())
 }

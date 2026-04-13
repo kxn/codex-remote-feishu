@@ -16,7 +16,6 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	statePath := defaultInstallStatePath(baseDir)
 	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
-	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "helper-binary")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -44,7 +43,6 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	slot, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
 		StatePath:    statePath,
 		SourceBinary: sourceBinary,
-		HelperBinary: helperBinary,
 	})
 	if err != nil {
 		t.Fatalf("RunLocalBinaryUpgradeWithStatePath: %v", err)
@@ -68,11 +66,18 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	if err != nil {
 		t.Fatalf("ReadFile helper: %v", err)
 	}
-	if string(helperRaw) != "helper-binary" {
-		t.Fatalf("helper binary content = %q, want helper-binary", string(helperRaw))
+	if len(helperRaw) == 0 {
+		t.Fatal("expected helper shim binary to be non-empty")
 	}
-	if got, want := strings.Join(startedArgs, "\x00"), strings.Join([]string{"upgrade-helper", "-state-path", statePath}, "\x00"); got != want {
-		t.Fatalf("helper args = %#v, want %#v", startedArgs, []string{"upgrade-helper", "-state-path", statePath})
+	if len(startedArgs) != 0 {
+		t.Fatalf("helper args = %#v, want empty direct-exec shim", startedArgs)
+	}
+	sidecarRaw, err := os.ReadFile(UpgradeShimSidecarPath(startedBinary))
+	if err != nil {
+		t.Fatalf("ReadFile sidecar: %v", err)
+	}
+	if !bytes.Contains(sidecarRaw, []byte(statePath)) {
+		t.Fatalf("sidecar = %q, want state path", string(sidecarRaw))
 	}
 
 	updated, err := LoadState(statePath)
@@ -107,7 +112,6 @@ func TestRunLocalBinaryUpgradeWithStatePathRejectsBusyPendingUpgrade(t *testing.
 	statePath := defaultInstallStatePath(baseDir)
 	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
-	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "helper-binary")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -128,7 +132,6 @@ func TestRunLocalBinaryUpgradeWithStatePathRejectsBusyPendingUpgrade(t *testing.
 	_, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
 		StatePath:    statePath,
 		SourceBinary: sourceBinary,
-		HelperBinary: helperBinary,
 		Slot:         "local-test",
 	})
 	if err == nil || !strings.Contains(err.Error(), "already in progress") {
@@ -142,7 +145,6 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	statePath := defaultInstallStatePath(baseDir)
 	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
 	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
-	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "cli-binary")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -160,16 +162,13 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 		t.Fatalf("artifact path = %q, want %q", got, want)
 	}
 
-	originalExec := executablePath
 	originalStart := upgradeHelperStartDetachedCommandFunc
-	executablePath = func() (string, error) { return helperBinary, nil }
 	var startedBinary string
 	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
 		startedBinary = opts.BinaryPath
 		return 321, nil
 	}
 	defer func() {
-		executablePath = originalExec
 		upgradeHelperStartDetachedCommandFunc = originalStart
 	}()
 
@@ -194,8 +193,13 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile helper: %v", err)
 	}
-	if string(helperRaw) != "cli-binary" {
-		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
+	if len(helperRaw) == 0 {
+		t.Fatal("expected helper shim binary to be non-empty")
+	}
+	if sidecarRaw, err := os.ReadFile(UpgradeShimSidecarPath(startedBinary)); err != nil {
+		t.Fatalf("ReadFile sidecar: %v", err)
+	} else if !bytes.Contains(sidecarRaw, []byte(statePath)) {
+		t.Fatalf("sidecar = %q, want state path", string(sidecarRaw))
 	}
 }
 
@@ -204,7 +208,6 @@ func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 	statePath := defaultInstallStatePathForInstance(baseDir, debugInstanceID)
 	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
 	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
-	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "cli-binary")
 
 	stateValue := InstallState{
 		InstanceID:        debugInstanceID,
@@ -223,16 +226,13 @@ func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 		t.Fatalf("artifact path = %q, want %q", got, want)
 	}
 
-	originalExec := executablePath
 	originalStart := upgradeHelperStartDetachedCommandFunc
-	executablePath = func() (string, error) { return helperBinary, nil }
 	var startedBinary string
 	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
 		startedBinary = opts.BinaryPath
 		return 321, nil
 	}
 	defer func() {
-		executablePath = originalExec
 		upgradeHelperStartDetachedCommandFunc = originalStart
 	}()
 
@@ -254,8 +254,8 @@ func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile helper: %v", err)
 	}
-	if string(helperRaw) != "cli-binary" {
-		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
+	if len(helperRaw) == 0 {
+		t.Fatal("expected helper shim binary to be non-empty")
 	}
 }
 
@@ -265,7 +265,6 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 	statePath := defaultInstallStatePathForInstance(baseDir, "master")
 	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
 	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
-	helperBinary := seedBinary(t, filepath.Join(baseDir, "helper-bin", executableName(runtime.GOOS)), "cli-binary")
 
 	stateValue := InstallState{
 		InstanceID:        "master",
@@ -291,16 +290,13 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 	}
 	t.Setenv(repoRootEnvVar, repoRoot)
 
-	originalExec := executablePath
 	originalStart := upgradeHelperStartDetachedCommandFunc
-	executablePath = func() (string, error) { return helperBinary, nil }
 	var startedBinary string
 	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
 		startedBinary = opts.BinaryPath
 		return 321, nil
 	}
 	defer func() {
-		executablePath = originalExec
 		upgradeHelperStartDetachedCommandFunc = originalStart
 	}()
 
@@ -320,8 +316,8 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile helper: %v", err)
 	}
-	if string(helperRaw) != "cli-binary" {
-		t.Fatalf("helper binary content = %q, want cli-binary", string(helperRaw))
+	if len(helperRaw) == 0 {
+		t.Fatal("expected helper shim binary to be non-empty")
 	}
 }
 

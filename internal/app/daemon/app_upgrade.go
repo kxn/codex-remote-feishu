@@ -220,7 +220,6 @@ func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValu
 	slot, err := install.RunLocalBinaryUpgradeWithStatePath(install.LocalBinaryUpgradeOptions{
 		StatePath:    stateValue.StatePath,
 		SourceBinary: artifactPath,
-		HelperBinary: stateValue.CurrentBinaryPath,
 	})
 	if err != nil {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_local_prepare_failed", fmt.Sprintf("准备本地升级失败：%v", err))}

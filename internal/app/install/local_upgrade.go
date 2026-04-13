@@ -16,7 +16,6 @@ type LocalBinaryUpgradeOptions struct {
 	StatePath    string
 	SourceBinary string
 	Slot         string
-	HelperBinary string
 }
 
 func LocalUpgradeArtifactPath(stateValue InstallState) string {
@@ -97,14 +96,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		return "", err
 	}
 
-	helperBinary := strings.TrimSpace(opts.HelperBinary)
-	if helperBinary == "" {
-		stateValue.PendingUpgrade = nil
-		stateValue.RollbackCandidate = nil
-		_ = WriteState(statePath, stateValue)
-		return "", fmt.Errorf("helper binary path is required")
-	}
-	helperPath, err := copyUpgradeHelperBinary(helperBinary, statePath)
+	helperPath, err := PrepareUpgradeHelperShim(statePath, stateValue.InstanceID)
 	if err != nil {
 		stateValue.PendingUpgrade = nil
 		stateValue.RollbackCandidate = nil
@@ -118,6 +110,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		StatePath:    statePath,
 		LogPath:      logPath,
 		Env:          append(append([]string{}, os.Environ()...), RuntimeEnvForState(stateValue)...),
+		DirectExec:   true,
 	})
 	if err != nil {
 		stateValue.PendingUpgrade = nil
@@ -208,22 +201,6 @@ func validateUpgradeSlot(slot string) (string, error) {
 		}
 	}
 	return slot, nil
-}
-
-func copyUpgradeHelperBinary(sourceBinary, statePath string) (string, error) {
-	helperDir := filepath.Join(filepath.Dir(statePath), "upgrade-helper")
-	if err := os.MkdirAll(helperDir, 0o755); err != nil {
-		return "", err
-	}
-	name := "codex-remote-upgrade-helper"
-	if ext := filepath.Ext(sourceBinary); ext != "" {
-		name += ext
-	}
-	helperPath := filepath.Join(helperDir, fmt.Sprintf("%s-%d", name, time.Now().UTC().UnixNano()))
-	if err := copyFile(sourceBinary, helperPath); err != nil {
-		return "", err
-	}
-	return helperPath, nil
 }
 
 func localUpgradeLogPath(stateValue InstallState) string {
