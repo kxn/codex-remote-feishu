@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/conversationtrace"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -107,6 +108,7 @@ type App struct {
 	serverIdentity      agentproto.ServerIdentity
 	debugRelayFlow      bool
 	rawLogger           *debuglog.RawLogger
+	conversationTrace   *conversationtrace.Logger
 
 	relayServer *http.Server
 	apiServer   *http.Server
@@ -313,6 +315,10 @@ func (a *App) SetDebugRelayFlow(enabled bool) {
 func (a *App) SetRawLogger(logger *debuglog.RawLogger) {
 	a.rawLogger = logger
 	a.relay.SetRawLogger(logger)
+}
+
+func (a *App) SetConversationTrace(logger *conversationtrace.Logger) {
+	a.conversationTrace = logger
 }
 
 func (a *App) debugf(format string, args ...any) {

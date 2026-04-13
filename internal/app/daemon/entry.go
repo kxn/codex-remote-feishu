@@ -15,6 +15,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/conversationtrace"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
@@ -126,6 +127,12 @@ func RunMain(ctx context.Context, version, branch string) error {
 		} else {
 			app.SetRawLogger(rawLogger)
 		}
+	}
+	traceLogger, err := conversationtrace.Open(filepath.Join(paths.LogsDir, "codex-remote-conversation-trace.ndjson"))
+	if err != nil {
+		log.Printf("conversation trace disabled: %v", err)
+	} else {
+		app.SetConversationTrace(traceLogger)
 	}
 	if startup.SetupRequired {
 		token, expiresAt, err := app.EnableSetupAccess(20 * time.Minute)

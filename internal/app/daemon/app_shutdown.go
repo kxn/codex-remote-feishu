@@ -358,6 +358,9 @@ func (a *App) finishShutdown(errs ...error) error {
 	if a.rawLogger != nil {
 		_ = a.rawLogger.Close()
 	}
+	if a.conversationTrace != nil {
+		_ = a.conversationTrace.Close()
+	}
 	return errors.Join(errs...)
 }
 
