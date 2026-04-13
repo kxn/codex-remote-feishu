@@ -106,6 +106,37 @@
 
 其中 `BackendConfigRecord` 可先保持与当前 `ModelConfigRecord` 等价字段，再按 backend 逐步扩展。
 
+## 5.6 旧数据升级与兼容（新增）
+
+### 兼容原则
+
+1. 旧版本没有 backend 维度的数据，默认按 `codex` 解释。
+2. 升级后不得因为缺少 backend 字段导致：
+   - surface 无法恢复
+   - workspace 默认配置丢失
+   - `/mode normal` 旧用户进入异常状态
+3. 能 lazy 兼容的地方优先 lazy 兼容；只有在读写模型明显冲突时才做显式迁移。
+
+### 需要重点审视的数据
+
+1. surface resume state
+2. workspace defaults / prompt override
+3. instance snapshot / thread selection 相关持久状态
+4. 任何把 thread id 当作全局唯一键缓存的状态
+
+### 建议策略
+
+1. 读取旧数据时：
+   - 缺失 backend 字段 -> 视为 `codex`
+   - 缺失 backend-aware workspace config -> 读旧配置并挂到 `codex` 名下
+2. 写回时：
+   - 按新结构持久化
+   - 尽量做到一次读、按需升级、原地收敛
+3. 若某状态无法安全自动迁移：
+   - 明确丢弃该状态
+   - 给用户可恢复的默认行为
+   - 在文档和 notice 中说明
+
 ## 6. 命令矩阵（PoC 版）
 
 | Command | Codex | Claude PoC | 处理策略 |
@@ -159,6 +190,7 @@
 3. 修正 startup refresh pending 统计，只追踪已派发 refresh 的实例。
 4. 补充 backend 维度到 surface resume / instance snapshot 关键状态（至少写入并保留，不先改 UI）。
 5. `/mode` 切换实现为 provider-aware（`normal -> codex` 别名），并补齐切换时状态清理。
+6. 盘点并实现旧版本状态的读取兼容或迁移规则。
 
 交付物：
 
@@ -206,12 +238,14 @@
 6. 同 workspace 并存 Codex+Claude 时，`/list` 与 `/use` 不混 backend 数据。
 7. surface resume 不会把一个 backend 的会话误恢复到另一个 backend 实例。
 8. `/mode normal` 与 `/mode codex` 语义一致；`/mode claude` 切换后不会残留旧 backend 会话态。
+9. 旧版本持久化数据升级后仍可正常进入 Codex 路径，且不会因缺失 backend 字段崩坏。
 
 ## 9. 风险与回退
 
 - 风险：能力门控遗漏导致错误下发。
 - 风险：startup recovery 被错误 pending 条件阻塞。
 - 风险：拒绝路径只返回 ack 未投影 notice，造成“像卡死”。
+- 风险：旧版本持久化状态没有 backend 维度，升级后被错误解释或覆盖。
 
 回退策略：
 
