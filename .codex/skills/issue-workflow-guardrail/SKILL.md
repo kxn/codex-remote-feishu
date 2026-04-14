@@ -108,6 +108,10 @@ Use the issue body for durable structure:
 - related docs
 - related files
 - acceptance criteria
+- staged plan (`建议范围`) when work is not truly single-stage
+- implementation context (`实现参考`)
+- check context (`检查参考`)
+- finish / knowledge-sync context (`收尾参考`)
 
 Use comments only for live collaboration:
 
@@ -131,7 +135,11 @@ When picking up or re-assessing an issue:
    - Mark missing original context as `待补充` when needed.
 5. If the issue is still too broad, narrow it or split follow-up issues before implementation.
 6. If staged implementation is expected, write the current staged plan into the issue body before coding.
-7. If later investigation or implementation changes that staged plan materially, update the issue body before continuing.
+7. Once the issue is implementable, fill or refresh `实现参考`, `检查参考`, and `收尾参考`.
+   - `实现参考`: recommended cut, key docs/files, current preferred solution, confirmed constraints
+   - `检查参考`: risky flows, regression points, exact docs/tests to re-check
+   - `收尾参考`: likely knowledge write-back targets such as issue body, linked design docs, docs/general, state-machine docs, AGENTS, or repo skills
+8. If later investigation or implementation changes the staged plan or any execution-context section materially, update the issue body before continuing.
 
 ## Reassessment Decision
 
@@ -181,9 +189,10 @@ If the issue was already implementable and still is after reassessment:
 
 - do not leave a ritual “starting work” comment
 - implement against the refined issue
-- before each implementation stage, re-read the issue body, latest comments, and current code state
+- before each implementation stage, re-read the issue body, latest comments, current code state, and `实现参考`
 - before each implementation stage, re-run any repository skills already required by the task so the next step is based on current guidance
-- if the best next stage changed materially, update the issue body first instead of leaving the new plan only in a comment
+- before validation/check work, re-read `检查参考`
+- if the best next stage or any execution-context section changed materially, update the issue body first instead of leaving the new plan only in a comment
 - prefer staged delivery for medium or large work
 - write the current staged plan into the issue or a linked design doc before stage 1
 - update the staged plan back to the issue whenever the plan or stage split changes
@@ -191,7 +200,19 @@ If the issue was already implementable and still is after reassessment:
 - every stage must include sufficient validation, not only compilation or superficial smoke checks
 - each stage should end with implementation, stage-scoped validation, and a local commit
 - validate the result
+- before any normal stop path, re-read `收尾参考` and decide whether durable knowledge changed enough to require write-back
 - update any affected design or state-machine document required by repo rules
+
+## Finish Knowledge Write-back Rules
+
+Before `finish`, explicitly decide whether this work changed durable knowledge:
+
+1. Update the issue body or linked design doc when confirmed facts, stage split, or recommended execution path changed.
+2. Update `docs/general/` or other canonical docs when user-visible behavior, contracts, state transitions, or protocol semantics changed.
+3. Update `AGENTS.md`, repo skills, or other workflow docs when you discovered a reusable guardrail, gotcha, or review rule that future issue work should inherit.
+4. Skip durable write-back only when the change is truly local/trivial and introduces no reusable lesson.
+
+If you choose not to sync anything durable, make that a deliberate decision rather than an omission.
 
 For explicit `fast` path execution:
 
@@ -209,6 +230,7 @@ When closing the issue, leave a short completion note with:
 - what was implemented
 - what was intentionally not changed, if relevant
 - how it was validated
+- what durable knowledge was synced back, or why none was needed
 - commit or PR reference
 - follow-up issue reference if work was intentionally deferred
 

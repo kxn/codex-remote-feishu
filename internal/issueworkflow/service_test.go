@@ -334,9 +334,37 @@ func TestBuildLintReportFastModeSkipsStagedPlanInfo(t *testing.T) {
 	}
 }
 
+func TestBuildLintReportFlagsMissingExecutionContextSections(t *testing.T) {
+	report := BuildLintReport(Issue{
+		Body: strings.Join([]string{
+			"## 背景",
+			"body",
+			"## 目标",
+			"goal",
+			"## 完成标准",
+			"done",
+			"## 建议范围",
+			"stage 1",
+		}, "\n"),
+		Labels: []string{"bug", "area:daemon"},
+	}, WorkflowModeFull)
+	if !hasFindingCode(report.Findings, "missing-execution-context-sections") {
+		t.Fatalf("expected execution-context info finding, got %#v", report.Findings)
+	}
+}
+
 func hasFindingCode(findings []LintFinding, code string) bool {
 	for _, finding := range findings {
 		if finding.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCheckName(checks []CheckResult, name string) bool {
+	for _, check := range checks {
+		if check.Name == name {
 			return true
 		}
 	}
@@ -353,5 +381,38 @@ func TestValidateDocMetadataRejectsWrongType(t *testing.T) {
 	}
 	if err := validateDocMetadata(path, "general"); err == nil {
 		t.Fatal("expected validateDocMetadata to fail")
+	}
+}
+
+func TestFinishWarnsWhenKnowledgeWritebackNeedsReview(t *testing.T) {
+	gh := &fakeGitHubClient{
+		issue: Issue{
+			Number: 22,
+			Labels: []string{"processing"},
+		},
+	}
+	svc := &Service{
+		RootDir: t.TempDir(),
+		Git: &fakeGitClient{
+			originURL:    "https://github.com/kxn/codex-remote-feishu.git",
+			changedFiles: []string{"internal/app/daemon/app.go"},
+			diffCheckOutput: map[bool]string{
+				false: "",
+				true:  "",
+			},
+			diffCheckErr: map[bool]error{},
+		},
+		GitHub: gh,
+		Now:    time.Now,
+	}
+	result, err := svc.Finish(context.Background(), FinishOptions{
+		IssueNumber:       22,
+		ReleaseProcessing: true,
+	})
+	if err != nil {
+		t.Fatalf("Finish error = %v", err)
+	}
+	if !hasCheckName(result.Checks, "knowledge_writeback_review") {
+		t.Fatalf("expected knowledge write-back warning, got %#v", result.Checks)
 	}
 }

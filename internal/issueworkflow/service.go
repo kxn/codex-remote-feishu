@@ -19,7 +19,8 @@ const (
 
 var (
 	requiredSections  = []string{"背景", "目标", "完成标准"}
-	preferredSections = []string{"范围", "非目标", "相关文档", "涉及文件", "建议范围"}
+	preferredSections = []string{"范围", "非目标", "相关文档", "涉及文件", "建议范围", "实现参考", "检查参考", "收尾参考"}
+	executionSections = []string{"实现参考", "检查参考", "收尾参考"}
 	statusLabels      = []string{"status:needs-investigation", "status:needs-clarification", "status:blocked"}
 	categoryLabels    = []string{"enhancement", "bug", "maintainability", "testing", "documentation"}
 )
@@ -166,6 +167,9 @@ func (s *Service) Finish(ctx context.Context, opts FinishOptions) (result Finish
 		if surfaceCheck := s.remoteSurfaceDocCheck(result.ChangedFiles); surfaceCheck != nil {
 			result.Checks = append(result.Checks, *surfaceCheck)
 		}
+		if knowledgeCheck := s.knowledgeWritebackCheck(result.ChangedFiles); knowledgeCheck != nil {
+			result.Checks = append(result.Checks, *knowledgeCheck)
+		}
 		if hasFailedCheck(result.Checks) {
 			return result, nil
 		}
@@ -279,6 +283,16 @@ func BuildLintReport(issue Issue, mode WorkflowMode) LintReport {
 			Message:  "issue is label-wise implementable but body does not yet include `建议范围`",
 		})
 	}
+	if len(report.RequiredMissing) == 0 && len(report.StatusLabels) == 0 {
+		missingExecutionSections := intersectSections(report.PreferredMissing, executionSections)
+		if len(missingExecutionSections) > 0 {
+			report.Findings = append(report.Findings, LintFinding{
+				Severity: LintSeverityInfo,
+				Code:     "missing-execution-context-sections",
+				Message:  "issue is label-wise implementable but body does not yet include execution context sections: " + strings.Join(missingExecutionSections, ", "),
+			})
+		}
+	}
 	return report
 }
 
@@ -372,6 +386,16 @@ func containsSection(sections []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func intersectSections(values []string, targets []string) []string {
+	out := make([]string, 0)
+	for _, target := range targets {
+		if containsSection(values, target) {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 func diffCheckResult(name string, output string, err error) CheckResult {
@@ -541,6 +565,55 @@ func (s *Service) remoteSurfaceDocCheck(changedFiles []string) *CheckResult {
 		Name:    "remote_surface_doc_guard",
 		Status:  CheckStatusWarning,
 		Message: "remote-surface-sensitive files changed without touching docs/general/remote-surface-state-machine.md: " + strings.Join(sensitive, ", "),
+	}
+}
+
+func (s *Service) knowledgeWritebackCheck(changedFiles []string) *CheckResult {
+	sourceChanged := make([]string, 0)
+	knowledgeTouched := false
+	for _, file := range changedFiles {
+		switch {
+		case isKnowledgeCarrier(file):
+			knowledgeTouched = true
+		case strings.HasSuffix(file, "_test.go"):
+		case strings.HasPrefix(file, "cmd/") && strings.HasSuffix(file, ".go"):
+			sourceChanged = append(sourceChanged, file)
+		case strings.HasPrefix(file, "internal/") && strings.HasSuffix(file, ".go"):
+			sourceChanged = append(sourceChanged, file)
+		case strings.HasPrefix(file, "testkit/") && strings.HasSuffix(file, ".go"):
+			sourceChanged = append(sourceChanged, file)
+		case strings.HasPrefix(file, "scripts/"):
+			sourceChanged = append(sourceChanged, file)
+		}
+	}
+	if len(sourceChanged) == 0 || knowledgeTouched {
+		return nil
+	}
+	sort.Strings(sourceChanged)
+	return &CheckResult{
+		Name:   "knowledge_writeback_review",
+		Status: CheckStatusWarning,
+		Message: "non-test implementation files changed without touching durable knowledge carriers; re-check issue body/docs/skills/templates before close-out: " +
+			strings.Join(sourceChanged, ", "),
+	}
+}
+
+func isKnowledgeCarrier(file string) bool {
+	switch {
+	case file == "AGENTS.md":
+		return true
+	case file == "DEVELOPER.md":
+		return true
+	case file == "README.md":
+		return true
+	case strings.HasPrefix(file, "docs/"):
+		return true
+	case strings.HasPrefix(file, ".codex/skills/"):
+		return true
+	case strings.HasPrefix(file, ".github/ISSUE_TEMPLATE/"):
+		return true
+	default:
+		return false
 	}
 }
 

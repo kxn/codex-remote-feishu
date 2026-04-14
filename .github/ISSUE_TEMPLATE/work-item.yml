@@ -101,6 +101,19 @@ body:
       required: true
 
   - type: textarea
+    id: staged_plan
+    attributes:
+      label: 建议范围
+      description: 如果预计要分阶段推进，先写当前的阶段切分与建议顺序；单阶段工作可写“单阶段完成”
+      placeholder: |
+        例如：
+        - 阶段 1：补状态机文档与 issue 语义
+        - 阶段 2：改 orchestrator 主逻辑与测试
+        - 阶段 3：补收尾同步与回归验证
+    validations:
+      required: true
+
+  - type: textarea
     id: validation_hint
     attributes:
       label: 验证建议
@@ -110,6 +123,45 @@ body:
         - go test ./internal/adapter/codex
         - go test ./...
         - 手工验证 Feishu / VS Code 链路
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation_context
+    attributes:
+      label: 实现参考
+      description: 给实现阶段看的最小必要上下文：推荐切口、关键文档/代码、当前推荐方案、已确认约束；未知可写“待补充”
+      placeholder: |
+        例如：
+        - 先看 docs/general/remote-surface-state-machine.md，再看 internal/core/orchestrator
+        - 推荐切口：先收敛 issue body，再改 service attach 逻辑
+        - 已确认约束：normal mode 不允许静默跨 workspace 跳转
+    validations:
+      required: true
+
+  - type: textarea
+    id: check_context
+    attributes:
+      label: 检查参考
+      description: 给检查阶段看的风险和回归面：必须核对的链路、状态机、协议、历史 bug 或测试点；未知可写“待补充”
+      placeholder: |
+        例如：
+        - 必查 /list -> /use -> /new 的路由切换
+        - 必对照 docs/general/remote-surface-state-machine.md
+        - 需要确认不会重新引入 attach 成功但无后续动作的死状态
+    validations:
+      required: true
+
+  - type: textarea
+    id: finish_context
+    attributes:
+      label: 收尾参考
+      description: 给 finish 阶段看的同步项：哪些 issue/body/doc/状态机/技能可能要回写，以及这次可能沉淀的新约束、模式或坑；未知可写“待补充”
+      placeholder: |
+        例如：
+        - 若命令语义变化，回写 docs/general/remote-surface-state-machine.md
+        - 若 issue 阶段计划变化，先改 issue body 再继续
+        - 若发现新 gotcha，补到 AGENTS.md 或对应 skill/doc
     validations:
       required: true
 
