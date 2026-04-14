@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、`/steerall` 的批量并入当前 running turn 入口、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时记录 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、`/steerall` 的批量并入当前 running turn 入口、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时记录 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -102,7 +102,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `ProductMode` 当前已经进入 daemon 级 `surface resume state`：
    1. 进程内已有 surface 会保留它。
    2. daemon 重启后，startup 会先从 `surface resume state` materialize latent surface，并恢复之前的 `ProductMode`。
-   3. `surface resume state` 当前不仅记录 `ProductMode` / instance / thread / workspace / route，还会记录 headless 恢复所需的 thread title / thread cwd / headless 标记；它已经是唯一持久化恢复源。
+   3. `surface resume state` 当前不仅记录 `ProductMode` / `Verbosity` / instance / thread / workspace / route，还会记录 headless 恢复所需的 thread title / thread cwd / headless 标记；它已经是唯一持久化恢复源。
    4. `normal` mode surface 随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
       2. 只有 `ResumeHeadless=false` 的目标，visible thread 当前不可见时才允许降级回原 workspace 的 attached-unbound 语义。
@@ -125,7 +125,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
 6. 当前 `/list` 已按 mode 分流：
    1. normal mode 打开 unified target picker，由用户在同一张卡里选择工作区与会话后再确认。
    2. vscode mode 继续列在线 VS Code instance。
-7. `normal mode` 当前已经完成这一轮产品收窄：
+7. `Verbosity` 当前也是 surface 级偏好：
+   1. `/verbose quiet|normal|verbose` 直接改当前 surface。
+   2. `/detach` 不会清掉它。
+   3. daemon 重启后，latent surface 会从 `surface resume state` 恢复之前的 `Verbosity`。
+8. `normal mode` 当前已经完成这一轮产品收窄：
    1. `/list` / `/use` / `/useall` 都收敛到同一张 target picker 卡：先选工作区，再选会话，最后由 confirm 按钮一次性提交真实切换。
    2. 工作区候选只保留当前可操作的 workspace：可接管 online workspace，以及带可恢复会话的 recoverable-only workspace；busy / 不可接管 workspace 不再单独列在主路径里。
    3. 会话候选始终基于当前选中的 workspace 重新生成，并固定附带一项 `新建会话`。
@@ -135,7 +139,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    7. `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 normal mode 下当前都只负责“重新打开或刷新 target picker”，不再维持旧的分页 selection-card 主路径。
    8. `/new` 已变成 workspace-owned prepared state。
    9. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
-8. `vscode mode` 当前已经完成这一轮收窄：
+9. `vscode mode` 当前已经完成这一轮收窄：
    1. `/list` attach/switch instance 后默认进入 follow-first，而不是落回 pinned/unbound。
    2. 默认跟随目标只看 `ObservedFocusedThreadID`，不再回落 `ActiveThreadID`。
    3. detached `vscode /use` / `/useall` 会直接拒绝，并要求先 `/list`。
@@ -157,7 +161,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 1. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
    1. surface 有 `gateway/chat/user` 路由信息。
-   2. surface 的 `ProductMode` 已从持久化 `surface resume state` 恢复。
+   2. surface 的 `ProductMode` 与 `Verbosity` 已从持久化 `surface resume state` 恢复。
    3. surface 可能还带有持久化的 resume target 元数据（instance / thread / workspace / route 语义）；它们不会在 materialize 当下直接投影成 live attach，但 daemon 随后会异步评估恢复。
    4. 对 `normal` mode 来说，这个 latent detached 可能是短暂中间态：
       1. exact visible thread 恢复成功后会进入 `R2 AttachedPinned`。
@@ -527,7 +531,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 4. 若切换前存在 `PendingHeadless` 或 `surface resume state` 里仍带着 headless 恢复目标，会一并 kill / clear，避免 mode 切完以后又被后台恢复拉回 headless。
 5. `vscode` surface 不参与 headless auto-restore；即使 startup 目录里还残留旧 `headless-restore-hints.json`，运行时也会直接跳过。
 6. 当前 mode 会跨 daemon 重启保留：
-   1. startup 会先恢复 latent surface 与 `ProductMode`
+   1. startup 会先恢复 latent surface、`ProductMode` 与 `Verbosity`
    2. `normal` mode 会继续按 persisted target 尝试自动恢复：exact visible thread > workspace attach fallback > 与 headless restore 协同
    3. 若存在 `ResumeThreadID`，在首轮 `threads.refresh -> threads.snapshot` 完成前会先静默等待，不会过早降级或直接报失败
    4. `vscode` mode 会按 exact `ResumeInstanceID` 尝试恢复：恢复成功后回到 `follow_local`，若暂时缺少新的 VS Code 活动则明确提示用户去 VS Code 再说一句话或手动 `/use`
@@ -901,7 +905,7 @@ daemon startup 的 vscode resume 额外规则：
    3. `threads.snapshot`
    4. `thread.discovered`
    5. `thread.focused`
-2. daemon startup 时会先根据 `surface resume state` materialize latent detached surface，并恢复 `ProductMode`；`surface resume state` 当前也携带 headless 恢复所需的 thread 元数据。旧 `headless-restore-hints.json` 只会在 startup 时尝试迁移导入；迁移后不再参与运行时恢复判定。
+2. daemon startup 时会先根据 `surface resume state` materialize latent detached surface，并恢复 `ProductMode` 与 `Verbosity`；`surface resume state` 当前也携带 headless 恢复所需的 thread 元数据。旧 `headless-restore-hints.json` 只会在 startup 时尝试迁移导入；迁移后不再参与运行时恢复判定。
 3. 后台恢复前置条件：
    1. surface 当前是 `normal` mode
    2. surface 当前没有显式 attach
@@ -1127,7 +1131,7 @@ retained-offline overlay 额外规则：
 25. **normal `/list` 仍按 instance root 聚合，broad headless pool 会把多个 thread `cwd` workspace 压成一个选项**：已修复。当前 workspace 列表先看可见 thread `CWD`，只有无可见 thread 时才回退到实例级 workspace metadata。
 26. **normal detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 normal mode 的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
 27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 `surface resume state` 里的 headless 恢复目标，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。
-28. **daemon 重启后 latent surface 会丢 mode，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由与 `ProductMode`。
+28. **daemon 重启后 latent surface 会丢 mode / verbosity，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由、`ProductMode` 与 `Verbosity`。
 29. **normal mode daemon 重启后会静默掉回 detached、过早报失败，或与 headless restore 优先级互相打架**：已修复。当前恢复顺序已收敛为 exact visible thread > 非 headless 目标的 workspace fallback > headless restore；首轮 refresh 前会静默等待，`ResumeHeadless=true` 的目标不会再先 attach 到错误 workspace，失败路径也只保留单条 notice + backoff。
 30. **vscode mode daemon 重启后只保留 mode、不恢复实例，或者恢复链路误走 headless**：已修复。当前会按 exact `ResumeInstanceID` 恢复到原 VS Code 实例，回到 follow-local 语义；若还没有新的 VS Code 活动，会明确提示去 VS Code 再说一句话或手动 `/use`，而且运行时不再读取独立 headless hint 文件。
 31. **vscode mode 进入或 daemon 重启恢复时，会在 legacy `settings.json` / stale managed shim 状态下继续尝试恢复，导致用户看起来进入了 vscode mode，但底层仍沿用旧接入方式或失效入口**：已修复。当前 detached-vscode 恢复会先做本机 VS Code 兼容性检查；命中旧 `settings.json` override 或 stale managed shim 时，会保持 detached，发迁移/修复卡片，并在点击后统一迁移到 managed shim，同时清掉旧 `chatgpt.cliExecutable`。

@@ -22,6 +22,7 @@ type SurfaceResumeEntry struct {
 	ChatID             string    `json:"chatID,omitempty"`
 	ActorUserID        string    `json:"actorUserID,omitempty"`
 	ProductMode        string    `json:"productMode,omitempty"`
+	Verbosity          string    `json:"verbosity,omitempty"`
 	ResumeInstanceID   string    `json:"resumeInstanceID,omitempty"`
 	ResumeThreadID     string    `json:"resumeThreadID,omitempty"`
 	ResumeThreadTitle  string    `json:"resumeThreadTitle,omitempty"`
@@ -186,6 +187,7 @@ func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, 
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
+	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
 	entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(entry.ResumeThreadCWD)
@@ -207,6 +209,7 @@ func sameSurfaceResumeEntryContent(left, right SurfaceResumeEntry) bool {
 		strings.TrimSpace(left.ChatID) == strings.TrimSpace(right.ChatID) &&
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
+		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&
 		strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
 		strings.TrimSpace(left.ResumeThreadTitle) == strings.TrimSpace(right.ResumeThreadTitle) &&

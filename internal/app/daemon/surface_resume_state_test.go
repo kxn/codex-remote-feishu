@@ -34,6 +34,7 @@ func TestSurfaceResumeStoreRoundTrip(t *testing.T) {
 		ChatID:             "chat-1",
 		ActorUserID:        "user-1",
 		ProductMode:        "vscode",
+		Verbosity:          " verbose ",
 		ResumeInstanceID:   "inst-1",
 		ResumeThreadID:     "thread-1",
 		ResumeThreadTitle:  " 修复登录流程 ",
@@ -57,7 +58,7 @@ func TestSurfaceResumeStoreRoundTrip(t *testing.T) {
 	if entry.GatewayID != "app-1" || entry.ChatID != "chat-1" || entry.ActorUserID != "user-1" {
 		t.Fatalf("unexpected routing fields: %#v", entry)
 	}
-	if entry.ProductMode != "vscode" || entry.ResumeInstanceID != "inst-1" || entry.ResumeThreadID != "thread-1" {
+	if entry.ProductMode != "vscode" || entry.Verbosity != "verbose" || entry.ResumeInstanceID != "inst-1" || entry.ResumeThreadID != "thread-1" {
 		t.Fatalf("unexpected resume target fields: %#v", entry)
 	}
 	if entry.ResumeThreadTitle != "修复登录流程" || entry.ResumeThreadCWD != "/data/dl/droid" || !entry.ResumeHeadless {
@@ -207,6 +208,29 @@ func TestDaemonStartupCanonicalizesLegacySplitFeishuP2PSurfaceResumeState(t *tes
 	}
 }
 
+func TestSurfaceResumeStoreDefaultsLegacyMissingVerbosityToNormal(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceResumeStatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\"\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write legacy surface resume state: %v", err)
+	}
+
+	store, err := loadSurfaceResumeStore(path)
+	if err != nil {
+		t.Fatalf("load legacy store: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected legacy surface resume entry after reload")
+	}
+	if entry.Verbosity != "normal" {
+		t.Fatalf("expected missing verbosity to normalize to normal, got %#v", entry)
+	}
+}
+
 func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *testing.T) {
 	t.Parallel()
 
@@ -281,6 +305,47 @@ func TestDaemonPersistsSurfaceModeAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestDaemonPersistsSurfaceVerbosityAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionVerboseCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/verbose quiet",
+	})
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.Verbosity != "quiet" {
+		t.Fatalf("expected persisted quiet verbosity, got %#v", entry)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	events := restarted.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionVerboseCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/verbose",
+	})
+	if len(events) != 1 || events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil {
+		t.Fatalf("expected one verbose config event after restart, got %#v", events)
+	}
+	if got := events[0].FeishuCommandView.Config.CurrentValue; got != "quiet" {
+		t.Fatalf("expected quiet verbosity after restart, got %q", got)
+	}
+}
+
 func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testing.T) {
 	t.Parallel()
 
@@ -291,6 +356,7 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 		ChatID:             "chat-1",
 		ActorUserID:        "user-1",
 		ProductMode:        "normal",
+		Verbosity:          "verbose",
 		ResumeInstanceID:   "inst-visible-1",
 		ResumeThreadID:     "thread-1",
 		ResumeWorkspaceKey: "/data/dl/droid",
@@ -314,6 +380,17 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 	if snapshot.ProductMode != "normal" {
 		t.Fatalf("expected normal mode after restart, got %#v", snapshot)
 	}
+	events := app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionVerboseCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/verbose",
+	})
+	if len(events) != 1 || events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Config == nil {
+		t.Fatalf("expected one verbose config event after resume materialization, got %#v", events)
+	}
+	if got := events[0].FeishuCommandView.Config.CurrentValue; got != "verbose" {
+		t.Fatalf("expected verbose setting after restart materialization, got %q", got)
+	}
 	if snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
 		t.Fatalf("expected restored surface to stay detached, got %#v", snapshot)
 	}
@@ -322,7 +399,7 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 	if entry == nil {
 		t.Fatal("expected resume entry after startup sync")
 	}
-	if entry.ResumeInstanceID != "inst-visible-1" || entry.ResumeThreadID != "thread-1" || entry.ResumeWorkspaceKey != "/data/dl/droid" || entry.ResumeRouteMode != "pinned" {
+	if entry.Verbosity != "verbose" || entry.ResumeInstanceID != "inst-visible-1" || entry.ResumeThreadID != "thread-1" || entry.ResumeWorkspaceKey != "/data/dl/droid" || entry.ResumeRouteMode != "pinned" {
 		t.Fatalf("expected startup materialization to preserve stored resume target, got %#v", entry)
 	}
 }

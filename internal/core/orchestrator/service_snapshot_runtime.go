@@ -81,7 +81,7 @@ func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID s
 	})
 }
 
-func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode) {
+func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, verbosity state.SurfaceVerbosity) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
 	}
@@ -96,6 +96,7 @@ func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUs
 		return
 	}
 	surface.ProductMode = state.NormalizeProductMode(mode)
+	surface.Verbosity = state.NormalizeSurfaceVerbosity(verbosity)
 }
 
 func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {

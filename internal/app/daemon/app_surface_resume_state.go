@@ -77,6 +77,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			entry.ChatID,
 			entry.ActorUserID,
 			state.ProductMode(entry.ProductMode),
+			state.SurfaceVerbosity(entry.Verbosity),
 		)
 	}
 }
@@ -241,6 +242,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		ChatID:           strings.TrimSpace(surface.ChatID),
 		ActorUserID:      strings.TrimSpace(surface.ActorUserID),
 		ProductMode:      string(state.NormalizeProductMode(surface.ProductMode)),
+		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
 	}
 	if entry.SurfaceSessionID == "" {
 		return SurfaceResumeEntry{}, false
