@@ -78,6 +78,8 @@ type remoteTurnBinding struct {
 	TurnID                string
 	Status                string
 	StartedAt             time.Time
+	StartTotalUsage       agentproto.TokenUsageBreakdown
+	HasStartTotalUsage    bool
 	LastUsage             agentproto.TokenUsageBreakdown
 	HasLastUsage          bool
 }

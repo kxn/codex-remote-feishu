@@ -32,6 +32,26 @@ func (s *Service) recordRemoteTurnTokenUsage(instanceID, threadID, turnID string
 	binding.HasLastUsage = true
 }
 
+func (s *Service) captureRemoteTurnStartTotalUsage(instanceID string, binding *remoteTurnBinding, threadID string) {
+	if binding == nil || binding.HasStartTotalUsage {
+		return
+	}
+	inst := s.root.Instances[instanceID]
+	if inst == nil {
+		return
+	}
+	threadID = strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID))
+	if threadID == "" {
+		return
+	}
+	thread := inst.Threads[threadID]
+	if thread == nil || thread.TokenUsage == nil {
+		return
+	}
+	binding.StartTotalUsage = thread.TokenUsage.Total
+	binding.HasStartTotalUsage = true
+}
+
 func finalTurnSummaryForBinding(now time.Time, binding *remoteTurnBinding, thread *state.ThreadRecord) *control.FinalTurnSummary {
 	if binding == nil || binding.StartedAt.IsZero() {
 		return nil
@@ -47,21 +67,48 @@ func finalTurnSummaryForBinding(now time.Time, binding *remoteTurnBinding, threa
 		Elapsed:   elapsed,
 		ThreadCWD: strings.TrimSpace(binding.ThreadCWD),
 	}
-	if binding.HasLastUsage {
-		summary.Usage = &control.FinalTurnUsage{
-			InputTokens:           binding.LastUsage.InputTokens,
-			CachedInputTokens:     binding.LastUsage.CachedInputTokens,
-			OutputTokens:          binding.LastUsage.OutputTokens,
-			ReasoningOutputTokens: binding.LastUsage.ReasoningOutputTokens,
-			TotalTokens:           binding.LastUsage.TotalTokens,
-		}
-	}
 	if thread != nil && thread.TokenUsage != nil {
+		summary.ThreadUsage = finalTurnUsageFromBreakdown(thread.TokenUsage.Total)
 		summary.TotalTokensInContext = thread.TokenUsage.Total.TotalTokens
 		if thread.TokenUsage.ModelContextWindow != nil {
 			value := *thread.TokenUsage.ModelContextWindow
 			summary.ModelContextWindow = &value
 		}
 	}
+	if thread != nil && thread.TokenUsage != nil && binding.HasStartTotalUsage {
+		if delta, ok := finalTurnUsageDelta(thread.TokenUsage.Total, binding.StartTotalUsage); ok {
+			summary.Usage = delta
+		}
+	}
+	if summary.Usage == nil && binding.HasLastUsage {
+		summary.Usage = finalTurnUsageFromBreakdown(binding.LastUsage)
+	}
 	return summary
+}
+
+func finalTurnUsageFromBreakdown(usage agentproto.TokenUsageBreakdown) *control.FinalTurnUsage {
+	return &control.FinalTurnUsage{
+		InputTokens:           usage.InputTokens,
+		CachedInputTokens:     usage.CachedInputTokens,
+		OutputTokens:          usage.OutputTokens,
+		ReasoningOutputTokens: usage.ReasoningOutputTokens,
+		TotalTokens:           usage.TotalTokens,
+	}
+}
+
+func finalTurnUsageDelta(end, start agentproto.TokenUsageBreakdown) (*control.FinalTurnUsage, bool) {
+	if end.InputTokens < start.InputTokens ||
+		end.CachedInputTokens < start.CachedInputTokens ||
+		end.OutputTokens < start.OutputTokens ||
+		end.ReasoningOutputTokens < start.ReasoningOutputTokens ||
+		end.TotalTokens < start.TotalTokens {
+		return nil, false
+	}
+	return &control.FinalTurnUsage{
+		InputTokens:           end.InputTokens - start.InputTokens,
+		CachedInputTokens:     end.CachedInputTokens - start.CachedInputTokens,
+		OutputTokens:          end.OutputTokens - start.OutputTokens,
+		ReasoningOutputTokens: end.ReasoningOutputTokens - start.ReasoningOutputTokens,
+		TotalTokens:           end.TotalTokens - start.TotalTokens,
+	}, true
 }

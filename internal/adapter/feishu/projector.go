@@ -660,17 +660,33 @@ func formatFinalTurnSummaryLine(summary *control.FinalTurnSummary) string {
 	}
 	parts := []string{fmt.Sprintf("**本轮用时** %s", formatElapsedDuration(summary.Elapsed))}
 	if usage := summary.Usage; usage != nil {
-		parts = append(parts,
-			fmt.Sprintf("**输入** %d", usage.InputTokens),
-			fmt.Sprintf("**缓存** %s", formatCachedUsageSummary(usage.CachedInputTokens, usage.InputTokens)),
-			fmt.Sprintf("**输出** %d", usage.OutputTokens),
-			fmt.Sprintf("**推理** %d", usage.ReasoningOutputTokens),
-		)
-		if contextLeft := formatApproxContextLeftSummary(usage.InputTokens, summary.ModelContextWindow); contextLeft != "" {
-			parts = append(parts, fmt.Sprintf("**上下文剩余(估算)** %s", contextLeft))
-		}
+		parts = append(parts, fmt.Sprintf("**本轮累计** %s", formatTokenUsageSummary(usage)))
+	}
+	if usage := summary.ThreadUsage; usage != nil {
+		parts = append(parts, fmt.Sprintf("**线程累计** %s", formatTokenUsageSummary(usage)))
+	}
+	contextInputTokens := 0
+	if usage := summary.ThreadUsage; usage != nil {
+		contextInputTokens = usage.InputTokens
+	} else if usage := summary.Usage; usage != nil {
+		contextInputTokens = usage.InputTokens
+	}
+	if contextLeft := formatApproxContextLeftSummary(contextInputTokens, summary.ModelContextWindow); contextLeft != "" {
+		parts = append(parts, fmt.Sprintf("**上下文剩余(估算)** %s", contextLeft))
 	}
 	return strings.Join(parts, "  ")
+}
+
+func formatTokenUsageSummary(usage *control.FinalTurnUsage) string {
+	if usage == nil {
+		return ""
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("输入 %d", usage.InputTokens),
+		fmt.Sprintf("缓存 %s", formatCachedUsageSummary(usage.CachedInputTokens, usage.InputTokens)),
+		fmt.Sprintf("输出 %d", usage.OutputTokens),
+		fmt.Sprintf("推理 %d", usage.ReasoningOutputTokens),
+	}, "  ")
 }
 
 func formatCachedUsageSummary(cachedInput, input int) string {

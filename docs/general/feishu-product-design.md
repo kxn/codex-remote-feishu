@@ -683,9 +683,9 @@ final `block.committed`：
 - 文件展示名优先使用“最短唯一后缀”，避免直接铺完整长路径；重命名会显示 `旧路径 → 新路径`
 - 当前最多展开前 6 个文件；超出的部分只提示“另有 N 个文件未展开”
 - 若本轮没有可展示的最终正文，但存在文件修改 summary，仍会补一张合成 final card，正文为 `已完成文件修改。`
-- final card 底部当前会追加一条 turn summary footer，显示本轮用时；若当前 turn 已带有稳定的 `last usage`，还会追加本轮 `input`、`cached input`、`cache ratio`、`output`、`reasoning output`
-- 若当前 turn 同时带有 `last.inputTokens` 与 `modelContextWindow`，footer 还会按近似公式 `1 - input / window` 追加 `context left`
-- 这条 `context left` 当前是估算值，表达的是“按本轮输入占窗口比例估算的剩余空间”，不是 thread 当前精确剩余上下文
+- final card 底部当前会追加一条 turn summary footer，显示本轮用时；若 token usage 可用，则会显示本轮累计（优先 `turn end total - turn start total`，缺失时回退到 `last usage`）和线程累计（`thread total`），并附带 `input`、`cached input`、`cache ratio`、`output`、`reasoning output`
+- 若当前 turn 同时带有可用 `inputTokens` 与 `modelContextWindow`，footer 还会按近似公式 `1 - input / window` 追加 `context left`（优先使用线程累计 input，缺失时回退到本轮累计 input）
+- 这条 `context left` 当前是估算值，不等价于协议中的精确上下文剩余值
 - 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
 - Markdown 预览重写与最终 reply/create message 发送使用独立 timeout 预算
 - 预览物化失败时不会阻塞主回复，正文保持原样

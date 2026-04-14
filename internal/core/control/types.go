@@ -452,6 +452,7 @@ type FinalTurnSummary struct {
 	Elapsed              time.Duration
 	ThreadCWD            string
 	Usage                *FinalTurnUsage
+	ThreadUsage          *FinalTurnUsage
 	TotalTokensInContext int
 	ModelContextWindow   *int
 }

@@ -131,6 +131,21 @@ func TestThreadTokenUsageUpdatePopulatesThreadStateAndFinalTurnSummary(t *testin
 		ActorUserID:      "user-1",
 		InstanceID:       "inst-1",
 	})
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventThreadTokenUsageUpdated,
+		ThreadID: "thread-1",
+		TokenUsage: &agentproto.ThreadTokenUsage{
+			Total: agentproto.TokenUsageBreakdown{
+				TotalTokens:           300,
+				InputTokens:           220,
+				CachedInputTokens:     120,
+				OutputTokens:          80,
+				ReasoningOutputTokens: 30,
+			},
+		},
+	}); len(events) != 0 {
+		t.Fatalf("expected no direct UI event when recording baseline token usage, got %#v", events)
+	}
 	if events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
 		SurfaceSessionID: "surface-1",
@@ -155,18 +170,18 @@ func TestThreadTokenUsageUpdatePopulatesThreadStateAndFinalTurnSummary(t *testin
 		TurnID:   "turn-1",
 		TokenUsage: &agentproto.ThreadTokenUsage{
 			Last: agentproto.TokenUsageBreakdown{
-				TotalTokens:           200,
-				InputTokens:           150,
-				CachedInputTokens:     90,
-				OutputTokens:          50,
-				ReasoningOutputTokens: 20,
+				TotalTokens:           190,
+				InputTokens:           145,
+				CachedInputTokens:     75,
+				OutputTokens:          45,
+				ReasoningOutputTokens: 18,
 			},
 			Total: agentproto.TokenUsageBreakdown{
 				TotalTokens:           500,
-				InputTokens:           400,
+				InputTokens:           370,
 				CachedInputTokens:     200,
-				OutputTokens:          100,
-				ReasoningOutputTokens: 40,
+				OutputTokens:          130,
+				ReasoningOutputTokens: 50,
 			},
 			ModelContextWindow: &contextWindow,
 		},
@@ -178,11 +193,11 @@ func TestThreadTokenUsageUpdatePopulatesThreadStateAndFinalTurnSummary(t *testin
 	if thread == nil || thread.TokenUsage == nil {
 		t.Fatalf("expected thread usage state, got %#v", thread)
 	}
-	if thread.TokenUsage.Total.TotalTokens != 500 || thread.TokenUsage.Last.CachedInputTokens != 90 {
+	if thread.TokenUsage.Total.TotalTokens != 500 || thread.TokenUsage.Last.CachedInputTokens != 75 {
 		t.Fatalf("unexpected thread token usage: %#v", thread.TokenUsage)
 	}
-	if binding := svc.activeRemote["inst-1"]; binding == nil || !binding.HasLastUsage || binding.LastUsage.TotalTokens != 200 {
-		t.Fatalf("expected active remote binding to capture last usage, got %#v", svc.activeRemote["inst-1"])
+	if binding := svc.activeRemote["inst-1"]; binding == nil || !binding.HasLastUsage || binding.LastUsage.TotalTokens != 190 || !binding.HasStartTotalUsage || binding.StartTotalUsage.TotalTokens != 300 {
+		t.Fatalf("expected active remote binding to capture turn usage baseline and last usage, got %#v", svc.activeRemote["inst-1"])
 	}
 
 	now = now.Add(3400 * time.Millisecond)
@@ -202,8 +217,11 @@ func TestThreadTokenUsageUpdatePopulatesThreadStateAndFinalTurnSummary(t *testin
 	if summary.Elapsed != 3400*time.Millisecond {
 		t.Fatalf("unexpected elapsed summary: %#v", summary)
 	}
-	if summary.Usage == nil || summary.Usage.TotalTokens != 200 || summary.Usage.CachedInputTokens != 90 || summary.Usage.ReasoningOutputTokens != 20 {
+	if summary.Usage == nil || summary.Usage.TotalTokens != 200 || summary.Usage.InputTokens != 150 || summary.Usage.CachedInputTokens != 80 || summary.Usage.OutputTokens != 50 || summary.Usage.ReasoningOutputTokens != 20 {
 		t.Fatalf("unexpected final usage summary: %#v", summary)
+	}
+	if summary.ThreadUsage == nil || summary.ThreadUsage.TotalTokens != 500 || summary.ThreadUsage.InputTokens != 370 || summary.ThreadUsage.CachedInputTokens != 200 {
+		t.Fatalf("unexpected thread cumulative usage summary: %#v", summary)
 	}
 	if summary.TotalTokensInContext != 500 {
 		t.Fatalf("unexpected total tokens in context: %#v", summary)

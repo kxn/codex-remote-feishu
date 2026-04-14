@@ -213,6 +213,7 @@ func (s *Service) markRemoteTurnRunning(instanceID string, initiator agentproto.
 	if item.FrozenThreadID == "" {
 		item.FrozenThreadID = threadID
 	}
+	s.captureRemoteTurnStartTotalUsage(instanceID, binding, item.FrozenThreadID)
 	if binding.StartedAt.IsZero() {
 		binding.StartedAt = s.now().UTC()
 	}

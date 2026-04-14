@@ -369,6 +369,13 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 				ReasoningOutputTokens: 20,
 				TotalTokens:           200,
 			},
+			ThreadUsage: &control.FinalTurnUsage{
+				InputTokens:           400,
+				CachedInputTokens:     200,
+				OutputTokens:          100,
+				ReasoningOutputTokens: 40,
+				TotalTokens:           500,
+			},
 		},
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
@@ -377,7 +384,7 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 	if len(ops[0].CardElements) != 1 {
 		t.Fatalf("expected standalone usage footer, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **输入** 150  **缓存** 90 (60.0%)  **输出** 50  **推理** 20  **上下文剩余(估算)** 85.0%" {
+	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 150  缓存 90 (60.0%)  输出 50  推理 20  **线程累计** 输入 400  缓存 200 (50.0%)  输出 100  推理 40  **上下文剩余(估算)** 60.0%" {
 		t.Fatalf("unexpected usage footer: %#v", ops[0].CardElements[0])
 	}
 }
@@ -405,7 +412,7 @@ func TestProjectFinalAssistantBlockShowsZeroInputWithoutCacheRatio(t *testing.T)
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **输入** 0  **缓存** 0  **输出** 12  **推理** 3" {
+	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 0  缓存 0  输出 12  推理 3" {
 		t.Fatalf("unexpected zero-input usage footer: %#v", ops[0].CardElements[0])
 	}
 }
