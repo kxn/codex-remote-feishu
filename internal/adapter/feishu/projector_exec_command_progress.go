@@ -102,6 +102,8 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 		switch entry.Kind {
 		case "web_search":
 			entry.Label = "搜索"
+		case "mcp_tool_call":
+			entry.Label = "MCP"
 		default:
 			entry.Label = "处理中"
 		}

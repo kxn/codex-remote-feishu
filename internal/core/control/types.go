@@ -498,17 +498,6 @@ type ExecCommandProgress struct {
 	Final     bool
 }
 
-type MCPToolCallProgress struct {
-	ThreadID     string
-	TurnID       string
-	ItemID       string
-	Server       string
-	Tool         string
-	Status       string
-	ErrorMessage string
-	DurationMS   int
-}
-
 type UIEventKind string
 
 const (
@@ -524,7 +513,6 @@ const (
 	UIEventThreadSelectionChange       UIEventKind = "thread.selection.changed"
 	UIEventBlockCommitted              UIEventKind = "block.committed"
 	UIEventImageOutput                 UIEventKind = "image.output"
-	UIEventMCPToolCallProgress         UIEventKind = "mcp_tool_call.progress"
 	UIEventExecCommandProgress         UIEventKind = "exec_command.progress"
 	UIEventAgentCommand                UIEventKind = "agent.command"
 	UIEventDaemonCommand               UIEventKind = "daemon.command"
@@ -583,7 +571,6 @@ type UIEvent struct {
 	ThreadSelection             *ThreadSelectionChanged
 	Block                       *render.Block
 	ImageOutput                 *ImageOutput
-	MCPToolCallProgress         *MCPToolCallProgress
 	ExecCommandProgress         *ExecCommandProgress
 	FileChangeSummary           *FileChangeSummary
 	FinalTurnSummary            *FinalTurnSummary

@@ -18,6 +18,8 @@ func (s *Service) handleProcessProgressItemStarted(instanceID string, event agen
 		return s.handleCommandExecutionProgressStarted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressStarted(instanceID, event)
+	case "mcp_tool_call":
+		return s.handleMCPToolCallItemStarted(instanceID, event)
 	default:
 		return nil
 	}
@@ -42,6 +44,8 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressCompleted(instanceID, event)
+	case "mcp_tool_call":
+		return s.handleMCPToolCallItemCompleted(instanceID, event)
 	default:
 		return nil
 	}
@@ -250,7 +254,7 @@ func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleReco
 	switch strings.TrimSpace(itemKind) {
 	case "command_execution":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose
-	case "web_search":
+	case "web_search", "mcp_tool_call":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	default:
 		return false

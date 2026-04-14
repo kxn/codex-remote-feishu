@@ -1,10 +1,12 @@
 package orchestrator
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type mcpToolCallProgressRecord struct {
@@ -61,49 +63,59 @@ func equalMCPToolCallProgressRecord(left, right *mcpToolCallProgressRecord) bool
 		left.DurationMS == right.DurationMS
 }
 
-func (s *Service) handleMCPToolCallItemProgress(instanceID string, event agentproto.Event) []control.UIEvent {
+func (s *Service) handleMCPToolCallItemStarted(instanceID string, event agentproto.Event) []control.UIEvent {
+	return s.handleMCPToolCallItemProgress(instanceID, event, false)
+}
+
+func (s *Service) handleMCPToolCallItemCompleted(instanceID string, event agentproto.Event) []control.UIEvent {
+	return s.handleMCPToolCallItemProgress(instanceID, event, true)
+}
+
+func (s *Service) handleMCPToolCallItemProgress(instanceID string, event agentproto.Event, final bool) []control.UIEvent {
 	if strings.TrimSpace(event.ItemKind) != "mcp_tool_call" || strings.TrimSpace(event.ItemID) == "" {
 		return nil
 	}
 	surface := s.surfaceForInitiator(instanceID, event)
-	if surface == nil {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 		return nil
 	}
-	progress := mcpToolCallProgressFromEvent(event)
-	if progress == nil {
+	record := mcpToolCallProgressRecordFromEvent(surface.SurfaceSessionID, instanceID, event)
+	if record == nil {
 		return nil
-	}
-	record := &mcpToolCallProgressRecord{
-		SurfaceSessionID: surface.SurfaceSessionID,
-		InstanceID:       instanceID,
-		ThreadID:         event.ThreadID,
-		TurnID:           event.TurnID,
-		ItemID:           event.ItemID,
-		Server:           progress.Server,
-		Tool:             progress.Tool,
-		Status:           progress.Status,
-		ErrorMessage:     progress.ErrorMessage,
-		DurationMS:       progress.DurationMS,
 	}
 	key := mcpToolCallProgressKey(surface.SurfaceSessionID, instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if existing := s.mcpToolCallProgress[key]; existing != nil && equalMCPToolCallProgressRecord(existing, record) {
 		return nil
 	}
-	s.mcpToolCallProgress[key] = record
-	sourceMessageID := ""
-	if binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID); binding != nil {
-		sourceMessageID = binding.ReplyToMessageID
+	progress := s.ensureProgressForMCPToolCall(surface, instanceID, event.ThreadID, event.TurnID, event.ItemID, final)
+	if progress == nil {
+		return nil
 	}
-	return []control.UIEvent{{
-		Kind:                control.UIEventMCPToolCallProgress,
-		GatewayID:           surface.GatewayID,
-		SurfaceSessionID:    surface.SurfaceSessionID,
-		SourceMessageID:     sourceMessageID,
-		MCPToolCallProgress: progress,
-	}}
+	s.mcpToolCallProgress[key] = record
+	progress.ItemID = strings.TrimSpace(event.ItemID)
+	upsertExecCommandProgressEntry(progress, mcpToolCallProgressEntry(*record))
+	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
-func mcpToolCallProgressFromEvent(event agentproto.Event) *control.MCPToolCallProgress {
+func (s *Service) ensureProgressForMCPToolCall(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID, itemID string, final bool) *state.ExecCommandProgressRecord {
+	if !final {
+		return s.activeOrEnsureExecCommandProgress(surface, instanceID, threadID, turnID)
+	}
+	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
+	if progress == nil || !progressHasEntry(progress, itemID, "mcp_tool_call") {
+		return nil
+	}
+	return progress
+}
+
+func (s *Service) activeOrEnsureExecCommandProgress(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID string) *state.ExecCommandProgressRecord {
+	if progress := activeExecCommandProgress(surface, instanceID, threadID, turnID); progress != nil {
+		return progress
+	}
+	return s.ensureExecCommandProgress(surface, instanceID, threadID, turnID)
+}
+
+func mcpToolCallProgressRecordFromEvent(surfaceID, instanceID string, event agentproto.Event) *mcpToolCallProgressRecord {
 	status := normalizeMCPToolCallProgressStatus(event)
 	if status == "" {
 		return nil
@@ -112,15 +124,17 @@ func mcpToolCallProgressFromEvent(event agentproto.Event) *control.MCPToolCallPr
 	if event.Metadata != nil {
 		durationMS = lookupIntFromAny(event.Metadata["durationMs"])
 	}
-	return &control.MCPToolCallProgress{
-		ThreadID:     event.ThreadID,
-		TurnID:       event.TurnID,
-		ItemID:       event.ItemID,
-		Server:       metadataString(event.Metadata, "server"),
-		Tool:         metadataString(event.Metadata, "tool"),
-		Status:       status,
-		ErrorMessage: metadataString(event.Metadata, "errorMessage"),
-		DurationMS:   durationMS,
+	return &mcpToolCallProgressRecord{
+		SurfaceSessionID: surfaceID,
+		InstanceID:       instanceID,
+		ThreadID:         event.ThreadID,
+		TurnID:           event.TurnID,
+		ItemID:           strings.TrimSpace(event.ItemID),
+		Server:           metadataString(event.Metadata, "server"),
+		Tool:             metadataString(event.Metadata, "tool"),
+		Status:           status,
+		ErrorMessage:     metadataString(event.Metadata, "errorMessage"),
+		DurationMS:       durationMS,
 	}
 }
 
@@ -145,5 +159,44 @@ func normalizeMCPToolCallProgressStatus(event agentproto.Event) string {
 		}
 	default:
 		return ""
+	}
+}
+
+func mcpToolCallProgressEntry(record mcpToolCallProgressRecord) state.ExecCommandProgressEntryRecord {
+	name := formatMCPToolCallName(record.Server, record.Tool)
+	summary := name
+	switch strings.ToLower(strings.TrimSpace(record.Status)) {
+	case "completed":
+		if record.DurationMS > 0 {
+			summary = fmt.Sprintf("%s（%d ms）", name, record.DurationMS)
+		}
+	case "failed":
+		if strings.TrimSpace(record.ErrorMessage) != "" {
+			summary = fmt.Sprintf("%s（失败：%s）", name, strings.TrimSpace(record.ErrorMessage))
+		} else {
+			summary = fmt.Sprintf("%s（失败）", name)
+		}
+	}
+	return state.ExecCommandProgressEntryRecord{
+		ItemID:  record.ItemID,
+		Kind:    "mcp_tool_call",
+		Label:   "MCP",
+		Summary: summary,
+		Status:  record.Status,
+	}
+}
+
+func formatMCPToolCallName(server, tool string) string {
+	server = strings.TrimSpace(server)
+	tool = strings.TrimSpace(tool)
+	switch {
+	case server != "" && tool != "":
+		return server + "." + tool
+	case tool != "":
+		return tool
+	case server != "":
+		return server
+	default:
+		return "未知 MCP 调用"
 	}
 }

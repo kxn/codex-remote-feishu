@@ -637,15 +637,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(events, s.completeRemoteTurn(instanceID, event.ThreadID, event.TurnID, event.Status, event.ErrorMessage, event.Problem, finalText, summary)...))
 	case agentproto.EventItemStarted:
 		s.trackItemStart(instanceID, event)
-		events := append(preface, s.handleProcessProgressItemStarted(instanceID, event)...)
-		events = append(events, s.handleMCPToolCallItemProgress(instanceID, event)...)
-		return s.filterEventsForSurfaceVisibility(events)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemStarted(instanceID, event)...))
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemDelta(instanceID, event)...))
 	case agentproto.EventItemCompleted:
 		events := append(preface, s.handleProcessProgressItemCompleted(instanceID, event)...)
-		events = append(events, s.handleMCPToolCallItemProgress(instanceID, event)...)
 		events = append(events, s.completeItem(instanceID, event)...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestStarted:

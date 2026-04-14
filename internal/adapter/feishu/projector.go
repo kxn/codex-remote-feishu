@@ -378,26 +378,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			ImagePath:        strings.TrimSpace(event.ImageOutput.SavedPath),
 			ImageBase64:      strings.TrimSpace(event.ImageOutput.ImageBase64),
 		}}
-	case control.UIEventMCPToolCallProgress:
-		if event.MCPToolCallProgress == nil {
-			return nil
-		}
-		progress := *event.MCPToolCallProgress
-		title := "MCP 调用"
-		body := mcpToolCallProgressBody(progress)
-		theme := mcpToolCallProgressTheme(progress)
-		return []Operation{{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			ReplyToMessageID: event.SourceMessageID,
-			CardTitle:        title,
-			CardBody:         body,
-			CardThemeKey:     theme,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, body, theme, nil),
-		}}
 	case control.UIEventExecCommandProgress:
 		if event.ExecCommandProgress == nil {
 			return nil
