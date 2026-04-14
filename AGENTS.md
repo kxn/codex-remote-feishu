@@ -327,7 +327,12 @@ When a change is intentionally committed during task work:
   - it fetches the target branch
   - if the remote branch moved ahead, it rebases onto it
   - after a successful rebase, it reruns tests, defaulting to `go test ./...`
-  - only then does it push
+  - after a successful rebase, it requires an explicit post-rebase audit before push
+  - that audit must re-check:
+    - whether the implementation direction still matches the intended plan
+    - whether the implementation still matches the intended behavior after rebasing
+  - if no drift is found, continue push
+  - if drift is found, fix it first, then continue and finish
 - If rebase conflicts or tests fail, stop and handle that manually; do not try to script conflict resolution into the helper.
 
 ## Branch Restoration Rule

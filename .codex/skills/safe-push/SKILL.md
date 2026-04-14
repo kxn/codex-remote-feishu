@@ -21,13 +21,24 @@ The helper only automates the safe happy path:
 2. `git fetch` the target branch
 3. if the remote branch moved ahead, `git rebase` onto it
 4. rerun `go test ./...` only when a rebase actually happened
-5. push only if all previous steps succeed
+5. if a rebase happened, require an explicit post-rebase review before push
+6. if no drift is found, continue push; if drift is found, fix it first and then continue push
 
 ## Important limits
 
 - It does not auto-resolve rebase conflicts.
 - It does not auto-handle test failures.
+- It does not auto-decide whether a rebase changed the intended direction or implementation.
 - On conflict or test failure, it stops and leaves the repo state visible for manual handling.
+- After a successful rebase, it requires a manual audit of:
+  - whether the implementation direction still matches the intended plan
+  - whether the implementation still matches the intended behavior after rebasing onto the latest branch state
+- If drift is found, fix it first, then continue.
+- In non-interactive shells, confirm the audit with:
+
+```bash
+./safe-push.sh --confirm-rebase-review
+```
 
 ## Useful variants
 
