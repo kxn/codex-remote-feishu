@@ -1498,6 +1498,7 @@ func TestRemoteTurnInterruptedWithProblemFailsQueueAndEmitsStructuredNotice(t *t
 		TurnID:    "turn-1",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
+	now = now.Add(2100 * time.Millisecond)
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:         agentproto.EventTurnCompleted,
@@ -1524,10 +1525,13 @@ func TestRemoteTurnInterruptedWithProblemFailsQueueAndEmitsStructuredNotice(t *t
 		t.Fatalf("expected interrupted remote turn with problem to fail queue item, got %#v", item)
 	}
 
-	var sawFailedPending, sawNotice bool
+	var sawFailedPending, sawNotice, sawFinalBlock bool
 	for _, event := range events {
 		if event.PendingInput != nil && event.PendingInput.QueueItemID == "queue-1" && event.PendingInput.Status == string(state.QueueItemFailed) {
 			sawFailedPending = true
+		}
+		if event.Block != nil && event.Block.Final {
+			sawFinalBlock = true
 		}
 		if event.Notice != nil && event.Notice.Code == "turn_failed" {
 			sawNotice = true
@@ -1538,6 +1542,86 @@ func TestRemoteTurnInterruptedWithProblemFailsQueueAndEmitsStructuredNotice(t *t
 	}
 	if !sawFailedPending || !sawNotice {
 		t.Fatalf("expected failed queue state and structured notice, got %#v", events)
+	}
+	if sawFinalBlock {
+		t.Fatalf("expected interrupted remote turn with no completed assistant text not to emit final block, got %#v", events)
+	}
+}
+
+func TestInterruptedTurnFlushesBufferedAssistantTextAsNonFinal(t *testing.T) {
+	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "agent_message",
+		Delta:    "先给你一个中间结果。",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-1",
+		ItemKind: "agent_message",
+	})
+	now = now.Add(2100 * time.Millisecond)
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnCompleted,
+		ThreadID:     "thread-1",
+		TurnID:       "turn-1",
+		Status:       "interrupted",
+		ErrorMessage: "stream disconnected before completion",
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+
+	var sawBufferedText, sawFinalBlock bool
+	for _, event := range events {
+		if event.Block != nil && strings.TrimSpace(event.Block.Text) == "先给你一个中间结果。" {
+			sawBufferedText = true
+			if event.Block.Final {
+				sawFinalBlock = true
+			}
+		}
+	}
+	if !sawBufferedText {
+		t.Fatalf("expected interrupted turn to flush buffered assistant text, got %#v", events)
+	}
+	if sawFinalBlock {
+		t.Fatalf("expected interrupted turn buffered text to stay non-final, got %#v", events)
 	}
 }
 

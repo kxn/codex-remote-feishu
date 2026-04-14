@@ -616,13 +616,20 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)
 		summary := s.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		finalText := pendingTurnTextValue(s.pendingTurnText, instanceID, event.ThreadID, event.TurnID)
+		finalizeTurnOutput := shouldFinalizeTurnOutput(event)
+		finalRenderSummary := (*control.FileChangeSummary)(nil)
+		finalRenderTurnSummary := (*control.FinalTurnSummary)(nil)
+		if finalizeTurnOutput {
+			finalRenderSummary = summary
+			finalRenderTurnSummary = finalTurnSummaryForBinding(s.now().UTC(), s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID), thread)
+		}
 		events := s.flushPendingTurnTextWithSummary(
 			instanceID,
 			event.ThreadID,
 			event.TurnID,
-			true,
-			summary,
-			finalTurnSummaryForBinding(s.now().UTC(), s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID), thread),
+			finalizeTurnOutput,
+			finalRenderSummary,
+			finalRenderTurnSummary,
 		)
 		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)
 		deleteMatchingTurnPlanSnapshots(s.turnPlanSnapshots, instanceID, event.ThreadID, event.TurnID)
@@ -654,6 +661,16 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 	default:
 		return s.filterEventsForSurfaceVisibility(preface)
 	}
+}
+
+func shouldFinalizeTurnOutput(event agentproto.Event) bool {
+	if event.Status != "completed" {
+		return false
+	}
+	if strings.TrimSpace(event.ErrorMessage) != "" {
+		return false
+	}
+	return event.Problem == nil
 }
 
 // Tick is the orchestrator's deadline driver.
