@@ -214,6 +214,33 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 				metadata["text"] = text
 			}
 		}
+	case "mcp_tool_call":
+		if server := firstNonEmptyString(
+			lookupStringFromAny(item["server"]),
+			lookupString(item, "invocation", "server"),
+		); server != "" {
+			metadata["server"] = server
+		}
+		if tool := firstNonEmptyString(
+			lookupStringFromAny(item["tool"]),
+			lookupStringFromAny(item["name"]),
+			lookupString(item, "invocation", "tool"),
+		); tool != "" {
+			metadata["tool"] = tool
+		}
+		if errorMessage := firstNonEmptyString(
+			lookupString(item, "error", "message"),
+			lookupStringFromAny(item["errorMessage"]),
+			lookupStringFromAny(item["error_message"]),
+			lookupStringFromAny(item["error"]),
+		); errorMessage != "" {
+			metadata["errorMessage"] = errorMessage
+		}
+		if durationMs := lookupIntFromAny(item["durationMs"]); durationMs != 0 || item["durationMs"] != nil {
+			metadata["durationMs"] = durationMs
+		} else if durationMs := lookupIntFromAny(item["duration_ms"]); durationMs != 0 || item["duration_ms"] != nil {
+			metadata["durationMs"] = durationMs
+		}
 	case "command_execution":
 		if command := firstNonEmptyString(
 			lookupStringFromAny(item["command"]),
