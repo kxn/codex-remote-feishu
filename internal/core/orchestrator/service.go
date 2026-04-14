@@ -34,6 +34,7 @@ type Service struct {
 	abandoningUntil      map[string]time.Time
 	itemBuffers          map[string]*itemBuffer
 	turnPlanSnapshots    map[string]*turnPlanSnapshotRecord
+	mcpToolCallProgress  map[string]*mcpToolCallProgressRecord
 	threadRefreshes      map[string]bool
 	pendingTurnText      map[string]*completedTextItem
 	turnFileChanges      map[string]*turnFileChangeSummary
@@ -182,6 +183,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		abandoningUntil:     map[string]time.Time{},
 		itemBuffers:         map[string]*itemBuffer{},
 		turnPlanSnapshots:   map[string]*turnPlanSnapshotRecord{},
+		mcpToolCallProgress: map[string]*mcpToolCallProgressRecord{},
 		threadRefreshes:     map[string]bool{},
 		pendingTurnText:     map[string]*completedTextItem{},
 		turnFileChanges:     map[string]*turnFileChangeSummary{},
@@ -624,6 +626,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		)
 		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)
 		deleteMatchingTurnPlanSnapshots(s.turnPlanSnapshots, instanceID, event.ThreadID, event.TurnID)
+		deleteMatchingMCPToolCallProgress(s.mcpToolCallProgress, instanceID, event.ThreadID, event.TurnID)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
 			if surface != nil {
@@ -634,12 +637,15 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(events, s.completeRemoteTurn(instanceID, event.ThreadID, event.TurnID, event.Status, event.ErrorMessage, event.Problem, finalText, summary)...))
 	case agentproto.EventItemStarted:
 		s.trackItemStart(instanceID, event)
-		return s.filterEventsForSurfaceVisibility(append(preface, s.handleExecCommandItemStarted(instanceID, event)...))
+		events := append(preface, s.handleExecCommandItemStarted(instanceID, event)...)
+		events = append(events, s.handleMCPToolCallItemProgress(instanceID, event)...)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleExecCommandItemDelta(instanceID, event)...))
 	case agentproto.EventItemCompleted:
 		events := append(preface, s.handleExecCommandItemCompleted(instanceID, event)...)
+		events = append(events, s.handleMCPToolCallItemProgress(instanceID, event)...)
 		events = append(events, s.completeItem(instanceID, event)...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestStarted:

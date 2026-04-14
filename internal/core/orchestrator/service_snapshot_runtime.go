@@ -686,6 +686,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 	delete(s.activeRemote, instanceID)
 	delete(s.threadRefreshes, instanceID)
 	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
+	deleteMatchingMCPToolCallProgress(s.mcpToolCallProgress, instanceID, "", "")
 	for key, item := range s.pendingTurnText {
 		if item == nil || item.InstanceID != instanceID {
 			continue

@@ -63,6 +63,8 @@ func classifySurfaceVisibleEvent(event control.UIEvent) surfaceVisibilityClass {
 	switch event.Kind {
 	case control.UIEventPlanUpdated:
 		return surfaceVisibilityPlan
+	case control.UIEventMCPToolCallProgress:
+		return surfaceVisibilityProgressText
 	case control.UIEventExecCommandProgress:
 		return surfaceVisibilityProgressText
 	case control.UIEventBlockCommitted:
