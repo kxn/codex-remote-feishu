@@ -123,6 +123,19 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		if len(questions) == 0 {
 			return notice(surface, "request_unsupported", "收到缺少问题定义的 request_user_input 请求，当前无法在飞书端处理。")
 		}
+	case "permissions_request_approval":
+		if title == "需要处理请求" {
+			title = "需要授予权限"
+		}
+		body = buildPermissionsRequestBody(event.RequestPrompt, event.Metadata)
+		options = buildPermissionsRequestOptions()
+	case "mcp_server_elicitation":
+		if title == "需要处理请求" {
+			title = "需要处理 MCP 请求"
+		}
+		body = buildMCPElicitationBody(event.RequestPrompt, event.Metadata)
+		questions = buildMCPElicitationQuestions(event.RequestPrompt, event.Metadata)
+		options = buildMCPElicitationOptions(event.RequestPrompt, event.Metadata, questions)
 	default:
 		if body == "" {
 			body = "本地 Codex 正在等待处理新的交互请求。"
@@ -302,6 +315,17 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 		}
 		clearRequestUserInputSubmitConfirmState(request)
 		return response, true, nil
+	case "permissions_request_approval":
+		response, complete, followup := buildPermissionsRequestResponse(request, action)
+		if followup != nil {
+			return nil, false, followup
+		}
+		if !complete || response == nil {
+			return nil, false, notice(surface, "request_invalid", "这个权限请求按钮无效或当前不支持。")
+		}
+		return response, true, nil
+	case "mcp_server_elicitation":
+		return s.buildMCPElicitationResponse(surface, request, action)
 	default:
 		return nil, false, notice(surface, "request_unsupported", fmt.Sprintf("飞书端暂不支持处理 %s 类型的请求。", requestType))
 	}

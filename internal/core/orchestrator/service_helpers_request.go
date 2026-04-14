@@ -30,7 +30,7 @@ func normalizeRequestType(value string) string {
 
 func requestPromptRenderable(requestType string) bool {
 	switch normalizeRequestType(requestType) {
-	case "approval", "request_user_input":
+	case "approval", "request_user_input", "permissions_request_approval", "mcp_server_elicitation":
 		return true
 	default:
 		return false
@@ -420,6 +420,10 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 		return "当前有待回答问题。请先在卡片上点击选项或提交表单。"
 	case "approval":
 		return "当前有待确认请求。请先点击卡片上的“允许一次”、“拒绝”或“告诉 Codex 怎么改”。"
+	case "permissions_request_approval":
+		return "当前有待授予权限请求。请先在卡片上选择“允许本次”、“本会话允许”或“拒绝”。"
+	case "mcp_server_elicitation":
+		return "当前有待处理的 MCP 请求。请先在卡片上填写返回内容，或选择继续/拒绝/取消。"
 	default:
 		return "当前有待处理请求。这个请求类型暂时不能在飞书端直接处理，请先回到本地处理或等待后续支持。"
 	}

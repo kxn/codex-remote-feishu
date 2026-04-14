@@ -20,9 +20,14 @@ func requestPromptBody(prompt control.FeishuDirectRequestPrompt) string {
 	}
 	body := strings.TrimSpace(prompt.Body)
 	if body == "" {
-		if prompt.RequestType == "request_user_input" {
+		switch normalizeRequestPromptType(prompt.RequestType) {
+		case "request_user_input":
 			body = "本地 Codex 正在等待你补充参数或说明。"
-		} else {
+		case "permissions_request_approval":
+			body = "本地 Codex 正在等待授予附加权限。"
+		case "mcp_server_elicitation":
+			body = "本地 Codex 正在等待 MCP server 返回更多信息。"
+		default:
 			body = "本地 Codex 正在等待你的确认。"
 		}
 	}
@@ -36,6 +41,16 @@ func requestPromptBody(prompt control.FeishuDirectRequestPrompt) string {
 }
 
 func requestPromptElements(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) []map[string]any {
+	switch normalizeRequestPromptType(prompt.RequestType) {
+	case "request_user_input":
+		if len(prompt.Questions) != 0 {
+			return requestUserInputPromptElements(prompt, daemonLifecycleID)
+		}
+	case "permissions_request_approval":
+		return permissionsRequestPromptElements(prompt, daemonLifecycleID)
+	case "mcp_server_elicitation":
+		return mcpElicitationPromptElements(prompt, daemonLifecycleID)
+	}
 	if normalizeRequestPromptType(prompt.RequestType) == "request_user_input" && len(prompt.Questions) != 0 {
 		return requestUserInputPromptElements(prompt, daemonLifecycleID)
 	}
@@ -277,7 +292,7 @@ func requestPromptFormElement(prompt control.FeishuDirectRequestPrompt, daemonLi
 	if len(elements) == 0 {
 		return nil
 	}
-	elements = append(elements, cardFormSubmitButtonElement("提交答案", stampActionValue(map[string]any{
+	elements = append(elements, cardFormSubmitButtonElement(requestPromptSubmitLabel(prompt), stampActionValue(map[string]any{
 		cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
 		cardActionPayloadKeyRequestID:       prompt.RequestID,
 		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
@@ -296,13 +311,20 @@ func requestPromptSubmitActionRow(prompt control.FeishuDirectRequestPrompt, daem
 		return nil
 	}
 	return cardButtonGroupElement([]map[string]any{
-		cardCallbackButtonElement("提交答案", "primary", stampActionValue(map[string]any{
+		cardCallbackButtonElement(requestPromptSubmitLabel(prompt), "primary", stampActionValue(map[string]any{
 			cardActionPayloadKeyKind:            cardActionKindRequestRespond,
 			cardActionPayloadKeyRequestID:       prompt.RequestID,
 			cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
 			cardActionPayloadKeyRequestOptionID: requestUserInputSubmitOptionID,
 		}, daemonLifecycleID), false, ""),
 	})
+}
+
+func requestPromptSubmitLabel(prompt control.FeishuDirectRequestPrompt) string {
+	if normalizeRequestPromptType(prompt.RequestType) == "mcp_server_elicitation" {
+		return "提交并继续"
+	}
+	return "提交答案"
 }
 
 func requestPromptSubmitConfirmActionRow(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {

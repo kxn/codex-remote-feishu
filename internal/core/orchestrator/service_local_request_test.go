@@ -636,15 +636,15 @@ func TestUnsupportedMCPRequestStoresPendingStateWithoutRenderingApprovalCard(t *
 		},
 	})
 
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_unsupported" {
-		t.Fatalf("expected unsupported notice, got %#v", events)
+	if len(events) != 1 || events[0].FeishuDirectRequestPrompt == nil {
+		t.Fatalf("expected renderable permissions request prompt, got %#v", events)
 	}
-	if events[0].FeishuDirectRequestPrompt != nil {
-		t.Fatalf("expected no approval-style request card for unsupported mcp request, got %#v", events[0].FeishuDirectRequestPrompt)
+	if events[0].FeishuDirectRequestPrompt.RequestType != "permissions_request_approval" {
+		t.Fatalf("unexpected request prompt payload: %#v", events[0].FeishuDirectRequestPrompt)
 	}
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-mcp-1"]
 	if record == nil || record.RequestType != "permissions_request_approval" {
-		t.Fatalf("expected pending unsupported request state, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
+		t.Fatalf("expected pending permissions request state, got %#v", svc.root.Surfaces["surface-1"].PendingRequests)
 	}
 	if record.Prompt == nil || record.Prompt.Type != agentproto.RequestTypePermissionsRequestApproval {
 		t.Fatalf("expected typed request prompt to be retained in state, got %#v", record)
