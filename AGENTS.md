@@ -355,7 +355,17 @@ For repository file-length enforcement:
 - `bash scripts/check/go-file-length.sh` is a mandatory repository gate, not an advisory reminder.
 - Do not bypass this gate with `git commit --no-verify`, by disabling hooks, or by treating an unrelated oversized file as acceptable background debt.
 - If a commit is blocked by an existing oversized file, the default next step is to split or otherwise reduce the offending file until the check passes.
+- Splitting for this gate must be structure-first, not line-count-first:
+  - before moving code, read the whole oversized file and identify its main responsibility clusters, state ownership points, and external API surface
+  - write a short split plan in the active issue or implementation notes that states target files and ownership boundaries
+  - split by cohesive responsibility boundaries (for example: transport/parsing, orchestration/state transitions, rendering/projection, persistence/io), not by arbitrary function count or contiguous line chunks
+  - keep behavior stable during the split unless behavior change is explicitly part of the same task, and avoid mixing unrelated refactors into a gate-driven split
+  - each new file should have a clear purpose, stable naming, and minimal cross-file back-and-forth dependencies
 - If fixing one oversized file reveals another existing oversized file, continue resolving the newly exposed blocker instead of bypassing the gate.
+- A split is not complete just because the line limit passes; it is complete only after:
+  - the affected package tests or equivalent validation pass
+  - imports/dependencies reflect the intended ownership boundaries instead of accidental circular flow via helper leakage
+  - any required design/state-machine docs are updated when logic ownership or lifecycle boundaries changed
 - Do not leave the repository in a state where future commits still require skipping the file-length check.
 
 ## Proxy Environment
