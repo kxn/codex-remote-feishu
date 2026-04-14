@@ -19,6 +19,7 @@ const (
 	ActionRemovedCommand              ActionKind = "surface.command.removed"
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
+	ActionShowHistory                 ActionKind = "surface.command.history"
 	ActionDebugCommand                ActionKind = "surface.command.debug"
 	ActionUpgradeCommand              ActionKind = "surface.command.upgrade"
 	ActionStartCommandCapture         ActionKind = "surface.command.capture.start"
@@ -61,6 +62,8 @@ const (
 	ActionTargetPickerSelectWorkspace ActionKind = "surface.target_picker.select_workspace"
 	ActionTargetPickerSelectSession   ActionKind = "surface.target_picker.select_session"
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
+	ActionHistoryPage                 ActionKind = "surface.history.page"
+	ActionHistoryDetail               ActionKind = "surface.history.detail"
 )
 
 type InboundLifecycleVerdict string
@@ -105,6 +108,7 @@ type Action struct {
 	InstanceID          string
 	WorkspaceKey        string
 	ThreadID            string
+	TurnID              string
 	ViewMode            string
 	Page                int
 	ReturnPage          int
@@ -507,6 +511,7 @@ const (
 	UIEventFeishuDirectRequestPrompt   UIEventKind = "request.prompt"
 	UIEventFeishuPathPicker            UIEventKind = "path.picker"
 	UIEventFeishuTargetPicker          UIEventKind = "target.picker"
+	UIEventFeishuThreadHistory         UIEventKind = "thread.history"
 	UIEventPendingInput                UIEventKind = "pending.input.state"
 	UIEventNotice                      UIEventKind = "notice"
 	UIEventPlanUpdated                 UIEventKind = "plan.updated"
@@ -565,6 +570,8 @@ type UIEvent struct {
 	FeishuPathPickerContext     *FeishuUIPathPickerContext
 	FeishuTargetPickerView      *FeishuTargetPickerView
 	FeishuTargetPickerContext   *FeishuUITargetPickerContext
+	FeishuThreadHistoryView     *FeishuThreadHistoryView
+	FeishuThreadHistoryContext  *FeishuUIThreadHistoryContext
 	PendingInput                *PendingInputState
 	Notice                      *Notice
 	PlanUpdate                  *PlanUpdate

@@ -182,6 +182,22 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event control.UIEve
 }
 
 func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.Operation) {
+	if event.FeishuThreadHistoryView != nil {
+		for _, operation := range operations {
+			if operation.Kind != feishu.OperationSendCard {
+				continue
+			}
+			if strings.TrimSpace(operation.MessageID) == "" {
+				continue
+			}
+			a.service.RecordThreadHistoryMessage(
+				event.SurfaceSessionID,
+				event.FeishuThreadHistoryView.PickerID,
+				operation.MessageID,
+			)
+			break
+		}
+	}
 	if event.ExecCommandProgress == nil {
 		return
 	}

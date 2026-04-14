@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`path_picker_*` / `target_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness，以及“当前仅 approval / request_user_input 渲染为 request 卡；尚未支持飞书直答的 MCP request type 只追加 unsupported notice、不生成伪 approval 卡”的边界、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；其中 `web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 仅 verbose 可见）。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness，以及“当前仅 approval / request_user_input 渲染为 request 卡；尚未支持飞书直答的 MCP request type 只追加 unsupported notice、不生成伪 approval 卡”的边界、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；其中 `web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 仅 verbose 可见）。
 
 ## 1. 文档定位
 
@@ -94,6 +94,7 @@
 | `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话` 的产品语义仍由 orchestrator 决定，并保持 append-only |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡。`/sendfile` 的文件模式 projector 当前会渲染成紧凑双 `select_static`：目录下拉触发 `enter`，文件下拉触发 `select` |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
+| bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把同一张卡同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回这张 history 卡 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；真正应用参数后仍进入产品状态变更，因此 apply 继续保持 append-only |
 | `request approve` / `request_user_input` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、`request_user_input` 的分题暂存、“提交答案”触发确认态、确认态留空提交与最终提交校验属于产品状态机。当前只有 approval 与 `request_user_input` 会真正投影成 request 卡；尚未支持飞书直答的 MCP request type 只保留产品门禁并追加 unsupported notice |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
@@ -161,6 +162,8 @@
 | `target_picker_select_workspace` | `picker_id`、`field_name` | unified target picker 的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
 | `target_picker_select_session` | `picker_id`、`field_name` | unified target picker 的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread 或 `new_thread` |
 | `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session` | unified target picker 的确认按钮；真正把当前表单值送到产品层执行 attach / switch / `新建会话` |
+| `history_page` | `picker_id`、`page` | `/history` 列表页翻页；命中当前 active history 时同步替换当前卡为 loading，然后异步重查当前 thread history |
+| `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；gateway 同样兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
 | `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
@@ -261,6 +264,9 @@
 - `ActionShowAllThreads`
 - `ActionShowScopedThreads`
 - `ActionShowWorkspaceThreads`
+- `ActionShowHistory`
+- `ActionHistoryPage`
+- `ActionHistoryDetail`
 - `ActionPathPickerEnter`
 - `ActionPathPickerUp`
 - `ActionPathPickerSelect`
@@ -273,6 +279,7 @@
 - `/menu` 分组内命令的阶段可见性当前已收束到统一策略：
   - `/follow` 仅在 `vscode_working` 可见
   - `/new` 仅在 `normal_working` 可见
+  - `/history` 当前不额外分阶段，normal / vscode 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
   - 其余命令默认可见
   - orchestrator 与 projector 共同复用该策略函数，避免两侧分叉
 - 当前所有可 replace 的 Feishu UI 导航，都采用同一套 lifecycle 策略：
@@ -306,6 +313,11 @@
 当前新增补充：
 
 - stamped 菜单命令里的非 inline 命令（例如 `/status`、`/list`、`/stop`、`/steerall`、`/new`、`/follow`、`/detach`）会先同步 replace 为“命令已提交”锚点卡，再继续 append 原命令结果卡。
+- `/history` 当前是单独的混合路径：
+  - bare `/history`、`history_page`、`history_detail` 都在 inline-replace allow-list 里
+  - card callback 命中时，daemon 会先同步 replace 当前卡为 loading history card
+  - 同一动作返回的 `thread.history.read` daemon command 仍会继续异步执行，不会因为同步 replace 而被吞掉
+  - 成功/失败结果会优先 patch 回同一张 history 卡；文本触发 `/history` 时则先 reply 一张 patchable history card，再在结果回来后 `message.patch`
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。

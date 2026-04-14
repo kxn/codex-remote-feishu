@@ -291,6 +291,8 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeInfo, elements),
 		}}
+	case control.UIEventFeishuThreadHistory:
+		return p.projectThreadHistory(chatID, event)
 	case control.UIEventPendingInput:
 		if event.PendingInput == nil {
 			return nil

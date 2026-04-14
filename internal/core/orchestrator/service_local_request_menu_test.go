@@ -171,7 +171,7 @@ func TestMenuActionNormalCurrentWorkGroupShowsNew(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/stop", "/steerall", "/new", "/sendfile"}
+	want := []string{"/stop", "/steerall", "/new", "/history", "/sendfile"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", got, want)
 	}
@@ -193,7 +193,7 @@ func TestMenuActionVSCodeCurrentWorkGroupHidesNew(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/stop", "/steerall", "/sendfile"}
+	want := []string{"/stop", "/steerall", "/history", "/sendfile"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("vscode current_work commands = %#v, want %#v", got, want)
 	}

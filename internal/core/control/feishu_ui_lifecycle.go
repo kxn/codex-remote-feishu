@@ -40,6 +40,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 	}
 	switch intent.Kind {
 	case FeishuUIIntentShowCommandMenu,
+		FeishuUIIntentShowHistory,
 		FeishuUIIntentShowModeCatalog,
 		FeishuUIIntentShowAutoContinueCatalog,
 		FeishuUIIntentShowReasoningCatalog,
@@ -58,7 +59,9 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentPathPickerUp,
 		FeishuUIIntentPathPickerSelect,
 		FeishuUIIntentTargetPickerSelectWorkspace,
-		FeishuUIIntentTargetPickerSelectSession:
+		FeishuUIIntentTargetPickerSelectSession,
+		FeishuUIIntentHistoryPage,
+		FeishuUIIntentHistoryDetail:
 		return true
 	default:
 		return false

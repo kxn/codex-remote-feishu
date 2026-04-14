@@ -47,6 +47,11 @@ func TestInlineCardReplacementPolicyActionSet(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "bare history",
+			action: Action{Kind: ActionShowHistory, Text: "/history"},
+			want:   true,
+		},
+		{
 			name:   "parameter apply",
 			action: Action{Kind: ActionModeCommand, Text: "/mode vscode"},
 			want:   false,
@@ -99,6 +104,16 @@ func TestInlineCardReplacementPolicyActionSet(t *testing.T) {
 		{
 			name:   "path picker navigation",
 			action: Action{Kind: ActionPathPickerEnter, PickerID: "picker-1", PickerEntry: "subdir"},
+			want:   true,
+		},
+		{
+			name:   "history page navigation",
+			action: Action{Kind: ActionHistoryPage, PickerID: "history-1", Page: 1},
+			want:   true,
+		},
+		{
+			name:   "history detail navigation",
+			action: Action{Kind: ActionHistoryDetail, PickerID: "history-1", TurnID: "turn-1"},
 			want:   true,
 		},
 		{

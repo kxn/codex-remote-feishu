@@ -570,16 +570,18 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. `/stop`
    2. `/steerall`
    3. `/new`
-   4. `/reasoning`
-   5. `/model`
-   6. `/access`
+   4. `/history`
+   5. `/reasoning`
+   6. `/model`
+   7. `/access`
 4. `vscode` working 首页前排固定为：
    1. `/stop`
    2. `/steerall`
-   3. `/reasoning`
-   4. `/model`
-   5. `/access`
-   6. `/follow`
+   3. `/history`
+   4. `/reasoning`
+   5. `/model`
+   6. `/access`
+   7. `/follow`
 5. `normal` working 首页与主路径里不再暴露 `/follow`。
 6. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
    1. `send settings`：`/reasoning`、`/model`、`/access`
@@ -999,6 +1001,7 @@ transport degraded retained attachment
 | `/list` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/newinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/new` | 拒绝 | `normal`: 允许；`vscode`: 拒绝 | `normal`: 允许；`vscode`: 拒绝 | 拒绝 | 拒绝 | 允许；若首条消息已 dispatching/running 则拒绝 |
+| `/history` | 提示先 `/list` 接管在线实例 | 提示先 `/use`，或直接发文本开启新会话 | 允许；读取当前选中 thread 的历史 | 提示先在 VS Code 里进入会话，或手动 `/use` | 允许；读取当前跟随 thread 的历史 | 提示先发送首条文本真正创建会话 |
 | `/killinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/use` `/useall` | `normal`: 二者都打开 unified target picker；`/list` 是更偏向换工作区，`/use`/`/useall` 是更偏向选会话；`vscode`: 拒绝并提示先 `/list` | `normal`: 二者都打开 target picker，`/use` 默认当前 workspace，`/useall` 允许跨 workspace；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `normal`: 二者都打开 target picker，允许在 confirm 时切到其他 workspace 或 `新建会话`；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | 允许打开 target picker；若仅有 unsent draft，confirm 前会先丢弃；若首条已 dispatching/running，则 confirm 时拒绝 route exit |
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许 | 允许 | 允许 | 拒绝并提示迁移 |
@@ -1058,6 +1061,8 @@ retained-offline overlay 额外规则：
 | `show_all_threads` | `ActionShowAllThreads` | normal mode 下重新打开 `/useall` target picker；vscode mode 下仍是当前实例全部会话视图 |
 | `show_all_thread_workspaces` | `ActionShowAllThreadWorkspaces` | normal mode 下重新打开 `/useall` target picker（兼容旧 grouped 总览展开动作） |
 | `show_recent_thread_workspaces` | `ActionShowRecentThreadWorkspaces` | normal mode 下重新打开 `/useall` target picker（兼容旧 grouped 总览返回动作） |
+| `history_page` | `ActionHistoryPage` | `/history` 列表页翻页；会先同步把当前卡切到 loading，再异步重查当前 thread history |
+| `history_detail` | `ActionHistoryDetail` | `/history` 进入某一轮详情，或在详情页前后切换；同样会先同步 loading，再异步回填结果 |
 | `target_picker_select_workspace` | `ActionTargetPickerSelectWorkspace` | unified target picker 的工作区下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_select_session` | `ActionTargetPickerSelectSession` | unified target picker 的会话下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_confirm` | `ActionTargetPickerConfirm` | unified target picker 的确认按钮；真正执行 attach / switch / `新建会话` |
@@ -1073,8 +1078,10 @@ retained-offline overlay 额外规则：
 
 1. `/new`
 2. 菜单 `new`
+3. `/history`
+4. 菜单 `history`
 
-二者都直接映射到 `ActionNewThread`。
+其中 `/new` / 菜单 `new` 都直接映射到 `ActionNewThread`；`/history` / 菜单 `history` 都映射到 `ActionShowHistory`。
 
 同时，文本命令里新增：
 
@@ -1096,8 +1103,11 @@ retained-offline overlay 额外规则：
    7. `ActionShowWorkspaceThreads`
    8. `ActionTargetPickerSelectWorkspace`
    9. `ActionTargetPickerSelectSession`
-   10. bare `ActionModeCommand` / `ActionAutoContinueCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
-2. 只有当这些动作命中 `InlineCardReplacementPolicy(...)`、来源卡片带有当前 daemon 的 lifecycle 标识、且 Feishu UI controller 只返回一个显式标记 `InlineReplaceCurrentCard` 的 `UIEvent` 时，才会走原地替换。
+   10. `ActionShowHistory`
+   11. `ActionHistoryPage`
+   12. `ActionHistoryDetail`
+   13. bare `ActionModeCommand` / `ActionAutoContinueCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
+2. 这些动作只要命中 `InlineCardReplacementPolicy(...)`、来源卡片带有当前 daemon 的 lifecycle 标识、且首个 `UIEvent` 显式标记 `InlineReplaceCurrentCard`，就会先走原地替换；若同一动作后面还带异步命令（当前就是 `/history` 的 `thread.history.read`），daemon 仍会继续执行后续事件，不会因为同步 replace 而提前终止。
 3. `/help` 这类静态目录卡、apply 终态、request prompt 终态、upgrade/debug 异步结果等仍然沿用 append-only 消息语义，不在这轮同步回包范围内。
 
 ## 8. 当前死状态审计结论

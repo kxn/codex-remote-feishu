@@ -28,6 +28,7 @@ type Service struct {
 	nextRequestCommandID int
 	nextPathPickerID     int
 	nextTargetPickerID   int
+	nextThreadHistoryID  int
 	nextHeadlessID       int
 	handoffUntil         map[string]time.Time
 	pausedUntil          map[string]time.Time
@@ -372,6 +373,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue)
 	case control.ActionShowCommandHelp:
 		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
+	case control.ActionShowHistory:
+		events = s.openThreadHistory(surface, action.MessageID, action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != "")
 	case control.ActionDebugCommand:
 		events = []control.UIEvent{{
 			Kind:             control.UIEventDaemonCommand,

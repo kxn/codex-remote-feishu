@@ -7,6 +7,7 @@ const (
 	cardActionPayloadKeyInstanceID            = "instance_id"
 	cardActionPayloadKeyWorkspaceKey          = "workspace_key"
 	cardActionPayloadKeyThreadID              = "thread_id"
+	cardActionPayloadKeyTurnID                = "turn_id"
 	cardActionPayloadKeyViewMode              = "view_mode"
 	cardActionPayloadKeyPage                  = "page"
 	cardActionPayloadKeyReturnPage            = "return_page"
@@ -30,6 +31,7 @@ const (
 	cardPathPickerFileSelectFieldName         = "path_picker_file"
 	cardTargetPickerWorkspaceFieldName        = "target_picker_workspace"
 	cardTargetPickerSessionFieldName          = "target_picker_session"
+	cardThreadHistoryTurnFieldName           = "thread_history_turn"
 	cardActionPayloadDefaultCommandFieldName  = "command_args"
 	cardActionKindAttachInstance              = "attach_instance"
 	cardActionKindAttachWorkspace             = "attach_workspace"
@@ -61,6 +63,8 @@ const (
 	cardActionKindTargetPickerSelectWorkspace = "target_picker_select_workspace"
 	cardActionKindTargetPickerSelectSession   = "target_picker_select_session"
 	cardActionKindTargetPickerConfirm         = "target_picker_confirm"
+	cardActionKindHistoryPage                 = "history_page"
+	cardActionKindHistoryDetail               = "history_detail"
 )
 
 func actionPayloadKind(value map[string]any) string {
@@ -226,4 +230,18 @@ func actionPayloadTargetPicker(kind, pickerID string) map[string]any {
 		cardActionPayloadKeyKind:     strings.TrimSpace(kind),
 		cardActionPayloadKeyPickerID: strings.TrimSpace(pickerID),
 	}
+}
+
+func actionPayloadThreadHistory(kind, pickerID, turnID string, page int) map[string]any {
+	payload := map[string]any{
+		cardActionPayloadKeyKind:     strings.TrimSpace(kind),
+		cardActionPayloadKeyPickerID: strings.TrimSpace(pickerID),
+	}
+	if page > 0 {
+		payload[cardActionPayloadKeyPage] = page
+	}
+	if strings.TrimSpace(turnID) != "" {
+		payload[cardActionPayloadKeyTurnID] = strings.TrimSpace(turnID)
+	}
+	return payload
 }

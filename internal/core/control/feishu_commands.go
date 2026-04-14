@@ -10,6 +10,7 @@ const (
 	FeishuCommandUse               = "use"
 	FeishuCommandUseAll            = "useall"
 	FeishuCommandNew               = "new"
+	FeishuCommandHistory           = "history"
 	FeishuCommandSendFile          = "sendfile"
 	FeishuCommandFollow            = "follow"
 	FeishuCommandDetach            = "detach"
@@ -195,6 +196,30 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "new", action: Action{Kind: ActionNewThread}},
 			{alias: "newthread", action: Action{Kind: ActionNewThread}},
 			{alias: "newinstance", action: Action{Kind: ActionRemovedCommand, Text: "new_instance"}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandHistory,
+			GroupID:          FeishuCommandGroupCurrentWork,
+			Title:            "查看会话历史",
+			CanonicalSlash:   "/history",
+			CanonicalMenuKey: "history",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "查看当前输入目标 thread 的历史 turn 列表，并在卡片里继续查看某一轮的详情。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+			RecommendedMenu: &FeishuRecommendedMenu{
+				Key:         "history",
+				Name:        "查看会话历史",
+				Description: "查看当前输入目标 thread 的历史 turn 列表，并可进入某一轮的详情。",
+			},
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/history", action: Action{Kind: ActionShowHistory, Text: "/history"}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "history", action: Action{Kind: ActionShowHistory, Text: "/history"}},
 		},
 	},
 	sendFileCommandSpec(),

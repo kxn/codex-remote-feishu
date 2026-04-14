@@ -198,6 +198,19 @@ func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceC
 	}
 }
 
+func (s *Service) buildFeishuThreadHistoryContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView) *control.FeishuUIThreadHistoryContext {
+	return &control.FeishuUIThreadHistoryContext{
+		DTOOwner:       control.FeishuUIDTOwnerThreadHistory,
+		Surface:        s.buildFeishuUISurfaceContext(surface),
+		PickerID:       strings.TrimSpace(view.PickerID),
+		ThreadID:       strings.TrimSpace(view.ThreadID),
+		Mode:           view.Mode,
+		Page:           view.Page,
+		SelectedTurnID: strings.TrimSpace(view.SelectedTurnID),
+		Loading:        view.Loading,
+	}
+}
+
 func (s *Service) feishuDirectSelectionPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) control.UIEvent {
 	return control.UIEvent{
 		Kind:                        control.UIEventFeishuDirectSelectionPrompt,
@@ -245,5 +258,17 @@ func (s *Service) targetPickerViewEvent(surface *state.SurfaceConsoleRecord, vie
 		InlineReplaceCurrentCard:  inline,
 		FeishuTargetPickerView:    &view,
 		FeishuTargetPickerContext: s.buildFeishuTargetPickerContextFromView(surface, view),
+	}
+}
+
+func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView, inline bool, sourceMessageID string) control.UIEvent {
+	return control.UIEvent{
+		Kind:                     control.UIEventFeishuThreadHistory,
+		GatewayID:                surface.GatewayID,
+		SurfaceSessionID:         surface.SurfaceSessionID,
+		SourceMessageID:          sourceMessageID,
+		InlineReplaceCurrentCard: inline,
+		FeishuThreadHistoryView:  &view,
+		FeishuThreadHistoryContext: s.buildFeishuThreadHistoryContextFromView(surface, view),
 	}
 }

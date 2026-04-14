@@ -14,6 +14,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 	switch intent.Kind {
 	case control.FeishuUIIntentShowCommandMenu:
 		return []control.UIEvent{s.commandViewEvent(surface, s.buildCommandMenuView(surface, intent.RawText))}
+	case control.FeishuUIIntentShowHistory:
+		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentShowModeCatalog:
 		return []control.UIEvent{s.commandViewEvent(surface, s.buildModeCommandView(surface))}
 	case control.FeishuUIIntentShowAutoContinueCatalog:
@@ -78,6 +80,10 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 		return s.handleTargetPickerSelectWorkspace(surface, intent.PickerID, intent.WorkspaceKey, intent.ActorUserID)
 	case control.FeishuUIIntentTargetPickerSelectSession:
 		return s.handleTargetPickerSelectSession(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID)
+	case control.FeishuUIIntentHistoryPage:
+		return s.handleThreadHistoryPage(surface, intent.PickerID, intent.Page, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentHistoryDetail:
+		return s.handleThreadHistoryDetail(surface, intent.PickerID, intent.TurnID, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
 	default:
 		return nil
 	}

@@ -11,6 +11,7 @@ const (
 	FeishuUIDTOwnerCommand      FeishuUIDTOwner = "feishu_command_view"
 	FeishuUIDTOwnerPathPicker   FeishuUIDTOwner = "feishu_path_picker_view"
 	FeishuUIDTOwnerTargetPicker FeishuUIDTOwner = "feishu_target_picker_view"
+	FeishuUIDTOwnerThreadHistory FeishuUIDTOwner = "feishu_thread_history_view"
 )
 
 // FeishuUICallbackPayloadOwner identifies the layer that owns callback payload
@@ -106,4 +107,17 @@ type FeishuUITargetPickerContext struct {
 	Title                string
 	SelectedWorkspaceKey string
 	SelectedSessionValue string
+}
+
+// FeishuUIThreadHistoryContext describes the stable query/policy inputs
+// backing the /history list/detail card flow.
+type FeishuUIThreadHistoryContext struct {
+	DTOOwner       FeishuUIDTOwner
+	Surface        FeishuUISurfaceContext
+	PickerID       string
+	ThreadID       string
+	Mode           FeishuThreadHistoryViewMode
+	Page           int
+	SelectedTurnID string
+	Loading        bool
 }

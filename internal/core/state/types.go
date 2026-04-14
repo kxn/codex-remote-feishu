@@ -187,6 +187,7 @@ type SurfaceConsoleRecord struct {
 	PromptOverride       ModelConfigRecord
 	PendingHeadless      *HeadlessLaunchRecord
 	ActiveTargetPicker   *ActiveTargetPickerRecord
+	ActiveThreadHistory  *ActiveThreadHistoryRecord
 	PendingRequests      map[string]*RequestPromptRecord
 	ActiveRequestCapture *RequestCaptureRecord
 	ActiveCommandCapture *CommandCaptureRecord

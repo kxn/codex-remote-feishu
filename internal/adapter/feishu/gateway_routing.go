@@ -482,6 +482,52 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			TargetPickerValue: selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSessionFieldName),
 			Inbound:           meta,
 		}, true
+	case cardActionKindHistoryPage:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		if pickerID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionHistoryPage,
+			GatewayID:        g.config.GatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         pickerID,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Inbound:          meta,
+		}, true
+	case cardActionKindHistoryDetail:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		if pickerID == "" {
+			return control.Action{}, false
+		}
+		turnID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTurnID))
+		if turnID == "" {
+			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+			if fieldName == "" {
+				fieldName = cardThreadHistoryTurnFieldName
+			}
+			turnID = selectStaticFormValue(event.Event.Action.FormValue, fieldName)
+			if turnID == "" {
+				turnID = pathPickerSelectedEntryName(event, fieldName)
+			}
+		}
+		if turnID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionHistoryDetail,
+			GatewayID:        g.config.GatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         pickerID,
+			TurnID:           turnID,
+			Inbound:          meta,
+		}, true
 	default:
 		return control.Action{}, false
 	}

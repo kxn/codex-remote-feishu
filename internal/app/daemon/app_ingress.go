@@ -233,8 +233,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		return nil
 	}
 	events := a.applyIngressActionLocked(action)
-	appendEvents := events
-	inlineResult := a.inlineCardActionResultLocked(action, events)
+	inlineResult, appendEvents := a.inlineCardActionResultLocked(action, events)
 	commandSubmissionAnchorReplace := false
 	if inlineResult == nil {
 		inlineResult, appendEvents = a.bareCommandContinuationResultLocked(action, events)
@@ -244,7 +243,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		commandSubmissionAnchorReplace = inlineResult != nil
 	}
 	inlineNavigationReplace := inlineResult != nil && control.AllowsInlineCardReplacement(action)
-	if !inlineNavigationReplace {
+	if !inlineNavigationReplace || len(appendEvents) != 0 {
 		a.handleUIEvents(ctx, appendEvents)
 	}
 	if commandSubmissionAnchorReplace {
@@ -277,20 +276,20 @@ func (a *App) applyIngressActionLocked(action control.Action) []control.UIEvent 
 	return a.service.ApplySurfaceAction(action)
 }
 
-func (a *App) inlineCardActionResultLocked(action control.Action, events []control.UIEvent) *feishu.ActionResult {
-	if !control.AllowsInlineCardReplacement(action) || len(events) != 1 {
-		return nil
+func (a *App) inlineCardActionResultLocked(action control.Action, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
+	if !control.AllowsInlineCardReplacement(action) || len(events) == 0 {
+		return nil, events
 	}
 	event := events[0]
 	if !event.InlineReplaceCurrentCard || event.Command != nil || event.DaemonCommand != nil {
-		return nil
+		return nil, events
 	}
 	event.DaemonLifecycleID = a.daemonLifecycleID
 	ops := a.projector.Project(a.service.SurfaceChatID(event.SurfaceSessionID), event)
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard {
-		return nil
+		return nil, events
 	}
-	return &feishu.ActionResult{ReplaceCurrentCard: &ops[0]}
+	return &feishu.ActionResult{ReplaceCurrentCard: &ops[0]}, events[1:]
 }
 
 func (a *App) commandSubmissionAnchorResultLocked(action control.Action) *feishu.ActionResult {

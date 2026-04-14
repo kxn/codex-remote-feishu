@@ -12,6 +12,9 @@ func (a *App) handleThreadHistoryDaemonCommand(command control.DaemonCommand) []
 	instanceID := strings.TrimSpace(command.InstanceID)
 	threadID := strings.TrimSpace(command.ThreadID)
 	if surfaceID == "" || instanceID == "" || threadID == "" {
+		if events := a.service.HandleSurfaceThreadHistoryFailure(surfaceID, "history_query_invalid", "history 查询参数不完整。"); len(events) != 0 {
+			return events
+		}
 		return []control.UIEvent{{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surfaceID,
@@ -36,6 +39,9 @@ func (a *App) handleThreadHistoryDaemonCommand(command control.DaemonCommand) []
 		},
 	}
 	if err := a.sendAgentCommand(instanceID, agentCommand); err != nil {
+		if events := a.service.HandleSurfaceThreadHistoryFailure(surfaceID, "history_query_dispatch_failed", "history 查询未成功发送到本地 Codex。"); len(events) != 0 {
+			return events
+		}
 		return []control.UIEvent{{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surfaceID,
@@ -63,6 +69,9 @@ func (a *App) handleThreadHistoryCommandAckLocked(instanceID string, ack agentpr
 		return nil, true
 	}
 	delete(a.pendingThreadHistoryReads, commandID)
+	if events := a.service.HandleSurfaceThreadHistoryFailure(pending.SurfaceSessionID, "history_query_rejected", "本地 Codex 拒绝了这次 history 查询。"); len(events) != 0 {
+		return events, true
+	}
 	return []control.UIEvent{{
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: pending.SurfaceSessionID,
@@ -86,6 +95,9 @@ func (a *App) handleThreadHistoryEventLocked(instanceID string, event agentproto
 		return nil, true
 	}
 	if pending.ThreadID != "" && pending.ThreadID != strings.TrimSpace(event.ThreadID) && pending.ThreadID != strings.TrimSpace(event.ThreadHistory.Thread.ThreadID) {
+		if events := a.service.HandleSurfaceThreadHistoryFailure(pending.SurfaceSessionID, "history_query_stale", "history 查询结果已过期。"); len(events) != 0 {
+			return events, true
+		}
 		return []control.UIEvent{{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: pending.SurfaceSessionID,
@@ -96,5 +108,5 @@ func (a *App) handleThreadHistoryEventLocked(instanceID string, event agentproto
 		}}, true
 	}
 	a.service.RecordSurfaceThreadHistory(pending.SurfaceSessionID, *event.ThreadHistory)
-	return nil, true
+	return a.service.HandleSurfaceThreadHistoryLoaded(pending.SurfaceSessionID), true
 }

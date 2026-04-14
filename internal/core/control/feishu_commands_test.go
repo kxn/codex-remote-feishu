@@ -174,6 +174,16 @@ func TestParseFeishuTextActionRecognizesSendFileCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesHistoryCommand(t *testing.T) {
+	action, ok := ParseFeishuTextAction("/history")
+	if !ok {
+		t.Fatal("expected /history to be parsed")
+	}
+	if action.Kind != ActionShowHistory {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionShowHistory)
+	}
+}
+
 func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
 	cases := []struct {
 		name    string
