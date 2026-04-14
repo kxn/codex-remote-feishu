@@ -319,6 +319,7 @@ For staged delivery against an implementable issue:
    - Prefer tests and validation that exercise the changed behavior and runtime path, not only compilation or superficial smoke checks.
 9. After each stage-end commit, immediately reassess how that completed work affects the next stage before continuing.
 10. If implementation discovers a better stage split, update the plan first, then continue under the revised stages.
+11. Staged local-only commits are allowed for intermediate stages when explicitly requested, but once the final stage is complete, push the final result before issue close-out.
 
 For explicit `fast` path execution against an implementable issue:
 
@@ -347,7 +348,7 @@ When closing an issue, leave a short completion note that includes:
 When a change is intentionally committed during task work:
 
 - Push it to GitHub in the same turn by default.
-- Exception: when the user explicitly requests staged local-only commits between phases, follow `GitHub Issue Workflow` and do not push until the staged rollout is complete or the user asks for a push.
+- Exception: when the user explicitly requests staged local-only commits between phases, follow `GitHub Issue Workflow`; intermediate stages may stay local, but the final stage completion must be pushed before issue close-out (unless the user explicitly asks not to push yet).
 - Exception: when applying `Clean Worktree Stop Rule` at a pause boundary and no push was requested, a local commit may be kept and pushed later.
 - Do not leave a local-only commit behind unless one of the above exceptions applies.
 - For the common happy path, prefer `./safe-push.sh` from the repo root instead of manually doing `fetch -> rebase -> retest -> push`.
