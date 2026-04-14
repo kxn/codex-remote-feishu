@@ -280,7 +280,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
 3. 会话下拉始终基于当前选中的 workspace 动态重建。
    1. 先列该 workspace 下当前可接管或可恢复的 thread。
    2. 最后一项固定追加 `新建会话`。
-   3. 若 surface 当前已经在该 workspace 的 `R5 NewThreadReady`，默认选中 `新建会话`；否则优先当前 thread，再回退到第一个可恢复 thread。
+   3. picker 首次打开时，若 surface 当前已经在该 workspace 的 `R5 NewThreadReady`，默认选中 `新建会话`；否则优先当前 thread，再回退到第一个可恢复 thread。
+   4. 只要用户随后切换了工作区，当前会话选择就会被显式清空，卡片回到“未选会话”占位态；必须重新选择后才能 confirm，不再 silent fallback 到新的默认会话。
 4. 选择工作区或会话时，只会刷新 target picker 本身，不会立即 attach / switch / create。
    1. `target_picker_select_workspace`
    2. `target_picker_select_session`

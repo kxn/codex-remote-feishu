@@ -89,3 +89,44 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 		t.Fatalf("expected target picker payload kinds, got %#v", actions)
 	}
 }
+
+func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:             "picker-1",
+		Title:                "选择工作区与会话",
+		WorkspacePlaceholder: "选择工作区",
+		SessionPlaceholder:   "选择会话",
+		SelectedWorkspaceKey: "/data/dl/web",
+		ConfirmLabel:         "使用会话",
+		CanConfirm:           false,
+		WorkspaceOptions: []control.FeishuTargetPickerWorkspaceOption{
+			{Value: "/data/dl/web", Label: "web", MetaText: "刚刚"},
+		},
+		SessionOptions: []control.FeishuTargetPickerSessionOption{
+			{Value: "thread:thread-2", Kind: control.FeishuTargetPickerSessionThread, Label: "web · 整理样式", MetaText: "刚刚"},
+			{Value: "new_thread", Kind: control.FeishuTargetPickerSessionNewThread, Label: "新建会话", MetaText: "在这个工作区里开始一个新的会话"},
+		},
+	}, "life-2")
+
+	var sessionSelect map[string]any
+	for _, element := range elements {
+		if cardStringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerSessionFieldName {
+			sessionSelect = element
+		}
+	}
+	if sessionSelect == nil {
+		t.Fatalf("expected session select element, got %#v", elements)
+	}
+	if _, ok := sessionSelect["initial_option"]; ok {
+		t.Fatalf("expected empty session selection to use placeholder, got %#v", sessionSelect)
+	}
+	var sawDisabledConfirm bool
+	for _, action := range cardActionsFromElements(elements) {
+		if cardValueMap(action)[cardActionPayloadKeyKind] == cardActionKindTargetPickerConfirm && action["disabled"] == true {
+			sawDisabledConfirm = true
+		}
+	}
+	if !sawDisabledConfirm {
+		t.Fatalf("expected confirm button to stay disabled, got %#v", elements)
+	}
+}

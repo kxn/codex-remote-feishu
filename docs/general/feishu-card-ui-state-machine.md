@@ -90,7 +90,7 @@
 | `create_workspace` | `mixed` | 旧 normal `/list` 卡片残留的 transport 兼容入口；点击后仍会打开目录模式 path picker，但当前 unified target picker 主路径不再默认暴露它 |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/use` / `/useall` target picker；vscode mode 下仍沿用 thread selection / scoped-all 导航 |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责用指定 workspace/source 重新打开 target picker；vscode / legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的双下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route |
+| `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的双下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route；其中切换工作区会显式清空当前会话选择，回到 placeholder 态 |
 | `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话` 的产品语义仍由 orchestrator 决定，并保持 append-only |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡。`/sendfile` 的文件模式 projector 当前会渲染成紧凑双 `select_static`：目录下拉触发 `enter`，文件下拉触发 `select` |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
@@ -280,6 +280,10 @@
   - normal `/list` / `/use` / `/useall` 的会话切换
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
+- unified target picker 当前额外有一条明确的 UI 语义：
+  - picker 首次打开时仍可带一个推荐默认会话
+  - 但工作区一旦变化，session 下拉会被主动清空，不再偷偷换成新 workspace 的默认项
+  - confirm 按钮会随之禁用，直到用户重新选定会话
 
 ### 5.3 当前明确保持 append-only 的动作
 
@@ -351,7 +355,8 @@
   - target picker 当前也有一个 coarse-grained `picker_id`
     - `target_picker_select_workspace` / `target_picker_select_session` 必须命中当前 active picker，才会继续 inline replace
     - `target_picker_confirm` 还会额外校验当前工作区 / 会话候选是否仍包含用户刚刚提交的组合
-    - 同 daemon 生命周期里的旧 target picker 如果 `picker_id` 不匹配或候选已变化，会返回 `target_picker_expired` 或 `target_picker_selection_changed`，不会 silent fallback 到别的默认候选
+    - 同 daemon 生命周期里的旧 target picker 如果 `picker_id` 不匹配或候选已变化，会返回 `target_picker_expired` 或 `target_picker_selection_changed`
+    - 当前即使只是“原会话已不再有效”，刷新后的最新 picker 也会把 session 重新置空，而不是 silent fallback 到别的默认候选
 
 因此当前的 same-daemon 并发点击 / 旧 view 点击策略是：
 

@@ -13,6 +13,7 @@ const (
 	defaultTargetPickerTTL     = 10 * time.Minute
 	targetPickerNewThreadValue = "new_thread"
 	targetPickerThreadPrefix   = "thread:"
+	targetPickerAutoSession    = "__auto__"
 )
 
 func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, preferredWorkspaceKey string, inline bool) []control.UIEvent {
@@ -46,7 +47,7 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		OwnerUserID:          strings.TrimSpace(firstNonEmpty(surface.ActorUserID)),
 		Source:               source,
 		SelectedWorkspaceKey: preferredWorkspaceKey,
-		SelectedSessionValue: "",
+		SelectedSessionValue: targetPickerAutoSession,
 		CreatedAt:            s.now(),
 		ExpiresAt:            expiresAt,
 	}, nil
@@ -224,11 +225,13 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 
 	sessionOptions := s.targetPickerSessionOptions(surface, selectedWorkspace)
 	selectedSession := strings.TrimSpace(record.SelectedSessionValue)
-	if !targetPickerHasSessionOption(sessionOptions, selectedSession) {
+	switch {
+	case selectedSession == targetPickerAutoSession:
 		selectedSession = s.defaultTargetPickerSessionValue(surface, selectedWorkspace, sessionOptions)
-	}
-	if !targetPickerHasSessionOption(sessionOptions, selectedSession) && len(sessionOptions) != 0 {
-		selectedSession = sessionOptions[0].Value
+	case selectedSession == "":
+		// Keep the session dropdown visibly empty after a workspace switch.
+	case !targetPickerHasSessionOption(sessionOptions, selectedSession):
+		selectedSession = ""
 	}
 	record.SelectedSessionValue = selectedSession
 

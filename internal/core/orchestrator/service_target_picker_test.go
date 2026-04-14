@@ -62,6 +62,12 @@ func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-web")); ok {
 		t.Fatalf("expected other workspace session to disappear after refresh, got %#v", view.SessionOptions)
 	}
+	if view.SelectedSessionValue != "" {
+		t.Fatalf("expected session selection to clear after workspace switch, got %#v", view)
+	}
+	if view.CanConfirm {
+		t.Fatalf("expected confirm to stay disabled until a new session is chosen, got %#v", view)
+	}
 }
 
 func TestTargetPickerConfirmExistingThreadAttachesSelection(t *testing.T) {
@@ -286,6 +292,9 @@ func TestTargetPickerConfirmRejectsStaleSessionFallback(t *testing.T) {
 	for _, event := range events {
 		if event.FeishuTargetPickerView != nil {
 			sawRefresh = true
+			if event.FeishuTargetPickerView.SelectedSessionValue != "" || event.FeishuTargetPickerView.CanConfirm {
+				t.Fatalf("expected refreshed picker to clear stale session selection, got %#v", event.FeishuTargetPickerView)
+			}
 		}
 		if event.Notice != nil && event.Notice.Code == "target_picker_selection_changed" {
 			sawNotice = true
