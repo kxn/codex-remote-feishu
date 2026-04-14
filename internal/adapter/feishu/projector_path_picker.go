@@ -9,6 +9,13 @@ import (
 )
 
 func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
+	if view.Mode == control.PathPickerModeFile {
+		return fileModePathPickerElements(view, daemonLifecycleID)
+	}
+	return defaultPathPickerElements(view, daemonLifecycleID)
+}
+
+func defaultPathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(view.Entries)*2+8)
 	elements = append(elements, map[string]any{
 		"tag":     "markdown",
@@ -61,6 +68,79 @@ func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID str
 	return elements
 }
 
+func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
+	elements := make([]map[string]any, 0, 10)
+	summaryLines := []string{
+		"**当前目录**\n" + formatNeutralTextTag(view.CurrentPath),
+		"**允许范围**\n" + formatNeutralTextTag(view.RootPath),
+	}
+	selectedPath := strings.TrimSpace(view.SelectedPath)
+	if selectedPath != "" {
+		summaryLines = append(summaryLines, "**待发送文件**\n"+formatNeutralTextTag(selectedPath))
+	} else {
+		summaryLines = append(summaryLines, "**待发送文件**\n"+formatNeutralTextTag("未选择"))
+	}
+	elements = append(elements, map[string]any{
+		"tag":     "markdown",
+		"content": strings.Join(summaryLines, "\n"),
+	})
+
+	directoryOptions, _ := pathPickerSelectStaticOptions(view, control.PathPickerEntryDirectory)
+	if len(directoryOptions) != 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**进入目录**",
+		})
+		elements = append(elements, pathPickerSelectStaticElement(
+			cardPathPickerDirectorySelectFieldName,
+			"选择子目录并进入",
+			stampActionValue(pathPickerFieldActionPayload(cardActionKindPathPickerEnter, view.PickerID, cardPathPickerDirectorySelectFieldName), daemonLifecycleID),
+			directoryOptions,
+			"",
+		))
+	}
+
+	fileOptions, selectedOption := pathPickerSelectStaticOptions(view, control.PathPickerEntryFile)
+	if len(fileOptions) != 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**选择文件**",
+		})
+		elements = append(elements, pathPickerSelectStaticElement(
+			cardPathPickerFileSelectFieldName,
+			"选择待发送文件",
+			stampActionValue(pathPickerFieldActionPayload(cardActionKindPathPickerSelect, view.PickerID, cardPathPickerFileSelectFieldName), daemonLifecycleID),
+			fileOptions,
+			selectedOption,
+		))
+	}
+
+	if len(directoryOptions) == 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "当前目录下没有可进入的子目录。",
+		})
+	}
+	if len(fileOptions) == 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "当前目录下没有可发送文件。",
+		})
+	}
+	if hint := strings.TrimSpace(view.Hint); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(hint),
+		})
+	}
+	elements = append(elements, cardButtonGroupElement([]map[string]any{
+		cardCallbackButtonElement("上一级", "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerUp, view.PickerID, ""), daemonLifecycleID), !view.CanGoUp, ""),
+		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
+		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
+	}))
+	return elements
+}
+
 func pathPickerEntryLine(entry control.FeishuPathPickerEntry) string {
 	name := strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name))
 	kind := "文件"
@@ -97,4 +177,59 @@ func pathPickerEntryButton(view control.FeishuPathPickerView, entry control.Feis
 		label = "选择 · " + filepath.Base(strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name)))
 	}
 	return cardCallbackButtonElement(label, buttonType, stampActionValue(actionPayloadPathPicker(kind, view.PickerID, entry.Name), daemonLifecycleID), false, "fill")
+}
+
+func pathPickerSelectStaticOptions(view control.FeishuPathPickerView, kind control.PathPickerEntryKind) ([]map[string]any, string) {
+	options := make([]map[string]any, 0, len(view.Entries))
+	initialOption := ""
+	for _, entry := range view.Entries {
+		if entry.Disabled || entry.Kind != kind {
+			continue
+		}
+		value := strings.TrimSpace(entry.Name)
+		if value == "" {
+			continue
+		}
+		options = append(options, map[string]any{
+			"text":  cardPlainText(pathPickerSelectStaticLabel(entry)),
+			"value": value,
+		})
+		if entry.Selected {
+			initialOption = value
+		}
+	}
+	return options, initialOption
+}
+
+func pathPickerSelectStaticLabel(entry control.FeishuPathPickerEntry) string {
+	label := strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name))
+	if entry.Kind == control.PathPickerEntryDirectory {
+		return label + "/"
+	}
+	return label
+}
+
+func pathPickerSelectStaticElement(name, placeholder string, payload map[string]any, options []map[string]any, initialOption string) map[string]any {
+	element := map[string]any{
+		"tag":         "select_static",
+		"name":        strings.TrimSpace(name),
+		"placeholder": cardPlainText(placeholder),
+		"options":     options,
+		"behaviors": []map[string]any{{
+			"type":  "callback",
+			"value": cloneCardMap(payload),
+		}},
+	}
+	if strings.TrimSpace(initialOption) != "" {
+		element["initial_option"] = strings.TrimSpace(initialOption)
+	}
+	return element
+}
+
+func pathPickerFieldActionPayload(kind, pickerID, fieldName string) map[string]any {
+	payload := actionPayloadPathPicker(kind, pickerID, "")
+	if strings.TrimSpace(fieldName) != "" {
+		payload[cardActionPayloadKeyFieldName] = strings.TrimSpace(fieldName)
+	}
+	return payload
 }

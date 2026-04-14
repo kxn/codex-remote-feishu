@@ -382,6 +382,9 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindPathPickerEnter, cardActionKindPathPickerSelect:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		entryName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyEntryName))
+		if entryName == "" {
+			entryName = pathPickerSelectedEntryName(event, strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName)))
+		}
 		if pickerID == "" || entryName == "" {
 			return control.Action{}, false
 		}
@@ -443,6 +446,57 @@ func formStringValue(values map[string]interface{}, key string) string {
 	default:
 		return fmt.Sprint(raw)
 	}
+}
+
+func pathPickerSelectedEntryName(event *larkcallback.CardActionTriggerEvent, fieldName string) string {
+	if event == nil || event.Event == nil || event.Event.Action == nil {
+		return ""
+	}
+	action := event.Event.Action
+	if option := strings.TrimSpace(action.Option); option != "" {
+		return option
+	}
+	for _, option := range action.Options {
+		if option = strings.TrimSpace(option); option != "" {
+			return option
+		}
+	}
+	if fieldName != "" {
+		return selectStaticFormValue(action.FormValue, fieldName)
+	}
+	return ""
+}
+
+func selectStaticFormValue(values map[string]interface{}, key string) string {
+	if len(values) == 0 || strings.TrimSpace(key) == "" {
+		return ""
+	}
+	raw, ok := values[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	switch typed := raw.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []string:
+		for _, item := range typed {
+			if item = strings.TrimSpace(item); item != "" {
+				return item
+			}
+		}
+	case []interface{}:
+		for _, item := range typed {
+			if item == nil {
+				continue
+			}
+			if text := strings.TrimSpace(fmt.Sprint(item)); text != "" {
+				return text
+			}
+		}
+	default:
+		return strings.TrimSpace(fmt.Sprint(raw))
+	}
+	return ""
 }
 
 func requestAnswersFromValue(values map[string]interface{}) map[string][]string {

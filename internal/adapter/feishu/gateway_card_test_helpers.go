@@ -90,6 +90,8 @@ func cardActionsFromElements(elements []map[string]any) []map[string]any {
 		switch cardStringValue(element["tag"]) {
 		case "button":
 			actions = append(actions, element)
+		case "select_static":
+			actions = append(actions, element)
 		case "action":
 			for _, button := range cardButtonArray(element["actions"]) {
 				actions = append(actions, button)

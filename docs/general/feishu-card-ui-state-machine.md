@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode），以及无回调的 `exec_command` 共享更新卡（首次 reply，后续 `message.patch` 同卡更新，正文出现后终结）。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、`/sendfile` 文件模式 path picker 的紧凑 V2 双下拉（目录下拉即时进入、文件下拉只更新待发送文件、真正发送仍由 confirm 按钮触发）、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode），以及无回调的 `exec_command` 共享更新卡（首次 reply，后续 `message.patch` 同卡更新，正文出现后终结）。
 
 ## 1. 文档定位
 
@@ -64,7 +64,7 @@
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
-  - 负责把当前需要的 callback payload 字段写进卡片按钮/表单
+  - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
   - 对 `exec_command` 进度卡，负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新
   - 当前是 selection 与 command/config cards 最终 projection 的 owner：
     [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
@@ -87,7 +87,7 @@
 | `create_workspace` | `mixed` | 当前由 Feishu UI 层把 normal `/list` 里的“从目录新建工作区”按钮送到产品层；点击后会打开目录模式 path picker，真正的 workspace 创建/复用与 route 落点仍由 orchestrator 决定 |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 thread 列表分页与 scoped/all 视图切换；真正接管 thread 不在这里发生 |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/useall` 工作区总览分页、单 workspace 详情分页与“返回分组”；不直接改变 selected thread |
-| `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡 |
+| `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡。`/sendfile` 的文件模式 projector 当前会渲染成紧凑双 `select_static`：目录下拉触发 `enter`，文件下拉触发 `select` |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；真正应用参数后仍进入产品状态变更，因此 apply 继续保持 append-only |
 | `request approve` / `request_user_input` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、`request_user_input` 的分题暂存、“提交答案”触发确认态、确认态留空提交与最终提交校验属于产品状态机 |
@@ -149,9 +149,9 @@
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | 在 `/useall` 工作区总览里切页 |
 | `show_workspace_threads` | `workspace_key`、`page`、`return_page` | 进入某个 workspace 的会话详情，或在详情里切页；`return_page` 用于“返回分组”回到原总览页 |
 | `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
-| `path_picker_enter` | `picker_id`、`entry_name` | 进入当前 active picker 里的一个子目录 |
+| `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
-| `path_picker_select` | `picker_id`、`entry_name` | 在当前 active picker 里选择一个文件或目录 |
+| `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
 | `path_picker_confirm` | `picker_id` | 用当前 active picker 的已校验结果触发 consumer handoff |
 | `path_picker_cancel` | `picker_id` | 结束当前 active picker，并把取消结果交给 consumer 或默认 notice |
 | `request_respond` | `request_id`、`request_type`、`request_option_id`、`request_answers`、`request_revision` | 响应 approval 或 `request_user_input`；`request_user_input` 可携带局部 `request_answers` 进入分题暂存，`request_option_id=submit` 触发“提交答案”语义，未答题时会进入确认态；`request_option_id=confirm_submit_with_unanswered` 触发留空确认提交，`request_option_id=cancel_submit_with_unanswered` 退出确认态，`request_option_id=submit_with_unanswered` 保持兼容 |
@@ -179,6 +179,11 @@
     - `request_option_id=confirm_submit_with_unanswered`：确认留空提交
     - `request_option_id=cancel_submit_with_unanswered`：返回继续补答
   - 若表单没有字段值，再回退 `input_value`
+- `path_picker_enter` / `path_picker_select`
+  - 旧按钮路径继续直接读取 `entry_name`
+  - `select_static` 路径允许 payload 只带 `field_name`
+  - gateway 当前按 `action.option -> action.options[0] -> form_value[field_name]` 的顺序提取被选中的目录/文件条目
+  - 这样 projector 可以把 `/sendfile` 文件模式 path picker 收敛成紧凑双下拉，而不必继续为每个条目单独渲染按钮
 
 `request_user_input` 卡片当前额外的可视语义：
 

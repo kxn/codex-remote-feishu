@@ -62,6 +62,18 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 	if len(actions) < 5 {
 		t.Fatalf("expected picker navigation and entry actions, got %#v", actions)
 	}
+	selectCount := 0
+	for _, element := range elements {
+		if element["tag"] == "select_static" {
+			selectCount++
+		}
+	}
+	if selectCount != 2 {
+		t.Fatalf("expected compact file picker to render two selects, got %#v", elements)
+	}
+	if containsButtonLabel(elements, "进入 · subdir") || containsButtonLabel(elements, "选择 · a.txt") {
+		t.Fatalf("expected compact file picker to avoid per-entry buttons, got %#v", elements)
+	}
 	foundEnter := false
 	foundSelect := false
 	for _, action := range actions {

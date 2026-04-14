@@ -11,6 +11,9 @@ func TestParseCardActionTriggerEventBuildsPathPickerEntryActions(t *testing.T) {
 	tests := []struct {
 		name       string
 		payload    map[string]any
+		option     string
+		options    []string
+		formValue  map[string]interface{}
 		wantKind   control.ActionKind
 		wantPicker string
 		wantEntry  string
@@ -37,6 +40,44 @@ func TestParseCardActionTriggerEventBuildsPathPickerEntryActions(t *testing.T) {
 			wantPicker: "picker-1",
 			wantEntry:  "a.txt",
 		},
+		{
+			name: "enter from select option",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerEnter,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerDirectorySelectFieldName,
+			},
+			option:     "subdir",
+			wantKind:   control.ActionPathPickerEnter,
+			wantPicker: "picker-1",
+			wantEntry:  "subdir",
+		},
+		{
+			name: "select from options array",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerSelect,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerFileSelectFieldName,
+			},
+			options:    []string{"b.txt"},
+			wantKind:   control.ActionPathPickerSelect,
+			wantPicker: "picker-1",
+			wantEntry:  "b.txt",
+		},
+		{
+			name: "select from form value fallback",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerSelect,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerFileSelectFieldName,
+			},
+			formValue: map[string]interface{}{
+				cardPathPickerFileSelectFieldName: []interface{}{"report.txt"},
+			},
+			wantKind:   control.ActionPathPickerSelect,
+			wantPicker: "picker-1",
+			wantEntry:  "report.txt",
+		},
 	}
 
 	for _, tt := range tests {
@@ -47,7 +88,12 @@ func TestParseCardActionTriggerEventBuildsPathPickerEntryActions(t *testing.T) {
 			event := &larkcallback.CardActionTriggerEvent{
 				Event: &larkcallback.CardActionTriggerRequest{
 					Operator: &larkcallback.Operator{UserID: &userID},
-					Action:   &larkcallback.CallBackAction{Value: tt.payload},
+					Action: &larkcallback.CallBackAction{
+						Value:     tt.payload,
+						Option:    tt.option,
+						Options:   tt.options,
+						FormValue: tt.formValue,
+					},
 					Context: &larkcallback.Context{
 						OpenChatID:    "oc_1",
 						OpenMessageID: "om-card-picker",

@@ -26,6 +26,8 @@ const (
 	cardActionPayloadKeyPickerID             = "picker_id"
 	cardActionPayloadKeyEntryName            = "entry_name"
 	cardActionPayloadKeyDaemonLifecycleID    = "daemon_lifecycle_id"
+	cardPathPickerDirectorySelectFieldName   = "path_picker_directory"
+	cardPathPickerFileSelectFieldName        = "path_picker_file"
 	cardActionPayloadDefaultCommandFieldName = "command_args"
 	cardActionKindAttachInstance             = "attach_instance"
 	cardActionKindAttachWorkspace            = "attach_workspace"
