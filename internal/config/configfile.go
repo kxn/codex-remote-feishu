@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 const (
@@ -190,6 +192,9 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return fmt.Errorf("config path is required")
+	}
+	if err := pathscope.EnsureWritePath(path); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

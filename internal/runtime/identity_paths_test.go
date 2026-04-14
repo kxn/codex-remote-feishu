@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func TestBinaryIdentityHelpersAndPersistence(t *testing.T) {
@@ -158,12 +159,62 @@ func TestDefaultPathsAndHelpers(t *testing.T) {
 		}
 	})
 
+	t.Run("home fallback uses fs prefix", func(t *testing.T) {
+		home := t.TempDir()
+		prefix := filepath.Join(t.TempDir(), "sandbox")
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		t.Setenv(pathscope.EnvFSPrefix, prefix)
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
+		t.Setenv("XDG_STATE_HOME", "")
+
+		paths, err := DefaultPaths()
+		if err != nil {
+			t.Fatalf("DefaultPaths: %v", err)
+		}
+		wantConfigHome := filepath.Join(pathscope.ApplyPrefix(home), ".config")
+		if paths.ConfigDir != filepath.Join(wantConfigHome, ProductName) {
+			t.Fatalf("ConfigDir = %q, want %q", paths.ConfigDir, filepath.Join(wantConfigHome, ProductName))
+		}
+		if !strings.HasPrefix(paths.StateDir, prefix) {
+			t.Fatalf("StateDir = %q, want prefix %q", paths.StateDir, prefix)
+		}
+	})
+
 	logsDir := filepath.Join(string(filepath.Separator), "tmp", "logs")
 	if got := WrapperRawLogFile(logsDir, 123); got != filepath.Join(logsDir, "codex-remote-wrapper-123-raw.ndjson") {
 		t.Fatalf("WrapperRawLogFile = %q", got)
 	}
 	if got := WrapperRawLogFile(logsDir, 0); got != filepath.Join(logsDir, "codex-remote-wrapper-unknown-raw.ndjson") {
 		t.Fatalf("WrapperRawLogFile unknown = %q", got)
+	}
+}
+
+func TestWriteIdentityRespectsStrictFSPrefix(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+	t.Setenv(pathscope.EnvFSStrict, "1")
+
+	startedAt := time.Unix(1_700_000_000, 0).UTC()
+	identity, err := NewServerIdentityWithBranch("9.9.9", "master", filepath.Join(prefix, "config.json"), startedAt)
+	if err != nil {
+		t.Fatalf("NewServerIdentityWithBranch: %v", err)
+	}
+	outsidePath := filepath.Join(t.TempDir(), "identity.json")
+	if err := WriteServerIdentity(outsidePath, identity); err == nil {
+		t.Fatal("WriteServerIdentity(outside) expected strict-prefix error")
+	}
+	if err := WritePID(filepath.Join(t.TempDir(), "daemon.pid"), 1234); err == nil {
+		t.Fatal("WritePID(outside) expected strict-prefix error")
+	}
+
+	insidePath := filepath.Join(prefix, "state", "identity.json")
+	if err := WriteServerIdentity(insidePath, identity); err != nil {
+		t.Fatalf("WriteServerIdentity(inside): %v", err)
+	}
+	if err := WritePID(filepath.Join(prefix, "state", "daemon.pid"), 1234); err != nil {
+		t.Fatalf("WritePID(inside): %v", err)
 	}
 }
 

@@ -14,8 +14,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "install TestMain temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tempRoot)
-
 	homeDir := filepath.Join(tempRoot, "home")
 	configHome := filepath.Join(tempRoot, "xdg-config")
 	dataHome := filepath.Join(tempRoot, "xdg-data")
@@ -51,5 +49,12 @@ func TestMain(m *testing.M) {
 		systemctlUserRunner = originalSystemctl
 	}()
 
-	os.Exit(m.Run())
+	code := m.Run()
+	if err := os.RemoveAll(tempRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "install TestMain cleanup %s: %v\n", tempRoot, err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
 }

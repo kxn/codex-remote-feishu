@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func TestWriteAppConfigLeavesPprofDisabledByDefault(t *testing.T) {
@@ -55,5 +57,21 @@ func TestWriteAppConfigNormalizesEnabledPprofDefaults(t *testing.T) {
 	}
 	if loaded.Config.Debug.Pprof.ListenPort != 17501 {
 		t.Fatalf("ListenPort = %d, want 17501", loaded.Config.Debug.Pprof.ListenPort)
+	}
+}
+
+func TestWriteAppConfigRespectsStrictFSPrefix(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+	t.Setenv(pathscope.EnvFSStrict, "1")
+
+	outsidePath := filepath.Join(t.TempDir(), "config.json")
+	if err := WriteAppConfig(outsidePath, DefaultAppConfig()); err == nil {
+		t.Fatal("WriteAppConfig(outside) expected strict-prefix error")
+	}
+
+	insidePath := filepath.Join(prefix, "config", "config.json")
+	if err := WriteAppConfig(insidePath, DefaultAppConfig()); err != nil {
+		t.Fatalf("WriteAppConfig(inside): %v", err)
 	}
 }

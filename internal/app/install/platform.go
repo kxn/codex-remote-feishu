@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 type PlatformDefaults struct {
@@ -20,7 +22,7 @@ type PlatformDefaults struct {
 }
 
 func DetectPlatformDefaults() (PlatformDefaults, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := pathscope.UserHomeDir()
 	if err != nil {
 		return PlatformDefaults{}, err
 	}

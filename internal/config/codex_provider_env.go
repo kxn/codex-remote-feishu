@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 type CodexProviderEnvInfo struct {
@@ -143,7 +144,7 @@ func resolveCodexConfigPath(env []string) (string, error) {
 }
 
 func currentUserHomeDir() string {
-	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+	if home, err := pathscope.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
 		return home
 	}
 	current, err := user.Current()

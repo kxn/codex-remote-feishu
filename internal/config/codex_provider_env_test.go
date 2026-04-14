@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func TestResolveCodexProviderEnvUsesConfiguredProfile(t *testing.T) {
@@ -194,6 +196,22 @@ env_key = "CUSTOM_API_KEY"
 	}
 	if count := countEnvKey(got, "http_proxy"); count != 1 {
 		t.Fatalf("http_proxy count = %d, want 1", count)
+	}
+}
+
+func TestResolveCodexConfigPathUsesFSPrefixWhenHomeMissingInEnv(t *testing.T) {
+	homeDir := t.TempDir()
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv("HOME", homeDir)
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+
+	got, err := resolveCodexConfigPath(nil)
+	if err != nil {
+		t.Fatalf("resolveCodexConfigPath: %v", err)
+	}
+	want := filepath.Join(pathscope.ApplyPrefix(homeDir), ".codex", codexConfigFileName)
+	if got != want {
+		t.Fatalf("resolveCodexConfigPath() = %q, want %q", got, want)
 	}
 }
 

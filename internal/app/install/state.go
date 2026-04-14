@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func LoadState(path string) (InstallState, error) {
@@ -40,6 +42,9 @@ func LoadState(path string) (InstallState, error) {
 }
 
 func WriteState(path string, state InstallState) error {
+	if err := pathscope.EnsureWritePath(path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

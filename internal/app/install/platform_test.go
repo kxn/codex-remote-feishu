@@ -3,8 +3,11 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func TestDefaultVSCodeSettingsPathWindowsUsesAppData(t *testing.T) {
@@ -130,6 +133,29 @@ func TestDetectBundleEntrypointsPrefersCurrentArchOnDarwin(t *testing.T) {
 		filepath.Join(extensionDir, "bin", "darwin-arm64", "codex"),
 	}
 	assertEntrypointsEqual(t, got, want)
+}
+
+func TestDetectPlatformDefaultsUsesFSPrefix(t *testing.T) {
+	homeDir := t.TempDir()
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+
+	defaults, err := DetectPlatformDefaults()
+	if err != nil {
+		t.Fatalf("DetectPlatformDefaults: %v", err)
+	}
+	wantHome := pathscope.ApplyPrefix(homeDir)
+	if defaults.HomeDir != wantHome {
+		t.Fatalf("HomeDir = %q, want %q", defaults.HomeDir, wantHome)
+	}
+	if defaults.BaseDir != wantHome {
+		t.Fatalf("BaseDir = %q, want %q", defaults.BaseDir, wantHome)
+	}
+	if !strings.HasPrefix(defaults.InstallBinDir, wantHome) {
+		t.Fatalf("InstallBinDir = %q, want prefix %q", defaults.InstallBinDir, wantHome)
+	}
 }
 
 func assertEntrypointsEqual(t *testing.T, got, want []string) {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 type WrapperConfig struct {
@@ -155,7 +157,7 @@ func ResolveExternalAccessSettings(base ExternalAccessSettings) ExternalAccessSe
 func xdgConfigPath(parts ...string) string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
-		home, err := os.UserHomeDir()
+		home, err := pathscope.UserHomeDir()
 		if err != nil {
 			return ""
 		}

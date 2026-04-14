@@ -9,11 +9,13 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 var (
 	serviceRuntimeGOOS  = runtime.GOOS
-	serviceUserHomeDir  = os.UserHomeDir
+	serviceUserHomeDir  = pathscope.UserHomeDir
 	serviceMkdirAll     = os.MkdirAll
 	serviceWriteFile    = os.WriteFile
 	serviceRemoveFile   = os.Remove

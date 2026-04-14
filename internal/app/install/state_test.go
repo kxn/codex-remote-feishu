@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 func TestLoadStateCollapsesLegacyConfigPaths(t *testing.T) {
@@ -62,5 +64,26 @@ func TestWriteStateOmitsLegacyConfigPathFields(t *testing.T) {
 		if strings.Contains(string(raw), field) {
 			t.Fatalf("did not expect %s in written state: %s", field, raw)
 		}
+	}
+}
+
+func TestWriteStateRespectsStrictFSPrefix(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+	t.Setenv(pathscope.EnvFSStrict, "1")
+
+	state := InstallState{
+		BaseDir:    prefix,
+		ConfigPath: filepath.Join(prefix, ".config", "codex-remote", "config.json"),
+		StatePath:  filepath.Join(prefix, ".local", "share", "codex-remote", "install-state.json"),
+	}
+	outsidePath := filepath.Join(t.TempDir(), "install-state.json")
+	if err := WriteState(outsidePath, state); err == nil {
+		t.Fatal("WriteState(outside) expected strict-prefix error")
+	}
+
+	insidePath := filepath.Join(prefix, ".local", "share", "codex-remote", "install-state.json")
+	if err := WriteState(insidePath, state); err != nil {
+		t.Fatalf("WriteState(inside): %v", err)
 	}
 }

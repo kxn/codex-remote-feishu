@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 type Paths struct {
@@ -59,7 +61,7 @@ func xdgBase(envKey, fallbackSuffix string) (string, error) {
 	if value := os.Getenv(envKey); value != "" {
 		return value, nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := pathscope.UserHomeDir()
 	if err != nil {
 		return "", err
 	}

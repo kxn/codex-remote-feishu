@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
 const ProductName = "codex-remote"
@@ -82,6 +83,9 @@ func CompatibleIdentity(local agentproto.BinaryIdentity, remote agentproto.Binar
 }
 
 func WriteServerIdentity(path string, identity agentproto.ServerIdentity) error {
+	if err := pathscope.EnsureWritePath(path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -106,6 +110,9 @@ func ReadServerIdentity(path string) (agentproto.ServerIdentity, error) {
 }
 
 func WritePID(path string, pid int) error {
+	if err := pathscope.EnsureWritePath(path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
