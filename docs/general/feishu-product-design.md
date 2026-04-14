@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、reply 当前 processing 源消息的自动 steering、旧生命周期动作判定、卡片交互、结构化计划更新卡、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 reply 当前 processing 源消息的自动 steering 与 `merge_forward` 结构化 envelope 入站语义。
 
 ## 1. 文档定位
 
@@ -92,6 +92,15 @@ alias 仍继续兼容，但不再作为主展示入口：
   - 引用文本会作为额外提示文本带入
   - 引用图文混合消息时，会把其中的文本和图片一起带入
   - 若 reply 目标命中当前 surface 正在 processing 的 source message，且 reply 当前消息属于文本 / 图片输入，则不会把被引用原消息再次重发，而是把“当前 reply 自身内容”直接 steer 进当前 running turn
+- `merge_forward`
+  - 正文转发聊天记录不会再拍平成普通 prose 摘要
+  - 当前会先构造成结构化树，再以首个文本 input 发送：
+    - `<forwarded_chat_bundle_v1>{...json...}</forwarded_chat_bundle_v1>`
+  - reply / quote 一个转发聊天记录时，复用同一结构，但 wrapper 会变成：
+    - `<quoted_forwarded_chat_bundle_v1>{...json...}</quoted_forwarded_chat_bundle_v1>`
+  - tree 中保留 bundle 层级、消息顺序、sender、message type 与 `image_refs`
+  - 真实图片会按稳定遍历顺序作为后续 `local_image` / `remote_image` inputs 追加，JSON 里只保留引用关系
+  - `file` / unknown / unavailable child 不会 silently 丢失，而是保留占位节点
 
 ### 3.2 菜单事件
 

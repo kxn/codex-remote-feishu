@@ -95,19 +95,18 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "merge_forward":
-		text, err := g.parseMergeForwardEventContent(ctx, message)
+		payload, err := g.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
 		if err != nil {
 			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_merge_forward_content", err)
 			return control.Action{}, false, err
 		}
-		merged := mergeForwardTextInput(text)
-		if merged.Text == "" {
+		if len(payload.Inputs) == 0 {
 			logInboundMessageIgnored(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "empty_merge_forward_content")
 			return control.Action{}, false, nil
 		}
 		action.Kind = control.ActionTextMessage
-		action.Text = text
-		action.Inputs = append(g.quotedInputs(ctx, message), merged)
+		action.Text = payload.Summary
+		action.Inputs = append(g.quotedInputs(ctx, message), payload.Inputs...)
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	default:

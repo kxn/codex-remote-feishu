@@ -1,12 +1,9 @@
 package feishu
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 func parseMergeForwardContent(rawContent string) (string, error) {
@@ -44,104 +41,6 @@ func parseMergeForwardContent(rawContent string) (string, error) {
 		lines = append(lines[:maxLines], fmt.Sprintf("...（其余 %d 条省略）", remaining))
 	}
 	return strings.Join(lines, "\n"), nil
-}
-
-func (g *LiveGateway) parseMergeForwardEventContent(ctx context.Context, message *larkim.EventMessage) (string, error) {
-	if message == nil {
-		return "", fmt.Errorf("nil merge_forward message")
-	}
-	if g.fetchMessageFn != nil {
-		messageID := strings.TrimSpace(stringPtr(message.MessageId))
-		if messageID != "" {
-			referenced, err := g.fetchMessageFn(ctx, messageID)
-			if err == nil && referenced != nil && strings.EqualFold(strings.TrimSpace(referenced.MessageType), "merge_forward") {
-				text, err := g.summarizeMergeForwardGatewayMessage(ctx, referenced)
-				if err == nil {
-					return text, nil
-				}
-			}
-		}
-	}
-	return parseMergeForwardContent(stringPtr(message.Content))
-}
-
-func (g *LiveGateway) summarizeMergeForwardGatewayMessage(ctx context.Context, message *gatewayMessage) (string, error) {
-	if message == nil {
-		return "", fmt.Errorf("nil merge_forward message")
-	}
-	if len(message.Children) == 0 {
-		return parseMergeForwardContent(message.Content)
-	}
-	lines := make([]string, 0, len(message.Children)+1)
-	seen := map[string]struct{}{}
-	appendLine := func(text string) {
-		text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-		if text == "" {
-			return
-		}
-		if _, ok := seen[text]; ok {
-			return
-		}
-		seen[text] = struct{}{}
-		lines = append(lines, text)
-	}
-	if title := mergeForwardTitle(message.Content); title != "" {
-		appendLine(title)
-	}
-	for _, child := range message.Children {
-		text, err := g.summarizeGatewayMessageWithSpeaker(ctx, child)
-		if err != nil {
-			continue
-		}
-		appendLine(text)
-	}
-	if len(lines) > 0 {
-		return strings.Join(lines, "\n"), nil
-	}
-	return parseMergeForwardContent(message.Content)
-}
-
-func (g *LiveGateway) summarizeGatewayMessageWithSpeaker(ctx context.Context, message *gatewayMessage) (string, error) {
-	text, err := g.summarizeGatewayMessage(ctx, message)
-	if err != nil {
-		return "", err
-	}
-	label := gatewayMessageSpeakerLabel(message)
-	if label == "" {
-		return text, nil
-	}
-	return label + ": " + text, nil
-}
-
-func (g *LiveGateway) summarizeGatewayMessage(ctx context.Context, message *gatewayMessage) (string, error) {
-	if message == nil || message.Deleted {
-		return "", fmt.Errorf("empty gateway message")
-	}
-	switch strings.ToLower(strings.TrimSpace(message.MessageType)) {
-	case "text":
-		return parseTextContent(message.Content)
-	case "post":
-		_, text, err := g.parsePostInputs(ctx, message.MessageID, message.Content)
-		if err != nil {
-			return "", err
-		}
-		return text, nil
-	case "image":
-		return "[图片]", nil
-	case "file":
-		if name := parseFileName(message.Content); name != "" {
-			return "[文件] " + name, nil
-		}
-		return "[文件]", nil
-	case "merge_forward":
-		return g.summarizeMergeForwardGatewayMessage(ctx, message)
-	default:
-		text, err := parseMergeForwardContent(message.Content)
-		if err == nil {
-			return text, nil
-		}
-		return "", fmt.Errorf("unsupported message type: %s", message.MessageType)
-	}
 }
 
 func gatewayMessageSpeakerLabel(message *gatewayMessage) string {

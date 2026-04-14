@@ -75,13 +75,13 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 		}
 		return []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
 	case "merge_forward":
-		text, err := g.summarizeMergeForwardGatewayMessage(ctx, referenced)
+		payload, err := g.buildMergeForwardStructuredPayloadFromGatewayMessage(ctx, referenced, true)
 		if err != nil {
 			log.Printf("feishu quote merge_forward parse ignored: message=%s err=%v", referenced.MessageID, err)
 			return nil
 		}
-		if wrapped := mergeForwardTextInput(text); wrapped.Text != "" {
-			return []agentproto.Input{wrapped}
+		if len(payload.Inputs) > 0 {
+			return payload.Inputs
 		}
 		return nil
 	default:
@@ -108,17 +108,6 @@ func quotedTextInput(text string) agentproto.Input {
 	return agentproto.Input{
 		Type: agentproto.InputText,
 		Text: "<被引用内容>\n" + text + "\n</被引用内容>",
-	}
-}
-
-func mergeForwardTextInput(text string) agentproto.Input {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return agentproto.Input{}
-	}
-	return agentproto.Input{
-		Type: agentproto.InputText,
-		Text: "<转发聊天记录>\n" + text + "\n</转发聊天记录>",
 	}
 }
 

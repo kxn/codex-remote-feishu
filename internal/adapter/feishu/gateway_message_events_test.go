@@ -476,10 +476,17 @@ func TestParseMessageEventHandlesMergeForwardMessage(t *testing.T) {
 		t.Fatalf("unexpected merge forward summary: %#v", action)
 	}
 	if len(action.Inputs) != 1 {
-		t.Fatalf("expected single forwarded transcript input, got %#v", action.Inputs)
+		t.Fatalf("expected single forwarded envelope input, got %#v", action.Inputs)
 	}
-	if action.Inputs[0].Type != agentproto.InputText || action.Inputs[0].Text != "<转发聊天记录>\nForwarded chat\nfirst line\n</转发聊天记录>" {
-		t.Fatalf("unexpected merge forward input: %#v", action.Inputs[0])
+	envelope := mustDecodeForwardedChatEnvelopeInput(t, action.Inputs[0], forwardedChatInputTagV1)
+	if envelope.Schema != forwardedChatSchemaV1 || envelope.Source != "feishu.merge_forward" {
+		t.Fatalf("unexpected merge forward envelope header: %#v", envelope)
+	}
+	if envelope.Root.Kind != "bundle" || envelope.Root.Title != "Forwarded chat" || len(envelope.Root.Items) != 1 {
+		t.Fatalf("unexpected merge forward envelope root: %#v", envelope.Root)
+	}
+	if envelope.Root.Items[0].MessageType != "text" || envelope.Root.Items[0].Text != "first line" {
+		t.Fatalf("unexpected merge forward envelope item: %#v", envelope.Root.Items[0])
 	}
 }
 
@@ -509,6 +516,16 @@ func TestParseMessageEventHandlesMergeForwardPlainTextFallback(t *testing.T) {
 	}
 	if action.Text != "Merged and Forwarded Message" {
 		t.Fatalf("unexpected merge forward fallback text: %#v", action)
+	}
+	if len(action.Inputs) != 1 {
+		t.Fatalf("expected single forwarded envelope input, got %#v", action.Inputs)
+	}
+	envelope := mustDecodeForwardedChatEnvelopeInput(t, action.Inputs[0], forwardedChatInputTagV1)
+	if envelope.Root.Kind != "bundle" || len(envelope.Root.Items) != 1 {
+		t.Fatalf("unexpected fallback merge forward root: %#v", envelope.Root)
+	}
+	if envelope.Root.Items[0].MessageType != "text" || envelope.Root.Items[0].Text != "Merged and Forwarded Message" {
+		t.Fatalf("unexpected fallback merge forward item: %#v", envelope.Root.Items[0])
 	}
 }
 
@@ -555,6 +572,19 @@ func TestParseMessageEventExpandsMergeForwardFromFetchedChildren(t *testing.T) {
 	if action.Text != want {
 		t.Fatalf("unexpected expanded merge forward text: got %q want %q", action.Text, want)
 	}
+	if len(action.Inputs) != 1 {
+		t.Fatalf("expected single forwarded envelope input, got %#v", action.Inputs)
+	}
+	envelope := mustDecodeForwardedChatEnvelopeInput(t, action.Inputs[0], forwardedChatInputTagV1)
+	if len(envelope.Root.Items) != 3 {
+		t.Fatalf("unexpected expanded merge forward items: %#v", envelope.Root.Items)
+	}
+	if envelope.Root.Items[0].Sender == nil || envelope.Root.Items[0].Sender.Label != "用户(ou_user_a)" || envelope.Root.Items[0].Text != "/compact" {
+		t.Fatalf("unexpected first expanded merge forward item: %#v", envelope.Root.Items[0])
+	}
+	if envelope.Root.Items[2].Sender == nil || envelope.Root.Items[2].Sender.Label != "应用(cli_bot_1)" || envelope.Root.Items[2].Text != "当前线程上下文已压缩完成。" {
+		t.Fatalf("unexpected third expanded merge forward item: %#v", envelope.Root.Items[2])
+	}
 }
 
 func TestParseMessageEventQuotesMergeForwardMessage(t *testing.T) {
@@ -595,8 +625,12 @@ func TestParseMessageEventQuotesMergeForwardMessage(t *testing.T) {
 	if len(action.Inputs) != 2 {
 		t.Fatalf("expected quoted merge forward + current text, got %#v", action.Inputs)
 	}
-	if action.Inputs[0].Type != agentproto.InputText || action.Inputs[0].Text != "<转发聊天记录>\n讨论记录\n张三: 先看日志\n李四: 确认 message_type\n</转发聊天记录>" {
-		t.Fatalf("unexpected quoted merge forward input: %#v", action.Inputs[0])
+	envelope := mustDecodeForwardedChatEnvelopeInput(t, action.Inputs[0], quotedForwardedChatInputTagV1)
+	if envelope.Root.Title != "讨论记录" || len(envelope.Root.Items) != 2 {
+		t.Fatalf("unexpected quoted merge forward envelope: %#v", envelope.Root)
+	}
+	if envelope.Root.Items[0].Sender == nil || envelope.Root.Items[0].Sender.Label != "张三" || envelope.Root.Items[0].Text != "先看日志" {
+		t.Fatalf("unexpected first quoted merge forward item: %#v", envelope.Root.Items[0])
 	}
 	if action.Inputs[1].Type != agentproto.InputText || action.Inputs[1].Text != "按这个继续查" {
 		t.Fatalf("unexpected current text input: %#v", action.Inputs[1])
@@ -645,9 +679,15 @@ func TestParseMessageEventQuotesFetchedMergeForwardMessageWithSpeakerLabels(t *t
 	if len(action.Inputs) != 2 {
 		t.Fatalf("expected quoted merge forward + current text, got %#v", action.Inputs)
 	}
-	wantQuoted := "<转发聊天记录>\n用户(ou_user_a): 先看 inbound 事件\n用户(ou_user_b): 然后核对 fetch 分支\n</转发聊天记录>"
-	if action.Inputs[0].Type != agentproto.InputText || action.Inputs[0].Text != wantQuoted {
-		t.Fatalf("unexpected quoted merge forward input: %#v", action.Inputs[0])
+	envelope := mustDecodeForwardedChatEnvelopeInput(t, action.Inputs[0], quotedForwardedChatInputTagV1)
+	if len(envelope.Root.Items) != 2 {
+		t.Fatalf("unexpected quoted fetched merge forward items: %#v", envelope.Root.Items)
+	}
+	if envelope.Root.Items[0].Sender == nil || envelope.Root.Items[0].Sender.Label != "用户(ou_user_a)" || envelope.Root.Items[0].Text != "先看 inbound 事件" {
+		t.Fatalf("unexpected first quoted fetched merge forward item: %#v", envelope.Root.Items[0])
+	}
+	if envelope.Root.Items[1].Sender == nil || envelope.Root.Items[1].Sender.Label != "用户(ou_user_b)" || envelope.Root.Items[1].Text != "然后核对 fetch 分支" {
+		t.Fatalf("unexpected second quoted fetched merge forward item: %#v", envelope.Root.Items[1])
 	}
 	if action.Inputs[1].Type != agentproto.InputText || action.Inputs[1].Text != "照这个排查" {
 		t.Fatalf("unexpected current text input: %#v", action.Inputs[1])
