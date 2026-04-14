@@ -19,10 +19,7 @@ func (g *LiveGateway) quotedInputs(ctx context.Context, message *larkim.EventMes
 	if message == nil || g.fetchMessageFn == nil {
 		return nil
 	}
-	targetMessageID := strings.TrimSpace(stringPtr(message.ParentId))
-	if targetMessageID == "" {
-		targetMessageID = strings.TrimSpace(stringPtr(message.RootId))
-	}
+	targetMessageID := referencedMessageID(message)
 	if targetMessageID == "" {
 		return nil
 	}
@@ -90,6 +87,17 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 	default:
 		return nil
 	}
+}
+
+func referencedMessageID(message *larkim.EventMessage) string {
+	if message == nil {
+		return ""
+	}
+	targetMessageID := strings.TrimSpace(stringPtr(message.ParentId))
+	if targetMessageID == "" {
+		targetMessageID = strings.TrimSpace(stringPtr(message.RootId))
+	}
+	return targetMessageID
 }
 
 func quotedTextInput(text string) agentproto.Input {

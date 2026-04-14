@@ -343,6 +343,8 @@ type QueueItemRecord struct {
 	ReplyToMessageID      string
 	ReplyToMessagePreview string
 	Inputs                []agentproto.Input
+	SteerInputs           []agentproto.Input
+	RestoreAsStagedImage  bool
 	FrozenThreadID        string
 	FrozenCWD             string
 	FrozenOverride        ModelConfigRecord

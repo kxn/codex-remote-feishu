@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、`/steerall` 的批量并入当前 running turn 入口、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时记录 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、pending request 对新 MCP request type 的当前保守承载（保持 gate、只发 unsupported notice、不伪装成 approval 卡）、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时记录 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、pending request 对新 MCP request type 的当前保守承载（保持 gate、只发 unsupported notice、不伪装成 approval 卡）、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -192,10 +192,13 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 1. 当前还存在一个**可叠加**的 steering overlay：
    1. 某个 queued item 被点赞升级后，会离开 `QueuedQueueItemIDs`
-   2. 该 item 进入 `QueueItemStatus=steering`
-   3. 相关命令记录在 `pendingSteers`
+   2. 或者用户 reply 当前 processing 的 source message，且 reply 内容属于当前 v1 支持的文本/图片输入时，会创建一个临时 steering item
+   3. 该 item 进入 `QueueItemStatus=steering`
+   4. 相关命令记录在 `pendingSteers`
 2. 这个 overlay 不占用 `ActiveQueueItemID`，所以可以与 `E3 Running` 并存。
-3. steering ack 成功后，item 进入 `steered`；失败时恢复回原 queue 位置。
+3. steering ack 成功后，item 进入 `steered`；失败时恢复回普通语义：
+   1. 文本 / 图文 reply 恢复为普通 queued item
+   2. 独立图片 reply 恢复为 `ImageStaged`
 
 ### 3.4 输入门禁状态
 
@@ -400,16 +403,22 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 当前实现不允许未发送草稿在 route change 时 silently retarget。
 
-### 4.6 queued 点赞 steering 只升级当前 item，不做隐式重排
+### 4.6 queued 点赞 / reply 命中 processing source 的 steering 只升级当前输入，不做隐式重排
 
-当前 `surface.message.reaction.created` 的产品语义已经固定：
+当前 steering 入口的产品语义已经固定：
 
-1. 只有 `ThumbsUp` 才会触发。
-2. 只有 queued item 的主文本 `SourceMessageID` 能触发。
-3. 图片消息上的点赞不会单独触发任何状态迁移。
-4. 目标 item 必须和当前 active running turn 属于同一 `FrozenThreadID`。
-5. 命中后不会改写其他 queued item 的相对顺序，也不会跨 thread 偷偷 retarget。
-6. steering 失败时，目标 item 必须恢复回原 queue 位置，不能 silently 消失。
+1. queued 点赞入口：
+   1. 只有 `ThumbsUp` 才会触发。
+   2. 只有 queued item 的主文本 `SourceMessageID` 能触发。
+   3. 图片消息上的点赞不会单独触发任何状态迁移。
+2. reply 自动 steering 入口：
+   1. 只有 reply 目标命中**当前 surface 正在 processing 的 source message**时才会触发。
+   2. 必须命中当前 surface 自己的 active running turn；仅 instance 有 active turn 但 surface 不拥有该 running item 时不会触发。
+   3. 当前只支持文本 / 图片内容；被 reply 的原消息不会再作为 quoted input 重新 steer 进去。
+3. 无论哪种入口：
+   1. 目标 item / reply fallback item 都必须和当前 active running turn 属于同一 `FrozenThreadID`。
+   2. 命中后不会改写其他 queued item 的相对顺序，也不会跨 thread 偷偷 retarget。
+   3. steering 失败时，目标输入必须恢复回普通语义，不能 silently 消失。
 
 ### 4.7 `R5 NewThreadReady` 是稳定态，不是半成品
 
@@ -760,11 +769,12 @@ E2 Dispatching
 
 E3 Running
   -- turn.completed(remote_surface) --> E0 Idle
+  -- reply 当前 processing source message（文本/图片，且命中当前 surface active running item） --> `SteerPending` overlay
 
 `SteerPending` overlay
   -- `turn.steer` command ack accepted --> 被并入的 item 逐条转 `steered`，并给对应主文本 + 已绑定图片补 `ThumbsUp`
-  -- `turn.steer` dispatch failure / command rejected --> 被并入的 item 按原队列顺序恢复
-  -- transport degraded / disconnect / remove instance --> 恢复到原 queue 位置
+  -- `turn.steer` dispatch failure / command rejected --> 被并入的输入按普通语义恢复（queued item 按原顺序恢复；独立图片 reply 恢复为 staged image）
+  -- transport degraded / disconnect / remove instance --> 被并入的输入按普通语义恢复
 ```
 
 补充说明：

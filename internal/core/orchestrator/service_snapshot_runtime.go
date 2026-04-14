@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -318,6 +319,9 @@ func (s *Service) restorePendingSteer(key string, notice *control.Notice) []cont
 		if item == nil || item.Status == state.QueueItemSteered {
 			continue
 		}
+		if s.restorePendingSteerAsStagedImage(surface, item) {
+			continue
+		}
 		item.Status = state.QueueItemQueued
 		surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
 		queueIndex, ok := pendingSteerQueueIndex(binding, queueItemID)
@@ -408,6 +412,27 @@ func pendingSteerQueueIndex(binding *pendingSteerBinding, queueItemID string) (i
 		return binding.QueueIndex, true
 	}
 	return 0, false
+}
+
+func (s *Service) restorePendingSteerAsStagedImage(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord) bool {
+	if surface == nil || item == nil || !item.RestoreAsStagedImage {
+		return false
+	}
+	if len(item.Inputs) != 1 || item.Inputs[0].Type != agentproto.InputLocalImage {
+		return false
+	}
+	s.nextImageID++
+	image := &state.StagedImageRecord{
+		ImageID:          "img-" + strconv.Itoa(s.nextImageID),
+		SurfaceSessionID: surface.SurfaceSessionID,
+		SourceMessageID:  item.SourceMessageID,
+		LocalPath:        item.Inputs[0].Path,
+		MIMEType:         item.Inputs[0].MIMEType,
+		State:            state.ImageStaged,
+	}
+	surface.StagedImages[image.ImageID] = image
+	delete(surface.QueueItems, item.ID)
+	return true
 }
 
 func (s *Service) HandleHeadlessLaunchStarted(surfaceID, instanceID string, pid int) []control.UIEvent {

@@ -31,6 +31,10 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 		MessageID:        stringPtr(message.MessageId),
 		Inbound:          inboundMetaFromMessageEvent(event),
 	}
+	replyTargetMessageID := referencedMessageID(message)
+	if replyTargetMessageID != "" {
+		action.TargetMessageID = replyTargetMessageID
+	}
 
 	switch strings.ToLower(stringPtr(message.MessageType)) {
 	case "text":
@@ -49,11 +53,12 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 			commandAction.Inbound = action.Inbound
 			return commandAction, true, nil
 		}
-		inputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
-		inputs = append(g.quotedInputs(ctx, message), inputs...)
+		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
+		inputs := append(g.quotedInputs(ctx, message), currentInputs...)
 		action.Kind = control.ActionTextMessage
 		action.Text = text
 		action.Inputs = inputs
+		action.SteerInputs = currentInputs
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "post":
@@ -69,6 +74,7 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 		action.Kind = control.ActionTextMessage
 		action.Text = text
 		action.Inputs = append(g.quotedInputs(ctx, message), inputs...)
+		action.SteerInputs = append([]agentproto.Input(nil), inputs...)
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "image":
@@ -85,6 +91,7 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 		action.Kind = control.ActionImageMessage
 		action.LocalPath = path
 		action.MIMEType = mimeType
+		action.SteerInputs = []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "merge_forward":

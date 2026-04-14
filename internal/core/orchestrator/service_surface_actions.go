@@ -373,6 +373,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
+	if autoSteer := s.maybeAutoSteerReply(surface, action); autoSteer != nil {
+		return autoSteer
+	}
 	if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
 		return blocked
 	}
@@ -405,6 +408,9 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
+	}
+	if autoSteer := s.maybeAutoSteerReply(surface, action); autoSteer != nil {
+		return autoSteer
 	}
 	if blocked := s.maybePrepareImplicitNewThreadFromUnboundImage(surface, inst); blocked != nil {
 		return blocked
@@ -547,7 +553,7 @@ func (s *Service) dispatchSteerCandidates(
 		surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
 		queueItemIDs = append(queueItemIDs, item.ID)
 		queueIndices[item.ID] = candidate.QueueIndex
-		inputs = append(inputs, item.Inputs...)
+		inputs = append(inputs, queueItemSteerInputs(item)...)
 		if sourceMessageID == "" {
 			sourceMessageID = strings.TrimSpace(item.SourceMessageID)
 		}

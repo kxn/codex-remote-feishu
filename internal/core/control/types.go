@@ -96,6 +96,7 @@ type Action struct {
 	MessageID           string
 	Text                string
 	Inputs              []agentproto.Input
+	SteerInputs         []agentproto.Input
 	PromptID            string
 	OptionID            string
 	RequestID           string

@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-13`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、旧生命周期动作判定、卡片交互、结构化计划更新卡、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
+> Updated: `2026-04-14`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，包括 canonical slash/menu 命令面、阶段感知 `/menu` 首页、统一参数卡表单、autowhip、图文/引用入站、reply 当前 processing 源消息的自动 steering、旧生命周期动作判定、卡片交互、结构化计划更新卡、queued 点赞 steering、`image_generation`/`dynamic_tool_call` 富结果回显，以及最终回复 reply 与文件修改摘要。
 
 ## 1. 文档定位
 
@@ -91,6 +91,7 @@ alias 仍继续兼容，但不再作为主展示入口：
   - 会补查被引用消息
   - 引用文本会作为额外提示文本带入
   - 引用图文混合消息时，会把其中的文本和图片一起带入
+  - 若 reply 目标命中当前 surface 正在 processing 的 source message，且 reply 当前消息属于文本 / 图片输入，则不会把被引用原消息再次重发，而是把“当前 reply 自身内容”直接 steer 进当前 running turn
 
 ### 3.2 菜单事件
 
@@ -419,6 +420,11 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - queued 文本被点赞后，目标 item 会先离开普通 queue，进入 `steering`
 - wrapper 对 `turn.steer` 返回 `accepted=true` 后，该 item 记为 `steered`
 - 若 dispatch 失败或 wrapper reject，则恢复到原 queue 位置
+- 若用户 reply 当前 processing 的 source message，且 reply 内容是当前 v1 支持的文本 / 图片，则会直接创建一个临时 steering item：
+  - 立即给这条 reply 自己加 `OneSecond`
+  - 发送 `turn.steer`
+  - steering 成功后给这条 reply 自己补 `ThumbsUp`
+  - steering 失败时恢复回普通语义：文本 / 图文 reply 回到 queue，独立图片 reply 回到 staged image
 
 另外，autowhip 实际补发时也复用同一条 queue，但它和普通用户输入不是同一种来源：
 
@@ -435,6 +441,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 远端 turn 完成时，移除 `THINKING`
 - 只有当前活动 queue item 有 Typing
 - steering 成功后，会移除 `OneSecond`，并给该 item 的主文本和已绑定图片统一补 `ThumbsUp`
+- reply 当前 processing 源消息触发 auto-steer 时，也会先给这条 reply 自己加 `OneSecond`；accepted 后移除并补 `ThumbsUp`
 - 被显式丢弃的 queued/staged 输入仍补 `ThumbsDown`
 
 例外：
