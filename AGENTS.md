@@ -1,5 +1,18 @@
 # AGENTS
 
+## Conversation Handshake Rule
+
+For direct instructions from the repository owner/user in chat:
+
+- First send a concise restatement of your understanding:
+  - what the user is asking you to do
+  - what your immediate execution approach will be
+- Then proceed automatically with implementation.
+- If the user does not reply after the restatement, treat it as implicit approval and continue.
+- If the user sends correction/steer feedback, immediately adjust to that steer and continue from the corrected direction.
+
+This rule is mandatory for all agents collaborating in this repository.
+
 ## Project Skill
 
 For work on this repository's relay stack, use the project skill at `.codex/skills/relay-stack-playbook/`.
