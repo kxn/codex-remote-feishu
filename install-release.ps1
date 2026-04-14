@@ -270,7 +270,14 @@ function Resolve-LatestVersionFromReleaseApi([string]$SelectedTrack) {
   if ([string]::IsNullOrWhiteSpace($apiUrl)) {
     $apiUrl = "https://api.github.com/repos/$Repo/releases?per_page=100"
   }
-  $releases = @(Invoke-TextRequest $apiUrl | ConvertFrom-Json)
+  $releasePayload = Invoke-TextRequest $apiUrl | ConvertFrom-Json
+  if ($releasePayload -is [System.Array]) {
+    $releases = $releasePayload
+  } elseif ($null -eq $releasePayload) {
+    $releases = @()
+  } else {
+    $releases = @($releasePayload)
+  }
   switch ($SelectedTrack) {
     "production" {
       $tagPattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
