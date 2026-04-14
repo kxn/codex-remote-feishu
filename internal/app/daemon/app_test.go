@@ -469,7 +469,7 @@ func TestHandleGatewayActionRerendersMenuFromCurrentSurfaceStateWithoutViewSessi
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/menu",
+		Text:             "/menu current_work",
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
@@ -478,11 +478,11 @@ func TestHandleGatewayActionRerendersMenuFromCurrentSurfaceStateWithoutViewSessi
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected inline replacement result, got %#v", result)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/stop") {
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/new") {
 		t.Fatalf("expected rerendered menu to reflect current attached state, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
-	if operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/list") {
-		t.Fatalf("expected stale detached menu actions not to survive current-state rerender, got %#v", result.ReplaceCurrentCard.CardElements)
+	if operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/follow") {
+		t.Fatalf("expected current_work menu not to show /follow, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
 

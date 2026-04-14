@@ -7,12 +7,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-const (
-	commandMenuStageDetached      = "detached"
-	commandMenuStageNormalWorking = "normal_working"
-	commandMenuStageVSCodeWorking = "vscode_working"
-)
-
 // FeishuDirectCommandCatalogFromView projects the UI-owned command view into the transition
 // command catalog shape currently consumed by the Feishu renderer.
 func FeishuDirectCommandCatalogFromView(view control.FeishuCommandView, ctx *control.FeishuUICommandContext) (control.FeishuDirectCommandCatalog, bool) {
@@ -61,7 +55,7 @@ func buildCommandMenuGroupCatalog(stage, groupID string) control.FeishuDirectCom
 		if !def.ShowInMenu {
 			continue
 		}
-		if def.ID == control.FeishuCommandFollow && stage != commandMenuStageVSCodeWorking {
+		if !control.FeishuCommandVisibleInMenuStage(def.ID, stage) {
 			continue
 		}
 		entries = append(entries, commandEntryForDefinition(def))

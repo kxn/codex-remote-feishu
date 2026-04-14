@@ -11,9 +11,9 @@ import (
 type commandMenuStage string
 
 const (
-	commandMenuStageDetached      commandMenuStage = "detached"
-	commandMenuStageNormalWorking commandMenuStage = "normal_working"
-	commandMenuStageVSCodeWorking commandMenuStage = "vscode_working"
+	commandMenuStageDetached      commandMenuStage = commandMenuStage(control.FeishuCommandMenuStageDetached)
+	commandMenuStageNormalWorking commandMenuStage = commandMenuStage(control.FeishuCommandMenuStageNormalWorking)
+	commandMenuStageVSCodeWorking commandMenuStage = commandMenuStage(control.FeishuCommandMenuStageVSCodeWorking)
 )
 
 func (s *Service) buildCommandMenuCatalog(surface *state.SurfaceConsoleRecord, raw string) control.FeishuDirectCommandCatalog {
@@ -61,7 +61,7 @@ func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleReco
 		if !def.ShowInMenu {
 			continue
 		}
-		if def.ID == control.FeishuCommandFollow && stage != commandMenuStageVSCodeWorking {
+		if !control.FeishuCommandVisibleInMenuStage(def.ID, string(stage)) {
 			continue
 		}
 		entries = append(entries, commandEntryForDefinition(def))

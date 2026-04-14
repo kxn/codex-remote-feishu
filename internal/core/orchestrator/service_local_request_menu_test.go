@@ -155,6 +155,50 @@ func TestMenuActionVSCodeSwitchTargetGroupShowsFollow(t *testing.T) {
 	}
 }
 
+func TestMenuActionNormalCurrentWorkGroupShowsNew(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		Text:             "/menu current_work",
+	})
+	catalog := commandCatalogFromEvent(t, events[0])
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/stop", "/steerall", "/new", "/sendfile"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normal current_work commands = %#v, want %#v", got, want)
+	}
+}
+
+func TestMenuActionVSCodeCurrentWorkGroupHidesNew(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		Text:             "/menu current_work",
+	})
+	catalog := commandCatalogFromEvent(t, events[0])
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/stop", "/steerall", "/sendfile"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("vscode current_work commands = %#v, want %#v", got, want)
+	}
+}
+
 func TestMenuSubmenuShowsReturnToPreviousLevelButton(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

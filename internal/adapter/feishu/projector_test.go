@@ -1163,6 +1163,32 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 	}
 }
 
+func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
+	normalCatalog, ok := FeishuDirectCommandCatalogFromView(control.FeishuCommandView{
+		Menu: &control.FeishuCommandMenuView{Stage: "normal_working", GroupID: "current_work"},
+	}, nil)
+	if !ok {
+		t.Fatalf("expected normal current_work menu to project")
+	}
+	gotNormal := firstCommandTexts(normalCatalog.Sections[0].Entries)
+	wantNormal := []string{"/stop", "/steerall", "/new", "/sendfile"}
+	if fmt.Sprint(gotNormal) != fmt.Sprint(wantNormal) {
+		t.Fatalf("normal current_work commands = %#v, want %#v", gotNormal, wantNormal)
+	}
+
+	vscodeCatalog, ok := FeishuDirectCommandCatalogFromView(control.FeishuCommandView{
+		Menu: &control.FeishuCommandMenuView{Stage: "vscode_working", GroupID: "current_work"},
+	}, nil)
+	if !ok {
+		t.Fatalf("expected vscode current_work menu to project")
+	}
+	gotVSCode := firstCommandTexts(vscodeCatalog.Sections[0].Entries)
+	wantVSCode := []string{"/stop", "/steerall", "/sendfile"}
+	if fmt.Sprint(gotVSCode) != fmt.Sprint(wantVSCode) {
+		t.Fatalf("vscode current_work commands = %#v, want %#v", gotVSCode, wantVSCode)
+	}
+}
+
 func TestProjectCommandViewRendersModelCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

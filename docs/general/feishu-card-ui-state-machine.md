@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-14`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`），以及无回调的 `exec_command` 共享更新卡（首次 reply，后续 `message.patch` 同卡更新，正文出现后终结）。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、`path_picker_*` callback 协议、active picker 的 same-daemon freshness / append-only confirm-cancel 边界、normal `/list` 工作区卡片里的 `create_workspace` 入口与“目录选择后交给 workspace consumer”的 handoff、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、request 卡在 same-daemon 生命周期内的 `request_revision` freshness、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode），以及无回调的 `exec_command` 共享更新卡（首次 reply，后续 `message.patch` 同卡更新，正文出现后终结）。
 
 ## 1. 文档定位
 
@@ -82,7 +82,7 @@
 
 | 交互面 | 当前 owner | 当前边界 |
 | --- | --- | --- |
-| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；不再直接进入主 reducer，也不改 core route |
+| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；首页仅保留分组导航入口，不再额外渲染“常用操作”区块；不再直接进入主 reducer，也不改 core route |
 | `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 `/list` 工作区分页导航；不改变 attach 状态 |
 | `create_workspace` | `mixed` | 当前由 Feishu UI 层把 normal `/list` 里的“从目录新建工作区”按钮送到产品层；点击后会打开目录模式 path picker，真正的 workspace 创建/复用与 route 落点仍由 orchestrator 决定 |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理 thread 列表分页与 scoped/all 视图切换；真正接管 thread 不在这里发生 |
@@ -244,6 +244,11 @@
 当前语义补充：
 
 - 这批动作的 owner 已经从“daemon/gateway 里的散落动作白名单”收束成“`FeishuUIIntent` -> lifecycle policy -> controller replaceable event”三段。
+- `/menu` 分组内命令的阶段可见性当前已收束到统一策略：
+  - `/follow` 仅在 `vscode_working` 可见
+  - `/new` 仅在 `normal_working` 可见
+  - 其余命令默认可见
+  - orchestrator 与 projector 共同复用该策略函数，避免两侧分叉
 - 当前所有可 replace 的 Feishu UI 导航，都采用同一套 lifecycle 策略：
   - daemon freshness：`daemon_lifecycle`
   - view/session 策略：`surface_state_rederived`
