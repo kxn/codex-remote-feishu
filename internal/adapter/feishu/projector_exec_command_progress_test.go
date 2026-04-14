@@ -17,9 +17,10 @@ func TestProjectExecCommandProgressCreatesReplyCard(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-1",
-			Command:  "npm test",
-			CWD:      "/data/dl/droid",
-			Status:   "running",
+			Commands: []string{
+				`/bin/bash -lc "npm test"`,
+				`bash -lc 'go test ./...'`,
+			},
 		},
 	})
 	if len(ops) != 1 {
@@ -29,8 +30,14 @@ func TestProjectExecCommandProgressCreatesReplyCard(t *testing.T) {
 	if op.Kind != OperationSendCard || op.ReplyToMessageID != "om-source-1" || !op.CardUpdateMulti {
 		t.Fatalf("expected initial exec progress card reply, got %#v", op)
 	}
-	if !strings.Contains(op.CardBody, "`npm test`") || !strings.Contains(op.CardBody, "`/data/dl/droid`") {
-		t.Fatalf("expected command progress body to include command and cwd, got %#v", op)
+	if !strings.Contains(op.CardBody, "npm test") || !strings.Contains(op.CardBody, "go test ./...") {
+		t.Fatalf("expected command list body to include normalized commands, got %#v", op)
+	}
+	if strings.Contains(op.CardBody, "bash -lc") {
+		t.Fatalf("expected command list body to strip shell wrapper, got %#v", op)
+	}
+	if strings.Contains(op.CardBody, "状态") || strings.Contains(op.CardBody, "目录") {
+		t.Fatalf("expected command list body only, got %#v", op)
 	}
 }
 
@@ -57,7 +64,7 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 	if op.Kind != OperationUpdateCard || op.MessageID != "om-progress-1" || op.ReplyToMessageID != "" {
 		t.Fatalf("expected update operation for existing exec progress card, got %#v", op)
 	}
-	if op.CardThemeKey != cardThemeSuccess {
-		t.Fatalf("expected completed exec progress to use success theme, got %#v", op)
+	if op.CardThemeKey != cardThemeInfo {
+		t.Fatalf("expected exec progress to use info theme, got %#v", op)
 	}
 }

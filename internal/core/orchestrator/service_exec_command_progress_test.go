@@ -9,11 +9,11 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestExecCommandProgressEmitsStartAndUpdateForSameCard(t *testing.T) {
+func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoContinueSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityNormal
+	surface.Verbosity = state.SurfaceVerbosityVerbose
 
 	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
 
@@ -39,27 +39,47 @@ func TestExecCommandProgressEmitsStartAndUpdateForSameCard(t *testing.T) {
 	if progress.Command != "npm test" || progress.CWD != "/data/dl/droid" || progress.Status != "running" || progress.Final {
 		t.Fatalf("unexpected start progress payload: %#v", progress)
 	}
+	if len(progress.Commands) != 1 || progress.Commands[0] != "npm test" {
+		t.Fatalf("expected first command history, got %#v", progress)
+	}
 
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+
+	secondStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+	if len(secondStarted) != 1 || secondStarted[0].Kind != control.UIEventExecCommandProgress || secondStarted[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second exec progress update, got %#v", secondStarted)
+	}
+	progress = secondStarted[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected second start to update same card, got %#v", progress)
+	}
+	if len(progress.Commands) != 2 || progress.Commands[0] != "npm test" || progress.Commands[1] != "go test ./..." {
+		t.Fatalf("expected accumulated command history, got %#v", progress)
+	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
 		ThreadID: "thread-1",
 		TurnID:   "turn-1",
-		ItemID:   "cmd-1",
+		ItemID:   "cmd-2",
 		ItemKind: "command_execution",
 		Status:   "completed",
 		Metadata: map[string]any{
-			"command": "npm test",
-			"cwd":     "/data/dl/droid",
+			"command": "go test ./...",
 		},
 	})
-	if len(completed) != 1 || completed[0].Kind != control.UIEventExecCommandProgress || completed[0].ExecCommandProgress == nil {
-		t.Fatalf("expected exec progress completion event, got %#v", completed)
-	}
-	progress = completed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" || progress.Status != "completed" || !progress.Final {
-		t.Fatalf("expected completion to target same card, got %#v", progress)
+	if len(completed) != 0 {
+		t.Fatalf("expected completion not to refresh exec progress card, got %#v", completed)
 	}
 }
 
@@ -90,11 +110,38 @@ func TestExecCommandProgressQuietVerbositySuppressesCard(t *testing.T) {
 	}
 }
 
-func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
+func TestExecCommandProgressNormalVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoContinueSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "npm test",
+			"cwd":     "/data/dl/droid",
+		},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected normal verbosity to suppress exec progress card, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected normal verbosity not to retain exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
+
+func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
 
 	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
 
@@ -155,7 +202,7 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoContinueSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityNormal
+	surface.Verbosity = state.SurfaceVerbosityVerbose
 
 	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
 
@@ -181,17 +228,10 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 		Status:    "failed",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
-	foundFinal := false
 	for _, event := range finished {
-		if event.Kind != control.UIEventExecCommandProgress || event.ExecCommandProgress == nil {
-			continue
+		if event.Kind == control.UIEventExecCommandProgress {
+			t.Fatalf("expected turn completion not to refresh exec progress card, got %#v", finished)
 		}
-		if event.ExecCommandProgress.MessageID == "om-progress-1" && event.ExecCommandProgress.Status == "failed" && event.ExecCommandProgress.Final {
-			foundFinal = true
-		}
-	}
-	if !foundFinal {
-		t.Fatalf("expected turn completion to finalize running exec progress, got %#v", finished)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
 		t.Fatalf("expected turn completion to clear exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)

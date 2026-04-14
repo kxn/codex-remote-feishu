@@ -478,6 +478,7 @@ type ExecCommandProgress struct {
 	TurnID    string
 	ItemID    string
 	MessageID string
+	Commands  []string
 	Command   string
 	CWD       string
 	Status    string

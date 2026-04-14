@@ -24,13 +24,15 @@ func (s *Service) handleExecCommandItemStarted(instanceID string, event agentpro
 		return nil
 	}
 	progress := s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	prevItemID := strings.TrimSpace(progress.ItemID)
 	progress.ItemID = event.ItemID
 	progress.Command = command
+	progress.Commands = appendExecCommandHistory(progress.Commands, command)
 	if strings.TrimSpace(cwd) != "" {
 		progress.CWD = cwd
 	}
 	progress.Status = normalizeExecCommandProgressStatus(event.Status, false)
-	if !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
+	if prevItemID != "" && prevItemID == strings.TrimSpace(event.ItemID) && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -79,7 +81,7 @@ func (s *Service) handleExecCommandItemCompleted(instanceID string, event agentp
 		progress.CWD = cwd
 	}
 	progress.Status = normalizeExecCommandProgressStatus(event.Status, true)
-	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, true)
+	return nil
 }
 
 func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnID, turnStatus, finalText string) []control.UIEvent {
@@ -92,14 +94,9 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 		return nil
 	}
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
-	if strings.TrimSpace(finalText) != "" || !s.surfaceAllowsExecCommandProgress(surface) {
-		return nil
-	}
-	if isTerminalExecCommandProgressStatus(progress.Status) {
-		return nil
-	}
-	progress.Status = normalizeExecCommandProgressStatus(turnStatus, true)
-	return s.emitExecCommandProgress(surface, progress, threadID, turnID, true)
+	_ = turnStatus
+	_ = finalText
+	return nil
 }
 
 func (s *Service) RecordExecCommandProgressMessage(surfaceID, threadID, turnID, itemID, messageID string) {
@@ -138,6 +135,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 			TurnID:    progress.TurnID,
 			ItemID:    progress.ItemID,
 			MessageID: progress.MessageID,
+			Commands:  append([]string(nil), progress.Commands...),
 			Command:   progress.Command,
 			CWD:       progress.CWD,
 			Status:    progress.Status,
@@ -176,7 +174,7 @@ func (s *Service) surfaceAllowsExecCommandProgress(surface *state.SurfaceConsole
 	if surface == nil {
 		return false
 	}
-	return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
+	return state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose
 }
 
 func (s *Service) eventCarriesAssistantText(instanceID string, event agentproto.Event) bool {
@@ -202,6 +200,14 @@ func execCommandMetadata(event agentproto.Event) (string, string) {
 	return strings.TrimSpace(command), strings.TrimSpace(cwd)
 }
 
+func appendExecCommandHistory(commands []string, command string) []string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return commands
+	}
+	return append(commands, command)
+}
+
 func normalizeExecCommandProgressStatus(status string, final bool) string {
 	value := strings.ToLower(strings.TrimSpace(status))
 	switch value {
@@ -223,14 +229,5 @@ func normalizeExecCommandProgressStatus(status string, final bool) string {
 			return value
 		}
 		return "running"
-	}
-}
-
-func isTerminalExecCommandProgressStatus(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "completed", "failed", "interrupted":
-		return true
-	default:
-		return false
 	}
 }
