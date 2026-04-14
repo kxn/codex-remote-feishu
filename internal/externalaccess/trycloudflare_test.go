@@ -60,7 +60,7 @@ func TestTryCloudflareProviderKeepsTunnelAliveAfterStartupContextEnds(t *testing
 			return nil
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-			script := fmt.Sprintf("printf 'https://example.trycloudflare.com\\n'; sleep 0.3; echo alive > %q; sleep 60", probeFile)
+			script := fmt.Sprintf("printf 'https://example.trycloudflare.com\\n'; sleep 0.3; printf 'alive\\n' > %s; sleep 60", bashSingleQuotedPath(probeFile))
 			return exec.CommandContext(ctx, "bash", "-lc", script)
 		},
 	})
@@ -72,8 +72,7 @@ func TestTryCloudflareProviderKeepsTunnelAliveAfterStartupContextEnds(t *testing
 	}
 	cancel()
 
-	time.Sleep(700 * time.Millisecond)
-	content, err := os.ReadFile(probeFile)
+	content, err := waitForFileContent(probeFile, 3*time.Second)
 	if err != nil {
 		t.Fatalf("expected tunnel child process to outlive startup context, read probe file: %v", err)
 	}
@@ -221,4 +220,27 @@ func reserveLocalPort(t *testing.T) int {
 	}
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port
+}
+
+func waitForFileContent(path string, timeout time.Duration) ([]byte, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		raw, err := os.ReadFile(path)
+		if err == nil && len(strings.TrimSpace(string(raw))) != 0 {
+			return raw, nil
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return nil, err
+			}
+			return raw, nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func bashSingleQuotedPath(path string) string {
+	value := filepath.ToSlash(path)
+	value = strings.ReplaceAll(value, `'`, `'"'"'`)
+	return "'" + value + "'"
 }
