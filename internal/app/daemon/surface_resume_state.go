@@ -40,6 +40,7 @@ type surfaceResumeState struct {
 type surfaceResumeStore struct {
 	path    string
 	entries map[string]SurfaceResumeEntry
+	dirty   bool
 }
 
 func surfaceResumeStatePath(stateDir string) string {
@@ -78,9 +79,17 @@ func loadSurfaceResumeStore(path string) (*surfaceResumeStore, error) {
 	for key, entry := range persisted.Entries {
 		normalized, ok := normalizeSurfaceResumeEntry(entry)
 		if !ok {
+			store.dirty = true
 			continue
 		}
+		if strings.TrimSpace(key) != normalized.SurfaceSessionID {
+			store.dirty = true
+		}
 		store.entries[key] = normalized
+	}
+	if canonical, changed := canonicalizeSurfaceResumeEntries(store.entries); changed {
+		store.entries = canonical
+		store.dirty = true
 	}
 	return store, nil
 }
@@ -116,6 +125,10 @@ func (s *surfaceResumeStore) Put(entry SurfaceResumeEntry) error {
 		return fmt.Errorf("surface resume entry requires surface id")
 	}
 	s.entries[normalized.SurfaceSessionID] = normalized
+	if canonical, changed := canonicalizeSurfaceResumeEntries(s.entries); changed {
+		s.entries = canonical
+		s.dirty = true
+	}
 	return s.save()
 }
 
@@ -160,7 +173,11 @@ func (s *surfaceResumeStore) save() error {
 	if err := tmpFile.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, s.path)
+	if err := os.Rename(tmpPath, s.path); err != nil {
+		return err
+	}
+	s.dirty = false
+	return nil
 }
 
 func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, bool) {

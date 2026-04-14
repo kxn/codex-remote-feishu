@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,142 @@ func TestSurfaceResumeStoreRoundTrip(t *testing.T) {
 	}
 	if !entry.UpdatedAt.Equal(updatedAt) {
 		t.Fatalf("unexpected updatedAt: %s", entry.UpdatedAt)
+	}
+}
+
+func TestSurfaceResumeStoreDedupesSplitFeishuP2PSurfacesOnPut(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceResumeStatePath(stateDir)
+	store, err := loadSurfaceResumeStore(path)
+	if err != nil {
+		t.Fatalf("load empty store: %v", err)
+	}
+
+	shadowUpdatedAt := time.Date(2026, 4, 11, 2, 47, 45, 0, time.UTC)
+	if err := store.Put(SurfaceResumeEntry{
+		SurfaceSessionID:   "feishu:Codex-5:user:a756fefe",
+		GatewayID:          "Codex-5",
+		ChatID:             "oc_099318e4d660955369af84e8c8aea268",
+		ActorUserID:        "a756fefe",
+		ProductMode:        "normal",
+		ResumeInstanceID:   "inst-headless-pool-1",
+		ResumeWorkspaceKey: "/data/dl/.local/state/codex-remote",
+		ResumeRouteMode:    "unbound",
+		ResumeHeadless:     true,
+		UpdatedAt:          shadowUpdatedAt,
+	}); err != nil {
+		t.Fatalf("put shadow feishu surface: %v", err)
+	}
+
+	canonicalUpdatedAt := time.Date(2026, 4, 14, 4, 10, 35, 0, time.UTC)
+	if err := store.Put(SurfaceResumeEntry{
+		SurfaceSessionID:   "feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169",
+		GatewayID:          "Codex-5",
+		ChatID:             "oc_099318e4d660955369af84e8c8aea268",
+		ActorUserID:        "ou_7588194bf7ffe98ef2845026aa398169",
+		ProductMode:        "normal",
+		ResumeInstanceID:   "inst-headless-2",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "你好你好",
+		ResumeThreadCWD:    "/data/dl/fschannel5",
+		ResumeWorkspaceKey: "/data/dl/fschannel5",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+		UpdatedAt:          canonicalUpdatedAt,
+	}); err != nil {
+		t.Fatalf("put canonical feishu surface: %v", err)
+	}
+
+	reloaded, err := loadSurfaceResumeStore(path)
+	if err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	entries := reloaded.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected one deduped entry, got %#v", entries)
+	}
+	if _, ok := reloaded.Get("feishu:Codex-5:user:a756fefe"); ok {
+		t.Fatalf("expected shadow surface entry to be removed, got %#v", entries)
+	}
+	entry, ok := reloaded.Get("feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169")
+	if !ok {
+		t.Fatalf("expected canonical feishu entry after dedupe, got %#v", entries)
+	}
+	if entry.ResumeThreadID != "thread-1" || entry.ResumeRouteMode != "pinned" || entry.ResumeWorkspaceKey != "/data/dl/fschannel5" {
+		t.Fatalf("expected richer canonical resume target to win, got %#v", entry)
+	}
+	if !entry.UpdatedAt.Equal(canonicalUpdatedAt) {
+		t.Fatalf("expected latest updatedAt to be preserved, got %#v", entry)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read persisted state: %v", err)
+	}
+	if strings.Contains(string(raw), "a756fefe") {
+		t.Fatalf("expected persisted state to drop shadow surface, got %s", raw)
+	}
+}
+
+func TestDaemonStartupCanonicalizesLegacySplitFeishuP2PSurfaceResumeState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	writeSurfaceResumeStateForTest(t, stateDir, surfaceResumeState{
+		Version: surfaceResumeStateVersion,
+		Entries: map[string]SurfaceResumeEntry{
+			"feishu:Codex-5:user:a756fefe": {
+				SurfaceSessionID:   "feishu:Codex-5:user:a756fefe",
+				GatewayID:          "Codex-5",
+				ChatID:             "oc_099318e4d660955369af84e8c8aea268",
+				ActorUserID:        "a756fefe",
+				ProductMode:        "normal",
+				ResumeInstanceID:   "inst-headless-pool-1",
+				ResumeWorkspaceKey: "/data/dl/.local/state/codex-remote",
+				ResumeRouteMode:    "unbound",
+				ResumeHeadless:     true,
+				UpdatedAt:          time.Date(2026, 4, 11, 2, 47, 45, 0, time.UTC),
+			},
+			"feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169": {
+				SurfaceSessionID:   "feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169",
+				GatewayID:          "Codex-5",
+				ChatID:             "oc_099318e4d660955369af84e8c8aea268",
+				ActorUserID:        "ou_7588194bf7ffe98ef2845026aa398169",
+				ProductMode:        "normal",
+				ResumeInstanceID:   "inst-headless-2",
+				ResumeThreadID:     "thread-1",
+				ResumeThreadTitle:  "你好你好",
+				ResumeThreadCWD:    "/data/dl/fschannel5",
+				ResumeWorkspaceKey: "/data/dl/fschannel5",
+				ResumeRouteMode:    "pinned",
+				ResumeHeadless:     true,
+				UpdatedAt:          time.Date(2026, 4, 14, 4, 10, 35, 0, time.UTC),
+			},
+		},
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	if snapshot := app.service.SurfaceSnapshot("feishu:Codex-5:user:a756fefe"); snapshot != nil {
+		t.Fatalf("expected shadow surface not to materialize, got %#v", snapshot)
+	}
+	snapshot := app.service.SurfaceSnapshot("feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169")
+	if snapshot == nil {
+		t.Fatal("expected canonical feishu surface to materialize")
+	}
+	if snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected canonical surface to stay latent after startup materialization, got %#v", snapshot)
+	}
+
+	if entry := app.SurfaceResumeState("feishu:Codex-5:user:a756fefe"); entry != nil {
+		t.Fatalf("expected shadow resume state entry to be removed, got %#v", entry)
+	}
+	entry := app.SurfaceResumeState("feishu:Codex-5:user:ou_7588194bf7ffe98ef2845026aa398169")
+	if entry == nil {
+		t.Fatal("expected canonical resume state entry after startup")
+	}
+	if entry.ResumeThreadID != "thread-1" || entry.ResumeRouteMode != "pinned" || entry.ResumeWorkspaceKey != "/data/dl/fschannel5" {
+		t.Fatalf("expected canonical resume target after startup, got %#v", entry)
 	}
 }
 
@@ -751,5 +888,21 @@ func putSurfaceResumeStateForTest(t *testing.T, stateDir string, entry SurfaceRe
 	}
 	if err := store.Put(entry); err != nil {
 		t.Fatalf("put surface resume entry: %v", err)
+	}
+}
+
+func writeSurfaceResumeStateForTest(t *testing.T, stateDir string, persisted surfaceResumeState) {
+	t.Helper()
+	path := surfaceResumeStatePath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	raw, err := json.MarshalIndent(persisted, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal surface resume state: %v", err)
+	}
+	raw = append(raw, '\n')
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write surface resume state: %v", err)
 	}
 }

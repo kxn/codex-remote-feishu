@@ -33,6 +33,11 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 			entries: map[string]SurfaceResumeEntry{},
 		}
 	}
+	if store != nil && store.dirty {
+		if err := store.save(); err != nil {
+			log.Printf("persist sanitized surface resume state failed: path=%s err=%v", path, err)
+		}
+	}
 	a.surfaceResumeState = store
 	a.materializeSurfaceResumeStateLocked()
 	a.syncSurfaceResumeRecoveryStateLocked()
