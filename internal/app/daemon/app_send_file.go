@@ -13,6 +13,15 @@ import (
 )
 
 func (a *App) handleSendIMFileCommand(command control.DaemonCommand) []control.UIEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return nil
+	}
+	return a.handleSendIMFileCommandLocked(command)
+}
+
+func (a *App) handleSendIMFileCommandLocked(command control.DaemonCommand) []control.UIEvent {
 	path := strings.TrimSpace(command.LocalPath)
 	if path == "" {
 		return sendFileNotice(command.SurfaceSessionID, "send_file_invalid", "文件路径无效，请重新选择后再试。")
@@ -27,9 +36,7 @@ func (a *App) handleSendIMFileCommand(command control.DaemonCommand) []control.U
 		return sendFileNotice(command.SurfaceSessionID, "send_file_invalid", "当前只能发送文件，不能发送目录。")
 	}
 
-	a.mu.Lock()
 	resolved, toolErr := a.resolveToolSurfaceContextLocked(command.SurfaceSessionID)
-	a.mu.Unlock()
 	if toolErr != nil {
 		return sendFileNotice(command.SurfaceSessionID, "send_file_unavailable", sendFileToolErrorText(toolErr))
 	}

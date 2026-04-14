@@ -14,6 +14,15 @@ import (
 )
 
 func (a *App) handleDaemonCommand(command control.DaemonCommand) []control.UIEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return nil
+	}
+	return a.handleDaemonCommandLocked(command)
+}
+
+func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []control.UIEvent {
 	switch command.Kind {
 	case control.DaemonCommandStartHeadless:
 		return a.startManagedHeadless(command)
@@ -28,7 +37,7 @@ func (a *App) handleDaemonCommand(command control.DaemonCommand) []control.UIEve
 	case control.DaemonCommandThreadHistoryRead:
 		return a.handleThreadHistoryDaemonCommand(command)
 	case control.DaemonCommandSendIMFile:
-		return a.handleSendIMFileCommand(command)
+		return a.handleSendIMFileCommandLocked(command)
 	default:
 		return nil
 	}

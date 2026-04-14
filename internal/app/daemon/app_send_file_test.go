@@ -142,3 +142,96 @@ func TestHandleSendIMFileCommandMapsUploadAndSendFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleActionPathPickerConfirmSendFileDoesNotDeadlock(t *testing.T) {
+	sender := &fakeToolFileSender{}
+	app := New(":0", ":0", sender, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	workspaceRoot := t.TempDir()
+	filePath := filepath.Join(workspaceRoot, "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	waitAction := func(name string, fn func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() {
+			fn()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s timed out (possible deadlock)", name)
+		}
+	}
+
+	waitAction("open send file picker", func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionSendFile,
+			SurfaceSessionID: "surface-1",
+			GatewayID:        "app-1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+		})
+	})
+	surfaces := app.service.Surfaces()
+	if len(surfaces) != 1 || surfaces[0].ActivePathPicker == nil {
+		t.Fatalf("expected active path picker, got %#v", surfaces)
+	}
+	pickerID := surfaces[0].ActivePathPicker.PickerID
+	if pickerID == "" {
+		t.Fatalf("expected picker id")
+	}
+
+	waitAction("select file", func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionPathPickerSelect,
+			SurfaceSessionID: "surface-1",
+			GatewayID:        "app-1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+			PickerID:         pickerID,
+			PickerEntry:      filepath.Base(filePath),
+		})
+	})
+	waitAction("confirm picker and send file", func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionPathPickerConfirm,
+			SurfaceSessionID: "surface-1",
+			GatewayID:        "app-1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+			PickerID:         pickerID,
+		})
+	})
+	waitAction("follow-up status action", func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionStatus,
+			SurfaceSessionID: "surface-1",
+			GatewayID:        "app-1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+		})
+	})
+
+	if len(sender.calls) != 1 {
+		t.Fatalf("expected one send call after confirm, got %#v", sender.calls)
+	}
+}

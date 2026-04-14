@@ -334,7 +334,7 @@ func (a *App) bareCommandContinuationResultLocked(action control.Action, events 
 	if !daemonCommandMatchesBareContinuation(action, daemonCommand) {
 		return nil, events
 	}
-	followup := a.handleDaemonCommand(daemonCommand)
+	followup := a.handleDaemonCommandLocked(daemonCommand)
 	if len(followup) == 0 {
 		return nil, nil
 	}

@@ -17,7 +17,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 	_ = ctx
 	for _, event := range events {
 		if event.DaemonCommand != nil {
-			followup := a.handleDaemonCommand(*event.DaemonCommand)
+			followup := a.handleDaemonCommandLocked(*event.DaemonCommand)
 			a.handleUIEvents(context.Background(), followup)
 			continue
 		}
