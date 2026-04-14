@@ -13,6 +13,21 @@ For direct instructions from the repository owner/user in chat:
 
 This rule is mandatory for all agents collaborating in this repository.
 
+## Staged Execution Continuity Rule
+
+When the user explicitly asks to execute work in stages (for example: "按阶段推进", "分阶段推进", "阶段式推进", "staged rollout"):
+
+- Treat staged execution as a continuous delivery instruction, not a request for phase-by-phase confirmation.
+- Complete all planned stages in the same task flow by default.
+- Do not stop after finishing only one stage.
+- Do not pause mid-way to ask whether to continue to the next stage.
+- This rule applies regardless of whether the work is tracked by a GitHub issue.
+- The only valid stop conditions are:
+  - hard blocker (missing dependency, external outage, permission limitation)
+  - newly discovered contradiction that makes continuing unsafe
+  - explicit user interruption or redirection
+- When a valid stop condition happens, report the concrete blocker and the exact next action to resume staged execution.
+
 ## Project Skill
 
 For work on this repository's relay stack, use the project skill at `.codex/skills/relay-stack-playbook/`.
