@@ -36,18 +36,18 @@ type surfaceInboundLane struct {
 }
 
 type queuedMessageWork struct {
-	gatewayID        string
-	surfaceID        string
-	chatID           string
-	actorUserID      string
-	messageID        string
-	messageType      string
-	content          string
-	parentMessageID  string
-	rootMessageID    string
-	inbound          *control.ActionInboundMeta
-	text             string
-	imageKey         string
+	gatewayID       string
+	surfaceID       string
+	chatID          string
+	actorUserID     string
+	messageID       string
+	messageType     string
+	content         string
+	parentMessageID string
+	rootMessageID   string
+	inbound         *control.ActionInboundMeta
+	text            string
+	imageKey        string
 }
 
 type queuedActionWork struct {
