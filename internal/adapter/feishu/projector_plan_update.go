@@ -32,12 +32,12 @@ func planUpdateElements(update control.PlanUpdate) []map[string]any {
 func planUpdateStatusLabel(status agentproto.TurnPlanStepStatus) string {
 	switch status {
 	case agentproto.TurnPlanStepStatusCompleted:
-		return "☑ 已完成"
+		return "☑"
 	case agentproto.TurnPlanStepStatusInProgress:
-		return "◐ 进行中"
+		return "◐"
 	case agentproto.TurnPlanStepStatusPending:
-		return "○ 待处理"
+		return "○"
 	default:
-		return "○ 状态未知"
+		return "○"
 	}
 }

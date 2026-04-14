@@ -33,6 +33,9 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 	if op.CardTitle != "当前计划" || op.ReplyToMessageID != "om_1" {
 		t.Fatalf("unexpected plan update card envelope: %#v", op)
 	}
+	if op.CardThemeKey != cardThemePlan {
+		t.Fatalf("expected plan card theme key %q, got %#v", cardThemePlan, op.CardThemeKey)
+	}
 	if op.CardBody != "先把协议和去重打通。" {
 		t.Fatalf("expected explanation in card body, got %#v", op)
 	}
@@ -46,13 +49,13 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 		}
 	}
 	joined := strings.Join(rendered, "\n")
-	if !strings.Contains(joined, "☑ 已完成 接入结构化 plan") {
+	if !strings.Contains(joined, "☑ 接入结构化 plan") {
 		t.Fatalf("expected completed step row, got %q", joined)
 	}
-	if !strings.Contains(joined, "◐ 进行中 做 orchestrator 去重") {
+	if !strings.Contains(joined, "◐ 做 orchestrator 去重") {
 		t.Fatalf("expected in-progress step row, got %q", joined)
 	}
-	if !strings.Contains(joined, "○ 待处理 接入飞书卡片投影") {
+	if !strings.Contains(joined, "○ 接入飞书卡片投影") {
 		t.Fatalf("expected pending step row, got %q", joined)
 	}
 }

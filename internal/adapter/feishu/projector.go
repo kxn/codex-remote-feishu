@@ -55,6 +55,7 @@ const (
 
 const (
 	cardThemeInfo     = "info"
+	cardThemePlan     = "plan"
 	cardThemeSuccess  = "success"
 	cardThemeError    = "error"
 	cardThemeFinal    = "final"
@@ -145,10 +146,10 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			ReplyToMessageID: event.SourceMessageID,
 			CardTitle:        title,
 			CardBody:         body,
-			CardThemeKey:     cardThemeInfo,
+			CardThemeKey:     cardThemePlan,
 			CardElements:     elements,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, body, cardThemeInfo, elements),
+			card:             rawCardDocument(title, body, cardThemePlan, elements),
 		}}
 	case control.UIEventFeishuDirectSelectionPrompt:
 		var prompt *control.FeishuDirectSelectionPrompt

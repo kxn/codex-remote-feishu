@@ -850,6 +850,8 @@ func cardTemplate(themeKey, fallback string) string {
 		key = strings.ToLower(strings.TrimSpace(fallback))
 	}
 	switch {
+	case key == cardThemePlan:
+		return "blue"
 	case key == cardThemeFinal:
 		return "blue"
 	case key == cardThemeSuccess, key == cardThemeApproval:
