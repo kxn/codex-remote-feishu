@@ -115,6 +115,7 @@ func (f *fakeCronBitableAPI) waitForWrites(t *testing.T, wantCreates, wantUpdate
 func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	workspace := t.TempDir()
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
 		GatewayID: "gateway-1",
@@ -139,6 +140,9 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
 		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: app.headlessRuntime.Paths.StateDir,
+		},
 	})
 	var launches int
 	var capturedEnv []string
@@ -178,6 +182,7 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
 		GatewayID: "gateway-1",
@@ -269,6 +274,7 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
 		GatewayID: "gateway-1",
@@ -322,6 +328,7 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
 		GatewayID: "gateway-1",
