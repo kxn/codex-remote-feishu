@@ -10,6 +10,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
+func intPtr(value int) *int {
+	return &value
+}
+
 func TestProjectTurnFailedNoticeUsesErrorTheme(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -361,6 +365,7 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 		},
 		FinalTurnSummary: &control.FinalTurnSummary{
 			Elapsed:            2100 * time.Millisecond,
+			ContextInputTokens: intPtr(150),
 			ModelContextWindow: &contextWindow,
 			Usage: &control.FinalTurnUsage{
 				InputTokens:           150,
@@ -384,7 +389,7 @@ func TestProjectFinalAssistantBlockShowsTurnUsageFooter(t *testing.T) {
 	if len(ops[0].CardElements) != 1 {
 		t.Fatalf("expected standalone usage footer, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 150  缓存 90 (60.0%)  输出 50  推理 20  **线程累计** 输入 400  缓存 200 (50.0%)  输出 100  推理 40  **上下文剩余(估算)** 60.0%" {
+	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 150  缓存 90 (60.0%)  输出 50  推理 20  **线程累计** 输入 400  缓存 200 (50.0%)  输出 100  推理 40  **上下文剩余(估算)** 85.0%" {
 		t.Fatalf("unexpected usage footer: %#v", ops[0].CardElements[0])
 	}
 }
@@ -402,6 +407,7 @@ func TestProjectFinalAssistantBlockCompactsThreadUsageFooter(t *testing.T) {
 		},
 		FinalTurnSummary: &control.FinalTurnSummary{
 			Elapsed:            2100 * time.Millisecond,
+			ContextInputTokens: intPtr(466989),
 			ModelContextWindow: &contextWindow,
 			Usage: &control.FinalTurnUsage{
 				InputTokens:           466989,
@@ -423,7 +429,7 @@ func TestProjectFinalAssistantBlockCompactsThreadUsageFooter(t *testing.T) {
 	if len(ops[0].CardElements) != 1 {
 		t.Fatalf("expected standalone usage footer, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 466989  缓存 395648 (84.7%)  输出 1803  推理 761  **线程累计** 输入 250.7M  缓存 233.3M (93.0%)  输出 912.7K  推理 415.5K  **上下文剩余(估算)** 74.9%" {
+	if ops[0].CardElements[0]["content"] != "**本轮用时** 2秒  **本轮累计** 输入 466989  缓存 395648 (84.7%)  输出 1803  推理 761  **线程累计** 输入 250.7M  缓存 233.3M (93.0%)  输出 912.7K  推理 415.5K  **上下文剩余(估算)** 100.0%" {
 		t.Fatalf("unexpected compact usage footer: %#v", ops[0].CardElements[0])
 	}
 }

@@ -640,11 +640,13 @@ func formatFinalTurnSummaryLine(summary *control.FinalTurnSummary) string {
 	if usage := summary.ThreadUsage; usage != nil {
 		parts = append(parts, fmt.Sprintf("**线程累计** %s", formatTokenUsageSummary(usage, true)))
 	}
-	contextInputTokens := 0
-	if usage := summary.ThreadUsage; usage != nil {
-		contextInputTokens = usage.InputTokens
+	contextInputTokens := (*int)(nil)
+	if summary.ContextInputTokens != nil {
+		value := *summary.ContextInputTokens
+		contextInputTokens = &value
 	} else if usage := summary.Usage; usage != nil {
-		contextInputTokens = usage.InputTokens
+		value := usage.InputTokens
+		contextInputTokens = &value
 	}
 	if contextLeft := formatApproxContextLeftSummary(contextInputTokens, summary.ModelContextWindow); contextLeft != "" {
 		parts = append(parts, fmt.Sprintf("**上下文剩余(估算)** %s", contextLeft))
@@ -694,14 +696,17 @@ func formatTokenUsageValue(value int, compact bool) string {
 	return fmt.Sprintf("%d", value)
 }
 
-func formatApproxContextLeftSummary(input int, modelContextWindow *int) string {
+func formatApproxContextLeftSummary(input *int, modelContextWindow *int) string {
 	if modelContextWindow == nil || *modelContextWindow <= 0 {
 		return ""
 	}
-	if input <= 0 {
+	if input == nil {
+		return ""
+	}
+	if *input <= 0 {
 		return "100.0%"
 	}
-	left := 100 * (1 - float64(input)/float64(*modelContextWindow))
+	left := 100 * (1 - float64(*input)/float64(*modelContextWindow))
 	if left < 0 {
 		left = 0
 	}

@@ -470,6 +470,7 @@ type FinalTurnSummary struct {
 	Usage                *FinalTurnUsage
 	ThreadUsage          *FinalTurnUsage
 	TotalTokensInContext int
+	ContextInputTokens   *int
 	ModelContextWindow   *int
 }
 

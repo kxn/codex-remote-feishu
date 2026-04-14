@@ -69,7 +69,11 @@ func finalTurnSummaryForBinding(now time.Time, binding *remoteTurnBinding, threa
 	}
 	if thread != nil && thread.TokenUsage != nil {
 		summary.ThreadUsage = finalTurnUsageFromBreakdown(thread.TokenUsage.Total)
-		summary.TotalTokensInContext = thread.TokenUsage.Total.TotalTokens
+		summary.TotalTokensInContext = thread.TokenUsage.Last.TotalTokens
+		if thread.TokenUsage.Last.InputTokens > 0 {
+			value := thread.TokenUsage.Last.InputTokens
+			summary.ContextInputTokens = &value
+		}
 		if thread.TokenUsage.ModelContextWindow != nil {
 			value := *thread.TokenUsage.ModelContextWindow
 			summary.ModelContextWindow = &value

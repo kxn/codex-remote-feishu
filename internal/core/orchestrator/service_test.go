@@ -224,8 +224,11 @@ func TestThreadTokenUsageUpdatePopulatesThreadStateAndFinalTurnSummary(t *testin
 	if summary.ThreadUsage == nil || summary.ThreadUsage.TotalTokens != 500 || summary.ThreadUsage.InputTokens != 370 || summary.ThreadUsage.CachedInputTokens != 200 {
 		t.Fatalf("unexpected thread cumulative usage summary: %#v", summary)
 	}
-	if summary.TotalTokensInContext != 500 {
+	if summary.TotalTokensInContext != 190 {
 		t.Fatalf("unexpected total tokens in context: %#v", summary)
+	}
+	if summary.ContextInputTokens == nil || *summary.ContextInputTokens != 145 {
+		t.Fatalf("unexpected context input tokens: %#v", summary)
 	}
 	if summary.ModelContextWindow == nil || *summary.ModelContextWindow != 1000 {
 		t.Fatalf("unexpected model context window: %#v", summary)
