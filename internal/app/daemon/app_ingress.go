@@ -591,6 +591,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 			)
 		}
 		uiEvents := a.service.ApplyAgentEvent(instanceID, event)
+		a.logThreadRefreshCommand(instanceID, event, uiEvents)
 		if event.Kind == agentproto.EventTurnStarted {
 			a.traceTurnLifecycle(instanceID, event)
 		}
@@ -619,6 +620,44 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	if syncSurfaceResumeState {
 		a.syncSurfaceResumeStateForInstanceLocked(instanceID, nil)
 	}
+}
+
+func (a *App) logThreadRefreshCommand(instanceID string, event agentproto.Event, uiEvents []control.UIEvent) {
+	inst := a.service.Instance(instanceID)
+	activeTurnID := ""
+	if inst != nil {
+		activeTurnID = inst.ActiveTurnID
+	}
+	var refreshSurfaceIDs []string
+	for _, uiEvent := range uiEvents {
+		if uiEvent.Command != nil && uiEvent.Command.Kind == agentproto.CommandThreadsRefresh {
+			refreshSurfaceIDs = append(refreshSurfaceIDs, uiEvent.SurfaceSessionID)
+		}
+	}
+	if len(refreshSurfaceIDs) == 0 {
+		if event.Kind == agentproto.EventThreadDiscovered && event.FocusSource == "remote_created_thread" {
+			log.Printf(
+				"thread discovered from remote create: instance=%s thread=%s pending=%s active=%s activeTurn=%s",
+				instanceID,
+				event.ThreadID,
+				summarizeRemoteStatuses(a.service.PendingRemoteTurns()),
+				summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
+				activeTurnID,
+			)
+		}
+		return
+	}
+	log.Printf(
+		"auto thread refresh queued: instance=%s causeEvent=%s thread=%s focusSource=%s surfaces=%s pending=%s active=%s activeTurn=%s",
+		instanceID,
+		event.Kind,
+		event.ThreadID,
+		event.FocusSource,
+		strings.Join(refreshSurfaceIDs, ","),
+		summarizeRemoteStatuses(a.service.PendingRemoteTurns()),
+		summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
+		activeTurnID,
+	)
 }
 
 func shouldLogAgentEvent(event agentproto.Event) bool {

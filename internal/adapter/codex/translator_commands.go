@@ -116,6 +116,12 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 	case agentproto.CommandThreadsRefresh:
 		requestID := t.nextRequest("threads-refresh")
 		t.pendingThreadListRequestID = requestID
+		t.debugf(
+			"translate threads refresh: request=%s currentThread=%s inflightReads=%d",
+			requestID,
+			t.currentThreadID,
+			len(t.pendingThreadReads),
+		)
 		payload := map[string]any{
 			"id":     requestID,
 			"method": "thread/list",

@@ -137,6 +137,12 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.pendingThreadListRequestID = ""
 			t.threadRefreshOrder = nil
 			threads := parseThreadList(message["result"])
+			t.debugf(
+				"observe server thread/list refresh: request=%s threads=%d currentThread=%s",
+				requestID,
+				len(threads),
+				t.currentThreadID,
+			)
 			if len(threads) == 0 {
 				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
 				return Result{
@@ -167,6 +173,12 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				outbound = append(outbound, append(bytes, '\n'))
 			}
+			t.debugf(
+				"observe server thread/list refresh followups: request=%s threadReads=%d firstThread=%s",
+				requestID,
+				len(outbound),
+				threads[0].ThreadID,
+			)
 			return Result{Suppress: true, OutboundToCodex: outbound}, nil
 		}
 		if threadID, exists := t.pendingThreadReads[requestID]; exists {
@@ -208,6 +220,12 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				records = append(records, extras...)
 				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
 				t.threadRefreshOrder = nil
+				t.debugf(
+					"observe server thread refresh completed: request=%s records=%d currentThread=%s",
+					requestID,
+					len(records),
+					t.currentThreadID,
+				)
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{{
@@ -247,6 +265,17 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if problem.TurnID != "" {
 			t.pendingTurnProblems[problem.TurnID] = *problem
+			if t.pendingThreadListRequestID != "" || len(t.pendingThreadReads) > 0 {
+				t.debugf(
+					"observe server error during thread refresh: thread=%s turn=%s code=%s pendingThreadList=%t pendingThreadReads=%d currentThread=%s",
+					problem.ThreadID,
+					problem.TurnID,
+					problem.Code,
+					t.pendingThreadListRequestID != "",
+					len(t.pendingThreadReads),
+					t.currentThreadID,
+				)
+			}
 			t.debugf(
 				"observe server error: thread=%s turn=%s code=%s retryable=%t message=%s",
 				problem.ThreadID,
