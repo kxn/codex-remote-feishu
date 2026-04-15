@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -192,6 +193,7 @@ func (p *DriveMarkdownPreviewer) runBackgroundCleanup(ctx context.Context) error
 	defer p.maintenanceMu.Unlock()
 
 	now := p.nowUTC()
+	var combinedErr error
 	if p.api != nil && strings.TrimSpace(p.config.StatePath) != "" {
 		p.stateMu.Lock()
 		state := p.loadStateLocked()
@@ -200,26 +202,25 @@ func (p *DriveMarkdownPreviewer) runBackgroundCleanup(ctx context.Context) error
 
 		if shouldRunDriveCleanup {
 			result, err := p.cleanupManagedPreviewFiles(ctx, now.Add(-p.config.BackgroundCleanupMaxAge))
-			if err != nil {
-				return err
-			}
-
-			p.stateMu.Lock()
-			state = p.loadStateLocked()
-			state.LastCleanupAt = now
-			if err := p.saveStateLocked(); err != nil {
+			if err == nil {
+				p.stateMu.Lock()
+				state = p.loadStateLocked()
+				state.LastCleanupAt = now
+				if saveErr := p.saveStateLocked(); saveErr != nil {
+					err = saveErr
+				}
 				p.stateMu.Unlock()
-				return err
 			}
-			p.stateMu.Unlock()
-
-			if result.DeletedFileCount > 0 {
+			if err == nil && result.DeletedFileCount > 0 {
 				log.Printf(
 					"markdown preview background cleanup: gateway=%s deleted=%d bytes=%d",
 					strings.TrimSpace(p.config.GatewayID),
 					result.DeletedFileCount,
 					result.DeletedEstimatedBytes,
 				)
+			}
+			if err != nil {
+				combinedErr = joinPreviewMaintenanceError(combinedErr, "drive cleanup", err)
 			}
 		}
 	}
@@ -228,10 +229,21 @@ func (p *DriveMarkdownPreviewer) runBackgroundCleanup(ctx context.Context) error
 		err := p.cleanupWebPreviewCacheLocked(now)
 		p.webPreviewMu.Unlock()
 		if err != nil {
-			return err
+			combinedErr = joinPreviewMaintenanceError(combinedErr, "web preview cleanup", err)
 		}
 	}
-	return nil
+	return combinedErr
+}
+
+func joinPreviewMaintenanceError(current error, label string, err error) error {
+	if err == nil {
+		return current
+	}
+	wrapped := fmt.Errorf("%s failed: %w", strings.TrimSpace(label), err)
+	if current == nil {
+		return wrapped
+	}
+	return errors.Join(current, wrapped)
 }
 
 func (p *DriveMarkdownPreviewer) discoverManagedRoot(ctx context.Context) (previewRemoteNode, bool, error) {

@@ -936,6 +936,66 @@ func TestDriveMarkdownPreviewerBackgroundCleanupRunsOnInterval(t *testing.T) {
 	assertPreviewContextHasDeadlineWithin(t, deleteCtx, previewDriveBackgroundCleanupTimeout)
 }
 
+func TestDriveMarkdownPreviewerBackgroundCleanupStillRunsWebCleanupWhenDriveFails(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 4, 15, 18, 0, 0, 0, time.UTC)
+
+	previewer := NewDriveMarkdownPreviewer(newFakePreviewAPI(), MarkdownPreviewConfig{
+		GatewayID:               "main",
+		StatePath:               filepath.Join(root, "state", "preview.json"),
+		CacheDir:                filepath.Join(root, "preview-cache"),
+		ProcessCWD:              root,
+		BackgroundCleanupEvery:  time.Minute,
+		BackgroundCleanupMaxAge: 24 * time.Hour,
+	})
+	previewer.SetWebPreviewPublisher(&fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"})
+	sourcePath := filepath.Join(root, "docs", "old.txt")
+	_, expiredPreviewID := publishWebPreviewArtifactForTest(t, previewer, sourcePath, []byte("old preview\n"), now.Add(-2*time.Hour))
+
+	manifest, err := previewer.loadWebPreviewScopeManifest(testPreviewScopePublicID)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	expiredRecord := manifest.Records[expiredPreviewID]
+	if expiredRecord == nil {
+		t.Fatalf("missing expired record: %#v", manifest.Records)
+	}
+	expiredRecord.ExpiresAt = now.Add(-time.Minute)
+	if err := previewer.saveWebPreviewScopeManifest(manifest); err != nil {
+		t.Fatalf("save manifest: %v", err)
+	}
+	blobPath := previewer.previewBlobPath(expiredRecord.BlobKey)
+	if err := os.Chtimes(blobPath, now.Add(-defaultPreviewBlobTTL-time.Hour), now.Add(-defaultPreviewBlobTTL-time.Hour)); err != nil {
+		t.Fatalf("age expired blob: %v", err)
+	}
+
+	api := newFakePreviewAPI()
+	api.listFilesFunc = func(context.Context, string) ([]previewRemoteNode, error) {
+		return nil, fmt.Errorf("drive unavailable")
+	}
+	previewer.api = api
+	previewer.nowFn = func() time.Time { return now }
+
+	err = previewer.runBackgroundCleanup(context.Background())
+	if err == nil {
+		t.Fatal("expected drive cleanup error")
+	}
+	if !strings.Contains(err.Error(), "drive cleanup failed") {
+		t.Fatalf("expected drive cleanup error context, got %v", err)
+	}
+
+	manifest, err = previewer.loadWebPreviewScopeManifest(testPreviewScopePublicID)
+	if err != nil {
+		t.Fatalf("reload manifest: %v", err)
+	}
+	if manifest != nil && len(manifest.Records) != 0 {
+		t.Fatalf("expected web cleanup to prune expired record despite drive failure, got %#v", manifest.Records)
+	}
+	if _, err := os.Stat(blobPath); !os.IsNotExist(err) {
+		t.Fatalf("expected web cleanup to remove expired blob despite drive failure, got err=%v", err)
+	}
+}
+
 func TestDriveMarkdownPreviewerSkipsMarkdownOutsideAllowedRoots(t *testing.T) {
 	root := t.TempDir()
 	other := t.TempDir()
