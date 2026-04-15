@@ -13,7 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
-func TestAdminPageServesEmbeddedShell(t *testing.T) {
+func TestAdminRootServesLightweightHelpPage(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
 		ID:        "main",
@@ -24,6 +24,32 @@ func TestAdminPageServesEmbeddedShell(t *testing.T) {
 	app := newAdminUITestApp(cfg)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `id="root"`) {
+		t.Fatalf("expected lightweight help page, body=%s", body)
+	}
+	if !strings.Contains(body, "/admin/") {
+		t.Fatalf("expected admin prefix hint, body=%s", body)
+	}
+}
+
+func TestAdminPrefixServesEmbeddedShell(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app := newAdminUITestApp(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
@@ -74,7 +100,7 @@ func TestSetupPageServesEmbeddedShell(t *testing.T) {
 	}
 }
 
-func TestAdminUIAssetRouteServesBuiltBundle(t *testing.T) {
+func TestAdminPrefixAssetRouteServesBuiltBundle(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
 		ID:        "main",
@@ -84,7 +110,7 @@ func TestAdminUIAssetRouteServesBuiltBundle(t *testing.T) {
 	}}
 	app := newAdminUITestApp(cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
@@ -99,7 +125,7 @@ func TestAdminUIAssetRouteServesBuiltBundle(t *testing.T) {
 		t.Fatalf("expected js asset path in shell, body=%s", rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/"+strings.TrimPrefix(match, "./"), nil)
+	req = httptest.NewRequest(http.MethodGet, "/admin/"+strings.TrimPrefix(match, "./"), nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec = httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
@@ -135,8 +161,8 @@ func TestAdminPprofRouteIsNotServedByAdminMux(t *testing.T) {
 	if strings.Contains(body, "Types of profiles available") {
 		t.Fatalf("expected admin mux to hide pprof content, body=%s", body)
 	}
-	if !strings.Contains(body, "Codex Remote Control Plane") {
-		t.Fatalf("expected admin shell fallback, body=%s", body)
+	if !strings.Contains(body, "Admin entry has moved to") {
+		t.Fatalf("expected root help fallback, body=%s", body)
 	}
 }
 

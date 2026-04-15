@@ -253,6 +253,39 @@ func (a *App) ConfigureAdmin(opts AdminRuntimeOptions) {
 	a.mu.Unlock()
 }
 
+func (a *App) adminPrefixMux(base http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin":
+			http.Redirect(w, r, "/admin/", http.StatusFound)
+			return
+		case "/admin/":
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			a.handleAdminPage(w, r)
+			return
+		}
+
+		if !strings.HasPrefix(r.URL.Path, "/admin/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		rewritten := r.Clone(r.Context())
+		rewritten.URL.Path = strings.TrimPrefix(r.URL.Path, "/admin")
+		if rewritten.URL.Path == "" {
+			rewritten.URL.Path = "/"
+		}
+		if rawPath := strings.TrimPrefix(r.URL.RawPath, "/admin"); rawPath != "" {
+			rewritten.URL.RawPath = rawPath
+		}
+		rewritten.RequestURI = ""
+		base.ServeHTTP(w, rewritten)
+	})
+}
+
 func (a *App) EnableSetupAccess(ttl time.Duration) (string, time.Time, error) {
 	token, expiresAt, err := a.adminAuth.EnableSetupToken(ttl)
 	if err != nil {
@@ -270,21 +303,16 @@ func (a *App) handleRootPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/setup?token="+url.QueryEscape(token), http.StatusSeeOther)
 		return
 	}
+	writeRootHelpPage(w)
+}
+
+func (a *App) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		http.Redirect(w, r, "/setup?token="+url.QueryEscape(token), http.StatusSeeOther)
+		return
+	}
 
 	auth := a.requestAuth(r)
-	state, err := a.bootstrapState(auth)
-	if err != nil {
-		writePageError(w, http.StatusInternalServerError, "load bootstrap state", err)
-		return
-	}
-	if state.SetupRequired {
-		if !a.authAllowsSetup(auth) {
-			writePageUnauthorized(w, "setup access requires the startup token link or localhost access")
-			return
-		}
-		http.Redirect(w, r, "/setup", http.StatusSeeOther)
-		return
-	}
 	if !a.authAllowsAdmin(auth) {
 		writePageUnauthorized(w, "admin access is limited to localhost in this stage")
 		return
@@ -618,6 +646,17 @@ func writePageError(w http.ResponseWriter, status int, title string, err error) 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = fmt.Fprintf(w, "<!doctype html><html><body style=\"font-family: sans-serif; padding: 32px;\"><h1>%s</h1><p>%s</p></body></html>", html.EscapeString(title), html.EscapeString(err.Error()))
+}
+
+func writeRootHelpPage(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprint(w, `<!doctype html><html><body style="font-family: sans-serif; padding: 32px;">
+<h1>Codex Remote</h1>
+<p>Admin entry has moved to <a href="/admin/">/admin/</a>.</p>
+<p>Setup remains available at <a href="/setup">/setup</a>.</p>
+<p>This root page is intentionally lightweight so external access can keep separate module prefixes.</p>
+</body></html>`)
 }
 
 func writeAdminAppShell(w http.ResponseWriter) {

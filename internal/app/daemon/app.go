@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -294,7 +295,22 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 
 	apiMux := http.NewServeMux()
 	app.registerAPIRoutes(apiMux)
-	app.apiServer = &http.Server{Addr: apiAddr, Handler: apiMux}
+
+	app.apiServer = &http.Server{
+		Addr: apiAddr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/admin":
+				http.Redirect(w, r, "/admin/", http.StatusFound)
+				return
+			case strings.HasPrefix(r.URL.Path, "/admin/"):
+				app.adminPrefixMux(apiMux).ServeHTTP(w, r)
+				return
+			default:
+				apiMux.ServeHTTP(w, r)
+			}
+		}),
+	}
 	return app
 }
 
