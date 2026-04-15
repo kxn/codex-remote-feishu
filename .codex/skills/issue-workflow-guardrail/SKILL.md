@@ -78,6 +78,20 @@ Use these commands at fixed times:
 2. After body or label edits, run `lint`.
 3. Before any normal stop path for the issue, run `finish`.
 
+## GitHub CLI Compatibility
+
+In this repository, do not rely on bare `gh issue view <number>` for issue reads.
+
+- The default `gh issue view` path may fail with a GraphQL error tied to deprecated classic Projects fields such as `repository.issue.projectCards`.
+- Prefer `gh issue view <number> --json ...` when you need structured issue data.
+- If you only need raw issue contents or `--json` is still inconvenient, use REST directly:
+
+```bash
+gh api repos/<owner>/<repo>/issues/<number>
+```
+
+- Do not misclassify this failure as an issue-content problem; it is usually a `gh` query compatibility problem.
+
 Only spend extra reasoning on the parts the scripts cannot decide:
 
 - whether the issue is actually implementable now
