@@ -203,6 +203,7 @@ type App struct {
 	commandAnchorRecallDelay time.Duration
 
 	upgradeLookup          releaseLookupFunc
+	devManifestLookup      devManifestLookupFunc
 	upgradeCheckInterval   time.Duration
 	upgradeStartupDelay    time.Duration
 	upgradePromptScanEvery time.Duration
@@ -272,6 +273,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
 	app.upgradeLookup = app.defaultReleaseLookup
+	app.devManifestLookup = app.defaultDevManifestLookup
 	app.cronBitableFactory = app.defaultCronBitableFactory
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,

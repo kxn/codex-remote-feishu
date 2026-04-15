@@ -1,10 +1,25 @@
 # Release Roadmap Workflow
 
 > Type: `general`
-> Updated: `2026-04-12`
-> Summary: 定义版本 milestone、release tracker、显式 production 版本号、release branch 目标分支、自动发版闸门，以及本地临时切到发布分支后的回切规则。
+> Updated: `2026-04-15`
+> Summary: 定义 `master` 单主干、短命 `release/*` 封版分支、固定 `dev-latest` 滚动 prerelease，以及 milestone / release tracker / 显式 production 版本号驱动的发版闸门。
 
-## 1. 目的
+## 1. 当前基线
+
+当前仓库的发布基线先明确为：
+
+- 日常开发长期只保留 `master` 这一个主干。
+- `release/x.y` 只在正式版封版窗口短期存在，用于 beta/RC 验证和 release blocker 修复；正式版发完后尽快删除。
+- 对外稳定语义继续是 `production` / `beta`。
+- 高频“最新 master 成功构建”不再持续新增 `alpha.N`，而是收敛到固定一条 `dev-latest` prerelease。
+
+这意味着：
+
+- 不再引入长期 `dev` 分支。
+- 不再把多个旧 `release/*` 当成长期常驻维护分支。
+- `dev-latest` 和正式版本历史展示面分离，避免 GitHub Releases 被连续 alpha 冲散。
+
+## 2. 目的
 
 这个仓库继续允许平时滚动开发，但正式版本不再依赖“临到发版时再看应该发什么”。
 
@@ -19,15 +34,15 @@
 - milestone/roadmap 已经收敛，但最终发出的 tag 却不是原计划版本
 - 中途有人手动发了一个别的 production 版本，导致后续自动版本计算基线被打乱
 
-## 2. 核心对象
+## 3. 核心对象
 
-### 2.1 Milestone
+### 3.1 Milestone
 
 - 一个 milestone 对应一个准备发出的版本
 - milestone 标题必须直接等于目标版本号，例如 `v0.14.0`
 - 要进入该版本的 issue，都挂到同一个 milestone
 
-### 2.2 Release Tracker Issue
+### 3.2 Release Tracker Issue
 
 - 每个版本都创建一个 release tracker issue
 - 使用 `.github/ISSUE_TEMPLATE/release-tracker.yml`
@@ -36,7 +51,7 @@
 - 若“发布分支”留空，则自动发版回退到仓库默认分支
 - tracker issue 关闭时，会按其中记录的版本号触发自动发版
 
-### 2.3 Release Labels
+### 3.3 Release Labels
 
 - `release:tracker`
   - 标记“这个 issue 是版本 tracker”
@@ -50,9 +65,9 @@
 - milestone 内没有 `release:stretch` 的 open issue，都视为阻塞当前版本发版
 - `release:stretch` 只用于明确允许延期的项，不要滥用
 
-## 3. 版本号来源
+## 4. 版本号来源
 
-### 3.1 Production
+### 4.1 Production
 
 - `production` track 的版本号必须显式指定
 - 手动触发 release workflow 时，必须填写 `version`
@@ -63,14 +78,16 @@
 - 手滑发了另一个 production 版本，不会改变已计划版本本身
 - 但如果手滑提前发了完全相同的版本号，tracker 自动发版会因为 tag/release 已存在而失败，需要手工处理冲突
 
-### 3.2 Beta / Alpha
+### 4.2 Beta / Alpha / Dev-Latest
 
-- `beta` 和 `alpha` 继续允许沿用现有自动版本计算
-- 需要时也可以走 release tracker，并显式指定某个预发布版本号
+- `beta` 继续允许沿用现有自动版本计算
+- `alpha` 只保留兼容 / 手动语义，不再作为日常开发快照公开分发主面
+- `dev-latest` 不参与 semver 版本计算，它是一条固定 tag / fixed prerelease，只滚动覆盖 asset 与 manifest
+- 需要时预发布仍可通过 release tracker 显式指定某个 `beta` / `alpha` 版本号
 
-## 4. 日常使用方式
+## 5. 日常使用方式
 
-### 4.1 新建一个版本
+### 5.1 新建一个版本
 
 1. 创建 milestone，标题直接写目标版本号，例如 `v0.14.0`
 2. 用 Release Tracker 模板创建 tracker issue
@@ -78,7 +95,7 @@
 4. 把要进这个版本的 issue 移到这个 milestone
 5. 对允许延期但不阻塞的 issue，显式加 `release:stretch`
 
-### 4.2 判断能不能发版
+### 5.2 判断能不能发版
 
 先执行：
 
@@ -93,7 +110,7 @@ readiness 通过的条件是：
 - tracker issue 的“发布前检查”全部勾选完成
 - milestone 下没有仍然 open 的非 `release:stretch` issue
 
-### 4.3 触发正式发版
+### 5.3 触发正式发版
 
 当 readiness 通过后，直接关闭 tracker issue。
 
@@ -110,21 +127,36 @@ readiness 通过的条件是：
 - 发版动作结束后，无论成功还是失败，都切回开始前的分支或 ref
 - 不要把仓库停留在临时发布分支，除非用户明确要求保留在那里
 
-### 4.4 发布说明放在哪里
+### 5.4 平时给内部试最新 master
+
+内部 / 自测要跟最新 master 成功构建时，不再新建一串 `alpha.N` GitHub Release，而是更新固定的：
+
+- tag: `dev-latest`
+- release: `dev-latest`（prerelease）
+
+已经安装好的实例直接使用：
+
+```text
+/upgrade dev
+```
+
+客户端会读取固定的 `dev-latest.json` manifest，再解析当前平台的公开 release asset 并完成升级；目标机器不需要 `gh login`。
+
+### 5.5 发布说明放在哪里
 
 - 对外的正式版本说明，主维护位置放在仓库根目录的 `CHANGELOG.md`
 - release workflow 会优先把 `CHANGELOG.md` 中当前版本的小节提取进 GitHub release notes
 - release tracker issue 负责版本号、轨道、发布分支、检查项和发版闸门，不负责承载完整 changelog 正文
 - tracker issue 里可以保留一段很短的发布摘要，或直接放 `CHANGELOG.md` / GitHub Release 的链接
 
-## 5. 建议边界
+## 6. 建议边界
 
 - tracker issue 负责承载版本元信息、检查项和发版闸门，不负责搬运每个功能 issue 的细节
 - `CHANGELOG.md` 负责用户视角的版本变化摘要，不需要在 tracker issue 和 `docs/` 目录里各写一份完整副本
 - 真正的工作拆分仍然在普通 issue 中完成
 - milestone 表达“计划范围”，release tracker 表达“发版动作”
 
-## 6. 失败处理
+## 7. 失败处理
 
 如果关闭 tracker issue 后自动发版失败，优先看三类问题：
 

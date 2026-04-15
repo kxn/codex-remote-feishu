@@ -5,11 +5,14 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -94,6 +97,64 @@ func TestEnsureReleaseBinaryFallsBackWhenRenameHitsCrossDeviceLink(t *testing.T)
 	}
 	if string(raw) != "release-binary" {
 		t.Fatalf("binary contents = %q", string(raw))
+	}
+}
+
+func TestEnsureDevBinaryVerifiesChecksum(t *testing.T) {
+	version := "dev-abc123"
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	assetName := assetNameForVersionLabel("dev", goos, goarch)
+	packageDir := packageDirForVersionLabel("dev", goos, goarch)
+	archivePath := filepath.Join(t.TempDir(), assetName)
+	writePlatformReleaseArchive(t, archivePath, packageDir, executableName(goos), "dev-binary", goos)
+
+	archiveRaw, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("ReadFile archive: %v", err)
+	}
+	checksum := sha256.Sum256(archiveRaw)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) != assetName {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, archivePath)
+	}))
+	defer server.Close()
+
+	binaryPath, err := EnsureDevBinary(context.Background(), DevBinaryOptions{
+		Manifest: DevManifest{Version: version},
+		Asset: DevManifestAsset{
+			Name:   assetName,
+			URL:    server.URL + "/" + assetName,
+			SHA256: hex.EncodeToString(checksum[:]),
+		},
+		VersionsRoot: filepath.Join(t.TempDir(), "releases"),
+	})
+	if err != nil {
+		t.Fatalf("EnsureDevBinary: %v", err)
+	}
+	raw, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("ReadFile binary: %v", err)
+	}
+	if string(raw) != "dev-binary" {
+		t.Fatalf("binary contents = %q", string(raw))
+	}
+
+	_, err = EnsureDevBinary(context.Background(), DevBinaryOptions{
+		Manifest: DevManifest{Version: "dev-bad"},
+		Asset: DevManifestAsset{
+			Name:   assetName,
+			URL:    server.URL + "/" + assetName,
+			SHA256: strings.Repeat("0", 64),
+		},
+		VersionsRoot: filepath.Join(t.TempDir(), "releases-bad"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("EnsureDevBinary checksum error = %v, want mismatch", err)
 	}
 }
 

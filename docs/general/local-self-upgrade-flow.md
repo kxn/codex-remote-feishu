@@ -1,8 +1,8 @@
 # 本地自升级流程
 
 > Type: `general`
-> Updated: `2026-04-13`
-> Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式，以及自动回滚规则。
+> Updated: `2026-04-15`
+> Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式、与 `/upgrade dev` 的边界，以及自动回滚规则。
 
 ## 1. 这份文档回答什么问题
 
@@ -27,9 +27,10 @@
 
 - WebSetup 里的普通安装流程
 - GitHub Release 下载与安装
+- `/upgrade dev` 通过固定 `dev-latest` manifest 拉取滚动开发构建的细节
 - 飞书内 `/upgrade latest` 的 release 升级交互细节
 
-但要注意，当前本地升级和 release 升级在底层都会复用同一个 upgrade-helper 事务模型，只是目标 binary 的来源不同。
+但要注意，当前本地升级、`/upgrade latest` 的 release 升级、以及 `/upgrade dev` 的滚动开发构建升级，在底层都会复用同一个 upgrade-helper 事务模型，只是目标 binary 的来源不同。
 
 ## 3. 参与者与角色
 

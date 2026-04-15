@@ -38,6 +38,7 @@ const (
 	upgradeCommandShowTrack  upgradeCommandMode = "track_show"
 	upgradeCommandSetTrack   upgradeCommandMode = "track_set"
 	upgradeCommandLatest     upgradeCommandMode = "latest"
+	upgradeCommandDev        upgradeCommandMode = "dev"
 	upgradeCommandLocal      upgradeCommandMode = "local"
 )
 
@@ -163,6 +164,8 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track, false)
 	case upgradeCommandLatest:
 		return a.handleUpgradeLatestCommand(command, stateValue)
+	case upgradeCommandDev:
+		return a.handleUpgradeDevCommand(command, stateValue)
 	case upgradeCommandLocal:
 		return a.handleUpgradeLocalCommand(command, stateValue)
 	default:
@@ -182,11 +185,14 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 			return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_prepare_failed", fmt.Sprintf("清理陈旧升级候选失败：%v", err))}
 		}
 	}
-	if stateValue.PendingUpgrade != nil && pendingUpgradeCandidate(stateValue.PendingUpgrade) {
+	if pendingUpgradeCandidateFromSource(stateValue.PendingUpgrade, install.UpgradeSourceRelease) {
 		return a.beginPendingUpgradeLocked(command, stateValue)
 	}
 	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_busy", fmt.Sprintf("当前升级事务处于 %s，暂时不能发起新检查。", stateValue.PendingUpgrade.Phase))}
+	}
+	if pendingUpgradeCandidateFromSource(stateValue.PendingUpgrade, install.UpgradeSourceDev) {
+		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_pending_other_source", "当前已有 dev 构建升级候选，请改用 `/upgrade dev` 继续，或重新检查当前来源。")}
 	}
 	track := stateValue.CurrentTrack
 	if track == "" {

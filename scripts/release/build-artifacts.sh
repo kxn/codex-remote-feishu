@@ -75,6 +75,14 @@ resolve_build_flavor() {
   printf '%s\n' "dev"
 }
 
+resolve_package_version_label() {
+  if [[ -n "${CODEX_REMOTE_PACKAGE_VERSION_LABEL:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_PACKAGE_VERSION_LABEL}"
+    return
+  fi
+  printf '%s\n' "${version#v}"
+}
+
 version=""
 output_dir="dist"
 skip_admin_ui_build=0
@@ -120,6 +128,7 @@ fi
 
 build_branch="$(resolve_build_branch)"
 build_flavor="$(resolve_build_flavor)"
+package_version_label="$(resolve_package_version_label)"
 
 if [[ "${skip_admin_ui_build}" == "1" ]]; then
   if [[ ! -f "${ROOT_DIR}/internal/app/daemon/adminui/dist/index.html" ]]; then
@@ -155,7 +164,7 @@ fi
 
 for platform in "${platforms[@]}"; do
   read -r goos goarch <<<"${platform}"
-  package_name="codex-remote-feishu_${version#v}_${goos}_${goarch}"
+  package_name="codex-remote-feishu_${package_version_label}_${goos}_${goarch}"
   staging_dir="${output_dir}/${package_name}"
   mkdir -p "${staging_dir}"
 

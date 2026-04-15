@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-13`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 入口语义、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
+> Updated: `2026-04-15`
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
 
 ## 1. 范围
 
@@ -159,7 +159,14 @@ Windows PowerShell:
   - 保留本地 binary 升级入口（`/upgrade local`）
   - `pprof` 默认开启
 
-`/upgrade track`、帮助文案和卡片入口都会读取这套策略；旧 `/debug track` 仅作为兼容别名保留。
+额外约束：
+
+- `production|beta|alpha` 仍然只表示 GitHub semver release track。
+- `/upgrade dev` 是单独的“滚动开发构建源”命令，不属于 `track` 子空间。
+- `dev-latest` 由固定 GitHub prerelease + `dev-latest.json` manifest 提供，客户端按 manifest 解析当前平台资产并做 checksum 校验。
+- 当前 `dev-latest` workflow 产出的 binary 使用 `shipping` flavor；也就是说它是“最新 master 的公开测试构建”，不是源码仓库本地 `dev` flavor 的替代品。
+
+`/upgrade track`、帮助文案和卡片入口都会读取这套策略；旧 `/debug track` 仅作为兼容别名保留。`/upgrade dev` 则始终是显式命令入口，不跟随 track 按钮一起大面积曝光。
 
 ## 4. 默认布局
 
@@ -289,6 +296,11 @@ loginctl enable-linger "$USER"
   - 用户发送 `/upgrade track` 或 `/upgrade track <track>` 可查看/切换升级渠道
   - track 可选范围由 build flavor 策略决定（旧 `/debug track` 仅保留兼容）
   - daemon 不再后台自动检查 GitHub release，也不再主动弹出升级提示卡
+- 滚动开发构建升级
+  - 用户发送 `/upgrade dev`
+  - daemon 读取固定 `dev-latest.json`
+  - 按当前平台选择 `dev-latest` 的公开 release asset，并做 checksum 校验
+  - `dev` 不会改写当前 `track`；它只是一次显式的升级源选择
 - 本地编译产物升级
   - 用户先把新编译的 binary 放到固定 artifact 路径
   - 再发送 `/upgrade local`（当前只在允许本地升级的 flavor 下开放）
@@ -425,6 +437,16 @@ release 包内不再附带：
 - GitHub 端生成 release notes 和 checksums
 - release notes 优先引用 `CHANGELOG.md` 中当前版本的人类整理摘要，再附带按提交分组的明细
 - GitHub 端创建并发布 GitHub Release
+
+滚动开发构建另外走独立的 `Dev Release` workflow：
+
+- 触发条件是 `master` 上一次 CI 成功，或手动指定 ref
+- 固定更新同一条 `dev-latest` prerelease
+- 只覆盖 asset / manifest，不再持续新增一串 `alpha.N`
+- 公开契约固定为：
+  - `dev-latest.json`
+  - `checksums.txt`
+  - `codex-remote-feishu_dev_<goos>_<goarch>.tar.gz|zip`
 
 本地 `make release-artifacts VERSION=...` 仅用于打包预演，不是正式发布路径。
 

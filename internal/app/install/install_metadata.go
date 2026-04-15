@@ -26,6 +26,7 @@ type UpgradeSource string
 
 const (
 	UpgradeSourceRelease UpgradeSource = "release"
+	UpgradeSourceDev     UpgradeSource = "dev"
 	UpgradeSourceLocal   UpgradeSource = "local"
 )
 
@@ -294,6 +295,8 @@ func normalizeUpgradeSource(source UpgradeSource) UpgradeSource {
 	switch strings.ToLower(strings.TrimSpace(string(source))) {
 	case string(UpgradeSourceRelease):
 		return UpgradeSourceRelease
+	case string(UpgradeSourceDev):
+		return UpgradeSourceDev
 	case string(UpgradeSourceLocal):
 		return UpgradeSourceLocal
 	default:

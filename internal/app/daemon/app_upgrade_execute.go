@@ -52,12 +52,38 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 
 	stateValue := request.State
 	targetVersion := strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)
-	targetBinary, err := install.EnsureReleaseBinary(ctx, install.ReleaseBinaryOptions{
-		Repository:   strings.TrimSpace(os.Getenv("CODEX_REMOTE_REPO")),
-		BaseURL:      strings.TrimSpace(os.Getenv("CODEX_REMOTE_BASE_URL")),
-		Version:      targetVersion,
-		VersionsRoot: stateValue.VersionsRoot,
-	})
+	var targetBinary string
+	var err error
+	switch stateValue.PendingUpgrade.Source {
+	case install.UpgradeSourceRelease:
+		targetBinary, err = install.EnsureReleaseBinary(ctx, install.ReleaseBinaryOptions{
+			Repository:   strings.TrimSpace(os.Getenv("CODEX_REMOTE_REPO")),
+			BaseURL:      strings.TrimSpace(os.Getenv("CODEX_REMOTE_BASE_URL")),
+			Version:      targetVersion,
+			VersionsRoot: stateValue.VersionsRoot,
+		})
+	case install.UpgradeSourceDev:
+		lookup := a.devManifestLookup
+		if lookup == nil {
+			lookup = a.defaultDevManifestLookup
+		}
+		manifest, asset, lookupErr := lookup(ctx)
+		if lookupErr != nil {
+			a.finishUpgradeStartFailure(request, fmt.Errorf("读取 dev manifest 失败：%w", lookupErr))
+			return
+		}
+		if latestVersion := strings.TrimSpace(manifest.Version); latestVersion != targetVersion {
+			a.finishUpgradeStartFailure(request, fmt.Errorf("dev 构建已从 %s 更新到 %s，请重新发送 /upgrade dev 确认最新版本", targetVersion, latestVersion))
+			return
+		}
+		targetBinary, err = install.EnsureDevBinary(ctx, install.DevBinaryOptions{
+			Manifest:     manifest,
+			Asset:        asset,
+			VersionsRoot: stateValue.VersionsRoot,
+		})
+	default:
+		err = fmt.Errorf("不支持的升级来源 %q", stateValue.PendingUpgrade.Source)
+	}
 	if err != nil {
 		a.finishUpgradeStartFailure(request, fmt.Errorf("下载目标版本失败：%w", err))
 		return
@@ -76,7 +102,6 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	rollbackCandidate.Fingerprint = identity.BuildFingerprint
 	stateValue.RollbackCandidate = rollbackCandidate
 	stateValue.PendingUpgrade.Phase = install.PendingUpgradePhasePrepared
-	stateValue.PendingUpgrade.Source = install.UpgradeSourceRelease
 	stateValue.PendingUpgrade.TargetSlot = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), targetVersion)
 	stateValue.PendingUpgrade.TargetBinaryPath = targetBinary
 

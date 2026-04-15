@@ -68,6 +68,8 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 			return parsedUpgradeCommand{Mode: upgradeCommandShowTrack}, nil
 		case "latest":
 			return parsedUpgradeCommand{Mode: upgradeCommandLatest}, nil
+		case "dev":
+			return parsedUpgradeCommand{Mode: upgradeCommandDev}, nil
 		case "local":
 			return parsedUpgradeCommand{Mode: upgradeCommandLocal}, nil
 		default:
@@ -184,7 +186,7 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
 					Commands:    []string{"/upgrade"},
-					Description: "输入 `/upgrade` 后面的参数，例如 `track beta`、`latest` 或 `local`。",
+					Description: "输入 `/upgrade` 后面的参数，例如 `track beta`、`latest`、`dev` 或 `local`。",
 					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandUpgrade, ""),
 				}},
 			},
@@ -194,26 +196,42 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 
 func buildUpgradePromptCatalog(stateValue install.InstallState) *control.FeishuDirectCommandCatalog {
 	targetVersion := ""
+	title := "发现可升级版本"
+	confirmCommand := "/upgrade latest"
+	description := "继续升级到当前 track 的最新版本。"
+	summary := ""
 	if stateValue.PendingUpgrade != nil {
 		targetVersion = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
+		if stateValue.PendingUpgrade.Source == install.UpgradeSourceDev {
+			title = "发现开发版更新"
+			confirmCommand = "/upgrade dev"
+			description = "继续升级到最新的 dev 构建。"
+			summary = fmt.Sprintf(
+				"检测到新的 dev 构建可用。\n当前版本：%s\n目标版本：%s\n\n再次发送 /upgrade dev 继续升级流程。",
+				firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
+				firstNonEmpty(targetVersion, "unknown"),
+			)
+		}
 	}
-	summary := fmt.Sprintf(
-		"检测到 %s track 有新版本可用。\n当前版本：%s\n目标版本：%s\n\n再次发送 /upgrade latest 继续升级流程。",
-		firstNonEmpty(string(stateValue.CurrentTrack), "unknown"),
-		firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
-		firstNonEmpty(targetVersion, "unknown"),
-	)
+	if summary == "" {
+		summary = fmt.Sprintf(
+			"检测到 %s track 有新版本可用。\n当前版本：%s\n目标版本：%s\n\n再次发送 /upgrade latest 继续升级流程。",
+			firstNonEmpty(string(stateValue.CurrentTrack), "unknown"),
+			firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
+			firstNonEmpty(targetVersion, "unknown"),
+		)
+	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:       "发现可升级版本",
+		Title:       title,
 		Summary:     summary,
 		Interactive: true,
 		Sections: []control.CommandCatalogSection{{
 			Title: "操作",
 			Entries: []control.CommandCatalogEntry{{
-				Commands:    []string{"/upgrade latest"},
-				Description: "继续升级到当前 track 的最新版本。",
+				Commands:    []string{confirmCommand},
+				Description: description,
 				Buttons: []control.CommandCatalogButton{
-					{Label: "确认升级", CommandText: "/upgrade latest"},
+					{Label: "确认升级", CommandText: confirmCommand},
 					{Label: "查看状态", CommandText: "/upgrade"},
 				},
 			}},
@@ -230,7 +248,7 @@ func buildTrackSummary(stateValue install.InstallState) string {
 	if latest := strings.TrimSpace(stateValue.LastKnownLatestVersion); latest != "" {
 		lines = append(lines, fmt.Sprintf("最近看到的最新版本：%s", latest))
 	}
-	lines = append(lines, "切换 track 不会自动触发升级；需要立即检查时请发送 /upgrade latest。")
+	lines = append(lines, "切换 track 不会自动触发升级；需要立即检查时请发送 /upgrade latest。滚动开发构建请使用 /upgrade dev。")
 	return strings.Join(lines, "\n")
 }
 
@@ -305,6 +323,13 @@ func pendingUpgradeCandidate(pending *install.PendingUpgrade) bool {
 	}
 }
 
+func pendingUpgradeCandidateFromSource(pending *install.PendingUpgrade, source install.UpgradeSource) bool {
+	if !pendingUpgradeCandidate(pending) {
+		return false
+	}
+	return pending.Source == source
+}
+
 func clearPendingCandidateOnTrackSwitch(pending *install.PendingUpgrade, nextTrack install.ReleaseTrack) bool {
 	if pending == nil {
 		return false
@@ -320,7 +345,7 @@ func clearStalePendingCandidateOnLiveVersion(stateValue *install.InstallState, l
 		return false
 	}
 	pending := stateValue.PendingUpgrade
-	if pending.Source != install.UpgradeSourceRelease {
+	if pending.Source != install.UpgradeSourceRelease && pending.Source != install.UpgradeSourceDev {
 		return false
 	}
 	liveVersion = strings.TrimSpace(liveVersion)
@@ -333,7 +358,7 @@ func clearStalePendingCandidateOnLiveVersion(stateValue *install.InstallState, l
 	}
 	stateValue.CurrentVersion = liveVersion
 	stateValue.CurrentSlot = firstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion), liveVersion)
-	if stateValue.CurrentTrack == "" {
+	if stateValue.CurrentTrack == "" && pending.Source == install.UpgradeSourceRelease {
 		stateValue.CurrentTrack = firstNonEmptyTrack(pending.TargetTrack, install.ParseReleaseTrack(liveVersion))
 	}
 	stateValue.LastKnownLatestVersion = liveVersion
@@ -422,7 +447,7 @@ func unsupportedTrackMessage(track install.ReleaseTrack) string {
 }
 
 func upgradeSubcommandUsageSummary() string {
-	parts := []string{"`track`", "`latest`"}
+	parts := []string{"`track`", "`latest`", "`dev`"}
 	if install.CurrentBuildAllowsLocalUpgrade() {
 		parts = append(parts, "`local`")
 	}
@@ -436,6 +461,7 @@ func upgradeCommandUsageSyntax() string {
 		segments = append(segments, fmt.Sprintf("`/upgrade track [%s]`", strings.Join(allowed, "|")))
 	}
 	segments = append(segments, "`/upgrade latest`")
+	segments = append(segments, "`/upgrade dev`")
 	if install.CurrentBuildAllowsLocalUpgrade() {
 		segments = append(segments, "`/upgrade local`")
 	}

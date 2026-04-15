@@ -98,6 +98,9 @@ func RunUpgradeHelperWithStatePath(ctx context.Context, statePath string) error 
 
 	stateValue.CurrentVersion = stateValue.PendingUpgrade.TargetVersion
 	stateValue.CurrentSlot = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
+	if stateValue.PendingUpgrade.Source != UpgradeSourceLocal {
+		stateValue.InstallSource = InstallSourceRelease
+	}
 	stateValue.LastKnownLatestVersion = stateValue.PendingUpgrade.TargetVersion
 	stateValue.PendingUpgrade.Phase = PendingUpgradePhaseCommitted
 	return WriteState(statePath, stateValue)
@@ -232,7 +235,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 	if err := copyFile(targetBinary, stateValue.CurrentBinaryPath); err != nil {
 		return fmt.Errorf("copy upgrade binary %s -> %s: %w", targetBinary, stateValue.CurrentBinaryPath, err)
 	}
-	if stateValue.PendingUpgrade.Source == UpgradeSourceRelease {
+	if stateValue.PendingUpgrade.Source != UpgradeSourceLocal {
 		_ = updateCurrentReleaseLink(stateValue.VersionsRoot, firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)))
 	}
 	return nil

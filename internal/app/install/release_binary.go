@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +27,23 @@ type ReleaseBinaryOptions struct {
 	Client       *http.Client
 }
 
+type DevBinaryOptions struct {
+	Manifest     DevManifest
+	Asset        DevManifestAsset
+	VersionsRoot string
+	Client       *http.Client
+}
+
+type binaryArchiveOptions struct {
+	AssetURL            string
+	AssetName           string
+	PackageVersionLabel string
+	TargetSlot          string
+	VersionsRoot        string
+	ExpectedSHA256      string
+	Client              *http.Client
+}
+
 var releaseBinaryRename = os.Rename
 
 func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string, error) {
@@ -32,14 +51,61 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 	if version == "" {
 		return "", fmt.Errorf("release version is required")
 	}
+	return ensureBinaryArchive(ctx, binaryArchiveOptions{
+		AssetURL:            releaseAssetURL(opts.Repository, opts.BaseURL, version, releaseAssetName(version, runtime.GOOS, runtime.GOARCH)),
+		AssetName:           releaseAssetName(version, runtime.GOOS, runtime.GOARCH),
+		PackageVersionLabel: strings.TrimPrefix(version, "v"),
+		TargetSlot:          version,
+		VersionsRoot:        opts.VersionsRoot,
+		Client:              opts.Client,
+	})
+}
+
+func EnsureDevBinary(ctx context.Context, opts DevBinaryOptions) (string, error) {
+	version := strings.TrimSpace(opts.Manifest.Version)
+	if version == "" {
+		return "", fmt.Errorf("dev manifest version is required")
+	}
+	assetName := strings.TrimSpace(opts.Asset.Name)
+	if assetName == "" {
+		return "", fmt.Errorf("dev asset name is required")
+	}
+	return ensureBinaryArchive(ctx, binaryArchiveOptions{
+		AssetURL:            strings.TrimSpace(opts.Asset.URL),
+		AssetName:           assetName,
+		PackageVersionLabel: "dev",
+		TargetSlot:          version,
+		VersionsRoot:        opts.VersionsRoot,
+		ExpectedSHA256:      opts.Asset.SHA256,
+		Client:              opts.Client,
+	})
+}
+
+func ensureBinaryArchive(ctx context.Context, opts binaryArchiveOptions) (string, error) {
+	targetSlot := strings.TrimSpace(opts.TargetSlot)
+	if targetSlot == "" {
+		return "", fmt.Errorf("target slot is required")
+	}
 	versionsRoot := strings.TrimSpace(opts.VersionsRoot)
 	if versionsRoot == "" {
 		return "", fmt.Errorf("versions root is required")
 	}
+	assetURL := strings.TrimSpace(opts.AssetURL)
+	if assetURL == "" {
+		return "", fmt.Errorf("asset url is required")
+	}
+	assetName := strings.TrimSpace(opts.AssetName)
+	if assetName == "" {
+		return "", fmt.Errorf("asset name is required")
+	}
+	packageLabel := strings.TrimSpace(opts.PackageVersionLabel)
+	if packageLabel == "" {
+		return "", fmt.Errorf("package version label is required")
+	}
 
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
-	targetDir := filepath.Join(versionsRoot, version)
+	targetDir := filepath.Join(versionsRoot, targetSlot)
 	targetBinary := filepath.Join(targetDir, executableName(goos))
 	if info, err := os.Stat(targetBinary); err == nil && info.Mode().IsRegular() {
 		return targetBinary, nil
@@ -49,8 +115,6 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	assetName := releaseAssetName(version, goos, goarch)
-	assetURL := releaseAssetURL(opts.Repository, opts.BaseURL, version, assetName)
 
 	tempDir, err := os.MkdirTemp("", "codex-remote-release-*")
 	if err != nil {
@@ -62,11 +126,14 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 	if err := downloadFile(ctx, client, assetURL, archivePath); err != nil {
 		return "", err
 	}
+	if err := verifyDownloadedChecksum(archivePath, opts.ExpectedSHA256); err != nil {
+		return "", err
+	}
 	if err := extractReleaseArchive(archivePath, tempDir, goos); err != nil {
 		return "", err
 	}
 
-	packageDir := filepath.Join(tempDir, releasePackageDir(version, goos, goarch))
+	packageDir := filepath.Join(tempDir, packageDirForVersionLabel(packageLabel, goos, goarch))
 	if info, err := os.Stat(packageDir); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("downloaded archive missing package directory %s", filepath.Base(packageDir))
 	}
@@ -84,11 +151,19 @@ func EnsureReleaseBinary(ctx context.Context, opts ReleaseBinaryOptions) (string
 }
 
 func releaseAssetName(version, goos, goarch string) string {
-	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s%s", strings.TrimPrefix(version, "v"), goos, goarch, releaseArchiveSuffix(goos))
+	return assetNameForVersionLabel(strings.TrimPrefix(version, "v"), goos, goarch)
 }
 
 func releasePackageDir(version, goos, goarch string) string {
-	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s", strings.TrimPrefix(version, "v"), goos, goarch)
+	return packageDirForVersionLabel(strings.TrimPrefix(version, "v"), goos, goarch)
+}
+
+func assetNameForVersionLabel(versionLabel, goos, goarch string) string {
+	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s%s", versionLabel, goos, goarch, releaseArchiveSuffix(goos))
+}
+
+func packageDirForVersionLabel(versionLabel, goos, goarch string) string {
+	return fmt.Sprintf("codex-remote-feishu_%s_%s_%s", versionLabel, goos, goarch)
 }
 
 func releaseArchiveSuffix(goos string) string {
@@ -140,6 +215,28 @@ func downloadFile(ctx context.Context, client *http.Client, url, targetPath stri
 	defer file.Close()
 	_, err = io.Copy(file, resp.Body)
 	return err
+}
+
+func verifyDownloadedChecksum(path, expected string) error {
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	if expected == "" {
+		return nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return err
+	}
+	actual := hex.EncodeToString(hash.Sum(nil))
+	if actual != expected {
+		return fmt.Errorf("checksum mismatch for %s: want %s, got %s", filepath.Base(path), expected, actual)
+	}
+	return nil
 }
 
 func extractReleaseArchive(archivePath, targetDir, goos string) error {
