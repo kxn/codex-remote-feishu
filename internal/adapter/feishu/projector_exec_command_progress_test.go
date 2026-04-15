@@ -87,6 +87,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "上海天气"},
 				{ItemID: "web-2", Kind: "web_search", Label: "打开网页", Summary: "https://example.com/weather"},
 				{ItemID: "mcp-1", Kind: "mcp_tool_call", Label: "MCP", Summary: "docs.lookup（12 ms）"},
+				{ItemID: "dynamic_tool_call::read", Kind: "dynamic_tool_call", Label: "Read", Summary: "a.cpp b.cpp"},
 			},
 		},
 	})
@@ -94,7 +95,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") {
+	if !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "Read：a.cpp b.cpp") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {

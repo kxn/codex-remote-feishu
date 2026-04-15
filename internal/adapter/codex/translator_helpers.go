@@ -232,6 +232,15 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		); tool != "" {
 			metadata["tool"] = tool
 		}
+		if arguments := cloneJSONValue(firstNonNil(
+			item["arguments"],
+			item["args"],
+			lookupAny(item, "invocation", "arguments"),
+			lookupAny(item, "input", "arguments"),
+			lookupAny(item, "input"),
+		)); arguments != nil {
+			metadata["arguments"] = arguments
+		}
 		if success, ok := item["success"].(bool); ok {
 			metadata["success"] = success
 		}

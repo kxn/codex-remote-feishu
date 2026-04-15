@@ -695,6 +695,52 @@ func TestRemoteTurnDynamicToolCallRemoteImageLinkFallsBackToTextLink(t *testing.
 	}
 }
 
+func TestRemoteTurnDynamicToolCallEmptyOutputStaysSilent(t *testing.T) {
+	now := time.Date(2026, 4, 10, 12, 4, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "工具测试", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "执行工具",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-1",
+		ItemKind: "dynamic_tool_call",
+		Metadata: map[string]any{
+			"tool": "read",
+		},
+	})
+	for _, event := range events {
+		if event.Notice != nil {
+			t.Fatalf("expected empty dynamic tool output to stay silent, got %#v", events)
+		}
+	}
+}
+
 func TestRemoteTurnImageGenerationOnlyTurnDoesNotForceSyntheticFinalText(t *testing.T) {
 	now := time.Date(2026, 4, 10, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

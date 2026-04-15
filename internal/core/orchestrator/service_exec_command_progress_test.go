@@ -269,6 +269,144 @@ func TestWebSearchProgressQuietVerbositySuppressesCard(t *testing.T) {
 	}
 }
 
+func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读两个文件", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-1",
+		ItemKind: "dynamic_tool_call",
+		Metadata: map[string]any{
+			"tool": "Read",
+			"arguments": map[string]any{
+				"path": "a.cpp",
+			},
+		},
+	})
+	if len(first) != 1 || first[0].Kind != control.UIEventExecCommandProgress || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected dynamic tool progress start, got %#v", first)
+	}
+	progress := first[0].ExecCommandProgress
+	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "dynamic_tool_call" || progress.Entries[0].Label != "Read" || progress.Entries[0].Summary != "a.cpp" {
+		t.Fatalf("unexpected dynamic tool first entry: %#v", progress.Entries)
+	}
+
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-2",
+		ItemKind: "dynamic_tool_call",
+		Metadata: map[string]any{
+			"tool": "read",
+			"arguments": map[string]any{
+				"path": "b.cpp",
+			},
+		},
+	})
+	if len(second) != 1 || second[0].Kind != control.UIEventExecCommandProgress || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected dynamic tool merged update, got %#v", second)
+	}
+	progress = second[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected dynamic tool update to reuse same card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "a.cpp b.cpp" {
+		t.Fatalf("expected same tool to merge into one row, got %#v", progress.Entries)
+	}
+}
+
+func TestDynamicToolCallProgressNormalVerbositySuppressesCard(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读文件", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-1",
+		ItemKind: "dynamic_tool_call",
+		Metadata: map[string]any{
+			"tool": "Read",
+			"arguments": map[string]any{
+				"path": "a.cpp",
+			},
+		},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected normal verbosity to suppress dynamic tool progress, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected normal verbosity not to retain progress, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
+
+func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读文件", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-1",
+		ItemKind: "dynamic_tool_call",
+		Metadata: map[string]any{
+			"tool": "Read",
+			"arguments": map[string]any{
+				"path": "a.cpp",
+			},
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected started event, got %#v", started)
+	}
+	itemID := started[0].ExecCommandProgress.ItemID
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", itemID, "om-progress-1")
+
+	failed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "tool-1",
+		ItemKind: "dynamic_tool_call",
+		Status:   "failed",
+		Metadata: map[string]any{
+			"tool": "Read",
+			"arguments": map[string]any{
+				"path": "a.cpp",
+			},
+		},
+	})
+	if len(failed) != 1 || failed[0].ExecCommandProgress == nil {
+		t.Fatalf("expected failure update event, got %#v", failed)
+	}
+	progress := failed[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected failure to update existing progress card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "a.cpp（失败）" || progress.Entries[0].Status != "failed" {
+		t.Fatalf("expected failed dynamic tool row annotation, got %#v", progress.Entries)
+	}
+}
+
 func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -207,17 +207,28 @@ type ExecCommandProgressEntryRecord struct {
 }
 
 type ExecCommandProgressRecord struct {
-	InstanceID    string
-	ThreadID      string
-	TurnID        string
-	ItemID        string
-	MessageID     string
-	Entries       []ExecCommandProgressEntryRecord
-	Commands      []string
-	Command       string
-	CWD           string
-	Status        string
-	LastEmittedAt time.Time
+	InstanceID           string
+	ThreadID             string
+	TurnID               string
+	ItemID               string
+	MessageID            string
+	Entries              []ExecCommandProgressEntryRecord
+	Commands             []string
+	Command              string
+	CWD                  string
+	Status               string
+	DynamicToolItemGroup map[string]string
+	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord
+	LastEmittedAt        time.Time
+}
+
+type DynamicToolProgressGroupRecord struct {
+	GroupKey string
+	Tool     string
+	Label    string
+	Args     []string
+	Summary  string
+	Status   string
 }
 
 type AutoContinueRuntimeRecord struct {

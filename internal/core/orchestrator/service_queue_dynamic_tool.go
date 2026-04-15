@@ -33,10 +33,7 @@ func (s *Service) renderDynamicToolCallItem(instanceID string, event agentproto.
 		events = append(events, s.renderTextItem(instanceID, event.ThreadID, event.TurnID, event.ItemID, text, false)...)
 	}
 	if len(imageItems) == 0 {
-		if len(events) != 0 {
-			return events
-		}
-		return append(events, notice(surface, "dynamic_tool_output_missing", "工具调用已完成，但当前结果没有可展示的文本或图片内容。")...)
+		return events
 	}
 
 	replySourceMessageID := ""

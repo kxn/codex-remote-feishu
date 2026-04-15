@@ -445,6 +445,42 @@ func TestObserveServerDynamicToolCallStructuredOutputFallsBackToSummaryText(t *t
 	}
 }
 
+func TestObserveServerDynamicToolCallExtractsArgumentsMetadata(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	started, err := tr.ObserveServer([]byte(`{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"tool-3","type":"dynamicToolCall","tool":"read","arguments":{"path":"a.cpp"}}}}`))
+	if err != nil {
+		t.Fatalf("observe dynamic tool item started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one event, got %#v", started.Events)
+	}
+	startedEvent := started.Events[0]
+	if startedEvent.Kind != agentproto.EventItemStarted || startedEvent.ItemKind != "dynamic_tool_call" {
+		t.Fatalf("unexpected started event: %#v", startedEvent)
+	}
+	arguments, ok := startedEvent.Metadata["arguments"].(map[string]any)
+	if !ok || arguments["path"] != "a.cpp" {
+		t.Fatalf("expected dynamic tool arguments in started metadata, got %#v", startedEvent.Metadata["arguments"])
+	}
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"tool-3","type":"dynamicToolCall","tool":"read","input":{"path":"b.cpp"}}}}`))
+	if err != nil {
+		t.Fatalf("observe dynamic tool item completed: %v", err)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one event, got %#v", completed.Events)
+	}
+	completedEvent := completed.Events[0]
+	if completedEvent.Kind != agentproto.EventItemCompleted || completedEvent.ItemKind != "dynamic_tool_call" {
+		t.Fatalf("unexpected completed event: %#v", completedEvent)
+	}
+	arguments, ok = completedEvent.Metadata["arguments"].(map[string]any)
+	if !ok || arguments["path"] != "b.cpp" {
+		t.Fatalf("expected dynamic tool input fallback in completed metadata, got %#v", completedEvent.Metadata["arguments"])
+	}
+}
+
 func TestObserveServerCompletedLegacyAssistantMessageMapsToAgentMessage(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	result, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"item-1","type":"assistant_message","text":"hello"}}}`))

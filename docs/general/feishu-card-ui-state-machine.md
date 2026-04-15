@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-04-14`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` 与 `mcp_server_elicitation` 已进入 request 卡体系（权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；其中 `web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 仅 verbose 可见）。
+> Updated: `2026-04-15`
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` 与 `mcp_server_elicitation` 已进入 request 卡体系（权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；其中 `web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 与 `dynamic_tool_call` 仅 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数）。
 
 ## 1. 文档定位
 
@@ -66,7 +66,7 @@
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
-  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call`），负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新
+  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call`），负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新
   - 当前是 selection / target-picker / command/config cards 最终 projection 的 owner：
     [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
     负责把 `FeishuTargetPickerView` 投影成 unified target picker 卡片
@@ -334,12 +334,14 @@ MCP request 卡片当前新增的可视语义：
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。
-- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call`）不走 callback replace，也不属于旧卡 freshness 判定面：
+- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call`）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次以 reply card 形式追加到源消息下
-  - 若同一 turn 内继续收到新的可见过程项，则改用 `message.patch` 更新同一消息；当前会把 `exec_command`、`web_search` 与 `mcp_tool_call` 累积到同一张“处理中”卡
+  - 若同一 turn 内继续收到新的可见过程项，则改用 `message.patch` 更新同一消息；当前会把 `exec_command`、`web_search`、`mcp_tool_call` 与 `dynamic_tool_call` 累积到同一张“处理中”卡
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
-  - 可见性当前按 item kind 区分：`web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 仅 verbose 可见
+  - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；若同一 turn 内连续出现同名 tool，则会复用同一行并按首次出现顺序持续追加参数（例如 `Read：a.cpp` -> `Read：a.cpp b.cpp`）；失败态会在该行内补 `（失败）`
+  - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
+  - 可见性当前按 item kind 区分：`web_search` 与 `mcp_tool_call` 在 normal / verbose 可见，`exec_command` 与 `dynamic_tool_call` 仅 verbose 可见
   - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
 
@@ -448,9 +450,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` 行级摘要的投影边界，以及首次 reply 与后续 update 的同卡更新语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` 行级摘要的投影边界，以及首次 reply 与后续 update 的同卡更新语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
-  - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取
+  - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
   - 锁定 message.delete 出站能力与“消息已不存在”类错误的静默降级
 - [internal/adapter/feishu/gateway_path_picker_test.go](../../internal/adapter/feishu/gateway_path_picker_test.go)
@@ -458,9 +460,11 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
   - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 normal `/list` 的基础 target picker 语义
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` 的可见性分档、同卡复用、正文出现后终止、同卡更新不复活与 turn 完成清理语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、同卡复用、正文出现后终止、同类 tool 行级聚合、失败态行内标记，以及 turn 完成清理语义
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)
   - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重与行级摘要更新语义
+- [internal/core/orchestrator/service_image_output_test.go](../../internal/core/orchestrator/service_image_output_test.go)
+  - 锁定 `dynamic_tool_call` 在有文本/图片输出时仍走原结果渲染路径，而空输出场景保持静默、不再补缺省 notice
 - [internal/core/orchestrator/service_target_picker_test.go](../../internal/core/orchestrator/service_target_picker_test.go)
   - 锁定 target picker 的 inline refresh、confirm attach / `新建会话`、recoverable-only workspace headless 路径，以及 stale selection 不会 silent fallback
 - [internal/core/orchestrator/service_path_picker_test.go](../../internal/core/orchestrator/service_path_picker_test.go)
