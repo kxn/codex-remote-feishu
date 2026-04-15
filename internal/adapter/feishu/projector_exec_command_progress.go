@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -178,8 +179,12 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 
 func renderExecProgressBlock(block control.ExecCommandProgressBlock) []string {
 	lines := []string{renderExecProgressBlockHeader(block)}
-	for _, row := range block.Rows {
-		lines = append(lines, "- "+renderExecProgressBlockRow(row))
+	for i, row := range block.Rows {
+		prefix := "    "
+		if i == 0 {
+			prefix = "  └ "
+		}
+		lines = append(lines, prefix+renderExecProgressBlockRow(row))
 	}
 	return lines
 }
@@ -187,31 +192,27 @@ func renderExecProgressBlock(block control.ExecCommandProgressBlock) []string {
 func renderExecProgressBlockHeader(block control.ExecCommandProgressBlock) string {
 	switch strings.ToLower(strings.TrimSpace(block.Kind)) {
 	case "exploration":
-		switch strings.ToLower(strings.TrimSpace(block.Status)) {
-		case "failed":
-			return "探索失败"
-		case "completed":
-			return "已探索"
-		default:
-			return "探索中"
+		if strings.EqualFold(strings.TrimSpace(block.Status), "running") {
+			return "• Exploring"
 		}
+		return "• Explored"
 	default:
-		return "处理中"
+		return "• Running"
 	}
 }
 
 func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
 	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
 	case "read":
-		return "读取：" + truncateExecProgressSummary(strings.Join(row.Items, "、"), 60)
+		return "Read " + truncateExecProgressSummary(strings.Join(execProgressReadNames(row.Items), ", "), 60)
 	case "list":
-		return "列目录：" + truncateExecProgressSummary(row.Summary, 60)
+		return "List " + truncateExecProgressSummary(row.Summary, 60)
 	case "search":
 		summary := row.Summary
 		if row.Secondary != "" {
 			summary = summary + " in " + row.Secondary
 		}
-		return "搜索：" + truncateExecProgressSummary(summary, 60)
+		return "Search " + truncateExecProgressSummary(summary, 60)
 	default:
 		text := row.Summary
 		if text == "" && len(row.Items) != 0 {
@@ -219,6 +220,27 @@ func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string 
 		}
 		return truncateExecProgressSummary(text, 60)
 	}
+}
+
+func execProgressReadNames(items []string) []string {
+	names := make([]string, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		text := strings.TrimSpace(item)
+		if text == "" {
+			continue
+		}
+		name := filepath.Base(text)
+		if name == "." || name == string(filepath.Separator) || strings.TrimSpace(name) == "" {
+			name = text
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
 }
 
 func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {

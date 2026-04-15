@@ -482,6 +482,87 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 	}
 }
 
+func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "按顺序看看", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat foo.txt"`,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first read start, got %#v", first)
+	}
+	progress := first[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" {
+		t.Fatalf("expected first read row, got %#v", progress.Blocks)
+	}
+
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "ls -la"`,
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected list update, got %#v", second)
+	}
+	progress = second[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
+		t.Fatalf("expected read + list rows, got %#v", progress.Blocks)
+	}
+	if progress.Blocks[0].Rows[1].Kind != "list" || progress.Blocks[0].Rows[1].Summary != "ls -la" {
+		t.Fatalf("expected upstream-style list summary, got %#v", progress.Blocks[0].Rows)
+	}
+
+	third := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-3",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat bar.txt"`,
+		},
+	})
+	if len(third) != 1 || third[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second read update, got %#v", third)
+	}
+	progress = third[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 3 {
+		t.Fatalf("expected separated read groups around list row, got %#v", progress.Blocks)
+	}
+	rows := progress.Blocks[0].Rows
+	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
+		t.Fatalf("unexpected first read row: %#v", rows)
+	}
+	if rows[1].Kind != "list" || rows[1].Summary != "ls -la" {
+		t.Fatalf("unexpected list row: %#v", rows)
+	}
+	if rows[2].Kind != "read" || len(rows[2].Items) != 1 || rows[2].Items[0] != "bar.txt" {
+		t.Fatalf("unexpected second read row: %#v", rows)
+	}
+}
+
 func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

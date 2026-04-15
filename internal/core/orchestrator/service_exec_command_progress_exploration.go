@@ -73,7 +73,13 @@ func upsertExplorationProgress(progress *state.ExecCommandProgressRecord, itemID
 	exploration := ensureExplorationProgress(progress)
 	before := cloneExplorationBlock(exploration.Block)
 
-	upsertExplorationRow(&exploration.Block, action)
+	if final {
+		if len(exploration.Block.Rows) == 0 {
+			appendExplorationRow(&exploration.Block, action)
+		}
+	} else {
+		appendExplorationRow(&exploration.Block, action)
+	}
 	if exploration.ActiveItemIDs == nil {
 		exploration.ActiveItemIDs = map[string]bool{}
 	}
@@ -114,47 +120,48 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 	return progress.Exploration
 }
 
-func upsertExplorationRow(block *state.ExecCommandProgressBlockRecord, action execProgressExplorationAction) {
+func appendExplorationRow(block *state.ExecCommandProgressBlockRecord, action execProgressExplorationAction) {
 	if block == nil {
 		return
 	}
-	rowID := explorationRowID(action)
-	for i := range block.Rows {
-		row := &block.Rows[i]
-		if row.RowID != rowID {
-			continue
+	action.Kind = strings.TrimSpace(action.Kind)
+	action.Summary = strings.TrimSpace(action.Summary)
+	action.Secondary = strings.TrimSpace(action.Secondary)
+	items := make([]string, 0, len(action.Items))
+	for _, item := range action.Items {
+		if text := strings.TrimSpace(item); text != "" {
+			items = append(items, text)
 		}
-		if len(action.Items) != 0 {
-			row.Items = appendUniquePreserveOrder(row.Items, action.Items...)
+	}
+	if action.Kind == "" {
+		return
+	}
+	if action.Kind == "read" {
+		if len(items) == 0 {
+			return
 		}
-		if strings.TrimSpace(action.Summary) != "" {
-			row.Summary = strings.TrimSpace(action.Summary)
+		if len(block.Rows) > 0 && block.Rows[len(block.Rows)-1].Kind == "read" {
+			block.Rows[len(block.Rows)-1].Items = appendUniquePreserveOrder(block.Rows[len(block.Rows)-1].Items, items...)
+			return
 		}
-		if strings.TrimSpace(action.Secondary) != "" {
-			row.Secondary = strings.TrimSpace(action.Secondary)
-		}
+		block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
+			RowID: nextExplorationRowID(block, action.Kind),
+			Kind:  action.Kind,
+			Items: append([]string(nil), items...),
+		})
 		return
 	}
 	block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
-		RowID:     rowID,
+		RowID:     nextExplorationRowID(block, action.Kind),
 		Kind:      action.Kind,
-		Items:     append([]string(nil), action.Items...),
-		Summary:   strings.TrimSpace(action.Summary),
-		Secondary: strings.TrimSpace(action.Secondary),
+		Items:     append([]string(nil), items...),
+		Summary:   action.Summary,
+		Secondary: action.Secondary,
 	})
 }
 
-func explorationRowID(action execProgressExplorationAction) string {
-	switch action.Kind {
-	case "read":
-		return "read"
-	case "list":
-		return "list::" + strings.TrimSpace(action.Summary)
-	case "search":
-		return "search::" + strings.TrimSpace(action.Summary) + "::" + strings.TrimSpace(action.Secondary)
-	default:
-		return strings.TrimSpace(action.Kind) + "::" + strings.TrimSpace(action.Summary)
-	}
+func nextExplorationRowID(block *state.ExecCommandProgressBlockRecord, kind string) string {
+	return strings.TrimSpace(kind) + "::" + strconv.Itoa(len(block.Rows)+1)
 }
 
 func explorationBlockStatus(exploration *state.ExecCommandProgressExplorationRecord) string {
@@ -257,7 +264,7 @@ func parseCommandExecutionExplorationAction(command string) (execProgressExplora
 	case "ls":
 		items := positionalArgs(args[1:], nil)
 		if len(items) == 0 {
-			return execProgressExplorationAction{Kind: "list", Summary: cmd}, true
+			return execProgressExplorationAction{Kind: "list", Summary: command}, true
 		}
 		return execProgressExplorationAction{Kind: "list", Summary: strings.Join(items, " ")}, true
 	case "rg", "grep":
