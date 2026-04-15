@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	cronStateSchemaVersion   = 1
+	cronStateSchemaVersion   = 2
 	cronDefaultTimeoutMinute = 30
 	cronScheduleScanEvery    = time.Second
 	cronExitGrace            = 20 * time.Second
@@ -36,6 +36,9 @@ type cronStateFile struct {
 	InstanceScopeKey    string            `json:"instance_scope_key,omitempty"`
 	InstanceLabel       string            `json:"instance_label,omitempty"`
 	GatewayID           string            `json:"gateway_id,omitempty"`
+	OwnerGatewayID      string            `json:"owner_gateway_id,omitempty"`
+	OwnerAppID          string            `json:"owner_app_id,omitempty"`
+	OwnerBoundAt        time.Time         `json:"owner_bound_at,omitempty"`
 	Bitable             *cronBitableState `json:"bitable,omitempty"`
 	Jobs                []cronJobState    `json:"jobs,omitempty"`
 	LastWorkspaceSyncAt time.Time         `json:"last_workspace_sync_at,omitempty"`
@@ -79,6 +82,7 @@ type cronRunState struct {
 	RunID            string
 	InstanceID       string
 	GatewayID        string
+	WritebackTarget  cronWritebackTarget
 	JobRecordID      string
 	JobName          string
 	WorkspaceKey     string

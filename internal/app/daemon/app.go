@@ -176,6 +176,7 @@ type App struct {
 	cronJobActiveRuns               map[string]string
 	cronExitTargets                 map[string]*cronExitTarget
 	cronBitableFactory              func(string) (feishu.BitableAPI, error)
+	cronGatewayIdentityLookup       func(string) (cronGatewayIdentity, bool, error)
 	cronNextScheduleScan            time.Time
 
 	adminAuth             *adminauth.Manager
@@ -278,6 +279,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	app.upgradeLookup = app.defaultReleaseLookup
 	app.devManifestLookup = app.defaultDevManifestLookup
 	app.cronBitableFactory = app.defaultCronBitableFactory
+	app.cronGatewayIdentityLookup = app.defaultCronGatewayIdentityLookup
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,
 		OnEvents:     app.enqueueEvents,

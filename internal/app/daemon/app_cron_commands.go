@@ -15,30 +15,56 @@ func (a *App) handleCronDaemonCommand(command control.DaemonCommand) []control.U
 	if err != nil {
 		return cronUsageEvents(command.SurfaceSessionID, err.Error())
 	}
-	if a.cronSyncInFlight {
-		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
-	}
-	a.cronSyncInFlight = true
 	switch parsed.Mode {
 	case cronCommandShow:
-		go a.runCronShowCommand(command)
-		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_prepare_started", "正在准备 Cron 配置表。首次创建或修复 schema 时可能需要几秒，请稍候。")}
+		catalog, err := a.prepareCronCatalog(command)
+		if err != nil {
+			return append([]control.UIEvent{
+				cronNoticeEvent(command.SurfaceSessionID, "cron_status_failed", fmt.Sprintf("Cron 状态读取失败：%v", err)),
+			}, cronUsageEvents(command.SurfaceSessionID, "")...)
+		}
+		if catalog == nil {
+			return cronUsageEvents(command.SurfaceSessionID, "")
+		}
+		return []control.UIEvent{*catalog}
+	case cronCommandRepair:
+		if a.cronSyncInFlight {
+			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
+		}
+		a.cronSyncInFlight = true
+		go a.runCronRepairCommand(command)
+		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_repair_started", "正在修复 Cron 配置表并同步工作区清单，请稍候。")}
 	case cronCommandReload:
+		if a.cronSyncInFlight {
+			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
+		}
+		a.cronSyncInFlight = true
 		go a.runCronReloadCommand(command)
 		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_reload_started", "正在重新加载 Cron 任务配置，并校验表格内容。")}
+	case cronCommandMigrateOwner:
+		if a.cronSyncInFlight {
+			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
+		}
+		a.cronSyncInFlight = true
+		go a.runCronMigrateOwnerCommand(command)
+		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_migrate_owner_started", "正在迁移 Cron owner 到当前 surface 对应 bot，请稍候。")}
 	default:
-		a.cronSyncInFlight = false
 		return cronUsageEvents(command.SurfaceSessionID, "不支持的 /cron 子命令。")
 	}
 }
 
-func (a *App) runCronShowCommand(command control.DaemonCommand) {
-	catalog, err := a.prepareCronCatalog(command)
-	a.finishCronBackgroundCommand(command.SurfaceSessionID, catalog, err)
-}
-
 func (a *App) runCronReloadCommand(command control.DaemonCommand) {
 	notice, err := a.reloadCronJobs(command)
+	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
+}
+
+func (a *App) runCronRepairCommand(command control.DaemonCommand) {
+	notice, err := a.repairCronBitable(command)
+	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
+}
+
+func (a *App) runCronMigrateOwnerCommand(command control.DaemonCommand) {
+	notice, err := a.migrateCronOwner(command)
 	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
 }
 
@@ -85,14 +111,55 @@ func (a *App) cronBitableAPI(gatewayID string) (feishu.BitableAPI, error) {
 }
 
 func (a *App) prepareCronCatalog(command control.DaemonCommand) (*control.UIEvent, error) {
-	stateValue, extraSummary, err := a.ensureCronBitable(command)
+	a.mu.Lock()
+	stateValue, err := a.loadCronStateLocked(false)
+	if err != nil {
+		a.mu.Unlock()
+		return nil, err
+	}
+	snapshot := cloneCronState(stateValue)
+	a.mu.Unlock()
+	ownerView := a.inspectCronOwnerView(snapshot)
+	return &control.UIEvent{
+		Kind:             control.UIEventFeishuDirectCommandCatalog,
+		SurfaceSessionID: command.SurfaceSessionID,
+		FeishuDirectCommandCatalog: buildCronStatusCatalog(
+			snapshot,
+			ownerView,
+			"",
+		),
+	}, nil
+}
+
+func (a *App) repairCronBitable(command control.DaemonCommand) (*control.UIEvent, error) {
+	summary, err := a.repairCronBitableNow(command)
 	if err != nil {
 		return nil, err
 	}
 	return &control.UIEvent{
-		Kind:                       control.UIEventFeishuDirectCommandCatalog,
-		SurfaceSessionID:           command.SurfaceSessionID,
-		FeishuDirectCommandCatalog: buildCronStatusCatalog(stateValue, extraSummary),
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: command.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code:  "cron_repair_ready",
+			Title: "Cron",
+			Text:  summary,
+		},
+	}, nil
+}
+
+func (a *App) migrateCronOwner(command control.DaemonCommand) (*control.UIEvent, error) {
+	summary, err := a.migrateCronOwnerNow(command)
+	if err != nil {
+		return nil, err
+	}
+	return &control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: command.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code:  "cron_owner_migrated",
+			Title: "Cron",
+			Text:  summary,
+		},
 	}, nil
 }
 

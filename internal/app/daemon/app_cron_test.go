@@ -18,11 +18,13 @@ import (
 )
 
 type fakeCronBitableAPI struct {
-	mu            sync.Mutex
-	createRecords []fakeCronRecordWrite
-	updateRecords []fakeCronRecordWrite
-	grantCalls    []fakeCronPermissionGrant
-	permissions   map[string]feishu.BitablePermissionMember
+	mu             sync.Mutex
+	createRecords  []fakeCronRecordWrite
+	updateRecords  []fakeCronRecordWrite
+	grantCalls     []fakeCronPermissionGrant
+	permissions    map[string]feishu.BitablePermissionMember
+	recordsByTable map[string][]*larkbitable.AppTableRecord
+	listCalls      []fakeCronRecordWrite
 }
 
 type fakeCronRecordWrite struct {
@@ -40,6 +42,28 @@ type fakeCronPermissionGrant struct {
 	PrincipalType string
 	Perm          string
 	PermType      string
+}
+
+func setCronGatewayLookup(app *App, values ...string) {
+	identities := map[string]string{}
+	for index := 0; index < len(values); index += 2 {
+		gatewayID := strings.TrimSpace(values[index])
+		if gatewayID == "" {
+			continue
+		}
+		appID := gatewayID
+		if index+1 < len(values) && strings.TrimSpace(values[index+1]) != "" {
+			appID = strings.TrimSpace(values[index+1])
+		}
+		identities[gatewayID] = appID
+	}
+	app.cronGatewayIdentityLookup = func(gatewayID string) (cronGatewayIdentity, bool, error) {
+		appID, ok := identities[strings.TrimSpace(gatewayID)]
+		if !ok {
+			return cronGatewayIdentity{}, false, nil
+		}
+		return cronGatewayIdentity{GatewayID: strings.TrimSpace(gatewayID), AppID: appID}, true, nil
+	}
 }
 
 func (f *fakeCronBitableAPI) GetApp(context.Context, string) (*larkbitable.App, error) {
@@ -74,8 +98,28 @@ func (f *fakeCronBitableAPI) UpdateField(context.Context, string, string, string
 	return nil, nil
 }
 
-func (f *fakeCronBitableAPI) ListRecords(context.Context, string, string, []string) ([]*larkbitable.AppTableRecord, error) {
-	return nil, nil
+func (f *fakeCronBitableAPI) ListRecords(_ context.Context, appToken, tableID string, _ []string) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	values := f.recordsByTable
+	if len(values) == 0 {
+		return nil, nil
+	}
+	tableID = strings.TrimSpace(tableID)
+	records := values[tableID]
+	cloned := make([]*larkbitable.AppTableRecord, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		copyRecord := *record
+		if record.Fields != nil {
+			copyRecord.Fields = cloneAnyMap(record.Fields)
+		}
+		cloned = append(cloned, &copyRecord)
+	}
+	f.listCalls = append(f.listCalls, fakeCronRecordWrite{AppToken: appToken, TableID: tableID})
+	return cloned, nil
 }
 
 func (f *fakeCronBitableAPI) CreateRecord(_ context.Context, appToken, tableID string, fields map[string]any) (*larkbitable.AppTableRecord, error) {
@@ -207,6 +251,7 @@ func (f *fakeCronBitableAPI) waitForWrites(t *testing.T, wantCreates, wantUpdate
 func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	workspace := t.TempDir()
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -274,6 +319,7 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -366,6 +412,7 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -420,6 +467,7 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 	workspace := t.TempDir()
 	api := &fakeCronBitableAPI{}
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -467,6 +515,290 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 	}
 	if _, ok := app.cronRuns[instanceID]; ok {
 		t.Fatalf("timed-out cron run should be removed from active map")
+	}
+}
+
+func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronSyncInFlight = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			AppURL:   "https://example.feishu.cn/base/app-cron",
+		},
+	}
+
+	events := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron",
+		GatewayID:        "gateway-2",
+		SurfaceSessionID: "surface-2",
+	})
+	if len(events) != 1 || events[0].Kind != control.UIEventFeishuDirectCommandCatalog {
+		t.Fatalf("events = %#v, want one direct command catalog", events)
+	}
+	if !app.cronSyncInFlight {
+		t.Fatalf("view-only /cron should not clear or claim the mutating sync gate")
+	}
+	if app.cronState.OwnerGatewayID != "gateway-1" || app.cronState.GatewayID != "gateway-1" {
+		t.Fatalf("view-only /cron must not rewrite owner state: %#v", app.cronState)
+	}
+	if summary := events[0].FeishuDirectCommandCatalog.Summary; !strings.Contains(summary, "Owner 状态：正常") {
+		t.Fatalf("summary = %q, want owner health", summary)
+	}
+}
+
+func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
+	api := &fakeCronBitableAPI{
+		recordsByTable: map[string][]*larkbitable.AppTableRecord{
+			"tbl-workspaces": {{
+				RecordId: stringPtr("rec-workspace-1"),
+				Fields: map[string]any{
+					"工作区名称": "project",
+					"工作区键":  "/tmp/project",
+					"当前状态":  "可用",
+				},
+			}},
+			"tbl-tasks": {{
+				RecordId: stringPtr("rec-task-1"),
+				Fields: map[string]any{
+					"任务名":    "Nightly",
+					"启用":     true,
+					"调度类型":   cronScheduleTypeInterval,
+					"间隔":     "15分钟",
+					"工作区":    []any{"rec-workspace-1"},
+					"提示词":    "check CI",
+					"超时（分钟）": "20",
+				},
+			}},
+		},
+	}
+	var factoryGateways []string
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			Tables: cronTableIDs{
+				Tasks:      "tbl-tasks",
+				Workspaces: "tbl-workspaces",
+			},
+		},
+	}
+	app.cronBitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
+		factoryGateways = append(factoryGateways, gatewayID)
+		return api, nil
+	}
+
+	if _, err := app.reloadCronJobsNow(control.DaemonCommand{GatewayID: "gateway-2", SurfaceSessionID: "surface-2"}); err != nil {
+		t.Fatalf("reloadCronJobsNow: %v", err)
+	}
+	if fmt.Sprintf("%q", factoryGateways) != fmt.Sprintf("%q", []string{"gateway-1"}) {
+		t.Fatalf("factory gateways = %v, want owner gateway only", factoryGateways)
+	}
+	if len(app.cronState.Jobs) != 1 || app.cronState.Jobs[0].RecordID != "rec-task-1" {
+		t.Fatalf("jobs = %#v, want one loaded task", app.cronState.Jobs)
+	}
+	if app.cronState.OwnerGatewayID != "gateway-1" {
+		t.Fatalf("reload must not rewrite owner: %#v", app.cronState)
+	}
+}
+
+func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
+	api1 := &fakeCronBitableAPI{}
+	api2 := &fakeCronBitableAPI{}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		GatewayID:      "gateway-1",
+		OwnerGatewayID: "gateway-1",
+		OwnerAppID:     "app-1",
+		Bitable: &cronBitableState{
+			AppToken: "app-1",
+			Tables: cronTableIDs{
+				Tasks: "tbl-tasks-1",
+				Runs:  "tbl-runs-1",
+			},
+		},
+	}
+	app.cronBitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
+		switch gatewayID {
+		case "gateway-1":
+			return api1, nil
+		case "gateway-2":
+			return api2, nil
+		default:
+			return nil, fmt.Errorf("unexpected gateway %q", gatewayID)
+		}
+	}
+	instanceID := "inst-cron-frozen-target"
+	app.cronRuns[instanceID] = &cronRunState{
+		RunID:      instanceID,
+		InstanceID: instanceID,
+		GatewayID:  "gateway-1",
+		WritebackTarget: cronWritebackTarget{
+			GatewayID: "gateway-1",
+			Bitable: cronBitableState{
+				AppToken: "app-1",
+				Tables: cronTableIDs{
+					Tasks: "tbl-tasks-1",
+					Runs:  "tbl-runs-1",
+				},
+			},
+		},
+		JobRecordID:    "rec-task-1",
+		JobName:        "Nightly",
+		WorkspaceKey:   "/tmp/project",
+		TriggeredAt:    time.Now().UTC().Add(-time.Minute),
+		StartedAt:      time.Now().UTC().Add(-30 * time.Second),
+		CompletedAt:    time.Now().UTC(),
+		FinalMessage:   "done",
+		TimeoutMinutes: 15,
+	}
+	app.cronState.OwnerGatewayID = "gateway-2"
+	app.cronState.OwnerAppID = "app-2"
+	app.cronState.GatewayID = "gateway-2"
+	app.cronState.Bitable = &cronBitableState{
+		AppToken: "app-2",
+		Tables: cronTableIDs{
+			Tasks: "tbl-tasks-2",
+			Runs:  "tbl-runs-2",
+		},
+	}
+
+	app.completeCronRunLocked(instanceID, "completed", "", time.Now().UTC(), false)
+
+	api1.waitForWrites(t, 1, 1)
+	api1.mu.Lock()
+	defer api1.mu.Unlock()
+	if len(api2.createRecords) != 0 || len(api2.updateRecords) != 0 {
+		t.Fatalf("frozen writeback must not switch to the newer owner: api2=%#v %#v", api2.createRecords, api2.updateRecords)
+	}
+	if api1.createRecords[0].AppToken != "app-1" || api1.updateRecords[0].AppToken != "app-1" {
+		t.Fatalf("writeback target app token = %#v / %#v, want app-1", api1.createRecords[0], api1.updateRecords[0])
+	}
+}
+
+func TestCronMigrateOwnerCopiesBindingToCurrentSurfaceBot(t *testing.T) {
+	oldAPI := &fakeCronBitableAPI{
+		recordsByTable: map[string][]*larkbitable.AppTableRecord{
+			"tbl-workspaces-old": {{
+				RecordId: stringPtr("rec-workspace-old"),
+				Fields: map[string]any{
+					"工作区名称": "project",
+					"工作区键":  "/tmp/project",
+					"当前状态":  "可用",
+				},
+			}},
+			"tbl-tasks-old": {{
+				RecordId: stringPtr("rec-task-old"),
+				Fields: map[string]any{
+					"任务名":    "Nightly",
+					"启用":     true,
+					"调度类型":   cronScheduleTypeInterval,
+					"间隔":     "15分钟",
+					"工作区":    []any{"rec-workspace-old"},
+					"提示词":    "check CI",
+					"超时（分钟）": "20",
+				},
+			}},
+			"tbl-runs-old": {{
+				RecordId: stringPtr("rec-run-old"),
+				Fields: map[string]any{
+					"任务名":  "Nightly",
+					"状态":   "成功",
+					"结果摘要": "done",
+				},
+			}},
+		},
+	}
+	newAPI := newFlakyCronBootstrapBitableAPI()
+	newAPI.failCreateField = false
+
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-old",
+			Tables: cronTableIDs{
+				Tasks:      "tbl-tasks-old",
+				Workspaces: "tbl-workspaces-old",
+				Runs:       "tbl-runs-old",
+				Meta:       "tbl-meta-old",
+			},
+		},
+	}
+	app.cronBitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
+		switch gatewayID {
+		case "gateway-1":
+			return oldAPI, nil
+		case "gateway-2":
+			return newAPI, nil
+		default:
+			return nil, fmt.Errorf("unexpected gateway %q", gatewayID)
+		}
+	}
+
+	if _, err := app.migrateCronOwnerNow(control.DaemonCommand{GatewayID: "gateway-2", SurfaceSessionID: "surface-2"}); err != nil {
+		t.Fatalf("migrateCronOwnerNow: %v", err)
+	}
+	if app.cronState.OwnerGatewayID != "gateway-2" || app.cronState.OwnerAppID != "app-2" {
+		t.Fatalf("owner state = %#v, want migrated owner gateway-2/app-2", app.cronState)
+	}
+	if len(app.cronState.Jobs) != 1 || app.cronState.Jobs[0].WorkspaceKey != "/tmp/project" {
+		t.Fatalf("jobs after migration = %#v", app.cronState.Jobs)
+	}
+	newBinding := app.cronState.Bitable
+	if newBinding == nil {
+		t.Fatalf("expected migrated bitable binding")
+	}
+	newAPI.mu.Lock()
+	defer newAPI.mu.Unlock()
+	if len(newAPI.recordsByTable[newBinding.Tables.Workspaces]) != 1 {
+		t.Fatalf("copied workspaces = %#v", newAPI.recordsByTable)
+	}
+	if len(newAPI.recordsByTable[newBinding.Tables.Tasks]) != 1 {
+		t.Fatalf("copied tasks = %#v", newAPI.recordsByTable)
+	}
+	if len(newAPI.recordsByTable[newBinding.Tables.Runs]) != 1 {
+		t.Fatalf("copied runs = %#v", newAPI.recordsByTable)
+	}
+	newWorkspaceID := strings.TrimSpace(stringValue(newAPI.recordsByTable[newBinding.Tables.Workspaces][0].RecordId))
+	taskWorkspaceLinks, _ := newAPI.recordsByTable[newBinding.Tables.Tasks][0].Fields["工作区"].([]any)
+	if len(taskWorkspaceLinks) != 1 || strings.TrimSpace(cronValueString(taskWorkspaceLinks[0])) == "rec-workspace-old" {
+		t.Fatalf("task workspace links were not remapped: %#v", newAPI.recordsByTable[newBinding.Tables.Tasks][0].Fields["工作区"])
+	}
+	if cronValueString(taskWorkspaceLinks[0]) != newWorkspaceID {
+		t.Fatalf("task workspace link = %#v, want %q", taskWorkspaceLinks, newWorkspaceID)
 	}
 }
 
@@ -589,6 +921,7 @@ func TestCronJobFromRecordSupportsLegacySelectEnabledValue(t *testing.T) {
 
 func TestEnsureCronUserPermissionGrantsEditAccess(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	api := &fakeCronBitableAPI{}
 
 	if err := app.ensureCronUserPermission(context.Background(), api, "app-cron", "ou_7588194bf7ffe98ef2845026aa398169"); err != nil {
@@ -611,6 +944,7 @@ func TestEnsureCronUserPermissionGrantsEditAccess(t *testing.T) {
 
 func TestEnsureCronUserPermissionUpgradesViewAccessToEdit(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	api := &fakeCronBitableAPI{
 		permissions: map[string]feishu.BitablePermissionMember{
 			"openid:ou_7588194bf7ffe98ef2845026aa398169": {Perm: "view", PermType: "container"},
@@ -655,6 +989,7 @@ type flakyCronBootstrapBitableAPI struct {
 	failCreateField  bool
 	tables           map[string]*larkbitable.AppTable
 	fieldsByTable    map[string][]*larkbitable.AppTableField
+	recordsByTable   map[string][]*larkbitable.AppTableRecord
 	grantCalls       []fakeCronPermissionGrant
 }
 
@@ -675,6 +1010,7 @@ func newFlakyCronBootstrapBitableAPI() *flakyCronBootstrapBitableAPI {
 				IsPrimary: boolPtr(true),
 			}},
 		},
+		recordsByTable: map[string][]*larkbitable.AppTableRecord{},
 	}
 }
 
@@ -787,32 +1123,84 @@ func (f *flakyCronBootstrapBitableAPI) UpdateField(_ context.Context, _ string, 
 	return nil, errors.New("field not found")
 }
 
-func (f *flakyCronBootstrapBitableAPI) ListRecords(context.Context, string, string, []string) ([]*larkbitable.AppTableRecord, error) {
-	return nil, nil
+func (f *flakyCronBootstrapBitableAPI) ListRecords(_ context.Context, _ string, tableID string, _ []string) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	records := f.recordsByTable[tableID]
+	values := make([]*larkbitable.AppTableRecord, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		cloned := *record
+		if record.Fields != nil {
+			cloned.Fields = cloneAnyMap(record.Fields)
+		}
+		values = append(values, &cloned)
+	}
+	return values, nil
 }
 
-func (f *flakyCronBootstrapBitableAPI) CreateRecord(context.Context, string, string, map[string]any) (*larkbitable.AppTableRecord, error) {
-	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")}, nil
+func (f *flakyCronBootstrapBitableAPI) CreateRecord(_ context.Context, _ string, tableID string, fields map[string]any) (*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	recordID := fmt.Sprintf("%s-rec-%d", tableID, len(f.recordsByTable[tableID])+1)
+	record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+	f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
+	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
 }
 
-func (f *flakyCronBootstrapBitableAPI) UpdateRecord(context.Context, string, string, string, map[string]any) (*larkbitable.AppTableRecord, error) {
-	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")}, nil
+func (f *flakyCronBootstrapBitableAPI) UpdateRecord(_ context.Context, _ string, tableID, recordID string, fields map[string]any) (*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, record := range f.recordsByTable[tableID] {
+		if record == nil || strings.TrimSpace(stringValue(record.RecordId)) != strings.TrimSpace(recordID) {
+			continue
+		}
+		record.Fields = cloneAnyMap(fields)
+		return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+	}
+	record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+	f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
+	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
 }
 
-func (f *flakyCronBootstrapBitableAPI) BatchCreateRecords(_ context.Context, _ string, _ string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
+func (f *flakyCronBootstrapBitableAPI) BatchCreateRecords(_ context.Context, _ string, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	records := make([]*larkbitable.AppTableRecord, 0, len(values))
-	for range values {
-		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")})
+	for _, fields := range values {
+		recordID := fmt.Sprintf("rec-%d", len(f.recordsByTable[tableID])+1)
+		record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+		f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
+		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
 	}
 	return records, nil
 }
 
-func (f *flakyCronBootstrapBitableAPI) BatchUpdateRecords(_ context.Context, _ string, _ string, values []feishu.BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
+func (f *flakyCronBootstrapBitableAPI) BatchUpdateRecords(_ context.Context, _ string, tableID string, values []feishu.BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	records := make([]*larkbitable.AppTableRecord, 0, len(values))
 	for _, update := range values {
 		recordID := strings.TrimSpace(update.RecordID)
 		if recordID == "" {
 			recordID = "rec-meta"
+		}
+		found := false
+		for _, record := range f.recordsByTable[tableID] {
+			if record == nil || strings.TrimSpace(stringValue(record.RecordId)) != recordID {
+				continue
+			}
+			record.Fields = cloneAnyMap(update.Fields)
+			found = true
+			break
+		}
+		if !found {
+			f.recordsByTable[tableID] = append(f.recordsByTable[tableID], &larkbitable.AppTableRecord{
+				RecordId: stringPtr(recordID),
+				Fields:   cloneAnyMap(update.Fields),
+			})
 		}
 		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
 	}
@@ -863,6 +1251,7 @@ func boolPtr(value bool) *bool {
 func TestEnsureCronBitablePersistsProgressAndReusesRemoteObjectsAfterTimeout(t *testing.T) {
 	api := newFlakyCronBootstrapBitableAPI()
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -925,6 +1314,7 @@ func TestEnsureCronBitableRecoversLegacyPartialStateWithFreshTasksTable(t *testi
 	api.failCreateField = false
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -964,6 +1354,7 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 	)
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{
@@ -1003,6 +1394,7 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 	api.failCreateField = false
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
 	app.cronState = &cronStateFile{

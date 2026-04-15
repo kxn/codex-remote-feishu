@@ -245,7 +245,10 @@ func (a *App) completeCronRunLocked(instanceID, status, errorMessage string, now
 			delete(a.cronJobActiveRuns, activeKey)
 		}
 	}
-	writeTarget := a.snapshotCronWritebackLocked()
+	writeTarget := run.WritebackTarget
+	if !writeTarget.valid() {
+		writeTarget = a.snapshotCronWritebackLocked()
+	}
 	completedRun := *run
 	if run.Buffers != nil {
 		completedRun.Buffers = nil
@@ -265,8 +268,12 @@ func (a *App) snapshotCronWritebackLocked() cronWritebackTarget {
 	if !cronStateHasBinding(a.cronState) || a.cronState == nil || a.cronState.Bitable == nil {
 		return cronWritebackTarget{}
 	}
+	gatewayID := strings.TrimSpace(a.cronState.OwnerGatewayID)
+	if gatewayID == "" {
+		gatewayID = strings.TrimSpace(a.cronState.GatewayID)
+	}
 	target := cronWritebackTarget{
-		GatewayID: strings.TrimSpace(a.cronState.GatewayID),
+		GatewayID: gatewayID,
 		Bitable:   *a.cronState.Bitable,
 	}
 	return target

@@ -34,8 +34,10 @@ var cronIntervalChoices = []cronIntervalChoice{
 type cronCommandMode string
 
 const (
-	cronCommandShow   cronCommandMode = "show"
-	cronCommandReload cronCommandMode = "reload"
+	cronCommandShow         cronCommandMode = "show"
+	cronCommandRepair       cronCommandMode = "repair"
+	cronCommandReload       cronCommandMode = "reload"
+	cronCommandMigrateOwner cronCommandMode = "migrate-owner"
 )
 
 type parsedCronCommand struct {
@@ -55,12 +57,17 @@ func parseCronCommandText(text string) (parsedCronCommand, error) {
 	case 1:
 		return parsedCronCommand{Mode: cronCommandShow}, nil
 	case 2:
-		if fields[1] == "reload" {
+		switch fields[1] {
+		case "repair":
+			return parsedCronCommand{Mode: cronCommandRepair}, nil
+		case "reload":
 			return parsedCronCommand{Mode: cronCommandReload}, nil
+		case "migrate-owner":
+			return parsedCronCommand{Mode: cronCommandMigrateOwner}, nil
 		}
-		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持查看配置表或执行 `/cron reload`。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持查看状态、执行 `/cron repair`、`/cron reload` 或 `/cron migrate-owner`。")
 	default:
-		return parsedCronCommand{}, fmt.Errorf("`/cron reload` 不接受额外参数。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron repair` / `/cron reload` / `/cron migrate-owner` 不接受额外参数。")
 	}
 }
 
@@ -72,15 +79,15 @@ func cronUsageEvents(surfaceID, message string) []control.UIEvent {
 	events = append(events, control.UIEvent{
 		Kind:                       control.UIEventFeishuDirectCommandCatalog,
 		SurfaceSessionID:           surfaceID,
-		FeishuDirectCommandCatalog: buildCronStatusCatalog(nil, ""),
+		FeishuDirectCommandCatalog: buildCronStatusCatalog(nil, cronOwnerView{}, ""),
 	})
 	return events
 }
 
-func buildCronStatusCatalog(stateValue *cronStateFile, extraSummary string) *control.FeishuDirectCommandCatalog {
+func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
-		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 多维表格。发送 `/cron` 后会自动创建或修复。")
+		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 多维表格。执行 `/cron repair` 后会创建配置表。")
 	} else {
 		tableLine := fmt.Sprintf("配置表：%s", firstNonEmpty(strings.TrimSpace(stateValue.Bitable.AppURL), strings.TrimSpace(stateValue.Bitable.AppToken)))
 		if url := strings.TrimSpace(stateValue.Bitable.AppURL); url != "" {
@@ -100,6 +107,15 @@ func buildCronStatusCatalog(stateValue *cronStateFile, extraSummary string) *con
 			summaryLines = append(summaryLines, "最近 reload 摘要："+strings.TrimSpace(stateValue.LastReloadSummary))
 		}
 	}
+	if strings.TrimSpace(ownerView.StatusLabel) != "" {
+		summaryLines = append(summaryLines, "Owner 状态："+strings.TrimSpace(ownerView.StatusLabel))
+	}
+	if strings.TrimSpace(ownerView.Detail) != "" {
+		summaryLines = append(summaryLines, strings.TrimSpace(ownerView.Detail))
+	}
+	if strings.TrimSpace(ownerView.NextAction) != "" {
+		summaryLines = append(summaryLines, "下一步："+strings.TrimSpace(ownerView.NextAction))
+	}
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
@@ -113,16 +129,17 @@ func buildCronStatusCatalog(stateValue *cronStateFile, extraSummary string) *con
 				Title: "快捷操作",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("打开/修复配置表", "/cron", "primary", false),
+						runCommandButton("修复配置表", "/cron repair", "primary", false),
 						runCommandButton("重新加载配置", "/cron reload", "", false),
+						runCommandButton("迁移 owner", "/cron migrate-owner", "", false),
 					},
 				}},
 			},
 			{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:    []string{"/cron"},
-					Description: "输入 `reload` 重新加载任务配置；直接发送 `/cron` 会打开或修复配置表。",
+					Commands:    []string{"/cron", "/cron repair", "/cron reload", "/cron migrate-owner"},
+					Description: "直接发送 `/cron` 查看当前绑定与 owner 状态；`/cron repair` 修复配置表并同步工作区；`/cron reload` 重新加载任务；`/cron migrate-owner` 显式把 owner 切到当前 surface 对应 bot。",
 					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
 				}},
 			},

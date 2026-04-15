@@ -104,19 +104,21 @@ func (a *App) launchCronRunLocked(job cronJobState, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("启动隐藏执行失败：%w", err)
 	}
+	writebackTarget := a.snapshotCronWritebackLocked()
 	run := &cronRunState{
-		RunID:          instanceID,
-		InstanceID:     instanceID,
-		GatewayID:      strings.TrimSpace(a.cronState.GatewayID),
-		JobRecordID:    strings.TrimSpace(job.RecordID),
-		JobName:        firstNonEmpty(strings.TrimSpace(job.Name), displayName),
-		WorkspaceKey:   workspaceRoot,
-		Prompt:         strings.TrimSpace(job.Prompt),
-		TimeoutMinutes: cronDefaultTimeoutMinutes(job.TimeoutMinutes),
-		TriggeredAt:    now,
-		PID:            pid,
-		Status:         "starting",
-		Buffers:        map[string]*cronItemBuffer{},
+		RunID:           instanceID,
+		InstanceID:      instanceID,
+		GatewayID:       strings.TrimSpace(writebackTarget.GatewayID),
+		WritebackTarget: writebackTarget,
+		JobRecordID:     strings.TrimSpace(job.RecordID),
+		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), displayName),
+		WorkspaceKey:    workspaceRoot,
+		Prompt:          strings.TrimSpace(job.Prompt),
+		TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
+		TriggeredAt:     now,
+		PID:             pid,
+		Status:          "starting",
+		Buffers:         map[string]*cronItemBuffer{},
 	}
 	a.cronRuns[instanceID] = run
 	a.cronJobActiveRuns[cronJobActiveKey(job.RecordID, job.Name)] = instanceID
@@ -132,18 +134,19 @@ func (a *App) recordCronImmediateResultLocked(job cronJobState, triggeredAt time
 		return
 	}
 	run := cronRunState{
-		RunID:          cronInstanceIDForRun(job.RecordID, triggeredAt),
-		InstanceID:     cronInstanceIDForRun(job.RecordID, triggeredAt),
-		GatewayID:      target.GatewayID,
-		JobRecordID:    strings.TrimSpace(job.RecordID),
-		JobName:        firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
-		WorkspaceKey:   strings.TrimSpace(job.WorkspaceKey),
-		Prompt:         strings.TrimSpace(job.Prompt),
-		TimeoutMinutes: cronDefaultTimeoutMinutes(job.TimeoutMinutes),
-		TriggeredAt:    triggeredAt,
-		CompletedAt:    triggeredAt,
-		Status:         strings.TrimSpace(status),
-		ErrorMessage:   strings.TrimSpace(errorMessage),
+		RunID:           cronInstanceIDForRun(job.RecordID, triggeredAt),
+		InstanceID:      cronInstanceIDForRun(job.RecordID, triggeredAt),
+		GatewayID:       target.GatewayID,
+		WritebackTarget: target,
+		JobRecordID:     strings.TrimSpace(job.RecordID),
+		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
+		WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),
+		Prompt:          strings.TrimSpace(job.Prompt),
+		TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
+		TriggeredAt:     triggeredAt,
+		CompletedAt:     triggeredAt,
+		Status:          strings.TrimSpace(status),
+		ErrorMessage:    strings.TrimSpace(errorMessage),
 	}
 	go a.writeCronRunResultAsync(target, run)
 }
