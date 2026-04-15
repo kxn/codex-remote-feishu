@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
@@ -52,6 +53,7 @@ type PreparedPreviewArtifact struct {
 	ContentHash  string
 	ArtifactKind string
 	MIMEType     string
+	RendererKind string
 	Text         string
 	Bytes        []byte
 }
@@ -60,6 +62,7 @@ type PreviewDeliveryKind string
 
 const (
 	PreviewDeliveryDriveFileLink PreviewDeliveryKind = "drive_file_link"
+	PreviewDeliveryWebFileLink   PreviewDeliveryKind = "web_file_link"
 )
 
 type PreviewDeliveryPlan struct {
@@ -105,3 +108,15 @@ type FinalBlockPreviewPublisher interface {
 
 type MarkdownPreviewService = FinalBlockPreviewService
 type MarkdownPreviewRequest = FinalBlockPreviewRequest
+
+type WebPreviewPublisher interface {
+	IssueScopePrefix(context.Context, string) (string, error)
+}
+
+type WebPreviewConfigurable interface {
+	SetWebPreviewPublisher(WebPreviewPublisher)
+}
+
+type WebPreviewRouteService interface {
+	ServeWebPreview(http.ResponseWriter, *http.Request, string, string, bool) bool
+}

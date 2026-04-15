@@ -2,7 +2,12 @@ package feishu
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -944,6 +949,194 @@ func TestDriveMarkdownPreviewerLeavesUnhandledFileLinksUntouched(t *testing.T) {
 	}
 }
 
+type fakeWebPreviewPublisher struct {
+	baseURL    string
+	issuedFor  []string
+	returnErr  error
+}
+
+func (p *fakeWebPreviewPublisher) IssueScopePrefix(_ context.Context, scopePublicID string) (string, error) {
+	p.issuedFor = append(p.issuedFor, scopePublicID)
+	if p.returnErr != nil {
+		return "", p.returnErr
+	}
+	return p.baseURL, nil
+}
+
+func TestDriveMarkdownPreviewerRewritesTextFileToWebPreviewLink(t *testing.T) {
+	root := t.TempDir()
+	notePath := writePreviewFile(t, filepath.Join(root, "docs", "note.txt"), "plain text\n")
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD: root,
+		CacheDir:   filepath.Join(root, "preview-cache"),
+	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
+
+	req := MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Open [note](docs/note.txt).",
+		},
+	}
+	result, err := previewer.RewriteFinalBlock(context.Background(), req)
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if !strings.HasPrefix(result.Block.Text, "Open [note](https://preview.example/g/shared/") || !strings.Contains(result.Block.Text, "?t=token).") {
+		t.Fatalf("expected web preview link, got %q", result.Block.Text)
+	}
+	scopeKey := previewScopeKey(req.GatewayID, req.SurfaceSessionID, req.ChatID, req.ActorUserID)
+	scopePublicID := previewScopePublicID(scopeKey)
+	if len(web.issuedFor) != 1 || web.issuedFor[0] != scopePublicID {
+		t.Fatalf("unexpected issued scopes: %#v want %q", web.issuedFor, scopePublicID)
+	}
+	manifest, err := previewer.loadWebPreviewScopeManifest(scopePublicID)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	if manifest == nil || len(manifest.Records) != 1 {
+		t.Fatalf("unexpected manifest: %#v", manifest)
+	}
+	record := firstWebPreviewRecord(manifest)
+	if record == nil || record.SourcePath != notePath {
+		t.Fatalf("unexpected record: %#v", record)
+	}
+	if _, err := os.Stat(previewer.previewBlobPath(record.BlobKey)); err != nil {
+		t.Fatalf("expected preview blob to exist: %v", err)
+	}
+}
+
+func TestDriveMarkdownPreviewerFallsBackToWebPreviewWhenDriveUploadFails(t *testing.T) {
+	root := t.TempDir()
+	writeMarkdownFile(t, filepath.Join(root, "docs", "design.md"), "# design\n")
+	api := newFakePreviewAPI()
+	api.uploadFileFunc = func(_ context.Context, _, _ string, _ []byte) (string, error) {
+		return "", fmt.Errorf("upload failed")
+	}
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		ProcessCWD: root,
+		StatePath:  filepath.Join(root, "state", "preview.json"),
+		CacheDir:   filepath.Join(root, "preview-cache"),
+	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
+
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Read [design](docs/design.md).",
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if !strings.HasPrefix(result.Block.Text, "Read [design](https://preview.example/g/shared/") {
+		t.Fatalf("expected web preview fallback link, got %q", result.Block.Text)
+	}
+	if len(api.uploadFileCalls) != 1 {
+		t.Fatalf("expected drive publish to be attempted once, got %#v", api.uploadFileCalls)
+	}
+}
+
+func TestDriveMarkdownPreviewerWebPreviewTracksPreviousVersion(t *testing.T) {
+	root := t.TempDir()
+	docPath := writePreviewFile(t, filepath.Join(root, "docs", "note.txt"), "v1\n")
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD: root,
+		CacheDir:   filepath.Join(root, "preview-cache"),
+	})
+	previewer.SetWebPreviewPublisher(&fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"})
+
+	req := MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Read [note](docs/note.txt).",
+		},
+	}
+	if _, err := previewer.RewriteFinalBlock(context.Background(), req); err != nil {
+		t.Fatalf("first rewrite: %v", err)
+	}
+	writePreviewFile(t, docPath, "v2\n")
+	if _, err := previewer.RewriteFinalBlock(context.Background(), req); err != nil {
+		t.Fatalf("second rewrite: %v", err)
+	}
+
+	scopeKey := previewScopeKey(req.GatewayID, req.SurfaceSessionID, req.ChatID, req.ActorUserID)
+	scopePublicID := previewScopePublicID(scopeKey)
+	manifest, err := previewer.loadWebPreviewScopeManifest(scopePublicID)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	if manifest == nil || len(manifest.Records) != 2 {
+		t.Fatalf("unexpected manifest record count: %#v", manifest)
+	}
+	firstID := previewRecordID(scopeKey, docPath, sha256Hex("v1\n"))
+	secondID := previewRecordID(scopeKey, docPath, sha256Hex("v2\n"))
+	second := manifest.Records[secondID]
+	if second == nil {
+		t.Fatalf("missing second record in manifest: %#v", manifest.Records)
+	}
+	if second.PreviousID != firstID {
+		t.Fatalf("expected previous id %q, got %#v", firstID, second)
+	}
+}
+
+func TestDriveMarkdownPreviewerServesWebPreviewSnapshot(t *testing.T) {
+	root := t.TempDir()
+	notePath := writePreviewFile(t, filepath.Join(root, "docs", "note.txt"), "hello preview\n")
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD: root,
+		CacheDir:   filepath.Join(root, "preview-cache"),
+	})
+	previewer.SetWebPreviewPublisher(&fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"})
+
+	req := MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Read [note](docs/note.txt).",
+		},
+	}
+	if _, err := previewer.RewriteFinalBlock(context.Background(), req); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	scopeKey := previewScopeKey(req.GatewayID, req.SurfaceSessionID, req.ChatID, req.ActorUserID)
+	scopePublicID := previewScopePublicID(scopeKey)
+	previewID := previewRecordID(scopeKey, notePath, sha256Hex("hello preview\n"))
+	httpReq := httptest.NewRequest(http.MethodGet, "/preview/s/"+scopePublicID+"/"+previewID, nil)
+	rec := httptest.NewRecorder()
+	if ok := previewer.ServeWebPreview(rec, httpReq, scopePublicID, previewID, false); !ok {
+		t.Fatal("expected preview route to be served")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "hello preview") {
+		t.Fatalf("expected preview body to include content, got %q", rec.Body.String())
+	}
+}
+
 func TestDriveMarkdownPreviewerSupportsRegisteredHandlerPublisherChain(t *testing.T) {
 	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{})
 	previewer.handlers = nil
@@ -1093,4 +1286,21 @@ func writePreviewState(t *testing.T, path string, state *previewState) {
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatalf("write preview state: %v", err)
 	}
+}
+
+func firstWebPreviewRecord(manifest *webPreviewScopeManifest) *webPreviewRecord {
+	if manifest == nil {
+		return nil
+	}
+	for _, record := range manifest.Records {
+		if record != nil {
+			return record
+		}
+	}
+	return nil
+}
+
+func sha256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }

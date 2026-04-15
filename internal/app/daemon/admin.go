@@ -162,6 +162,8 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /assets/", http.FileServerFS(adminui.FS()))
 	mux.HandleFunc("GET /", a.handleRootPage)
 	mux.HandleFunc("GET /setup", a.handleSetupPage)
+	mux.HandleFunc("GET /preview/s/{scope}/{preview}", a.handlePreviewPage)
+	mux.HandleFunc("GET /preview/s/{scope}/{preview}/download", a.handlePreviewDownload)
 	mux.HandleFunc("GET /api/setup/bootstrap-state", a.requireSetup(a.handleBootstrapState))
 	mux.HandleFunc("POST /api/setup/complete", a.requireSetup(a.handleSetupComplete))
 	mux.HandleFunc("GET /api/setup/feishu/manifest", a.requireSetup(a.handleFeishuManifest))

@@ -30,6 +30,7 @@ type PreviewDriveAdminService interface {
 
 type MarkdownPreviewConfig struct {
 	StatePath               string
+	CacheDir                string
 	GatewayID               string
 	ProcessCWD              string
 	MaxFileBytes            int64
@@ -43,6 +44,7 @@ type DriveMarkdownPreviewer struct {
 
 	handlers   []FinalBlockPreviewHandler
 	publishers []FinalBlockPreviewPublisher
+	webPublisher WebPreviewPublisher
 	mu         sync.Mutex
 	loaded     bool
 	state      *previewState
@@ -168,6 +170,7 @@ func NewDriveMarkdownPreviewer(api previewDriveAPI, cfg MarkdownPreviewConfig) *
 	}
 	previewer.RegisterHandler(markdownFilePreviewHandler{previewer: previewer})
 	previewer.RegisterPublisher(driveMarkdownLinkPublisher{previewer: previewer})
+	previewer.RegisterPublisher(webPreviewLinkPublisher{previewer: previewer})
 	return previewer
 }
 
@@ -183,4 +186,11 @@ func (p *DriveMarkdownPreviewer) RegisterPublisher(publisher FinalBlockPreviewPu
 		return
 	}
 	p.publishers = append(p.publishers, publisher)
+}
+
+func (p *DriveMarkdownPreviewer) SetWebPreviewPublisher(publisher WebPreviewPublisher) {
+	if p == nil {
+		return
+	}
+	p.webPublisher = publisher
 }

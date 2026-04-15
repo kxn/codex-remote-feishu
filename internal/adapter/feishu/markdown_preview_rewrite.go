@@ -224,6 +224,15 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 
 	sum := sha256.Sum256(content)
 	contentSHA := hex.EncodeToString(sum[:])
+	rendererKind := previewRendererKind(resolvedPath, artifactKind, mimeType)
+	deliveries := []PreviewDeliveryPlan{{
+		Kind: PreviewDeliveryWebFileLink,
+	}}
+	if isSupportedPreviewArtifactKind(artifactKind) {
+		deliveries = append([]PreviewDeliveryPlan{{
+			Kind: PreviewDeliveryDriveFileLink,
+		}}, deliveries...)
+	}
 	return &PreviewPlan{
 		HandlerID: h.ID(),
 		Artifact: PreparedPreviewArtifact{
@@ -232,12 +241,11 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 			ContentHash:  contentSHA,
 			ArtifactKind: artifactKind,
 			MIMEType:     mimeType,
+			RendererKind: rendererKind,
 			Text:         string(content),
 			Bytes:        append([]byte(nil), content...),
 		},
-		Deliveries: []PreviewDeliveryPlan{{
-			Kind: PreviewDeliveryDriveFileLink,
-		}},
+		Deliveries: deliveries,
 	}, true, nil
 }
 

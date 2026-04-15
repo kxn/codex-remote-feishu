@@ -355,6 +355,14 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleExchange(w http.ResponseWriter, r *http.Request, grantID, token string) {
 	grant, session, err := s.exchange(grantID, token)
 	if err != nil {
+		if _, authErr := s.authorizeRequest(r, grantID); authErr == nil {
+			redirectURL := &url.URL{Path: r.URL.Path}
+			query := r.URL.Query()
+			query.Del("t")
+			redirectURL.RawQuery = query.Encode()
+			http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+			return
+		}
 		writeUnauthorized(w, err)
 		return
 	}

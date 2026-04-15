@@ -182,6 +182,7 @@ type App struct {
 	admin                 adminRuntimeState
 	externalAccess        *externalaccess.Service
 	externalAccessRuntime ExternalAccessRuntimeConfig
+	webPreviewGrants      map[string]*previewScopeGrant
 
 	relayListener          net.Listener
 	apiListener            net.Listener
@@ -257,6 +258,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		cronJobActiveRuns:            map[string]string{},
 		cronExitTargets:              map[string]*cronExitTarget{},
 		adminAuth:                    authManager,
+		webPreviewGrants:             map[string]*previewScopeGrant{},
 		workspaceContextRoots:        map[string]string{},
 		shutdownGracePeriod:          5 * time.Second,
 		shutdownNoticeTimeout:        2 * time.Second,
@@ -345,6 +347,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 
 func (a *App) SetFinalBlockPreviewer(previewer feishu.FinalBlockPreviewService) {
 	a.finalBlockPreviewer = previewer
+	if configurable, ok := previewer.(feishu.WebPreviewConfigurable); ok {
+		configurable.SetWebPreviewPublisher(daemonWebPreviewPublisher{app: a})
+	}
 }
 
 func (a *App) SetDebugRelayFlow(enabled bool) {

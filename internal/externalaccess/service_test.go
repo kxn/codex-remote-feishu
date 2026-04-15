@@ -229,3 +229,38 @@ func TestServiceIssueURLDoesNotCacheProviderBaseAcrossCalls(t *testing.T) {
 		t.Fatalf("second external url = %q, want refreshed provider base", second.ExternalURL)
 	}
 }
+
+func TestServiceExchangeFallsBackToExistingCookieWhenQueryTokenIsInvalid(t *testing.T) {
+	now := time.Date(2026, 4, 10, 18, 0, 0, 0, time.UTC)
+	service := NewService(Options{Now: func() time.Time { return now }})
+	issued, err := service.IssueURL(t.Context(), IssueRequest{
+		Purpose:        PurposePreview,
+		TargetURL:      "http://127.0.0.1:9501/preview/s/scope/",
+		TargetBasePath: "/preview/s/scope/",
+		LinkTTL:        2 * time.Second,
+		SessionTTL:     10 * time.Minute,
+	}, "http://127.0.0.1:9512")
+	if err != nil {
+		t.Fatalf("IssueURL: %v", err)
+	}
+	parsed, _ := url.Parse(issued.ExternalURL)
+
+	req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("initial exchange status = %d, want 302 body=%s", rec.Code, rec.Body.String())
+	}
+	cookie := rec.Result().Cookies()[0]
+
+	req = httptest.NewRequest(http.MethodGet, parsed.Path+"file-a?t=invalid-token", nil)
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("invalid query with valid cookie status = %d, want 302 body=%s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != parsed.Path+"file-a" {
+		t.Fatalf("location = %q, want %q", location, parsed.Path+"file-a")
+	}
+}

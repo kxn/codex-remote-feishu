@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -206,8 +207,26 @@ func previewArtifactMetadata(path string) (artifactKind string, mimeType string,
 		return "markdown", "text/markdown", true
 	case ".html", ".htm":
 		return "html", "text/html", true
+	case ".png":
+		return "image", "image/png", true
+	case ".jpg", ".jpeg":
+		return "image", "image/jpeg", true
+	case ".gif":
+		return "image", "image/gif", true
+	case ".webp":
+		return "image", "image/webp", true
+	case ".svg":
+		return "image", "image/svg+xml", true
+	case ".pdf":
+		return "pdf", "application/pdf", true
+	case ".txt", ".log", ".json", ".yaml", ".yml", ".xml", ".csv", ".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".sh", ".sql", ".ini", ".toml", ".diff", ".patch":
+		return "text", "text/plain; charset=utf-8", true
 	default:
-		return "", "", false
+		mimeType = strings.TrimSpace(mime.TypeByExtension(strings.ToLower(filepath.Ext(strings.TrimSpace(path)))))
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		return "binary", mimeType, true
 	}
 }
 

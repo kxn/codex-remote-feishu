@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -31,6 +32,7 @@ type GatewayAppConfig struct {
 	UseSystemProxy        bool
 	ImageTempDir          string
 	PreviewStatePath      string
+	PreviewCacheDir       string
 	PreviewRootFolderName string
 }
 
@@ -66,6 +68,7 @@ type MultiGatewayController struct {
 	started       bool
 	startCtx      context.Context
 	actionHandler ActionHandler
+	webPreviewPublisher WebPreviewPublisher
 
 	newGateway   func(GatewayAppConfig) gatewayRuntime
 	newPreviewer func(gatewayRuntime, GatewayAppConfig) FinalBlockPreviewService
@@ -86,14 +89,19 @@ func NewMultiGatewayController() *MultiGatewayController {
 		})
 	}
 	controller.newPreviewer = func(runtime gatewayRuntime, cfg GatewayAppConfig) FinalBlockPreviewService {
-		if runtime == nil || runtime.Client() == nil || strings.TrimSpace(cfg.PreviewStatePath) == "" {
+		if strings.TrimSpace(cfg.PreviewCacheDir) == "" {
 			return nil
 		}
+		var api previewDriveAPI
+		if runtime != nil && runtime.Client() != nil {
+			api = NewLarkDrivePreviewAPI(runtime.Client())
+		}
 		return NewDriveMarkdownPreviewer(
-			NewLarkDrivePreviewAPI(runtime.Client()),
+			api,
 			MarkdownPreviewConfig{
-				StatePath: cfg.PreviewStatePath,
-				GatewayID: cfg.GatewayID,
+				StatePath:  cfg.PreviewStatePath,
+				CacheDir:   cfg.PreviewCacheDir,
+				GatewayID:  cfg.GatewayID,
 			},
 		)
 	}
@@ -236,6 +244,40 @@ func (c *MultiGatewayController) RewriteFinalBlock(ctx context.Context, req Fina
 	return worker.previewer.RewriteFinalBlock(ctx, req)
 }
 
+func (c *MultiGatewayController) SetWebPreviewPublisher(publisher WebPreviewPublisher) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.webPreviewPublisher = publisher
+	for _, worker := range c.workers {
+		if worker == nil || worker.previewer == nil {
+			continue
+		}
+		configurable, ok := worker.previewer.(WebPreviewConfigurable)
+		if !ok {
+			continue
+		}
+		configurable.SetWebPreviewPublisher(publisher)
+	}
+}
+
+func (c *MultiGatewayController) ServeWebPreview(w http.ResponseWriter, r *http.Request, scopePublicID, previewID string, download bool) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, worker := range c.workers {
+		if worker == nil || worker.previewer == nil {
+			continue
+		}
+		routeService, ok := worker.previewer.(WebPreviewRouteService)
+		if !ok {
+			continue
+		}
+		if routeService.ServeWebPreview(w, r, scopePublicID, previewID, download) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppConfig) error {
 	cfg = normalizeGatewayAppConfig(cfg)
 
@@ -341,6 +383,9 @@ func (c *MultiGatewayController) ensureWorkerRunningLocked(gatewayID string) err
 	})
 	worker.runtime = runtime
 	worker.previewer = c.newPreviewer(runtime, worker.config)
+	if configurable, ok := worker.previewer.(WebPreviewConfigurable); ok && c.webPreviewPublisher != nil {
+		configurable.SetWebPreviewPublisher(c.webPreviewPublisher)
+	}
 	worker.status.Disabled = false
 	worker.status.State = GatewayStateConnecting
 	worker.status.LastError = ""
@@ -436,6 +481,9 @@ func normalizeGatewayAppConfig(cfg GatewayAppConfig) GatewayAppConfig {
 	}
 	if strings.TrimSpace(cfg.PreviewStatePath) == "" {
 		cfg.PreviewStatePath = filepath.Join(".", "feishu-preview-"+cfg.GatewayID+".json")
+	}
+	if strings.TrimSpace(cfg.PreviewCacheDir) == "" {
+		cfg.PreviewCacheDir = filepath.Join(".", "preview-cache", cfg.GatewayID)
 	}
 	return cfg
 }
