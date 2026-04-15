@@ -287,9 +287,32 @@ func buildPathPickerEntries(record *state.ActivePathPickerRecord) ([]control.Fei
 		if items[i].Kind != items[j].Kind {
 			return items[i].Kind == control.PathPickerEntryDirectory
 		}
-		return strings.ToLower(items[i].Label) < strings.ToLower(items[j].Label)
+		if items[i].Kind == control.PathPickerEntryDirectory {
+			leftBucket := pathPickerDirectorySortBucket(items[i])
+			rightBucket := pathPickerDirectorySortBucket(items[j])
+			if leftBucket != rightBucket {
+				return leftBucket < rightBucket
+			}
+		}
+		leftLabel := strings.ToLower(strings.TrimSpace(firstNonEmpty(items[i].Label, items[i].Name)))
+		rightLabel := strings.ToLower(strings.TrimSpace(firstNonEmpty(items[j].Label, items[j].Name)))
+		if leftLabel != rightLabel {
+			return leftLabel < rightLabel
+		}
+		return strings.TrimSpace(items[i].Name) < strings.TrimSpace(items[j].Name)
 	})
 	return items, nil
+}
+
+func pathPickerDirectorySortBucket(entry control.FeishuPathPickerEntry) int {
+	if entry.Kind != control.PathPickerEntryDirectory {
+		return 0
+	}
+	name := strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name))
+	if strings.HasPrefix(name, ".") {
+		return 1
+	}
+	return 0
 }
 
 func clearSurfacePathPicker(surface *state.SurfaceConsoleRecord) {

@@ -85,7 +85,7 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 		"content": strings.Join(summaryLines, "\n"),
 	})
 
-	directoryOptions, _ := pathPickerSelectStaticOptions(view, control.PathPickerEntryDirectory)
+	directoryOptions := fileModeDirectoryOptions(view)
 	if len(directoryOptions) != 0 {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
@@ -139,6 +139,19 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
 	}))
 	return elements
+}
+
+func fileModeDirectoryOptions(view control.FeishuPathPickerView) []map[string]any {
+	options, _ := pathPickerSelectStaticOptions(view, control.PathPickerEntryDirectory)
+	if !view.CanGoUp {
+		return options
+	}
+	parentOption := map[string]any{
+		"text":  cardPlainText(".."),
+		"value": "..",
+	}
+	options = append([]map[string]any{parentOption}, options...)
+	return options
 }
 
 func pathPickerEntryLine(entry control.FeishuPathPickerEntry) string {

@@ -89,3 +89,97 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 		t.Fatalf("expected enter/select payload kinds, got %#v", actions)
 	}
 }
+
+func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:     "picker-1",
+		Mode:         control.PathPickerModeFile,
+		Title:        "选择文件",
+		RootPath:     "/root",
+		CurrentPath:  "/root/subdir",
+		ConfirmLabel: "确认",
+		CancelLabel:  "取消",
+		CanGoUp:      true,
+		Entries: []control.FeishuPathPickerEntry{
+			{Name: "alpha", Label: "alpha", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+			{Name: ".hidden", Label: ".hidden", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+			{Name: "a.txt", Label: "a.txt", Kind: control.PathPickerEntryFile, ActionKind: control.PathPickerEntryActionSelect},
+		},
+	}, "life-3")
+
+	options := selectStaticOptionValues(t, elements, cardPathPickerDirectorySelectFieldName)
+	if got, want := options, []string{"..", "alpha", ".hidden"}; !equalPathPickerTestStrings(got, want) {
+		t.Fatalf("unexpected directory options: got %v want %v", got, want)
+	}
+}
+
+func TestFileModePathPickerOmitsParentOptionAtRoot(t *testing.T) {
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:     "picker-1",
+		Mode:         control.PathPickerModeFile,
+		Title:        "选择文件",
+		RootPath:     "/root",
+		CurrentPath:  "/root",
+		ConfirmLabel: "确认",
+		CancelLabel:  "取消",
+		Entries: []control.FeishuPathPickerEntry{
+			{Name: "alpha", Label: "alpha", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+		},
+	}, "life-4")
+
+	options := selectStaticOptionValues(t, elements, cardPathPickerDirectorySelectFieldName)
+	if got, want := options, []string{"alpha"}; !equalPathPickerTestStrings(got, want) {
+		t.Fatalf("unexpected root directory options: got %v want %v", got, want)
+	}
+}
+
+func selectStaticOptionValues(t *testing.T, elements []map[string]any, fieldName string) []string {
+	t.Helper()
+	for _, element := range elements {
+		if cardStringValue(element["tag"]) != "select_static" || cardStringValue(element["name"]) != fieldName {
+			continue
+		}
+		return cardOptionValues(element["options"])
+	}
+	t.Fatalf("select_static %q not found in %#v", fieldName, elements)
+	return nil
+}
+
+func cardOptionValues(raw any) []string {
+	switch typed := raw.(type) {
+	case []map[string]any:
+		values := make([]string, 0, len(typed))
+		for _, option := range typed {
+			if value := cardStringValue(option["value"]); value != "" {
+				values = append(values, value)
+			}
+		}
+		return values
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			option, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if value := cardStringValue(option["value"]); value != "" {
+				values = append(values, value)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+func equalPathPickerTestStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -139,6 +139,79 @@ func TestOpenPathPickerFileModeSelectsFileAndRejectsDirectorySelection(t *testin
 	}
 }
 
+func TestOpenPathPickerFileModeAllowsParentDirectoryEntry(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:        control.PathPickerModeFile,
+		RootPath:    root,
+		InitialPath: nested,
+	})
+	view := singlePathPickerEvent(t, events)
+	if !testutil.SamePath(view.CurrentPath, nested) || !view.CanGoUp {
+		t.Fatalf("expected nested file picker view, got %#v", view)
+	}
+
+	enterEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerEnter,
+		SurfaceSessionID: "surface-1",
+		PickerID:         view.PickerID,
+		PickerEntry:      "..",
+	})
+	back := singlePathPickerEvent(t, enterEvents)
+	if !testutil.SamePath(back.CurrentPath, root) {
+		t.Fatalf("expected parent entry to return to root, got %#v", back)
+	}
+}
+
+func TestBuildPathPickerEntriesSortsDotDirectoriesAfterNormalDirectories(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"zeta", ".hidden", "alpha"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	for _, file := range []string{"b.txt", ".env"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", file, err)
+		}
+	}
+
+	entries, err := buildPathPickerEntries(&state.ActivePathPickerRecord{
+		Mode:        state.PathPickerModeFile,
+		RootPath:    root,
+		CurrentPath: root,
+	})
+	if err != nil {
+		t.Fatalf("build entries: %v", err)
+	}
+
+	var directories []string
+	var files []string
+	for _, entry := range entries {
+		switch entry.Kind {
+		case control.PathPickerEntryDirectory:
+			directories = append(directories, entry.Name)
+		case control.PathPickerEntryFile:
+			files = append(files, entry.Name)
+		}
+	}
+	if got, want := directories, []string{"alpha", "zeta", ".hidden"}; !equalStringSlices(got, want) {
+		t.Fatalf("unexpected directory order: got %v want %v", got, want)
+	}
+	if got, want := files, []string{".env", "b.txt"}; !equalStringSlices(got, want) {
+		t.Fatalf("unexpected file order: got %v want %v", got, want)
+	}
+}
+
 func TestOpenPathPickerRejectsPathEscapesAndSymlinkEscapes(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -181,6 +254,18 @@ func TestOpenPathPickerRejectsPathEscapesAndSymlinkEscapes(t *testing.T) {
 	if len(escapeEvents) != 1 || escapeEvents[0].Notice == nil || escapeEvents[0].Notice.Code != "path_picker_invalid_entry" {
 		t.Fatalf("expected symlink escape rejection notice, got %#v", escapeEvents)
 	}
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestOpenPathPickerDirectoryModeRejectsFileSelection(t *testing.T) {

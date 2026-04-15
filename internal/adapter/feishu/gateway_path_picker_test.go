@@ -53,6 +53,18 @@ func TestParseCardActionTriggerEventBuildsPathPickerEntryActions(t *testing.T) {
 			wantEntry:  "subdir",
 		},
 		{
+			name: "enter parent from select option",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerEnter,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerDirectorySelectFieldName,
+			},
+			option:     "..",
+			wantKind:   control.ActionPathPickerEnter,
+			wantPicker: "picker-1",
+			wantEntry:  "..",
+		},
+		{
 			name: "select from options array",
 			payload: map[string]any{
 				"kind":       cardActionKindPathPickerSelect,
