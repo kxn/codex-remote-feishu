@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -86,6 +87,41 @@ func (f *fakeCronBitableAPI) UpdateRecord(_ context.Context, appToken, tableID, 
 		Fields:   cloneAnyMap(fields),
 	})
 	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+}
+
+func (f *fakeCronBitableAPI) BatchCreateRecords(_ context.Context, appToken, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	base := len(f.createRecords)
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for i, fields := range values {
+		recordID := fmt.Sprintf("rec-created-%d", base+i)
+		f.createRecords = append(f.createRecords, fakeCronRecordWrite{
+			AppToken: appToken,
+			TableID:  tableID,
+			RecordID: recordID,
+			Fields:   cloneAnyMap(fields),
+		})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+	}
+	return records, nil
+}
+
+func (f *fakeCronBitableAPI) BatchUpdateRecords(_ context.Context, appToken, tableID string, values []feishu.BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for _, update := range values {
+		recordID := strings.TrimSpace(update.RecordID)
+		f.updateRecords = append(f.updateRecords, fakeCronRecordWrite{
+			AppToken: appToken,
+			TableID:  tableID,
+			RecordID: recordID,
+			Fields:   cloneAnyMap(update.Fields),
+		})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+	}
+	return records, nil
 }
 
 func (f *fakeCronBitableAPI) ListPermissionMembers(context.Context, string, string) (map[string]bool, error) {
@@ -579,6 +615,26 @@ func (f *flakyCronBootstrapBitableAPI) CreateRecord(context.Context, string, str
 
 func (f *flakyCronBootstrapBitableAPI) UpdateRecord(context.Context, string, string, string, map[string]any) (*larkbitable.AppTableRecord, error) {
 	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) BatchCreateRecords(_ context.Context, _ string, _ string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for range values {
+		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")})
+	}
+	return records, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) BatchUpdateRecords(_ context.Context, _ string, _ string, values []feishu.BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for _, update := range values {
+		recordID := strings.TrimSpace(update.RecordID)
+		if recordID == "" {
+			recordID = "rec-meta"
+		}
+		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+	}
+	return records, nil
 }
 
 func (f *flakyCronBootstrapBitableAPI) ListPermissionMembers(context.Context, string, string) (map[string]bool, error) {

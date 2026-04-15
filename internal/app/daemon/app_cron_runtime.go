@@ -309,8 +309,6 @@ func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunSta
 		log.Printf("cron writeback failed: instance=%s err=%v", run.InstanceID, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
 
 	statusText := cronStatusText(run.Status)
 	summary := cronRunSummary(firstNonEmpty(run.FinalMessage, run.ErrorMessage, statusText))
@@ -327,9 +325,11 @@ func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunSta
 		"最终回复":  strings.TrimSpace(run.FinalMessage),
 		"错误信息":  strings.TrimSpace(run.ErrorMessage),
 	}
-	if _, err := api.CreateRecord(ctx, target.Bitable.AppToken, target.Bitable.Tables.Runs, runFields); err != nil {
+	runsCtx, cancelRuns := context.WithTimeout(context.Background(), cronWritebackRunsTTL)
+	if _, err := api.CreateRecord(runsCtx, target.Bitable.AppToken, target.Bitable.Tables.Runs, runFields); err != nil {
 		log.Printf("cron run history write failed: instance=%s job=%s err=%v", run.InstanceID, taskName, err)
 	}
+	cancelRuns()
 	if strings.TrimSpace(run.JobRecordID) == "" {
 		return
 	}
@@ -343,7 +343,9 @@ func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunSta
 		"最近结果摘要": summary,
 		"最近错误":   strings.TrimSpace(run.ErrorMessage),
 	}
-	if _, err := api.UpdateRecord(ctx, target.Bitable.AppToken, target.Bitable.Tables.Tasks, run.JobRecordID, taskFields); err != nil {
+	taskCtx, cancelTask := context.WithTimeout(context.Background(), cronWritebackTasksTTL)
+	if _, err := api.UpdateRecord(taskCtx, target.Bitable.AppToken, target.Bitable.Tables.Tasks, run.JobRecordID, taskFields); err != nil {
 		log.Printf("cron task status write failed: instance=%s job=%s record=%s err=%v", run.InstanceID, taskName, run.JobRecordID, err)
 	}
+	cancelTask()
 }

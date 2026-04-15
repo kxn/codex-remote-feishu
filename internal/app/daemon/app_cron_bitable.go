@@ -122,14 +122,15 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), cronReloadReadTTL)
-	defer cancel()
-
-	workspacesByRecord, err := a.loadCronWorkspaceIndex(ctx, api, stateValue.Bitable)
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronReloadWorkspaceTTL)
+	defer cancelWorkspace()
+	workspacesByRecord, err := a.loadCronWorkspaceIndex(workspaceCtx, api, stateValue.Bitable)
 	if err != nil {
 		return "", err
 	}
-	records, err := api.ListRecords(ctx, stateValue.Bitable.AppToken, stateValue.Bitable.Tables.Tasks, []string{
+	tasksCtx, cancelTasks := context.WithTimeout(context.Background(), cronReloadTasksTTL)
+	defer cancelTasks()
+	records, err := api.ListRecords(tasksCtx, stateValue.Bitable.AppToken, stateValue.Bitable.Tables.Tasks, []string{
 		"任务名", "启用", "调度类型", "每天-时", "每天-分", "间隔", "工作区", "提示词", "超时（分钟）",
 	})
 	if err != nil {
@@ -506,6 +507,9 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 	}
 	result := map[string]string{}
 	desired := map[string]cronWorkspaceRow{}
+	pendingCreateKeys := make([]string, 0, len(rows))
+	pendingCreates := make([]map[string]any, 0, len(rows))
+	pendingUpdates := make([]feishu.BitableRecordUpdate, 0, len(rows))
 	for _, row := range rows {
 		if strings.TrimSpace(row.Key) == "" {
 			continue
@@ -523,17 +527,12 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 				if cronValueString(record.Fields["工作区名称"]) == row.Name && cronValueString(record.Fields["当前状态"]) == row.Status {
 					continue
 				}
-				if _, err := api.UpdateRecord(ctx, binding.AppToken, binding.Tables.Workspaces, recordID, fields); err != nil {
-					return nil, err
-				}
+				pendingUpdates = append(pendingUpdates, feishu.BitableRecordUpdate{RecordID: recordID, Fields: fields})
 				continue
 			}
 		}
-		created, err := api.CreateRecord(ctx, binding.AppToken, binding.Tables.Workspaces, fields)
-		if err != nil {
-			return nil, err
-		}
-		result[row.Key] = strings.TrimSpace(stringValue(created.RecordId))
+		pendingCreateKeys = append(pendingCreateKeys, row.Key)
+		pendingCreates = append(pendingCreates, fields)
 	}
 	for key, record := range existing {
 		if _, ok := desired[key]; ok {
@@ -546,7 +545,32 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		if cronValueString(record.Fields["当前状态"]) == "已失效" {
 			continue
 		}
-		if _, err := api.UpdateRecord(ctx, binding.AppToken, binding.Tables.Workspaces, recordID, map[string]any{"当前状态": "已失效"}); err != nil {
+		pendingUpdates = append(pendingUpdates, feishu.BitableRecordUpdate{
+			RecordID: recordID,
+			Fields:   map[string]any{"当前状态": "已失效"},
+		})
+	}
+	if len(pendingCreates) > 0 {
+		created, err := api.BatchCreateRecords(ctx, binding.AppToken, binding.Tables.Workspaces, pendingCreates)
+		if err != nil {
+			return nil, err
+		}
+		if len(created) != len(pendingCreateKeys) {
+			return nil, fmt.Errorf("cron workspace batch create returned %d records, want %d", len(created), len(pendingCreateKeys))
+		}
+		for i, key := range pendingCreateKeys {
+			recordID := ""
+			if created[i] != nil {
+				recordID = strings.TrimSpace(stringValue(created[i].RecordId))
+			}
+			if recordID == "" {
+				return nil, fmt.Errorf("cron workspace batch create missing record id for key %q", key)
+			}
+			result[key] = recordID
+		}
+	}
+	if len(pendingUpdates) > 0 {
+		if _, err := api.BatchUpdateRecords(ctx, binding.AppToken, binding.Tables.Workspaces, pendingUpdates); err != nil {
 			return nil, err
 		}
 	}

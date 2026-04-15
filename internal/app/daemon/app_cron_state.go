@@ -18,9 +18,12 @@ const (
 	cronScheduleScanEvery    = time.Second
 	cronExitGrace            = 20 * time.Second
 	cronBitableBootstrapTTL  = 2 * time.Minute
-	cronBitableWorkspaceTTL  = 45 * time.Second
+	cronBitableWorkspaceTTL  = 90 * time.Second
 	cronBitablePermissionTTL = 30 * time.Second
-	cronReloadReadTTL        = 45 * time.Second
+	cronReloadWorkspaceTTL   = 45 * time.Second
+	cronReloadTasksTTL       = 90 * time.Second
+	cronWritebackRunsTTL     = 30 * time.Second
+	cronWritebackTasksTTL    = 30 * time.Second
 	cronInstancePrefix       = "inst-cron-"
 	cronRunsTableName        = "运行记录"
 	cronTasksTableName       = "任务配置"

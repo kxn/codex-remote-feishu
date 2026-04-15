@@ -12,6 +12,12 @@ import (
 )
 
 const bitablePermissionDocType = "bitable"
+const bitableBatchRecordLimit = 500
+
+type BitableRecordUpdate struct {
+	RecordID string
+	Fields   map[string]any
+}
 
 type BitableAPI interface {
 	GetApp(context.Context, string) (*larkbitable.App, error)
@@ -25,6 +31,8 @@ type BitableAPI interface {
 	ListRecords(context.Context, string, string, []string) ([]*larkbitable.AppTableRecord, error)
 	CreateRecord(context.Context, string, string, map[string]any) (*larkbitable.AppTableRecord, error)
 	UpdateRecord(context.Context, string, string, string, map[string]any) (*larkbitable.AppTableRecord, error)
+	BatchCreateRecords(context.Context, string, string, []map[string]any) ([]*larkbitable.AppTableRecord, error)
+	BatchUpdateRecords(context.Context, string, string, []BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error)
 	ListPermissionMembers(context.Context, string, string) (map[string]bool, error)
 	GrantPermission(context.Context, string, string, string, string, string) error
 }
@@ -310,6 +318,83 @@ func (a *liveBitableAPI) UpdateRecord(ctx context.Context, appToken, tableID, re
 		return nil, fmt.Errorf("missing bitable update record response data")
 	}
 	return resp.Data.Record, nil
+}
+
+func (a *liveBitableAPI) BatchCreateRecords(ctx context.Context, appToken, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for start := 0; start < len(values); start += bitableBatchRecordLimit {
+		end := start + bitableBatchRecordLimit
+		if end > len(values) {
+			end = len(values)
+		}
+		items := make([]*larkbitable.AppTableRecord, 0, end-start)
+		for _, fields := range values[start:end] {
+			items = append(items, larkbitable.NewAppTableRecordBuilder().Fields(fields).Build())
+		}
+		resp, err := a.client.Bitable.V1.AppTableRecord.BatchCreate(ctx, larkbitable.NewBatchCreateAppTableRecordReqBuilder().
+			AppToken(appToken).
+			TableId(tableID).
+			Body(larkbitable.NewBatchCreateAppTableRecordReqBodyBuilder().
+				Records(items).
+				Build()).
+			Build())
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			return nil, newAPIError("bitable.v1.app_table_record.batch_create", resp.ApiResp, resp.CodeError)
+		}
+		if resp.Data == nil {
+			return nil, fmt.Errorf("missing bitable batch create response data")
+		}
+		records = append(records, resp.Data.Records...)
+	}
+	return records, nil
+}
+
+func (a *liveBitableAPI) BatchUpdateRecords(ctx context.Context, appToken, tableID string, values []BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	records := make([]*larkbitable.AppTableRecord, 0, len(values))
+	for start := 0; start < len(values); start += bitableBatchRecordLimit {
+		end := start + bitableBatchRecordLimit
+		if end > len(values) {
+			end = len(values)
+		}
+		items := make([]*larkbitable.AppTableRecord, 0, end-start)
+		for _, update := range values[start:end] {
+			recordID := strings.TrimSpace(update.RecordID)
+			if recordID == "" {
+				return nil, fmt.Errorf("missing record id in batch update")
+			}
+			items = append(items, larkbitable.NewAppTableRecordBuilder().
+				RecordId(recordID).
+				Fields(update.Fields).
+				Build())
+		}
+		resp, err := a.client.Bitable.V1.AppTableRecord.BatchUpdate(ctx, larkbitable.NewBatchUpdateAppTableRecordReqBuilder().
+			AppToken(appToken).
+			TableId(tableID).
+			Body(larkbitable.NewBatchUpdateAppTableRecordReqBodyBuilder().
+				Records(items).
+				Build()).
+			Build())
+		if err != nil {
+			return nil, err
+		}
+		if !resp.Success() {
+			return nil, newAPIError("bitable.v1.app_table_record.batch_update", resp.ApiResp, resp.CodeError)
+		}
+		if resp.Data == nil {
+			return nil, fmt.Errorf("missing bitable batch update response data")
+		}
+		records = append(records, resp.Data.Records...)
+	}
+	return records, nil
 }
 
 func (a *liveBitableAPI) ListPermissionMembers(ctx context.Context, token, docType string) (map[string]bool, error) {
