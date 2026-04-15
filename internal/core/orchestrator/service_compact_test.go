@@ -276,6 +276,94 @@ func TestCompactStartFailureRestoresQueuedDispatch(t *testing.T) {
 	}
 }
 
+func TestCompactDisconnectClearsBindingAndAllowsRetryAfterReconnect(t *testing.T) {
+	now := time.Date(2026, 4, 14, 18, 25, 0, 0, time.UTC)
+	svc := newCompactServiceFixture(&now)
+	startCompactDispatching(t, svc)
+
+	svc.ApplyInstanceDisconnected("inst-1")
+	if svc.compactTurns["inst-1"] != nil {
+		t.Fatalf("expected disconnect to clear compact binding, got %#v", svc.compactTurns["inst-1"])
+	}
+
+	svc.ApplyInstanceConnected("inst-1")
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+
+	retry := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCompact,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(retry) != 1 || retry[0].Command == nil || retry[0].Command.Kind != agentproto.CommandThreadCompactStart {
+		t.Fatalf("expected compact retry after reconnect, got %#v", retry)
+	}
+}
+
+func TestCompactTransportDegradedClearsBindingAndAllowsRetryAfterReconnect(t *testing.T) {
+	now := time.Date(2026, 4, 14, 18, 26, 0, 0, time.UTC)
+	svc := newCompactServiceFixture(&now)
+	startCompactDispatching(t, svc)
+
+	svc.ApplyInstanceTransportDegraded("inst-1", false)
+	if svc.compactTurns["inst-1"] != nil {
+		t.Fatalf("expected transport degraded to clear compact binding, got %#v", svc.compactTurns["inst-1"])
+	}
+
+	svc.ApplyInstanceConnected("inst-1")
+	retry := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCompact,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(retry) != 1 || retry[0].Command == nil || retry[0].Command.Kind != agentproto.CommandThreadCompactStart {
+		t.Fatalf("expected compact retry after reconnect, got %#v", retry)
+	}
+}
+
+func TestCompactRemoveInstanceClearsBinding(t *testing.T) {
+	now := time.Date(2026, 4, 14, 18, 27, 0, 0, time.UTC)
+	svc := newCompactServiceFixture(&now)
+	startCompactDispatching(t, svc)
+
+	svc.RemoveInstance("inst-1")
+	if svc.compactTurns["inst-1"] != nil {
+		t.Fatalf("expected remove instance to clear compact binding, got %#v", svc.compactTurns["inst-1"])
+	}
+}
+
+func startCompactDispatching(t *testing.T, svc *Service) {
+	t.Helper()
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCompact,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(first) != 1 || first[0].Command == nil || first[0].Command.Kind != agentproto.CommandThreadCompactStart {
+		t.Fatalf("expected compact command, got %#v", first)
+	}
+	svc.BindPendingRemoteCommand("surface-1", "cmd-compact-audit")
+}
+
 func newCompactServiceFixture(now *time.Time) *Service {
 	svc := newServiceForTest(now)
 	svc.UpsertInstance(&state.InstanceRecord{

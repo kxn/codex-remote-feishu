@@ -541,6 +541,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 	}
 	inst.Online = false
 	inst.ActiveTurnID = ""
+	delete(s.compactTurns, instanceID)
 
 	for _, surface := range s.root.Surfaces {
 		if surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID {
@@ -550,14 +551,15 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []control.UIEvent
 	}
 
 	surfaces := s.findAttachedSurfaces(instanceID)
+	var events []control.UIEvent
+	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
 		delete(s.instanceClaims, instanceID)
 		delete(s.pendingRemote, instanceID)
 		delete(s.activeRemote, instanceID)
-		return nil
+		return events
 	}
 
-	var events []control.UIEvent
 	for _, surface := range surfaces {
 		surface.PromptOverride = state.ModelConfigRecord{}
 		surface.ActiveTurnOrigin = ""
@@ -600,18 +602,19 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	}
 	inst.Online = false
 	inst.ActiveTurnID = ""
+	delete(s.compactTurns, instanceID)
 
 	delete(s.threadRefreshes, instanceID)
 
 	surfaces := s.findAttachedSurfaces(instanceID)
+	var events []control.UIEvent
+	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
 		delete(s.pendingRemote, instanceID)
 		delete(s.activeRemote, instanceID)
-		return nil
+		return events
 	}
 
-	var events []control.UIEvent
-	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	noticeText := s.attachmentTransportDegradedText(nil, inst)
 	preserveRemoteOwnership := false
 	for _, surface := range surfaces {
@@ -693,6 +696,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 		inst.Online = false
 		inst.ActiveTurnID = ""
 	}
+	delete(s.compactTurns, instanceID)
 	s.restorePendingSteersForInstance(instanceID)
 	for _, surface := range s.root.Surfaces {
 		if surface == nil {

@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-14`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时记录 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`permissions_request_approval` / `mcp_server_elicitation` 已进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Updated: `2026-04-15`
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义，以及 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`permissions_request_approval` / `mcp_server_elicitation` 已进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -778,11 +778,13 @@ E3 Running
   -- command dispatch accepted，等待 compact 对应 `turn.started` --> 保持 `CompactPending`
   -- turn.started(remote_surface，命中当前 compact 请求) --> `CompactRunning` overlay
   -- command rejected / dispatch failure / `system.error(operation=thread.compact.start)` --> 清 compact overlay，并恢复后续 queue 出队
+  -- transport degraded / disconnect / remove instance --> 清 compact overlay；disconnect/remove 继续走 detach，degraded 保留 route 但不再视为 compact 进行中
 
 `CompactRunning` overlay
   -- turn.completed(remote_surface) --> 清 compact overlay，并继续 dispatchNext / finishSurfaceAfterWork
   -- compact 期间新文本 --> 先按普通 queued follow-up 入队，不立即派发
   -- compact 期间 reply auto-steer / `/steerall` --> 不命中 compact turn
+  -- transport degraded / disconnect / remove instance --> 清 compact overlay；后续 reconnect 后可重新 `/compact`
 
 `SteerPending` overlay
   -- `turn.steer` command ack accepted --> 被并入的 item 逐条转 `steered`，并给对应主文本 + 已绑定图片补 `ThumbsUp`
@@ -1177,6 +1179,8 @@ retained-offline overlay 额外规则：
 31. **vscode mode 进入或 daemon 重启恢复时，会在 legacy `settings.json` / stale managed shim 状态下继续尝试恢复，导致用户看起来进入了 vscode mode，但底层仍沿用旧接入方式或失效入口**：已修复。当前 detached-vscode 恢复会先做本机 VS Code 兼容性检查；命中旧 `settings.json` override 或 stale managed shim 时，会保持 detached，发迁移/修复卡片，并在点击后统一迁移到 managed shim，同时清掉旧 `chatgpt.cliExecutable`。
 32. **同一张 `/menu` 或 `/use` 导航卡每点一步就继续在消息流里堆新卡，导致用户停留在同一选择上下文却要反复找最新卡**：已修复。当前限定范围内的 same-context 导航已经改成 card callback 同步替换当前卡，不再制造额外历史噪音。
 33. **normal `/list` 只能展示仍有 online instance 的 workspace，导致仅能从 persisted/offline thread 恢复的 workspace（例如 `picdetect`）完全不可见**：已修复。当前 normal `/list` 会把 recoverable-only workspace 也列出来，但不会伪装成 attach；按钮会直接进入该 workspace 的会话列表，再复用现有 `/use` 恢复链路。
+34. **transport degraded / hard disconnect / remove instance 后 compact overlay 可能残留，导致后续 `/compact` 永久 busy**：已修复。当前这三条路径都会清掉 `compactTurns`，不会再把实例卡在伪 `compact_in_progress`。
+35. **hard disconnect 时 pending steer 没恢复，steering 中的 queued 输入会脱离普通队列后直接消失**：已修复。当前 disconnect 也会按原顺序恢复 `pendingSteers`，再继续 offline/detach 语义。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

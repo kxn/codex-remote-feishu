@@ -131,6 +131,45 @@ func TestSteerAllCommandRejectedRestoresOriginalQueueOrder(t *testing.T) {
 	}
 }
 
+func TestSteerAllPendingDisconnectRestoresOriginalQueueOrder(t *testing.T) {
+	now := time.Date(2026, 4, 14, 10, 20, 0, 0, time.UTC)
+	svc := newSteerAllServiceFixture(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSteerAll,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(events) != 2 || events[1].Command == nil {
+		t.Fatalf("expected steer command, got %#v", events)
+	}
+
+	disconnect := svc.ApplyInstanceDisconnected("inst-1")
+	if len(svc.pendingSteers) != 0 {
+		t.Fatalf("expected pending steer bindings cleared on disconnect, got %#v", svc.pendingSteers)
+	}
+
+	surface := svc.root.Surfaces["surface-1"]
+	if got := surface.QueuedQueueItemIDs; len(got) != 2 || got[0] != "queue-2" || got[1] != "queue-3" {
+		t.Fatalf("expected steer-all queue order restored on disconnect, got %#v", got)
+	}
+	if surface.QueueItems["queue-2"].Status != state.QueueItemQueued || surface.QueueItems["queue-3"].Status != state.QueueItemQueued {
+		t.Fatalf("expected queued statuses restored on disconnect, got queue-2=%#v queue-3=%#v", surface.QueueItems["queue-2"], surface.QueueItems["queue-3"])
+	}
+
+	gotOffline := false
+	for _, event := range disconnect {
+		if event.Notice != nil && event.Notice.Code == "attached_instance_offline" {
+			gotOffline = true
+			break
+		}
+	}
+	if !gotOffline {
+		t.Fatalf("expected offline notice on disconnect, got %#v", disconnect)
+	}
+}
+
 func newSteerAllServiceFixture(now *time.Time) *Service {
 	svc := newServiceForTest(now)
 	svc.UpsertInstance(&state.InstanceRecord{
