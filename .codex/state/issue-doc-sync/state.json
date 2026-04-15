@@ -187,6 +187,19 @@
       "recordedAt": "2026-04-08T04:20:34Z"
     },
     {
+      "number": 23,
+      "title": "[Work] 实现 /cron 多维表格配置与后台执行",
+      "updatedAt": "2026-04-14T17:04:44Z",
+      "closedAt": "2026-04-14T17:04:40Z",
+      "decision": "new-doc",
+      "reason": "新增已实现文档，沉淀 /cron 实例级多维表格、reload 与 fresh hidden run 调度边界。",
+      "targetDocs": [
+        "docs/implemented/cron-bitable-scheduler-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/23",
+      "recordedAt": "2026-04-15T16:22:52Z"
+    },
+    {
       "number": 24,
       "updatedAt": "2026-04-07T11:59:00Z",
       "decision": "skip",
@@ -1827,6 +1840,110 @@
       "reason": "manual /compact 入口、上游 thread/compact/start 接线与 gating 语义，已同步 relay protocol、Feishu 产品文档与 remote-surface 状态机文档。",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/213",
       "recordedAt": "2026-04-14T16:19:55Z"
+    },
+    {
+      "number": 217,
+      "title": "[Design] 收敛分支策略与 dev 升级通道：master 单主干 + dev-latest 滚动 release",
+      "updatedAt": "2026-04-15T01:03:58Z",
+      "closedAt": "2026-04-15T01:03:55Z",
+      "decision": "skip",
+      "reason": "发布/升级基线已同步进现有 general 文档，当前 docs 已覆盖 master 单主干、短命 release 与 dev-latest 语义。",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/217",
+      "recordedAt": "2026-04-15T16:23:04Z"
+    },
+    {
+      "number": 218,
+      "title": "[Work] 将 Web Admin 迁移到 /admin 前缀",
+      "updatedAt": "2026-04-15T02:44:56Z",
+      "closedAt": "2026-04-15T02:44:53Z",
+      "decision": "merge",
+      "reason": "把 Web Admin 挂载路径的最终结论并入现有实现文档，明确 /admin/ 主入口、根路径轻量说明页与 setup 回跳边界。",
+      "targetDocs": [
+        "docs/implemented/web-admin-ui-redesign.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/218",
+      "recordedAt": "2026-04-15T16:23:20Z"
+    },
+    {
+      "number": 220,
+      "title": "[Feature] 增加 /preview 单文件外链预览页，作为 final message 文件链接的统一兜底",
+      "updatedAt": "2026-04-15T11:13:51Z",
+      "closedAt": "2026-04-15T09:10:54Z",
+      "decision": "skip",
+      "reason": "现有 web preview 设计基线文档已经覆盖 /preview snapshot、scope grant 复用、cache 生命周期与 diff-first 的已实现契约。",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/220",
+      "recordedAt": "2026-04-15T16:23:48Z"
+    },
+    {
+      "number": 221,
+      "title": "[Feature] 处理中卡片支持 dynamic_tool_call 展示（含同类 tool 增量合并）",
+      "updatedAt": "2026-04-15T04:17:14Z",
+      "closedAt": "2026-04-15T04:17:11Z",
+      "decision": "skip",
+      "reason": "canonical Feishu 卡片状态机文档已同步 dynamic_tool_call 进入共享过程卡、同类 tool 聚合与失败态行内标记的最终行为。",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/221",
+      "recordedAt": "2026-04-15T16:23:37Z"
+    },
+    {
+      "number": 222,
+      "title": "[Work] 补齐 Codex App Server 缺失的交互请求协议面，避免真实 request 被吞",
+      "updatedAt": "2026-04-15T14:29:00Z",
+      "closedAt": "2026-04-15T14:28:56Z",
+      "decision": "merge",
+      "reason": "把新增 request surface 的最终结论并入 canonical 状态机与协议审计文档，明确 command/file/network approval 与顶层 tool/requestUserInput 不再被 relay/Feishu/headless 吞掉。",
+      "targetDocs": [
+        "docs/general/feishu-card-ui-state-machine.md",
+        "docs/general/remote-surface-state-machine.md",
+        "docs/inprogress/codex-app-server-state-machine-audit.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/222",
+      "recordedAt": "2026-04-15T16:24:12Z"
+    },
+    {
+      "number": 224,
+      "title": "[Work] Cron 配置表跨 bot surface 的 owner / 权限模型",
+      "updatedAt": "2026-04-15T17:09:33Z",
+      "closedAt": "2026-04-15T17:09:30Z",
+      "decision": "merge",
+      "reason": "把多 bot Cron owner / 权限模型的最终实现并入现有 /cron 已实现文档，补齐 view-only /cron、显式 repair/reload/migrate-owner 与 frozen writeback 语义。",
+      "targetDocs": [
+        "docs/implemented/cron-bitable-scheduler-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/224",
+      "recordedAt": "2026-04-15T17:32:09Z"
+    },
+    {
+      "number": 225,
+      "title": "[Work] 共用状态卡支持上游式探索过程呈现",
+      "updatedAt": "2026-04-15T16:43:24Z",
+      "closedAt": "2026-04-15T16:43:20Z",
+      "decision": "skip",
+      "reason": "docs/implemented/shared-exploration-progress-card-design.md 与 docs/README.md 已覆盖共用探索过程卡的最终实现边界，本轮无需新增文档。",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/225",
+      "recordedAt": "2026-04-15T16:47:07Z"
+    },
+    {
+      "number": 226,
+      "title": "[Bug] 收敛 Feishu API 长生命周期 context 使用并补齐统一超时策略",
+      "updatedAt": "2026-04-15T16:37:40Z",
+      "closedAt": "2026-04-15T16:37:36Z",
+      "decision": "new-doc",
+      "reason": "新增 general 文档固化 Feishu API bounded-call 与 timeout 纪律，沉淀统一 client 构造、链路级 deadline 与高风险路径边界。",
+      "targetDocs": [
+        "docs/general/feishu-api-timeout-discipline.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/226",
+      "recordedAt": "2026-04-15T16:47:11Z"
+    },
+    {
+      "number": 227,
+      "title": "fix(feishu): investigate and stabilize clickable links in V2 final reply cards",
+      "updatedAt": "2026-04-15T16:37:08Z",
+      "closedAt": "2026-04-15T16:37:08Z",
+      "decision": "skip",
+      "reason": "docs/general/feishu-product-design.md 与 docs/implemented/feishu-md-preview-design.md 已覆盖 final reply markdown link 稳定化的最终边界，本轮无需新增文档。",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/227",
+      "recordedAt": "2026-04-15T16:47:14Z"
     }
   ]
 }

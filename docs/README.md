@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-15`
-> Summary: 新增共享探索过程卡设计草案并刷新文档索引。
+> Updated: `2026-04-16`
+> Summary: 新增 Feishu API timeout 基线与 `/cron` 已实现文档，并补齐 app-server 审计文档和最新文档索引。
 
 ## 1. 适用范围
 
@@ -113,6 +113,7 @@
 - [architecture.md](./general/architecture.md)
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
 - [dev-conversation-trace.md](./general/dev-conversation-trace.md)
+- [feishu-api-timeout-discipline.md](./general/feishu-api-timeout-discipline.md)
 - [feishu-product-design.md](./general/feishu-product-design.md)
 - [feishu-im-message-research.md](./general/feishu-im-message-research.md)
 - [feishu-card-ui-state-machine.md](./general/feishu-card-ui-state-machine.md)
@@ -128,6 +129,7 @@
 
 ### 6.2 `implemented`
 
+- [cron-bitable-scheduler-design.md](./implemented/cron-bitable-scheduler-design.md)
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
 - [managed-headless-pool-design.md](./implemented/managed-headless-pool-design.md)
@@ -141,6 +143,7 @@
 
 - [claude-provider-protocol-mapping.md](./inprogress/claude-provider-protocol-mapping.md)
 - [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
+- [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [thread-description-unification-plan.md](./inprogress/thread-description-unification-plan.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)

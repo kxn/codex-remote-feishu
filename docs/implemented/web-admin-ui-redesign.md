@@ -1,8 +1,8 @@
 # Web 管理界面重设计
 
 > Type: `implemented`
-> Updated: `2026-04-11`
-> Summary: admin 默认界面已切到新的稳态运维外观，主界面不再保留旧 wizard / 回 setup 叙事；新增飞书应用、连接修复、能力补齐与 VS Code 管理都收敛到 admin 内完成。
+> Updated: `2026-04-16`
+> Summary: 补记 `#218` 已把 Web Admin 主入口固定到 `/admin/`，根路径只保留轻量说明页，setup / startup / install 完成后的默认返回地址统一回到 `/admin/`。
 
 ## 1. 文档定位
 
@@ -37,6 +37,12 @@
 
 - 桌面端保留侧栏信息架构；窄屏下侧栏会收起为顶部可展开导航，同一套 shell 同时服务 admin 与 setup
 - 页面内所有引用的本地资源、本地跳转和本地 API 入口都按相对本地路径生成，避免 `/assets/...`、`/api/...`、`/setup` 这类根路径假设把反代访问弄坏
+
+当前挂载路径也已经固定：
+
+- `GET /admin/` 是唯一的主管理页入口，`/admin` 只负责补斜杠重定向
+- 根路径 `/` 只保留轻量说明页，不再承担主管理页职责
+- `setup` 继续保留独立的 `/setup` 入口，但 setup 完成、startup/install 回跳与本地管理链接都会统一落到 `/admin/`
 
 ## 3. 当前实现
 

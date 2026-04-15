@@ -1,8 +1,8 @@
 # Codex App Server 状态机遵循度审计
 
 > Type: `inprogress`
-> Updated: `2026-04-15`
-> Summary: 对照 OpenAI 官方 Codex App Server 文档，按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度，重点标出严格遵循项、部分遵循项和目前未建模的关键缺口。
+> Updated: `2026-04-16`
+> Summary: 对照 OpenAI 官方 Codex App Server 文档，按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮回写补记 `#222` 已补齐 command/file approval 与顶层 `tool/requestUserInput` 的 relay/Feishu/headless 承接，剩余 gap 主要转向更细粒度 request UI 与其他未建模状态机。
 
 ## 1. 审计范围与判定口径
 
@@ -292,30 +292,34 @@
 2. `item/fileChange/requestApproval`
 3. `tool/requestUserInput` / 文内又写成 `item/tool/requestUserInput`
 
-当前实现结论：`部分遵循，且这里有明显缺口`
+当前实现结论：`部分遵循；核心交互请求面已补齐`
 
 现状：
 
 - 已有：
   - 泛化 `serverRequest/started` / `serverRequest/resolved`
+  - `item/commandExecution/requestApproval`
+  - `item/fileChange/requestApproval`
+  - `tool/requestUserInput`
   - `item/tool/requestUserInput`
   - 以及仓库中后来补的 `item/permissions/requestApproval`、`mcpServer/elicitation/request`（这两条超出本页主线，但属于我们额外追上 upstream 的部分）
-- 缺的：
-  - 官方页面里的 `item/commandExecution/requestApproval` 当前没有解析路径
-  - 官方页面里的 `item/fileChange/requestApproval` 当前没有解析路径
-  - 文档 API 列表写的是 `tool/requestUserInput`，我们当前只识别 `item/tool/requestUserInput`
+- 当前剩余边界：
+  - command/file approval 当前会先归一化成 `approval_command`、`approval_file_change`、`approval_network`，并复用通用 request 卡，而不是 1:1 复制 upstream 的更细专用 UI
+  - `availableDecisions` 已会继续透传到 request options，包含 `cancel`；但像 `acceptWithExecpolicyAmendment` 这类更细决策还没有专门交互面
 
 这意味着：
 
-- 我们对“审批”这件事不是完全没做；
-- 但**不是严格按这页官方 surface 做的**；
-- 特别是 command/file approval 这两条页面里写得非常清楚的多步状态机，当前 relay/headless 并没有正式承接。
+- relay/Feishu/headless 已经不会再把这几类真实 request 静默吞掉；
+- 但**还不是严格按这页官方每一条专用 UI surface 完整复制**；
+- 当前更准确的表述是：主链路已补齐，剩余差异集中在更细粒度 approval 决策 UI，而不是“请求根本没有承接”。
 
 证据：
 
 - `internal/adapter/codex/translator_observe_server.go`
 - `internal/adapter/codex/translator_helpers_request.go`
-- 仓库内无 `item/commandExecution/requestApproval` / `item/fileChange/requestApproval` 命中
+- `internal/core/orchestrator/service_helpers_request.go`
+- `internal/adapter/codex/translator_requests_test.go`
+- `internal/core/orchestrator/service_request_approval_test.go`
 
 ### 3.11 Dynamic tool call
 
@@ -454,8 +458,8 @@
 | `turn/diff/updated` | 未遵循/未实现 | 当前完全没处理 |
 | 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView/collab 命名仍有缺口 |
 | `item/reasoning/summaryPartAdded` | 未遵循/未实现 | 缺失 |
-| command/file approval 多步状态机 | 未严格遵循 | 缺 `item/commandExecution/requestApproval` 与 `item/fileChange/requestApproval` |
-| `item/tool/requestUserInput` | 部分遵循 | 已接 `item/tool/requestUserInput`，但页面顶层列的是 `tool/requestUserInput` |
+| command/file approval 多步状态机 | 部分遵循 | relay/Feishu/headless 已承接 `item/commandExecution/requestApproval` 与 `item/fileChange/requestApproval`，并把 command/file/network approval 归一化成可渲染 request；更细的专用决策 UI 仍未补齐 |
+| `tool/requestUserInput` / `item/tool/requestUserInput` | 严格遵循 | relay/Feishu/headless 现在同时识别顶层与 `item` 形式，并继续复用现有 `request_user_input` 草稿/提交状态机 |
 | dynamic tool call (`item/tool/call`) | 部分遵循 | 只接 item 生命周期，没接 client 回写 request |
 | `review/start -> enteredReviewMode -> exitedReviewMode` | 未遵循/未实现 | relay/headless 无此能力 |
 | `command/exec*` | 未遵循/未实现 | 仅解析 turn 内 command item 的 output delta |
@@ -519,7 +523,6 @@
    - `thread/status/changed`
    - `turn/diff/updated`
 2. 再补“官方多步状态机、且我们很可能迟早要产品化”的：
-   - command/file approval
    - `review/start`
    - dynamic tool `item/tool/call`
 3. 最后再看“更多是能力缺失，不是当前主路径 correctness 问题”的：
