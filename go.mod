@@ -7,7 +7,9 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/klauspost/compress v1.18.5
 	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	github.com/yuin/goldmark v1.7.13
 	golang.org/x/sys v0.37.0
 	modernc.org/sqlite v1.46.0
 )

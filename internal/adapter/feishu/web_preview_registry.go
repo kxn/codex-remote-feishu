@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -18,30 +17,33 @@ import (
 
 const (
 	defaultPreviewRecordTTL = 7 * 24 * time.Hour
+	defaultPreviewBlobTTL   = 14 * 24 * time.Hour
 )
 
+var defaultPreviewCacheBudgetBytes int64 = 1 << 30
+
 type webPreviewScopeManifest struct {
-	ScopeKey      string                        `json:"scopeKey,omitempty"`
-	ScopePublicID string                        `json:"scopePublicID,omitempty"`
-	LastUsedAt    time.Time                     `json:"lastUsedAt,omitempty"`
-	Records       map[string]*webPreviewRecord  `json:"records,omitempty"`
+	ScopeKey      string                       `json:"scopeKey,omitempty"`
+	ScopePublicID string                       `json:"scopePublicID,omitempty"`
+	LastUsedAt    time.Time                    `json:"lastUsedAt,omitempty"`
+	Records       map[string]*webPreviewRecord `json:"records,omitempty"`
 }
 
 type webPreviewRecord struct {
-	PreviewID     string    `json:"previewID,omitempty"`
-	LineageKey    string    `json:"lineageKey,omitempty"`
-	PreviousID    string    `json:"previousPreviewID,omitempty"`
-	SourcePath    string    `json:"sourcePath,omitempty"`
-	DisplayName   string    `json:"displayName,omitempty"`
-	ArtifactKind  string    `json:"artifactKind,omitempty"`
-	MIMEType      string    `json:"mimeType,omitempty"`
-	RendererKind  string    `json:"rendererKind,omitempty"`
-	ContentHash   string    `json:"contentHash,omitempty"`
-	BlobKey       string    `json:"blobKey,omitempty"`
-	SizeBytes     int64     `json:"sizeBytes,omitempty"`
-	CreatedAt     time.Time `json:"createdAt,omitempty"`
-	LastUsedAt    time.Time `json:"lastUsedAt,omitempty"`
-	ExpiresAt     time.Time `json:"expiresAt,omitempty"`
+	PreviewID    string    `json:"previewID,omitempty"`
+	LineageKey   string    `json:"lineageKey,omitempty"`
+	PreviousID   string    `json:"previousPreviewID,omitempty"`
+	SourcePath   string    `json:"sourcePath,omitempty"`
+	DisplayName  string    `json:"displayName,omitempty"`
+	ArtifactKind string    `json:"artifactKind,omitempty"`
+	MIMEType     string    `json:"mimeType,omitempty"`
+	RendererKind string    `json:"rendererKind,omitempty"`
+	ContentHash  string    `json:"contentHash,omitempty"`
+	BlobKey      string    `json:"blobKey,omitempty"`
+	SizeBytes    int64     `json:"sizeBytes,omitempty"`
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	LastUsedAt   time.Time `json:"lastUsedAt,omitempty"`
+	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
 }
 
 type webPreviewArtifact struct {
@@ -83,10 +85,14 @@ func previewRendererKind(path, artifactKind, mimeType string) string {
 		return "markdown"
 	case "html":
 		return "html_source"
+	case "svg":
+		return "svg_source"
 	}
 	switch strings.ToLower(strings.TrimSpace(mimeType)) {
 	case "application/pdf":
 		return "pdf"
+	case "image/svg+xml":
+		return "svg_source"
 	}
 	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
 	switch ext {
@@ -94,7 +100,9 @@ func previewRendererKind(path, artifactKind, mimeType string) string {
 		return "markdown"
 	case ".html", ".htm":
 		return "html_source"
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg":
+	case ".svg":
+		return "svg_source"
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
 		return "image"
 	case ".pdf":
 		return "pdf"
@@ -204,6 +212,9 @@ func (p *DriveMarkdownPreviewer) publishWebPreviewArtifact(ctx context.Context, 
 	}
 	manifest.LastUsedAt = now
 	if err := p.ensurePreviewBlob(record.BlobKey, artifact.Bytes); err != nil {
+		return WebPreviewPublishResult{}, err
+	}
+	if err := p.touchPreviewBlob(record.BlobKey, now); err != nil {
 		return WebPreviewPublishResult{}, err
 	}
 	if err := p.saveWebPreviewScopeManifest(manifest); err != nil {
@@ -360,110 +371,4 @@ func (p *DriveMarkdownPreviewer) previewBlobPath(blobKey string) string {
 		prefix = blobKey[:2]
 	}
 	return filepath.Join(p.config.CacheDir, "blobs", "sha256", prefix, blobKey+".bin")
-}
-
-func serveWebPreviewHTTP(w http.ResponseWriter, r *http.Request, artifact *webPreviewArtifact) {
-	if artifact == nil {
-		http.NotFound(w, r)
-		return
-	}
-	record := artifact.Record
-	displayName := firstNonEmpty(strings.TrimSpace(record.DisplayName), "preview")
-	switch strings.TrimSpace(record.RendererKind) {
-	case "markdown":
-		writeSimplePreviewHTML(w, http.StatusOK, displayName, "markdown", "<pre>"+escapePreviewText(string(artifact.Content))+"</pre>", record)
-	case "text", "html_source":
-		writeSimplePreviewHTML(w, http.StatusOK, displayName, "text", "<pre>"+escapePreviewText(string(artifact.Content))+"</pre>", record)
-	case "image":
-		w.Header().Set("Content-Type", firstNonEmpty(strings.TrimSpace(record.MIMEType), detectContentType(artifact.Content)))
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(artifact.Content)
-	case "pdf":
-		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(artifact.Content)
-	default:
-		writeSimplePreviewHTML(w, http.StatusOK, displayName, "download", "<p>This file type is download-only in preview v1.</p>", record)
-	}
-}
-
-func serveWebPreviewDownloadHTTP(w http.ResponseWriter, _ *http.Request, artifact *webPreviewArtifact) {
-	if artifact == nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	record := artifact.Record
-	w.Header().Set("Content-Type", firstNonEmpty(strings.TrimSpace(record.MIMEType), "application/octet-stream"))
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizePreviewDownloadName(record.DisplayName)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(artifact.Content)
-}
-
-func writeSimplePreviewHTML(w http.ResponseWriter, status int, title, label, body string, record webPreviewRecord) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(
-		w,
-		"<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>%s</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;margin:0;background:#f7f4ec;color:#1f1d19}main{max-width:980px;margin:0 auto;padding:24px}header{margin-bottom:20px}h1{font-size:24px;margin:0 0 8px}p.meta{color:#6b6254;margin:0 0 4px}pre{white-space:pre-wrap;word-break:break-word;background:#fbfaf7;border:1px solid #ddd2bf;border-radius:12px;padding:16px;overflow:auto}a.btn{display:inline-block;margin-top:8px;color:#0c5c56;text-decoration:none;font-weight:600}</style></head><body><main><header><p class=\"meta\">Preview</p><h1>%s</h1><p class=\"meta\">type: %s</p><a class=\"btn\" href=\"./download\">Download</a></header>%s</main></body></html>",
-		escapePreviewText(title),
-		escapePreviewText(title),
-		escapePreviewText(firstNonEmpty(label, record.RendererKind)),
-		body,
-	)
-}
-
-func escapePreviewText(value string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		"\"", "&quot;",
-	)
-	return replacer.Replace(value)
-}
-
-func sanitizePreviewDownloadName(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "preview.bin"
-	}
-	name = strings.NewReplacer("\n", "-", "\r", "-", "\"", "-", "\\", "-", "/", "-").Replace(name)
-	return name
-}
-
-func detectContentType(content []byte) string {
-	if len(content) == 0 {
-		return "application/octet-stream"
-	}
-	return http.DetectContentType(content)
-}
-
-var errPreviewRecordExpired = fmt.Errorf("preview record expired")
-
-func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.Request, scopePublicID, previewID string, download bool) bool {
-	if p == nil {
-		return false
-	}
-	artifact, err := p.loadWebPreviewArtifact(scopePublicID, previewID)
-	switch {
-	case err == nil:
-		if download {
-			serveWebPreviewDownloadHTTP(w, r, artifact)
-		} else {
-			serveWebPreviewHTTP(w, r, artifact)
-		}
-		return true
-	case err == errPreviewRecordExpired:
-		writeSimplePreviewHTML(w, http.StatusGone, "Preview expired", "expired", "<p>This preview snapshot has expired.</p>", webPreviewRecord{})
-		return true
-	case os.IsNotExist(err):
-		return false
-	default:
-		writeSimplePreviewHTML(w, http.StatusInternalServerError, "Preview unavailable", "error", "<p>Failed to load this preview snapshot.</p>", webPreviewRecord{})
-		return true
-	}
 }

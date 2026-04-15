@@ -12,10 +12,10 @@ import (
 )
 
 type fakePreviewRouteService struct {
-	scope      string
-	preview    string
-	download   bool
-	publisher  feishu.WebPreviewPublisher
+	scope     string
+	preview   string
+	download  bool
+	publisher feishu.WebPreviewPublisher
 }
 
 func (f *fakePreviewRouteService) RewriteFinalBlock(_ context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
@@ -93,6 +93,29 @@ func TestPreviewRouteDelegatesToFinalPreviewer(t *testing.T) {
 	}
 	if previewer.publisher == nil {
 		t.Fatal("expected preview publisher to be injected")
+	}
+}
+
+func TestPreviewScopeRootDelegatesToFinalPreviewer(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	previewer := &fakePreviewRouteService{}
+	app.SetFinalBlockPreviewer(previewer)
+
+	req := httptest.NewRequest(http.MethodGet, "/preview/s/scope-a/", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if previewer.scope != "scope-a" || previewer.preview != "" || previewer.download {
+		t.Fatalf("unexpected preview root delegation: %#v", previewer)
 	}
 }
 

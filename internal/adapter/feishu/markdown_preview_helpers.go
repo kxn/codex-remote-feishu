@@ -216,7 +216,7 @@ func previewArtifactMetadata(path string) (artifactKind string, mimeType string,
 	case ".webp":
 		return "image", "image/webp", true
 	case ".svg":
-		return "image", "image/svg+xml", true
+		return "svg", "image/svg+xml", true
 	case ".pdf":
 		return "pdf", "application/pdf", true
 	case ".txt", ".log", ".json", ".yaml", ".yml", ".xml", ".csv", ".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".sh", ".sql", ".ini", ".toml", ".diff", ".patch":

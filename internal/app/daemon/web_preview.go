@@ -34,6 +34,10 @@ func (a *App) handlePreviewPage(w http.ResponseWriter, r *http.Request) {
 	a.servePreviewRoute(w, r, false)
 }
 
+func (a *App) handlePreviewScopeRoot(w http.ResponseWriter, r *http.Request) {
+	a.servePreviewRoute(w, r, false)
+}
+
 func (a *App) handlePreviewDownload(w http.ResponseWriter, r *http.Request) {
 	a.servePreviewRoute(w, r, true)
 }

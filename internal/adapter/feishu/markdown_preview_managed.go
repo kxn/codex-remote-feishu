@@ -95,7 +95,12 @@ func (p *DriveMarkdownPreviewer) cleanupManagedPreviewFilesLocked(ctx context.Co
 }
 
 func (p *DriveMarkdownPreviewer) RunBackgroundMaintenance(ctx context.Context) {
-	if p == nil || p.api == nil || strings.TrimSpace(p.config.StatePath) == "" {
+	if p == nil {
+		return
+	}
+	hasDriveCleanup := p.api != nil && strings.TrimSpace(p.config.StatePath) != ""
+	hasWebPreviewCleanup := strings.TrimSpace(p.config.CacheDir) != ""
+	if !hasDriveCleanup && !hasWebPreviewCleanup {
 		return
 	}
 
@@ -118,27 +123,34 @@ func (p *DriveMarkdownPreviewer) runBackgroundCleanup(ctx context.Context) error
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	state := p.loadStateLocked()
 	now := p.nowUTC()
-	if !state.LastCleanupAt.IsZero() && now.Before(state.LastCleanupAt.Add(p.config.BackgroundCleanupEvery)) {
-		return nil
-	}
+	if p.api != nil && strings.TrimSpace(p.config.StatePath) != "" {
+		state := p.loadStateLocked()
+		if !state.LastCleanupAt.IsZero() && now.Before(state.LastCleanupAt.Add(p.config.BackgroundCleanupEvery)) {
+			return nil
+		}
 
-	result, err := p.cleanupManagedPreviewFilesLocked(ctx, state, now.Add(-p.config.BackgroundCleanupMaxAge))
-	if err != nil {
-		return err
+		result, err := p.cleanupManagedPreviewFilesLocked(ctx, state, now.Add(-p.config.BackgroundCleanupMaxAge))
+		if err != nil {
+			return err
+		}
+		state.LastCleanupAt = now
+		if err := p.saveStateLocked(); err != nil {
+			return err
+		}
+		if result.DeletedFileCount > 0 {
+			log.Printf(
+				"markdown preview background cleanup: gateway=%s deleted=%d bytes=%d",
+				strings.TrimSpace(p.config.GatewayID),
+				result.DeletedFileCount,
+				result.DeletedEstimatedBytes,
+			)
+		}
 	}
-	state.LastCleanupAt = now
-	if err := p.saveStateLocked(); err != nil {
-		return err
-	}
-	if result.DeletedFileCount > 0 {
-		log.Printf(
-			"markdown preview background cleanup: gateway=%s deleted=%d bytes=%d",
-			strings.TrimSpace(p.config.GatewayID),
-			result.DeletedFileCount,
-			result.DeletedEstimatedBytes,
-		)
+	if strings.TrimSpace(p.config.CacheDir) != "" {
+		if err := p.cleanupWebPreviewCacheLocked(now); err != nil {
+			return err
+		}
 	}
 	return nil
 }
