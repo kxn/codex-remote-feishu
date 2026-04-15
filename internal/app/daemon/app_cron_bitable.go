@@ -53,17 +53,24 @@ func (a *App) ensureCronBitable(command control.DaemonCommand) (*cronStateFile, 
 	if err != nil {
 		return nil, "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
+	persistProgress := func(next cronBitableState) error {
+		return a.persistCronBitableBindingProgress(gatewayID, scopeKey, label, next)
+	}
+	bootstrapCtx, cancelBootstrap := context.WithTimeout(context.Background(), cronBitableBootstrapTTL)
+	defer cancelBootstrap()
 
-	updatedBinding, err := a.ensureCronBitableRemote(ctx, api, binding, scopeKey, label)
+	updatedBinding, err := a.ensureCronBitableRemote(bootstrapCtx, api, binding, scopeKey, label, persistProgress)
 	if err != nil {
 		return nil, "", err
 	}
-	if _, err := a.syncCronWorkspaceTable(ctx, api, updatedBinding, workspaces); err != nil {
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronBitableWorkspaceTTL)
+	defer cancelWorkspace()
+	if _, err := a.syncCronWorkspaceTable(workspaceCtx, api, updatedBinding, workspaces); err != nil {
 		return nil, "", err
 	}
-	if err := a.ensureCronUserPermission(ctx, api, updatedBinding.AppToken, a.service.SurfaceActorUserID(command.SurfaceSessionID)); err != nil {
+	permissionCtx, cancelPermission := context.WithTimeout(context.Background(), cronBitablePermissionTTL)
+	defer cancelPermission()
+	if err := a.ensureCronUserPermission(permissionCtx, api, updatedBinding.AppToken, a.service.SurfaceActorUserID(command.SurfaceSessionID)); err != nil {
 		return nil, "", err
 	}
 
@@ -84,6 +91,25 @@ func (a *App) ensureCronBitable(command control.DaemonCommand) (*cronStateFile, 
 	return cloneCronState(stateValue), fmt.Sprintf("已同步 %d 个工作区。编辑表格后发送 `/cron reload` 生效。", len(workspaces)), nil
 }
 
+func (a *App) persistCronBitableBindingProgress(gatewayID, scopeKey, label string, binding cronBitableState) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	stateValue, err := a.loadCronStateLocked(true)
+	if err != nil {
+		return err
+	}
+	stateValue.GatewayID = gatewayID
+	if strings.TrimSpace(scopeKey) != "" {
+		stateValue.InstanceScopeKey = scopeKey
+	}
+	if strings.TrimSpace(label) != "" {
+		stateValue.InstanceLabel = label
+	}
+	stateValue.Bitable = &binding
+	return a.writeCronStateLocked()
+}
+
 func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	stateValue, _, err := a.ensureCronBitable(command)
 	if err != nil {
@@ -96,7 +122,7 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cronReloadReadTTL)
 	defer cancel()
 
 	workspacesByRecord, err := a.loadCronWorkspaceIndex(ctx, api, stateValue.Bitable)
@@ -151,7 +177,7 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	return summary, nil
 }
 
-func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI, previous cronBitableState, scopeKey, label string) (cronBitableState, error) {
+func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI, previous cronBitableState, scopeKey, label string, persist func(cronBitableState) error) (cronBitableState, error) {
 	binding := previous
 	var app *larkbitable.App
 	var err error
@@ -171,8 +197,14 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 	}
 	binding.AppToken = stringValue(app.AppToken)
 	binding.AppURL = firstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(stringValue(app.Url)))
+	binding.DefaultTable = firstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
 	if binding.CreatedAt.IsZero() {
 		binding.CreatedAt = time.Now().UTC()
+	}
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
 	}
 
 	tables, err := api.ListTables(ctx, binding.AppToken)
@@ -180,23 +212,53 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 		return cronBitableState{}, err
 	}
 	byID, byName := cronIndexTables(tables)
-	defaultTableID := strings.TrimSpace(stringValue(app.DefaultTableId))
+	defaultTableID := firstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
+	if defaultTableID == "" &&
+		strings.TrimSpace(binding.Tables.Tasks) == "" &&
+		strings.TrimSpace(binding.Tables.Workspaces) == "" &&
+		strings.TrimSpace(binding.Tables.Runs) == "" &&
+		strings.TrimSpace(binding.Tables.Meta) == "" &&
+		len(byID) == 1 {
+		for tableID := range byID {
+			defaultTableID = tableID
+		}
+	}
 	binding.Tables.Tasks, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Tasks, cronTasksTableName, "任务名", defaultTableID)
 	if err != nil {
 		return cronBitableState{}, err
+	}
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
 	}
 	delete(byName, cronTasksTableName)
 	binding.Tables.Workspaces, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Workspaces, cronWorkspacesTableName, "工作区名称", "")
 	if err != nil {
 		return cronBitableState{}, err
 	}
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
+	}
 	binding.Tables.Runs, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Runs, cronRunsTableName, "任务名", "")
 	if err != nil {
 		return cronBitableState{}, err
 	}
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
+	}
 	binding.Tables.Meta, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Meta, cronMetaTableName, "名称", "")
 	if err != nil {
 		return cronBitableState{}, err
+	}
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
 	}
 	if err := a.ensureCronTableSchemas(ctx, api, binding, scopeKey, label); err != nil {
 		return cronBitableState{}, err
@@ -207,6 +269,11 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 	}
 	binding.MetaRecordID = metaRecordID
 	binding.LastVerified = time.Now().UTC()
+	if persist != nil {
+		if err := persist(binding); err != nil {
+			return cronBitableState{}, err
+		}
+	}
 	return binding, nil
 }
 

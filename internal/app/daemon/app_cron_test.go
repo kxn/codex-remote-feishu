@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -428,4 +430,266 @@ func stringPtr(value string) *string {
 	return &value
 }
 
+type flakyCronBootstrapBitableAPI struct {
+	mu               sync.Mutex
+	createAppCalls   int
+	getAppCalls      int
+	createTableCalls int
+	failCreateField  bool
+	tables           map[string]*larkbitable.AppTable
+	fieldsByTable    map[string][]*larkbitable.AppTableField
+}
+
+func newFlakyCronBootstrapBitableAPI() *flakyCronBootstrapBitableAPI {
+	return &flakyCronBootstrapBitableAPI{
+		failCreateField: true,
+		tables: map[string]*larkbitable.AppTable{
+			"tbl-default": {
+				TableId: stringPtr("tbl-default"),
+				Name:    stringPtr("未命名表格"),
+			},
+		},
+		fieldsByTable: map[string][]*larkbitable.AppTableField{
+			"tbl-default": {{
+				FieldId:   stringPtr("fld-default-primary"),
+				FieldName: stringPtr("默认列"),
+				Type:      intPtr(1),
+				IsPrimary: boolPtr(true),
+			}},
+		},
+	}
+}
+
+func (f *flakyCronBootstrapBitableAPI) GetApp(context.Context, string) (*larkbitable.App, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.getAppCalls++
+	return &larkbitable.App{
+		AppToken: stringPtr("app-cron"),
+		Url:      stringPtr("https://example.feishu.cn/base/app-cron"),
+	}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) CreateApp(context.Context, string, string) (*larkbitable.App, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createAppCalls++
+	return &larkbitable.App{
+		AppToken:       stringPtr("app-cron"),
+		Url:            stringPtr("https://example.feishu.cn/base/app-cron"),
+		DefaultTableId: stringPtr("tbl-default"),
+	}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) ListTables(context.Context, string) ([]*larkbitable.AppTable, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	values := make([]*larkbitable.AppTable, 0, len(f.tables))
+	for _, table := range f.tables {
+		cloned := *table
+		values = append(values, &cloned)
+	}
+	return values, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) CreateTable(_ context.Context, _ string, table *larkbitable.ReqTable) (*larkbitable.AppTable, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createTableCalls++
+	tableID := "tbl-created-" + strings.ReplaceAll(strings.TrimSpace(stringValue(table.Name)), " ", "-")
+	created := &larkbitable.AppTable{
+		TableId: stringPtr(tableID),
+		Name:    table.Name,
+	}
+	f.tables[tableID] = created
+	primaryName := "主列"
+	if len(table.Fields) > 0 && table.Fields[0] != nil && strings.TrimSpace(stringValue(table.Fields[0].FieldName)) != "" {
+		primaryName = strings.TrimSpace(stringValue(table.Fields[0].FieldName))
+	}
+	f.fieldsByTable[tableID] = []*larkbitable.AppTableField{{
+		FieldId:   stringPtr("fld-" + tableID + "-primary"),
+		FieldName: stringPtr(primaryName),
+		Type:      intPtr(1),
+		IsPrimary: boolPtr(true),
+	}}
+	return created, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) RenameTable(_ context.Context, _ string, tableID, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if table := f.tables[tableID]; table != nil {
+		table.Name = stringPtr(name)
+	}
+	return nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) ListFields(_ context.Context, _ string, tableID string) ([]*larkbitable.AppTableField, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fields := f.fieldsByTable[tableID]
+	values := make([]*larkbitable.AppTableField, 0, len(fields))
+	for _, field := range fields {
+		cloned := *field
+		values = append(values, &cloned)
+	}
+	return values, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) CreateField(_ context.Context, _ string, tableID string, field *larkbitable.AppTableField) (*larkbitable.AppTableField, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failCreateField {
+		return nil, context.DeadlineExceeded
+	}
+	cloned := &larkbitable.AppTableField{
+		FieldId:   stringPtr("fld-" + tableID + "-" + strings.TrimSpace(stringValue(field.FieldName))),
+		FieldName: field.FieldName,
+		Type:      field.Type,
+		Property:  field.Property,
+		IsPrimary: boolPtr(false),
+	}
+	f.fieldsByTable[tableID] = append(f.fieldsByTable[tableID], cloned)
+	return cloned, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) UpdateField(_ context.Context, _ string, tableID, fieldID string, field *larkbitable.AppTableField) (*larkbitable.AppTableField, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, existing := range f.fieldsByTable[tableID] {
+		if strings.TrimSpace(stringValue(existing.FieldId)) != fieldID {
+			continue
+		}
+		existing.FieldName = field.FieldName
+		existing.Type = field.Type
+		existing.Property = field.Property
+		cloned := *existing
+		return &cloned, nil
+	}
+	return nil, errors.New("field not found")
+}
+
+func (f *flakyCronBootstrapBitableAPI) ListRecords(context.Context, string, string, []string) ([]*larkbitable.AppTableRecord, error) {
+	return nil, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) CreateRecord(context.Context, string, string, map[string]any) (*larkbitable.AppTableRecord, error) {
+	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) UpdateRecord(context.Context, string, string, string, map[string]any) (*larkbitable.AppTableRecord, error) {
+	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-meta")}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) ListPermissionMembers(context.Context, string, string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (f *flakyCronBootstrapBitableAPI) GrantPermission(context.Context, string, string, string, string, string) error {
+	return nil
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func TestEnsureCronBitablePersistsProgressAndReusesRemoteObjectsAfterTimeout(t *testing.T) {
+	api := newFlakyCronBootstrapBitableAPI()
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		Bitable:          &cronBitableState{},
+		Jobs:             []cronJobState{},
+	}
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
+
+	_, _, err := app.ensureCronBitable(control.DaemonCommand{GatewayID: "gateway-1"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ensureCronBitable first error = %v, want context deadline exceeded", err)
+	}
+	if app.cronState == nil || app.cronState.Bitable == nil {
+		t.Fatalf("cron state = %#v, want persisted bitable binding", app.cronState)
+	}
+	if app.cronState.Bitable.AppToken != "app-cron" {
+		t.Fatalf("app token = %q, want app-cron", app.cronState.Bitable.AppToken)
+	}
+	if app.cronState.Bitable.DefaultTable != "tbl-default" {
+		t.Fatalf("default table = %q, want tbl-default", app.cronState.Bitable.DefaultTable)
+	}
+	if app.cronState.Bitable.Tables.Tasks == "" || app.cronState.Bitable.Tables.Workspaces == "" || app.cronState.Bitable.Tables.Runs == "" || app.cronState.Bitable.Tables.Meta == "" {
+		t.Fatalf("table binding not persisted after timeout: %#v", app.cronState.Bitable.Tables)
+	}
+	if api.createAppCalls != 1 {
+		t.Fatalf("createAppCalls after first attempt = %d, want 1", api.createAppCalls)
+	}
+	if api.createTableCalls != 3 {
+		t.Fatalf("createTableCalls after first attempt = %d, want 3", api.createTableCalls)
+	}
+
+	api.mu.Lock()
+	api.failCreateField = false
+	api.mu.Unlock()
+
+	_, _, err = app.ensureCronBitable(control.DaemonCommand{GatewayID: "gateway-1"})
+	if err != nil {
+		t.Fatalf("ensureCronBitable second attempt: %v", err)
+	}
+	if api.createAppCalls != 1 {
+		t.Fatalf("createAppCalls after retry = %d, want still 1", api.createAppCalls)
+	}
+	if api.getAppCalls == 0 {
+		t.Fatalf("expected retry to reuse existing app token via GetApp")
+	}
+	if api.createTableCalls != 3 {
+		t.Fatalf("createTableCalls after retry = %d, want still 3", api.createTableCalls)
+	}
+	if app.cronState.Bitable.LastVerified.IsZero() {
+		t.Fatalf("expected successful retry to verify binding, got %#v", app.cronState.Bitable)
+	}
+}
+
+func TestEnsureCronBitableRecoversLegacyPartialStateWithoutCreatingExtraTasksTable(t *testing.T) {
+	api := newFlakyCronBootstrapBitableAPI()
+	api.failCreateField = false
+
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+		},
+		Jobs: []cronJobState{},
+	}
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
+
+	_, _, err := app.ensureCronBitable(control.DaemonCommand{GatewayID: "gateway-1"})
+	if err != nil {
+		t.Fatalf("ensureCronBitable with legacy partial state: %v", err)
+	}
+	if api.createAppCalls != 0 {
+		t.Fatalf("createAppCalls = %d, want 0 for persisted app token", api.createAppCalls)
+	}
+	if api.createTableCalls != 3 {
+		t.Fatalf("createTableCalls = %d, want 3 when default table is reused as tasks table", api.createTableCalls)
+	}
+	if got := app.cronState.Bitable.Tables.Tasks; got != "tbl-default" {
+		t.Fatalf("tasks table = %q, want tbl-default", got)
+	}
+}
+
 var _ feishu.BitableAPI = (*fakeCronBitableAPI)(nil)
+var _ feishu.BitableAPI = (*flakyCronBootstrapBitableAPI)(nil)

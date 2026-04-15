@@ -17,6 +17,10 @@ const (
 	cronDefaultTimeoutMinute = 30
 	cronScheduleScanEvery    = time.Second
 	cronExitGrace            = 20 * time.Second
+	cronBitableBootstrapTTL  = 2 * time.Minute
+	cronBitableWorkspaceTTL  = 45 * time.Second
+	cronBitablePermissionTTL = 30 * time.Second
+	cronReloadReadTTL        = 45 * time.Second
 	cronInstancePrefix       = "inst-cron-"
 	cronRunsTableName        = "运行记录"
 	cronTasksTableName       = "任务配置"
@@ -40,6 +44,7 @@ type cronStateFile struct {
 type cronBitableState struct {
 	AppToken     string       `json:"app_token,omitempty"`
 	AppURL       string       `json:"app_url,omitempty"`
+	DefaultTable string       `json:"default_table_id,omitempty"`
 	MetaRecordID string       `json:"meta_record_id,omitempty"`
 	Tables       cronTableIDs `json:"tables,omitempty"`
 	CreatedAt    time.Time    `json:"created_at,omitempty"`
