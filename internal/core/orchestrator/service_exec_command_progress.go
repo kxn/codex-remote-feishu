@@ -75,14 +75,20 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 		progress.CWD = cwd
 	}
 	progress.Status = normalizeExecCommandProgressStatus(event.Status, false)
-	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
-		ItemID:  progress.ItemID,
-		Kind:    "command_execution",
-		Label:   "执行",
-		Summary: command,
-		Status:  progress.Status,
-	})
-	if prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
+	explorationChanged := false
+	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, false); ok {
+		explorationChanged = changed
+		progress.ItemID = execProgressExplorationBlockID
+	} else {
+		upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+			ItemID:  progress.ItemID,
+			Kind:    "command_execution",
+			Label:   "执行",
+			Summary: command,
+			Status:  progress.Status,
+		})
+	}
+	if !explorationChanged && prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -111,7 +117,7 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		return nil
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if progress == nil || !progressHasEntry(progress, event.ItemID, "command_execution") {
+	if progress == nil {
 		return nil
 	}
 	command, cwd := execCommandMetadata(event)
@@ -125,6 +131,16 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		progress.CWD = cwd
 	}
 	progress.Status = normalizeExecCommandProgressStatus(event.Status, true)
+	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, true); ok {
+		progress.ItemID = execProgressExplorationBlockID
+		if changed && s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+			return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+		}
+		return nil
+	}
+	if !progressHasEntry(progress, event.ItemID, "command_execution") {
+		return nil
+	}
 	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  strings.TrimSpace(event.ItemID),
 		Kind:    "command_execution",
@@ -162,6 +178,13 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if changed, ok := upsertExplorationProgressForDynamicTool(progress, event, false); ok {
+		progress.ItemID = execProgressExplorationBlockID
+		if !changed {
+			return nil
+		}
+		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+	}
 	entry, groupKey, changed := upsertDynamicToolProgressEntry(progress, event)
 	if !changed {
 		return nil
@@ -179,6 +202,13 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	if progress == nil {
 		return nil
+	}
+	if changed, ok := upsertExplorationProgressForDynamicTool(progress, event, true); ok {
+		progress.ItemID = execProgressExplorationBlockID
+		if !changed {
+			return nil
+		}
+		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
 	entry, groupKey, changed := upsertDynamicToolProgressEntry(progress, event)
 	if groupKey == "" || !changed {
@@ -241,6 +271,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 			Status:  entry.Status,
 		})
 	}
+	blocks := execCommandProgressBlocks(progress)
 	return []control.UIEvent{{
 		Kind:             control.UIEventExecCommandProgress,
 		SurfaceSessionID: surface.SurfaceSessionID,
@@ -250,6 +281,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 			TurnID:    progress.TurnID,
 			ItemID:    progress.ItemID,
 			MessageID: progress.MessageID,
+			Blocks:    blocks,
 			Entries:   entries,
 			Commands:  append([]string(nil), progress.Commands...),
 			Command:   progress.Command,

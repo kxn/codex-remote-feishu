@@ -265,8 +265,11 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 		t.Fatalf("expected dynamic tool progress start, got %#v", first)
 	}
 	progress := first[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "dynamic_tool_call" || progress.Entries[0].Label != "Read" || progress.Entries[0].Summary != "a.cpp" {
-		t.Fatalf("unexpected dynamic tool first entry: %#v", progress.Entries)
+	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "exploration" || progress.Blocks[0].Status != "running" {
+		t.Fatalf("expected dynamic tool read to enter exploration block, got %#v", progress.Blocks)
+	}
+	if len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "a.cpp" {
+		t.Fatalf("unexpected dynamic tool first exploration row: %#v", progress.Blocks[0].Rows)
 	}
 
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
@@ -291,8 +294,12 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 	if progress.MessageID != "om-progress-1" {
 		t.Fatalf("expected dynamic tool update to reuse same card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "a.cpp b.cpp" {
-		t.Fatalf("expected same tool to merge into one row, got %#v", progress.Entries)
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
+		t.Fatalf("expected merged exploration block, got %#v", progress.Blocks)
+	}
+	items := progress.Blocks[0].Rows[0].Items
+	if len(items) != 2 || items[0] != "a.cpp" || items[1] != "b.cpp" {
+		t.Fatalf("expected same tool to merge into one read row, got %#v", progress.Blocks[0].Rows)
 	}
 }
 
@@ -373,8 +380,105 @@ func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 	if progress.MessageID != "om-progress-1" {
 		t.Fatalf("expected failure to update existing progress card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "a.cpp（失败）" || progress.Entries[0].Status != "failed" {
-		t.Fatalf("expected failed dynamic tool row annotation, got %#v", progress.Entries)
+	if len(progress.Blocks) != 1 || progress.Blocks[0].Status != "failed" {
+		t.Fatalf("expected failed dynamic tool exploration block, got %#v", progress.Blocks)
+	}
+	if len(progress.Blocks[0].Rows) != 1 || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "a.cpp" {
+		t.Fatalf("expected failed block to keep read row, got %#v", progress.Blocks)
+	}
+}
+
+func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "先看看代码", "turn-1")
+
+	readStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat internal/core/control/types.go"`,
+		},
+	})
+	if len(readStarted) != 1 || readStarted[0].ExecCommandProgress == nil {
+		t.Fatalf("expected read exploration start, got %#v", readStarted)
+	}
+	progress := readStarted[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "exploration" || progress.Blocks[0].Status != "running" {
+		t.Fatalf("expected exploration block after read start, got %#v", progress.Blocks)
+	}
+	if len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "internal/core/control/types.go" {
+		t.Fatalf("unexpected read exploration row: %#v", progress.Blocks[0].Rows)
+	}
+	if len(progress.Entries) != 0 {
+		t.Fatalf("expected exploration command to avoid duplicate legacy entries, got %#v", progress.Entries)
+	}
+
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+
+	searchStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "rg compact internal/"`,
+		},
+	})
+	if len(searchStarted) != 1 || searchStarted[0].ExecCommandProgress == nil {
+		t.Fatalf("expected search exploration update, got %#v", searchStarted)
+	}
+	progress = searchStarted[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected search start to update same card, got %#v", progress)
+	}
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
+		t.Fatalf("expected shared exploration block with two rows, got %#v", progress.Blocks)
+	}
+	if progress.Blocks[0].Rows[1].Kind != "search" || progress.Blocks[0].Rows[1].Summary != "compact" || progress.Blocks[0].Rows[1].Secondary != "internal/" {
+		t.Fatalf("unexpected search exploration row: %#v", progress.Blocks[0].Rows)
+	}
+
+	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat internal/core/control/types.go"`,
+		},
+	})
+	if len(completed) != 0 {
+		t.Fatalf("expected first exploration completion without visible block change to stay quiet, got %#v", completed)
+	}
+
+	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"command": `bash -lc "rg compact internal/"`,
+		},
+	})
+	if len(finished) != 1 || finished[0].ExecCommandProgress == nil {
+		t.Fatalf("expected final exploration completion update, got %#v", finished)
+	}
+	if finished[0].ExecCommandProgress.Blocks[0].Status != "completed" {
+		t.Fatalf("expected exploration block to flip completed, got %#v", finished[0].ExecCommandProgress.Blocks)
 	}
 }
 

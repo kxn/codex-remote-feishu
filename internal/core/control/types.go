@@ -493,11 +493,27 @@ type ExecCommandProgressEntry struct {
 	Status  string
 }
 
+type ExecCommandProgressBlockRow struct {
+	RowID     string
+	Kind      string
+	Items     []string
+	Summary   string
+	Secondary string
+}
+
+type ExecCommandProgressBlock struct {
+	BlockID string
+	Kind    string
+	Status  string
+	Rows    []ExecCommandProgressBlockRow
+}
+
 type ExecCommandProgress struct {
 	ThreadID  string
 	TurnID    string
 	ItemID    string
 	MessageID string
+	Blocks    []ExecCommandProgressBlock
 	Entries   []ExecCommandProgressEntry
 	Commands  []string
 	Command   string

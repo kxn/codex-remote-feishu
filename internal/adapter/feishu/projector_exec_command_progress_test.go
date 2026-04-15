@@ -87,20 +87,58 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "上海天气"},
 				{ItemID: "web-2", Kind: "web_search", Label: "打开网页", Summary: "https://example.com/weather"},
 				{ItemID: "mcp-1", Kind: "mcp_tool_call", Label: "MCP", Summary: "docs.lookup（12 ms）"},
-				{ItemID: "dynamic_tool_call::read", Kind: "dynamic_tool_call", Label: "Read", Summary: "a.cpp b.cpp"},
 				{ItemID: "compact-1", Kind: "context_compaction", Summary: "上下文已整理。"},
 			},
+			Blocks: []control.ExecCommandProgressBlock{{
+				BlockID: "exploration",
+				Kind:    "exploration",
+				Status:  "completed",
+				Rows: []control.ExecCommandProgressBlockRow{
+					{RowID: "read", Kind: "read", Items: []string{"a.cpp", "b.cpp"}},
+				},
+			}},
 		},
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "Read：a.cpp b.cpp") || !strings.Contains(body, "整理：上下文已整理。") {
+	if !strings.Contains(body, "已探索") || !strings.Contains(body, "读取：a.cpp、b.cpp") || !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {
 		t.Fatalf("expected command row to still strip shell wrapper, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "exploration",
+			Blocks: []control.ExecCommandProgressBlock{{
+				BlockID: "exploration",
+				Kind:    "exploration",
+				Status:  "running",
+				Rows: []control.ExecCommandProgressBlockRow{
+					{RowID: "read", Kind: "read", Items: []string{"docs/README.md", "internal/core/control/types.go"}},
+					{RowID: "list::internal/core", Kind: "list", Summary: "internal/core"},
+					{RowID: "search::compact::internal/", Kind: "search", Summary: "compact", Secondary: "internal/"},
+				},
+			}},
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if !strings.Contains(body, "探索中") || !strings.Contains(body, "读取：docs/README.md、internal/core/control/types.go") || !strings.Contains(body, "列目录：internal/core") || !strings.Contains(body, "搜索：compact in internal/") {
+		t.Fatalf("expected exploration block rendering, got %#v", ops[0])
 	}
 }
 

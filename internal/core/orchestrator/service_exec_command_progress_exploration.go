@@ -1,0 +1,368 @@
+package orchestrator
+
+import (
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
+
+const execProgressExplorationBlockID = "exploration"
+
+type execProgressExplorationAction struct {
+	Kind      string
+	Items     []string
+	Summary   string
+	Secondary string
+}
+
+var explorationShellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
+
+func execCommandProgressBlocks(progress *state.ExecCommandProgressRecord) []control.ExecCommandProgressBlock {
+	if progress == nil || progress.Exploration == nil {
+		return nil
+	}
+	block := progress.Exploration.Block
+	rows := make([]control.ExecCommandProgressBlockRow, 0, len(block.Rows))
+	for _, row := range block.Rows {
+		rows = append(rows, control.ExecCommandProgressBlockRow{
+			RowID:     row.RowID,
+			Kind:      row.Kind,
+			Items:     append([]string(nil), row.Items...),
+			Summary:   row.Summary,
+			Secondary: row.Secondary,
+		})
+	}
+	return []control.ExecCommandProgressBlock{{
+		BlockID: block.BlockID,
+		Kind:    block.Kind,
+		Status:  block.Status,
+		Rows:    rows,
+	}}
+}
+
+func upsertExplorationProgressForCommandExecution(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {
+	command, _ := execCommandMetadata(event)
+	action, ok := parseCommandExecutionExplorationAction(command)
+	if !ok {
+		return false, false
+	}
+	return upsertExplorationProgress(progress, strings.TrimSpace(event.ItemID), action, normalizeExecCommandProgressStatus(event.Status, final), final), true
+}
+
+func upsertExplorationProgressForDynamicTool(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {
+	action, ok := parseDynamicToolExplorationAction(event.Metadata)
+	if !ok {
+		return false, false
+	}
+	status := normalizeDynamicToolProgressStatus(event)
+	if final && status == "" {
+		status = "completed"
+	}
+	return upsertExplorationProgress(progress, strings.TrimSpace(event.ItemID), action, status, final), true
+}
+
+func upsertExplorationProgress(progress *state.ExecCommandProgressRecord, itemID string, action execProgressExplorationAction, status string, final bool) bool {
+	if progress == nil {
+		return false
+	}
+	exploration := ensureExplorationProgress(progress)
+	before := cloneExplorationBlock(exploration.Block)
+
+	upsertExplorationRow(&exploration.Block, action)
+	if exploration.ActiveItemIDs == nil {
+		exploration.ActiveItemIDs = map[string]bool{}
+	}
+	if itemID != "" {
+		if final {
+			delete(exploration.ActiveItemIDs, itemID)
+		} else {
+			exploration.ActiveItemIDs[itemID] = true
+		}
+	}
+	if status == "failed" {
+		exploration.Failed = true
+	}
+	exploration.Block.Status = explorationBlockStatus(exploration)
+	return !sameExecCommandProgressBlock(before, exploration.Block)
+}
+
+func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state.ExecCommandProgressExplorationRecord {
+	if progress.Exploration == nil {
+		progress.Exploration = &state.ExecCommandProgressExplorationRecord{
+			Block: state.ExecCommandProgressBlockRecord{
+				BlockID: execProgressExplorationBlockID,
+				Kind:    "exploration",
+				Status:  "running",
+			},
+			ActiveItemIDs: map[string]bool{},
+		}
+	}
+	if progress.Exploration.Block.BlockID == "" {
+		progress.Exploration.Block.BlockID = execProgressExplorationBlockID
+	}
+	if progress.Exploration.Block.Kind == "" {
+		progress.Exploration.Block.Kind = "exploration"
+	}
+	if progress.Exploration.ActiveItemIDs == nil {
+		progress.Exploration.ActiveItemIDs = map[string]bool{}
+	}
+	return progress.Exploration
+}
+
+func upsertExplorationRow(block *state.ExecCommandProgressBlockRecord, action execProgressExplorationAction) {
+	if block == nil {
+		return
+	}
+	rowID := explorationRowID(action)
+	for i := range block.Rows {
+		row := &block.Rows[i]
+		if row.RowID != rowID {
+			continue
+		}
+		if len(action.Items) != 0 {
+			row.Items = appendUniquePreserveOrder(row.Items, action.Items...)
+		}
+		if strings.TrimSpace(action.Summary) != "" {
+			row.Summary = strings.TrimSpace(action.Summary)
+		}
+		if strings.TrimSpace(action.Secondary) != "" {
+			row.Secondary = strings.TrimSpace(action.Secondary)
+		}
+		return
+	}
+	block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
+		RowID:     rowID,
+		Kind:      action.Kind,
+		Items:     append([]string(nil), action.Items...),
+		Summary:   strings.TrimSpace(action.Summary),
+		Secondary: strings.TrimSpace(action.Secondary),
+	})
+}
+
+func explorationRowID(action execProgressExplorationAction) string {
+	switch action.Kind {
+	case "read":
+		return "read"
+	case "list":
+		return "list::" + strings.TrimSpace(action.Summary)
+	case "search":
+		return "search::" + strings.TrimSpace(action.Summary) + "::" + strings.TrimSpace(action.Secondary)
+	default:
+		return strings.TrimSpace(action.Kind) + "::" + strings.TrimSpace(action.Summary)
+	}
+}
+
+func explorationBlockStatus(exploration *state.ExecCommandProgressExplorationRecord) string {
+	if exploration == nil {
+		return ""
+	}
+	for _, active := range exploration.ActiveItemIDs {
+		if active {
+			return "running"
+		}
+	}
+	if exploration.Failed {
+		return "failed"
+	}
+	return "completed"
+}
+
+func cloneExplorationBlock(block state.ExecCommandProgressBlockRecord) state.ExecCommandProgressBlockRecord {
+	clone := state.ExecCommandProgressBlockRecord{
+		BlockID: block.BlockID,
+		Kind:    block.Kind,
+		Status:  block.Status,
+		Rows:    make([]state.ExecCommandProgressBlockRowRecord, 0, len(block.Rows)),
+	}
+	for _, row := range block.Rows {
+		clone.Rows = append(clone.Rows, state.ExecCommandProgressBlockRowRecord{
+			RowID:     row.RowID,
+			Kind:      row.Kind,
+			Items:     append([]string(nil), row.Items...),
+			Summary:   row.Summary,
+			Secondary: row.Secondary,
+		})
+	}
+	return clone
+}
+
+func sameExecCommandProgressBlock(left, right state.ExecCommandProgressBlockRecord) bool {
+	if left.BlockID != right.BlockID || left.Kind != right.Kind || left.Status != right.Status || len(left.Rows) != len(right.Rows) {
+		return false
+	}
+	for i := range left.Rows {
+		if !sameExecCommandProgressBlockRow(left.Rows[i], right.Rows[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameExecCommandProgressBlockRow(left, right state.ExecCommandProgressBlockRowRecord) bool {
+	if left.RowID != right.RowID || left.Kind != right.Kind || left.Summary != right.Summary || left.Secondary != right.Secondary {
+		return false
+	}
+	return sameStringSlice(left.Items, right.Items)
+}
+
+func parseDynamicToolExplorationAction(metadata map[string]any) (execProgressExplorationAction, bool) {
+	tool := strings.ToLower(strings.TrimSpace(metadataString(metadata, "tool")))
+	switch tool {
+	case "read":
+		items := dynamicToolProgressArguments(metadata)
+		if len(items) == 0 {
+			if summary := strings.TrimSpace(dynamicToolProgressSummaryFromMetadata(metadata)); summary != "" {
+				items = []string{summary}
+			}
+		}
+		if len(items) == 0 {
+			return execProgressExplorationAction{}, false
+		}
+		return execProgressExplorationAction{Kind: "read", Items: items}, true
+	default:
+		return execProgressExplorationAction{}, false
+	}
+}
+
+func parseCommandExecutionExplorationAction(command string) (execProgressExplorationAction, bool) {
+	command = normalizeExplorationCommand(command)
+	if command == "" || containsShellOperators(command) {
+		return execProgressExplorationAction{}, false
+	}
+	args := strings.Fields(command)
+	if len(args) == 0 {
+		return execProgressExplorationAction{}, false
+	}
+	cmd := strings.ToLower(strings.TrimSpace(filepath.Base(args[0])))
+	switch cmd {
+	case "cat", "bat":
+		items := positionalArgs(args[1:], nil)
+		if len(items) == 0 {
+			return execProgressExplorationAction{}, false
+		}
+		return execProgressExplorationAction{Kind: "read", Items: items}, true
+	case "head", "tail":
+		if item := lastPositionalArg(args[1:]); item != "" {
+			return execProgressExplorationAction{Kind: "read", Items: []string{item}}, true
+		}
+	case "sed":
+		if item := lastPositionalArg(args[1:]); item != "" {
+			return execProgressExplorationAction{Kind: "read", Items: []string{item}}, true
+		}
+	case "ls":
+		items := positionalArgs(args[1:], nil)
+		if len(items) == 0 {
+			return execProgressExplorationAction{Kind: "list", Summary: cmd}, true
+		}
+		return execProgressExplorationAction{Kind: "list", Summary: strings.Join(items, " ")}, true
+	case "rg", "grep":
+		query, scope := parseSearchArgs(args[1:])
+		if query == "" {
+			return execProgressExplorationAction{}, false
+		}
+		return execProgressExplorationAction{Kind: "search", Summary: query, Secondary: scope}, true
+	}
+	return execProgressExplorationAction{}, false
+}
+
+func normalizeExplorationCommand(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	match := explorationShellLCCommandPattern.FindStringSubmatch(command)
+	if len(match) == 2 {
+		command = strings.TrimSpace(match[1])
+	}
+	if len(command) >= 2 && command[0] == '"' && command[len(command)-1] == '"' {
+		if unquoted, err := strconv.Unquote(command); err == nil {
+			command = strings.TrimSpace(unquoted)
+		}
+	} else if len(command) >= 2 && command[0] == '\'' && command[len(command)-1] == '\'' {
+		command = strings.TrimSpace(command[1 : len(command)-1])
+	}
+	return strings.Join(strings.Fields(command), " ")
+}
+
+func containsShellOperators(command string) bool {
+	if strings.Contains(command, "&&") || strings.Contains(command, "||") {
+		return true
+	}
+	return strings.ContainsAny(command, "|;><")
+}
+
+func positionalArgs(args []string, optionsWithValue map[string]bool) []string {
+	out := make([]string, 0, len(args))
+	skipNext := false
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "" {
+			continue
+		}
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if optionsWithValue != nil && optionsWithValue[arg] {
+				skipNext = true
+			}
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func lastPositionalArg(args []string) string {
+	positional := positionalArgs(args, map[string]bool{
+		"-n":          true,
+		"-c":          true,
+		"-m":          true,
+		"--lines":     true,
+		"--bytes":     true,
+		"--max-count": true,
+	})
+	if len(positional) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(positional[len(positional)-1])
+}
+
+func parseSearchArgs(args []string) (string, string) {
+	positional := positionalArgs(args, map[string]bool{
+		"-e":               true,
+		"-f":               true,
+		"-g":               true,
+		"-m":               true,
+		"-C":               true,
+		"-A":               true,
+		"-B":               true,
+		"-t":               true,
+		"--regexp":         true,
+		"--file":           true,
+		"--glob":           true,
+		"--max-count":      true,
+		"--context":        true,
+		"--after-context":  true,
+		"--before-context": true,
+		"--type":           true,
+	})
+	if len(positional) == 0 {
+		return "", ""
+	}
+	query := strings.TrimSpace(positional[0])
+	scope := ""
+	if len(positional) > 1 {
+		scope = strings.TrimSpace(positional[len(positional)-1])
+		if scope == query {
+			scope = ""
+		}
+	}
+	return query, scope
+}

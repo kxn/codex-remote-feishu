@@ -37,15 +37,27 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {
-	entries := normalizedExecProgressEntries(progress)
-	if len(entries) == 0 {
-		return "（暂无可显示过程）"
+	lines := make([]string, 0, len(progress.Blocks)+len(progress.Entries))
+	for _, block := range normalizedExecProgressBlocks(progress) {
+		lines = append(lines, renderExecProgressBlock(block)...)
 	}
-	lines := make([]string, 0, len(entries))
-	for _, entry := range entries {
+	for _, entry := range normalizedExecProgressEntries(progress) {
 		lines = append(lines, renderExecProgressEntry(entry))
 	}
+	if len(lines) == 0 {
+		return "（暂无可显示过程）"
+	}
 	return strings.Join(lines, "\n")
+}
+
+func normalizedExecProgressBlocks(progress control.ExecCommandProgress) []control.ExecCommandProgressBlock {
+	blocks := make([]control.ExecCommandProgressBlock, 0, len(progress.Blocks))
+	for _, block := range progress.Blocks {
+		if normalized, ok := normalizeExecProgressBlock(block); ok {
+			blocks = append(blocks, normalized)
+		}
+	}
+	return blocks
 }
 
 func normalizedExecProgressEntries(progress control.ExecCommandProgress) []control.ExecCommandProgressEntry {
@@ -89,6 +101,52 @@ func normalizedExecProgressCommands(progress control.ExecCommandProgress) []stri
 	return nil
 }
 
+func normalizeExecProgressBlock(block control.ExecCommandProgressBlock) (control.ExecCommandProgressBlock, bool) {
+	block.BlockID = strings.TrimSpace(block.BlockID)
+	block.Kind = strings.TrimSpace(block.Kind)
+	block.Status = strings.TrimSpace(block.Status)
+	rows := make([]control.ExecCommandProgressBlockRow, 0, len(block.Rows))
+	for _, row := range block.Rows {
+		if normalized, ok := normalizeExecProgressBlockRow(row); ok {
+			rows = append(rows, normalized)
+		}
+	}
+	block.Rows = rows
+	if block.Kind == "" || len(block.Rows) == 0 {
+		return control.ExecCommandProgressBlock{}, false
+	}
+	return block, true
+}
+
+func normalizeExecProgressBlockRow(row control.ExecCommandProgressBlockRow) (control.ExecCommandProgressBlockRow, bool) {
+	row.RowID = strings.TrimSpace(row.RowID)
+	row.Kind = strings.TrimSpace(row.Kind)
+	row.Summary = strings.TrimSpace(row.Summary)
+	row.Secondary = strings.TrimSpace(row.Secondary)
+	items := make([]string, 0, len(row.Items))
+	for _, item := range row.Items {
+		if text := strings.TrimSpace(item); text != "" {
+			items = append(items, text)
+		}
+	}
+	row.Items = items
+	switch row.Kind {
+	case "read":
+		if len(row.Items) == 0 {
+			return control.ExecCommandProgressBlockRow{}, false
+		}
+	case "list", "search":
+		if row.Summary == "" {
+			return control.ExecCommandProgressBlockRow{}, false
+		}
+	default:
+		if row.Summary == "" && len(row.Items) == 0 {
+			return control.ExecCommandProgressBlockRow{}, false
+		}
+	}
+	return row, true
+}
+
 func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control.ExecCommandProgressEntry, bool) {
 	entry.Kind = strings.TrimSpace(entry.Kind)
 	entry.Label = strings.TrimSpace(entry.Label)
@@ -116,6 +174,51 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 		return control.ExecCommandProgressEntry{}, false
 	}
 	return entry, true
+}
+
+func renderExecProgressBlock(block control.ExecCommandProgressBlock) []string {
+	lines := []string{renderExecProgressBlockHeader(block)}
+	for _, row := range block.Rows {
+		lines = append(lines, "- "+renderExecProgressBlockRow(row))
+	}
+	return lines
+}
+
+func renderExecProgressBlockHeader(block control.ExecCommandProgressBlock) string {
+	switch strings.ToLower(strings.TrimSpace(block.Kind)) {
+	case "exploration":
+		switch strings.ToLower(strings.TrimSpace(block.Status)) {
+		case "failed":
+			return "探索失败"
+		case "completed":
+			return "已探索"
+		default:
+			return "探索中"
+		}
+	default:
+		return "处理中"
+	}
+}
+
+func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
+	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
+	case "read":
+		return "读取：" + truncateExecProgressSummary(strings.Join(row.Items, "、"), 60)
+	case "list":
+		return "列目录：" + truncateExecProgressSummary(row.Summary, 60)
+	case "search":
+		summary := row.Summary
+		if row.Secondary != "" {
+			summary = summary + " in " + row.Secondary
+		}
+		return "搜索：" + truncateExecProgressSummary(summary, 60)
+	default:
+		text := row.Summary
+		if text == "" && len(row.Items) != 0 {
+			text = strings.Join(row.Items, " ")
+		}
+		return truncateExecProgressSummary(text, 60)
+	}
 }
 
 func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {

@@ -206,6 +206,27 @@ type ExecCommandProgressEntryRecord struct {
 	Status  string
 }
 
+type ExecCommandProgressBlockRowRecord struct {
+	RowID     string
+	Kind      string
+	Items     []string
+	Summary   string
+	Secondary string
+}
+
+type ExecCommandProgressBlockRecord struct {
+	BlockID string
+	Kind    string
+	Status  string
+	Rows    []ExecCommandProgressBlockRowRecord
+}
+
+type ExecCommandProgressExplorationRecord struct {
+	Block         ExecCommandProgressBlockRecord
+	ActiveItemIDs map[string]bool
+	Failed        bool
+}
+
 type ExecCommandProgressRecord struct {
 	InstanceID           string
 	ThreadID             string
@@ -217,6 +238,7 @@ type ExecCommandProgressRecord struct {
 	Command              string
 	CWD                  string
 	Status               string
+	Exploration          *ExecCommandProgressExplorationRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord
 	LastEmittedAt        time.Time
