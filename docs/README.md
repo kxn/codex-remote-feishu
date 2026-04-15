@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-14`
-> Summary: 新增 Claude provider 协议映射文档并刷新文档索引。
+> Updated: `2026-04-15`
+> Summary: 新增 web preview snapshot 草案并刷新文档索引。
 
 ## 1. 适用范围
 
@@ -154,6 +154,7 @@
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
+- [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-onboarding-admin-workflow-prd.md](./draft/web-onboarding-admin-workflow-prd.md)
 - [web-onboarding-admin-user-mock.html](./draft/web-onboarding-admin-user-mock.html)
