@@ -14,6 +14,8 @@ func (p *DriveMarkdownPreviewer) CleanupBefore(ctx context.Context, cutoff time.
 	if p.api == nil {
 		return PreviewDriveCleanupResult{}, fmt.Errorf("preview drive api is not available")
 	}
+	ctx, cancel := newFeishuTimeoutContext(ctx, previewDriveCleanupTimeout)
+	defer cancel()
 
 	result, err := p.cleanupManagedPreviewFiles(ctx, cutoff)
 	if err != nil {
@@ -44,10 +46,12 @@ func (p *DriveMarkdownPreviewer) CleanupBefore(ctx context.Context, cutoff time.
 	return result, nil
 }
 
-func (p *DriveMarkdownPreviewer) Summary() (PreviewDriveSummary, error) {
+func (p *DriveMarkdownPreviewer) Summary(ctx context.Context) (PreviewDriveSummary, error) {
 	if p == nil {
 		return PreviewDriveSummary{}, nil
 	}
+	ctx, cancel := newFeishuTimeoutContext(ctx, previewDriveSummaryTimeout)
+	defer cancel()
 
 	p.stateMu.Lock()
 	state := p.loadStateLocked()
@@ -59,7 +63,7 @@ func (p *DriveMarkdownPreviewer) Summary() (PreviewDriveSummary, error) {
 	beforeToken, beforeURL := previewRootSnapshot(state)
 	p.stateMu.Unlock()
 
-	summary, root, err := p.summarizeManagedInventory(context.Background())
+	summary, root, err := p.summarizeManagedInventory(ctx)
 	if err != nil {
 		if isPreviewDriveAccessDeniedError(err) {
 			p.stateMu.Lock()

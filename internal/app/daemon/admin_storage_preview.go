@@ -1,14 +1,11 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-
-	lark "github.com/larksuite/oapi-sdk-go/v3"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 )
@@ -16,7 +13,7 @@ import (
 var newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) feishu.PreviewDriveAdminService {
 	var api = feishu.NewLarkDrivePreviewAPI(nil)
 	if strings.TrimSpace(cfg.AppID) != "" && strings.TrimSpace(cfg.AppSecret) != "" {
-		api = feishu.NewLarkDrivePreviewAPI(lark.NewClient(cfg.AppID, cfg.AppSecret))
+		api = feishu.NewLarkDrivePreviewAPI(feishu.NewLarkClient(cfg.AppID, cfg.AppSecret))
 	}
 	return feishu.NewDriveMarkdownPreviewer(api, feishu.MarkdownPreviewConfig{
 		StatePath: cfg.PreviewStatePath,
@@ -55,7 +52,7 @@ func (a *App) handlePreviewDriveStatus(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	summary, err := admin.Summary()
+	summary, err := admin.Summary(r.Context())
 	if err != nil {
 		writePreviewDriveAdminError(w, "failed to summarize preview drive inventory", "preview_drive_summary_failed", err)
 		return
@@ -107,7 +104,7 @@ func (a *App) handlePreviewDriveCleanup(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	result, err := admin.CleanupBefore(context.Background(), time.Now().Add(-time.Duration(req.OlderThanHours)*time.Hour))
+	result, err := admin.CleanupBefore(r.Context(), time.Now().Add(-time.Duration(req.OlderThanHours)*time.Hour))
 	if err != nil {
 		writePreviewDriveAdminError(w, "failed to cleanup preview drive files", "preview_drive_cleanup_failed", err)
 		return

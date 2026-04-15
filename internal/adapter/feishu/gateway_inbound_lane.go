@@ -234,7 +234,10 @@ func (w *queuedMessageWork) run(ctx context.Context, gateway *LiveGateway, handl
 	if w == nil || gateway == nil || handler == nil {
 		return
 	}
-	action, ok, err := w.parseAction(ctx, gateway)
+	parseCtx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	defer cancel()
+
+	action, ok, err := w.parseAction(parseCtx, gateway)
 	if err != nil {
 		msg := w.eventMessage()
 		logInboundMessageParseFailed(w.gatewayID, w.surfaceID, w.inbound, msg, "async_parse", err)
@@ -556,11 +559,8 @@ func (g *LiveGateway) deliverAsyncInboundFailure(ctx context.Context, surfaceID,
 		cardEnvelope:     cardEnvelopeV2,
 		card:             legacyCardDocument("消息未处理", body, cardThemeError, nil),
 	}
-	applyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	applyCtx, cancel := newFeishuTimeoutContext(ctx, asyncInboundFailureNoticeTimeout)
 	defer cancel()
-	if ctx != nil {
-		applyCtx = ctx
-	}
 	if err := g.Apply(applyCtx, []Operation{op}); err != nil {
 		log.Printf("feishu async inbound failure notice delivery failed: surface=%s reply_to=%s err=%v", surfaceID, replyToMessageID, err)
 	}

@@ -19,10 +19,12 @@ type fakePreviewDriveAdmin struct {
 	cleanupResult feishu.PreviewDriveCleanupResult
 	summaryErr    error
 	cleanupErr    error
+	summaryCtx    context.Context
 	cleanupCutoff time.Time
 }
 
-func (f *fakePreviewDriveAdmin) Summary() (feishu.PreviewDriveSummary, error) {
+func (f *fakePreviewDriveAdmin) Summary(ctx context.Context) (feishu.PreviewDriveSummary, error) {
+	f.summaryCtx = ctx
 	return f.summary, f.summaryErr
 }
 

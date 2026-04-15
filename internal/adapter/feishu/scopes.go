@@ -3,8 +3,6 @@ package feishu
 import (
 	"context"
 	"strings"
-
-	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
 
 type AppScopeStatus struct {
@@ -14,7 +12,7 @@ type AppScopeStatus struct {
 }
 
 func ListAppScopes(ctx context.Context, cfg LiveGatewayConfig) ([]AppScopeStatus, error) {
-	client := lark.NewClient(strings.TrimSpace(cfg.AppID), strings.TrimSpace(cfg.AppSecret))
+	client := NewLarkClient(cfg.AppID, cfg.AppSecret)
 	resp, err := client.Application.V6.Scope.List(ctx)
 	if err != nil {
 		return nil, err

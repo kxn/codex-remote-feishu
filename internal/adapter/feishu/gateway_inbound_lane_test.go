@@ -170,12 +170,18 @@ func TestHandleInboundMessageEventSuppressesDuplicateCommandEvent(t *testing.T) 
 
 func TestQueuedInboundFailureSendsReplyCard(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.downloadImageFn = func(_ context.Context, _, _ string) (string, string, error) {
+	var (
+		downloadCtx context.Context
+		replyCtx    context.Context
+	)
+	gateway.downloadImageFn = func(ctx context.Context, _, _ string) (string, string, error) {
+		downloadCtx = ctx
 		return "", "", errors.New("boom")
 	}
 
 	replyCalled := make(chan string, 1)
-	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(ctx context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+		replyCtx = ctx
 		if messageID != "om-img-1" {
 			t.Fatalf("unexpected reply target: %q", messageID)
 		}
@@ -235,6 +241,9 @@ func TestQueuedInboundFailureSendsReplyCard(t *testing.T) {
 		t.Fatal("expected async parse failure to stop before calling handler")
 	case <-time.After(150 * time.Millisecond):
 	}
+
+	assertContextHasDeadlineWithin(t, downloadCtx, inboundMessageParseTimeout)
+	assertContextHasDeadlineWithin(t, replyCtx, asyncInboundFailureNoticeTimeout)
 }
 
 func testTextMessageEvent(eventID, messageID, text string) *larkim.P2MessageReceiveV1 {

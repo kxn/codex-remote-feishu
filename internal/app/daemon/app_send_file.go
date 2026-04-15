@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
+
+const sendIMFileCommandTimeout = 2 * time.Minute
 
 func (a *App) handleSendIMFileCommand(command control.DaemonCommand) []control.UIEvent {
 	a.mu.Lock()
@@ -46,17 +49,29 @@ func (a *App) handleSendIMFileCommandLocked(command control.DaemonCommand) []con
 		return sendFileNotice(command.SurfaceSessionID, "send_file_unavailable", "当前运行环境暂不支持发送飞书文件消息。")
 	}
 
-	result, err := sender.SendIMFile(context.Background(), feishu.IMFileSendRequest{
-		GatewayID:        resolved.GatewayID,
-		SurfaceSessionID: resolved.SurfaceSessionID,
-		ChatID:           resolved.ChatID,
-		ActorUserID:      resolved.ActorUserID,
-		Path:             path,
-	})
-	if err != nil {
-		_ = a.observeFeishuPermissionError(resolved.GatewayID, err)
+	sendCtx, cancel := context.WithTimeout(context.Background(), sendIMFileCommandTimeout)
+	defer cancel()
+
+	var (
+		result  feishu.IMFileSendResult
+		callErr error
+	)
+	// Do not hold the app lock across Feishu upload/send IO.
+	a.mu.Unlock()
+	func() {
+		defer a.mu.Lock()
+		result, callErr = sender.SendIMFile(sendCtx, feishu.IMFileSendRequest{
+			GatewayID:        resolved.GatewayID,
+			SurfaceSessionID: resolved.SurfaceSessionID,
+			ChatID:           resolved.ChatID,
+			ActorUserID:      resolved.ActorUserID,
+			Path:             path,
+		})
+	}()
+	if callErr != nil {
+		_ = a.observeFeishuPermissionError(resolved.GatewayID, callErr)
 		var sendErr *feishu.IMFileSendError
-		if errors.As(err, &sendErr) {
+		if errors.As(callErr, &sendErr) {
 			switch sendErr.Code {
 			case feishu.IMFileSendErrorUploadFailed:
 				return sendFileNotice(command.SurfaceSessionID, "send_file_upload_failed", "文件上传失败，请稍后重试。")

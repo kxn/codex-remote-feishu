@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -15,16 +16,20 @@ func TestSendIMFileUploadsThenCreatesFileMessage(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	var (
 		uploadPath     string
+		uploadCtx      context.Context
 		createMsgType  string
 		createContent  string
 		createTargetID string
 		createTargetTy string
+		createCtx      context.Context
 	)
-	gateway.uploadFilePathFn = func(_ context.Context, path string) (string, string, error) {
+	gateway.uploadFilePathFn = func(ctx context.Context, path string) (string, string, error) {
+		uploadCtx = ctx
 		uploadPath = path
 		return "file-key-1", "report.txt", nil
 	}
-	gateway.createMessageFn = func(_ context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
+	gateway.createMessageFn = func(ctx context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
+		createCtx = ctx
 		createTargetTy = receiveIDType
 		createTargetID = receiveID
 		createMsgType = msgType
@@ -69,6 +74,8 @@ func TestSendIMFileUploadsThenCreatesFileMessage(t *testing.T) {
 	if gateway.messages["om-file-1"] != "surface-1" {
 		t.Fatalf("expected created file message to be tracked for surface callbacks, got %#v", gateway.messages)
 	}
+	assertContextHasDeadlineWithin(t, uploadCtx, sendIMFileTimeout)
+	assertContextHasDeadlineWithin(t, createCtx, sendIMFileTimeout)
 }
 
 func TestSendIMFileReturnsUploadFailure(t *testing.T) {
@@ -107,5 +114,23 @@ func TestSendIMFileReturnsSendFailure(t *testing.T) {
 	var sendErr *IMFileSendError
 	if !errors.As(err, &sendErr) || sendErr.Code != IMFileSendErrorSendFailed {
 		t.Fatalf("expected send failure, got %#v", err)
+	}
+}
+
+func assertContextHasDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {
+	t.Helper()
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected context deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		t.Fatalf("expected future deadline, got %s", deadline)
+	}
+	if remaining > max+time.Second {
+		t.Fatalf("expected deadline within %s, got remaining %s", max, remaining)
 	}
 }

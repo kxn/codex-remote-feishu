@@ -446,7 +446,22 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 	}
 
 	api := newFakePreviewAPI()
-	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
+	phase := "summary"
+	var (
+		summaryCtx context.Context
+		cleanupCtx context.Context
+	)
+	api.listFilesFunc = func(ctx context.Context, folderToken string) ([]previewRemoteNode, error) {
+		switch phase {
+		case "summary":
+			if summaryCtx == nil {
+				summaryCtx = ctx
+			}
+		case "cleanup":
+			if cleanupCtx == nil {
+				cleanupCtx = ctx
+			}
+		}
 		deleted := map[string]bool{}
 		for _, call := range api.deleteFileCalls {
 			deleted[call.Token] = true
@@ -478,14 +493,16 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 	previewer.state = normalizePreviewState(state)
 	previewer.nowFn = func() time.Time { return now }
 
-	summary, err := previewer.Summary()
+	summary, err := previewer.Summary(context.Background())
 	if err != nil {
 		t.Fatalf("Summary returned error: %v", err)
 	}
 	if summary.FileCount != 3 || summary.ScopeCount != 1 || summary.EstimatedBytes != 15 || summary.UnknownSizeFileCount != 1 {
 		t.Fatalf("unexpected summary: %#v", summary)
 	}
+	assertPreviewContextHasDeadlineWithin(t, summaryCtx, previewDriveSummaryTimeout)
 
+	phase = "cleanup"
 	result, err := previewer.CleanupBefore(context.Background(), now.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatalf("CleanupBefore returned error: %v", err)
@@ -502,6 +519,7 @@ func TestDriveMarkdownPreviewerSummaryAndCleanupBefore(t *testing.T) {
 	if _, ok := previewer.state.Files["feishu:app-1:chat:oc_chat|/repo/docs/old.md|sha-old"]; ok {
 		t.Fatalf("expected old preview file to be removed from state")
 	}
+	assertPreviewContextHasDeadlineWithin(t, cleanupCtx, previewDriveCleanupTimeout)
 }
 
 func TestDriveMarkdownPreviewerRecreatesMissingScopeFolder(t *testing.T) {
@@ -721,7 +739,7 @@ func TestDriveMarkdownPreviewerSummaryUsesRemoteInventoryWithoutLocalRoot(t *tes
 		},
 	})
 
-	summary, err := previewer.Summary()
+	summary, err := previewer.Summary(context.Background())
 	if err != nil {
 		t.Fatalf("Summary returned error: %v", err)
 	}
@@ -817,7 +835,7 @@ func TestDriveMarkdownPreviewerSummaryReturnsPermissionRequiredFallback(t *testi
 	}
 
 	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{StatePath: filepath.Join(t.TempDir(), "preview.json")})
-	summary, err := previewer.Summary()
+	summary, err := previewer.Summary(context.Background())
 	if err != nil {
 		t.Fatalf("Summary returned error: %v", err)
 	}
@@ -831,7 +849,7 @@ func TestDriveMarkdownPreviewerSummaryReturnsPermissionRequiredFallback(t *testi
 
 func TestDriveMarkdownPreviewerSummaryReturnsAPIUnavailableFallback(t *testing.T) {
 	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{StatePath: filepath.Join(t.TempDir(), "preview.json")})
-	summary, err := previewer.Summary()
+	summary, err := previewer.Summary(context.Background())
 	if err != nil {
 		t.Fatalf("Summary returned error: %v", err)
 	}
@@ -843,6 +861,7 @@ func TestDriveMarkdownPreviewerSummaryReturnsAPIUnavailableFallback(t *testing.T
 func TestDriveMarkdownPreviewerBackgroundCleanupRunsOnInterval(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 0, 0, 0, time.UTC)
 	deleted := make(chan string, 1)
+	var deleteCtx context.Context
 	api := newFakePreviewAPI()
 	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
 		switch folderToken {
@@ -873,7 +892,8 @@ func TestDriveMarkdownPreviewerBackgroundCleanupRunsOnInterval(t *testing.T) {
 			return nil, nil
 		}
 	}
-	api.deleteFileFunc = func(_ context.Context, token, _ string) error {
+	api.deleteFileFunc = func(ctx context.Context, token, _ string) error {
+		deleteCtx = ctx
 		select {
 		case deleted <- token:
 		default:
@@ -913,6 +933,7 @@ func TestDriveMarkdownPreviewerBackgroundCleanupRunsOnInterval(t *testing.T) {
 	if previewer.state == nil || previewer.state.LastCleanupAt.IsZero() {
 		t.Fatalf("expected background cleanup to record last cleanup timestamp, got %#v", previewer.state)
 	}
+	assertPreviewContextHasDeadlineWithin(t, deleteCtx, previewDriveBackgroundCleanupTimeout)
 }
 
 func TestDriveMarkdownPreviewerSkipsMarkdownOutsideAllowedRoots(t *testing.T) {
@@ -1361,6 +1382,24 @@ func findWebPreviewRecordBySourceAndHash(manifest *webPreviewScopeManifest, sour
 		}
 	}
 	return nil
+}
+
+func assertPreviewContextHasDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {
+	t.Helper()
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected context deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		t.Fatalf("expected future deadline, got %s", deadline)
+	}
+	if remaining > max+time.Second {
+		t.Fatalf("expected deadline within %s, got remaining %s", max, remaining)
+	}
 }
 
 func sha256Hex(value string) string {

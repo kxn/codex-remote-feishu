@@ -24,7 +24,7 @@ var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
 var markdownLineSuffixPattern = regexp.MustCompile(`^(.*\.md)(:\d+(?::\d+)?)$`)
 
 type PreviewDriveAdminService interface {
-	Summary() (PreviewDriveSummary, error)
+	Summary(context.Context) (PreviewDriveSummary, error)
 	CleanupBefore(context.Context, time.Time) (PreviewDriveCleanupResult, error)
 }
 

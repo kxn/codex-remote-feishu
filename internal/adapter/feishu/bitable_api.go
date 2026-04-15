@@ -53,7 +53,7 @@ func NewLiveBitableAPI(appID, appSecret string) BitableAPI {
 	if appID == "" || appSecret == "" {
 		return nil
 	}
-	return &liveBitableAPI{client: lark.NewClient(appID, appSecret)}
+	return &liveBitableAPI{client: NewLarkClient(appID, appSecret)}
 }
 
 func (a *liveBitableAPI) GetApp(ctx context.Context, appToken string) (*larkbitable.App, error) {

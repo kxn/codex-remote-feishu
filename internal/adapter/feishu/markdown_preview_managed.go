@@ -177,7 +177,10 @@ func (p *DriveMarkdownPreviewer) RunBackgroundMaintenance(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := p.runBackgroundCleanup(ctx); err != nil && ctx.Err() == nil {
+			cleanupCtx, cancel := newFeishuTimeoutContext(ctx, previewDriveBackgroundCleanupTimeout)
+			err := p.runBackgroundCleanup(cleanupCtx)
+			cancel()
+			if err != nil && ctx.Err() == nil {
 				log.Printf("markdown preview background cleanup failed: gateway=%s err=%v", strings.TrimSpace(p.config.GatewayID), err)
 			}
 		}

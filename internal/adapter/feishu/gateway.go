@@ -91,7 +91,7 @@ type feishuPostNode struct {
 
 func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	config.GatewayID = normalizeGatewayID(config.GatewayID)
-	client := lark.NewClient(config.AppID, config.AppSecret)
+	client := NewLarkClient(config.AppID, config.AppSecret)
 	gateway := &LiveGateway{
 		config:    config,
 		client:    client,

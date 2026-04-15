@@ -143,6 +143,65 @@ func TestHandleSendIMFileCommandMapsUploadAndSendFailures(t *testing.T) {
 	}
 }
 
+func TestHandleSendIMFileCommandReleasesAppLockAndUsesDeadline(t *testing.T) {
+	sender := &fakeToolFileSender{}
+	app := New(":0", ":0", sender, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	workspaceRoot := t.TempDir()
+	filePath := filepath.Join(workspaceRoot, "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	sender.sendFn = func(ctx context.Context, req feishu.IMFileSendRequest) (feishu.IMFileSendResult, error) {
+		assertDaemonContextHasDeadlineWithin(t, ctx, sendIMFileCommandTimeout)
+
+		lockAcquired := make(chan struct{})
+		go func() {
+			app.mu.Lock()
+			close(lockAcquired)
+			app.mu.Unlock()
+		}()
+		select {
+		case <-lockAcquired:
+		case <-time.After(time.Second):
+			t.Fatal("app mutex remained locked during SendIMFile")
+		}
+
+		return feishu.IMFileSendResult{
+			GatewayID:        req.GatewayID,
+			SurfaceSessionID: req.SurfaceSessionID,
+			FileName:         filepath.Base(req.Path),
+			FileKey:          "file-key",
+			MessageID:        "msg-file",
+		}, nil
+	}
+
+	events := app.handleSendIMFileCommand(control.DaemonCommand{
+		Kind:             control.DaemonCommandSendIMFile,
+		SurfaceSessionID: "surface-1",
+		LocalPath:        filePath,
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "send_file_sent" {
+		t.Fatalf("expected send success notice, got %#v", events)
+	}
+}
+
 func TestHandleActionPathPickerConfirmSendFileDoesNotDeadlock(t *testing.T) {
 	sender := &fakeToolFileSender{}
 	app := New(":0", ":0", sender, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
@@ -233,5 +292,23 @@ func TestHandleActionPathPickerConfirmSendFileDoesNotDeadlock(t *testing.T) {
 
 	if len(sender.calls) != 1 {
 		t.Fatalf("expected one send call after confirm, got %#v", sender.calls)
+	}
+}
+
+func assertDaemonContextHasDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {
+	t.Helper()
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected context deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		t.Fatalf("expected future deadline, got %s", deadline)
+	}
+	if remaining > max+time.Second {
+		t.Fatalf("expected deadline within %s, got remaining %s", max, remaining)
 	}
 }

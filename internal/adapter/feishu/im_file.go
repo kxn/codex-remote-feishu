@@ -65,6 +65,9 @@ func (e *IMFileSendError) Unwrap() error {
 }
 
 func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IMFileSendResult, error) {
+	ctx, cancel := newFeishuTimeoutContext(ctx, sendIMFileTimeout)
+	defer cancel()
+
 	result := IMFileSendResult{
 		GatewayID:        g.config.GatewayID,
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),

@@ -19,6 +19,9 @@ func (g *LiveGateway) quotedInputs(ctx context.Context, message *larkim.EventMes
 	if message == nil || g.fetchMessageFn == nil {
 		return nil
 	}
+	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	defer cancel()
+
 	targetMessageID := referencedMessageID(message)
 	if targetMessageID == "" {
 		return nil
@@ -112,6 +115,9 @@ func quotedTextInput(text string) agentproto.Input {
 }
 
 func (g *LiveGateway) parsePostInputs(ctx context.Context, messageID, rawContent string) ([]agentproto.Input, string, error) {
+	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	defer cancel()
+
 	var content feishuPostContent
 	if err := json.Unmarshal([]byte(rawContent), &content); err != nil {
 		return nil, "", err
