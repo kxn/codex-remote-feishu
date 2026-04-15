@@ -63,11 +63,11 @@ type gatewayWorker struct {
 }
 
 type MultiGatewayController struct {
-	mu            sync.RWMutex
-	workers       map[string]*gatewayWorker
-	started       bool
-	startCtx      context.Context
-	actionHandler ActionHandler
+	mu                  sync.RWMutex
+	workers             map[string]*gatewayWorker
+	started             bool
+	startCtx            context.Context
+	actionHandler       ActionHandler
 	webPreviewPublisher WebPreviewPublisher
 
 	newGateway   func(GatewayAppConfig) gatewayRuntime
@@ -99,9 +99,9 @@ func NewMultiGatewayController() *MultiGatewayController {
 		return NewDriveMarkdownPreviewer(
 			api,
 			MarkdownPreviewConfig{
-				StatePath:  cfg.PreviewStatePath,
-				CacheDir:   cfg.PreviewCacheDir,
-				GatewayID:  cfg.GatewayID,
+				StatePath: cfg.PreviewStatePath,
+				CacheDir:  cfg.PreviewCacheDir,
+				GatewayID: cfg.GatewayID,
 			},
 		)
 	}

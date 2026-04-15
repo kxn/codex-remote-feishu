@@ -514,7 +514,7 @@ func TestCronJobFromRecordSupportsLegacySelectEnabledValue(t *testing.T) {
 			"启用":   "启用",
 			"调度类型": cronScheduleTypeInterval,
 			"间隔":   "10分钟",
-			"工作区": []any{"rec-workspace-1"},
+			"工作区":  []any{"rec-workspace-1"},
 			"提示词":  "check CI",
 		},
 	}

@@ -3,8 +3,8 @@ package feishu
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -950,9 +950,9 @@ func TestDriveMarkdownPreviewerLeavesUnhandledFileLinksUntouched(t *testing.T) {
 }
 
 type fakeWebPreviewPublisher struct {
-	baseURL    string
-	issuedFor  []string
-	returnErr  error
+	baseURL   string
+	issuedFor []string
+	returnErr error
 }
 
 func (p *fakeWebPreviewPublisher) IssueScopePrefix(_ context.Context, scopePublicID string) (string, error) {
