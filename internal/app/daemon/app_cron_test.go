@@ -505,6 +505,61 @@ func TestCronJobFromRecordParsesLinkedWorkspaceValues(t *testing.T) {
 	}
 }
 
+func TestCronJobFromRecordParsesDailyClockField(t *testing.T) {
+	now := time.Now()
+	record := &larkbitable.AppTableRecord{
+		RecordId: stringPtr("rec-task-daily"),
+		Fields: map[string]any{
+			"任务名":  "Morning",
+			"启用":   true,
+			"调度类型": cronScheduleTypeDaily,
+			"调度时间": "09:30",
+			"工作区":  []any{"rec-workspace-1"},
+			"提示词":  "daily check",
+		},
+	}
+	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
+	}, now)
+	if err != nil {
+		t.Fatalf("cronJobFromRecord daily clock: %v", err)
+	}
+	if skip {
+		t.Fatalf("expected enabled daily job, got skip")
+	}
+	if job.DailyHour != 9 || job.DailyMinute != 30 {
+		t.Fatalf("unexpected daily clock parse: %#v", job)
+	}
+}
+
+func TestCronJobFromRecordSupportsLegacyDailyHourMinuteFields(t *testing.T) {
+	now := time.Now()
+	record := &larkbitable.AppTableRecord{
+		RecordId: stringPtr("rec-task-daily-legacy"),
+		Fields: map[string]any{
+			"任务名":  "Legacy Daily",
+			"启用":   true,
+			"调度类型": cronScheduleTypeDaily,
+			"每天-时": 7,
+			"每天-分": 5,
+			"工作区":  []any{"rec-workspace-1"},
+			"提示词":  "daily check",
+		},
+	}
+	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
+	}, now)
+	if err != nil {
+		t.Fatalf("cronJobFromRecord legacy daily fields: %v", err)
+	}
+	if skip {
+		t.Fatalf("expected enabled legacy daily job, got skip")
+	}
+	if job.DailyHour != 7 || job.DailyMinute != 5 {
+		t.Fatalf("unexpected legacy daily clock parse: %#v", job)
+	}
+}
+
 func TestCronJobFromRecordSupportsLegacySelectEnabledValue(t *testing.T) {
 	now := time.Now()
 	record := &larkbitable.AppTableRecord{
@@ -985,8 +1040,7 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 		"工作区",
 		"提示词",
 		"调度类型",
-		"每天-时",
-		"每天-分",
+		"调度时间",
 		"间隔",
 		"超时（分钟）",
 		"最近运行时间",

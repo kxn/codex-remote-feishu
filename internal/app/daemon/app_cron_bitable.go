@@ -131,9 +131,8 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	}
 	tasksCtx, cancelTasks := context.WithTimeout(context.Background(), cronReloadTasksTTL)
 	defer cancelTasks()
-	records, err := api.ListRecords(tasksCtx, stateValue.Bitable.AppToken, stateValue.Bitable.Tables.Tasks, []string{
-		"任务名", "启用", "调度类型", "每天-时", "每天-分", "间隔", "工作区", "提示词", "超时（分钟）",
-	})
+	// Fetch all fields so reload stays compatible while task-table schema evolves.
+	records, err := api.ListRecords(tasksCtx, stateValue.Bitable.AppToken, stateValue.Bitable.Tables.Tasks, nil)
 	if err != nil {
 		return "", err
 	}
@@ -473,8 +472,7 @@ func cronTaskFieldSpecs(workspacesTableID string) []cronFieldSpec {
 		{Name: "工作区", Type: 18, Property: larkbitable.NewAppTableFieldPropertyBuilder().TableId(workspacesTableID).Multiple(false).Build()},
 		{Name: "提示词", Type: 1},
 		{Name: "调度类型", Type: 3, Property: cronSelectFieldProperty([]string{cronScheduleTypeDaily, cronScheduleTypeInterval})},
-		{Name: "每天-时", Type: 2},
-		{Name: "每天-分", Type: 2},
+		{Name: "调度时间", Type: 1},
 		{Name: "间隔", Type: 3, Property: cronSelectFieldProperty(cronIntervalLabels())},
 		{Name: "超时（分钟）", Type: 2},
 		{Name: "最近运行时间", Type: 5},
@@ -787,11 +785,12 @@ func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord ma
 	}
 	switch scheduleType {
 	case cronScheduleTypeDaily:
-		job.DailyHour = cronValueInt(record.Fields["每天-时"])
-		job.DailyMinute = cronValueInt(record.Fields["每天-分"])
-		if job.DailyHour < 0 || job.DailyHour > 23 || job.DailyMinute < 0 || job.DailyMinute > 59 {
-			return cronJobState{}, false, fmt.Errorf("任务 `%s` 的每天定时时间无效", name)
+		hour, minute, ok := cronDailyTimeFromFields(record.Fields)
+		if !ok {
+			return cronJobState{}, false, fmt.Errorf("任务 `%s` 的每天定时时间无效，应填写为 HH:mm", name)
 		}
+		job.DailyHour = hour
+		job.DailyMinute = minute
 	case cronScheduleTypeInterval:
 		intervalLabel := strings.TrimSpace(cronValueString(record.Fields["间隔"]))
 		minutes, ok := intervalMinutesForLabel(intervalLabel)
