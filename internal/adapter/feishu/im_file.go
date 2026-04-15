@@ -182,8 +182,22 @@ func (g *LiveGateway) uploadFilePath(ctx context.Context, path string) (string, 
 
 func imFileTypeFromName(fileName string) string {
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(strings.TrimSpace(fileName))), ".")
-	if ext == "" {
+	switch ext {
+	case "opus":
+		return larkim.FileTypeOpus
+	case "mp4":
+		return larkim.FileTypeMp4
+	case "pdf":
+		return larkim.FileTypePdf
+	case "doc", "docx", "docm", "dot", "dotx", "dotm", "wps":
+		return larkim.FileTypeDoc
+	case "xls", "xlsx", "xlsm", "xlt", "xltx", "xltm", "csv", "et":
+		return larkim.FileTypeXls
+	case "ppt", "pptx", "pptm", "pps", "ppsx", "ppsm", "pot", "potx", "potm", "dps", "dpt":
+		return larkim.FileTypePpt
+	default:
+		// Feishu file upload only accepts a small fixed enum; unsupported types
+		// such as .md/.json must fall back to the generic binary stream type.
 		return larkim.FileTypeStream
 	}
-	return ext
 }

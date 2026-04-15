@@ -117,6 +117,32 @@ func TestSendIMFileReturnsSendFailure(t *testing.T) {
 	}
 }
 
+func TestIMFileTypeFromName(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		want     string
+	}{
+		{name: "unsupported markdown falls back to stream", fileName: "README.md", want: larkim.FileTypeStream},
+		{name: "json falls back to stream", fileName: "config.json", want: larkim.FileTypeStream},
+		{name: "docx uses doc family", fileName: "proposal.docx", want: larkim.FileTypeDoc},
+		{name: "xlsx uses xls family", fileName: "budget.xlsx", want: larkim.FileTypeXls},
+		{name: "pptx uses ppt family", fileName: "slides.pptx", want: larkim.FileTypePpt},
+		{name: "pdf preserved", fileName: "manual.pdf", want: larkim.FileTypePdf},
+		{name: "mp4 preserved", fileName: "demo.mp4", want: larkim.FileTypeMp4},
+		{name: "opus preserved", fileName: "voice.opus", want: larkim.FileTypeOpus},
+		{name: "no extension falls back to stream", fileName: "LICENSE", want: larkim.FileTypeStream},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := imFileTypeFromName(tt.fileName); got != tt.want {
+				t.Fatalf("imFileTypeFromName(%q) = %q, want %q", tt.fileName, got, tt.want)
+			}
+		})
+	}
+}
+
 func assertContextHasDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {
 	t.Helper()
 	if ctx == nil {
