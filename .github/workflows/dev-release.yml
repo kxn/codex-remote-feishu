@@ -1,17 +1,18 @@
 name: Dev Release
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       ref:
         description: Git ref to publish as dev-latest. Defaults to master.
         required: false
         default: master
+        type: string
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -29,55 +30,27 @@ jobs:
       - name: Resolve source ref
         id: source
         run: |
-          should_publish=false
-          ref=''
-          commit=''
-          branch=''
-          if [[ '${{ github.event_name }}' == 'workflow_run' ]]; then
-            if [[ '${{ github.event.workflow_run.conclusion }}' == 'success' && '${{ github.event.workflow_run.head_branch }}' == 'master' ]]; then
-              should_publish=true
-              ref='${{ github.event.workflow_run.head_sha }}'
-              commit='${{ github.event.workflow_run.head_sha }}'
-              branch='${{ github.event.workflow_run.head_branch }}'
-            fi
-          else
-            should_publish=true
-            ref='${{ inputs.ref }}'
-            if [[ -z "${ref}" ]]; then
-              ref='master'
-            fi
-            branch='${ref}'
+          ref='${{ inputs.ref }}'
+          if [[ -z "${ref}" ]]; then
+            ref='master'
           fi
-          echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
           echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
-          echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
-          echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
-
-      - name: Stop when trigger is not publishable
-        if: ${{ steps.source.outputs.should_publish != 'true' }}
-        run: echo 'skip dev-latest publish for this trigger'
 
       - name: Checkout
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ steps.source.outputs.ref }}
 
       - name: Setup Go
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Resolve build metadata
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         id: meta
         run: |
-          commit='${{ steps.source.outputs.commit }}'
-          if [[ -z "${commit}" ]]; then
-            commit="$(git rev-parse HEAD)"
-          fi
+          commit="$(git rev-parse HEAD)"
           short_commit="$(git rev-parse --short=12 "${commit}")"
           built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           version="dev-${short_commit}"
@@ -86,37 +59,13 @@ jobs:
           echo "built_at=${built_at}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Check public docs for machine-local paths
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
-        run: bash scripts/check/no-local-paths.sh
-
-      - name: Check legacy names are gone
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
-        run: bash scripts/check/no-legacy-names.sh
-
-      - name: Check formatting
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
-        run: |
-          files="$(find cmd internal testkit -name '*.go' | sort)"
-          output="$(gofmt -l ${files})"
-          if [[ -n "${output}" ]]; then
-            echo "${output}"
-            exit 1
-          fi
-
-      - name: Run tests
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
-        run: go test ./...
-
       - name: Build artifacts
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         env:
           CODEX_REMOTE_BUILD_FLAVOR: shipping
           CODEX_REMOTE_PACKAGE_VERSION_LABEL: dev
         run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}"
 
       - name: Build dev manifest
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         env:
           CODEX_REMOTE_DEV_VERSION: ${{ steps.meta.outputs.version }}
           CODEX_REMOTE_DEV_COMMIT: ${{ steps.meta.outputs.commit }}
@@ -125,7 +74,6 @@ jobs:
         run: bash scripts/release/build-dev-manifest.sh dist dist/dev-latest.json
 
       - name: Generate release notes
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         env:
           VERSION: ${{ steps.meta.outputs.version }}
           COMMIT: ${{ steps.meta.outputs.commit }}
@@ -133,13 +81,11 @@ jobs:
         run: bash scripts/release/dev-release-notes.sh > release-notes.md
 
       - name: Update dev-latest tag
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         run: |
           git tag -f dev-latest "${{ steps.meta.outputs.commit }}"
           git push origin refs/tags/dev-latest --force
 
       - name: Create or update dev-latest release
-        if: ${{ steps.source.outputs.should_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

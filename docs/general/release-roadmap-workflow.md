@@ -142,6 +142,12 @@ readiness 通过的条件是：
 
 客户端会读取固定的 `dev-latest.json` manifest，再解析当前平台的公开 release asset 并完成升级；目标机器不需要 `gh login`。
 
+当前推荐实现里，这条 `dev-latest` 更新链路直接挂在 `master` 的 CI 成功收尾上：
+
+- 只有当前一次 CI 的全部 job 都通过，才会进入 dev feed 更新
+- dev feed 更新只负责构建并覆盖 `dev-latest` 资产
+- 不重复跑正式 release 才需要的 smoke / 发布校验链路
+
 ### 5.5 发布说明放在哪里
 
 - 对外的正式版本说明，主维护位置放在仓库根目录的 `CHANGELOG.md`

@@ -440,8 +440,9 @@ release 包内不再附带：
 
 滚动开发构建另外走独立的 `Dev Release` workflow：
 
-- 触发条件是 `master` 上一次 CI 成功，或手动指定 ref
+- 触发条件是 `master` 的 CI 全部 job 成功后直接进入发布步骤，或手动指定 ref
 - 固定更新同一条 `dev-latest` prerelease
+- 不重复跑正式 release 那套 smoke / 发布校验
 - 只覆盖 asset / manifest，不再持续新增一串 `alpha.N`
 - 公开契约固定为：
   - `dev-latest.json`

@@ -105,3 +105,15 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+  publish-dev-release:
+    needs:
+      - quality-linux
+      - go-platform
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/dev-release.yml
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit
