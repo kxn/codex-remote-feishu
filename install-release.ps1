@@ -92,8 +92,7 @@ function Get-DefaultInstallRoot {
 function Get-GoArch {
   foreach ($candidate in @(
     $env:PROCESSOR_ARCHITEW6432,
-    $env:PROCESSOR_ARCHITECTURE,
-    [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    $env:PROCESSOR_ARCHITECTURE
   )) {
     $normalized = ""
     if ($null -ne $candidate) {
@@ -105,6 +104,24 @@ function Get-GoArch {
       "X86_64" { return "amd64" }
     }
   }
+
+  $runtimeInfoType = "System.Runtime.InteropServices.RuntimeInformation" -as [type]
+  if ($null -ne $runtimeInfoType) {
+    try {
+      $runtimeArch = $runtimeInfoType::OSArchitecture
+      if ($null -ne $runtimeArch) {
+        $normalized = ([string]$runtimeArch).Trim().ToUpperInvariant()
+        switch ($normalized) {
+          "AMD64" { return "amd64" }
+          "X64" { return "amd64" }
+          "X86_64" { return "amd64" }
+        }
+      }
+    } catch {
+      # Fall through to the unsupported-architecture error below.
+    }
+  }
+
   throw "Unsupported Windows architecture. The online installer currently supports x64 only."
 }
 
