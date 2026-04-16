@@ -740,6 +740,8 @@ final `block.committed`：
 - 若当前 turn 带有可用的飞书源消息 `SourceMessageID`，会优先 reply 到触发消息
 - 若 reply 失败、目标消息已不存在或不可回复，则回退到独立发卡
 - assistant 正文在 turn 完成前保持缓冲；最终回复会在完成时统一投影成 final card
+- 若单张 final card 会超出 Feishu payload 限制，当前会在 projector 层先拆成“主 final card + 若干 continuation cards”，而不是继续主要依赖网关截断
+- 主 final card 保留原标题、文件摘要与 turn summary footer；后续 continuation cards 只承载正文 continuation，并继续 reply 到同一个源消息
 - 若该 turn 带有文件修改 summary，会把摘要直接追加在 final assistant card 底部，而不是额外再发一张独立卡片
 - 文件摘要会展示本轮修改文件数、总 `+/-` 行数，以及逐文件的 `+/-` 统计
 - 文件展示名优先使用“最短唯一后缀”，避免直接铺完整长路径；重命名会显示 `旧路径 → 新路径`
@@ -751,6 +753,7 @@ final `block.committed`：
 - 若正文里存在可识别的本地 `.md` Markdown 链接，发送前会先尝试重写成飞书云空间预览链接
 - Markdown 预览重写与最终 reply/create message 发送使用独立 timeout 预算
 - 预览物化失败时不会阻塞主回复；显式远端 Markdown 链接保持可点击，本地 Markdown 链接会降级成稳定文本形态（例如 `说明文档 (`./docs/guide.md`)`），避免把整段 final card 的 Markdown 解析搞坏
+- 若 final reply 已经 split，后台 second-chance preview patch 当前只作用于主 final card；continuation cards 继续保持 append-only，不会被回头重发
 
 ### 7.4 代码块
 

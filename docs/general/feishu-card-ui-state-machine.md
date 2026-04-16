@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 成功发送后当前还会在 surface 内保留一份 recent final-card anchor（`message_id + instance/thread/turn/item + daemon_lifecycle_id`，仅同 daemon 生命周期内可回查，detach 清空），且若同步 preview rewrite 因超时或失败没赶上首发，daemon 会在后台再做一次更长时限的 preview rewrite，并在同 lifecycle / 同 turn anchor 仍有效时对同一张 final card 执行 `message.patch` 补强；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 当前已从“单卡 + 网关超限截断”升级成 projector 层的“主 final card + overflow reply cards”交付，主卡保留 recent final-card anchor、footer 与 second-chance patch，overflow cards 继续 append-only；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
 
 ## 1. 文档定位
 
@@ -341,6 +341,10 @@ MCP request 卡片当前新增的可视语义：
   - 同一动作返回的 `thread.history.read` daemon command 仍会继续异步执行，不会因为同步 replace 而被吞掉
   - 成功/失败结果会优先 patch 回同一张 history 卡；文本触发 `/history` 时则先 reply 一张 patchable history card，再在结果回来后 `message.patch`
 - final reply 当前继续保持 append-only，不会去 replace 现有卡；但一旦 final reply card 发送成功，daemon 会把这张卡的 `message_id` 连同 `instance/thread/turn/item` 与 `daemon_lifecycle_id` 一起记录成 recent final-card anchor：
+  - projector 当前会先尝试把完整 final body 投影成单张主卡；若单张卡超限，则会在应用层按正文结构拆成“主 final card + overflow reply cards”，避免把超限处理继续主要交给 gateway `trimCardPayloadToFit(...)`
+  - 主 final card 继续沿用原标题（如 `✅ 最后答复` 或带源消息预览的标题），并保留文件摘要 / turn footer / recent final-card anchor
+  - overflow cards 当前统一标题为 `✅ 最后答复（续）`，只承载正文 continuation，不再追加文件摘要或 footer
+  - split 后的各张卡当前都会继续 reply 到同一个源消息；这条路径仍属于 append-only final delivery，不进入 inline replace
   - 这份 anchor 只用于同 daemon 生命周期内的后续同卡补强路径，不暴露给 callback
   - lookup 当前要求 `surface + instance + thread + turn` 命中；若同时提供 `item` / `daemon_lifecycle_id`，也会继续做精确匹配
   - 同一 turn 再次记录会覆盖旧 anchor；不同 turn 会按最近窗口保留少量 recent anchors
@@ -348,6 +352,8 @@ MCP request 卡片当前新增的可视语义：
   - 若同步 `RewriteFinalBlock` 因超时或失败而退回原始正文 / fallback 预览，daemon 当前只会在这类失败路径下触发一次后台 second-chance preview：
     - 后台 preview timeout 会放宽到同步时限的两倍，并设有最小值
     - 只有后台结果相对首发 final block 真正产生改进时，才会继续发 `message.patch`
+    - 若 final reply 走了 split，后台 second-chance 只会重跑主卡对应的原始正文片段；patch 目标固定是主 final card，自身若会再次 split 则静默放弃
+    - 这意味着 overflow cards 继续保持 append-only，不会被后台 preview patch 追补，也不会在 patch 时重发
     - patch 目标固定是这张 final reply 自己，不会追加第二张 final card，也不会回填 preview supplement
     - 若 anchor 已因 detach、daemon lifecycle 变化或 turn identity 不匹配而失效，则静默放弃，不再尝试补丁
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
@@ -470,8 +476,10 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 `FeishuPathPickerView` 的按钮 payload、`daemon_lifecycle_id` stamp 与 enter/select 按钮区分
 - [internal/core/orchestrator/service_final_card_test.go](../../internal/core/orchestrator/service_final_card_test.go)
   - 锁定 final reply recent anchor 的 turn-scope 回查、同 turn 覆盖、lifecycle 匹配与 detach 清理
+- [internal/adapter/feishu/projector_snapshot_final_test.go](../../internal/adapter/feishu/projector_snapshot_final_test.go)
+  - 锁定 final reply 在普通场景仍保持单主卡；超长 Markdown / code final 会在 projector 层 split 成主卡 + `✅ 最后答复（续）`，且每张卡单独都能落在 Feishu payload 限制内
 - [internal/app/daemon/app_final_card_test.go](../../internal/app/daemon/app_final_card_test.go)
-  - 锁定同步 preview 超时后的 second-chance final patch：同卡 `message.patch`、无改进静默跳过、detach 后 anchor 失效即放弃
+  - 锁定同步 preview 超时后的 second-chance final patch：同卡 `message.patch`、无改进静默跳过、detach 后 anchor 失效即放弃，以及 split final reply 只回补主卡、不重发 overflow cards
 - [internal/adapter/feishu/gateway_target_picker_test.go](../../internal/adapter/feishu/gateway_target_picker_test.go)
   - 锁定 `target_picker_*` callback payload 能正确回到 `control.Action`
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
@@ -528,3 +536,4 @@ MCP request 卡片当前新增的可视语义：
 ## 待讨论取舍
 
 - 是否要把“缺少 `daemon_lifecycle_id` 的纯导航 callback”从当前的兼容异步路径，收紧成显式 reject 或显式降级提示；这会影响旧卡兼容性与 freshness 保证之间的取舍。
+- final reply split 当前采用“主卡保留原标题与 footer，overflow 统一标题为 `✅ 最后答复（续）`”的最小语义；是否要进一步升级成显式 `1/N` 编号、或把 footer 改挂到最后一张 continuation card，仍是产品取舍。
