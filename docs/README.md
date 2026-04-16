@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 新增 Feishu API timeout 基线与 `/cron` 已实现文档，并补齐 app-server 审计文档和最新文档索引。
+> Summary: 新增 final message 对比审计文档，并补齐最新文档索引。
 
 ## 1. 适用范围
 
@@ -144,6 +144,7 @@
 - [claude-provider-protocol-mapping.md](./inprogress/claude-provider-protocol-mapping.md)
 - [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
+- [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [thread-description-unification-plan.md](./inprogress/thread-description-unification-plan.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
