@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（工作区下拉 + 会话下拉 + confirm）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 成功发送后当前还会在 surface 内保留一份 recent final-card anchor（`message_id + instance/thread/turn/item + daemon_lifecycle_id`，仅同 daemon 生命周期内可回查，detach 清空）；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
 
 ## 1. 文档定位
 
@@ -340,6 +340,11 @@ MCP request 卡片当前新增的可视语义：
   - card callback 命中时，daemon 会先同步 replace 当前卡为 loading history card
   - 同一动作返回的 `thread.history.read` daemon command 仍会继续异步执行，不会因为同步 replace 而被吞掉
   - 成功/失败结果会优先 patch 回同一张 history 卡；文本触发 `/history` 时则先 reply 一张 patchable history card，再在结果回来后 `message.patch`
+- final reply 当前继续保持 append-only，不会去 replace 现有卡；但一旦 final reply card 发送成功，daemon 会把这张卡的 `message_id` 连同 `instance/thread/turn/item` 与 `daemon_lifecycle_id` 一起记录成 recent final-card anchor：
+  - 这份 anchor 只用于同 daemon 生命周期内的后续同卡补强路径，不暴露给 callback
+  - lookup 当前要求 `surface + instance + thread + turn` 命中；若同时提供 `item` / `daemon_lifecycle_id`，也会继续做精确匹配
+  - 同一 turn 再次记录会覆盖旧 anchor；不同 turn 会按最近窗口保留少量 recent anchors
+  - surface detach 会清空这些 recent anchors；daemon 重启后也不会恢复旧 anchor
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。
@@ -431,6 +436,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_exec_command_progress.go](../../internal/core/orchestrator/service_exec_command_progress.go)
 - [internal/core/orchestrator/service_mcp_tool_call_progress.go](../../internal/core/orchestrator/service_mcp_tool_call_progress.go)
 - [internal/core/orchestrator/service_replay.go](../../internal/core/orchestrator/service_replay.go)
+- [internal/core/orchestrator/service_final_card.go](../../internal/core/orchestrator/service_final_card.go)
 - [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
 - [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
 - [internal/adapter/feishu/projector_command_view.go](../../internal/adapter/feishu/projector_command_view.go)
@@ -457,6 +463,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 `FeishuTargetPickerView` 的双下拉 payload、`daemon_lifecycle_id` stamp 与 confirm 按钮结构
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
   - 锁定 `FeishuPathPickerView` 的按钮 payload、`daemon_lifecycle_id` stamp 与 enter/select 按钮区分
+- [internal/core/orchestrator/service_final_card_test.go](../../internal/core/orchestrator/service_final_card_test.go)
+  - 锁定 final reply recent anchor 的 turn-scope 回查、同 turn 覆盖、lifecycle 匹配与 detach 清理
 - [internal/adapter/feishu/gateway_target_picker_test.go](../../internal/adapter/feishu/gateway_target_picker_test.go)
   - 锁定 `target_picker_*` callback payload 能正确回到 `control.Action`
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)

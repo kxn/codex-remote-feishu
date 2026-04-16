@@ -222,6 +222,24 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 }
 
 func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.Operation) {
+	if event.Kind == control.UIEventBlockCommitted && event.Block != nil && event.Block.Final {
+		for _, operation := range operations {
+			if operation.Kind != feishu.OperationSendCard {
+				continue
+			}
+			if strings.TrimSpace(operation.MessageID) == "" {
+				continue
+			}
+			a.service.RecordFinalCardMessage(
+				event.SurfaceSessionID,
+				*event.Block,
+				event.SourceMessageID,
+				operation.MessageID,
+				event.DaemonLifecycleID,
+			)
+			break
+		}
+	}
 	if event.FeishuThreadHistoryView != nil {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {

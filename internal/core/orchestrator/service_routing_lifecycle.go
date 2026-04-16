@@ -30,6 +30,7 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
 	clearSurfaceRequests(surface)
 	clearSurfacePathPicker(surface)
+	clearSurfaceFinalCards(surface)
 	surface.LastSelection = nil
 	if strings.TrimSpace(instanceID) == "" {
 		return nil
