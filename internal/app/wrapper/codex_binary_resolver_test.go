@@ -3,6 +3,7 @@ package wrapper
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -137,5 +138,10 @@ func writeResolverExecutable(t *testing.T, path string) {
 	}
 	if err := os.WriteFile(path, []byte("resolver-bin"), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+	if runtime.GOOS == "windows" && filepath.Ext(path) == "" {
+		if err := os.WriteFile(path+".exe", []byte("resolver-bin"), 0o755); err != nil {
+			t.Fatalf("WriteFile(%q): %v", path+".exe", err)
+		}
 	}
 }

@@ -16,6 +16,20 @@ func TestWorkspaceCreatePickerRootForGOOSUnixUsesFilesystemRoot(t *testing.T) {
 	}
 }
 
+func TestWorkspacePickerPathsForGOOSWindowsUsesVolumeRootAsInitialWhenWorkspaceEmpty(t *testing.T) {
+	root, initial := workspacePickerPathsForGOOS("windows", "", `E:\Users\demo`)
+	if root != "E:/" || initial != "E:/" {
+		t.Fatalf("workspacePickerPathsForGOOS(windows, empty) = (%q, %q), want (%q, %q)", root, initial, "E:/", "E:/")
+	}
+}
+
+func TestWorkspacePickerPathsForGOOSUnixUsesFilesystemRootAsInitialWhenWorkspaceEmpty(t *testing.T) {
+	root, initial := workspacePickerPathsForGOOS("linux", "", "")
+	if root != "/" || initial != "/" {
+		t.Fatalf("workspacePickerPathsForGOOS(linux, empty) = (%q, %q), want (%q, %q)", root, initial, "/", "/")
+	}
+}
+
 func TestShouldResolveWorkspacePathOnHostWindowsKeepsSlashRootWorkspaceKeysLogical(t *testing.T) {
 	if shouldResolveWorkspacePathOnHost("windows", "/data/dl/demo") {
 		t.Fatal("expected slash-root workspace key to stay logical on windows")

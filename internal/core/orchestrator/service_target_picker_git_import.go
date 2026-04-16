@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -132,10 +131,7 @@ func (s *Service) respondTargetPickerGitImportRequest(surface *state.SurfaceCons
 	}
 	delete(surface.PendingRequests, request.RequestID)
 
-	initialPath := s.surfaceCurrentWorkspaceKey(surface)
-	if strings.TrimSpace(initialPath) == "" {
-		initialPath = string(filepath.Separator)
-	}
+	rootPath, initialPath := workspacePickerPaths(s.surfaceCurrentWorkspaceKey(surface))
 	meta := cloneStringMap(request.LocalMeta)
 	meta[targetPickerGitImportMetaRepoURL] = repoURL
 	if branchOrTag := strings.TrimSpace(request.DraftAnswers[targetPickerGitImportFieldBranchOrTag]); branchOrTag != "" {
@@ -147,7 +143,7 @@ func (s *Service) respondTargetPickerGitImportRequest(surface *state.SurfaceCons
 	return s.openPathPicker(surface, surface.ActorUserID, control.PathPickerRequest{
 		Mode:         control.PathPickerModeDirectory,
 		Title:        "选择仓库落地父目录",
-		RootPath:     string(filepath.Separator),
+		RootPath:     rootPath,
 		InitialPath:  initialPath,
 		Hint:         "请选择一个父目录。仓库会在这个目录下创建新的子目录，完成后直接进入新会话待命。",
 		ConfirmLabel: "克隆到这里",

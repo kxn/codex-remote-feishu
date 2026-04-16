@@ -70,7 +70,7 @@ func TestCompleteTargetPickerGitImportReportsStaleFlowAndKeepsDirectory(t *testi
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "git_import_flow_stale" {
 		t.Fatalf("expected stale-flow notice, got %#v", events)
 	}
-	if got := events[0].Notice.Text; got == "" || !containsAll(got, workspaceRoot, "目录会保留") {
+	if got := events[0].Notice.Text; got == "" || !containsAll(got, normalizeWorkspaceClaimKey(workspaceRoot), "目录会保留") {
 		t.Fatalf("expected stale-flow notice to mention kept directory, got %#v", events[0].Notice)
 	}
 }
@@ -121,7 +121,7 @@ func TestCompleteTargetPickerGitImportAttachFailureMentionsDirectoryPreserved(t 
 			sawBusy = true
 		case "git_import_workspace_attach_failed":
 			sawAttachFailed = true
-			if !containsAll(event.Notice.Text, workspaceRoot, "目录已保留") {
+			if !containsAll(event.Notice.Text, normalizeWorkspaceClaimKey(workspaceRoot), "目录已保留") {
 				t.Fatalf("expected attach-failed notice to mention preserved directory, got %#v", event.Notice)
 			}
 		}

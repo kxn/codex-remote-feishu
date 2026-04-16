@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -75,11 +74,7 @@ func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord,
 	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
 		return notice(surface, "workspace_create_normal_only", "当前处于 vscode 模式，不能从目录直接添加工作区。请先 `/mode normal`。")
 	}
-	initialPath := s.surfaceCurrentWorkspaceKey(surface)
-	if strings.TrimSpace(initialPath) == "" {
-		initialPath = string(filepath.Separator)
-	}
-	rootPath := workspaceCreatePickerRoot(initialPath)
+	rootPath, initialPath := workspacePickerPaths(s.surfaceCurrentWorkspaceKey(surface))
 	return s.openPathPicker(surface, surface.ActorUserID, control.PathPickerRequest{
 		Mode:         control.PathPickerModeDirectory,
 		Title:        "选择要接入的目录",
@@ -92,15 +87,32 @@ func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord,
 	})
 }
 
+func workspacePickerPaths(initialPath string) (string, string) {
+	return workspacePickerPathsForGOOS(runtime.GOOS, initialPath, windowsWorkspaceCreateFallbackPath())
+}
+
+func workspacePickerPathsForGOOS(goos, initialPath, windowsFallbackPath string) (string, string) {
+	initialPath = strings.TrimSpace(initialPath)
+	rootPath := workspaceCreatePickerRootForGOOSWithFallback(goos, initialPath, windowsFallbackPath)
+	if initialPath == "" {
+		initialPath = rootPath
+	}
+	return rootPath, initialPath
+}
+
 func workspaceCreatePickerRoot(initialPath string) string {
 	return workspaceCreatePickerRootForGOOS(runtime.GOOS, initialPath)
 }
 
 func workspaceCreatePickerRootForGOOS(goos, initialPath string) string {
+	return workspaceCreatePickerRootForGOOSWithFallback(goos, initialPath, windowsWorkspaceCreateFallbackPath())
+}
+
+func workspaceCreatePickerRootForGOOSWithFallback(goos, initialPath, windowsFallbackPath string) string {
 	initialPath = strings.TrimSpace(initialPath)
 	switch strings.ToLower(strings.TrimSpace(goos)) {
 	case "windows":
-		for _, candidate := range []string{initialPath, windowsWorkspaceCreateFallbackPath()} {
+		for _, candidate := range []string{initialPath, windowsFallbackPath} {
 			candidate = strings.TrimSpace(candidate)
 			if candidate == "" {
 				continue
