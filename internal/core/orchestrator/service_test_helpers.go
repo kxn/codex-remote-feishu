@@ -13,7 +13,7 @@ import (
 )
 
 func newServiceForTest(now *time.Time) *Service {
-	return NewService(func() time.Time { return *now }, Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner())
+	return NewService(func() time.Time { return *now }, Config{TurnHandoffWait: 800 * time.Millisecond, GitAvailable: true}, renderer.NewPlanner())
 }
 
 func materializeVSCodeSurfaceForTest(svc *Service, surfaceID string) {
@@ -93,6 +93,34 @@ func targetPickerSessionOption(view *control.FeishuTargetPickerView, value strin
 		}
 	}
 	return control.FeishuTargetPickerSessionOption{}, false
+}
+
+func targetPickerModeOption(view *control.FeishuTargetPickerView, value control.FeishuTargetPickerMode) (control.FeishuTargetPickerModeOption, bool) {
+	if view == nil {
+		return control.FeishuTargetPickerModeOption{}, false
+	}
+	for _, option := range view.ModeOptions {
+		if option.Value == value {
+			return option, true
+		}
+	}
+	return control.FeishuTargetPickerModeOption{}, false
+}
+
+func requestPromptFromEvent(t *testing.T, event control.UIEvent) *control.FeishuDirectRequestPrompt {
+	t.Helper()
+	if event.FeishuDirectRequestPrompt == nil {
+		t.Fatalf("expected request prompt event, got %#v", event)
+	}
+	return event.FeishuDirectRequestPrompt
+}
+
+func singleRequestPromptEvent(t *testing.T, events []control.UIEvent) *control.FeishuDirectRequestPrompt {
+	t.Helper()
+	if len(events) != 1 {
+		t.Fatalf("expected exactly one event, got %#v", events)
+	}
+	return requestPromptFromEvent(t, events[0])
 }
 
 func eventCommandCatalog(event control.UIEvent) (*control.FeishuDirectCommandCatalog, bool) {

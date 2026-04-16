@@ -61,6 +61,8 @@ const (
 	ActionPathPickerSelect            ActionKind = "surface.path_picker.select"
 	ActionPathPickerConfirm           ActionKind = "surface.path_picker.confirm"
 	ActionPathPickerCancel            ActionKind = "surface.path_picker.cancel"
+	ActionTargetPickerSelectMode      ActionKind = "surface.target_picker.select_mode"
+	ActionTargetPickerSelectSource    ActionKind = "surface.target_picker.select_source"
 	ActionTargetPickerSelectWorkspace ActionKind = "surface.target_picker.select_workspace"
 	ActionTargetPickerSelectSession   ActionKind = "surface.target_picker.select_session"
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
@@ -557,14 +559,15 @@ const (
 type DaemonCommandKind string
 
 const (
-	DaemonCommandStartHeadless     DaemonCommandKind = "headless.start"
-	DaemonCommandKillHeadless      DaemonCommandKind = "headless.kill"
-	DaemonCommandDebug             DaemonCommandKind = "debug.command"
-	DaemonCommandCron              DaemonCommandKind = "cron.command"
-	DaemonCommandUpgrade           DaemonCommandKind = "upgrade.command"
-	DaemonCommandVSCodeMigrate     DaemonCommandKind = "vscode.migrate"
-	DaemonCommandThreadHistoryRead DaemonCommandKind = "thread.history.read"
-	DaemonCommandSendIMFile        DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandStartHeadless      DaemonCommandKind = "headless.start"
+	DaemonCommandKillHeadless       DaemonCommandKind = "headless.kill"
+	DaemonCommandDebug              DaemonCommandKind = "debug.command"
+	DaemonCommandCron               DaemonCommandKind = "cron.command"
+	DaemonCommandUpgrade            DaemonCommandKind = "upgrade.command"
+	DaemonCommandVSCodeMigrate      DaemonCommandKind = "vscode.migrate"
+	DaemonCommandThreadHistoryRead  DaemonCommandKind = "thread.history.read"
+	DaemonCommandSendIMFile         DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandGitWorkspaceImport DaemonCommandKind = "workspace.git_import"
 )
 
 type DaemonCommand struct {
@@ -572,6 +575,7 @@ type DaemonCommand struct {
 	GatewayID        string
 	SurfaceSessionID string
 	SourceMessageID  string
+	PickerID         string
 	InstanceID       string
 	ThreadID         string
 	ThreadTitle      string
@@ -579,6 +583,9 @@ type DaemonCommand struct {
 	AutoRestore      bool
 	Text             string
 	LocalPath        string
+	RepoURL          string
+	RefName          string
+	DirectoryName    string
 }
 
 type UIEvent struct {

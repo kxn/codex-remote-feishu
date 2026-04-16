@@ -334,6 +334,7 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 			ID:             questionID,
 			Header:         header,
 			Question:       questionText,
+			Optional:       lookupBoolFromAny(record["optional"]) || (record["required"] != nil && !lookupBoolFromAny(record["required"])),
 			AllowOther:     lookupBoolFromAny(record["isOther"]),
 			Secret:         lookupBoolFromAny(record["isSecret"]),
 			Options:        options,

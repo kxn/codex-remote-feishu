@@ -26,11 +26,14 @@ const (
 	cardActionPayloadKeyApproved              = "approved"
 	cardActionPayloadKeyPickerID              = "picker_id"
 	cardActionPayloadKeyEntryName             = "entry_name"
+	cardActionPayloadKeyTargetValue           = "target_value"
 	cardActionPayloadKeyDaemonLifecycleID     = "daemon_lifecycle_id"
 	cardPathPickerDirectorySelectFieldName    = "path_picker_directory"
 	cardPathPickerFileSelectFieldName         = "path_picker_file"
+	cardTargetPickerModeFieldName             = "target_picker_mode"
 	cardTargetPickerWorkspaceFieldName        = "target_picker_workspace"
 	cardTargetPickerSessionFieldName          = "target_picker_session"
+	cardTargetPickerSourceFieldName           = "target_picker_source"
 	cardThreadHistoryTurnFieldName            = "thread_history_turn"
 	cardActionPayloadDefaultCommandFieldName  = "command_args"
 	cardActionKindAttachInstance              = "attach_instance"
@@ -60,6 +63,8 @@ const (
 	cardActionKindPathPickerSelect            = "path_picker_select"
 	cardActionKindPathPickerConfirm           = "path_picker_confirm"
 	cardActionKindPathPickerCancel            = "path_picker_cancel"
+	cardActionKindTargetPickerSelectMode      = "target_picker_select_mode"
+	cardActionKindTargetPickerSelectSource    = "target_picker_select_source"
 	cardActionKindTargetPickerSelectWorkspace = "target_picker_select_workspace"
 	cardActionKindTargetPickerSelectSession   = "target_picker_select_session"
 	cardActionKindTargetPickerConfirm         = "target_picker_confirm"
@@ -230,6 +235,14 @@ func actionPayloadTargetPicker(kind, pickerID string) map[string]any {
 		cardActionPayloadKeyKind:     strings.TrimSpace(kind),
 		cardActionPayloadKeyPickerID: strings.TrimSpace(pickerID),
 	}
+}
+
+func actionPayloadTargetPickerValue(kind, pickerID, targetValue string) map[string]any {
+	payload := actionPayloadTargetPicker(kind, pickerID)
+	if strings.TrimSpace(targetValue) != "" {
+		payload[cardActionPayloadKeyTargetValue] = strings.TrimSpace(targetValue)
+	}
+	return payload
 }
 
 func actionPayloadThreadHistory(kind, pickerID, turnID string, page int) map[string]any {

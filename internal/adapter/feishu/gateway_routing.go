@@ -425,6 +425,46 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			PickerID:         pickerID,
 			Inbound:          meta,
 		}, true
+	case cardActionKindTargetPickerSelectMode:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		targetValue := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
+		if pickerID == "" || targetValue == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:              control.ActionTargetPickerSelectMode,
+			GatewayID:         g.config.GatewayID,
+			SurfaceSessionID:  surfaceSessionID,
+			ChatID:            chatID,
+			ActorUserID:       operatorID,
+			MessageID:         messageID,
+			PickerID:          pickerID,
+			TargetPickerValue: targetValue,
+			Inbound:           meta,
+		}, true
+	case cardActionKindTargetPickerSelectSource:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		targetValue := selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSourceFieldName)
+		if targetValue == "" {
+			targetValue = pathPickerSelectedEntryName(event, cardTargetPickerSourceFieldName)
+		}
+		if targetValue == "" {
+			targetValue = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
+		}
+		if pickerID == "" || targetValue == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:              control.ActionTargetPickerSelectSource,
+			GatewayID:         g.config.GatewayID,
+			SurfaceSessionID:  surfaceSessionID,
+			ChatID:            chatID,
+			ActorUserID:       operatorID,
+			MessageID:         messageID,
+			PickerID:          pickerID,
+			TargetPickerValue: targetValue,
+			Inbound:           meta,
+		}, true
 	case cardActionKindTargetPickerSelectWorkspace:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		workspaceKey := selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerWorkspaceFieldName)

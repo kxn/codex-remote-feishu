@@ -37,6 +37,9 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 	if action.RequestRevision != 0 && action.RequestRevision != request.CardRevision {
 		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
 	}
+	if strings.TrimSpace(request.LocalKind) != "" {
+		return s.respondLocalRequest(surface, request, action)
+	}
 	requestType := normalizeRequestType(firstNonEmpty(action.RequestType, request.RequestType))
 	if requestType == "" {
 		requestType = "approval"
@@ -363,6 +366,9 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 	answers := map[string]any{}
 	missingLabels := make([]string, 0, len(request.Questions))
 	for _, question := range request.Questions {
+		if question.Optional {
+			continue
+		}
 		questionID := strings.TrimSpace(question.ID)
 		if questionID == "" {
 			continue

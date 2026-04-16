@@ -15,6 +15,7 @@ type Config struct {
 	HeadlessLaunchWait time.Duration
 	LocalPauseMaxWait  time.Duration
 	DetachAbandonWait  time.Duration
+	GitAvailable       bool
 }
 
 type Service struct {
@@ -28,6 +29,7 @@ type Service struct {
 	nextRequestCommandID int
 	nextPathPickerID     int
 	nextTargetPickerID   int
+	nextLocalRequestID   int
 	nextThreadHistoryID  int
 	nextHeadlessID       int
 	handoffUntil         map[string]time.Time
@@ -219,6 +221,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 	}
 	svc.RegisterPathPickerConsumer(workspaceCreatePathPickerConsumerKind, workspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(targetPickerWorkspaceCreatePathPickerConsumerKind, targetPickerWorkspaceCreatePathPickerConsumer{})
+	svc.RegisterPathPickerConsumer(targetPickerGitImportPathPickerConsumerKind, targetPickerGitImportPathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(sendFilePathPickerConsumerKind, sendFilePathPickerConsumer{})
 	return svc
 }

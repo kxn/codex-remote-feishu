@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -231,7 +232,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		panic(err)
 	}
 	app := &App{
-		service:                      orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond}, renderer.NewPlanner()),
+		service:                      orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond, GitAvailable: gitExecutableAvailable()}, renderer.NewPlanner()),
 		projector:                    feishu.NewProjector(),
 		gateway:                      gateway,
 		serverIdentity:               serverIdentity,
@@ -316,6 +317,11 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		}),
 	}
 	return app
+}
+
+func gitExecutableAvailable() bool {
+	_, err := exec.LookPath("git")
+	return err == nil
 }
 
 func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {

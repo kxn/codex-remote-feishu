@@ -322,6 +322,7 @@ type RequestPromptQuestionRecord struct {
 	ID             string
 	Header         string
 	Question       string
+	Optional       bool
 	AllowOther     bool
 	Secret         bool
 	Options        []RequestPromptQuestionOptionRecord
@@ -342,6 +343,8 @@ type RequestPromptRecord struct {
 	Body                     string
 	Options                  []RequestPromptOptionRecord
 	Questions                []RequestPromptQuestionRecord
+	LocalKind                string
+	LocalMeta                map[string]string
 	DraftAnswers             map[string]string
 	CardRevision             int
 	PendingDispatchCommandID string

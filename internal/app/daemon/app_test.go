@@ -747,12 +747,7 @@ func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
 		FocusSource: "local_ui",
 	}})
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionListInstances,
-		SurfaceSessionID: "feishu:chat:1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-	})
+	app.HandleAction(context.Background(), control.Action{Kind: control.ActionListInstances, SurfaceSessionID: "feishu:chat:1", ChatID: "chat-1", ActorUserID: "user-1"})
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionAttachInstance,
 		SurfaceSessionID: "feishu:chat:1",
@@ -1315,12 +1310,7 @@ func TestDaemonNotifiesAttachedSurfaceWhenInstanceDisconnects(t *testing.T) {
 		},
 	})
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionListInstances,
-		SurfaceSessionID: "feishu:chat:1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-	})
+	app.HandleAction(context.Background(), control.Action{Kind: control.ActionListInstances, SurfaceSessionID: "feishu:chat:1", ChatID: "chat-1", ActorUserID: "user-1"})
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionAttachInstance,
 		SurfaceSessionID: "feishu:chat:1",
@@ -1756,8 +1746,13 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	if gateway.operations[1].CardTitle != "选择工作区与会话" {
 		t.Fatalf("expected recovered response to be target picker card, got %#v", gateway.operations[1])
 	}
-	if !strings.Contains(gateway.operations[1].CardElements[0]["content"].(string), "添加工作区…") {
-		t.Fatalf("expected recovered target picker to expose create workspace option, got %#v", gateway.operations[1])
+	sawAddWorkspaceText := false
+	for _, element := range gateway.operations[1].CardElements {
+		content, _ := element["content"].(string)
+		sawAddWorkspaceText = sawAddWorkspaceText || strings.Contains(content, "完成后会进入新会话待命") || strings.Contains(content, "工作区来源")
+	}
+	if !sawAddWorkspaceText {
+		t.Fatalf("expected recovered target picker to expose add-workspace flow, got %#v", gateway.operations[1])
 	}
 	if button, ok := gateway.operations[1].CardElements[len(gateway.operations[1].CardElements)-1]["text"].(map[string]interface{}); !ok || button["content"] != "选择目录" {
 		t.Fatalf("expected recovered target picker confirm label to enter directory selection, got %#v", gateway.operations[1])

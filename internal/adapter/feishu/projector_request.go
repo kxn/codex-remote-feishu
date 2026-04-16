@@ -134,11 +134,29 @@ func requestUserInputPromptElements(prompt control.FeishuDirectRequestPrompt, da
 			elements = append(elements, row)
 		}
 	}
+	if extra := requestUserInputExtraActionRow(prompt, daemonLifecycleID); len(extra) != 0 {
+		elements = append(elements, extra)
+	}
 	elements = append(elements, map[string]any{
 		"tag":     "markdown",
 		"content": requestPromptQuestionHint(prompt),
 	})
 	return elements
+}
+
+func requestUserInputExtraActionRow(prompt control.FeishuDirectRequestPrompt, daemonLifecycleID string) map[string]any {
+	if prompt.SubmitWithUnansweredConfirmPending || len(prompt.Options) == 0 {
+		return nil
+	}
+	actions := make([]map[string]any, 0, len(prompt.Options))
+	for _, option := range prompt.Options {
+		button := requestPromptButton(prompt, option, daemonLifecycleID)
+		if len(button) == 0 {
+			continue
+		}
+		actions = append(actions, button)
+	}
+	return cardButtonGroupElement(actions)
 }
 
 func requestPromptButton(prompt control.FeishuDirectRequestPrompt, option control.RequestPromptOption, daemonLifecycleID string) map[string]any {

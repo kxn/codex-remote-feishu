@@ -130,3 +130,41 @@ func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testi
 		t.Fatalf("expected confirm button to stay disabled, got %#v", elements)
 	}
 }
+
+func TestTargetPickerElementsRenderModeSwitchAndSourceSelect(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:          "picker-1",
+		Title:             "选择工作区与会话",
+		SelectedMode:      control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:    control.FeishuTargetPickerSourceGitURL,
+		ShowModeSwitch:    true,
+		ShowSourceSelect:  true,
+		SourcePlaceholder: "选择工作区来源",
+		ConfirmLabel:      "填写 Git URL",
+		CanConfirm:        false,
+		ModeOptions: []control.FeishuTargetPickerModeOption{
+			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
+			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
+		},
+		SourceOptions: []control.FeishuTargetPickerSourceOption{
+			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", MetaText: "选择已经存在的目录", Available: true},
+			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", MetaText: "需要本机已安装 git 后才能使用", Available: false, UnavailableReason: "当前机器未检测到 git"},
+		},
+		AddModeSummary:        "完成后会进入新会话待命",
+		SourceUnavailableHint: "当前机器未检测到 `git`",
+	}, "life-3")
+
+	var sawSourceSelect bool
+	var sawModeButton bool
+	for _, action := range cardActionsFromElements(elements) {
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerSelectMode:
+			sawModeButton = true
+		case cardActionKindTargetPickerSelectSource:
+			sawSourceSelect = true
+		}
+	}
+	if !sawModeButton || !sawSourceSelect {
+		t.Fatalf("expected mode button callbacks and source select callback, got %#v", elements)
+	}
+}
