@@ -419,21 +419,19 @@ func (s *Service) defaultTargetPickerSessionValue(surface *state.SurfaceConsoleR
 	if workspaceKey == "" {
 		return ""
 	}
-	if surface != nil && surface.RouteMode == state.RouteModeNewThreadReady && s.surfaceCurrentWorkspaceKey(surface) == workspaceKey {
+	if s.surfaceCurrentWorkspaceKey(surface) != workspaceKey {
+		return ""
+	}
+	if surface != nil && surface.RouteMode == state.RouteModeNewThreadReady {
 		return targetPickerNewThreadValue
 	}
-	if surface != nil && strings.TrimSpace(surface.SelectedThreadID) != "" && s.surfaceCurrentWorkspaceKey(surface) == workspaceKey {
+	if surface != nil && strings.TrimSpace(surface.SelectedThreadID) != "" {
 		value := targetPickerThreadValue(surface.SelectedThreadID)
 		if targetPickerHasSessionOption(options, value) {
 			return value
 		}
 	}
-	for _, option := range options {
-		if option.Kind == control.FeishuTargetPickerSessionThread {
-			return option.Value
-		}
-	}
-	return targetPickerNewThreadValue
+	return ""
 }
 
 func targetPickerHasWorkspaceOption(options []control.FeishuTargetPickerWorkspaceOption, value string) bool {

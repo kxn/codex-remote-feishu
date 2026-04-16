@@ -17,7 +17,7 @@ const (
 )
 
 func (s *Service) buildCommandMenuCatalog(surface *state.SurfaceConsoleRecord, raw string) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildCommandMenuView(surface, raw))
+	return s.commandCatalogFromView(surface, s.buildCommandMenuView(surface, raw))
 }
 
 func parseCommandMenuView(raw string) string {
@@ -51,17 +51,26 @@ func (s *Service) buildCommandMenuHomeCatalog(surface *state.SurfaceConsoleRecor
 	}
 }
 
+func (s *Service) buildCommandHelpCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
+	return control.BuildFeishuCommandCatalogForDisplay(
+		"Slash 命令帮助",
+		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
+		false,
+		string(s.normalizeSurfaceProductMode(surface)),
+		"",
+	)
+}
+
 func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage, groupID string) control.FeishuDirectCommandCatalog {
 	group, ok := control.FeishuCommandGroupByID(groupID)
 	if !ok {
 		return s.buildCommandMenuHomeCatalog(surface)
 	}
 	entries := make([]control.CommandCatalogEntry, 0, 6)
+	productMode := string(s.normalizeSurfaceProductMode(surface))
 	for _, def := range control.FeishuCommandDefinitionsForGroup(groupID) {
-		if !def.ShowInMenu {
-			continue
-		}
-		if !control.FeishuCommandVisibleInMenuStage(def.ID, string(stage)) {
+		def, ok := control.FeishuCommandDefinitionForDisplay(def, productMode, true, string(stage))
+		if !ok {
 			continue
 		}
 		entries = append(entries, commandEntryForDefinition(def))
@@ -156,23 +165,23 @@ func commandBackButtons(groupID string) []control.CommandCatalogButton {
 }
 
 func (s *Service) buildModeCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildModeCommandView(surface))
+	return s.commandCatalogFromView(surface, s.buildModeCommandView(surface))
 }
 
 func (s *Service) buildAutoContinueCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildAutoContinueCommandView(surface))
+	return s.commandCatalogFromView(surface, s.buildAutoContinueCommandView(surface))
 }
 
 func (s *Service) buildReasoningCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildReasoningCommandView(surface))
+	return s.commandCatalogFromView(surface, s.buildReasoningCommandView(surface))
 }
 
 func (s *Service) buildAccessCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildAccessCommandView(surface))
+	return s.commandCatalogFromView(surface, s.buildAccessCommandView(surface))
 }
 
 func (s *Service) buildModelCatalog(surface *state.SurfaceConsoleRecord) control.FeishuDirectCommandCatalog {
-	return s.commandCatalogFromView(s.buildModelCommandView(surface))
+	return s.commandCatalogFromView(surface, s.buildModelCommandView(surface))
 }
 
 func (s *Service) buildAttachmentRequiredCatalog(surface *state.SurfaceConsoleRecord, def control.FeishuCommandDefinition) control.FeishuDirectCommandCatalog {

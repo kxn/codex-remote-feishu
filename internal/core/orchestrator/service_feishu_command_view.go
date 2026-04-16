@@ -110,10 +110,10 @@ func (s *Service) buildVerboseCommandView(surface *state.SurfaceConsoleRecord) c
 	}
 }
 
-func (s *Service) commandCatalogFromView(view control.FeishuCommandView) control.FeishuDirectCommandCatalog {
+func (s *Service) commandCatalogFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.FeishuDirectCommandCatalog {
 	switch {
 	case view.Menu != nil:
-		return s.commandMenuCatalogFromView(*view.Menu)
+		return s.commandMenuCatalogFromView(surface, *view.Menu)
 	case view.Config != nil:
 		return s.commandConfigCatalogFromView(*view.Config)
 	default:
@@ -121,13 +121,13 @@ func (s *Service) commandCatalogFromView(view control.FeishuCommandView) control
 	}
 }
 
-func (s *Service) commandMenuCatalogFromView(view control.FeishuCommandMenuView) control.FeishuDirectCommandCatalog {
+func (s *Service) commandMenuCatalogFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandMenuView) control.FeishuDirectCommandCatalog {
 	stage := commandMenuStage(strings.TrimSpace(view.Stage))
 	groupID := strings.TrimSpace(view.GroupID)
 	if groupID == "" {
-		return s.buildCommandMenuHomeCatalog(nil)
+		return s.buildCommandMenuHomeCatalog(surface)
 	}
-	return s.buildCommandMenuGroupCatalog(nil, stage, groupID)
+	return s.buildCommandMenuGroupCatalog(surface, stage, groupID)
 }
 
 func (s *Service) commandConfigCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {

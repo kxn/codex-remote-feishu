@@ -99,7 +99,7 @@ func (s *Service) feishuDirectCommandCatalogEvent(surface *state.SurfaceConsoleR
 }
 
 func (s *Service) commandViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
-	catalog := s.commandCatalogFromView(view)
+	catalog := s.commandCatalogFromView(surface, view)
 	return control.UIEvent{
 		Kind:                     control.UIEventFeishuDirectCommandCatalog,
 		GatewayID:                surface.GatewayID,

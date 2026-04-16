@@ -395,7 +395,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionTargetPickerConfirm:
 		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue)
 	case control.ActionShowCommandHelp:
-		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", control.FeishuCommandHelpCatalog())}
+		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", s.buildCommandHelpCatalog(surface))}
 	case control.ActionShowHistory:
 		events = s.openThreadHistory(surface, action.MessageID, action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != "")
 	case control.ActionDebugCommand:

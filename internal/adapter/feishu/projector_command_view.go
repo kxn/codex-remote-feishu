@@ -25,11 +25,15 @@ func commandMenuCatalogFromView(view control.FeishuCommandMenuView, ctx *control
 	if stage == "" && ctx != nil {
 		stage = strings.TrimSpace(ctx.MenuStage)
 	}
+	productMode := ""
+	if ctx != nil {
+		productMode = strings.TrimSpace(ctx.Surface.ProductMode)
+	}
 	groupID := strings.TrimSpace(view.GroupID)
 	if groupID == "" {
 		return buildCommandMenuHomeCatalog()
 	}
-	return buildCommandMenuGroupCatalog(stage, groupID)
+	return buildCommandMenuGroupCatalog(stage, groupID, productMode)
 }
 
 func buildCommandMenuHomeCatalog() control.FeishuDirectCommandCatalog {
@@ -45,17 +49,15 @@ func buildCommandMenuHomeCatalog() control.FeishuDirectCommandCatalog {
 	}
 }
 
-func buildCommandMenuGroupCatalog(stage, groupID string) control.FeishuDirectCommandCatalog {
+func buildCommandMenuGroupCatalog(stage, groupID, productMode string) control.FeishuDirectCommandCatalog {
 	group, ok := control.FeishuCommandGroupByID(groupID)
 	if !ok {
 		return buildCommandMenuHomeCatalog()
 	}
 	entries := make([]control.CommandCatalogEntry, 0, 6)
 	for _, def := range control.FeishuCommandDefinitionsForGroup(groupID) {
-		if !def.ShowInMenu {
-			continue
-		}
-		if !control.FeishuCommandVisibleInMenuStage(def.ID, stage) {
+		def, ok := control.FeishuCommandDefinitionForDisplay(def, productMode, true, stage)
+		if !ok {
 			continue
 		}
 		entries = append(entries, commandEntryForDefinition(def))

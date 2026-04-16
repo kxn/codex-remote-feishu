@@ -1,0 +1,78 @@
+package control
+
+import "strings"
+
+func normalizeFeishuCommandProductMode(productMode string) string {
+	switch strings.ToLower(strings.TrimSpace(productMode)) {
+	case "vscode":
+		return "vscode"
+	default:
+		return "normal"
+	}
+}
+
+// FeishuCommandDefinitionForDisplay projects a canonical command definition into
+// the user-facing help/menu shape for the current surface mode.
+func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode string, interactive bool, menuStage string) (FeishuCommandDefinition, bool) {
+	if interactive {
+		if !def.ShowInMenu || !FeishuCommandVisibleInMenuStage(def.ID, menuStage) {
+			return FeishuCommandDefinition{}, false
+		}
+	} else if !def.ShowInHelp {
+		return FeishuCommandDefinition{}, false
+	}
+
+	projected := cloneFeishuCommandDefinition(def)
+	if normalizeFeishuCommandProductMode(productMode) != "normal" {
+		return projected, true
+	}
+
+	switch strings.TrimSpace(projected.ID) {
+	case FeishuCommandUse, FeishuCommandUseAll:
+		return FeishuCommandDefinition{}, false
+	case FeishuCommandList:
+		projected.Title = "选择工作区/会话"
+		projected.Description = "打开统一的工作区/会话选择卡；可选择工作区、选择会话，也可添加工作区。"
+	}
+	return projected, true
+}
+
+func BuildFeishuCommandCatalogForDisplay(title, summary string, interactive bool, productMode, menuStage string) FeishuDirectCommandCatalog {
+	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))
+	for _, group := range feishuCommandGroups {
+		entries := make([]CommandCatalogEntry, 0, len(feishuCommandSpecs))
+		for _, spec := range feishuCommandSpecs {
+			def, ok := FeishuCommandDefinitionForDisplay(runtimeFeishuCommandDefinition(spec), productMode, interactive, menuStage)
+			if !ok || def.GroupID != group.ID {
+				continue
+			}
+			entry := CommandCatalogEntry{
+				Title:       strings.TrimSpace(def.Title),
+				Commands:    []string{def.CanonicalSlash},
+				Description: def.Description,
+				Examples:    append([]string(nil), def.Examples...),
+			}
+			if interactive {
+				entry.Buttons = append(entry.Buttons, CommandCatalogButton{
+					Label:       catalogButtonLabel(def),
+					Kind:        CommandCatalogButtonRunCommand,
+					CommandText: def.CanonicalSlash,
+				})
+			}
+			entries = append(entries, entry)
+		}
+		if len(entries) == 0 {
+			continue
+		}
+		sections = append(sections, CommandCatalogSection{
+			Title:   group.Title,
+			Entries: entries,
+		})
+	}
+	return FeishuDirectCommandCatalog{
+		Title:       title,
+		Summary:     summary,
+		Interactive: interactive,
+		Sections:    sections,
+	}
+}

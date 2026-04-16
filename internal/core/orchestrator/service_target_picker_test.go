@@ -337,8 +337,8 @@ func TestTargetPickerListPrefersRealWorkspaceOverSyntheticCreateOption(t *testin
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected initial selection to stay on real workspace, got %#v", view)
 	}
-	if view.SelectedSessionValue != targetPickerThreadValue("thread-web") {
-		t.Fatalf("expected attached workspace to auto-select its real session, got %#v", view)
+	if view.SelectedSessionValue != "" || view.CanConfirm {
+		t.Fatalf("expected detached target picker to keep session empty until explicit selection, got %#v", view)
 	}
 }
 
@@ -361,6 +361,81 @@ func TestTargetPickerListFallsBackToSyntheticCreateOptionWhenNoWorkspaceExists(t
 	}
 	if !view.CanConfirm || view.ConfirmLabel != "选择目录" {
 		t.Fatalf("expected create flow to be immediately actionable, got %#v", view)
+	}
+}
+
+func TestTargetPickerShowThreadsOnAttachedWorkspaceKeepsSessionEmptyWhenRouteUnbound(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 32, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/web",
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+
+	if view.SelectedWorkspaceKey != "/data/dl/web" {
+		t.Fatalf("expected current workspace to remain selected, got %#v", view)
+	}
+	if view.SelectedSessionValue != "" || view.CanConfirm {
+		t.Fatalf("expected unbound route to keep session empty until explicit user choice, got %#v", view)
+	}
+}
+
+func TestTargetPickerShowThreadsKeepsCurrentThreadSelection(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 33, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+			"thread-alt": {ThreadID: "thread-alt", Name: "修复按钮", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-web",
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+
+	if view.SelectedWorkspaceKey != "/data/dl/web" {
+		t.Fatalf("expected current workspace to remain selected, got %#v", view)
+	}
+	if view.SelectedSessionValue != targetPickerThreadValue("thread-web") || !view.CanConfirm {
+		t.Fatalf("expected current thread to stay preselected, got %#v", view)
 	}
 }
 

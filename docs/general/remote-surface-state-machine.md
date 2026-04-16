@@ -321,9 +321,12 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 3. 会话下拉始终基于当前选中的 workspace 动态重建。
    1. 先列该 workspace 下当前可接管或可恢复的 thread。
    2. 最后一项固定追加 `新建会话`。
-   3. picker 首次打开时，若 surface 当前已经在该 workspace 的 `R5 NewThreadReady`，默认选中 `新建会话`；否则优先当前 thread，再回退到第一个可恢复 thread。
-   4. 只要用户随后切换了工作区，当前会话选择就会被显式清空，卡片回到“未选会话”占位态；必须重新选择后才能 confirm，不再 silent fallback 到新的默认会话。
-   5. 只有当工作区切到 synthetic `添加工作区…` 时，会话下拉不会再展示真实 thread，而会收敛成单一 synthetic `新建会话`。
+   3. picker 首次打开时，只有两种情况会带默认会话：
+      1. surface 当前已经在该 workspace 的 `R5 NewThreadReady`，默认选中 `新建会话`。
+      2. surface 当前已经绑定到该 workspace 的某个 `SelectedThreadID`，且该 thread 仍在候选里，默认选中该 thread。
+   4. 如果当前 workspace 虽然已选中，但 surface 处于 unbound / detached，或者当前路由并不属于这个 workspace，则会话下拉保持空值，不再回退到“第一个可恢复 thread”。
+   5. 只要用户随后切换了工作区，当前会话选择就会被显式清空，卡片回到“未选会话”占位态；必须重新选择后才能 confirm，不再 silent fallback 到新的默认会话。
+   6. 只有当工作区切到 synthetic `添加工作区…` 时，会话下拉不会再展示真实 thread，而会收敛成单一 synthetic `新建会话`。
 4. 选择工作区或会话时，只会刷新 target picker 本身，不会立即 attach / switch / create。
    1. `target_picker_select_workspace`
    2. `target_picker_select_session`
@@ -603,49 +606,35 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 当前行为：
 
-1. `/menu` 首页按当前阶段重排，但二级分组保持稳定：
+1. `/menu` 首页当前只保留分组导航，不再在首页额外平铺“常用操作”或“前排固定命令”：
    1. `当前工作`
    2. `发送设置`
    3. `切换目标`
    4. `低频与维护`
-2. detached 首页前排固定为：
-   1. `/list`
-   2. `/use`
-   3. `/status`
-3. `normal` working 首页前排固定为：
-   1. `/stop`
-   2. `/compact`
-   3. `/steerall`
-   4. `/new`
-   5. `/history`
-   6. `/reasoning`
-   7. `/model`
-   8. `/access`
-4. `vscode` working 首页前排固定为：
-   1. `/stop`
-   2. `/compact`
-   3. `/steerall`
-   4. `/history`
-   5. `/reasoning`
-   6. `/model`
-   7. `/access`
-   8. `/follow`
-5. `normal` working 首页与主路径里不再暴露 `/follow`。
-6. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
+2. 二级分组顺序稳定，但组内可见命令会按当前 `product mode + menu stage` 做 display projection：
+   1. `normal mode` 的 `切换目标` 当前只显示一个统一入口：标题为 `选择工作区/会话`，实际 canonical slash 仍是 `/list`。
+   2. `normal mode` 下 `/use`、`/useall` 不再作为并列菜单项展示，但 alias / parser 兼容仍保留。
+   3. `vscode mode` 的 `切换目标` 仍分别显示 `/list`、`/use`、`/useall`。
+   4. `normal mode` 不展示 `/follow`；`vscode mode` 才展示 `/follow`。
+   5. `/new` 只在 `normal` working 可见，`/history` 当前在 normal / vscode 都可见。
+3. `/help` 当前也复用同一套 display projection：
+   1. `normal mode` 下帮助文本里的主展示入口也会把 `/list` 呈现为 `选择工作区/会话`。
+   2. `vscode mode` 下帮助文本仍保留 `/list`、`/use`、`/useall` 三个独立入口。
+4. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
    1. `send settings`：`/reasoning`、`/model`、`/access`
    2. `maintenance`：`/mode`、`/autowhip`
    3. 表单提交通过 card callback `submit_command_form` 拼回 canonical slash text，再复用文本命令解析链路。
-7. `maintenance` 分组里的 `/debug`、`/upgrade` 当前仍然是直接触发 daemon 动作的命令入口，不属于参数卡表单。
-8. 旧 `/model start_command_capture` 卡片只保留历史兼容：
+5. `maintenance` 分组里的 `/debug`、`/upgrade` 当前仍然是直接触发 daemon 动作的命令入口，不属于参数卡表单。
+6. 旧 `/model start_command_capture` 卡片只保留历史兼容：
    1. 点击后不会再创建新的 `G4 CommandCapture`
    2. 服务端会直接重新打开新的 `/model` 表单卡
    3. 若 daemon 热更新前已经残留 `G4`，下一条文本会立即应用，不再要求再点一次 Apply
-9. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
-10. 同上下文菜单导航当前已经支持“替换当前卡片”而不是追加新卡，但只限窄范围：
+7. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
+8. 同上下文菜单导航当前已经支持“替换当前卡片”而不是追加新卡，但只限窄范围：
    1. `/menu` 首页 <-> 二级分组页
    2. 从 `/menu` 分组页打开 bare `/mode`、`/autowhip`、`/reasoning`、`/access`、`/model`
    3. bare 参数卡里的“返回上一层”
-11. 这条原地替换链路当前只在动作来自带 `CardDaemonLifecycleID` 的飞书卡片时启用：
+9. 这条原地替换链路当前只在动作来自带 `CardDaemonLifecycleID` 的飞书卡片时启用：
    1. 网关通过 card callback 同步回包返回替换后的整张卡
    2. 同样的命令如果由 slash 文本或飞书后台 bot 菜单触发，仍按普通 append-only UIEvent 新发卡片
    3. `/help`、result/notice 类卡片不参与这条导航替换语义

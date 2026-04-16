@@ -35,6 +35,68 @@ func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
 	}
 }
 
+func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandHelp,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+	catalog := events[0].FeishuDirectCommandCatalog
+	if catalog == nil {
+		t.Fatalf("expected help catalog event, got %#v", events)
+	}
+	var switchEntries []control.CommandCatalogEntry
+	for _, section := range catalog.Sections {
+		if section.Title == "切换目标" {
+			switchEntries = section.Entries
+			break
+		}
+	}
+	got := firstCommands(switchEntries)
+	want := []string{"/list", "/detach", "/follow"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normal help switch_target commands = %#v, want %#v", got, want)
+	}
+	if len(switchEntries) == 0 || switchEntries[0].Title != "选择工作区/会话" {
+		t.Fatalf("expected unified normal switch target entry title, got %#v", switchEntries)
+	}
+}
+
+func TestHelpActionVSCodeModeKeepsSeparateSwitchTargetCommands(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandHelp,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+	})
+	catalog := events[0].FeishuDirectCommandCatalog
+	if catalog == nil {
+		t.Fatalf("expected help catalog event, got %#v", events)
+	}
+	var switchEntries []control.CommandCatalogEntry
+	for _, section := range catalog.Sections {
+		if section.Title == "切换目标" {
+			switchEntries = section.Entries
+			break
+		}
+	}
+	got := firstCommands(switchEntries)
+	want := []string{"/list", "/use", "/useall", "/detach", "/follow"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("vscode help switch_target commands = %#v, want %#v", got, want)
+	}
+}
+
 func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -106,7 +168,7 @@ func TestMenuActionDetachedHomepageShowsGroupNavigationOnly(t *testing.T) {
 	}
 }
 
-func TestMenuActionNormalSwitchTargetGroupHidesFollow(t *testing.T) {
+func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
@@ -122,14 +184,12 @@ func TestMenuActionNormalSwitchTargetGroupHidesFollow(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/list", "/use", "/useall", "/detach"}
+	want := []string{"/list", "/detach"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal switch_target commands = %#v, want %#v", got, want)
 	}
-	for _, command := range got {
-		if command == "/follow" {
-			t.Fatalf("normal switch_target should not expose /follow: %#v", got)
-		}
+	if len(catalog.Sections[0].Entries) == 0 || catalog.Sections[0].Entries[0].Title != "选择工作区/会话" {
+		t.Fatalf("expected unified normal switch target title, got %#v", catalog.Sections[0].Entries)
 	}
 }
 

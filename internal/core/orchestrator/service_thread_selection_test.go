@@ -168,8 +168,8 @@ func TestPresentThreadSelectionShowsPagedMostRecentThreads(t *testing.T) {
 	if len(view.SessionOptions) != 7 {
 		t.Fatalf("expected all recent threads plus new-thread option, got %#v", view.SessionOptions)
 	}
-	if view.SelectedSessionValue != targetPickerThreadValue("thread-6") {
-		t.Fatalf("expected most recent session to be selected by default, got %#v", view)
+	if view.SelectedSessionValue != "" || view.CanConfirm {
+		t.Fatalf("expected unbound /use to keep session empty until explicit selection, got %#v", view)
 	}
 }
 
@@ -210,8 +210,8 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 	if view.Source != control.TargetPickerRequestSourceUse || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected scoped /use to stay on current workspace, got %#v", view)
 	}
-	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != targetPickerThreadValue("thread-6") {
-		t.Fatalf("expected current-workspace sessions in recency order plus new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != "" || view.CanConfirm {
+		t.Fatalf("expected current-workspace sessions in recency order with empty default selection, got %#v", view)
 	}
 }
 
@@ -513,8 +513,8 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	if len(view.SessionOptions) != 4 {
 		t.Fatalf("expected workspace sessions plus new-thread option, got %#v", view.SessionOptions)
 	}
-	if view.SelectedSessionValue != targetPickerThreadValue("thread-2") {
-		t.Fatalf("expected workspace target picker to keep recency order, got %#v", view)
+	if view.SelectedSessionValue != "" || view.CanConfirm {
+		t.Fatalf("expected workspace target picker to keep session empty before user choice, got %#v", view)
 	}
 }
 

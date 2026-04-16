@@ -303,6 +303,9 @@ MCP request 卡片当前新增的可视语义：
   - `/new` 仅在 `normal_working` 可见
   - `/history` 当前不额外分阶段，normal / vscode 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
   - 其余命令默认可见
+  - `switch_target` 分组当前还带一层 mode-aware display projection：
+    - `normal mode` 只显示一个入口，标题为 `选择工作区/会话`，实际命令仍是 canonical `/list`
+    - `vscode mode` 继续分别显示 `/list`、`/use`、`/useall`
   - orchestrator 与 projector 共同复用该策略函数，避免两侧分叉
 - 当前所有可 replace 的 Feishu UI 导航，都采用同一套 lifecycle 策略：
   - daemon freshness：`daemon_lifecycle`
@@ -316,7 +319,10 @@ MCP request 卡片当前新增的可视语义：
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 - unified target picker 当前额外有一条明确的 UI 语义：
-  - picker 首次打开时仍可带一个推荐默认会话
+  - picker 首次打开时，不再为了“帮用户猜一个候选”去回退到其他 recoverable thread
+  - 只有当前 surface 已经处在同 workspace 的 `R5 NewThreadReady` 时，才默认选中 `新建会话`
+  - 或者 surface 当前已经绑定到同 workspace 的某个 thread，且该 thread 仍在候选里，才默认选中该 thread
+  - 如果只是当前 workspace 已选中，但 surface 处于 detached / unbound，session 会保持空值，等待用户显式选择
   - 但工作区一旦变化，session 下拉不会再 silently fallback 到新的真实 workspace 默认会话
   - 若切到真实 workspace，session 会被主动清空，confirm 按钮随之禁用，直到用户重新选定会话
   - 若切到 synthetic `添加工作区…`，session 下拉会改为单一 synthetic `新建会话`，confirm 按钮文案切成 `选择目录`
@@ -509,6 +515,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定路径规范化、root 边界、symlink escape、owner / expire / active picker gate、consumer handoff
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
   - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据；selection/command view 的 UI owner 已切到 read model，但用户可见行为保持不变
+- [internal/core/orchestrator/service_local_request_menu_test.go](../../internal/core/orchestrator/service_local_request_menu_test.go)
+  - 锁定 `/help` 与 `/menu` 当前共用 display projection：normal mode 会把 `/list` / `/use` / `/useall` 收口成 `选择工作区/会话`，vscode mode 继续保留三者分开展示
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
   - 锁定 daemon ingress 统一入口下的 inline replace 结果、菜单命令提交态锚点（replace 提交态 + append 结果）、`/help` 保持 append-only、active path picker 会阻断 competing `/menu`、same-daemon pure navigation 采用 current-surface rerender，以及 old-card 导航/命令被拒绝而不是继续 replace
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)
