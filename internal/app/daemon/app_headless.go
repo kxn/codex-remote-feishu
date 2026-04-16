@@ -212,39 +212,6 @@ func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
 	a.syncManagedHeadlessLocked(now)
 }
 
-func (a *App) reapIdleHeadless(now time.Time) {
-	if a.headlessRuntime.IdleTTL <= 0 {
-		return
-	}
-	for instanceID, managed := range a.managedHeadless {
-		if managed == nil {
-			delete(a.managedHeadless, instanceID)
-			continue
-		}
-		if strings.TrimSpace(managed.Status) != managedHeadlessStatusIdle || managed.IdleSince.IsZero() {
-			continue
-		}
-		if now.Sub(managed.IdleSince) < a.headlessRuntime.IdleTTL {
-			continue
-		}
-		inst := a.service.Instance(instanceID)
-		if inst != nil && inst.PID > 0 {
-			managed.PID = inst.PID
-		}
-		if managed.PID == 0 {
-			log.Printf("headless idle cleanup skipped: instance=%s err=missing pid", instanceID)
-			continue
-		}
-		if err := a.stopProcess(managed.PID, a.headlessRuntime.KillGrace); err != nil {
-			log.Printf("headless idle cleanup failed: instance=%s pid=%d err=%v", instanceID, managed.PID, err)
-			continue
-		}
-		log.Printf("headless idle cleanup: instance=%s pid=%d idle_since=%s", instanceID, managed.PID, managed.IdleSince.Format(time.RFC3339))
-		delete(a.managedHeadless, instanceID)
-		a.service.RemoveInstance(instanceID)
-	}
-}
-
 type managedHeadlessShutdownTarget struct {
 	InstanceID string
 	PID        int

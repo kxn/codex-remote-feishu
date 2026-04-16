@@ -87,21 +87,50 @@ func (a *App) recordCronImmediateResultLocked(job cronJobState, triggeredAt time
 }
 
 func (a *App) reapCronExitTargetsLocked(now time.Time) {
+	targets := make([]cronExitTarget, 0)
 	for instanceID, target := range a.cronExitTargets {
 		if target == nil {
 			delete(a.cronExitTargets, instanceID)
 			continue
 		}
-		if target.Deadline.IsZero() || now.Before(target.Deadline) {
+		if target.StopInFlight || target.Deadline.IsZero() || now.Before(target.Deadline) {
 			continue
 		}
-		if target.PID > 0 {
-			if err := a.stopProcess(target.PID, 0); err != nil {
-				log.Printf("cron forced stop failed: instance=%s pid=%d err=%v", instanceID, target.PID, err)
-			} else {
-				log.Printf("cron forced stop: instance=%s pid=%d", instanceID, target.PID)
-			}
+		if target.PID <= 0 {
+			delete(a.cronExitTargets, instanceID)
+			continue
 		}
-		delete(a.cronExitTargets, instanceID)
+		target.StopInFlight = true
+		target.LastStopAttemptAt = now
+		targets = append(targets, *target)
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	type cronForcedStopResult struct {
+		Target cronExitTarget
+		Err    error
+	}
+	results := make([]cronForcedStopResult, 0, len(targets))
+	a.mu.Unlock()
+	for _, target := range targets {
+		results = append(results, cronForcedStopResult{
+			Target: target,
+			Err:    a.stopProcess(target.PID, 0),
+		})
+	}
+	a.mu.Lock()
+
+	for _, result := range results {
+		if result.Err != nil {
+			log.Printf("cron forced stop failed: instance=%s pid=%d err=%v", result.Target.InstanceID, result.Target.PID, result.Err)
+			if target := a.cronExitTargets[result.Target.InstanceID]; target != nil {
+				target.StopInFlight = false
+			}
+			continue
+		}
+		log.Printf("cron forced stop: instance=%s pid=%d", result.Target.InstanceID, result.Target.PID)
+		delete(a.cronExitTargets, result.Target.InstanceID)
 	}
 }

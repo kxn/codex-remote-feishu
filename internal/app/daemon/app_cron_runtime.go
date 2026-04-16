@@ -318,11 +318,13 @@ func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time
 		deadline = now
 	}
 	if pid > 0 {
-		a.cronExitTargets[instanceID] = &cronExitTarget{
-			InstanceID: instanceID,
-			PID:        pid,
-			Deadline:   deadline,
+		target := a.cronExitTargets[instanceID]
+		if target == nil {
+			target = &cronExitTarget{InstanceID: instanceID}
+			a.cronExitTargets[instanceID] = target
 		}
+		target.PID = pid
+		target.Deadline = deadline
 	}
 }
 

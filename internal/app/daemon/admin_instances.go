@@ -253,7 +253,7 @@ func overlayManagedSummary(summary *adminInstanceSummary, managed *managedHeadle
 	if summary.Status == managedHeadlessStatusBusy || summary.Status == managedHeadlessStatusIdle {
 		summary.Online = true
 	}
-	if summary.Status == managedHeadlessStatusOffline || summary.Status == managedHeadlessStatusStarting || summary.Status == "stopped" || summary.Status == "deleted" {
+	if summary.Status == managedHeadlessStatusOffline || summary.Status == managedHeadlessStatusStarting || summary.Status == managedHeadlessStatusStopping || summary.Status == "stopped" || summary.Status == "deleted" {
 		summary.Online = false
 	}
 }
@@ -325,11 +325,13 @@ func adminInstanceStatusRank(status string) int {
 		return 1
 	case managedHeadlessStatusIdle:
 		return 2
-	case managedHeadlessStatusStarting:
+	case managedHeadlessStatusStopping:
 		return 3
-	case managedHeadlessStatusOffline:
+	case managedHeadlessStatusStarting:
 		return 4
-	default:
+	case managedHeadlessStatusOffline:
 		return 5
+	default:
+		return 6
 	}
 }

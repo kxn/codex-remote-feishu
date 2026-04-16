@@ -13,6 +13,7 @@ import (
 
 const (
 	managedHeadlessStatusStarting = "starting"
+	managedHeadlessStatusStopping = "stopping"
 	managedHeadlessStatusBusy     = "busy"
 	managedHeadlessStatusIdle     = "idle"
 	managedHeadlessStatusOffline  = "offline"
@@ -56,6 +57,9 @@ func (a *App) syncManagedHeadlessLocked(now time.Time) {
 			}
 		}
 		switch {
+		case strings.TrimSpace(managed.Status) == managedHeadlessStatusStopping:
+			managed.RefreshInFlight = false
+			managed.RefreshCommandID = ""
 		case isManagedHeadlessInstance(inst) && inst.Online:
 			if attached[instanceID] || strings.TrimSpace(inst.ActiveTurnID) != "" {
 				managed.Status = managedHeadlessStatusBusy

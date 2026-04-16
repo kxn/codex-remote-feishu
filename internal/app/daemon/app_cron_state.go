@@ -120,9 +120,11 @@ type cronItemBuffer struct {
 }
 
 type cronExitTarget struct {
-	InstanceID string
-	PID        int
-	Deadline   time.Time
+	InstanceID        string
+	PID               int
+	Deadline          time.Time
+	StopInFlight      bool
+	LastStopAttemptAt time.Time
 }
 
 func (a *App) cronStatePath() string {
