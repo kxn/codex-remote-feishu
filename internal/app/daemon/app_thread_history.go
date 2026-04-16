@@ -8,6 +8,15 @@ import (
 )
 
 func (a *App) handleThreadHistoryDaemonCommand(command control.DaemonCommand) []control.UIEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return nil
+	}
+	return a.handleThreadHistoryDaemonCommandLocked(command)
+}
+
+func (a *App) handleThreadHistoryDaemonCommandLocked(command control.DaemonCommand) []control.UIEvent {
 	surfaceID := strings.TrimSpace(command.SurfaceSessionID)
 	instanceID := strings.TrimSpace(command.InstanceID)
 	threadID := strings.TrimSpace(command.ThreadID)
@@ -38,7 +47,10 @@ func (a *App) handleThreadHistoryDaemonCommand(command control.DaemonCommand) []
 			ThreadID: threadID,
 		},
 	}
-	if err := a.sendAgentCommand(instanceID, agentCommand); err != nil {
+	a.mu.Unlock()
+	err := a.sendAgentCommand(instanceID, agentCommand)
+	a.mu.Lock()
+	if err != nil {
 		if events := a.service.HandleSurfaceThreadHistoryFailure(surfaceID, "history_query_dispatch_failed", "history 查询未成功发送到本地 Codex。"); len(events) != 0 {
 			return events
 		}

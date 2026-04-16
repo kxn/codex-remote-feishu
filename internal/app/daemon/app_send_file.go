@@ -52,26 +52,21 @@ func (a *App) handleSendIMFileCommandLocked(command control.DaemonCommand) []con
 	sendCtx, cancel := context.WithTimeout(context.Background(), sendIMFileCommandTimeout)
 	defer cancel()
 
-	var (
-		result  feishu.IMFileSendResult
-		callErr error
-	)
 	// Do not hold the app lock across Feishu upload/send IO.
+	request := feishu.IMFileSendRequest{
+		GatewayID:        resolved.GatewayID,
+		SurfaceSessionID: resolved.SurfaceSessionID,
+		ChatID:           resolved.ChatID,
+		ActorUserID:      resolved.ActorUserID,
+		Path:             path,
+	}
 	a.mu.Unlock()
-	func() {
-		defer a.mu.Lock()
-		result, callErr = sender.SendIMFile(sendCtx, feishu.IMFileSendRequest{
-			GatewayID:        resolved.GatewayID,
-			SurfaceSessionID: resolved.SurfaceSessionID,
-			ChatID:           resolved.ChatID,
-			ActorUserID:      resolved.ActorUserID,
-			Path:             path,
-		})
-	}()
-	if callErr != nil {
-		_ = a.observeFeishuPermissionError(resolved.GatewayID, callErr)
+	result, err := sender.SendIMFile(sendCtx, request)
+	a.mu.Lock()
+	if err != nil {
+		_ = a.observeFeishuPermissionError(resolved.GatewayID, err)
 		var sendErr *feishu.IMFileSendError
-		if errors.As(callErr, &sendErr) {
+		if errors.As(err, &sendErr) {
 			switch sendErr.Code {
 			case feishu.IMFileSendErrorUploadFailed:
 				return sendFileNotice(command.SurfaceSessionID, "send_file_upload_failed", "文件上传失败，请稍后重试。")

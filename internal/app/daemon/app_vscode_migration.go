@@ -204,7 +204,9 @@ func (a *App) detachedVSCodeCompatibilityTargetsLocked(surfaceFilter string) []v
 }
 
 func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []control.UIEvent {
+	a.mu.Unlock()
 	detect, err := a.buildVSCodeDetectResponse()
+	a.mu.Lock()
 	if err != nil {
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_check_failed", "VS Code 迁移检查失败", fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err))
 	}
@@ -212,13 +214,18 @@ func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []contro
 	if issue == nil {
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_not_needed", "无需迁移", "当前 VS Code 接入已经是最新状态，无需再次迁移。")
 	}
-	if err := a.applyVSCodeIntegration(vscodeApplyRequest{Mode: "managed_shim"}); err != nil {
+	a.mu.Unlock()
+	err = a.applyVSCodeIntegration(vscodeApplyRequest{Mode: "managed_shim"})
+	a.mu.Lock()
+	if err != nil {
 		log.Printf("apply vscode migration failed: surface=%s err=%v", command.SurfaceSessionID, err)
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_failed", "迁移失败", fmt.Sprintf("迁移扩展入口失败：%v。请确认 VS Code 已关闭，并且这台机器上的 Codex 扩展已经安装后再重试。", err))
 	}
 	a.invalidateVSCodeCompatibilityCacheLocked()
 
+	a.mu.Unlock()
 	remaining, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
 	if err != nil {
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_applied_detect_failed", "迁移已执行", fmt.Sprintf("扩展入口已经更新，但后续状态检查失败：%v。请重新打开 VS Code 后再试。", err))
 	}

@@ -120,7 +120,7 @@ func (a *App) handleDebugAdminCommand(command control.DaemonCommand) []control.U
 			return
 		}
 		if err != nil {
-			a.handleUIEvents(context.Background(), []control.UIEvent{
+			a.handleUIEventsLocked(context.Background(), []control.UIEvent{
 				debugNoticeEvent(surfaceID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err)),
 			})
 			return
@@ -131,7 +131,7 @@ func (a *App) handleDebugAdminCommand(command control.DaemonCommand) []control.U
 			issued.ExternalURL,
 			issued.ExpiresAt.UTC().Format(time.RFC3339),
 		)
-		a.handleUIEvents(context.Background(), []control.UIEvent{
+		a.handleUIEventsLocked(context.Background(), []control.UIEvent{
 			debugNoticeEvent(surfaceID, "debug_admin_link_ready", text),
 		})
 	}()
@@ -252,7 +252,7 @@ func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
 
 	events := a.applyUpgradeCheckResultLocked(request, release, err, completedAt)
 	if len(events) > 0 {
-		a.handleUIEvents(context.Background(), events)
+		a.handleUIEventsLocked(context.Background(), events)
 	}
 }
 

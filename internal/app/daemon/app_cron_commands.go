@@ -76,13 +76,13 @@ func (a *App) finishCronBackgroundCommand(surfaceID string, event *control.UIEve
 		return
 	}
 	if err != nil {
-		a.handleUIEvents(context.Background(), []control.UIEvent{
+		a.handleUIEventsLocked(context.Background(), []control.UIEvent{
 			cronNoticeEvent(surfaceID, "cron_command_failed", fmt.Sprintf("Cron 操作失败：%v", err)),
 		})
 		return
 	}
 	if event != nil {
-		a.handleUIEvents(context.Background(), []control.UIEvent{*event})
+		a.handleUIEventsLocked(context.Background(), []control.UIEvent{*event})
 	}
 }
 

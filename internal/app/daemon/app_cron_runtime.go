@@ -51,7 +51,17 @@ func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) b
 			}},
 		},
 	}
-	if err := a.sendAgentCommand(instanceID, command); err != nil {
+	a.mu.Unlock()
+	err := a.sendAgentCommand(instanceID, command)
+	a.mu.Lock()
+	run = a.cronRuns[instanceID]
+	if run == nil {
+		return true
+	}
+	if strings.TrimSpace(run.CommandID) != "" {
+		return true
+	}
+	if err != nil {
 		run.CommandID = command.CommandID
 		run.ErrorMessage = err.Error()
 		a.completeCronRunLocked(instanceID, "failed", "cron 隐藏执行启动失败："+err.Error(), now, true)
@@ -294,10 +304,14 @@ func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time
 		}
 	}
 	deadline := now.Add(cronExitGrace)
-	if err := a.sendAgentCommand(instanceID, agentproto.Command{
+	command := agentproto.Command{
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandProcessExit,
-	}); err != nil {
+	}
+	a.mu.Unlock()
+	err := a.sendAgentCommand(instanceID, command)
+	a.mu.Lock()
+	if err != nil {
 		log.Printf("cron process.exit send failed: instance=%s err=%v", instanceID, err)
 		deadline = now
 	}

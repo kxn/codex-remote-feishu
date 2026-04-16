@@ -140,7 +140,10 @@ func (a *App) sendManagedThreadsRefreshLocked(instanceID string, now time.Time, 
 		Kind:      agentproto.CommandThreadsRefresh,
 	}
 	a.markManagedThreadsRefreshRequestedLocked(instanceID, command.CommandID, now)
-	if err := a.sendAgentCommand(instanceID, command); err != nil {
+	a.mu.Unlock()
+	err := a.sendAgentCommand(instanceID, command)
+	a.mu.Lock()
+	if err != nil {
 		if managed := a.managedHeadless[instanceID]; managed != nil {
 			managed.RefreshInFlight = false
 			managed.RefreshCommandID = ""

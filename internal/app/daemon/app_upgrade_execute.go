@@ -156,7 +156,7 @@ func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) 
 		_ = a.writeUpgradeStateLocked(stateValue)
 	}
 	if request.SurfaceSessionID != "" {
-		a.handleUIEvents(context.Background(), []control.UIEvent{
+		a.handleUIEventsLocked(context.Background(), []control.UIEvent{
 			upgradeNoticeEvent(request.SurfaceSessionID, "upgrade_prepare_failed", err.Error()),
 		})
 	}

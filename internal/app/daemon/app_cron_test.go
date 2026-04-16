@@ -289,7 +289,9 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 		return 4321, nil
 	}
 
+	app.mu.Lock()
 	app.maybeScheduleCronJobsLocked(time.Now())
+	app.mu.Unlock()
 
 	if launches != 1 {
 		t.Fatalf("launches = %d, want 1", launches)
@@ -450,7 +452,9 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 		return 0, nil
 	}
 
+	app.mu.Lock()
 	app.maybeScheduleCronJobsLocked(time.Now())
+	app.mu.Unlock()
 
 	api.waitForWrites(t, 1, 1)
 	api.mu.Lock()
@@ -502,7 +506,9 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 		return nil
 	}
 
+	app.mu.Lock()
 	app.maybeScheduleCronJobsLocked(time.Now())
+	app.mu.Unlock()
 
 	if len(commands) != 1 || commands[0].Kind != agentproto.CommandProcessExit {
 		t.Fatalf("expected one process.exit command, got %#v", commands)
@@ -1446,6 +1452,53 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 	if enableType != 7 {
 		t.Fatalf("enable field type = %d, want 7 (checkbox)", enableType)
 	}
+}
+
+func TestHandleActionCronCommandDoesNotHoldAppLockDuringNoticeDelivery(t *testing.T) {
+	gateway := &reentrantAppLockGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	gateway.app = app
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) {
+		return nil, errors.New("cron bitable unavailable in test")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionCronCommand,
+			SurfaceSessionID: "surface-1",
+			GatewayID:        "app-1",
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+			Text:             "/cron",
+		})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cron action timed out (possible app-lock deadlock)")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		operations, err := gateway.snapshot()
+		if err != nil {
+			t.Fatalf("cron notice delivery should not fail while reentering app lock: %v", err)
+		}
+		if len(operations) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	operations, err := gateway.snapshot()
+	if err != nil {
+		t.Fatalf("cron notice delivery should not fail while reentering app lock: %v", err)
+	}
+	t.Fatalf("expected cron action to emit at least one gateway operation, got %#v", operations)
 }
 
 var _ feishu.BitableAPI = (*fakeCronBitableAPI)(nil)

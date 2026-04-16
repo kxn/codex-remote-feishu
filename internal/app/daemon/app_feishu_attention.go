@@ -69,7 +69,10 @@ func (a *App) syncFeishuTimeSensitiveLocked(ctx context.Context) {
 func (a *App) applyFeishuTimeSensitiveLocked(ctx context.Context, operation feishu.Operation) error {
 	applyCtx, applyCancel := a.newTimeoutContext(ctx, a.gatewayApplyTimeout)
 	defer applyCancel()
-	if err := a.gateway.Apply(applyCtx, []feishu.Operation{operation}); err != nil {
+	a.mu.Unlock()
+	err := a.gateway.Apply(applyCtx, []feishu.Operation{operation})
+	a.mu.Lock()
+	if err != nil {
 		if a.observeFeishuPermissionError(operation.GatewayID, err) {
 			log.Printf("feishu permission gap observed during time-sensitive apply: gateway=%s surface=%s err=%v", operation.GatewayID, operation.SurfaceSessionID, err)
 			return nil

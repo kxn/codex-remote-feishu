@@ -37,7 +37,7 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []control
 	case control.DaemonCommandVSCodeMigrate:
 		return a.handleVSCodeMigrateCommand(command)
 	case control.DaemonCommandThreadHistoryRead:
-		return a.handleThreadHistoryDaemonCommand(command)
+		return a.handleThreadHistoryDaemonCommandLocked(command)
 	case control.DaemonCommandSendIMFile:
 		return a.handleSendIMFileCommandLocked(command)
 	default:

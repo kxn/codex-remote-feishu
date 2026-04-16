@@ -172,7 +172,7 @@ func (a *App) handleIngressOverload(instanceID string, connectionID uint64) {
 	closed := a.relay.CloseConnection(instanceID, connectionID)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.handleUIEvents(context.Background(), a.service.ApplyInstanceTransportDegraded(instanceID, emitNotice))
+	a.handleUIEventsLocked(context.Background(), a.service.ApplyInstanceTransportDegraded(instanceID, emitNotice))
 	if !closed {
 		a.debugf("transport degraded connection already replaced: instance=%s connection=%d", instanceID, connectionID)
 	}
@@ -223,7 +223,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	)
 	if notice := rejectedInboundNotice(action); notice != nil {
 		a.ensureSurfaceRouteForNotice(action)
-		a.handleUIEvents(ctx, []control.UIEvent{{
+		a.handleUIEventsLocked(ctx, []control.UIEvent{{
 			Kind:             control.UIEventNotice,
 			GatewayID:        action.GatewayID,
 			SurfaceSessionID: action.SurfaceSessionID,
@@ -244,7 +244,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	}
 	inlineNavigationReplace := inlineResult != nil && control.AllowsInlineCardReplacement(action)
 	if !inlineNavigationReplace || len(appendEvents) != 0 {
-		a.handleUIEvents(ctx, appendEvents)
+		a.handleUIEventsLocked(ctx, appendEvents)
 	}
 	if commandSubmissionAnchorReplace {
 		a.scheduleCommandSubmissionAnchorRecall(action)
@@ -266,7 +266,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.invalidateVSCodeCompatibilityCacheLocked()
 		promptEvents, _ := a.maybePromptVSCodeCompatibilityLocked(action.SurfaceSessionID)
 		if inlineResult == nil {
-			a.handleUIEvents(ctx, promptEvents)
+			a.handleUIEventsLocked(ctx, promptEvents)
 		}
 	}
 	return inlineResult
@@ -512,7 +512,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	)
 	connectEvents := a.service.ApplyInstanceConnected(inst.InstanceID)
 	a.recordHeadlessRestoreOutcomeEventsLocked(connectEvents, now)
-	a.handleUIEvents(ctx, connectEvents)
+	a.handleUIEventsLocked(ctx, connectEvents)
 	if inst.Source == "vscode" {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}
@@ -522,12 +522,15 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		Kind:      agentproto.CommandThreadsRefresh,
 	}
 	refreshSent := false
-	if err := a.sendAgentCommand(hello.Instance.InstanceID, command); err != nil {
+	a.mu.Unlock()
+	err := a.sendAgentCommand(hello.Instance.InstanceID, command)
+	a.mu.Lock()
+	if err != nil {
 		log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
 		if managed := a.managedHeadless[hello.Instance.InstanceID]; managed != nil {
 			managed.LastError = "服务无法向本地 wrapper 发送初始化 threads.refresh。"
 		}
-		a.handleUIEvents(ctx, a.service.HandleProblem(hello.Instance.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+		a.handleUIEventsLocked(ctx, a.service.HandleProblem(hello.Instance.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 			Code:      "relay_send_command_failed",
 			Layer:     "daemon",
 			Stage:     "send_threads_refresh",
@@ -546,18 +549,18 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		a.markStartupThreadsRefreshRequestedLocked(hello.Instance.InstanceID)
 	}
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityLocked("")
-	a.handleUIEvents(ctx, vscodePromptEvents)
+	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []control.UIEvent{}
 	if !vscodeBlocked {
 		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
-	a.handleUIEvents(ctx, vscodeRecoveryEvents)
+	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEvents(ctx, normalRecoveryEvents)
+	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
-	a.handleUIEvents(ctx, recoveryEvents)
+	a.handleUIEventsLocked(ctx, recoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
 	a.syncWorkspaceSurfaceContextFilesLocked()
@@ -576,7 +579,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	for _, event := range events {
 		now := time.Now().UTC()
 		if historyEvents, handled := a.handleThreadHistoryEventLocked(instanceID, event); handled {
-			a.handleUIEvents(ctx, historyEvents)
+			a.handleUIEventsLocked(ctx, historyEvents)
 			continue
 		}
 		if event.Kind == agentproto.EventTurnCompleted {
@@ -617,7 +620,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
 		}
 		a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
-		a.handleUIEvents(ctx, uiEvents)
+		a.handleUIEventsLocked(ctx, uiEvents)
 		if eventAffectsSurfaceResumeState(event) {
 			syncSurfaceResumeState = true
 		}
@@ -709,14 +712,14 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 		return
 	}
 	if historyEvents, handled := a.handleThreadHistoryCommandAckLocked(instanceID, ack); handled {
-		a.handleUIEvents(ctx, historyEvents)
+		a.handleUIEventsLocked(ctx, historyEvents)
 		return
 	}
 	if ack.Accepted {
-		a.handleUIEvents(ctx, a.service.HandleCommandAccepted(instanceID, ack))
+		a.handleUIEventsLocked(ctx, a.service.HandleCommandAccepted(instanceID, ack))
 		return
 	}
-	a.handleUIEvents(ctx, a.service.HandleCommandRejected(instanceID, ack))
+	a.handleUIEventsLocked(ctx, a.service.HandleCommandRejected(instanceID, ack))
 }
 
 func (a *App) onDisconnect(ctx context.Context, instanceID string) {
@@ -746,20 +749,20 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.Managed,
 		inst.PID,
 	)
-	a.handleUIEvents(ctx, uiEvents)
+	a.handleUIEventsLocked(ctx, uiEvents)
 	if inst.Source == "vscode" {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityLocked("")
-	a.handleUIEvents(ctx, vscodePromptEvents)
+	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []control.UIEvent{}
 	if !vscodeBlocked {
 		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
-	a.handleUIEvents(ctx, vscodeRecoveryEvents)
+	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEvents(ctx, normalRecoveryEvents)
+	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
 	a.syncSurfaceResumeStateLocked(nil)
 	a.syncWorkspaceSurfaceContextFilesLocked()
 }
@@ -776,7 +779,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	uiEvents := a.service.Tick(now)
 	uiEvents = append(uiEvents, a.maybeFlushUpgradeResultLocked(now)...)
 	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
-	a.handleUIEvents(ctx, uiEvents)
+	a.handleUIEventsLocked(ctx, uiEvents)
 	a.syncManagedHeadlessLocked(now)
 	a.maybeRefreshIdleManagedHeadlessLocked(now)
 	a.reapIdleHeadless(now)
@@ -787,19 +790,19 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 		a.vscodeStartupCheckDue = false
 		vscodePromptEvents, blocked := a.maybePromptVSCodeCompatibilityLocked("")
 		vscodeBlocked = blocked
-		a.handleUIEvents(ctx, vscodePromptEvents)
+		a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	}
 	vscodeRecoveryEvents := []control.UIEvent{}
 	if !vscodeBlocked {
 		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
-	a.handleUIEvents(ctx, vscodeRecoveryEvents)
+	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEvents(ctx, normalRecoveryEvents)
+	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
 	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
 	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
-	a.handleUIEvents(ctx, recoveryEvents)
+	a.handleUIEventsLocked(ctx, recoveryEvents)
 	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeStartFeishuPermissionRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)

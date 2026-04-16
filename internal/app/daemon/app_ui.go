@@ -14,11 +14,19 @@ import (
 )
 
 func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.handleUIEventsLocked(ctx, events)
+}
+
+func (a *App) handleUIEventsLocked(ctx context.Context, events []control.UIEvent) {
 	_ = ctx
 	for _, event := range events {
 		if event.DaemonCommand != nil {
-			followup := a.handleDaemonCommandLocked(*event.DaemonCommand)
-			a.handleUIEvents(context.Background(), followup)
+			a.mu.Unlock()
+			followup := a.handleDaemonCommand(*event.DaemonCommand)
+			a.mu.Lock()
+			a.handleUIEventsLocked(context.Background(), followup)
 			continue
 		}
 		if event.Command != nil {
@@ -69,11 +77,14 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 					SurfaceSessionID: event.SurfaceSessionID,
 					CommandID:        event.Command.CommandID,
 				})
-				a.handleUIEvents(context.Background(), rollback)
+				a.handleUIEventsLocked(context.Background(), rollback)
 				continue
 			}
 			a.traceSteerCommand(event.SurfaceSessionID, instanceID, *event.Command)
-			if err := a.sendAgentCommand(instanceID, *event.Command); err != nil {
+			a.mu.Unlock()
+			err := a.sendAgentCommand(instanceID, *event.Command)
+			a.mu.Lock()
+			if err != nil {
 				log.Printf("relay send command failed: instance=%s kind=%s err=%v", instanceID, event.Command.Kind, err)
 				rollback := a.service.HandleCommandDispatchFailure(event.SurfaceSessionID, event.Command.CommandID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 					Code:             "relay_send_command_failed",
@@ -85,7 +96,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 					CommandID:        event.Command.CommandID,
 					Retryable:        true,
 				}))
-				a.handleUIEvents(context.Background(), rollback)
+				a.handleUIEventsLocked(context.Background(), rollback)
 			} else {
 				a.debugf(
 					"dispatch sent: surface=%s instance=%s command=%s kind=%s pending=%s active=%s",
@@ -99,7 +110,7 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 			}
 			continue
 		}
-		a.flushPendingGatewayNotices(event.SurfaceSessionID)
+		a.flushPendingGatewayNoticesLocked(event.SurfaceSessionID)
 		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
 			chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 			log.Printf("gateway apply failed: chat=%s event=%s err=%v", chatID, event.Kind, err)
@@ -109,7 +120,9 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 }
 
 func (a *App) deliverUIEvent(event control.UIEvent) error {
-	return a.deliverUIEventWithContext(context.Background(), event)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.deliverUIEventLocked(context.Background(), event)
 }
 
 func (a *App) deliverUIEventLocked(ctx context.Context, event control.UIEvent) error {
@@ -188,7 +201,15 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 	}
 	applyCtx, applyCancel := a.newTimeoutContext(ctx, a.gatewayApplyTimeout)
 	defer applyCancel()
-	if err := a.gateway.Apply(applyCtx, operations); err != nil {
+	var err error
+	if appLocked {
+		a.mu.Unlock()
+		err = a.gateway.Apply(applyCtx, operations)
+		a.mu.Lock()
+	} else {
+		err = a.gateway.Apply(applyCtx, operations)
+	}
+	if err != nil {
 		if a.observeFeishuPermissionError(gatewayID, err) {
 			log.Printf("feishu permission gap observed during ui delivery: gateway=%s surface=%s event=%s err=%v", gatewayID, event.SurfaceSessionID, event.Kind, err)
 			return nil
@@ -249,7 +270,7 @@ func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (
 	return context.WithTimeout(base, timeout)
 }
 
-func (a *App) flushPendingGatewayNotices(surfaceID string) {
+func (a *App) flushPendingGatewayNoticesLocked(surfaceID string) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
 	}
@@ -258,7 +279,7 @@ func (a *App) flushPendingGatewayNotices(surfaceID string) {
 		return
 	}
 	for _, event := range pending {
-		if err := a.deliverUIEvent(event); err != nil {
+		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
 			return
 		}
 	}
