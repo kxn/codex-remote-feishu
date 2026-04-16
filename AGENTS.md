@@ -202,7 +202,21 @@ When corresponding logic carriers changed:
 
 ## Commit / Push / Branch Policy
 
+- If repository work is resolved and verified, do not end the turn with uncommitted changes unless the user explicitly wants local-only uncommitted state.
 - If you intentionally commit during task work, push in the same turn by default unless user asked local-only staging.
+- Do not end a repository task with local commits left unpushed unless one of these is true:
+  - the user explicitly asked to keep it local-only
+  - the branch is explicitly a temporary local experiment branch
+  - push is genuinely blocked by conflict, failing post-rebase validation, permission, or outage
+- If stopping in a local-only state, explicitly report:
+  - `LOCAL-ONLY`
+  - current branch
+  - current `HEAD`
+  - why it was not pushed
+  - the exact next action needed to publish it
+- Before treating a repository task as complete, re-check both:
+  - `git status --short`
+  - whether local `HEAD` is ahead of its upstream
 - For temporary branch/ref switches, record start ref and return on normal exit unless user explicitly says stay.
 
 ## File Length Gate Policy
