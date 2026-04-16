@@ -33,6 +33,15 @@ type externalAccessLinkResponse struct {
 	URL externalaccess.IssuedURL `json:"url"`
 }
 
+type externalAccessShutdownPlan struct {
+	reason   string
+	service  *externalaccess.Service
+	server   *http.Server
+	listener net.Listener
+	waitCh   chan struct{}
+	waitOnly bool
+}
+
 func externalAccessSettingsViewFromConfig(value config.ExternalAccessSettings) externalAccessSettingsView {
 	value = config.ResolveExternalAccessSettings(value)
 	lazyStart := value.Provider.LazyStart == nil || *value.Provider.LazyStart
@@ -125,18 +134,38 @@ func (a *App) handleAdminExternalAccessLink(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *App) IssueExternalAccessURL(ctx context.Context, req externalaccess.IssueRequest) (externalaccess.IssuedURL, error) {
-	a.mu.Lock()
-	service := a.externalAccess
-	if service == nil {
-		a.mu.Unlock()
-		return externalaccess.IssuedURL{}, externalaccess.ErrDisabled
-	}
-	localURL, err := a.ensureExternalAccessListenerLocked()
-	a.mu.Unlock()
+	service, localURL, err := a.ensureExternalAccessIssueTarget()
 	if err != nil {
 		return externalaccess.IssuedURL{}, err
 	}
 	return service.IssueURL(ctx, req, localURL)
+}
+
+func (a *App) ensureExternalAccessIssueTarget() (*externalaccess.Service, string, error) {
+	a.mu.Lock()
+	service, localURL, err := a.ensureExternalAccessIssueTargetLocked()
+	a.mu.Unlock()
+	return service, localURL, err
+}
+
+func (a *App) ensureExternalAccessIssueTargetLocked() (*externalaccess.Service, string, error) {
+	for {
+		service := a.externalAccess
+		if service == nil {
+			return nil, "", externalaccess.ErrDisabled
+		}
+		if waitCh := a.externalAccessShutdownWait; waitCh != nil {
+			a.mu.Unlock()
+			<-waitCh
+			a.mu.Lock()
+			continue
+		}
+		localURL, err := a.ensureExternalAccessListenerLocked()
+		if err != nil {
+			return nil, "", err
+		}
+		return service, localURL, nil
+	}
 }
 
 func (a *App) ensureExternalAccessListenerLocked() (string, error) {
@@ -172,24 +201,71 @@ func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 	return localURL, nil
 }
 
-func (a *App) shutdownExternalAccessLocked(reason string) {
+func (a *App) prepareExternalAccessShutdownLocked(reason string) externalAccessShutdownPlan {
 	if a.externalAccess == nil {
-		return
+		return externalAccessShutdownPlan{}
 	}
+	if waitCh := a.externalAccessShutdownWait; waitCh != nil {
+		return externalAccessShutdownPlan{
+			reason:   reason,
+			waitCh:   waitCh,
+			waitOnly: true,
+		}
+	}
+	waitCh := make(chan struct{})
 	server := a.externalAccessServer
 	listener := a.externalAccessListener
+	service := a.externalAccess
 	a.externalAccessServer = nil
 	a.externalAccessListener = nil
+	a.externalAccessShutdownWait = waitCh
 	a.webPreviewGrants = map[string]*previewScopeGrant{}
-	if server != nil {
-		_ = server.Close()
+	return externalAccessShutdownPlan{
+		reason:   reason,
+		service:  service,
+		server:   server,
+		listener: listener,
+		waitCh:   waitCh,
 	}
-	if listener != nil {
-		_ = listener.Close()
+}
+
+func (a *App) executeExternalAccessShutdownPlan(plan externalAccessShutdownPlan) {
+	if plan.waitCh == nil {
+		return
 	}
-	if err := a.externalAccess.ShutdownRuntime(); err != nil {
-		log.Printf("external access shutdown (%s) failed: %v", reason, err)
+	if plan.waitOnly {
+		<-plan.waitCh
+		return
 	}
+	defer func() {
+		a.mu.Lock()
+		if a.externalAccessShutdownWait == plan.waitCh {
+			close(plan.waitCh)
+			a.externalAccessShutdownWait = nil
+		}
+		a.mu.Unlock()
+	}()
+	if plan.server != nil {
+		_ = plan.server.Close()
+	}
+	if plan.listener != nil {
+		_ = plan.listener.Close()
+	}
+	if plan.service != nil {
+		if err := plan.service.ShutdownRuntime(); err != nil {
+			log.Printf("external access shutdown (%s) failed: %v", plan.reason, err)
+		}
+	}
+}
+
+func (a *App) shutdownExternalAccessLocked(reason string) {
+	plan := a.prepareExternalAccessShutdownLocked(reason)
+	if plan.waitCh == nil {
+		return
+	}
+	a.mu.Unlock()
+	a.executeExternalAccessShutdownPlan(plan)
+	a.mu.Lock()
 }
 
 func (a *App) maybeShutdownExternalAccessIdleLocked(now time.Time) {

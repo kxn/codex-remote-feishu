@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -201,6 +202,33 @@ func (p *rotatingProvider) Snapshot() ProviderStatus {
 
 func (p *rotatingProvider) Close() error { return nil }
 
+type blockingCloseProvider struct {
+	startOnce    sync.Once
+	closeStarted chan struct{}
+	unblockClose chan struct{}
+}
+
+func (p *blockingCloseProvider) Kind() string { return "fake" }
+
+func (p *blockingCloseProvider) EnsurePublicBase(context.Context, string) (PublicBase, error) {
+	return PublicBase{
+		BaseURL:   "https://example.trycloudflare.com",
+		StartedAt: time.Unix(1, 0).UTC(),
+	}, nil
+}
+
+func (p *blockingCloseProvider) Snapshot() ProviderStatus {
+	return ProviderStatus{Kind: p.Kind(), Ready: true}
+}
+
+func (p *blockingCloseProvider) Close() error {
+	p.startOnce.Do(func() {
+		close(p.closeStarted)
+	})
+	<-p.unblockClose
+	return nil
+}
+
 func TestServiceIssueURLDoesNotCacheProviderBaseAcrossCalls(t *testing.T) {
 	provider := &rotatingProvider{}
 	service := NewService(Options{Provider: provider})
@@ -262,5 +290,45 @@ func TestServiceExchangeFallsBackToExistingCookieWhenQueryTokenIsInvalid(t *test
 	}
 	if location := rec.Header().Get("Location"); location != parsed.Path+"file-a" {
 		t.Fatalf("location = %q, want %q", location, parsed.Path+"file-a")
+	}
+}
+
+func TestServiceShutdownRuntimeDoesNotHoldMutexWhileClosingProvider(t *testing.T) {
+	provider := &blockingCloseProvider{
+		closeStarted: make(chan struct{}),
+		unblockClose: make(chan struct{}),
+	}
+	service := NewService(Options{Provider: provider})
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		_ = service.ShutdownRuntime()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-provider.closeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("provider.Close was not called")
+	}
+
+	snapshotDone := make(chan struct{})
+	go func() {
+		_ = service.Snapshot()
+		close(snapshotDone)
+	}()
+
+	select {
+	case <-snapshotDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Snapshot blocked while provider.Close was in flight")
+	}
+
+	close(provider.unblockClose)
+
+	select {
+	case <-shutdownDone:
+	case <-time.After(time.Second):
+		t.Fatal("ShutdownRuntime did not finish after provider.Close unblocked")
 	}
 }

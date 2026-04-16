@@ -2,7 +2,7 @@
 
 > Type: `implemented`
 > Updated: `2026-04-16`
-> Summary: external-access 基座已落地到当前代码，文档改为记录独立 listener、`trycloudflare` provider、短时授权 URL、idle auto-destroy 与首个 consumer 边界。
+> Summary: external-access 基座已落地到当前代码，文档记录独立 listener、`trycloudflare` provider、短时授权 URL、idle auto-destroy，以及 provider reuse 的 health/target 约束。
 
 ## 1. 文档定位
 
@@ -76,6 +76,11 @@
 - daemon 启动 `cloudflared` 时必须隔离配置目录，避免用户现有 `.cloudflared` 污染 quick tunnel 行为。
 - 这条通道默认是**短时临时资源**：如果 external-access listener 连续 `30m` 没有收到任何入站或出站流量，应自动销毁 listener + provider，并回收这次临时公网入口。
 
+当前实现还额外收敛了两条 runtime 约束：
+
+- provider reuse 不能只看“进程还活着”，还必须在复用前重新确认 `cloudflared` 的 `/ready` 仍健康。
+- provider reuse 不能跨 listener target 漂移；如果本地 listener 重建后目标 URL 发生变化，provider 必须丢弃旧 tunnel 并重启。
+
 ## 5. 总体架构
 
 建议把这套能力拆成 4 个明确组件：
@@ -109,6 +114,14 @@ external user browser
               -> token exchange / cookie session
               -> reverse proxy to localhost target
 ```
+
+实现上，这条链路现在按“三段式”推进 lifecycle：
+
+1. App/Service 在锁内只摘出当前 listener/provider/runtime 状态，并决定是否需要 shutdown 或 restart
+2. `server.Close()` / `listener.Close()` / `provider.Close()` 等慢操作在锁外执行
+3. 完成后再回到锁内清理可见状态与短时 grant
+
+这样 `App.mu` / `Service.mu` 不再直接包裹 external-access 的慢关闭路径。
 
 ## 6. 配置与状态模型
 

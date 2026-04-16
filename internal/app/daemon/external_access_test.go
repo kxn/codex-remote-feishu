@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,40 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 )
+
+type blockingShutdownExternalAccessProvider struct {
+	startOnce    sync.Once
+	unblockOnce  sync.Once
+	closeStarted chan struct{}
+	unblockClose chan struct{}
+}
+
+func (p *blockingShutdownExternalAccessProvider) Kind() string { return "fake" }
+
+func (p *blockingShutdownExternalAccessProvider) EnsurePublicBase(context.Context, string) (externalaccess.PublicBase, error) {
+	return externalaccess.PublicBase{
+		BaseURL:   "https://example.trycloudflare.com",
+		StartedAt: time.Unix(1, 0).UTC(),
+	}, nil
+}
+
+func (p *blockingShutdownExternalAccessProvider) Snapshot() externalaccess.ProviderStatus {
+	return externalaccess.ProviderStatus{Kind: p.Kind(), Ready: true}
+}
+
+func (p *blockingShutdownExternalAccessProvider) Close() error {
+	p.startOnce.Do(func() {
+		close(p.closeStarted)
+	})
+	<-p.unblockClose
+	return nil
+}
+
+func (p *blockingShutdownExternalAccessProvider) unblock() {
+	p.unblockOnce.Do(func() {
+		close(p.unblockClose)
+	})
+}
 
 func TestAdminExternalAccessStatusAndLink(t *testing.T) {
 	cfg := config.DefaultAppConfig()
@@ -158,5 +193,95 @@ func TestExternalAccessIdleTimeoutShutsDownListener(t *testing.T) {
 	}
 	if snapshot := app.externalAccess.Snapshot(); snapshot.ListenerActive {
 		t.Fatalf("expected external access runtime inactive after idle timeout, got %#v", snapshot)
+	}
+}
+
+func TestIssueExternalAccessURLWaitsForShutdownInFlight(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "trycloudflare",
+		},
+	}
+	provider := &blockingShutdownExternalAccessProvider{
+		closeStarted: make(chan struct{}),
+		unblockClose: make(chan struct{}),
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Provider:          provider,
+		DefaultLinkTTL:    10 * time.Second,
+		DefaultSessionTTL: 30 * time.Second,
+		IdleTTL:           5 * time.Minute,
+	})
+	defer func() {
+		provider.unblock()
+		_ = app.Shutdown(nil)
+	}()
+
+	_, err := app.IssueExternalAccessURL(context.Background(), externalaccess.IssueRequest{
+		Purpose:   externalaccess.PurposeDebug,
+		TargetURL: "http://127.0.0.1:9501/admin/",
+	})
+	if err != nil {
+		t.Fatalf("initial IssueExternalAccessURL: %v", err)
+	}
+	if app.externalAccessListener == nil {
+		t.Fatal("expected listener to be started")
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		app.mu.Lock()
+		app.shutdownExternalAccessLocked("test")
+		app.mu.Unlock()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-provider.closeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("external access shutdown did not reach provider.Close")
+	}
+
+	issueDone := make(chan struct{})
+	var issued externalaccess.IssuedURL
+	var issueErr error
+	go func() {
+		issued, issueErr = app.IssueExternalAccessURL(context.Background(), externalaccess.IssueRequest{
+			Purpose:   externalaccess.PurposeDebug,
+			TargetURL: "http://127.0.0.1:9501/admin/",
+		})
+		close(issueDone)
+	}()
+
+	select {
+	case <-issueDone:
+		t.Fatal("IssueExternalAccessURL returned before shutdown finished")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	provider.unblock()
+
+	select {
+	case <-shutdownDone:
+	case <-time.After(time.Second):
+		t.Fatal("shutdownExternalAccessLocked did not finish")
+	}
+
+	select {
+	case <-issueDone:
+	case <-time.After(time.Second):
+		t.Fatal("IssueExternalAccessURL did not resume after shutdown finished")
+	}
+
+	if issueErr != nil {
+		t.Fatalf("IssueExternalAccessURL after shutdown: %v", issueErr)
+	}
+	if issued.ExternalURL == "" {
+		t.Fatal("expected issued external URL after shutdown")
 	}
 }

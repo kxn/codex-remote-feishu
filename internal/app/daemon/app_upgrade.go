@@ -97,15 +97,11 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 }
 
 func (a *App) handleDebugAdminCommand(command control.DaemonCommand) []control.UIEvent {
-	service := a.externalAccess
-	if service == nil {
-		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", "生成管理页外链失败：external access 当前未启用。")}
-	}
-	adminURL := a.admin.adminURL
-	localURL, err := a.ensureExternalAccessListenerLocked()
+	service, localURL, err := a.ensureExternalAccessIssueTargetLocked()
 	if err != nil {
 		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err))}
 	}
+	adminURL := a.admin.adminURL
 	req := debugAdminIssueRequest(adminURL)
 	surfaceID := command.SurfaceSessionID
 	go func() {

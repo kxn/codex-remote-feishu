@@ -1,8 +1,8 @@
 # Web Preview Snapshot Design
 
 > Type: `draft`
-> Updated: `2026-04-15`
-> Summary: 新增 `/preview` snapshot/cache 主设计，收束 prefix grant、blob 落盘、lineage 与大文件 diff-first 策略。
+> Updated: `2026-04-16`
+> Summary: `/preview` snapshot/cache 主设计，收束 prefix grant、blob 落盘、lineage、大文件 diff-first，以及 external-access prefix 复用的 health/target 前置。
 
 ## 1. 文档定位
 
@@ -150,6 +150,12 @@ external-access 基座已经能稳定复用：
 - 该 grant 的 `TargetBasePath` 指向 `/preview/s/<scopePublicID>/`
 - 浏览器第一次点击这个 scope 下任一链接时，完成一次 token -> cookie 交换
 - 同一 scope 下其余文件链接直接复用同一 cookie path
+
+这里有一个实现层约束也已经收敛：
+
+- prefix grant 虽然按 scope 复用，但它依赖的 external-access provider 不能盲目复用旧 tunnel。
+- 当前实现要求 provider 在复用前同时满足：当前 tunnel `/ready` 仍健康、且它仍指向这次 listener 的 target。
+- 因此 preview scope 可以稳定复用授权语义，但不会因为 listener 重建而继续发出指向旧 origin 的 stale tunnel。
 
 ### 5.3 scope 的定义
 

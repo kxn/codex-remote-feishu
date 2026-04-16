@@ -180,11 +180,12 @@ type App struct {
 	cronGatewayIdentityLookup       func(string) (cronGatewayIdentity, bool, error)
 	cronNextScheduleScan            time.Time
 
-	adminAuth             *adminauth.Manager
-	admin                 adminRuntimeState
-	externalAccess        *externalaccess.Service
-	externalAccessRuntime ExternalAccessRuntimeConfig
-	webPreviewGrants      map[string]*previewScopeGrant
+	adminAuth                  *adminauth.Manager
+	admin                      adminRuntimeState
+	externalAccess             *externalaccess.Service
+	externalAccessRuntime      ExternalAccessRuntimeConfig
+	externalAccessShutdownWait chan struct{}
+	webPreviewGrants           map[string]*previewScopeGrant
 
 	relayListener          net.Listener
 	apiListener            net.Listener

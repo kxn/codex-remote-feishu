@@ -212,6 +212,130 @@ func TestTryCloudflareProviderEnsurePublicBaseCoalescesConcurrentStart(t *testin
 	}
 }
 
+func TestTryCloudflareProviderRestartsWhenListenerTargetChanges(t *testing.T) {
+	metricsPort := reserveLocalPort(t)
+	var factoryCalls atomic.Int32
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{
+		BinaryPath:  "cloudflared",
+		MetricsPort: metricsPort,
+		WaitReady: func(context.Context, int) error {
+			return nil
+		},
+		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+			call := factoryCalls.Add(1)
+			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+		},
+	})
+	defer provider.Close()
+
+	first, err := provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9512")
+	if err != nil {
+		t.Fatalf("EnsurePublicBase first: %v", err)
+	}
+	second, err := provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9513")
+	if err != nil {
+		t.Fatalf("EnsurePublicBase second: %v", err)
+	}
+	if got := factoryCalls.Load(); got != 2 {
+		t.Fatalf("factoryCalls = %d, want 2", got)
+	}
+	if first.BaseURL == second.BaseURL {
+		t.Fatalf("expected different public base after target change, got %q", first.BaseURL)
+	}
+}
+
+func TestTryCloudflareProviderRestartsWhenReadyProbeFails(t *testing.T) {
+	metricsPort := reserveLocalPort(t)
+	var factoryCalls atomic.Int32
+	var readyCalls atomic.Int32
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{
+		BinaryPath:  "cloudflared",
+		MetricsPort: metricsPort,
+		WaitReady: func(context.Context, int) error {
+			call := readyCalls.Add(1)
+			switch call {
+			case 1, 3:
+				return nil
+			case 2:
+				return errors.New("ready probe failed")
+			default:
+				return nil
+			}
+		},
+		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+			call := factoryCalls.Add(1)
+			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+		},
+	})
+	defer provider.Close()
+
+	first, err := provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9512")
+	if err != nil {
+		t.Fatalf("EnsurePublicBase first: %v", err)
+	}
+	second, err := provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9512")
+	if err != nil {
+		t.Fatalf("EnsurePublicBase second: %v", err)
+	}
+	if got := factoryCalls.Load(); got != 2 {
+		t.Fatalf("factoryCalls = %d, want 2", got)
+	}
+	if got := readyCalls.Load(); got != 4 {
+		t.Fatalf("readyCalls = %d, want 4", got)
+	}
+	if first.BaseURL == second.BaseURL {
+		t.Fatalf("expected restarted public base after failed probe, got %q", first.BaseURL)
+	}
+}
+
+func TestTryCloudflareProviderCoalescesConcurrentRestartOnTargetChange(t *testing.T) {
+	metricsPort := reserveLocalPort(t)
+	var factoryCalls atomic.Int32
+	provider := NewTryCloudflareProvider(TryCloudflareOptions{
+		BinaryPath:  "cloudflared",
+		MetricsPort: metricsPort,
+		WaitReady: func(context.Context, int) error {
+			return nil
+		},
+		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+			call := factoryCalls.Add(1)
+			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("sleep 0.2; printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+		},
+	})
+	defer provider.Close()
+
+	if _, err := provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9512"); err != nil {
+		t.Fatalf("EnsurePublicBase first: %v", err)
+	}
+
+	results := make([]PublicBase, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = provider.EnsurePublicBase(t.Context(), "http://127.0.0.1:9513")
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("EnsurePublicBase concurrent[%d]: %v", i, err)
+		}
+	}
+	if got := factoryCalls.Load(); got != 2 {
+		t.Fatalf("factoryCalls = %d, want 2", got)
+	}
+	if results[0].BaseURL == "" || results[1].BaseURL == "" {
+		t.Fatalf("results = %#v, want populated base URLs", results)
+	}
+	if results[0].BaseURL != results[1].BaseURL {
+		t.Fatalf("results = %#v, want shared restarted base", results)
+	}
+}
+
 func reserveLocalPort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
