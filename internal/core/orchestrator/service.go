@@ -651,13 +651,18 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnPlanUpdate(instanceID, event)...))
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
-		inst.ActiveTurnID = event.TurnID
-		inst.ActiveThreadID = event.ThreadID
+		trackActiveTurn := s.shouldTrackInstanceActiveTurn(instanceID, event)
+		if trackActiveTurn {
+			inst.ActiveTurnID = event.TurnID
+			inst.ActiveThreadID = event.ThreadID
+		}
 		if event.ThreadID != "" {
 			s.touchThread(s.ensureThread(inst, event.ThreadID))
 		}
-		if surface := s.surfaceForInitiator(instanceID, event); surface != nil {
-			surface.ActiveTurnOrigin = event.Initiator.Kind
+		if trackActiveTurn {
+			if surface := s.surfaceForInitiator(instanceID, event); surface != nil {
+				surface.ActiveTurnOrigin = event.Initiator.Kind
+			}
 		}
 		compactEvents := s.promoteCompactTurn(instanceID, event)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
@@ -679,16 +684,21 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventTurnCompleted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
-		inst.ActiveTurnID = ""
+		clearTrackedTurn := shouldClearTrackedInstanceActiveTurn(inst, event.ThreadID, event.TurnID)
+		if clearTrackedTurn {
+			inst.ActiveTurnID = ""
+		}
 		s.clearRequestsForTurn(instanceID, event.ThreadID, event.TurnID)
 		var thread *state.ThreadRecord
 		if event.ThreadID != "" {
-			inst.ActiveThreadID = event.ThreadID
+			if clearTrackedTurn || event.Initiator.Kind == agentproto.InitiatorLocalUI {
+				inst.ActiveThreadID = event.ThreadID
+			}
 			thread = s.ensureThread(inst, event.ThreadID)
 			s.touchThread(thread)
 		}
 		surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-		if surface != nil {
+		if clearTrackedTurn && surface != nil {
 			surface.ActiveTurnOrigin = ""
 		}
 		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)

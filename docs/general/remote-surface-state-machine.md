@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `Git URL` 先走本地 `request_user_input` 参数表单，再走父目录 path picker，并由 daemon-side non-interactive `git clone` 在持锁外执行；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 confirm 禁用）；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义，以及 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、本地 Git 导入参数表单复用同一 request gate、`approval_command` / `approval_file_change` / `approval_network` 与顶层 `tool/requestUserInput` 现在也进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `Git URL` 先走本地 `request_user_input` 参数表单，再走父目录 path picker，并由 daemon-side non-interactive `git clone` 在持锁外执行；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 confirm 禁用）；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义，以及 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、本地 Git 导入参数表单复用同一 request gate、`approval_command` / `approval_file_change` / `approval_network` 与顶层 `tool/requestUserInput` 现在也进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -839,32 +839,39 @@ E3 Running
 2. turn 建立后再提升到 `activeRemote`。
 3. 对空 thread 首条消息，promote 会优先按 `Initiator.SurfaceSessionID` 命中。
 4. 若 queue item 来自 `R5`，turn.started 后 surface 必须切回 `pinned`，不会继续停在 `new_thread_ready`。
-5. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
-6. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。
-7. 只要 compact 仍在 pending/running，`dispatchNext` 就不会再把后续 queued 输入发给同一实例。
-8. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。
-9. compact pending/running 也属于 `surfaceHasLiveRemoteWork`：
+5. instance 级 `ActiveTurnID/ActiveThreadID` 当前只跟踪“当前主交互面真正可中断的 turn”：
+   1. local UI turn 会更新它
+   2. 命中当前 `pendingRemote/activeRemote` 绑定的 remote turn 也会更新它
+   3. 未绑定的 unknown/helper side-turn 不会再覆盖或清空它
+6. `/stop` 当前会优先看当前 surface 的 `activeRemote` 绑定：
+   1. 即使 instance 级 `ActiveTurnID` 暂时缺失，只要当前 surface 仍保留 active running remote binding，仍会对该主 turn 发 `turn.interrupt`
+   2. 若已进入 retained-offline / transport degraded，则仍以 offline notice 为准，不会因为 retained binding 存在而伪造 interrupt
+7. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
+8. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。
+9. 只要 compact 仍在 pending/running，`dispatchNext` 就不会再把后续 queued 输入发给同一实例。
+10. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。
+11. compact pending/running 也属于 `surfaceHasLiveRemoteWork`：
    1. `/mode` 会直接拒绝
    2. `/detach` 会进入 delayed detach / abandoning
    3. `/use`、`/follow`、`/new` 这类 route mutation 会被挡住，不会在 compact 期间偷偷切走当前 thread
-10. remote turn 在 `turn.completed` 时，若当前 item 满足 autowhip 触发条件：
+12. remote turn 在 `turn.completed` 时，若当前 item 满足 autowhip 触发条件：
    1. surface 不会立刻同步 enqueue 新 item
    2. 只会把 surface 置入 `A2 Scheduled`
    3. 后续等 `Tick()` 到期后再真正 enqueue
-11. autowhip 当前有两条独立触发通道：
+13. autowhip 当前有两条独立触发通道：
    1. `problem.Retryable=true` 的 retryable failure
    2. final assistant 文本**不包含**收工口令 `老板不要再打我了，真的没有事情干了`
-12. 若 final assistant 文本命中收工口令：
+14. 若 final assistant 文本命中收工口令：
    1. 当前 surface 会回到 `A1 EnabledIdle`
    2. 不会继续 schedule / dispatch autowhip
    3. 会补一条 `AutoWhip` notice：`Codex 已经把活干完了，老板放过他吧`
-13. `/stop` 命中 live remote work 时，会给当前 surface 打一次 `SuppressOnce`：
+15. `/stop` 命中 live remote work 时，会给当前 surface 打一次 `SuppressOnce`：
    1. 本轮 turn 收尾时不会触发 autowhip
    2. suppress 只消费一次，之后 autowhip 恢复正常评估
-14. 当前 backoff 固定为：
+16. 当前 backoff 固定为：
    1. `incomplete_stop`（文本未出现收工口令）: `3s -> 10s -> 30s`，最多 3 次
    2. `retryable_failure`: `10s -> 30s -> 90s -> 300s`，最多 4 次
-15. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
+17. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
 
 ### 5.3 本地 VS Code 仲裁
 
@@ -1108,7 +1115,7 @@ transport degraded retained attachment
 retained-offline overlay 额外规则：
 
 1. 条件：`Attachment.InstanceID != ""` 且 `Dispatch.InstanceOnline=false`。
-2. 当前若保留了 active running/dispatching item，`/stop` 只返回恢复中提示，不会发送 interrupt。
+2. 当前若保留了 active running/dispatching item，`/stop` 只返回恢复中提示，不会发送 interrupt；即使 retained `activeRemote` binding 仍在，也以 offline notice 为准。
 3. `/detach` 直接 finalize，不进入 `E6 Abandoning`。
 4. `/status` 必须把“attachment 仍保留”和“实例当前离线”同时投影出来。
 

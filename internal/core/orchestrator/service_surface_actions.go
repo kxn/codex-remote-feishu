@@ -666,7 +666,9 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []control.UIE
 		Text:     "当前没有正在运行的推理。",
 		ThemeKey: "system",
 	}
-	if inst != nil && inst.ActiveTurnID != "" {
+	if inst != nil && !inst.Online && surface.ActiveQueueItemID != "" {
+		notice = s.stopOfflineNotice(surface)
+	} else if threadID, turnID, ok := s.interruptibleSurfaceTurn(surface); ok {
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventAgentCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -678,8 +680,8 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []control.UIE
 					ChatID:  surface.ChatID,
 				},
 				Target: agentproto.Target{
-					ThreadID: inst.ActiveThreadID,
-					TurnID:   inst.ActiveTurnID,
+					ThreadID: threadID,
+					TurnID:   turnID,
 				},
 			},
 		})
@@ -690,9 +692,7 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []control.UIE
 			ThemeKey: "system",
 		}
 	} else if surface.ActiveQueueItemID != "" {
-		if inst != nil && !inst.Online {
-			notice = s.stopOfflineNotice(surface)
-		} else if s.surfaceHasPendingCompact(surface) {
+		if s.surfaceHasPendingCompact(surface) {
 			notice = control.Notice{
 				Code:     "stop_not_interruptible",
 				Title:    "当前还不能停止",

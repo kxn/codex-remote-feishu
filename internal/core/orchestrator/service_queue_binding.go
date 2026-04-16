@@ -106,6 +106,29 @@ func (s *Service) lookupRemoteTurn(instanceID, threadID, turnID string) *remoteT
 	return s.pendingRemoteBinding(instanceID, threadID)
 }
 
+func (s *Service) shouldTrackInstanceActiveTurn(instanceID string, event agentproto.Event) bool {
+	if isInternalHelperEvent(event) {
+		return false
+	}
+	if event.Initiator.Kind == agentproto.InitiatorLocalUI {
+		return true
+	}
+	return s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID) != nil
+}
+
+func shouldClearTrackedInstanceActiveTurn(inst *state.InstanceRecord, threadID, turnID string) bool {
+	if inst == nil {
+		return false
+	}
+	activeTurnID := strings.TrimSpace(inst.ActiveTurnID)
+	if activeTurnID == "" || activeTurnID != strings.TrimSpace(turnID) {
+		return false
+	}
+	activeThreadID := strings.TrimSpace(inst.ActiveThreadID)
+	targetThreadID := strings.TrimSpace(threadID)
+	return activeThreadID == "" || targetThreadID == "" || activeThreadID == targetThreadID
+}
+
 func (s *Service) clearRemoteTurn(instanceID, turnID string) {
 	if binding := s.activeRemoteBinding(instanceID, turnID); binding != nil {
 		delete(s.activeRemote, instanceID)
@@ -138,6 +161,31 @@ func (s *Service) remoteBindingForSurface(surface *state.SurfaceConsoleRecord) *
 		return binding
 	}
 	return nil
+}
+
+func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) (threadID, turnID string, ok bool) {
+	if surface == nil || surface.AttachedInstanceID == "" {
+		return "", "", false
+	}
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	if binding := s.activeRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+		turnID = strings.TrimSpace(binding.TurnID)
+		if turnID != "" {
+			activeThreadID := ""
+			if inst != nil {
+				activeThreadID = inst.ActiveThreadID
+			}
+			return strings.TrimSpace(firstNonEmpty(binding.ThreadID, activeThreadID)), turnID, true
+		}
+	}
+	if inst == nil {
+		return "", "", false
+	}
+	turnID = strings.TrimSpace(inst.ActiveTurnID)
+	if turnID == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(inst.ActiveThreadID), turnID, true
 }
 
 func (s *Service) surfaceHasPendingSteer(surface *state.SurfaceConsoleRecord) bool {
