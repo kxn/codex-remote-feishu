@@ -40,8 +40,8 @@ func TestDriveMarkdownPreviewerServesHTMLAndSVGAsSourcePreview(t *testing.T) {
 	if svgRec.Code != http.StatusOK {
 		t.Fatalf("svg preview status = %d, want 200", svgRec.Code)
 	}
-	if !strings.Contains(svgRec.Body.String(), "SVG 源码") {
-		t.Fatalf("expected svg source mode label, got %q", svgRec.Body.String())
+	if !strings.Contains(svgRec.Body.String(), "不会作为同源文档直接渲染") {
+		t.Fatalf("expected svg safety notice, got %q", svgRec.Body.String())
 	}
 	if strings.Contains(svgRec.Body.String(), `<img src="./download?inline=1"`) {
 		t.Fatalf("expected svg preview to avoid inline image mode, got %q", svgRec.Body.String())
@@ -57,7 +57,10 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 	if ok := previewer.ServeWebPreview(imageRec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, imagePreviewID, false); !ok {
 		t.Fatal("expected image preview to be served")
 	}
-	if !strings.Contains(imageRec.Body.String(), `<img src="./download?inline=1"`) {
+	if !strings.Contains(imageRec.Body.String(), `class="preview-topbar"`) {
+		t.Fatalf("expected image preview to use shared shell, got %q", imageRec.Body.String())
+	}
+	if !strings.Contains(imageRec.Body.String(), `<img class="preview-image" src="./download?inline=1"`) {
 		t.Fatalf("expected image preview shell, got %q", imageRec.Body.String())
 	}
 
@@ -66,7 +69,7 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 	if ok := previewer.ServeWebPreview(pdfRec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, pdfPreviewID, false); !ok {
 		t.Fatal("expected pdf preview to be served")
 	}
-	if !strings.Contains(pdfRec.Body.String(), `<iframe src="./download?inline=1"`) {
+	if !strings.Contains(pdfRec.Body.String(), `<iframe class="preview-pdf" src="./download?inline=1"`) {
 		t.Fatalf("expected pdf preview shell, got %q", pdfRec.Body.String())
 	}
 }
@@ -88,7 +91,10 @@ func TestDriveMarkdownPreviewerServesDiffFirstForLargeText(t *testing.T) {
 		t.Fatal("expected diff-first preview to be served")
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Diff") || !strings.Contains(body, "-alpha") || !strings.Contains(body, "+beta") {
+	if strings.Contains(body, "类型：") {
+		t.Fatalf("expected minimal shell without legacy type metadata, got %q", body)
+	}
+	if !strings.Contains(body, "preview-topbar") || !strings.Contains(body, "-alpha") || !strings.Contains(body, "+beta") {
 		t.Fatalf("expected unified diff preview, got %q", body)
 	}
 }
@@ -117,10 +123,33 @@ func TestDriveMarkdownPreviewerReturnsExpiredAndMissingPreviewResponses(t *testi
 	if expiredRec.Code != http.StatusGone {
 		t.Fatalf("expired preview status = %d, want 410 body=%s", expiredRec.Code, expiredRec.Body.String())
 	}
+	if !strings.Contains(expiredRec.Body.String(), "preview-topbar") {
+		t.Fatalf("expected expired preview to use shared shell, got %q", expiredRec.Body.String())
+	}
 
 	missingRec := httptest.NewRecorder()
 	if ok := previewer.ServeWebPreview(missingRec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, "../other", false); ok {
 		t.Fatalf("expected missing/tampered preview id to be rejected, got status=%d body=%q", missingRec.Code, missingRec.Body.String())
+	}
+}
+
+func TestDriveMarkdownPreviewerServesScopeRootInsideSharedShell(t *testing.T) {
+	root := t.TempDir()
+	previewer := newWebPreviewerForTest(root)
+
+	rec := httptest.NewRecorder()
+	if ok := previewer.ServeWebPreview(rec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, "", false); !ok {
+		t.Fatal("expected scope root preview response")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("scope root preview status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="preview-topbar"`) || !strings.Contains(body, "请回到原消息并点击其中的具体文件链接进入预览") {
+		t.Fatalf("expected scope root page inside shared shell, got %q", body)
+	}
+	if strings.Contains(body, `class="hero"`) || strings.Contains(body, `class="panel"`) {
+		t.Fatalf("expected scope root page to avoid legacy admin shell, got %q", body)
 	}
 }
 

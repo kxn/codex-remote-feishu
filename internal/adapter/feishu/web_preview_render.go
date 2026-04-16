@@ -21,15 +21,6 @@ var (
 	markdownPreviewRenderer              = goldmark.New(goldmark.WithRendererOptions(goldmarkhtml.WithHardWraps()))
 )
 
-type webPreviewPage struct {
-	Title        string
-	TypeLabel    string
-	Notice       string
-	BodyHTML     string
-	Status       int
-	DownloadHref string
-}
-
 func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.Request, scopePublicID, previewID string, download bool) bool {
 	if p == nil {
 		return false
@@ -39,11 +30,11 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 			return false
 		}
 		writeWebPreviewPage(w, webPreviewPage{
-			Title:     "选择具体文件查看预览",
-			TypeLabel: "Snapshot",
-			Notice:    "这个地址只代表一组可复用的预览授权，不会列出目录内容。",
-			BodyHTML:  `<p>请回到原消息并点击其中的具体文件链接进入预览。</p>`,
-			Status:    http.StatusOK,
+			Title:    "选择具体文件查看预览",
+			Notice:   "这个地址只代表一组可复用的预览授权，不会列出目录内容。",
+			BodyHTML: `<p>请回到原消息并点击其中的具体文件链接进入预览。</p>`,
+			Status:   http.StatusOK,
+			Layout:   webPreviewLayoutMessage,
 		})
 		return true
 	}
@@ -58,24 +49,22 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 		return true
 	case err == errPreviewRecordExpired || err == errPreviewArtifactExpired:
 		writeWebPreviewPage(w, webPreviewPage{
-			Title:        "预览已过期",
-			TypeLabel:    "Snapshot",
-			Notice:       "这份预览快照已经过期，请重新生成新的产物链接。",
-			BodyHTML:     "<p>当前链接不再对应可访问的预览内容。</p>",
-			Status:       http.StatusGone,
-			DownloadHref: "",
+			Title:    "预览已过期",
+			Notice:   "这份预览快照已经过期，请重新生成新的产物链接。",
+			BodyHTML: "<p>当前链接不再对应可访问的预览内容。</p>",
+			Status:   http.StatusGone,
+			Layout:   webPreviewLayoutMessage,
 		})
 		return true
 	case os.IsNotExist(err):
 		return false
 	default:
 		writeWebPreviewPage(w, webPreviewPage{
-			Title:        "预览暂不可用",
-			TypeLabel:    "Snapshot",
-			Notice:       "服务暂时无法读取这份预览快照。",
-			BodyHTML:     "<p>你可以稍后重试，或重新生成新的产物链接。</p>",
-			Status:       http.StatusInternalServerError,
-			DownloadHref: "",
+			Title:    "预览暂不可用",
+			Notice:   "服务暂时无法读取这份预览快照。",
+			BodyHTML: "<p>你可以稍后重试，或重新生成新的产物链接。</p>",
+			Status:   http.StatusInternalServerError,
+			Layout:   webPreviewLayoutMessage,
 		})
 		return true
 	}
@@ -130,15 +119,14 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 	record := current.Record
 	page := webPreviewPage{
 		Title:        firstNonEmpty(strings.TrimSpace(record.DisplayName), "文件预览"),
-		TypeLabel:    previewTypeLabel(record),
 		Status:       http.StatusOK,
 		DownloadHref: "./download",
+		Layout:       webPreviewLayoutDocument,
 	}
 
 	switch strings.TrimSpace(record.RendererKind) {
 	case "markdown":
 		if shouldRenderDiffFirst(record, previous) {
-			page.TypeLabel = "Diff"
 			page.Notice = "文件较大，默认展示与上一版的差异。"
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
 			return page
@@ -158,7 +146,6 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 		return page
 	case "text":
 		if shouldRenderDiffFirst(record, previous) {
-			page.TypeLabel = "Diff"
 			page.Notice = "文件较大，默认展示与上一版的差异。"
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
 			return page
@@ -173,7 +160,6 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 	case "html_source":
 		page.Notice = "出于安全考虑，HTML 以源码方式展示，不会在页面内直接执行。"
 		if shouldRenderDiffFirst(record, previous) {
-			page.TypeLabel = "Diff"
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
 			return page
 		}
@@ -184,12 +170,15 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "image":
-		page.BodyHTML = `<figure class="asset-frame"><img src="./download?inline=1" alt="预览图片" /></figure>`
+		page.Layout = webPreviewLayoutImage
+		page.BodyHTML = `<img class="preview-image" src="./download?inline=1" alt="` + escapePreviewText(page.Title) + `" />`
 		return page
 	case "pdf":
-		page.BodyHTML = `<div class="asset-frame pdf-frame"><iframe src="./download?inline=1" title="PDF 预览"></iframe></div><p class="asset-help">如果当前浏览器无法内嵌 PDF，可直接下载原文件。</p>`
+		page.Layout = webPreviewLayoutPDF
+		page.BodyHTML = `<iframe class="preview-pdf" src="./download?inline=1" title="` + escapePreviewText(page.Title) + `"></iframe>`
 		return page
 	default:
+		page.Layout = webPreviewLayoutMessage
 		page.Notice = "当前文件类型不提供在线正文渲染，可直接下载原文件。"
 		page.BodyHTML = `<p>这份文件保留了快照下载能力，但当前不会在页面内直接展开。</p>`
 		return page
@@ -212,79 +201,6 @@ func serveWebPreviewDownloadHTTP(w http.ResponseWriter, r *http.Request, artifac
 	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, sanitizePreviewDownloadName(record.DisplayName)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(artifact.Content)
-}
-
-func writeWebPreviewPage(w http.ResponseWriter, page webPreviewPage) {
-	status := page.Status
-	if status <= 0 {
-		status = http.StatusOK
-	}
-	body := page.BodyHTML
-	if strings.TrimSpace(body) == "" {
-		body = "<p>当前没有可展示的正文内容。</p>"
-	}
-	downloadHTML := ""
-	if strings.TrimSpace(page.DownloadHref) != "" {
-		downloadHTML = `<a class="primary-action" href="` + escapePreviewText(page.DownloadHref) + `">下载原文件</a>`
-	}
-	noticeHTML := ""
-	if strings.TrimSpace(page.Notice) != "" {
-		noticeHTML = `<p class="notice">` + escapePreviewText(page.Notice) + `</p>`
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(
-		w,
-		`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%s</title><style>
-body{margin:0;background:#f5f1e8;color:#1f1c16;font-family:"Segoe UI",ui-sans-serif,system-ui,sans-serif}
-main{max-width:980px;margin:0 auto;padding:20px 16px 40px}
-.hero{background:linear-gradient(135deg,#fdfbf6,#efe4d0);border:1px solid #dbc8ab;border-radius:18px;padding:18px 18px 16px;box-shadow:0 10px 30px rgba(63,45,24,.08)}
-.eyebrow{margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a6840}
-h1{margin:0;font-size:28px;line-height:1.2}
-.meta{margin:10px 0 0;color:#6f604d}
-.actions{margin-top:14px}
-.primary-action{display:inline-block;padding:10px 14px;border-radius:999px;background:#164b48;color:#fff;text-decoration:none;font-weight:700}
-.notice{margin:18px 0 0;color:#5f513f}
-.panel{margin-top:18px;background:#fffdf8;border:1px solid #e5d6bf;border-radius:16px;padding:16px;overflow:hidden}
-.preview-prose{line-height:1.7}
-.preview-prose h1,.preview-prose h2,.preview-prose h3{line-height:1.3}
-.source-block,.diff-block,.summary-block{margin:0;white-space:pre-wrap;word-break:break-word;background:#fbf7ef;border:1px solid #eadcc7;border-radius:12px;padding:16px;overflow:auto}
-.asset-frame{background:#faf6ee;border:1px solid #e8dcc8;border-radius:14px;padding:10px;display:flex;justify-content:center;align-items:center;min-height:220px}
-.asset-frame img{max-width:100%%;height:auto;border-radius:8px}
-.pdf-frame iframe{width:100%%;min-height:72vh;border:0;border-radius:8px;background:#fff}
-.asset-help{color:#6a5b47}
-@media (max-width:640px){main{padding:14px 12px 28px}h1{font-size:23px}.hero{padding:16px}}
-</style></head><body><main><section class="hero"><p class="eyebrow">文件预览</p><h1>%s</h1><p class="meta">类型：%s</p>%s%s</section><section class="panel">%s</section></main></body></html>`,
-		escapePreviewText(page.Title),
-		escapePreviewText(page.Title),
-		escapePreviewText(firstNonEmpty(page.TypeLabel, "文件")),
-		downloadHTML,
-		noticeHTML,
-		body,
-	)
-}
-
-func previewTypeLabel(record webPreviewRecord) string {
-	switch strings.TrimSpace(record.RendererKind) {
-	case "markdown":
-		return "Markdown"
-	case "text":
-		return "文本"
-	case "html_source":
-		return "HTML 源码"
-	case "svg_source":
-		return "SVG 源码"
-	case "image":
-		return "图片"
-	case "pdf":
-		return "PDF"
-	default:
-		return "下载"
-	}
 }
 
 func allowsInlinePreviewDownload(rendererKind string) bool {
@@ -401,12 +317,6 @@ func (p *DriveMarkdownPreviewer) touchPreviewBlob(blobKey string, when time.Time
 		return err
 	}
 	return nil
-}
-
-func previewScopeRootPageHTML(scopePublicID string) string {
-	title := "预览链接需要具体文件"
-	body := `<p>这个地址只代表一组可复用的预览授权，不会列出目录内容。</p><p>请从原消息里的具体文件链接进入预览。</p>`
-	return fmt.Sprintf(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%s</title></head><body style="margin:0;background:#f5f1e8;color:#1f1c16;font-family:'Segoe UI',ui-sans-serif,system-ui,sans-serif"><main style="max-width:760px;margin:0 auto;padding:28px 16px"><p style="margin:0 0 8px;color:#8a6840;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">文件预览</p><h1 style="margin:0 0 14px">%s</h1>%s</main></body></html>`, escapePreviewText(title), escapePreviewText(title), body)
 }
 
 func blobSize(path string) int64 {
