@@ -53,6 +53,13 @@ func TestAdminExternalAccessStatusAndLink(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
+	var status externalAccessStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if status.Status.IdleTTL != 30*time.Minute {
+		t.Fatalf("idle ttl = %v, want %v", status.Status.IdleTTL, 30*time.Minute)
+	}
 
 	body := map[string]any{
 		"purpose":   "debug",

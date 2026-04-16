@@ -19,6 +19,7 @@ import (
 )
 
 const defaultCookieName = "codex_remote_external_access"
+const DefaultIdleTTL = 30 * time.Minute
 
 var (
 	ErrDisabled             = errors.New("external access disabled")
@@ -158,7 +159,7 @@ func NewService(opts Options) *Service {
 	}
 	idleTTL := opts.IdleTTL
 	if idleTTL <= 0 {
-		idleTTL = 5 * time.Minute
+		idleTTL = DefaultIdleTTL
 	}
 	cookieName := strings.TrimSpace(opts.CookieName)
 	if cookieName == "" {

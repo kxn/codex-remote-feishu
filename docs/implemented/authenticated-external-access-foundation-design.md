@@ -1,7 +1,7 @@
 # Authenticated External Access Foundation Design
 
 > Type: `implemented`
-> Updated: `2026-04-10`
+> Updated: `2026-04-16`
 > Summary: external-access 基座已落地到当前代码，文档改为记录独立 listener、`trycloudflare` provider、短时授权 URL、idle auto-destroy 与首个 consumer 边界。
 
 ## 1. 文档定位
@@ -74,7 +74,7 @@
 - 外部授权 URL 不能假设公网域名长期稳定。
 - consumer 第一阶段不能依赖 SSE。
 - daemon 启动 `cloudflared` 时必须隔离配置目录，避免用户现有 `.cloudflared` 污染 quick tunnel 行为。
-- 这条通道默认是**短时临时资源**：如果 external-access listener 连续 `5m` 没有收到任何入站或出站流量，应自动销毁 listener + provider，并回收这次临时公网入口。
+- 这条通道默认是**短时临时资源**：如果 external-access listener 连续 `30m` 没有收到任何入站或出站流量，应自动销毁 listener + provider，并回收这次临时公网入口。
 
 ## 5. 总体架构
 
@@ -532,7 +532,7 @@ proxy 层应该支持 WebSocket 透传，因为后续交互页面可能会用到
 
 - 以 listener 观察到的**入站或出站流量**为活跃信号
 - 只要任一方向出现流量，就刷新 `LastActivityAt`
-- 若连续 `5m` 没有任何入站或出站流量，则自动：
+- 若连续 `30m` 没有任何入站或出站流量，则自动：
   - 关闭 provider
   - 关闭/回收 external-access listener runtime
   - 清掉当前 public base 状态
@@ -568,7 +568,7 @@ cloudflared tunnel \
 
 ### 13.2.1 idle 回收语义
 
-即使 provider 仍然 `ready`，只要 external-access runtime 连续 `5m` 没有观察到入站或出站流量，也应主动回收，而不是保持常驻。
+即使 provider 仍然 `ready`，只要 external-access runtime 连续 `30m` 没有观察到入站或出站流量，也应主动回收，而不是保持常驻。
 
 这意味着：
 
@@ -639,7 +639,7 @@ consumer 统一走这条入口，不直接碰 provider。
 
 - 内部 `IssueURL()` 在 tunnel 未启动时可懒启动
 - 成功拿到 `trycloudflare` 外链
-- 连续 `5m` 无入站/出站流量后自动销毁 tunnel，再次使用时可重新拉起
+- 连续 `30m` 无入站/出站流量后自动销毁 tunnel，再次使用时可重新拉起
 
 ### 阶段 3
 
@@ -668,7 +668,7 @@ consumer 统一走这条入口，不直接碰 provider。
 - metrics `/ready` 健康检查
 - child process 配置目录隔离
 - `?t=` 在重复 GET / 预取场景下不会让真实用户首次点击直接失效
-- 连续 `5m` 无入站/出站流量后会自动销毁 listener/provider，并且后续可重新懒启动
+- 连续 `30m` 无入站/出站流量后会自动销毁 listener/provider，并且后续可重新懒启动
 
 ## 17. 当前建议
 

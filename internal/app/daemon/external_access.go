@@ -78,7 +78,7 @@ func newExternalAccessService(cfg ExternalAccessRuntimeConfig) *externalaccess.S
 		Provider:          provider,
 		DefaultLinkTTL:    settings.DefaultLinkTTL,
 		DefaultSessionTTL: settings.DefaultSessionTTL,
-		IdleTTL:           5 * time.Minute,
+		IdleTTL:           externalaccess.DefaultIdleTTL,
 	})
 }
 
