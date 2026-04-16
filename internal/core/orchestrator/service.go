@@ -39,6 +39,7 @@ type Service struct {
 	threadRefreshes      map[string]bool
 	pendingTurnText      map[string]*completedTextItem
 	turnFileChanges      map[string]*turnFileChangeSummary
+	turnDiffSnapshots    map[string]*control.TurnDiffSnapshot
 	pendingRemote        map[string]*remoteTurnBinding
 	activeRemote         map[string]*remoteTurnBinding
 	compactTurns         map[string]*compactTurnBinding
@@ -205,6 +206,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		threadRefreshes:     map[string]bool{},
 		pendingTurnText:     map[string]*completedTextItem{},
 		turnFileChanges:     map[string]*turnFileChangeSummary{},
+		turnDiffSnapshots:   map[string]*control.TurnDiffSnapshot{},
 		pendingRemote:       map[string]*remoteTurnBinding{},
 		activeRemote:        map[string]*remoteTurnBinding{},
 		compactTurns:        map[string]*compactTurnBinding{},
@@ -634,6 +636,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(events, s.reevaluateFollowSurfaces(instanceID)...))
 	case agentproto.EventThreadTokenUsageUpdated:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadTokenUsageUpdate(instanceID, event)...))
+	case agentproto.EventTurnDiffUpdated:
+		s.recordTurnDiffSnapshot(instanceID, event)
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventTurnPlanUpdated:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnPlanUpdate(instanceID, event)...))
@@ -681,12 +686,15 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		}
 		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)
 		summary := s.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
+		turnDiff := s.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := pendingTurnTextValue(s.pendingTurnText, instanceID, event.ThreadID, event.TurnID)
 		finalizeTurnOutput := shouldFinalizeTurnOutput(event)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
+		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)
 		finalRenderTurnSummary := (*control.FinalTurnSummary)(nil)
 		if finalizeTurnOutput {
 			finalRenderSummary = summary
+			finalRenderTurnDiff = turnDiff
 			finalRenderTurnSummary = finalTurnSummaryForBinding(s.now().UTC(), s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID), thread)
 		}
 		events := s.flushPendingTurnTextWithSummary(
@@ -695,6 +703,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			event.TurnID,
 			finalizeTurnOutput,
 			finalRenderSummary,
+			finalRenderTurnDiff,
 			finalRenderTurnSummary,
 		)
 		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)

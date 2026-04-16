@@ -34,6 +34,7 @@ const (
 	EventConfigObserved             EventKind = "config.observed"
 	EventLocalInteractionObserved   EventKind = "local.interaction.observed"
 	EventThreadTokenUsageUpdated    EventKind = "thread.token_usage.updated"
+	EventTurnDiffUpdated            EventKind = "turn.diff.updated"
 	EventTurnPlanUpdated            EventKind = "turn.plan.updated"
 	EventTurnStarted                EventKind = "turn.started"
 	EventTurnCompleted              EventKind = "turn.completed"
@@ -75,6 +76,7 @@ type Event struct {
 	Action          string                 `json:"action,omitempty"`
 	ItemKind        string                 `json:"itemKind,omitempty"`
 	Delta           string                 `json:"delta,omitempty"`
+	TurnDiff        string                 `json:"turnDiff,omitempty"`
 	Name            string                 `json:"name,omitempty"`
 	Preview         string                 `json:"preview,omitempty"`
 	Model           string                 `json:"model,omitempty"`

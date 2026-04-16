@@ -296,7 +296,7 @@ func (s *Service) completeRemoteTurn(instanceID, threadID, turnID, status, error
 }
 
 func (s *Service) renderTextItem(instanceID, threadID, turnID, itemID, text string, final bool) []control.UIEvent {
-	return s.renderTextItemWithSummary(instanceID, threadID, turnID, itemID, text, final, nil, nil)
+	return s.renderTextItemWithSummary(instanceID, threadID, turnID, itemID, text, final, nil, nil, nil)
 }
 
 func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []control.UIEvent {
@@ -375,7 +375,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []c
 	})
 }
 
-func (s *Service) renderTextItemWithSummary(instanceID, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, finalSummary *control.FinalTurnSummary) []control.UIEvent {
+func (s *Service) renderTextItemWithSummary(instanceID, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary) []control.UIEvent {
 	inst := s.root.Instances[instanceID]
 	surface := s.turnSurface(instanceID, threadID, turnID)
 	if surface == nil {
@@ -387,10 +387,10 @@ func (s *Service) renderTextItemWithSummary(instanceID, threadID, turnID, itemID
 	if final {
 		s.clearThreadReplay(inst, threadID)
 	}
-	return s.renderTextToSurface(surface, inst, threadID, turnID, itemID, text, final, summary, finalSummary)
+	return s.renderTextToSurface(surface, inst, threadID, turnID, itemID, text, final, summary, turnDiff, finalSummary)
 }
 
-func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, finalSummary *control.FinalTurnSummary) []control.UIEvent {
+func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
@@ -426,9 +426,9 @@ func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst 
 	if themeKey == "" {
 		themeKey = title
 	}
-	if len(blocks) == 0 && final && (summary != nil || finalSummary != nil) {
+	if len(blocks) == 0 && final && (summary != nil || turnDiff != nil || finalSummary != nil) {
 		syntheticText := "已完成。"
-		if summary != nil {
+		if summary != nil || turnDiff != nil {
 			syntheticText = "已完成文件修改。"
 		}
 		blocks = []render.Block{{
@@ -460,6 +460,9 @@ func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst 
 		}
 		if final && summary != nil && i == lastBlockIndex {
 			event.FileChangeSummary = summary
+		}
+		if final && turnDiff != nil && i == lastBlockIndex {
+			event.TurnDiffSnapshot = turnDiff
 		}
 		if final && finalSummary != nil && i == lastBlockIndex {
 			event.FinalTurnSummary = finalSummary
@@ -584,20 +587,20 @@ func (s *Service) storePendingTurnText(instanceID, threadID, turnID, itemID, ite
 }
 
 func (s *Service) flushPendingTurnText(instanceID, threadID, turnID string, final bool) []control.UIEvent {
-	return s.flushPendingTurnTextWithSummary(instanceID, threadID, turnID, final, nil, nil)
+	return s.flushPendingTurnTextWithSummary(instanceID, threadID, turnID, final, nil, nil, nil)
 }
 
-func (s *Service) flushPendingTurnTextWithSummary(instanceID, threadID, turnID string, final bool, summary *control.FileChangeSummary, finalSummary *control.FinalTurnSummary) []control.UIEvent {
+func (s *Service) flushPendingTurnTextWithSummary(instanceID, threadID, turnID string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary) []control.UIEvent {
 	key := turnRenderKey(instanceID, threadID, turnID)
 	pending := s.pendingTurnText[key]
 	if pending == nil {
-		if final && (summary != nil || finalSummary != nil) {
-			return s.renderTextItemWithSummary(instanceID, threadID, turnID, "file-change-summary", "", true, summary, finalSummary)
+		if final && (summary != nil || turnDiff != nil || finalSummary != nil) {
+			return s.renderTextItemWithSummary(instanceID, threadID, turnID, "file-change-summary", "", true, summary, turnDiff, finalSummary)
 		}
 		return nil
 	}
 	delete(s.pendingTurnText, key)
-	return s.renderTextItemWithSummary(pending.InstanceID, pending.ThreadID, pending.TurnID, pending.ItemID, pending.Text, final, summary, finalSummary)
+	return s.renderTextItemWithSummary(pending.InstanceID, pending.ThreadID, pending.TurnID, pending.ItemID, pending.Text, final, summary, turnDiff, finalSummary)
 }
 
 func (s *Service) flushPendingTurnTextIfTurnContinues(instanceID string, event agentproto.Event) []control.UIEvent {

@@ -102,6 +102,7 @@ func isCoalescibleRelayDelta(event agentproto.Event) bool {
 		event.Action != "" ||
 		event.Name != "" ||
 		event.Preview != "" ||
+		event.TurnDiff != "" ||
 		event.Model != "" ||
 		event.ReasoningEffort != "" ||
 		event.ConfigScope != "" ||

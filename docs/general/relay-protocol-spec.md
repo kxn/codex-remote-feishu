@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -44,6 +44,7 @@
 - `turn/steer`
 - `turn/interrupt`
 - `turn/started`
+- `turn/diff/updated`
 - `turn/plan/updated`
 - `turn/completed`
 - `item/started`
@@ -367,6 +368,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `thread.focused`
 - `thread.runtime_status.updated`
 - `thread.token_usage.updated`
+- `turn.diff.updated`
 - `config.observed`
 - `local.interaction.observed`
 - `turn.started`
@@ -427,7 +429,27 @@ wrapper 收到 `command` 后总是回传 accept/reject：
     - `errorMessage`
     - `items[]`
 
-### 5.3 关键字段
+### 5.3 `turn.diff.updated`
+
+这是 wrapper 对 native `turn/diff/updated` 的标准化 turn 级派生事件。
+
+关键字段：
+
+- `threadId`
+- `turnId`
+- `turnDiff`
+
+当前语义：
+
+- `turnDiff` 直接对应 app-server 给出的 latest aggregated unified diff snapshot
+- 对同一 `(threadId, turnId)` 的多次更新，orchestrator 采用 overwrite / latest-wins 语义，而不是 append 拼接
+- 这条链路与 `item.fileChange` 并存，但语义不同：
+  - `item.fileChange` 仍代表过程中的局部 file-change item
+  - `turn.diff.updated` 代表整轮 authoritative 聚合 diff 快照
+- 当前实现会在 orchestrator 内按 turn 暂存 latest snapshot，并在最终 block 事件上挂出 `TurnDiffSnapshot`
+- 当前尚未新增 Feishu 独立 diff UI；因此这次协议承接以语义保真和上层可消费为主，不改变现有 file-change 渲染路径
+
+### 5.4 关键字段
 
 #### `initiator`
 

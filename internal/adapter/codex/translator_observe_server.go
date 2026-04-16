@@ -465,6 +465,21 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
+	case "turn/diff/updated":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
+		diff := lookupString(message, "params", "diff")
+		if threadID == "" || turnID == "" {
+			return Result{}, nil
+		}
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventTurnDiffUpdated,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			TurnDiff:     diff,
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+		}}}, nil
 	case "turn/started":
 		threadID := lookupString(message, "params", "thread", "id")
 		if threadID == "" {

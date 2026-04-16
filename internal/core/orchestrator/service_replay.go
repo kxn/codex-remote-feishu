@@ -140,7 +140,7 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 
 	switch replay.Kind {
 	case state.ThreadReplayAssistantFinal:
-		return s.renderTextToSurface(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true, nil, nil)
+		return s.renderTextToSurface(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true, nil, nil, nil)
 	case state.ThreadReplayNotice:
 		if replay.NoticeCode == "context_compacted" {
 			if !s.surfaceAllowsProcessProgress(surface, "context_compaction") {

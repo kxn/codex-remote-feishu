@@ -461,6 +461,12 @@ type FileChangeSummary struct {
 	Files        []FileChangeSummaryEntry
 }
 
+type TurnDiffSnapshot struct {
+	ThreadID string
+	TurnID   string
+	Diff     string
+}
+
 type FinalTurnUsage struct {
 	InputTokens           int
 	CachedInputTokens     int
@@ -604,6 +610,7 @@ type UIEvent struct {
 	ImageOutput                 *ImageOutput
 	ExecCommandProgress         *ExecCommandProgress
 	FileChangeSummary           *FileChangeSummary
+	TurnDiffSnapshot            *TurnDiffSnapshot
 	FinalTurnSummary            *FinalTurnSummary
 	Command                     *agentproto.Command
 	DaemonCommand               *DaemonCommand

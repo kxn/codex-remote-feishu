@@ -22,6 +22,7 @@ type secondChanceFinalPatchJob struct {
 	SourceMessagePreview string
 	SentBlock            render.Block
 	FileChangeSummary    *control.FileChangeSummary
+	TurnDiffSnapshot     *control.TurnDiffSnapshot
 	FinalTurnSummary     *control.FinalTurnSummary
 	PreviewRequest       feishu.FinalBlockPreviewRequest
 }
@@ -59,6 +60,10 @@ func (a *App) maybeScheduleSecondChanceFinalPatchLocked(gatewayID, chatID string
 			summary.Files = append([]control.FileChangeSummaryEntry(nil), summary.Files...)
 		}
 		job.FileChangeSummary = &summary
+	}
+	if event.TurnDiffSnapshot != nil {
+		snapshot := *event.TurnDiffSnapshot
+		job.TurnDiffSnapshot = &snapshot
 	}
 	if event.FinalTurnSummary != nil {
 		summary := *event.FinalTurnSummary
@@ -125,6 +130,7 @@ func (a *App) runSecondChanceFinalPatch(job secondChanceFinalPatchJob) {
 		SourceMessagePreview: job.SourceMessagePreview,
 		Block:                &result.Block,
 		FileChangeSummary:    job.FileChangeSummary,
+		TurnDiffSnapshot:     job.TurnDiffSnapshot,
 		FinalTurnSummary:     job.FinalTurnSummary,
 	})
 	if len(ops) != 1 {
