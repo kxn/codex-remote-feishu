@@ -89,6 +89,7 @@ type remoteTurnBinding struct {
 	HasStartTotalUsage    bool
 	LastUsage             agentproto.TokenUsageBreakdown
 	HasLastUsage          bool
+	ModelReroute          *agentproto.TurnModelReroute
 }
 
 type compactTurnStatus string
@@ -636,6 +637,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		return s.filterEventsForSurfaceVisibility(append(events, s.reevaluateFollowSurfaces(instanceID)...))
 	case agentproto.EventThreadTokenUsageUpdated:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadTokenUsageUpdate(instanceID, event)...))
+	case agentproto.EventTurnModelRerouted:
+		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnModelReroute(instanceID, event)...))
 	case agentproto.EventTurnDiffUpdated:
 		s.recordTurnDiffSnapshot(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(preface)

@@ -212,6 +212,7 @@ type AttachmentSummary struct {
 	SelectedThreadFirstUserMessage     string
 	SelectedThreadLastUserMessage      string
 	SelectedThreadLastAssistantMessage string
+	SelectedThreadModelReroute         *agentproto.TurnModelReroute
 	SelectedThreadAgeText              string
 	RouteMode                          string
 	Abandoning                         bool
@@ -292,6 +293,7 @@ type ThreadSummary struct {
 	RuntimeStatus      string
 	Model              string
 	ReasoningEffort    string
+	LastModelReroute   *agentproto.TurnModelReroute
 	Loaded             bool
 	WaitingOnApproval  bool
 	WaitingOnUserInput bool

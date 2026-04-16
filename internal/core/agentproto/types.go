@@ -35,6 +35,7 @@ const (
 	EventLocalInteractionObserved   EventKind = "local.interaction.observed"
 	EventThreadTokenUsageUpdated    EventKind = "thread.token_usage.updated"
 	EventTurnDiffUpdated            EventKind = "turn.diff.updated"
+	EventTurnModelRerouted          EventKind = "turn.model_rerouted"
 	EventTurnPlanUpdated            EventKind = "turn.plan.updated"
 	EventTurnStarted                EventKind = "turn.started"
 	EventTurnCompleted              EventKind = "turn.completed"
@@ -92,6 +93,7 @@ type Event struct {
 	MCPToolProgress *MCPToolCallProgress   `json:"mcpToolProgress,omitempty"`
 	ApprovalReview  *AutoApprovalReview    `json:"approvalReview,omitempty"`
 	TokenUsage      *ThreadTokenUsage      `json:"tokenUsage,omitempty"`
+	ModelReroute    *TurnModelReroute      `json:"modelReroute,omitempty"`
 	PlanSnapshot    *TurnPlanSnapshot      `json:"planSnapshot,omitempty"`
 	ThreadHistory   *ThreadHistoryRecord   `json:"threadHistory,omitempty"`
 	RuntimeStatus   *ThreadRuntimeStatus   `json:"runtimeStatus,omitempty"`

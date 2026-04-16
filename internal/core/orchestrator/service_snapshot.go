@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"sort"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -38,6 +39,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		selectedFirstUserMessage := ""
 		selectedLastUserMessage := ""
 		selectedLastAssistantMessage := ""
+		selectedModelReroute := (*agentproto.TurnModelReroute)(nil)
 		selectedAgeText := ""
 		if selected != nil {
 			selectedTitle = displayThreadTitle(inst, selected, surface.SelectedThreadID)
@@ -45,6 +47,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			selectedFirstUserMessage = threadFirstUserSnippet(selected, 64)
 			selectedLastUserMessage = threadLastUserSnippet(selected, 64)
 			selectedLastAssistantMessage = threadLastAssistantSnippet(selected, 64)
+			selectedModelReroute = agentproto.CloneTurnModelReroute(selected.LastModelReroute)
 			selectedAgeText = humanizeRelativeTime(s.now(), selected.LastUsedAt)
 		}
 		snapshot.Attachment = control.AttachmentSummary{
@@ -60,6 +63,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			SelectedThreadFirstUserMessage:     selectedFirstUserMessage,
 			SelectedThreadLastUserMessage:      selectedLastUserMessage,
 			SelectedThreadLastAssistantMessage: selectedLastAssistantMessage,
+			SelectedThreadModelReroute:         selectedModelReroute,
 			SelectedThreadAgeText:              selectedAgeText,
 			RouteMode:                          string(surface.RouteMode),
 			Abandoning:                         surface.Abandoning,
@@ -95,6 +99,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 				RuntimeStatus:      threadRuntimeStatusType(thread),
 				Model:              thread.ExplicitModel,
 				ReasoningEffort:    thread.ExplicitReasoningEffort,
+				LastModelReroute:   agentproto.CloneTurnModelReroute(thread.LastModelReroute),
 				Loaded:             thread.Loaded,
 				WaitingOnApproval:  threadWaitingOnApproval(thread),
 				WaitingOnUserInput: threadWaitingOnUserInput(thread),

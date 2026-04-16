@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -46,6 +46,7 @@
 - `turn/started`
 - `turn/diff/updated`
 - `turn/plan/updated`
+- `model/rerouted`
 - `turn/completed`
 - `item/started`
 - `item/completed`
@@ -369,6 +370,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `thread.runtime_status.updated`
 - `thread.token_usage.updated`
 - `turn.diff.updated`
+- `turn.model_rerouted`
 - `config.observed`
 - `local.interaction.observed`
 - `turn.started`
@@ -449,7 +451,29 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - 当前实现会在 orchestrator 内按 turn 暂存 latest snapshot，并在最终 block 事件上挂出 `TurnDiffSnapshot`
 - 当前尚未新增 Feishu 独立 diff UI；因此这次协议承接以语义保真和上层可消费为主，不改变现有 file-change 渲染路径
 
-### 5.4 关键字段
+### 5.4 `turn.model_rerouted`
+
+这是 wrapper 对 native `model/rerouted` 的标准化 turn 级派生事件。
+
+关键字段：
+
+- `threadId`
+- `turnId`
+- `modelReroute`
+  - `threadId`
+  - `turnId`
+  - `fromModel`
+  - `toModel`
+  - `reason`
+
+当前语义：
+
+- wrapper 会保留 `fromModel` / `toModel` / `reason`，不再把 turn 级模型改路由静默吞掉
+- orchestrator 对同一 `(threadId, turnId)` 采用 latest-wins 语义保存最近一次 reroute
+- thread 级当前有效模型会同步切到 `toModel`，这样现有 snapshot / prompt / status 展示不会继续误报 reroute 前模型
+- 当前仍不额外生成 Feishu 强提示；用户可见层先保持安静，后续是否展示、展示到哪里再单独讨论
+
+### 5.5 关键字段
 
 #### `initiator`
 
@@ -528,7 +552,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - orchestrator 会把它投影成一条单独的 compact 成功提示
 - 若 compact 发生时没有 live surface，server 会把该提示存成 thread 级一次性 replay，等用户重新接入该 thread 时只补投一次
 
-### 5.3 Request 元数据
+### 5.6 Request 元数据
 
 `request.started` 当前至少会携带：
 
@@ -552,7 +576,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - 若 upstream 未显式给出 option，但请求种类可确认支持 session 级放行，则补出 `acceptForSession`
 - `captureFeedback` 只存在于 Feishu `request.prompt` 渲染层，不回写到 canonical event
 
-### 5.4 Helper/Internal traffic 规则
+### 5.7 Helper/Internal traffic 规则
 
 当前冻结规则：
 

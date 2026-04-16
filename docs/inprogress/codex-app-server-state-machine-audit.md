@@ -260,21 +260,21 @@
 当前实现结论：
 
 - `turn/plan/updated`：`严格遵循`
-- `turn/diff/updated`：`未遵循/未实现`
-- `model/rerouted`：`未遵循/未实现`
+- `turn/diff/updated`：`严格遵循`
+- `model/rerouted`：`遵循但有适配压缩`
 
 现状：
 
 - 计划更新已经有结构化快照抽取。
-- 但官方文档里明确存在的 `turn/diff/updated` 当前完全没有处理。
-- 这意味着我们虽然能从 `fileChange` item 里拿到单项 diff，但**没有官方聚合 diff 的 turn 级状态机**。
-- 最新 upstream README / schema 还把 `model/rerouted` 作为 turn 级派生通知列出来，用来表达后端把当前请求改路由到别的模型；当前 translator 也没有消费这条通知。
+- `turn/diff/updated` 已经被接成 canonical `turn.diff.updated`，orchestrator 会按 `(threadId, turnId)` 覆盖保存 authoritative aggregated diff snapshot，并在 turn 结束时挂到最终 block summary 上。
+- `model/rerouted` 现在也已经被接成 canonical `turn.model_rerouted`，会保留 `fromModel` / `toModel` / `reason`，并把 thread 当前有效模型同步到 `toModel`，避免后续产品面继续把 requested model 当成 actual model。
+- 这条 reroute 链路当前仍属于“协议保真优先”的接法：daemon/state/snapshot 已保留 latest state，但还没有单独做强提示或历史链路 UI。
 
 证据：
 
 - `internal/adapter/codex/translator_observe_server.go`
-- 仓库内无 `turn/diff/updated` 命中
-- 仓库内无 `model/rerouted` 命中
+- `internal/core/agentproto/types.go`
+- `internal/core/orchestrator/service_model_reroute.go`
 
 ### 3.9 通用 item 生命周期与 item delta
 
@@ -522,8 +522,8 @@
 | `turn/steer` | 严格遵循 | `expectedTurnId`、无新 `turn/started` 都已保持 |
 | `turn/interrupt` | 严格遵循 | 终态 `interrupted` 已承接 |
 | `turn/plan/updated` | 严格遵循 | 有结构化 plan snapshot |
-| `turn/diff/updated` | 未遵循/未实现 | 当前完全没处理 |
-| `model/rerouted` | 未遵循/未实现 | 最新 upstream 已把它列为 turn 派生通知，当前无消费 |
+| `turn/diff/updated` | 严格遵循 | authoritative turn 聚合 diff 已进入 canonical event 并可进入 final summary |
+| `model/rerouted` | 遵循但有适配压缩 | 已保留 `fromModel` / `toModel` / `reason` 并更新 thread 当前有效模型，但尚未单独做用户提示 |
 | 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView/collab 命名仍有缺口 |
 | `item/mcpToolCall/progress` | 遵循但有适配压缩 | translator 已标准化 typed progress event，但产品 UI 仍未深度表达 |
 | `item/reasoning/summaryPartAdded` | 未遵循/未实现 | 缺失 |
@@ -570,7 +570,6 @@
 - command/file approvals
 - `dynamicToolCall -> item/tool/call`
 - `thread/status/changed`
-- `turn/diff/updated`
 - `account/*`
 - `app/list/updated`
 - `mcpServer/oauth/login`
@@ -707,8 +706,6 @@
 1. 先修“明确不严格遵循且已经影响我们产品判断 / correctness”的：
    - `initialize -> initialized` 的 headless 缺口（已由 `#228` 修复，后续不再作为待补 correctness 缺口）
    - `thread/status/changed`
-   - `turn/diff/updated`
-   - `model/rerouted`
 2. 再补“官方多步状态机、且我们很可能迟早要产品化”的：
    - 更细粒度 approval / permissions / elicitation 决策 UI
    - dynamic tool `item/tool/call`

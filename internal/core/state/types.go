@@ -135,6 +135,7 @@ type ThreadRecord struct {
 	RuntimeStatus           *agentproto.ThreadRuntimeStatus
 	ExplicitModel           string
 	ExplicitReasoningEffort string
+	LastModelReroute        *agentproto.TurnModelReroute
 	Loaded                  bool
 	Archived                bool
 	TrafficClass            agentproto.TrafficClass
