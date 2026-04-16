@@ -34,12 +34,13 @@ type externalAccessLinkResponse struct {
 }
 
 type externalAccessShutdownPlan struct {
-	reason   string
-	service  *externalaccess.Service
-	server   *http.Server
-	listener net.Listener
-	waitCh   chan struct{}
-	waitOnly bool
+	reason        string
+	service       *externalaccess.Service
+	server        *http.Server
+	listener      net.Listener
+	waitCh        chan struct{}
+	waitOnly      bool
+	closeProvider bool
 }
 
 func externalAccessSettingsViewFromConfig(value config.ExternalAccessSettings) externalAccessSettingsView {
@@ -201,15 +202,16 @@ func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 	return localURL, nil
 }
 
-func (a *App) prepareExternalAccessShutdownLocked(reason string) externalAccessShutdownPlan {
+func (a *App) prepareExternalAccessShutdownLocked(reason string, closeProvider bool) externalAccessShutdownPlan {
 	if a.externalAccess == nil {
 		return externalAccessShutdownPlan{}
 	}
 	if waitCh := a.externalAccessShutdownWait; waitCh != nil {
 		return externalAccessShutdownPlan{
-			reason:   reason,
-			waitCh:   waitCh,
-			waitOnly: true,
+			reason:        reason,
+			waitCh:        waitCh,
+			waitOnly:      true,
+			closeProvider: closeProvider,
 		}
 	}
 	waitCh := make(chan struct{})
@@ -219,13 +221,16 @@ func (a *App) prepareExternalAccessShutdownLocked(reason string) externalAccessS
 	a.externalAccessServer = nil
 	a.externalAccessListener = nil
 	a.externalAccessShutdownWait = waitCh
-	a.webPreviewGrants = map[string]*previewScopeGrant{}
+	if closeProvider || len(a.webPreviewGrants) != 0 {
+		a.webPreviewGrants = map[string]*previewScopeGrant{}
+	}
 	return externalAccessShutdownPlan{
-		reason:   reason,
-		service:  service,
-		server:   server,
-		listener: listener,
-		waitCh:   waitCh,
+		reason:        reason,
+		service:       service,
+		server:        server,
+		listener:      listener,
+		waitCh:        waitCh,
+		closeProvider: closeProvider,
 	}
 }
 
@@ -252,14 +257,28 @@ func (a *App) executeExternalAccessShutdownPlan(plan externalAccessShutdownPlan)
 		_ = plan.listener.Close()
 	}
 	if plan.service != nil {
-		if err := plan.service.ShutdownRuntime(); err != nil {
-			log.Printf("external access shutdown (%s) failed: %v", plan.reason, err)
+		if plan.closeProvider {
+			if err := plan.service.ShutdownRuntime(); err != nil {
+				log.Printf("external access shutdown (%s) failed: %v", plan.reason, err)
+			}
+		} else {
+			plan.service.DeactivateListener()
 		}
 	}
 }
 
 func (a *App) shutdownExternalAccessLocked(reason string) {
-	plan := a.prepareExternalAccessShutdownLocked(reason)
+	plan := a.prepareExternalAccessShutdownLocked(reason, true)
+	if plan.waitCh == nil {
+		return
+	}
+	a.mu.Unlock()
+	a.executeExternalAccessShutdownPlan(plan)
+	a.mu.Lock()
+}
+
+func (a *App) deactivateExternalAccessListenerLocked(reason string) {
+	plan := a.prepareExternalAccessShutdownLocked(reason, false)
 	if plan.waitCh == nil {
 		return
 	}
@@ -272,8 +291,8 @@ func (a *App) maybeShutdownExternalAccessIdleLocked(now time.Time) {
 	if a.externalAccess == nil || !a.externalAccess.IdleExpired(now) {
 		return
 	}
-	log.Printf("external access idle timeout reached; shutting down listener and provider")
-	a.shutdownExternalAccessLocked("idle_timeout")
+	log.Printf("external access idle timeout reached; deactivating listener and clearing grants")
+	a.deactivateExternalAccessListenerLocked("idle_timeout")
 }
 
 func debugAdminIssueRequest(adminURL string) externalaccess.IssueRequest {

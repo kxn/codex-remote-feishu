@@ -155,6 +155,7 @@ external-access 基座已经能稳定复用：
 
 - prefix grant 虽然按 scope 复用，但它依赖的 external-access provider 不能盲目复用旧 tunnel。
 - 当前实现要求 provider 在复用前同时满足：当前 tunnel `/ready` 仍健康、且它仍指向这次 listener 的 target。
+- external-access idle timeout 当前会回收 listener、grant、session 和 preview scope grant；provider 只在 full shutdown、健康探测失败或 target 漂移时关闭/重启。
 - 因此 preview scope 可以稳定复用授权语义，但不会因为 listener 重建而继续发出指向旧 origin 的 stale tunnel。
 
 ### 5.3 scope 的定义

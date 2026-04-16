@@ -332,3 +332,38 @@ func TestServiceShutdownRuntimeDoesNotHoldMutexWhileClosingProvider(t *testing.T
 		t.Fatal("ShutdownRuntime did not finish after provider.Close unblocked")
 	}
 }
+
+func TestServiceDeactivateListenerKeepsProviderOpen(t *testing.T) {
+	provider := &blockingCloseProvider{
+		closeStarted: make(chan struct{}),
+		unblockClose: make(chan struct{}),
+	}
+	service := NewService(Options{Provider: provider})
+	service.SetListenerState("http://127.0.0.1:9512", true)
+
+	if _, err := service.IssueURL(t.Context(), IssueRequest{
+		Purpose:   PurposeDebug,
+		TargetURL: "http://127.0.0.1:9501/",
+	}, "http://127.0.0.1:9512"); err != nil {
+		t.Fatalf("IssueURL: %v", err)
+	}
+
+	service.DeactivateListener()
+
+	select {
+	case <-provider.closeStarted:
+		t.Fatal("provider.Close should not be called during listener-only deactivate")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	snapshot := service.Snapshot()
+	if snapshot.ListenerActive {
+		t.Fatalf("expected listener inactive after deactivate, got %#v", snapshot)
+	}
+	if snapshot.GrantCount != 0 || snapshot.SessionCount != 0 {
+		t.Fatalf("expected grants and sessions to be cleared, got %#v", snapshot)
+	}
+	if !snapshot.Provider.Ready {
+		t.Fatalf("expected provider to stay ready after listener-only deactivate, got %#v", snapshot)
+	}
+}

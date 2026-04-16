@@ -284,6 +284,22 @@ func (s *Service) IdleExpired(now time.Time) bool {
 
 func (s *Service) ShutdownRuntime() error {
 	s.mu.Lock()
+	s.deactivateListenerLocked()
+	provider := s.provider
+	s.mu.Unlock()
+	if provider == nil {
+		return nil
+	}
+	return provider.Close()
+}
+
+func (s *Service) DeactivateListener() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deactivateListenerLocked()
+}
+
+func (s *Service) deactivateListenerLocked() {
 	s.listenerActive = false
 	s.listenerURL = ""
 	s.publicBase = PublicBase{}
@@ -292,12 +308,6 @@ func (s *Service) ShutdownRuntime() error {
 	s.lastInboundAt = time.Time{}
 	s.lastOutboundAt = time.Time{}
 	s.lastActivityAt = time.Time{}
-	provider := s.provider
-	s.mu.Unlock()
-	if provider == nil {
-		return nil
-	}
-	return provider.Close()
 }
 
 func (s *Service) Close() error {

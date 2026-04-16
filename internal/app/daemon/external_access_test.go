@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
+	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,6 +53,16 @@ func (p *blockingShutdownExternalAccessProvider) unblock() {
 	p.unblockOnce.Do(func() {
 		close(p.unblockClose)
 	})
+}
+
+func reserveExternalAccessPort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
 }
 
 func TestAdminExternalAccessStatusAndLink(t *testing.T) {
@@ -283,5 +297,98 @@ func TestIssueExternalAccessURLWaitsForShutdownInFlight(t *testing.T) {
 	}
 	if issued.ExternalURL == "" {
 		t.Fatal("expected issued external URL after shutdown")
+	}
+}
+
+func TestExternalAccessIdleTimeoutDeactivatesListenerButKeepsWarmProvider(t *testing.T) {
+	base := time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC)
+	listenPort := reserveExternalAccessPort(t)
+
+	var factoryCalls atomic.Int32
+	var readyCalls atomic.Int32
+	provider := externalaccess.NewTryCloudflareProvider(externalaccess.TryCloudflareOptions{
+		BinaryPath:  "cloudflared",
+		MetricsPort: reserveExternalAccessPort(t),
+		WaitReady: func(context.Context, int) error {
+			readyCalls.Add(1)
+			return nil
+		},
+		CommandFactory: func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			factoryCalls.Add(1)
+			return exec.CommandContext(ctx, "bash", "-lc", "printf 'https://example.trycloudflare.com\\n'; sleep 60")
+		},
+	})
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        listenPort,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "trycloudflare",
+		},
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Now:               func() time.Time { return base },
+		Provider:          provider,
+		DefaultLinkTTL:    10 * time.Second,
+		DefaultSessionTTL: 30 * time.Second,
+		IdleTTL:           5 * time.Minute,
+	})
+	defer app.Shutdown(nil)
+
+	first, err := app.IssueExternalAccessURL(context.Background(), externalaccess.IssueRequest{
+		Purpose:   externalaccess.PurposeDebug,
+		TargetURL: "http://127.0.0.1:9501/admin/",
+	})
+	if err != nil {
+		t.Fatalf("first IssueExternalAccessURL: %v", err)
+	}
+	if got := factoryCalls.Load(); got != 1 {
+		t.Fatalf("factoryCalls after first issue = %d, want 1", got)
+	}
+
+	parsed, err := url.Parse(first.ExternalURL)
+	if err != nil {
+		t.Fatalf("parse first external url: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+	rec := httptest.NewRecorder()
+	app.externalAccess.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("exchange status = %d, want 302 body=%s", rec.Code, rec.Body.String())
+	}
+
+	app.onTick(context.Background(), base.Add(6*time.Minute))
+	if app.externalAccessListener != nil {
+		t.Fatal("expected idle timeout to stop listener")
+	}
+	snapshot := app.externalAccess.Snapshot()
+	if snapshot.ListenerActive {
+		t.Fatalf("expected listener inactive after idle timeout, got %#v", snapshot)
+	}
+	if snapshot.GrantCount != 0 || snapshot.SessionCount != 0 {
+		t.Fatalf("expected idle deactivate to clear grants/sessions, got %#v", snapshot)
+	}
+	if !snapshot.Provider.Ready {
+		t.Fatalf("expected provider to stay ready after idle deactivate, got %#v", snapshot)
+	}
+
+	second, err := app.IssueExternalAccessURL(context.Background(), externalaccess.IssueRequest{
+		Purpose:   externalaccess.PurposeDebug,
+		TargetURL: "http://127.0.0.1:9501/admin/",
+	})
+	if err != nil {
+		t.Fatalf("second IssueExternalAccessURL: %v", err)
+	}
+	if second.ExternalURL == first.ExternalURL {
+		t.Fatalf("expected new grant after idle deactivate, got same external URL %q", second.ExternalURL)
+	}
+	if got := factoryCalls.Load(); got != 1 {
+		t.Fatalf("factoryCalls after second issue = %d, want 1", got)
+	}
+	if got := readyCalls.Load(); got != 2 {
+		t.Fatalf("readyCalls = %d, want 2", got)
 	}
 }
