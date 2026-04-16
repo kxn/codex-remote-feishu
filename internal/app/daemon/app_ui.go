@@ -143,9 +143,14 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 	}
 	log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
 	var previewSupplementOps []feishu.Operation
+	var (
+		previewReq feishu.FinalBlockPreviewRequest
+		previewErr error
+		didPreview bool
+	)
 	if a.finalBlockPreviewer != nil && event.Kind == control.UIEventBlockCommitted && event.Block != nil {
 		previewCtx, previewCancel := a.newTimeoutContext(ctx, a.finalPreviewTimeout)
-		previewReq := feishu.FinalBlockPreviewRequest{
+		previewReq = feishu.FinalBlockPreviewRequest{
 			GatewayID:        gatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
@@ -158,6 +163,7 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 			previewResult feishu.FinalBlockPreviewResult
 			err           error
 		)
+		didPreview = true
 		if appLocked {
 			a.mu.Unlock()
 			previewResult, err = a.finalBlockPreviewer.RewriteFinalBlock(previewCtx, previewReq)
@@ -166,6 +172,7 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 			previewResult, err = a.finalBlockPreviewer.RewriteFinalBlock(previewCtx, previewReq)
 		}
 		previewCancel()
+		previewErr = err
 		event.Block = &previewResult.Block
 		previewSupplementOps = a.projector.ProjectPreviewSupplements(gatewayID, event.SurfaceSessionID, chatID, event.SourceMessageID, previewResult.Supplements)
 		if err != nil {
@@ -217,6 +224,9 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 		return err
 	}
 	a.recordUIEventDelivery(event, operations)
+	if didPreview {
+		a.maybeScheduleSecondChanceFinalPatchLocked(gatewayID, chatID, event, previewReq, previewErr)
+	}
 	a.traceAssistantBlock(event)
 	return nil
 }
