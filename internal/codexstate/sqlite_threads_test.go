@@ -55,7 +55,7 @@ func TestSQLiteThreadCatalogThreadByIDSkipsFilteredRows(t *testing.T) {
 	dbPath := createThreadCatalogTestDB(t)
 	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 
-	for _, threadID := range []string{"thread-exec", "thread-subagent", "thread-probe", "thread-mcp"} {
+	for _, threadID := range []string{"thread-exec", "thread-subagent", "thread-probe", "thread-mcp", "thread-cron"} {
 		thread, err := catalog.ThreadByID(threadID)
 		if err != nil {
 			t.Fatalf("thread by id %s: %v", threadID, err)
@@ -177,6 +177,7 @@ INSERT INTO threads (
 		{id: "thread-subagent", updatedAt: 1775710350, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "workerproj"), title: "子代理", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium", agentRole: "worker"},
 		{id: "thread-probe", updatedAt: 1775710300, source: "vscode", cwd: testutil.WorkspacePath("data", "dl", "_tmp-codex-appserver-hidden"), title: "APP_SERVER_LATENCY_PROBE", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "low"},
 		{id: "thread-mcp", updatedAt: 1775710250, source: "mcp", cwd: testutil.WorkspacePath("data", "dl", "testgame"), title: "MCP 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium"},
+		{id: "thread-cron", updatedAt: 1775710500, source: "cli", cwd: testutil.WorkspacePath("tmp", "daemon-state", "cron-repos", "runs", "inst-cron-1", "worktree"), title: "Cron 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium"},
 	}
 	for _, row := range rows {
 		if _, err := db.Exec(insert, row.id, row.updatedAt, row.source, row.cwd, row.title, row.archived, row.preview, row.model, row.reasoning, row.agentRole); err != nil {

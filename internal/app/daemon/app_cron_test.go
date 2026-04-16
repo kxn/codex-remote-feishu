@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -248,6 +251,38 @@ func (f *fakeCronBitableAPI) waitForWrites(t *testing.T, wantCreates, wantUpdate
 	t.Fatalf("timed out waiting for writes: got creates=%d updates=%d want creates=%d updates=%d", len(f.createRecords), len(f.updateRecords), wantCreates, wantUpdates)
 }
 
+func runCronTestGitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=Never",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+}
+
+func createCronGitTestRepo(t *testing.T) (string, string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+		t.Fatalf("mkdir repo root: %v", err)
+	}
+	runCronTestGitCommand(t, repoRoot, "init", "-q")
+	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write repo file: %v", err)
+	}
+	runCronTestGitCommand(t, repoRoot, "add", "README.md")
+	runCronTestGitCommand(t, repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init")
+	runCronTestGitCommand(t, repoRoot, "branch", "-M", "main")
+	return "file://" + filepath.ToSlash(repoRoot), "main"
+}
+
 func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	workspace := t.TempDir()
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
@@ -296,8 +331,8 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	if launches != 1 {
 		t.Fatalf("launches = %d, want 1", launches)
 	}
-	if !containsEnvEntry(capturedEnv, "CODEX_REMOTE_INSTANCE_SOURCE=headless") {
-		t.Fatalf("expected headless source env, got %#v", capturedEnv)
+	if !containsEnvEntry(capturedEnv, "CODEX_REMOTE_INSTANCE_SOURCE=cron") {
+		t.Fatalf("expected cron source env, got %#v", capturedEnv)
 	}
 	if !containsEnvEntry(capturedEnv, "CODEX_REMOTE_LIFETIME=daemon-owned") {
 		t.Fatalf("expected daemon-owned lifetime env, got %#v", capturedEnv)
@@ -625,6 +660,181 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 	}
 	if app.cronState.OwnerGatewayID != "gateway-1" {
 		t.Fatalf("reload must not rewrite owner: %#v", app.cronState)
+	}
+}
+
+func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
+	repoURL, ref := createCronGitTestRepo(t)
+	api := &fakeCronBitableAPI{
+		recordsByTable: map[string][]*larkbitable.AppTableRecord{
+			"tbl-workspaces": {},
+			"tbl-tasks": {{
+				RecordId: stringPtr("rec-task-git"),
+				Fields: map[string]any{
+					"任务名":                     "Git Nightly",
+					"启用":                      true,
+					cronTaskSourceTypeField:   cronTaskSourceGitRepoText,
+					cronTaskGitRepoInputField: repoURL + "#ref=" + ref,
+					"调度类型":                    cronScheduleTypeInterval,
+					"间隔":                      "15分钟",
+					"提示词":                     "check repo",
+					"超时（分钟）":                  "20",
+				},
+			}},
+		},
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			Tables: cronTableIDs{
+				Tasks:      "tbl-tasks",
+				Workspaces: "tbl-workspaces",
+			},
+		},
+	}
+	app.cronBitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
+		if gatewayID != "gateway-1" {
+			return nil, fmt.Errorf("unexpected gateway %q", gatewayID)
+		}
+		return api, nil
+	}
+
+	if _, err := app.reloadCronJobsNow(control.DaemonCommand{GatewayID: "gateway-1", SurfaceSessionID: "surface-1"}); err != nil {
+		t.Fatalf("reloadCronJobsNow: %v", err)
+	}
+	if len(app.cronState.Jobs) != 1 {
+		t.Fatalf("jobs = %#v, want one git job", app.cronState.Jobs)
+	}
+	job := app.cronState.Jobs[0]
+	if job.SourceType != cronJobSourceGitRepo {
+		t.Fatalf("source type = %q, want %q", job.SourceType, cronJobSourceGitRepo)
+	}
+	if job.GitRepoSourceInput != repoURL+"#ref="+ref || job.GitRepoURL != repoURL || job.GitRef != ref {
+		t.Fatalf("unexpected git source fields: %#v", job)
+	}
+	if job.WorkspaceKey != "" || job.WorkspaceRecordID != "" {
+		t.Fatalf("git job must not keep workspace fields: %#v", job)
+	}
+}
+
+func TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel(t *testing.T) {
+	repoURL, ref := createCronGitTestRepo(t)
+	api := &fakeCronBitableAPI{}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: t.TempDir(),
+		},
+	})
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		GatewayID:      "gateway-1",
+		OwnerGatewayID: "gateway-1",
+		Bitable: &cronBitableState{
+			AppToken: "app-1",
+			Tables: cronTableIDs{
+				Tasks: "tbl-tasks",
+				Runs:  "tbl-runs",
+			},
+		},
+		Jobs: []cronJobState{{
+			RecordID:           "rec-task-git",
+			Name:               "Git Nightly",
+			ScheduleType:       cronScheduleTypeInterval,
+			IntervalMinutes:    5,
+			SourceType:         cronJobSourceGitRepo,
+			GitRepoSourceInput: repoURL + "#ref=" + ref,
+			GitRepoURL:         repoURL,
+			GitRef:             ref,
+			Prompt:             "check repo",
+			TimeoutMinutes:     15,
+			NextRunAt:          time.Now().Add(-time.Minute),
+		}},
+	}
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
+
+	var capturedWorkDir string
+	var capturedEnv []string
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		capturedWorkDir = opts.WorkDir
+		capturedEnv = append([]string(nil), opts.Env...)
+		return 4321, nil
+	}
+	var commands []agentproto.Command
+	app.sendAgentCommand = func(target string, command agentproto.Command) error {
+		commands = append(commands, command)
+		return nil
+	}
+
+	app.mu.Lock()
+	app.maybeScheduleCronJobsLocked(time.Now())
+	var instanceID string
+	var runCopy cronRunState
+	for id, run := range app.cronRuns {
+		instanceID = id
+		runCopy = *run
+	}
+	app.mu.Unlock()
+
+	if instanceID == "" {
+		t.Fatal("expected one active cron git run")
+	}
+	if !containsEnvEntry(capturedEnv, "CODEX_REMOTE_INSTANCE_SOURCE=cron") {
+		t.Fatalf("expected cron source env, got %#v", capturedEnv)
+	}
+	if !strings.Contains(filepath.ToSlash(capturedWorkDir), "/cron-repos/runs/") {
+		t.Fatalf("git cron run dir = %q, want cron-repos/runs prefix", capturedWorkDir)
+	}
+	if _, err := os.Stat(filepath.Join(capturedWorkDir, "README.md")); err != nil {
+		t.Fatalf("materialized worktree missing repo file: %v", err)
+	}
+	if runCopy.SourceType != cronJobSourceGitRepo || runCopy.SourceLabel == "" || runCopy.RunRoot == "" || runCopy.GitSourceKey == "" {
+		t.Fatalf("unexpected run state: %#v", runCopy)
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID: instanceID,
+			Source:     "cron",
+			PID:        4321,
+		},
+	})
+	app.onEvents(context.Background(), instanceID, []agentproto.Event{
+		{Kind: agentproto.EventTurnStarted, ThreadID: "thread-git-1", TurnID: "turn-git-1"},
+		{Kind: agentproto.EventItemDelta, ThreadID: "thread-git-1", TurnID: "turn-git-1", ItemID: "item-git-1", ItemKind: "agent_message", Delta: "done"},
+		{Kind: agentproto.EventTurnCompleted, ThreadID: "thread-git-1", TurnID: "turn-git-1", Status: "completed"},
+	})
+
+	api.waitForWrites(t, 1, 1)
+	api.mu.Lock()
+	runFields := cloneAnyMap(api.createRecords[0].Fields)
+	api.mu.Unlock()
+	if got := runFields["工作区"]; got != runCopy.SourceLabel {
+		t.Fatalf("run history source label = %#v, want %q", got, runCopy.SourceLabel)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(runCopy.RunRoot); os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(runCopy.RunRoot); err == nil {
+		t.Fatalf("expected git cron run root to be cleaned up: %s", runCopy.RunRoot)
 	}
 }
 
@@ -1678,7 +1888,9 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 	wantNames := []string{
 		"任务名",
 		"启用",
+		"来源类型",
 		"工作区",
+		"Git 仓库引用",
 		"提示词",
 		"调度类型",
 		"调度时间",

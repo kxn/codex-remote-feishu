@@ -110,11 +110,7 @@ func Import(ctx context.Context, req ImportRequest) (ImportResult, error) {
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = parentDir
-	cmd.Env = append(os.Environ(),
-		"GIT_TERMINAL_PROMPT=0",
-		"GCM_INTERACTIVE=Never",
-	)
-	configureGitImportCommand(cmd)
+	PrepareCommand(cmd)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

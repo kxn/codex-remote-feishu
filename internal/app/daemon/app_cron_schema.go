@@ -9,7 +9,9 @@ import (
 func cronTaskFieldSpecs(workspacesTableID string) []cronFieldSpec {
 	return []cronFieldSpec{
 		{Name: "启用", Type: 7},
-		{Name: "工作区", Type: 18, Property: larkbitable.NewAppTableFieldPropertyBuilder().TableId(workspacesTableID).Multiple(false).Build()},
+		{Name: cronTaskSourceTypeField, Type: 3, Property: cronSelectFieldProperty([]string{cronTaskSourceWorkspaceText, cronTaskSourceGitRepoText})},
+		{Name: cronTaskWorkspaceField, Type: 18, Property: larkbitable.NewAppTableFieldPropertyBuilder().TableId(workspacesTableID).Multiple(false).Build()},
+		{Name: cronTaskGitRepoInputField, Type: 1},
 		{Name: "提示词", Type: 1},
 		{Name: "调度类型", Type: 3, Property: cronSelectFieldProperty([]string{cronScheduleTypeDaily, cronScheduleTypeInterval})},
 		{Name: "调度时间", Type: 1},

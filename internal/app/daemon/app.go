@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -179,6 +180,7 @@ type App struct {
 	cronBitableFactory              func(string) (feishu.BitableAPI, error)
 	cronGatewayIdentityLookup       func(string) (cronGatewayIdentity, bool, error)
 	cronNextScheduleScan            time.Time
+	cronRepoManager                 *cronrepo.Manager
 
 	adminAuth                  *adminauth.Manager
 	admin                      adminRuntimeState
@@ -347,6 +349,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	cfg.BaseEnv = append([]string{}, cfg.BaseEnv...)
 	cfg.LaunchArgs = append([]string{}, cfg.LaunchArgs...)
 	a.headlessRuntime = cfg
+	a.cronRepoManager = cronrepo.NewManager(cfg.Paths.StateDir)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)

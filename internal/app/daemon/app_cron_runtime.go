@@ -42,7 +42,7 @@ func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) b
 		Target: agentproto.Target{
 			CreateThreadIfMissing: true,
 			InternalHelper:        true,
-			CWD:                   run.WorkspaceKey,
+			CWD:                   firstNonEmpty(strings.TrimSpace(run.RunDirectory), strings.TrimSpace(run.WorkspaceKey)),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{
@@ -68,7 +68,7 @@ func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) b
 		return true
 	}
 	run.CommandID = command.CommandID
-	log.Printf("cron hidden prompt sent: instance=%s command=%s workspace=%s", instanceID, command.CommandID, run.WorkspaceKey)
+	log.Printf("cron hidden prompt sent: instance=%s command=%s source=%s cwd=%s", instanceID, command.CommandID, run.SourceLabel, command.Target.CWD)
 	return true
 }
 
@@ -269,9 +269,11 @@ func (a *App) completeCronRunLocked(instanceID, status, errorMessage string, now
 	}
 	if !writeTarget.valid() {
 		log.Printf("cron run completed without writeback target: instance=%s status=%s", instanceID, completedRun.Status)
+		go a.cleanupCronRunResources(completedRun)
 		return
 	}
 	go a.writeCronRunResultAsync(writeTarget, completedRun)
+	go a.cleanupCronRunResources(completedRun)
 }
 
 func (a *App) snapshotCronWritebackLocked() cronWritebackTarget {
@@ -341,7 +343,7 @@ func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunSta
 		"结束时间":  cronMilliseconds(run.CompletedAt),
 		"状态":    statusText,
 		"耗时（秒）": cronElapsedSeconds(run.StartedAt, run.CompletedAt),
-		"工作区":   run.WorkspaceKey,
+		"工作区":   firstNonEmpty(strings.TrimSpace(run.SourceLabel), strings.TrimSpace(run.WorkspaceKey)),
 		"结果摘要":  summary,
 		"最终回复":  strings.TrimSpace(run.FinalMessage),
 		"错误信息":  strings.TrimSpace(run.ErrorMessage),

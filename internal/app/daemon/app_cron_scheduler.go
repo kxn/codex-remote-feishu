@@ -28,6 +28,7 @@ func (a *App) maybeScheduleCronJobsLocked(now time.Time) {
 
 	now = cronSchedulerTime(now)
 	dirty := false
+	launches := []cronLaunchRequest{}
 	for idx := range stateValue.Jobs {
 		job := &stateValue.Jobs[idx]
 		if job.NextRunAt.IsZero() {
@@ -50,15 +51,14 @@ func (a *App) maybeScheduleCronJobsLocked(now time.Time) {
 		}
 		job.NextRunAt = nextRunAt
 		dirty = true
-		if err := a.launchCronRunLocked(*job, now); err != nil {
-			a.recordCronImmediateResultLocked(*job, now, "failed", err.Error())
-		}
+		launches = append(launches, a.newCronLaunchRequestLocked(*job, now))
 	}
 	if dirty {
 		if err := a.writeCronStateLocked(); err != nil {
 			log.Printf("cron scheduler state write failed: %v", err)
 		}
 	}
+	a.launchCronRequestsLocked(launches)
 }
 
 func (a *App) maybeTimeoutCronRunsLocked(now time.Time) {
@@ -82,73 +82,8 @@ func (a *App) maybeTimeoutCronRunsLocked(now time.Time) {
 	}
 }
 
-func (a *App) launchCronRunLocked(job cronJobState, now time.Time) error {
-	cfg := a.headlessRuntime
-	if strings.TrimSpace(cfg.BinaryPath) == "" {
-		return fmt.Errorf("headless binary 未配置，无法执行 Cron 任务")
-	}
-	workspaceRoot, err := normalizeWorkspaceRoot(job.WorkspaceKey)
-	if err != nil {
-		return fmt.Errorf("工作区不可用：%w", err)
-	}
-	instanceID := cronInstanceIDForRun(job.RecordID, now)
-	displayName := firstNonEmpty(strings.TrimSpace(job.Name), "cron")
-	env := append([]string{}, cfg.BaseEnv...)
-	env = append(env,
-		"CODEX_REMOTE_INSTANCE_ID="+instanceID,
-		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
-		"CODEX_REMOTE_LIFETIME=daemon-owned",
-		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=cron:"+displayName,
-	)
-	pid, err := a.startHeadless(controlToHeadlessLaunch(cfg, env, workspaceRoot, instanceID))
-	if err != nil {
-		return fmt.Errorf("启动隐藏执行失败：%w", err)
-	}
-	writebackTarget := a.snapshotCronWritebackLocked()
-	run := &cronRunState{
-		RunID:           instanceID,
-		InstanceID:      instanceID,
-		GatewayID:       strings.TrimSpace(writebackTarget.GatewayID),
-		WritebackTarget: writebackTarget,
-		JobRecordID:     strings.TrimSpace(job.RecordID),
-		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), displayName),
-		WorkspaceKey:    workspaceRoot,
-		Prompt:          strings.TrimSpace(job.Prompt),
-		TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
-		TriggeredAt:     now,
-		PID:             pid,
-		Status:          "starting",
-		Buffers:         map[string]*cronItemBuffer{},
-	}
-	a.cronRuns[instanceID] = run
-	a.cronJobActiveRuns[cronJobActiveKey(job.RecordID, job.Name)] = instanceID
-	delete(a.cronExitTargets, instanceID)
-	log.Printf("cron hidden run requested: instance=%s job=%s workspace=%s pid=%d", instanceID, run.JobName, run.WorkspaceKey, pid)
-	return nil
-}
-
 func (a *App) recordCronImmediateResultLocked(job cronJobState, triggeredAt time.Time, status, errorMessage string) {
-	target := a.snapshotCronWritebackLocked()
-	if !target.valid() {
-		log.Printf("cron immediate result skipped: no writeback target job=%s status=%s", job.Name, status)
-		return
-	}
-	run := cronRunState{
-		RunID:           cronInstanceIDForRun(job.RecordID, triggeredAt),
-		InstanceID:      cronInstanceIDForRun(job.RecordID, triggeredAt),
-		GatewayID:       target.GatewayID,
-		WritebackTarget: target,
-		JobRecordID:     strings.TrimSpace(job.RecordID),
-		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
-		WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),
-		Prompt:          strings.TrimSpace(job.Prompt),
-		TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
-		TriggeredAt:     triggeredAt,
-		CompletedAt:     triggeredAt,
-		Status:          strings.TrimSpace(status),
-		ErrorMessage:    strings.TrimSpace(errorMessage),
-	}
-	go a.writeCronRunResultAsync(target, run)
+	a.recordCronImmediateResultWithTargetLocked(a.snapshotCronWritebackLocked(), job, triggeredAt, status, errorMessage)
 }
 
 func (a *App) reapCronExitTargetsLocked(now time.Time) {

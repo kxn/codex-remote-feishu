@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	cronStateSchemaVersion   = 2
+	cronStateSchemaVersion   = 3
 	cronDefaultTimeoutMinute = 30
 	cronScheduleScanEvery    = time.Second
 	cronExitGrace            = 20 * time.Second
@@ -65,17 +65,21 @@ type cronTableIDs struct {
 }
 
 type cronJobState struct {
-	RecordID          string    `json:"record_id,omitempty"`
-	Name              string    `json:"name,omitempty"`
-	ScheduleType      string    `json:"schedule_type,omitempty"`
-	DailyHour         int       `json:"daily_hour,omitempty"`
-	DailyMinute       int       `json:"daily_minute,omitempty"`
-	IntervalMinutes   int       `json:"interval_minutes,omitempty"`
-	WorkspaceKey      string    `json:"workspace_key,omitempty"`
-	WorkspaceRecordID string    `json:"workspace_record_id,omitempty"`
-	Prompt            string    `json:"prompt,omitempty"`
-	TimeoutMinutes    int       `json:"timeout_minutes,omitempty"`
-	NextRunAt         time.Time `json:"next_run_at,omitempty"`
+	RecordID           string            `json:"record_id,omitempty"`
+	Name               string            `json:"name,omitempty"`
+	ScheduleType       string            `json:"schedule_type,omitempty"`
+	DailyHour          int               `json:"daily_hour,omitempty"`
+	DailyMinute        int               `json:"daily_minute,omitempty"`
+	IntervalMinutes    int               `json:"interval_minutes,omitempty"`
+	SourceType         cronJobSourceType `json:"source_type,omitempty"`
+	WorkspaceKey       string            `json:"workspace_key,omitempty"`
+	WorkspaceRecordID  string            `json:"workspace_record_id,omitempty"`
+	GitRepoSourceInput string            `json:"git_repo_source_input,omitempty"`
+	GitRepoURL         string            `json:"git_repo_url,omitempty"`
+	GitRef             string            `json:"git_ref,omitempty"`
+	Prompt             string            `json:"prompt,omitempty"`
+	TimeoutMinutes     int               `json:"timeout_minutes,omitempty"`
+	NextRunAt          time.Time         `json:"next_run_at,omitempty"`
 }
 
 type cronRunState struct {
@@ -85,7 +89,14 @@ type cronRunState struct {
 	WritebackTarget  cronWritebackTarget
 	JobRecordID      string
 	JobName          string
+	SourceType       cronJobSourceType
+	SourceLabel      string
 	WorkspaceKey     string
+	RunRoot          string
+	RunDirectory     string
+	GitSourceKey     string
+	GitRepoURL       string
+	GitRef           string
 	Prompt           string
 	TimeoutMinutes   int
 	TriggeredAt      time.Time
@@ -173,6 +184,9 @@ func normalizeCronState(stateValue cronStateFile) *cronStateFile {
 	}
 	if stateValue.Jobs == nil {
 		stateValue.Jobs = []cronJobState{}
+	}
+	for index := range stateValue.Jobs {
+		stateValue.Jobs[index] = cronNormalizeJobState(stateValue.Jobs[index])
 	}
 	return &stateValue
 }

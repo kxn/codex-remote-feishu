@@ -6,6 +6,8 @@ import (
 	"time"
 
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
 )
 
 type cronReloadTaskChange string
@@ -22,8 +24,11 @@ type cronReloadTaskItem struct {
 	DailyHour       int
 	DailyMinute     int
 	IntervalMinutes int
+	SourceType      cronJobSourceType
+	SourceSummary   string
 	WorkspaceKey    string
 	WorkspaceName   string
+	GitRepoInput    string
 	NextRunAt       time.Time
 	ChangeKind      cronReloadTaskChange
 	Reason          string
@@ -77,7 +82,10 @@ func cronReloadTaskItemFromJob(job cronJobState) cronReloadTaskItem {
 		DailyHour:       job.DailyHour,
 		DailyMinute:     job.DailyMinute,
 		IntervalMinutes: job.IntervalMinutes,
+		SourceType:      job.SourceType,
+		SourceSummary:   cronJobDisplaySource(job),
 		WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),
+		GitRepoInput:    strings.TrimSpace(job.GitRepoSourceInput),
 		NextRunAt:       job.NextRunAt,
 	}
 }
@@ -93,8 +101,10 @@ func cronReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspa
 		item.Name = item.RecordID
 	}
 	item.ScheduleType = strings.TrimSpace(cronValueString(record.Fields["调度类型"]))
-	workspaceLinks := cronValueStringSlice(record.Fields["工作区"])
-	if len(workspaceLinks) == 1 {
+	workspaceLinks := cronValueStringSlice(record.Fields[cronTaskWorkspaceField])
+	item.GitRepoInput = strings.TrimSpace(cronValueString(record.Fields[cronTaskGitRepoInputField]))
+	item.SourceType = cronInferJobSourceType(cronValueString(record.Fields[cronTaskSourceTypeField]), item.GitRepoInput, workspaceLinks)
+	if item.SourceType == cronJobSourceWorkspace && len(workspaceLinks) == 1 {
 		if workspaceRow, ok := workspacesByRecord[workspaceLinks[0]]; ok {
 			item.WorkspaceKey = strings.TrimSpace(workspaceRow.Key)
 			item.WorkspaceName = strings.TrimSpace(workspaceRow.Name)
@@ -112,14 +122,17 @@ func cronReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspa
 		}
 	}
 	job := cronJobState{
-		RecordID:        item.RecordID,
-		Name:            item.Name,
-		ScheduleType:    item.ScheduleType,
-		DailyHour:       item.DailyHour,
-		DailyMinute:     item.DailyMinute,
-		IntervalMinutes: item.IntervalMinutes,
-		WorkspaceKey:    item.WorkspaceKey,
+		RecordID:           item.RecordID,
+		Name:               item.Name,
+		ScheduleType:       item.ScheduleType,
+		SourceType:         item.SourceType,
+		DailyHour:          item.DailyHour,
+		DailyMinute:        item.DailyMinute,
+		IntervalMinutes:    item.IntervalMinutes,
+		WorkspaceKey:       item.WorkspaceKey,
+		GitRepoSourceInput: item.GitRepoInput,
 	}
+	item.SourceSummary = cronJobDisplaySource(job)
 	item.NextRunAt = cronNextRunAt(job, now)
 	return item
 }
@@ -162,26 +175,45 @@ func cronJobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRec
 	if prompt == "" {
 		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "提示词", fmt.Sprintf("任务 `%s` 缺少提示词", name))
 	}
-	workspaceLinks := cronValueStringSlice(record.Fields["工作区"])
-	if len(workspaceLinks) != 1 {
-		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "工作区", fmt.Sprintf("任务 `%s` 需要且只能选择一个工作区", name))
-	}
-	workspaceRow, ok := workspacesByRecord[workspaceLinks[0]]
-	if !ok || strings.TrimSpace(workspaceRow.Key) == "" {
-		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "工作区", fmt.Sprintf("任务 `%s` 选择的工作区已不存在", name))
-	}
-	if strings.TrimSpace(workspaceRow.Status) == "已失效" {
-		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "工作区", fmt.Sprintf("任务 `%s` 选择的工作区已失效", name))
-	}
+	workspaceLinks := cronValueStringSlice(record.Fields[cronTaskWorkspaceField])
+	gitRepoInput := strings.TrimSpace(cronValueString(record.Fields[cronTaskGitRepoInputField]))
+	sourceType := cronInferJobSourceType(cronValueString(record.Fields[cronTaskSourceTypeField]), gitRepoInput, workspaceLinks)
 	timeoutMinutes := cronDefaultTimeoutMinutes(cronValueInt(record.Fields["超时（分钟）"]))
 	job := cronJobState{
-		RecordID:          strings.TrimSpace(stringValue(record.RecordId)),
-		Name:              name,
-		ScheduleType:      scheduleType,
-		WorkspaceKey:      workspaceRow.Key,
-		WorkspaceRecordID: workspaceLinks[0],
-		Prompt:            prompt,
-		TimeoutMinutes:    timeoutMinutes,
+		RecordID:       strings.TrimSpace(stringValue(record.RecordId)),
+		Name:           name,
+		ScheduleType:   scheduleType,
+		SourceType:     sourceType,
+		Prompt:         prompt,
+		TimeoutMinutes: timeoutMinutes,
+	}
+	switch sourceType {
+	case cronJobSourceWorkspace:
+		if len(workspaceLinks) != 1 {
+			return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskWorkspaceField, fmt.Sprintf("任务 `%s` 需要且只能选择一个工作区", name))
+		}
+		workspaceRow, ok := workspacesByRecord[workspaceLinks[0]]
+		if !ok || strings.TrimSpace(workspaceRow.Key) == "" {
+			return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskWorkspaceField, fmt.Sprintf("任务 `%s` 选择的工作区已不存在", name))
+		}
+		if strings.TrimSpace(workspaceRow.Status) == "已失效" {
+			return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskWorkspaceField, fmt.Sprintf("任务 `%s` 选择的工作区已失效", name))
+		}
+		job.WorkspaceKey = workspaceRow.Key
+		job.WorkspaceRecordID = workspaceLinks[0]
+	case cronJobSourceGitRepo:
+		if gitRepoInput == "" {
+			return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskGitRepoInputField, fmt.Sprintf("任务 `%s` 缺少 Git 仓库引用", name))
+		}
+		spec, err := cronrepo.ParseSourceInput(gitRepoInput)
+		if err != nil {
+			return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskGitRepoInputField, fmt.Sprintf("任务 `%s` 的 Git 仓库引用无效：%s", name, err.Error()))
+		}
+		job.GitRepoSourceInput = gitRepoInput
+		job.GitRepoURL = spec.RepoURL
+		job.GitRef = spec.Ref
+	default:
+		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, cronTaskSourceTypeField, fmt.Sprintf("任务 `%s` 的来源类型无效：%s", name, cronValueString(record.Fields[cronTaskSourceTypeField])))
 	}
 	switch scheduleType {
 	case cronScheduleTypeDaily:
@@ -201,6 +233,7 @@ func cronJobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRec
 	default:
 		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "调度类型", fmt.Sprintf("任务 `%s` 的调度类型无效：%s", name, scheduleType))
 	}
+	job = cronNormalizeJobState(job)
 	job.NextRunAt = cronNextRunAt(job, now)
 	return job, false, nil
 }

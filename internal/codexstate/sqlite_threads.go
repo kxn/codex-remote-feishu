@@ -21,6 +21,7 @@ const (
 	defaultCodexSQLiteFilename = "state_5.sqlite"
 	internalProbeThreadPrefix  = "_tmp-codex-thread-latency-"
 	internalProbeAppPrefix     = "_tmp-codex-appserver-"
+	cronRepoRunPathPattern     = "%/cron-repos/runs/%"
 	sqliteReadRetryCount       = 3
 )
 
@@ -84,9 +85,10 @@ WHERE archived = 0
   AND COALESCE(agent_role, '') = ''
   AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
   AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
+  AND cwd NOT LIKE ?
 ORDER BY updated_at DESC, id DESC
 LIMIT ?
-`, limit)
+`, cronRepoRunPathPattern, limit)
 		if err != nil {
 			return err
 		}
@@ -130,10 +132,11 @@ WHERE archived = 0
   AND COALESCE(agent_role, '') = ''
   AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
   AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
+  AND cwd NOT LIKE ?
 GROUP BY cwd
 ORDER BY updated_at DESC, cwd ASC
 LIMIT ?
-`, limit)
+`, cronRepoRunPathPattern, limit)
 		if err != nil {
 			return err
 		}
@@ -184,8 +187,9 @@ WHERE id = ?
   AND COALESCE(agent_role, '') = ''
   AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
   AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
+  AND cwd NOT LIKE ?
 LIMIT 1
-`, threadID)
+`, threadID, cronRepoRunPathPattern)
 		record, err := scanPersistedThread(row)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
