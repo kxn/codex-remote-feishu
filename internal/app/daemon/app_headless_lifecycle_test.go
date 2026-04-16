@@ -557,3 +557,92 @@ func TestDaemonPrewarmsReplacementWhenOfflineManagedHeadlessDoesNotCount(t *test
 		t.Fatalf("expected original member to stay offline, got %#v", app.managedHeadless["inst-headless-old"])
 	}
 }
+
+func TestDaemonPrewarmLaunchFailureRollsBackReservation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	launches := 0
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches++
+		if launches == 1 {
+			return 0, errors.New("boom")
+		}
+		return 7000 + launches, nil
+	}
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: stateDir,
+			LogsDir:  t.TempDir(),
+		},
+		MinIdle: 1,
+	})
+
+	base := time.Now().UTC()
+	app.onTick(context.Background(), base)
+	if launches != 1 {
+		t.Fatalf("expected one failed prewarm launch, got %d", launches)
+	}
+	if len(app.managedHeadless) != 0 {
+		t.Fatalf("expected failed prewarm reservation to be rolled back, got %#v", app.managedHeadless)
+	}
+
+	app.onTick(context.Background(), base.Add(time.Minute))
+	if launches != 2 {
+		t.Fatalf("expected second tick to retry prewarm launch, got %d launches", launches)
+	}
+	if len(app.managedHeadless) != 1 {
+		t.Fatalf("expected successful retry to leave one managed headless record, got %#v", app.managedHeadless)
+	}
+}
+
+func TestDaemonPrewarmReservationBlocksDuplicateLaunchWhileStartInFlight(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	launches := 0
+	startEntered := make(chan struct{})
+	releaseStart := make(chan struct{})
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches++
+		if launches == 1 {
+			close(startEntered)
+			<-releaseStart
+		}
+		return 8000 + launches, nil
+	}
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		Paths: relayruntime.Paths{
+			StateDir: stateDir,
+			LogsDir:  t.TempDir(),
+		},
+		MinIdle: 1,
+	})
+
+	base := time.Now().UTC()
+	firstTickDone := make(chan struct{})
+	go func() {
+		app.onTick(context.Background(), base)
+		close(firstTickDone)
+	}()
+
+	<-startEntered
+	if len(app.managedHeadless) != 1 {
+		t.Fatalf("expected reserved prewarm slot while launch is in flight, got %#v", app.managedHeadless)
+	}
+
+	app.onTick(context.Background(), base.Add(5*time.Second))
+	if launches != 1 {
+		t.Fatalf("expected in-flight prewarm reservation to block duplicate launch, got %d launches", launches)
+	}
+
+	close(releaseStart)
+	<-firstTickDone
+	if len(app.managedHeadless) != 1 {
+		t.Fatalf("expected one managed headless record after launch settles, got %#v", app.managedHeadless)
+	}
+}

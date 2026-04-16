@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 const (
@@ -16,6 +17,11 @@ const (
 	managedHeadlessStatusIdle     = "idle"
 	managedHeadlessStatusOffline  = "offline"
 )
+
+type managedHeadlessPrewarmLaunch struct {
+	InstanceID string
+	Options    relayruntime.HeadlessLaunchOptions
+}
 
 func isManagedHeadlessInstance(inst *state.InstanceRecord) bool {
 	return inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed
@@ -191,13 +197,25 @@ func (a *App) ensureMinIdleManagedHeadlessLocked(now time.Time) {
 	if a.headlessRuntime.MinIdle <= 0 || strings.TrimSpace(a.headlessRuntime.BinaryPath) == "" {
 		return
 	}
-	missing := a.headlessRuntime.MinIdle - a.countWarmManagedHeadlessLocked(now)
-	for i := 0; i < missing; i++ {
-		if _, err := a.startPoolManagedHeadlessLocked(now, i+1); err != nil {
+	launches := a.reserveMinIdleManagedHeadlessLocked(now)
+	for _, launch := range launches {
+		if err := a.startReservedPoolManagedHeadlessLocked(launch); err != nil {
 			log.Printf("managed headless prewarm failed: err=%v", err)
 			return
 		}
 	}
+}
+
+func (a *App) reserveMinIdleManagedHeadlessLocked(now time.Time) []managedHeadlessPrewarmLaunch {
+	missing := a.headlessRuntime.MinIdle - a.countWarmManagedHeadlessLocked(now)
+	if missing <= 0 {
+		return nil
+	}
+	launches := make([]managedHeadlessPrewarmLaunch, 0, missing)
+	for i := 0; i < missing; i++ {
+		launches = append(launches, a.reservePoolManagedHeadlessLaunchLocked(now, i+1))
+	}
+	return launches
 }
 
 func (a *App) countWarmManagedHeadlessLocked(now time.Time) int {
@@ -218,7 +236,7 @@ func (a *App) countWarmManagedHeadlessLocked(now time.Time) int {
 	return count
 }
 
-func (a *App) startPoolManagedHeadlessLocked(now time.Time, seq int) (string, error) {
+func (a *App) reservePoolManagedHeadlessLaunchLocked(now time.Time, seq int) managedHeadlessPrewarmLaunch {
 	cfg := a.headlessRuntime
 	workDir := strings.TrimSpace(cfg.Paths.StateDir)
 	if workDir == "" {
@@ -233,13 +251,8 @@ func (a *App) startPoolManagedHeadlessLocked(now time.Time, seq int) (string, er
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless",
 	)
-	pid, err := a.startHeadless(controlToHeadlessLaunch(cfg, env, workDir, instanceID))
-	if err != nil {
-		return "", err
-	}
 	a.managedHeadless[instanceID] = &managedHeadlessProcess{
 		InstanceID:    instanceID,
-		PID:           pid,
 		RequestedAt:   now,
 		StartedAt:     now,
 		ThreadCWD:     workDir,
@@ -247,6 +260,36 @@ func (a *App) startPoolManagedHeadlessLocked(now time.Time, seq int) (string, er
 		DisplayName:   "headless",
 		Status:        managedHeadlessStatusStarting,
 	}
-	log.Printf("managed headless prewarm start requested: instance=%s pid=%d", instanceID, pid)
-	return instanceID, nil
+	return managedHeadlessPrewarmLaunch{
+		InstanceID: instanceID,
+		Options:    controlToHeadlessLaunch(cfg, env, workDir, instanceID),
+	}
+}
+
+func (a *App) startReservedPoolManagedHeadlessLocked(launch managedHeadlessPrewarmLaunch) error {
+	a.mu.Unlock()
+	pid, err := a.startHeadless(launch.Options)
+	a.mu.Lock()
+	if err != nil {
+		delete(a.managedHeadless, launch.InstanceID)
+		return err
+	}
+	managed := a.managedHeadless[launch.InstanceID]
+	if managed == nil || a.shuttingDown {
+		a.mu.Unlock()
+		stopErr := a.stopProcess(pid, a.headlessRuntime.KillGrace)
+		a.mu.Lock()
+		if stopErr != nil {
+			log.Printf("managed headless prewarm cleanup failed: instance=%s pid=%d err=%v", launch.InstanceID, pid, stopErr)
+		}
+		if a.shuttingDown {
+			return fmt.Errorf("daemon is shutting down during prewarm launch")
+		}
+		return fmt.Errorf("prewarm reservation missing after launch: %s", launch.InstanceID)
+	}
+	if managed.PID <= 0 {
+		managed.PID = pid
+	}
+	log.Printf("managed headless prewarm start requested: instance=%s pid=%d", launch.InstanceID, pid)
+	return nil
 }
