@@ -68,6 +68,10 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	loaded.CodexRealBinary, err = resolveNormalCodexBinary(loaded.ConfigPath, loaded.CodexRealBinary)
+	if err != nil {
+		return Config{}, err
+	}
 	services, err := config.LoadServicesConfig()
 	if err != nil {
 		return Config{}, err
