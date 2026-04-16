@@ -31,14 +31,15 @@ func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord
 }
 
 func normalizeWorkspaceClaimKey(value string) string {
-	value = state.ResolveWorkspaceKey(value)
+	raw := strings.TrimSpace(value)
+	value = state.ResolveWorkspaceKey(raw)
 	if value == "" {
 		return ""
 	}
-	if !looksLikeWorkspacePath(value) {
+	if !looksLikeWorkspacePath(raw) {
 		return value
 	}
-	if resolved, err := state.ResolveWorkspaceRootOnHost(value); err == nil {
+	if resolved, err := state.ResolveWorkspaceRootOnHost(raw); err == nil {
 		if resolved = state.ResolveWorkspaceKey(resolved); resolved != "" {
 			return resolved
 		}

@@ -110,7 +110,7 @@ func workspaceCreatePickerRootForGOOS(goos, initialPath string) string {
 			}
 		}
 	}
-	return string(filepath.Separator)
+	return "/"
 }
 
 func windowsWorkspaceCreateFallbackPath() string {
@@ -126,7 +126,7 @@ func windowsVolumeRoot(path string) string {
 	if !isWindowsVolumePath(path) {
 		return ""
 	}
-	return path[:2] + string(filepath.Separator)
+	return path[:2] + "/"
 }
 
 func (s *Service) startFreshWorkspaceHeadless(surface *state.SurfaceConsoleRecord, workspaceKey string) []control.UIEvent {

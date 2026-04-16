@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
@@ -62,6 +63,7 @@ func persistNormalCodexBinary(configPath, target string) {
 
 func firstUsableVSCodeBundleCodex(configured string) string {
 	candidates := []string{configured}
+	candidates = append(candidates, siblingVSCodeBundleCodexCandidates(configured)...)
 	if defaults, err := install.DetectPlatformDefaults(); err == nil {
 		candidates = append(candidates, defaults.CandidateBundleEntrypoints...)
 	}
@@ -80,6 +82,92 @@ func firstUsableVSCodeBundleCodex(configured string) string {
 		return resolved
 	}
 	return ""
+}
+
+func siblingVSCodeBundleCodexCandidates(configured string) []string {
+	root := vscodeBundleExtensionsRoot(configured)
+	if root == "" {
+		return nil
+	}
+
+	type candidate struct {
+		path    string
+		modTime int64
+	}
+
+	dirs, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	found := make([]candidate, 0, len(dirs))
+	for _, dir := range dirs {
+		if !dir.IsDir() || !strings.HasPrefix(dir.Name(), "openai.chatgpt-") {
+			continue
+		}
+		info, err := dir.Info()
+		if err != nil {
+			continue
+		}
+		for _, path := range vscodeBundleExtensionCandidates(filepath.Join(root, dir.Name())) {
+			found = append(found, candidate{
+				path:    path,
+				modTime: info.ModTime().UnixNano(),
+			})
+		}
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].modTime == found[j].modTime {
+			return strings.Compare(found[i].path, found[j].path) < 0
+		}
+		return found[i].modTime > found[j].modTime
+	})
+
+	values := make([]string, 0, len(found))
+	seen := map[string]bool{}
+	for _, item := range found {
+		key := normalizedPathKey(item.path)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		values = append(values, item.path)
+	}
+	return values
+}
+
+func vscodeBundleExtensionsRoot(path string) string {
+	path = cleanPath(path)
+	if path == "" || !looksLikeVSCodeBundleCodexPath(path) {
+		return ""
+	}
+	extensionDir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	if !strings.HasPrefix(filepath.Base(extensionDir), "openai.chatgpt-") {
+		return ""
+	}
+	return filepath.Dir(extensionDir)
+}
+
+func vscodeBundleExtensionCandidates(extensionDir string) []string {
+	binDir := filepath.Join(strings.TrimSpace(extensionDir), "bin")
+	dirs, err := os.ReadDir(binDir)
+	if err != nil {
+		return nil
+	}
+	values := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		if !dir.IsDir() {
+			continue
+		}
+		bundleDir := filepath.Join(binDir, dir.Name())
+		for _, name := range []string{"codex", "codex.exe", "codex.real", "codex.real.exe"} {
+			path := filepath.Join(bundleDir, name)
+			if regularFileExists(path) {
+				values = append(values, path)
+			}
+		}
+	}
+	sort.Strings(values)
+	return values
 }
 
 func usableVSCodeBundleCodexPath(path string) string {

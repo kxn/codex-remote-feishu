@@ -241,9 +241,17 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 
 	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
 	entries := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
+	seenWorkspaceKeys := map[string]struct{}{}
 	var current *control.FeishuWorkspaceSelectionCurrent
 	for workspaceKey := range visibleWorkspaces {
 		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+		if workspaceKey == "" {
+			continue
+		}
+		if _, exists := seenWorkspaceKeys[workspaceKey]; exists {
+			continue
+		}
+		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
 
@@ -577,7 +585,7 @@ func (s *Service) mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(latest m
 		return
 	}
 	for workspaceKey, usedAt := range s.recentPersistedWorkspaces(persistedRecentWorkspaceLimit) {
-		workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
+		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 		if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 			continue
 		}
@@ -609,7 +617,7 @@ func workspaceSelectionThreadKeyAndUsedAt(thread *state.ThreadRecord) (string, t
 	if !threadVisible(thread) {
 		return "", time.Time{}
 	}
-	workspaceKey := state.ResolveWorkspaceKey(thread.CWD)
+	workspaceKey := normalizeWorkspaceClaimKey(thread.CWD)
 	if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 		return "", time.Time{}
 	}

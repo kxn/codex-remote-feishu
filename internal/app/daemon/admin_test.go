@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestSetupTokenExchangeEnablesSetupBootstrapAPI(t *testing.T) {
@@ -293,7 +294,7 @@ func TestRuntimeStatusPayloadIncludesSurfaceProgressSummaries(t *testing.T) {
 	if summary.LastAssistantMessage != "我会先补结构化探索状态卡。" {
 		t.Fatalf("unexpected last assistant message: %#v", summary)
 	}
-	if summary.InstanceDisplayName != "Demo Workspace" || summary.WorkspacePath != "/tmp/demo" {
+	if summary.InstanceDisplayName != "Demo Workspace" || !testutil.SamePath(summary.WorkspacePath, "/tmp/demo") {
 		t.Fatalf("unexpected instance summary: %#v", summary)
 	}
 	if summary.Progress == nil || len(summary.Progress.Blocks) != 1 {

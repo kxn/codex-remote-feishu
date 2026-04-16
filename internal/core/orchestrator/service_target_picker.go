@@ -441,8 +441,16 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 	s.mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
 
 	entries := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
+	seenWorkspaceKeys := map[string]struct{}{}
 	for workspaceKey := range visibleWorkspaces {
 		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+		if workspaceKey == "" {
+			continue
+		}
+		if _, exists := seenWorkspaceKeys[workspaceKey]; exists {
+			continue
+		}
+		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
 		latestUsedAt := recoverableWorkspaces[workspaceKey]

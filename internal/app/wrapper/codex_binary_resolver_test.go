@@ -66,6 +66,29 @@ func TestResolveNormalCodexBinaryFallsBackToUsableVSCodeBundle(t *testing.T) {
 	}
 }
 
+func TestResolveNormalCodexBinaryFallsBackToSiblingBundleAcrossPlatformDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
+
+	vscodeRoot := filepath.Join(home, ".vscode-server", "extensions")
+	entrypoint := filepath.Join(vscodeRoot, "openai.chatgpt-2", "bin", "windows-x64", "codex.exe")
+	realPath := filepath.Join(vscodeRoot, "openai.chatgpt-2", "bin", "windows-x64", "codex.real.exe")
+	writeResolverExecutable(t, entrypoint)
+	writeResolverExecutable(t, realPath)
+
+	stale := filepath.Join(vscodeRoot, "openai.chatgpt-1", "bin", "linux-x86_64", "codex.real")
+	configPath := writeResolverConfig(t, home, stale)
+
+	got, err := resolveNormalCodexBinary(configPath, stale)
+	if err != nil {
+		t.Fatalf("resolveNormalCodexBinary: %v", err)
+	}
+	if got != realPath {
+		t.Fatalf("resolved codex binary = %q, want %q", got, realPath)
+	}
+}
+
 func TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

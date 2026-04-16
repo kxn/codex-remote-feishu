@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -205,5 +206,54 @@ func TestBuildWorkspaceSelectionModelUsesPersistedWorkspaceAggregationBeyondThre
 	}
 	if !foundLegacy {
 		t.Fatalf("expected legacy workspace to remain visible via workspace aggregation, got %#v", model.Entries)
+	}
+}
+
+func TestListWorkspacesDeduplicatesPersistedWorkspaceAliases(t *testing.T) {
+	now := time.Date(2026, 4, 14, 9, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	baseDir := t.TempDir()
+	workspaceRoot := filepath.Join(baseDir, "proj")
+	t.Chdir(baseDir)
+
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "proj",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "proj",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID:   "thread-1",
+				Name:       "会话-1",
+				CWD:        workspaceRoot,
+				LastUsedAt: now,
+			},
+		},
+	})
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recentWorkspaces: map[string]time.Time{
+			"./proj": now,
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected one target picker event, got %#v", events)
+	}
+
+	view := targetPickerFromEvent(t, events[0])
+	if len(view.WorkspaceOptions) != 1 {
+		t.Fatalf("expected persisted workspace alias to collapse into one option, got %#v", view.WorkspaceOptions)
+	}
+	if !testutil.SamePath(view.WorkspaceOptions[0].Value, workspaceRoot) {
+		t.Fatalf("workspace option value = %q, want %q", view.WorkspaceOptions[0].Value, workspaceRoot)
 	}
 }

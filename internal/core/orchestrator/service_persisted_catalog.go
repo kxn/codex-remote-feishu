@@ -50,7 +50,7 @@ func workspaceRecencyFromThreads(threads []state.ThreadRecord) map[string]time.T
 	workspaces := map[string]time.Time{}
 	for i := range threads {
 		thread := threads[i]
-		workspaceKey := state.ResolveWorkspaceKey(thread.CWD)
+		workspaceKey := normalizeWorkspaceClaimKey(thread.CWD)
 		if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 			continue
 		}
@@ -67,7 +67,7 @@ func normalizePersistedWorkspaceRecency(raw map[string]time.Time) map[string]tim
 	}
 	normalized := map[string]time.Time{}
 	for workspaceKey, usedAt := range raw {
-		workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
+		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 		if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 			continue
 		}
