@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -179,6 +180,9 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		}
 		if strings.TrimSpace(view.Thread.State) != "" {
 			thread.State = strings.TrimSpace(view.Thread.State)
+		}
+		if view.Thread.RuntimeStatus != nil {
+			thread.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(view.Thread.RuntimeStatus)
 		}
 		if strings.TrimSpace(view.Thread.ExplicitModel) != "" {
 			thread.ExplicitModel = strings.TrimSpace(view.Thread.ExplicitModel)

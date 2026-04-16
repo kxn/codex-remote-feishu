@@ -283,17 +283,20 @@ type InstanceSummary struct {
 }
 
 type ThreadSummary struct {
-	ThreadID          string
-	Name              string
-	DisplayTitle      string
-	Preview           string
-	CWD               string
-	State             string
-	Model             string
-	ReasoningEffort   string
-	Loaded            bool
-	IsObservedFocused bool
-	IsSelected        bool
+	ThreadID           string
+	Name               string
+	DisplayTitle       string
+	Preview            string
+	CWD                string
+	State              string
+	RuntimeStatus      string
+	Model              string
+	ReasoningEffort    string
+	Loaded             bool
+	WaitingOnApproval  bool
+	WaitingOnUserInput bool
+	IsObservedFocused  bool
+	IsSelected         bool
 }
 
 type PendingInputState struct {

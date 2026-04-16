@@ -312,6 +312,9 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if merged.TrafficClass == "" {
 		merged.TrafficClass = secondary.TrafficClass
 	}
+	if merged.RuntimeStatus == nil && secondary.RuntimeStatus != nil {
+		merged.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(secondary.RuntimeStatus)
+	}
 	if merged.TokenUsage == nil && secondary.TokenUsage != nil {
 		merged.TokenUsage = agentproto.CloneThreadTokenUsage(secondary.TokenUsage)
 	}
@@ -328,6 +331,7 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 		return nil
 	}
 	threadCopy := *thread
+	threadCopy.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(thread.RuntimeStatus)
 	threadCopy.TokenUsage = agentproto.CloneThreadTokenUsage(thread.TokenUsage)
 	if thread.UndeliveredReplay != nil {
 		replayCopy := *thread.UndeliveredReplay

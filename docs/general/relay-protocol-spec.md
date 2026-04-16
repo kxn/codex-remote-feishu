@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-04-14`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Updated: `2026-04-16`
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -37,6 +37,7 @@
 - `thread/read`
 - `thread/compact/start`
 - `thread/started`
+- `thread/status/changed`
 - `thread/name/updated`
 - `thread/tokenUsage/updated`
 - `turn/start`
@@ -322,6 +323,15 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 
 触发 wrapper 走 `thread/list + thread/read`，再返回标准化的 `threads.snapshot`。
 
+当前还会把 native `thread.status` 统一折叠到 canonical `ThreadSnapshotRecord.runtimeStatus`：
+
+- `thread/list` / `thread/read` 给出的 `status` 现在会直接进入 `runtimeStatus`
+- 兼容旧投影时，`state` 仍保留 legacy 字面值：
+  - `active -> running`
+  - `notLoaded -> not_loaded`
+  - `systemError -> system_error`
+- `loaded` 当前优先按 authoritative `runtimeStatus` 推导，而不是继续单独猜测
+
 ### 4.7 `thread.history.read`
 
 用于让 daemon 按需向某个 wrapper 查询指定 thread 的完整历史。
@@ -355,6 +365,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `thread.history.read`
 - `thread.discovered`
 - `thread.focused`
+- `thread.runtime_status.updated`
 - `thread.token_usage.updated`
 - `config.observed`
 - `local.interaction.observed`
@@ -367,7 +378,38 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `request.started`
 - `request.resolved`
 
-### 5.1 `thread.history.read`
+### 5.1 `thread.runtime_status.updated`
+
+这是 wrapper 对 native `thread/status/changed` 的标准化事件；另外 `thread/started` 与 `threads.snapshot` 现在也会携带相同结构的 `runtimeStatus`。
+
+关键字段：
+
+- `threadId`
+- `runtimeStatus`
+  - `type`
+    - `notLoaded`
+    - `idle`
+    - `systemError`
+    - `active`
+  - `activeFlags`
+    - `waitingOnApproval`
+    - `waitingOnUserInput`
+- `status`
+  - 当前仍保留 legacy 展示值：
+    - `running`
+    - `idle`
+    - `system_error`
+    - `not_loaded`
+- `loaded`
+  - 当前由 `runtimeStatus` 同步推导
+
+当前语义：
+
+- wrapper 现在不会再吞掉 native `thread/status/changed`
+- `thread/started.thread.status` 与 `thread/list` / `thread/read.thread.status` 也统一走同一套解析
+- orchestrator 把它当作 thread 级 authoritative runtime source；surface queue/request gate 仍由本地调度状态决定
+
+### 5.2 `thread.history.read`
 
 这是一个 command-correlated result event，用于把 `thread/read(includeTurns=true)` 的结构化结果从 wrapper 定向送回 daemon。
 
@@ -385,7 +427,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
     - `errorMessage`
     - `items[]`
 
-### 5.2 关键字段
+### 5.3 关键字段
 
 #### `initiator`
 

@@ -25,6 +25,7 @@ func TestEventAffectsSurfaceResumeState(t *testing.T) {
 		{name: "item completed", event: agentproto.Event{Kind: agentproto.EventItemCompleted}, want: true},
 		{name: "turn completed", event: agentproto.Event{Kind: agentproto.EventTurnCompleted}, want: true},
 		{name: "thread discovered", event: agentproto.Event{Kind: agentproto.EventThreadDiscovered}, want: true},
+		{name: "thread runtime status updated", event: agentproto.Event{Kind: agentproto.EventThreadRuntimeStatusUpdated}, want: true},
 		{name: "threads snapshot", event: agentproto.Event{Kind: agentproto.EventThreadsSnapshot}, want: true},
 	}
 	for _, tc := range tests {

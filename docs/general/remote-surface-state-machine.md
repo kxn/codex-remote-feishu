@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-16`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义，以及 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`approval_command` / `approval_file_change` / `approval_network` 与顶层 `tool/requestUserInput` 现在也进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 源消息时的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（工作区下拉 + 会话下拉 + confirm，recoverable-only workspace 也可经由 `新建会话` 走 fresh headless `PrepareNewThread` 启动路径）；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义，以及 Feishu 同上下文卡片导航的原地替换行为与协议边界、`request_user_input` 在多题场景下的分题暂存与“提交后确认留空”路径、`approval_command` / `approval_file_change` / `approval_network` 与顶层 `tool/requestUserInput` 现在也进入 renderable request card 与结构化回写链路、`surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载，以及 persisted sqlite recent-thread freshness 只补主交互会话并过滤内部 probe / agent-role 会话。
 
 ## 1. 文档定位
 
@@ -175,6 +175,36 @@ surface 不是单一枚举，而是五层正交状态叠加。
    6. 若该 surface 的 `surface resume state` 里仍带有 `ResumeHeadless=true` 的持久化目标，daemon 只会在 `normal` mode 的 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore；`vscode` mode 不会进入这条路径。
 2. 这种 latent surface 在 route 维度上仍然是 `R0 Detached`，不是新的 route state。
 3. 当前 startup 阶段不会因为 resume target 元数据而在 materialize 当下直接进入 `R1~R5`；是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，仍取决于 daemon 后续恢复调度，而不是 materialize 本身。
+
+### 3.2.1 thread 运行时状态 overlay
+
+thread 自身现在还有一层**authoritative runtime status overlay**，来源只认 upstream `thread.status`：
+
+| 代号 | 来源 | 当前实现语义 |
+| --- | --- | --- |
+| `T0 notLoaded` | `thread/list` / `thread/read` / `thread/started.thread.status` / `thread/status/changed` | thread 当前未 loaded 在某个实例里；会同步成 `ThreadRecord.Loaded=false`，但不会因此把 thread 从可见列表里删掉 |
+| `T1 idle` | 同上 | thread 当前 loaded 且空闲 |
+| `T2 systemError` | 同上 | thread 当前 loaded，但处于上游 system error 语义 |
+| `T3 active` | 同上 | thread 当前 loaded 且 active；额外 activeFlags 当前包括 `waitingOnApproval`、`waitingOnUserInput` |
+
+补充说明：
+
+1. 这层 overlay 当前承载在 `ThreadRecord.RuntimeStatus`，并投影到 `control.ThreadSummary.RuntimeStatus`、`WaitingOnApproval`、`WaitingOnUserInput`。
+2. 兼容旧展示链路时，thread summary 的 `State` 仍保留 legacy 字面值：
+   1. `active -> running`
+   2. `notLoaded -> not_loaded`
+   3. `systemError -> system_error`
+3. `notLoaded` 的当前产品语义是“thread 目前没 loaded 在实例里”，不是“thread 不可恢复”：
+   1. `threadVisible(...)` 仍只看 `Archived` 与 `TrafficClass`。
+   2. 只要 thread 仍然可见且保留 `CWD/workspace` 恢复锚点，normal `/use` 仍会走现有 resolver：当前可见 thread、复用 headless、或创建 headless。
+   3. detached `/use` 命中这类 thread 时，允许直接进入 preselected headless 恢复。
+4. `active(waitingOnApproval|waitingOnUserInput)` 当前只影响 thread 运行态投影与 claimed-thread busy 文案细化：
+   1. 若目标 thread 已被别的 surface claim，且 authoritative runtime status 仍是 `active`，kick 判定会落到 `thread_busy_running`。
+   2. 这不会单独新增 workspace/thread claim 冲突；没有 claim 的 thread 不会因为 `waitingOnApproval` 就额外变成跨 surface blocker。
+5. surface 交互 gate 仍由本地 queue/request/path-picker/capture 事实决定：
+   1. `PendingRequest` / `RequestCapture` 继续冻结 route mutation。
+   2. thread runtime status 不直接替代 `DispatchMode`、`ActiveQueueItemID`、`PendingRequests`。
+   3. 因此允许出现“thread authoritative status 已 idle，但当前 surface 仍有 queued/running queue item”的短暂并存态；两者分别回答不同问题。
 
 ### 3.3 执行状态
 

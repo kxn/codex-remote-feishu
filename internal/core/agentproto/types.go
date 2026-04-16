@@ -26,22 +26,23 @@ type Initiator struct {
 type EventKind string
 
 const (
-	EventThreadsSnapshot          EventKind = "threads.snapshot"
-	EventThreadHistoryRead        EventKind = "thread.history.read"
-	EventThreadDiscovered         EventKind = "thread.discovered"
-	EventThreadFocused            EventKind = "thread.focused"
-	EventConfigObserved           EventKind = "config.observed"
-	EventLocalInteractionObserved EventKind = "local.interaction.observed"
-	EventThreadTokenUsageUpdated  EventKind = "thread.token_usage.updated"
-	EventTurnPlanUpdated          EventKind = "turn.plan.updated"
-	EventTurnStarted              EventKind = "turn.started"
-	EventTurnCompleted            EventKind = "turn.completed"
-	EventItemStarted              EventKind = "item.started"
-	EventItemDelta                EventKind = "item.delta"
-	EventItemCompleted            EventKind = "item.completed"
-	EventRequestStarted           EventKind = "request.started"
-	EventRequestResolved          EventKind = "request.resolved"
-	EventSystemError              EventKind = "system.error"
+	EventThreadsSnapshot            EventKind = "threads.snapshot"
+	EventThreadHistoryRead          EventKind = "thread.history.read"
+	EventThreadDiscovered           EventKind = "thread.discovered"
+	EventThreadFocused              EventKind = "thread.focused"
+	EventThreadRuntimeStatusUpdated EventKind = "thread.runtime_status.updated"
+	EventConfigObserved             EventKind = "config.observed"
+	EventLocalInteractionObserved   EventKind = "local.interaction.observed"
+	EventThreadTokenUsageUpdated    EventKind = "thread.token_usage.updated"
+	EventTurnPlanUpdated            EventKind = "turn.plan.updated"
+	EventTurnStarted                EventKind = "turn.started"
+	EventTurnCompleted              EventKind = "turn.completed"
+	EventItemStarted                EventKind = "item.started"
+	EventItemDelta                  EventKind = "item.delta"
+	EventItemCompleted              EventKind = "item.completed"
+	EventRequestStarted             EventKind = "request.started"
+	EventRequestResolved            EventKind = "request.resolved"
+	EventSystemError                EventKind = "system.error"
 )
 
 type FileChangeKind string
@@ -91,22 +92,24 @@ type Event struct {
 	TokenUsage      *ThreadTokenUsage      `json:"tokenUsage,omitempty"`
 	PlanSnapshot    *TurnPlanSnapshot      `json:"planSnapshot,omitempty"`
 	ThreadHistory   *ThreadHistoryRecord   `json:"threadHistory,omitempty"`
+	RuntimeStatus   *ThreadRuntimeStatus   `json:"runtimeStatus,omitempty"`
 	Metadata        map[string]any         `json:"metadata,omitempty"`
 	Threads         []ThreadSnapshotRecord `json:"threads,omitempty"`
 	FileChanges     []FileChangeRecord     `json:"fileChanges,omitempty"`
 }
 
 type ThreadSnapshotRecord struct {
-	ThreadID        string `json:"threadId"`
-	Name            string `json:"name,omitempty"`
-	Preview         string `json:"preview,omitempty"`
-	CWD             string `json:"cwd,omitempty"`
-	Model           string `json:"model,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
-	Loaded          bool   `json:"loaded"`
-	Archived        bool   `json:"archived"`
-	State           string `json:"state,omitempty"`
-	ListOrder       int    `json:"listOrder,omitempty"`
+	ThreadID        string               `json:"threadId"`
+	Name            string               `json:"name,omitempty"`
+	Preview         string               `json:"preview,omitempty"`
+	CWD             string               `json:"cwd,omitempty"`
+	Model           string               `json:"model,omitempty"`
+	ReasoningEffort string               `json:"reasoningEffort,omitempty"`
+	Loaded          bool                 `json:"loaded"`
+	Archived        bool                 `json:"archived"`
+	State           string               `json:"state,omitempty"`
+	ListOrder       int                  `json:"listOrder,omitempty"`
+	RuntimeStatus   *ThreadRuntimeStatus `json:"runtimeStatus,omitempty"`
 }
 
 type ThreadHistoryRecord struct {

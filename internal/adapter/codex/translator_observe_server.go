@@ -235,6 +235,11 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			record.Loaded = record.Loaded || patch.Loaded
 			record.Archived = record.Archived || patch.Archived
 			record.State = choose(patch.State, record.State)
+			if patch.RuntimeStatus != nil {
+				record.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(patch.RuntimeStatus)
+				record.Loaded = patch.RuntimeStatus.IsLoaded()
+				record.State = choose(patch.RuntimeStatus.LegacyState(), record.State)
+			}
 			t.threadRefreshRecords[threadID] = record
 			delete(t.pendingThreadReads, requestID)
 			if len(t.pendingThreadReads) == 0 {
@@ -335,31 +340,39 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		t.debugf("observe server error without turn: code=%s message=%s", problem.Code, problem.Message)
 		return Result{Events: []agentproto.Event{agentproto.NewSystemErrorEvent(*problem)}}, nil
 	case "thread/started":
-		threadID := lookupString(message, "params", "thread", "id")
+		threadRecord := parseThreadRecord(lookupAny(message, "params", "thread"))
+		threadID := threadRecord.ThreadID
 		if threadID == "" {
 			threadID = lookupString(message, "params", "threadId")
 		}
-		cwd := lookupString(message, "params", "thread", "cwd")
+		cwd := threadRecord.CWD
 		if cwd == "" {
 			cwd = lookupString(message, "params", "cwd")
 		}
-		name := lookupString(message, "params", "thread", "name")
-		if name == "" {
-			name = lookupString(message, "params", "thread", "title")
+		name := threadRecord.Name
+		runtimeStatus := agentproto.CloneThreadRuntimeStatus(threadRecord.RuntimeStatus)
+		status := ""
+		loaded := false
+		if runtimeStatus != nil {
+			status = runtimeStatus.LegacyState()
+			loaded = runtimeStatus.IsLoaded()
 		}
 		if t.internalThreadIDs[threadID] {
 			if cwd != "" {
 				t.knownThreadCWD[threadID] = cwd
 			}
 			return Result{Events: []agentproto.Event{{
-				Kind:         agentproto.EventThreadDiscovered,
-				ThreadID:     threadID,
-				CWD:          cwd,
-				Name:         name,
-				FocusSource:  "remote_created_thread",
-				TrafficClass: agentproto.TrafficClassInternalHelper,
-				Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
-				Metadata:     map[string]any{"internalHelper": true},
+				Kind:          agentproto.EventThreadDiscovered,
+				ThreadID:      threadID,
+				CWD:           cwd,
+				Name:          name,
+				Status:        status,
+				Loaded:        loaded,
+				FocusSource:   "remote_created_thread",
+				TrafficClass:  agentproto.TrafficClassInternalHelper,
+				Initiator:     agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
+				RuntimeStatus: runtimeStatus,
+				Metadata:      map[string]any{"internalHelper": true},
 			}}}, nil
 		}
 		t.currentThreadID = threadID
@@ -371,11 +384,35 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.knownThreadCWD[threadID] = cwd
 		}
 		return Result{Events: []agentproto.Event{{
-			Kind:        agentproto.EventThreadDiscovered,
-			ThreadID:    threadID,
-			CWD:         cwd,
-			Name:        name,
-			FocusSource: "remote_created_thread",
+			Kind:          agentproto.EventThreadDiscovered,
+			ThreadID:      threadID,
+			CWD:           cwd,
+			Name:          name,
+			Status:        status,
+			Loaded:        loaded,
+			FocusSource:   "remote_created_thread",
+			RuntimeStatus: runtimeStatus,
+		}}}, nil
+	case "thread/status/changed":
+		threadID := lookupString(message, "params", "threadId")
+		runtimeStatus := parseThreadRuntimeStatus(lookupAny(message, "params", "status"))
+		if threadID == "" || runtimeStatus == nil {
+			return Result{}, nil
+		}
+		trafficClass := agentproto.TrafficClassPrimary
+		initiator := agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface}
+		if t.internalThreadIDs[threadID] {
+			trafficClass = agentproto.TrafficClassInternalHelper
+			initiator = agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+		}
+		return Result{Events: []agentproto.Event{{
+			Kind:          agentproto.EventThreadRuntimeStatusUpdated,
+			ThreadID:      threadID,
+			Status:        runtimeStatus.LegacyState(),
+			Loaded:        runtimeStatus.IsLoaded(),
+			TrafficClass:  trafficClass,
+			Initiator:     initiator,
+			RuntimeStatus: runtimeStatus,
 		}}}, nil
 	case "thread/name/updated":
 		threadID := lookupString(message, "params", "threadId")

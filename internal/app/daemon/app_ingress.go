@@ -681,6 +681,7 @@ func eventAffectsSurfaceResumeState(event agentproto.Event) bool {
 	switch event.Kind {
 	case agentproto.EventThreadsSnapshot,
 		agentproto.EventThreadDiscovered,
+		agentproto.EventThreadRuntimeStatusUpdated,
 		agentproto.EventThreadFocused,
 		agentproto.EventItemCompleted,
 		agentproto.EventTurnCompleted:

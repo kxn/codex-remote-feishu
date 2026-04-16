@@ -53,6 +53,20 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 	default:
 		return agentproto.ThreadSnapshotRecord{}
 	}
+	runtimeStatus := parseThreadRuntimeStatus(firstNonNil(
+		object["status"],
+		object["threadStatus"],
+		object["runtimeStatus"],
+		object["state"],
+	))
+	stateValue := strings.TrimSpace(lookupStringFromAny(object["state"]))
+	if stateValue == "" && runtimeStatus != nil {
+		stateValue = runtimeStatus.LegacyState()
+	}
+	loaded := lookupBoolFromAny(object["loaded"])
+	if runtimeStatus != nil {
+		loaded = runtimeStatus.IsLoaded()
+	}
 	return agentproto.ThreadSnapshotRecord{
 		ThreadID: choose(
 			lookupStringFromAny(object["id"]),
@@ -82,14 +96,63 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 			lookupString(object, "config", "reasoning_effort"),
 			lookupStringFromAny(object["effort"]),
 		),
-		Loaded:   lookupBoolFromAny(object["loaded"]),
+		Loaded:   loaded,
 		Archived: lookupBoolFromAny(object["archived"]),
-		State:    lookupStringFromAny(object["state"]),
+		State:    stateValue,
 		ListOrder: lookupIntFromAny(chooseAny(
 			object["listOrder"],
 			object["list_order"],
 		)),
+		RuntimeStatus: runtimeStatus,
 	}
+}
+
+func parseThreadRuntimeStatus(source any) *agentproto.ThreadRuntimeStatus {
+	switch typed := source.(type) {
+	case string:
+		statusType := agentproto.NormalizeThreadRuntimeStatusType(typed)
+		if statusType == "" {
+			return nil
+		}
+		return &agentproto.ThreadRuntimeStatus{Type: statusType}
+	case map[string]any:
+		statusType := agentproto.NormalizeThreadRuntimeStatusType(firstNonEmptyString(
+			lookupStringFromAny(typed["type"]),
+			lookupStringFromAny(typed["status"]),
+			lookupStringFromAny(typed["state"]),
+		))
+		if statusType == "" {
+			return nil
+		}
+		status := &agentproto.ThreadRuntimeStatus{Type: statusType}
+		if statusType == agentproto.ThreadRuntimeStatusTypeActive {
+			status.ActiveFlags = parseThreadActiveFlags(typed["activeFlags"])
+		}
+		return status
+	default:
+		return nil
+	}
+}
+
+func parseThreadActiveFlags(source any) []agentproto.ThreadActiveFlag {
+	raw := contentArrayValues(source)
+	if len(raw) == 0 {
+		return nil
+	}
+	flags := make([]agentproto.ThreadActiveFlag, 0, len(raw))
+	seen := map[agentproto.ThreadActiveFlag]bool{}
+	for _, current := range raw {
+		flag := agentproto.NormalizeThreadActiveFlag(lookupStringFromAny(current))
+		if flag == "" || seen[flag] {
+			continue
+		}
+		seen[flag] = true
+		flags = append(flags, flag)
+	}
+	if len(flags) == 0 {
+		return nil
+	}
+	return flags
 }
 
 func parseThreadHistoryRecord(result any) agentproto.ThreadHistoryRecord {

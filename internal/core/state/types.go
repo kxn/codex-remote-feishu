@@ -132,6 +132,7 @@ type ThreadRecord struct {
 	LastAssistantMessage    string
 	CWD                     string
 	State                   string
+	RuntimeStatus           *agentproto.ThreadRuntimeStatus
 	ExplicitModel           string
 	ExplicitReasoningEffort string
 	Loaded                  bool

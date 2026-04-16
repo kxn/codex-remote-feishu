@@ -86,17 +86,20 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		}
 		for _, thread := range visibleThreads(inst) {
 			snapshot.Threads = append(snapshot.Threads, control.ThreadSummary{
-				ThreadID:          thread.ThreadID,
-				Name:              thread.Name,
-				DisplayTitle:      displayThreadTitle(inst, thread, thread.ThreadID),
-				Preview:           thread.Preview,
-				CWD:               thread.CWD,
-				State:             thread.State,
-				Model:             thread.ExplicitModel,
-				ReasoningEffort:   thread.ExplicitReasoningEffort,
-				Loaded:            thread.Loaded,
-				IsObservedFocused: inst.ObservedFocusedThreadID == thread.ThreadID,
-				IsSelected:        surface.SelectedThreadID == thread.ThreadID,
+				ThreadID:           thread.ThreadID,
+				Name:               thread.Name,
+				DisplayTitle:       displayThreadTitle(inst, thread, thread.ThreadID),
+				Preview:            thread.Preview,
+				CWD:                thread.CWD,
+				State:              thread.State,
+				RuntimeStatus:      threadRuntimeStatusType(thread),
+				Model:              thread.ExplicitModel,
+				ReasoningEffort:    thread.ExplicitReasoningEffort,
+				Loaded:             thread.Loaded,
+				WaitingOnApproval:  threadWaitingOnApproval(thread),
+				WaitingOnUserInput: threadWaitingOnUserInput(thread),
+				IsObservedFocused:  inst.ObservedFocusedThreadID == thread.ThreadID,
+				IsSelected:         surface.SelectedThreadID == thread.ThreadID,
 			})
 		}
 	}

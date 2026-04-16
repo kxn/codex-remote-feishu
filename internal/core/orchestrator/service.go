@@ -546,9 +546,30 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 		if event.ReasoningEffort != "" {
 			thread.ExplicitReasoningEffort = event.ReasoningEffort
 		}
-		thread.Loaded = true
+		if event.RuntimeStatus != nil {
+			applyThreadRuntimeStatus(thread, event.RuntimeStatus)
+		} else {
+			thread.Loaded = true
+			if event.Status != "" {
+				thread.State = event.Status
+			}
+		}
 		s.touchThread(thread)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
+	case agentproto.EventThreadRuntimeStatusUpdated:
+		thread := s.ensureThread(inst, event.ThreadID)
+		if event.RuntimeStatus != nil {
+			applyThreadRuntimeStatus(thread, event.RuntimeStatus)
+		} else {
+			thread.Loaded = event.Loaded
+			if event.Status != "" {
+				thread.State = event.Status
+			}
+		}
+		if threadRuntimeActive(thread) {
+			s.touchThread(thread)
+		}
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventThreadsSnapshot:
 		delete(s.threadRefreshes, instanceID)
 		nextThreads := map[string]*state.ThreadRecord{}
@@ -557,7 +578,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 				continue
 			}
 			copied := cloneThreadRecord(thread)
-			copied.Loaded = false
+			markThreadNotLoaded(copied)
 			nextThreads[threadID] = copied
 		}
 		for _, thread := range event.Threads {
@@ -589,6 +610,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []c
 			current.Archived = thread.Archived
 			if thread.State != "" {
 				current.State = thread.State
+			}
+			if thread.RuntimeStatus != nil {
+				applyThreadRuntimeStatus(current, thread.RuntimeStatus)
 			}
 			current.ListOrder = thread.ListOrder
 			nextThreads[thread.ThreadID] = current

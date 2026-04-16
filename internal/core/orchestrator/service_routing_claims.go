@@ -466,6 +466,9 @@ func (s *Service) threadKickStatus(inst *state.InstanceRecord, owner *state.Surf
 	if inst != nil && inst.ActiveTurnID != "" && inst.ActiveThreadID == threadID {
 		return threadKickRunning
 	}
+	if inst != nil && threadRuntimeActive(inst.Threads[threadID]) {
+		return threadKickRunning
+	}
 	if owner == nil {
 		return threadKickIdle
 	}
