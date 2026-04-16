@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-04-16`
-> Summary: `/preview` snapshot/cache 主设计，收束 prefix grant、blob 落盘、lineage、大文件 diff-first，以及 external-access prefix 复用的 health/target 前置。
+> Summary: `/preview` snapshot/cache 主设计，收束 prefix grant、blob 落盘、lineage、大文件 diff-first，并补记当前已实现的极简 shell + renderer 分层与 external-access prefix 复用前置。
 
 ## 1. 文档定位
 
@@ -102,6 +102,7 @@
 4. `preview route / renderer` 层
    - 根据 `scopePublicID + previewID` 查 record/blob
    - 根据 artifact 类型、大小、是否存在上一版决定 viewer
+   - 当前用户可见页面已经收敛成“固定顶部极简 shell + 下方独立滚动 renderer”的结构：顶部只保留文件名与下载按钮，图片/PDF/文本类 renderer 共享同一套壳层
 
 这四层里，当前最关键的结论是：
 
@@ -446,6 +447,7 @@ v1 最小生成方式：
 
 ### 阶段 3：基础 renderer
 
+- 继续沿当前统一 shell 扩展 renderer，不再回到按文件类型各自复制整页壳层的做法
 - markdown
 - 文本/code/json/log 等文本类
 - image

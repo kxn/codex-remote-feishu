@@ -587,6 +587,7 @@ cloudflared tunnel \
 
 - `ready` 只表示“当前可用”，不表示“应该一直常驻”
 - idle timeout 默认只触发 listener-only deactivate，不直接关闭健康 provider
+- listener-only deactivate 与 full shutdown 都会同步清掉 grants / sessions / preview grants；因此旧 preview scope prefix 不会跨 listener 生命周期继续复用
 - 后续新的 `IssueURL()` 或新的实际访问，会先重建 listener，再尝试复用当前 provider
 - 只有在 full shutdown、`/ready` 探测失败或 listener target 变化时，provider 才需要关闭/重启
 
