@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 )
 
 type fakePreviewRouteService struct {
@@ -67,6 +68,69 @@ func TestIssuePreviewScopePrefixReusesGrantWithinTTL(t *testing.T) {
 	}
 	if snapshot := app.externalAccess.Snapshot(); snapshot.GrantCount != 1 {
 		t.Fatalf("expected one active grant, got %#v", snapshot)
+	}
+}
+
+func TestIssuePreviewScopePrefixReissuesGrantAfterExternalAccessIdleShutdown(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	base := time.Now().UTC()
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "disabled",
+		},
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Now:               func() time.Time { return base },
+		DefaultLinkTTL:    10 * time.Second,
+		DefaultSessionTTL: 30 * time.Second,
+		IdleTTL:           5 * time.Minute,
+	})
+	defer app.Shutdown(nil)
+
+	first, err := app.issuePreviewScopePrefix(context.Background(), "scope-1")
+	if err != nil {
+		t.Fatalf("first issuePreviewScopePrefix: %v", err)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{Proxy: nil},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(first)
+	if err != nil {
+		t.Fatalf("exchange request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", resp.StatusCode)
+	}
+
+	app.onTick(context.Background(), base.Add(6*time.Minute))
+	if app.externalAccessListener != nil {
+		t.Fatal("expected idle timeout to stop external access listener")
+	}
+
+	second, err := app.issuePreviewScopePrefix(context.Background(), "scope-1")
+	if err != nil {
+		t.Fatalf("second issuePreviewScopePrefix: %v", err)
+	}
+	if second == first {
+		t.Fatalf("expected reissued preview prefix after idle shutdown, got same url %q", second)
+	}
+	if snapshot := app.externalAccess.Snapshot(); snapshot.GrantCount != 1 {
+		t.Fatalf("expected one active grant after reissue, got %#v", snapshot)
 	}
 }
 

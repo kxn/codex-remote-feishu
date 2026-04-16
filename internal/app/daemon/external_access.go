@@ -180,6 +180,7 @@ func (a *App) shutdownExternalAccessLocked(reason string) {
 	listener := a.externalAccessListener
 	a.externalAccessServer = nil
 	a.externalAccessListener = nil
+	a.webPreviewGrants = map[string]*previewScopeGrant{}
 	if server != nil {
 		_ = server.Close()
 	}
