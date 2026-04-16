@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -36,7 +37,7 @@ func normalizeWorkspaceClaimKey(value string) string {
 	if value == "" {
 		return ""
 	}
-	if !looksLikeWorkspacePath(raw) {
+	if !shouldResolveWorkspacePathOnHost(runtime.GOOS, raw) {
 		return value
 	}
 	if resolved, err := state.ResolveWorkspaceRootOnHost(raw); err == nil {
@@ -45,6 +46,31 @@ func normalizeWorkspaceClaimKey(value string) string {
 		}
 	}
 	return value
+}
+
+func shouldResolveWorkspacePathOnHost(goos, raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(goos)) {
+	case "windows":
+		if isWindowsVolumePath(raw) || strings.HasPrefix(raw, `\\`) || strings.HasPrefix(raw, `//`) || strings.HasPrefix(raw, `\`) {
+			return true
+		}
+	default:
+		if strings.HasPrefix(raw, "/") {
+			return true
+		}
+	}
+	switch raw {
+	case ".", "..":
+		return true
+	}
+	return strings.HasPrefix(raw, "./") ||
+		strings.HasPrefix(raw, "../") ||
+		strings.HasPrefix(raw, `.\\`) ||
+		strings.HasPrefix(raw, `..\\`)
 }
 
 func looksLikeWorkspacePath(value string) bool {
