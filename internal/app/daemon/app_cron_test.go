@@ -762,6 +762,115 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 	}
 }
 
+func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
+	api := &fakeCronBitableAPI{
+		recordsByTable: map[string][]*larkbitable.AppTableRecord{
+			"tbl-workspaces": {{
+				RecordId: stringPtr("rec-workspace-1"),
+				Fields: map[string]any{
+					"工作区名称": "project",
+					"工作区键":  "/tmp/project",
+					"当前状态":  "可用",
+				},
+			}},
+			"tbl-tasks": {
+				{
+					RecordId: stringPtr("rec-keep"),
+					Fields: map[string]any{
+						"任务名":  "Keep",
+						"启用":   true,
+						"调度类型": cronScheduleTypeInterval,
+						"间隔":   "15分钟",
+						"工作区":  []any{"rec-workspace-1"},
+						"提示词":  "keep running",
+					},
+				},
+				{
+					RecordId: stringPtr("rec-disable"),
+					Fields: map[string]any{
+						"任务名":  "Disable",
+						"启用":   false,
+						"调度类型": cronScheduleTypeDaily,
+						"调度时间": "09:30",
+						"工作区":  []any{"rec-workspace-1"},
+						"提示词":  "disabled for now",
+					},
+				},
+				{
+					RecordId: stringPtr("rec-error"),
+					Fields: map[string]any{
+						"任务名":  "Broken",
+						"启用":   true,
+						"调度类型": cronScheduleTypeInterval,
+						"间隔":   "15分钟",
+						"工作区":  []any{"rec-workspace-1"},
+					},
+				},
+			},
+		},
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			Tables: cronTableIDs{
+				Tasks:      "tbl-tasks",
+				Workspaces: "tbl-workspaces",
+			},
+		},
+		Jobs: []cronJobState{
+			{RecordID: "rec-keep", Name: "Keep", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+			{RecordID: "rec-disable", Name: "Disable", ScheduleType: cronScheduleTypeDaily, DailyHour: 9, DailyMinute: 30, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(24 * time.Hour)},
+			{RecordID: "rec-delete", Name: "Delete", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 10, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(10 * time.Minute)},
+			{RecordID: "rec-error", Name: "Broken", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+		},
+	}
+	app.cronBitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
+		if gatewayID != "gateway-1" {
+			return nil, fmt.Errorf("unexpected gateway %q", gatewayID)
+		}
+		return api, nil
+	}
+
+	event, err := app.reloadCronJobs(control.DaemonCommand{GatewayID: "gateway-1", SurfaceSessionID: "surface-1"})
+	if err != nil {
+		t.Fatalf("reloadCronJobs: %v", err)
+	}
+	if event == nil || event.Notice == nil {
+		t.Fatalf("expected notice event, got %#v", event)
+	}
+	text := event.Notice.Text
+	for _, fragment := range []string{
+		"已加载：",
+		"`Keep（保留）`",
+		"已停用：",
+		"`Disable`",
+		"本次停止：",
+		"`Delete`",
+		"配置错误：",
+		"任务配置 第 3 行",
+		"字段：提示词",
+		"记录：rec-error",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected reload notice to contain %q, got %q", fragment, text)
+		}
+	}
+	if strings.Contains(app.cronState.LastReloadSummary, "`Keep`") || strings.Contains(app.cronState.LastReloadSummary, "已加载：") {
+		t.Fatalf("status summary should stay compact, got %q", app.cronState.LastReloadSummary)
+	}
+}
+
 func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 	api1 := &fakeCronBitableAPI{}
 	api2 := &fakeCronBitableAPI{}

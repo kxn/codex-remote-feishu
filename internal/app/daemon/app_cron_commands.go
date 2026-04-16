@@ -170,7 +170,7 @@ func (a *App) migrateCronOwner(command control.DaemonCommand) (*control.UIEvent,
 }
 
 func (a *App) reloadCronJobs(command control.DaemonCommand) (*control.UIEvent, error) {
-	summary, err := a.reloadCronJobsNow(command)
+	result, err := a.reloadCronJobsResultNow(command)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (a *App) reloadCronJobs(command control.DaemonCommand) (*control.UIEvent, e
 		Notice: &control.Notice{
 			Code:  "cron_reload_ready",
 			Title: "Cron",
-			Text:  summary,
+			Text:  result.DetailedText(),
 		},
 	}, nil
 }
