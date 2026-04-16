@@ -14,6 +14,8 @@ import (
 
 const gitWorkspaceImportCommandTimeout = 10 * time.Minute
 
+var runGitWorkspaceImport = gitworkspace.Import
+
 func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonCommand) []control.UIEvent {
 	request := gitworkspace.ImportRequest{
 		RepoURL:       strings.TrimSpace(command.RepoURL),
@@ -32,7 +34,7 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 	defer cancel()
 
 	a.mu.Unlock()
-	result, err := gitworkspace.Import(importCtx, request)
+	result, err := runGitWorkspaceImport(importCtx, request)
 	a.mu.Lock()
 	if err != nil {
 		var importErr *gitworkspace.ImportError
