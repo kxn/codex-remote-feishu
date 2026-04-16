@@ -78,6 +78,16 @@ Use these commands at fixed times:
 2. After body or label edits, run `lint`.
 3. Before any normal stop path for the issue, run `finish`.
 
+Important:
+
+- For an implementable issue, “local code is written and tests passed” is not by itself a normal stop path.
+- Unless the user explicitly asked for local-only staging, continue through the routine tail work as part of the same issue flow:
+  - commit the finished change
+  - push it when repo policy says pushes should happen
+  - post the final `finish` comment
+  - close the issue when acceptance is satisfied
+- Only stop short of that tail work when there is a real blocker or the user explicitly redirects you.
+
 ## GitHub CLI Compatibility
 
 In this repository, do not rely on bare `gh issue view <number>` for issue reads.
@@ -219,6 +229,8 @@ If the issue was already implementable and still is after reassessment:
 - continue through all planned stages in the same task unless a major assumption collapsed and the remaining direction would materially diverge
 - every stage must include sufficient validation, not only compilation or superficial smoke checks
 - each stage should end with implementation, stage-scoped validation, and a local commit
+- when the overall issue is finished, do not stop at “last stage implemented locally”; continue through publish/close-out work in the same turn unless blocked
+- posting a “locally complete” comment is not an acceptable substitute for commit/push/close when the user asked to complete the issue
 - validate the result
 - before any normal stop path, re-read `收尾参考` and decide whether durable knowledge changed enough to require write-back
 - update any affected design or state-machine document required by repo rules
@@ -253,6 +265,15 @@ When closing the issue, leave a short completion note with:
 - what durable knowledge was synced back, or why none was needed
 - commit or PR reference
 - follow-up issue reference if work was intentionally deferred
+
+The expected terminal state for a finished issue is:
+
+- clean worktree
+- no unpublished local commit left behind unless the user explicitly asked for local-only state
+- `finish` has been run
+- the issue is closed if its acceptance criteria are satisfied
+
+If you cannot reach that terminal state, say exactly why and what remains blocked instead of stopping silently at a local-only midpoint.
 
 Before finishing the turn, prefer:
 
