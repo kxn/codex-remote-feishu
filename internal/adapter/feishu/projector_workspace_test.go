@@ -45,7 +45,7 @@ func TestProjectWorkspaceSelectionViewAddsCreateWorkspaceEntry(t *testing.T) {
 			continue
 		}
 		for _, button := range cardElementButtons(t, element) {
-			if cardButtonLabel(t, button) != "新建 · 从目录新建工作区" {
+			if cardButtonLabel(t, button) != "新建 · 添加工作区" {
 				continue
 			}
 			payload := cardButtonPayload(t, button)

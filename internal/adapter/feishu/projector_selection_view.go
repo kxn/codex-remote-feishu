@@ -67,9 +67,9 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 	options = append(options, control.SelectionOption{
 		Index:       len(options) + 1,
 		OptionID:    "__create_workspace__",
-		Label:       "从目录新建工作区",
+		Label:       "添加工作区",
 		ButtonLabel: "新建",
-		MetaText:    "选择一个已存在目录，创建或复用对应工作区",
+		MetaText:    "选择一个已存在目录，将其接入或恢复为工作区",
 		ActionKind:  cardActionKindCreateWorkspace,
 	})
 

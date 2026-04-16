@@ -77,6 +77,7 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 		RootPath:     rootPath,
 		CurrentPath:  currentPath,
 		SelectedPath: selectedPath,
+		Hint:         strings.TrimSpace(req.Hint),
 		ConfirmLabel: strings.TrimSpace(firstNonEmpty(req.ConfirmLabel, "确认")),
 		CancelLabel:  strings.TrimSpace(firstNonEmpty(req.CancelLabel, "取消")),
 		CreatedAt:    s.now(),
@@ -244,6 +245,13 @@ func (s *Service) buildPathPickerView(record *state.ActivePathPickerRecord) (con
 	}
 	if record.Mode == state.PathPickerModeFile && view.SelectedPath == "" {
 		view.Hint = strings.TrimSpace(firstNonEmpty(view.Hint, "请选择一个文件后再确认。"))
+	}
+	if extraHint := strings.TrimSpace(record.Hint); extraHint != "" {
+		if strings.TrimSpace(view.Hint) == "" {
+			view.Hint = extraHint
+		} else {
+			view.Hint = strings.TrimSpace(view.Hint) + "\n" + extraHint
+		}
 	}
 	return view, nil
 }

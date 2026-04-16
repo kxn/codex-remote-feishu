@@ -215,6 +215,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		pathPickerConsumers: map[string]PathPickerConsumer{},
 	}
 	svc.RegisterPathPickerConsumer(workspaceCreatePathPickerConsumerKind, workspaceCreatePathPickerConsumer{})
+	svc.RegisterPathPickerConsumer(targetPickerWorkspaceCreatePathPickerConsumerKind, targetPickerWorkspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(sendFilePathPickerConsumerKind, sendFilePathPickerConsumer{})
 	return svc
 }

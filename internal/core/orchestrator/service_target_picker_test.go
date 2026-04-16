@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -302,5 +303,266 @@ func TestTargetPickerConfirmRejectsStaleSessionFallback(t *testing.T) {
 	}
 	if !sawRefresh || !sawNotice {
 		t.Fatalf("expected refreshed picker and stale-selection notice, got %#v", events)
+	}
+}
+
+func TestTargetPickerListPrefersRealWorkspaceOverSyntheticCreateOption(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 25, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+
+	if len(view.WorkspaceOptions) != 2 {
+		t.Fatalf("expected synthetic create option plus one real workspace, got %#v", view.WorkspaceOptions)
+	}
+	if !view.WorkspaceOptions[0].Synthetic || view.WorkspaceOptions[0].Value != targetPickerCreateWorkspaceValue {
+		t.Fatalf("expected create option to stay at top of workspace dropdown, got %#v", view.WorkspaceOptions)
+	}
+	if view.SelectedWorkspaceKey != "/data/dl/web" {
+		t.Fatalf("expected initial selection to stay on real workspace, got %#v", view)
+	}
+	if view.SelectedSessionValue != targetPickerThreadValue("thread-web") {
+		t.Fatalf("expected attached workspace to auto-select its real session, got %#v", view)
+	}
+}
+
+func TestTargetPickerListFallsBackToSyntheticCreateOptionWhenNoWorkspaceExists(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+
+	if len(view.WorkspaceOptions) != 1 || !view.WorkspaceOptions[0].Synthetic {
+		t.Fatalf("expected create option to be the only workspace choice, got %#v", view.WorkspaceOptions)
+	}
+	if view.SelectedWorkspaceKey != targetPickerCreateWorkspaceValue || view.SelectedSessionValue != targetPickerNewThreadValue {
+		t.Fatalf("expected synthetic create path to become the only default flow, got %#v", view)
+	}
+	if !view.CanConfirm || view.ConfirmLabel != "选择目录" {
+		t.Fatalf("expected create flow to be immediately actionable, got %#v", view)
+	}
+}
+
+func TestTargetPickerConfirmSyntheticCreateWorkspaceOpensDirectoryPickerWithoutRouteMutation(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 35, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     workspaceRoot,
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerSelectWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		WorkspaceKey:     targetPickerCreateWorkspaceValue,
+	})
+	updated := singleTargetPickerEvent(t, events)
+	if updated.SelectedWorkspaceKey != targetPickerCreateWorkspaceValue || updated.SelectedSessionValue != targetPickerNewThreadValue {
+		t.Fatalf("expected synthetic create selection to auto-enter new-thread branch, got %#v", updated)
+	}
+	if updated.ConfirmLabel != "选择目录" || !updated.CanConfirm {
+		t.Fatalf("expected synthetic create selection to become confirmable, got %#v", updated)
+	}
+
+	pathEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerConfirm,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
+		WorkspaceKey:      targetPickerCreateWorkspaceValue,
+		TargetPickerValue: targetPickerNewThreadValue,
+	})
+	pathView := singlePathPickerEvent(t, pathEvents)
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModeUnbound || !testutil.SamePath(surface.ClaimedWorkspaceKey, workspaceRoot) {
+		t.Fatalf("expected route to stay on current workspace until path confirm, got %#v", surface)
+	}
+	if surface.ActiveTargetPicker == nil || surface.ActivePathPicker == nil {
+		t.Fatalf("expected both target picker and appended path picker to stay active, got %#v", surface)
+	}
+	if pathView.Title != "选择要接入的目录" || pathView.ConfirmLabel != "接入并准备新会话" || !strings.Contains(pathView.Hint, "未确认前不会切换当前工作目标。") {
+		t.Fatalf("unexpected target-picker workspace create path view: %#v", pathView)
+	}
+}
+
+func TestTargetPickerCreateWorkspacePathPickerCancelKeepsCurrentTarget(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 40, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     workspaceRoot,
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	updated := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerSelectWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		WorkspaceKey:     targetPickerCreateWorkspaceValue,
+	}))
+	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerConfirm,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
+		WorkspaceKey:      targetPickerCreateWorkspaceValue,
+		TargetPickerValue: targetPickerNewThreadValue,
+	}))
+
+	cancelEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         pathView.PickerID,
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ActivePathPicker != nil || surface.ActiveTargetPicker == nil {
+		t.Fatalf("expected cancel to close only the path picker and keep target picker alive, got %#v", surface)
+	}
+	if surface.RouteMode != state.RouteModeUnbound || !testutil.SamePath(surface.ClaimedWorkspaceKey, workspaceRoot) {
+		t.Fatalf("expected cancel to keep current target unchanged, got %#v", surface)
+	}
+	if len(cancelEvents) != 1 || cancelEvents[0].Notice == nil || cancelEvents[0].Notice.Code != "workspace_create_cancelled" {
+		t.Fatalf("expected explicit cancellation notice, got %#v", cancelEvents)
+	}
+	if cancelEvents[0].Notice.Text != "已取消添加工作区。当前工作目标保持不变。" {
+		t.Fatalf("unexpected cancel notice: %#v", cancelEvents[0].Notice)
+	}
+}
+
+func TestTargetPickerCreateWorkspacePathPickerConfirmEntersNewThreadReadyAndClearsSourcePicker(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 45, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     workspaceRoot,
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	updated := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerSelectWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		WorkspaceKey:     targetPickerCreateWorkspaceValue,
+	}))
+	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerConfirm,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
+		WorkspaceKey:      targetPickerCreateWorkspaceValue,
+		TargetPickerValue: targetPickerNewThreadValue,
+	}))
+
+	confirmEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         pathView.PickerID,
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModeNewThreadReady || !testutil.SamePath(surface.PreparedThreadCWD, workspaceRoot) {
+		t.Fatalf("expected path confirm to enter new-thread-ready on the selected directory, got %#v", surface)
+	}
+	if surface.ActivePathPicker != nil || surface.ActiveTargetPicker != nil {
+		t.Fatalf("expected success path to clear both pickers, got %#v", surface)
+	}
+	var sawReady bool
+	for _, event := range confirmEvents {
+		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
+			sawReady = true
+		}
+	}
+	if !sawReady {
+		t.Fatalf("expected new-thread ready notice after path confirm, got %#v", confirmEvents)
 	}
 }

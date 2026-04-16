@@ -44,6 +44,7 @@ type FeishuTargetPickerWorkspaceOption struct {
 	Label           string
 	MetaText        string
 	RecoverableOnly bool
+	Synthetic       bool
 }
 
 type FeishuTargetPickerSessionOption struct {

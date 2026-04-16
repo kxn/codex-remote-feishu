@@ -87,11 +87,11 @@
 | --- | --- | --- |
 | `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；首页仅保留分组导航入口，不再额外渲染“常用操作”区块；不再直接进入主 reducer，也不改 core route |
 | `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/list` target picker；不直接改变 attach 状态 |
-| `create_workspace` | `mixed` | 旧 normal `/list` 卡片残留的 transport 兼容入口；点击后仍会打开目录模式 path picker，但当前 unified target picker 主路径不再默认暴露它 |
+| `create_workspace` | `mixed` | 旧 normal `/list` 卡片残留的 transport 兼容入口；点击后仍会打开目录模式 path picker，但当前 unified target picker 主路径已经改成工作区下拉里的 synthetic `添加工作区…` |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/use` / `/useall` target picker；vscode mode 下仍沿用 thread selection / scoped-all 导航 |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责用指定 workspace/source 重新打开 target picker；vscode / legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的双下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route；其中切换工作区会显式清空当前会话选择，回到 placeholder 态 |
-| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话` 的产品语义仍由 orchestrator 决定，并保持 append-only |
+| `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的双下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route；切换到真实 workspace 时会显式清空当前会话选择，切到 synthetic `添加工作区…` 时会把会话下拉收敛成单一 synthetic `新建会话` |
+| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话` 的产品语义仍由 orchestrator 决定，并保持 append-only；若当前命中 synthetic `添加工作区…` 分支，则 append 一张目录 path picker，而不是立即改 route |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡。`/sendfile` 的文件模式 projector 当前会渲染成紧凑双 `select_static`：目录下拉触发 `enter`，文件下拉触发 `select`；若当前不在根目录，目录下拉会把 `..` 固定放在第一项作为返回上一级入口；真实目录项里普通目录排在前，`.` 开头目录排在后 |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把同一张卡同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回这张 history 卡 |
@@ -153,15 +153,15 @@
 | --- | --- | --- |
 | `attach_instance` | `instance_id` | 接管指定实例 |
 | `attach_workspace` | `workspace_key` | 接管指定工作区 |
-| `create_workspace` | 无额外字段 | 打开“从目录新建工作区”的目录模式 path picker |
+| `create_workspace` | 无额外字段 | 打开“添加工作区”的目录模式 path picker；当前只作为 legacy transport 兼容入口存在 |
 | `use_thread` | `thread_id`、`allow_cross_workspace` | 选择 thread，必要时允许跨 workspace |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `view_mode`、`page` | normal mode 下重新打开 target picker；vscode / legacy selection path 下仍用于在当前 same-context thread 列表里切页 |
 | `show_all_workspaces` / `show_recent_workspaces` | `page` | normal mode 下重新打开 `/list` target picker；旧分页字段继续保留 transport 兼容 |
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | normal mode 下重新打开 `/useall` target picker；旧分页字段继续保留 transport 兼容 |
 | `show_workspace_threads` | `workspace_key`、`page`、`return_page` | normal mode 下以指定 workspace 重新打开 target picker；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
-| `target_picker_select_workspace` | `picker_id`、`field_name` | unified target picker 的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
+| `target_picker_select_workspace` | `picker_id`、`field_name` | unified target picker 的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键；当前 `source=list` 下该值也可能是 synthetic `__create_workspace__` |
 | `target_picker_select_session` | `picker_id`、`field_name` | unified target picker 的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread 或 `new_thread` |
-| `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session` | unified target picker 的确认按钮；真正把当前表单值送到产品层执行 attach / switch / `新建会话` |
+| `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session` | unified target picker 的确认按钮；真正把当前表单值送到产品层执行 attach / switch / `新建会话`，或在 synthetic `添加工作区…` 分支下 append 目录 path picker |
 | `history_page` | `picker_id`、`page` | `/history` 列表页翻页；命中当前 active history 时同步替换当前卡为 loading，然后异步重查当前 thread history |
 | `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；gateway 同样兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
@@ -317,8 +317,9 @@ MCP request 卡片当前新增的可视语义：
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 - unified target picker 当前额外有一条明确的 UI 语义：
   - picker 首次打开时仍可带一个推荐默认会话
-  - 但工作区一旦变化，session 下拉会被主动清空，不再偷偷换成新 workspace 的默认项
-  - confirm 按钮会随之禁用，直到用户重新选定会话
+  - 但工作区一旦变化，session 下拉不会再 silently fallback 到新的真实 workspace 默认会话
+  - 若切到真实 workspace，session 会被主动清空，confirm 按钮随之禁用，直到用户重新选定会话
+  - 若切到 synthetic `添加工作区…`，session 下拉会改为单一 synthetic `新建会话`，confirm 按钮文案切成 `选择目录`
 
 ### 5.3 当前明确保持 append-only 的动作
 

@@ -789,13 +789,18 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || len(view.WorkspaceOptions) != 1 {
+	if view.Source != control.TargetPickerRequestSourceList || len(view.WorkspaceOptions) != 2 {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected only free workspace to remain selectable, got %#v", view)
 	}
-	if view.WorkspaceOptions[0].Value != "/data/dl/web" || strings.Contains(view.WorkspaceOptions[0].MetaText, "当前被其他飞书会话接管") {
+	createOption, ok := targetPickerWorkspaceOption(view, targetPickerCreateWorkspaceValue)
+	if !ok || !createOption.Synthetic {
+		t.Fatalf("expected synthetic create option to appear in list picker, got %#v", view.WorkspaceOptions)
+	}
+	freeOption, ok := targetPickerWorkspaceOption(view, "/data/dl/web")
+	if !ok || strings.Contains(freeOption.MetaText, "当前被其他飞书会话接管") {
 		t.Fatalf("expected busy workspace to be omitted from picker, got %#v", view.WorkspaceOptions)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-2")); !ok {
@@ -873,13 +878,17 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 	if view.Source != control.TargetPickerRequestSourceList || view.SelectedWorkspaceKey != "/data/dl/droid" {
 		t.Fatalf("expected current workspace to stay selected by default, got %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 2 {
+	if len(view.WorkspaceOptions) != 3 {
 		t.Fatalf("expected busy workspace to be omitted while attachable/current stay visible, got %#v", view.WorkspaceOptions)
 	}
-	if !testutil.SamePath(view.WorkspaceOptions[0].Value, "/data/dl/web") || !strings.Contains(view.WorkspaceOptions[0].MetaText, "有 VS Code 活动") {
-		t.Fatalf("expected recent attachable workspace to sort first, got %#v", view.WorkspaceOptions)
+	if view.WorkspaceOptions[0].Value != targetPickerCreateWorkspaceValue || !view.WorkspaceOptions[0].Synthetic {
+		t.Fatalf("expected synthetic create option to stay at the top of list picker, got %#v", view.WorkspaceOptions)
 	}
-	if !testutil.SamePath(view.WorkspaceOptions[1].Value, "/data/dl/droid") {
+	webOption, ok := targetPickerWorkspaceOption(view, "/data/dl/web")
+	if !ok || !strings.Contains(webOption.MetaText, "有 VS Code 活动") {
+		t.Fatalf("expected recent attachable workspace to stay visible, got %#v", view.WorkspaceOptions)
+	}
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/droid"); !ok {
 		t.Fatalf("expected current workspace to remain in options, got %#v", view.WorkspaceOptions)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-current")); !ok {
@@ -921,11 +930,14 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 2 {
+	if len(view.WorkspaceOptions) != 3 {
 		t.Fatalf("expected two real workspaces instead of broad instance root, got %#v", view.WorkspaceOptions)
 	}
 	got := map[string]bool{}
 	for _, option := range view.WorkspaceOptions {
+		if option.Synthetic {
+			continue
+		}
 		got[option.Value] = true
 	}
 	if !got[testutil.WorkspacePath("data", "dl", "atlas")] || !got[testutil.WorkspacePath("data", "dl", "harbor")] || got[testutil.WorkspacePath("data", "dl")] {
@@ -970,10 +982,13 @@ func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if len(view.WorkspaceOptions) != 1 {
+	if len(view.WorkspaceOptions) != 2 {
 		t.Fatalf("expected one recoverable workspace option, got %#v", view.WorkspaceOptions)
 	}
-	option := view.WorkspaceOptions[0]
+	option, ok := targetPickerWorkspaceOption(view, "/data/dl/picdetect")
+	if !ok {
+		t.Fatalf("expected persisted-only workspace to remain visible, got %#v", view.WorkspaceOptions)
+	}
 	if !testutil.SamePath(option.Value, "/data/dl/picdetect") || !option.RecoverableOnly {
 		t.Fatalf("expected persisted-only workspace to remain recoverable-only, got %#v", option)
 	}
@@ -1074,7 +1089,7 @@ func TestShowAllWorkspacesUsesSamePagedWorkspacePrompt(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 6 {
+	if len(view.WorkspaceOptions) != 7 {
 		t.Fatalf("expected all workspaces in a single target picker, got %#v", view.WorkspaceOptions)
 	}
 }
@@ -1094,7 +1109,7 @@ func TestCreateWorkspaceActionOpensDirectoryPicker(t *testing.T) {
 		t.Fatalf("expected path picker event, got %#v", events)
 	}
 	view := events[0].FeishuPathPickerView
-	if view.Mode != control.PathPickerModeDirectory || view.Title != "选择工作区目录" || view.ConfirmLabel != "作为工作区使用" {
+	if view.Mode != control.PathPickerModeDirectory || view.Title != "选择要接入的目录" || view.ConfirmLabel != "接入为工作区" {
 		t.Fatalf("unexpected path picker view: %#v", view)
 	}
 }
@@ -1485,7 +1500,7 @@ func TestUseBusyRunningThreadRejectsKick(t *testing.T) {
 	}
 }
 
-func TestNormalModeListWithoutOnlineWorkspacesReturnsNotice(t *testing.T) {
+func TestNormalModeListWithoutOnlineWorkspacesShowsCreateWorkspacePicker(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -1496,14 +1511,21 @@ func TestNormalModeListWithoutOnlineWorkspacesReturnsNotice(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 {
-		t.Fatalf("expected one notice event, got %#v", events)
+	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected one target picker event, got %#v", events)
 	}
-	if events[0].Notice == nil || events[0].Notice.Code != "target_picker_unavailable" {
-		t.Fatalf("expected target picker unavailable notice, got %#v", events[0])
+	view := targetPickerFromEvent(t, events[0])
+	if view.Source != control.TargetPickerRequestSourceList {
+		t.Fatalf("expected /list picker source, got %#v", view)
 	}
-	if !strings.Contains(events[0].Notice.Text, "当前没有可操作的工作区") {
-		t.Fatalf("expected workspace empty state notice, got %#v", events[0].Notice)
+	if len(view.WorkspaceOptions) != 1 || !view.WorkspaceOptions[0].Synthetic || view.WorkspaceOptions[0].Value != targetPickerCreateWorkspaceValue {
+		t.Fatalf("expected create workspace to be the only workspace option, got %#v", view.WorkspaceOptions)
+	}
+	if view.SelectedWorkspaceKey != targetPickerCreateWorkspaceValue || view.SelectedSessionValue != targetPickerNewThreadValue {
+		t.Fatalf("expected synthetic create selection with new thread preselected, got %#v", view)
+	}
+	if !view.CanConfirm || view.ConfirmLabel != "选择目录" {
+		t.Fatalf("expected picker to proceed into directory selection, got %#v", view)
 	}
 }
 
@@ -1898,7 +1920,10 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
 		t.Fatalf("unexpected target picker: %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 1 || view.WorkspaceOptions[0].Value != "/data/dl/runtime/headless" {
+	if len(view.WorkspaceOptions) != 2 {
+		t.Fatalf("expected synthetic create option plus headless workspace, got %#v", view.WorkspaceOptions)
+	}
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/runtime/headless"); !ok {
 		t.Fatalf("expected only headless workspace in target picker, got %#v", view.WorkspaceOptions)
 	}
 	if len(view.SessionOptions) != 1 || view.SessionOptions[0].Value != targetPickerNewThreadValue {

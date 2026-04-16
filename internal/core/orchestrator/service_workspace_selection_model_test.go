@@ -47,7 +47,7 @@ func TestListWorkspacesShowsPagedEntries(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
 		t.Fatalf("unexpected target picker title: %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 6 {
+	if len(view.WorkspaceOptions) != 7 {
 		t.Fatalf("expected all workspaces in a single target picker, got %#v", view.WorkspaceOptions)
 	}
 }

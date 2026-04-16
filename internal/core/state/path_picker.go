@@ -17,6 +17,7 @@ type ActivePathPickerRecord struct {
 	RootPath     string
 	CurrentPath  string
 	SelectedPath string
+	Hint         string
 	ConfirmLabel string
 	CancelLabel  string
 	CreatedAt    time.Time

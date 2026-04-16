@@ -10,8 +10,10 @@ import (
 )
 
 const workspaceCreatePathPickerConsumerKind = "workspace_create"
+const targetPickerWorkspaceCreatePathPickerConsumerKind = "target_picker_workspace_create"
 
 type workspaceCreatePathPickerConsumer struct{}
+type targetPickerWorkspaceCreatePathPickerConsumer struct{}
 
 func (workspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Service, surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
 	if s == nil || surface == nil {
@@ -31,15 +33,45 @@ func (workspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Service, surface
 }
 
 func (workspaceCreatePathPickerConsumer) PathPickerCancelled(_ *Service, surface *state.SurfaceConsoleRecord, _ control.PathPickerResult) []control.UIEvent {
-	return notice(surface, "workspace_create_cancelled", "已取消新建工作区。")
+	return notice(surface, "workspace_create_cancelled", "已取消添加工作区。当前工作目标保持不变。")
+}
+
+func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Service, surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
+	if s == nil || surface == nil {
+		return nil
+	}
+	workspaceKey, err := state.ResolveWorkspaceRootOnHost(result.SelectedPath)
+	if err != nil {
+		return notice(surface, "workspace_create_invalid", fmt.Sprintf("目录路径无效：%v", err))
+	}
+	if workspaceKey == "" {
+		return notice(surface, "workspace_create_invalid", "目录路径无效，请重新选择。")
+	}
+	events := s.enterTargetPickerNewThread(surface, workspaceKey)
+	if targetPickerNewThreadSucceeded(surface, workspaceKey) {
+		clearSurfaceTargetPicker(surface)
+	}
+	return events
+}
+
+func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerCancelled(_ *Service, surface *state.SurfaceConsoleRecord, _ control.PathPickerResult) []control.UIEvent {
+	return notice(surface, "workspace_create_cancelled", "已取消添加工作区。当前工作目标保持不变。")
 }
 
 func (s *Service) openCreateWorkspacePicker(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.openWorkspaceCreatePicker(surface, workspaceCreatePathPickerConsumerKind, "接入为工作区", "")
+}
+
+func (s *Service) openTargetPickerWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.openWorkspaceCreatePicker(surface, targetPickerWorkspaceCreatePathPickerConsumerKind, "接入并准备新会话", "未确认前不会切换当前工作目标。")
+}
+
+func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord, consumerKind, confirmLabel, hint string) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
 	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-		return notice(surface, "workspace_create_normal_only", "当前处于 vscode 模式，不能从目录直接新建工作区。请先 `/mode normal`。")
+		return notice(surface, "workspace_create_normal_only", "当前处于 vscode 模式，不能从目录直接添加工作区。请先 `/mode normal`。")
 	}
 	initialPath := s.surfaceCurrentWorkspaceKey(surface)
 	if strings.TrimSpace(initialPath) == "" {
@@ -47,12 +79,13 @@ func (s *Service) openCreateWorkspacePicker(surface *state.SurfaceConsoleRecord)
 	}
 	return s.openPathPicker(surface, surface.ActorUserID, control.PathPickerRequest{
 		Mode:         control.PathPickerModeDirectory,
-		Title:        "选择工作区目录",
+		Title:        "选择要接入的目录",
 		RootPath:     string(filepath.Separator),
 		InitialPath:  initialPath,
-		ConfirmLabel: "作为工作区使用",
+		Hint:         strings.TrimSpace(hint),
+		ConfirmLabel: strings.TrimSpace(firstNonEmpty(confirmLabel, "接入为工作区")),
 		CancelLabel:  "取消",
-		ConsumerKind: workspaceCreatePathPickerConsumerKind,
+		ConsumerKind: strings.TrimSpace(consumerKind),
 	})
 }
 
@@ -106,9 +139,10 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 		Purpose:          state.HeadlessLaunchPurposeFreshWorkspace,
 		PrepareNewThread: prepareNewThread,
 	}
-	noticeText := fmt.Sprintf("正在把 `%s` 准备成可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
+	noticeTitle := "正在接入工作区"
+	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
 	if prepareNewThread {
-		noticeText = fmt.Sprintf("正在把 `%s` 准备成可用工作区，完成后会直接进入新会话待命。", workspaceKey)
+		noticeText = fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后会直接进入新会话待命。", workspaceKey)
 	}
 	events = append(events,
 		control.UIEvent{
@@ -116,7 +150,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
 				Code:  "workspace_create_starting",
-				Title: "正在准备工作区",
+				Title: noticeTitle,
 				Text:  noticeText,
 			},
 		},

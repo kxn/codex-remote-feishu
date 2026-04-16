@@ -29,6 +29,7 @@ type PathPickerRequest struct {
 	Title        string
 	RootPath     string
 	InitialPath  string
+	Hint         string
 	ConfirmLabel string
 	CancelLabel  string
 	ExpireAfter  time.Duration
