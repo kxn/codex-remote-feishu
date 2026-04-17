@@ -212,6 +212,8 @@ type ExecCommandProgressBlockRowRecord struct {
 	Items     []string
 	Summary   string
 	Secondary string
+	MergeKey  string
+	LastSeq   int
 }
 
 type ExecCommandProgressBlockRecord struct {
@@ -241,6 +243,7 @@ type ExecCommandProgressRecord struct {
 	Exploration          *ExecCommandProgressExplorationRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord
+	LastVisibleSeq       int
 	LastEmittedAt        time.Time
 }
 
