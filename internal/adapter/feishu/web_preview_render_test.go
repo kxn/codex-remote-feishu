@@ -60,7 +60,7 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 	if !strings.Contains(imageRec.Body.String(), `class="preview-topbar"`) {
 		t.Fatalf("expected image preview to use shared shell, got %q", imageRec.Body.String())
 	}
-	if !strings.Contains(imageRec.Body.String(), `<img class="preview-image" src="/preview/s/`+testPreviewScopePublicID+`/`+imagePreviewID+`/download?inline=1"`) {
+	if !strings.Contains(imageRec.Body.String(), `<img class="preview-image" src="`+imagePreviewID+`/download?inline=1"`) {
 		t.Fatalf("expected image preview shell, got %q", imageRec.Body.String())
 	}
 
@@ -69,12 +69,12 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 	if ok := previewer.ServeWebPreview(pdfRec, httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+pdfPreviewID, nil), testPreviewScopePublicID, pdfPreviewID, false); !ok {
 		t.Fatal("expected pdf preview to be served")
 	}
-	if !strings.Contains(pdfRec.Body.String(), `<iframe class="preview-pdf" src="/preview/s/`+testPreviewScopePublicID+`/`+pdfPreviewID+`/download?inline=1"`) {
+	if !strings.Contains(pdfRec.Body.String(), `<iframe class="preview-pdf" src="`+pdfPreviewID+`/download?inline=1"`) {
 		t.Fatalf("expected pdf preview shell, got %q", pdfRec.Body.String())
 	}
 }
 
-func TestDriveMarkdownPreviewerUsesCurrentRequestPathForDownloadLinks(t *testing.T) {
+func TestDriveMarkdownPreviewerUsesRelativeDownloadLinks(t *testing.T) {
 	root := t.TempDir()
 	previewer := newWebPreviewerForTest(root)
 
@@ -84,24 +84,23 @@ func TestDriveMarkdownPreviewerUsesCurrentRequestPathForDownloadLinks(t *testing
 	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
 		t.Fatal("expected text preview to be served")
 	}
-	if !strings.Contains(rec.Body.String(), `class="preview-download" href="/g/grant-1/`+previewID+`/download"`) {
-		t.Fatalf("expected topbar download link to stay on current preview path, got %q", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), `class="preview-download" href="`+previewID+`/download"`) {
+		t.Fatalf("expected topbar download link to use preview-relative href, got %q", rec.Body.String())
 	}
 }
 
-func TestDriveMarkdownPreviewerUsesForwardedPrefixForDownloadLinks(t *testing.T) {
+func TestDriveMarkdownPreviewerUsesSameRelativeDownloadLinksUnderInternalPath(t *testing.T) {
 	root := t.TempDir()
 	previewer := newWebPreviewerForTest(root)
 
 	_, previewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "note.txt"), []byte("hello\n"), time.Date(2026, 4, 17, 8, 5, 0, 0, time.UTC))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+previewID, nil)
-	req.Header.Set("X-Forwarded-Prefix", "/g/grant-1/")
 	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
 		t.Fatal("expected proxied text preview to be served")
 	}
-	if !strings.Contains(rec.Body.String(), `class="preview-download" href="/g/grant-1/`+previewID+`/download"`) {
-		t.Fatalf("expected topbar download link to use forwarded grant prefix, got %q", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), `class="preview-download" href="`+previewID+`/download"`) {
+		t.Fatalf("expected topbar download link to stay preview-relative on internal path, got %q", rec.Body.String())
 	}
 }
 
