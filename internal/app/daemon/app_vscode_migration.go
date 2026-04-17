@@ -110,7 +110,7 @@ func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now t
 	targets := a.detachedVSCodeCompatibilityTargetsLocked(surfaceFilter)
 	if len(targets) == 0 {
 		if surfaceFilter != "" {
-			delete(a.vscodeMigrationPrompts, strings.TrimSpace(surfaceFilter))
+			delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, strings.TrimSpace(surfaceFilter))
 		}
 		return nil, false
 	}
@@ -125,10 +125,10 @@ func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now t
 
 	events := []control.UIEvent{}
 	for _, target := range targets {
-		if a.vscodeMigrationPrompts[target.SurfaceSessionID] == issue.Key {
+		if a.surfaceResumeRuntime.vscodeMigrationPrompts[target.SurfaceSessionID] == issue.Key {
 			continue
 		}
-		a.vscodeMigrationPrompts[target.SurfaceSessionID] = issue.Key
+		a.surfaceResumeRuntime.vscodeMigrationPrompts[target.SurfaceSessionID] = issue.Key
 		catalog := vscodeMigrationCatalog(*issue)
 		events = append(events, control.UIEvent{
 			Kind:                       control.UIEventFeishuDirectCommandCatalog,
@@ -141,20 +141,20 @@ func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now t
 }
 
 func (a *App) syncVSCodeMigrationPromptStateLocked() {
-	if a.vscodeMigrationPrompts == nil {
-		a.vscodeMigrationPrompts = map[string]string{}
+	if a.surfaceResumeRuntime.vscodeMigrationPrompts == nil {
+		a.surfaceResumeRuntime.vscodeMigrationPrompts = map[string]string{}
 	}
-	for surfaceID := range a.vscodeMigrationPrompts {
+	for surfaceID := range a.surfaceResumeRuntime.vscodeMigrationPrompts {
 		snapshot := a.service.SurfaceSnapshot(surfaceID)
 		if snapshot == nil || state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) != state.ProductModeVSCode {
-			delete(a.vscodeMigrationPrompts, surfaceID)
+			delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, surfaceID)
 		}
 	}
 }
 
 func (a *App) clearVSCodeMigrationPromptsLocked() {
-	for surfaceID := range a.vscodeMigrationPrompts {
-		delete(a.vscodeMigrationPrompts, surfaceID)
+	for surfaceID := range a.surfaceResumeRuntime.vscodeMigrationPrompts {
+		delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, surfaceID)
 	}
 }
 
@@ -293,8 +293,8 @@ func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []contro
 		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_incomplete", "迁移未完成", remaining.Summary)
 	}
 
-	delete(a.vscodeMigrationPrompts, strings.TrimSpace(command.SurfaceSessionID))
-	a.vscodeResumeNotices[strings.TrimSpace(command.SurfaceSessionID)] = true
+	delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, strings.TrimSpace(command.SurfaceSessionID))
+	a.surfaceResumeRuntime.vscodeResumeNotices[strings.TrimSpace(command.SurfaceSessionID)] = true
 	return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_applied", issue.Title, issue.SuccessText)
 }
 

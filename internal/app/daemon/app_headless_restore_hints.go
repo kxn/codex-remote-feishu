@@ -17,7 +17,7 @@ func (a *App) migrateLegacyHeadlessRestoreHintsLocked(stateDir string) {
 		return
 	}
 	entries := store.Entries()
-	if len(entries) == 0 || a.surfaceResumeState == nil {
+	if len(entries) == 0 || a.surfaceResumeRuntime.store == nil {
 		return
 	}
 
@@ -46,7 +46,7 @@ func (a *App) migrateLegacyHeadlessRestoreHintsLocked(stateDir string) {
 		a.syncVSCodeResumeNoticeStateLocked(nil)
 		a.syncSurfaceResumeRecoveryStateLocked()
 		a.syncHeadlessRestoreStateLocked()
-		a.vscodeStartupCheckDue = storedVSCodeResumeExists(a.surfaceResumeState)
+		a.surfaceResumeRuntime.vscodeStartupCheckDue = storedVSCodeResumeExists(a.surfaceResumeRuntime.store)
 	}
 	if keepLegacyFile {
 		return
@@ -59,10 +59,10 @@ func (a *App) migrateLegacyHeadlessRestoreHintsLocked(stateDir string) {
 func (a *App) HeadlessRestoreHint(surfaceID string) *HeadlessRestoreHint {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.surfaceResumeState == nil {
+	if a.surfaceResumeRuntime.store == nil {
 		return nil
 	}
-	entry, ok := a.surfaceResumeState.Get(surfaceID)
+	entry, ok := a.surfaceResumeRuntime.store.Get(surfaceID)
 	if !ok {
 		return nil
 	}
@@ -75,14 +75,14 @@ func (a *App) HeadlessRestoreHint(surfaceID string) *HeadlessRestoreHint {
 }
 
 func (a *App) legacyHeadlessRestoreHintCoveredLocked(hint HeadlessRestoreHint) bool {
-	if a.surfaceResumeState == nil {
+	if a.surfaceResumeRuntime.store == nil {
 		return false
 	}
 	hint, ok := normalizeHeadlessRestoreHint(hint)
 	if !ok {
 		return false
 	}
-	entry, ok := a.surfaceResumeState.Get(hint.SurfaceSessionID)
+	entry, ok := a.surfaceResumeRuntime.store.Get(hint.SurfaceSessionID)
 	if !ok {
 		return false
 	}
@@ -91,7 +91,7 @@ func (a *App) legacyHeadlessRestoreHintCoveredLocked(hint HeadlessRestoreHint) b
 }
 
 func (a *App) importLegacyHeadlessRestoreHintLocked(hint HeadlessRestoreHint) bool {
-	if a.surfaceResumeState == nil {
+	if a.surfaceResumeRuntime.store == nil {
 		return false
 	}
 	hint, ok := normalizeHeadlessRestoreHint(hint)
@@ -114,7 +114,7 @@ func (a *App) importLegacyHeadlessRestoreHintLocked(hint HeadlessRestoreHint) bo
 		UpdatedAt:          hint.UpdatedAt,
 	}
 
-	if existing, ok := a.surfaceResumeState.Get(hint.SurfaceSessionID); ok {
+	if existing, ok := a.surfaceResumeRuntime.store.Get(hint.SurfaceSessionID); ok {
 		if state.NormalizeProductMode(state.ProductMode(existing.ProductMode)) == state.ProductModeVSCode {
 			return false
 		}
@@ -154,13 +154,13 @@ func (a *App) importLegacyHeadlessRestoreHintLocked(hint HeadlessRestoreHint) bo
 	if !ok || !sameHeadlessRestoreHintContent(derived, hint) {
 		return false
 	}
-	if current, ok := a.surfaceResumeState.Get(normalized.SurfaceSessionID); ok && sameSurfaceResumeEntryContent(current, normalized) {
+	if current, ok := a.surfaceResumeRuntime.store.Get(normalized.SurfaceSessionID); ok && sameSurfaceResumeEntryContent(current, normalized) {
 		return true
 	}
 	if normalized.UpdatedAt.IsZero() {
 		normalized.UpdatedAt = hint.UpdatedAt
 	}
-	if err := a.surfaceResumeState.Put(normalized); err != nil {
+	if err := a.surfaceResumeRuntime.store.Put(normalized); err != nil {
 		log.Printf("migrate legacy headless restore hint failed: surface=%s thread=%s err=%v", normalized.SurfaceSessionID, normalized.ResumeThreadID, err)
 		return false
 	}

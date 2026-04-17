@@ -1,8 +1,8 @@
 # Daemon Package Refactor Plan
 
 > Type: `draft`
-> Updated: `2026-04-11`
-> Summary: 为 `internal/app/daemon` 输出首版拆分方案，明确职责簇、共享状态压力和建议的分阶段抽取顺序。
+> Updated: `2026-04-17`
+> Summary: 为 `internal/app/daemon` 输出拆分方案，明确职责簇、共享状态压力、建议的分阶段抽取顺序，并同步当前已落地的 phase A runtime 边界。
 
 ## 1. 目标
 
@@ -198,13 +198,15 @@
 
 1. `adminRuntime`
    - 管理 admin/setup HTTP 接口、bootstrap state、setup token、Feishu/VS Code setup 子流。
-2. `headlessRuntime`
-   - 管理 headless lifecycle、prewarm、restore hints、surface resume 和 workspace context。
-3. `upgradeRuntime`
+2. `surfaceResumeRuntime`
+   - 管理 surface resume store、resume recovery、VS Code resume notice / migration prompt、workspace context 同步。
+3. `headlessRuntime`
+   - 管理 headless lifecycle、prewarm、restore hints、headless restore 重试与副作用调度。
+4. `upgradeRuntime`
    - 管理版本检查、升级事务状态、升级结果回写和 `/upgrade` 触发。
-4. `toolRuntime`
+5. `toolRuntime`
    - 管理 local tool service listener、manifest、鉴权与 tool 调用。
-5. `ingressRuntime`
+6. `ingressRuntime`
    - 管理 relay ingress pump、队列、transport degrade 和连接状态。
 
 这里不要求它们第一天就变成独立 package，但要求开始拥有清晰的依赖构造方式。
@@ -327,6 +329,10 @@
 1. 这两块的边界最清楚。
 2. 它们能明显减少 `App` 直接持有的状态和方法。
 3. 对主事件环的侵入比 headless / admin / ingress 小得多。
+
+当前进展：
+
+- `#248` phase A 已先把 `toolRuntime` 和 `surfaceResumeRuntime` 的状态归属从 `App` 根字段收口到显式 runtime state；后续仍需要继续把更多 receiver / side-effect 边界从 `App` 根上剥离。
 
 ## 9. 验证要求
 

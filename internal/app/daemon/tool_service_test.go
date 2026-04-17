@@ -63,16 +63,16 @@ func TestToolManifestRequiresBearerAndPublishesDescription(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/tools/manifest", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	app.toolServer.Handler.ServeHTTP(rec, req)
+	app.toolRuntime.server.Handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected unauthorized without bearer, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/tools/manifest", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
-	req.Header.Set("Authorization", "Bearer "+app.toolBearerToken)
+	req.Header.Set("Authorization", "Bearer "+app.toolRuntime.bearerToken)
 	rec = httptest.NewRecorder()
-	app.toolServer.Handler.ServeHTTP(rec, req)
+	app.toolRuntime.server.Handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected manifest success, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -101,7 +101,7 @@ func TestToolManifestRequiresBearerAndPublishesDescription(t *testing.T) {
 	if err := json.Unmarshal(infoRaw, &info); err != nil {
 		t.Fatalf("unmarshal tool service file: %v", err)
 	}
-	if info.Token != app.toolBearerToken || !strings.Contains(info.ManifestURL, "/v1/tools/manifest") {
+	if info.Token != app.toolRuntime.bearerToken || !strings.Contains(info.ManifestURL, "/v1/tools/manifest") {
 		t.Fatalf("unexpected tool service file: %#v", info)
 	}
 }

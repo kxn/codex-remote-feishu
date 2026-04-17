@@ -786,7 +786,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.reapIdleHeadless(now)
 	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
-	a.vscodeStartupCheckDue = false
+	a.surfaceResumeRuntime.vscodeStartupCheckDue = false
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
 	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []control.UIEvent{}

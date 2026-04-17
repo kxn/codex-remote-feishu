@@ -62,7 +62,7 @@ func (a *App) syncWorkspaceSurfaceContextFilesLocked() {
 		}
 	}
 
-	for workspaceRoot := range a.workspaceContextRoots {
+	for workspaceRoot := range a.surfaceResumeRuntime.workspaceContextRoots {
 		if _, ok := desired[workspaceRoot]; ok {
 			continue
 		}
@@ -71,19 +71,19 @@ func (a *App) syncWorkspaceSurfaceContextFilesLocked() {
 		}
 	}
 
-	a.workspaceContextRoots = map[string]string{}
+	a.surfaceResumeRuntime.workspaceContextRoots = map[string]string{}
 	for workspaceRoot, payload := range desired {
-		a.workspaceContextRoots[workspaceRoot] = payload.SurfaceSessionID
+		a.surfaceResumeRuntime.workspaceContextRoots[workspaceRoot] = payload.SurfaceSessionID
 	}
 }
 
 func (a *App) clearWorkspaceSurfaceContextFilesLocked() {
-	for workspaceRoot := range a.workspaceContextRoots {
+	for workspaceRoot := range a.surfaceResumeRuntime.workspaceContextRoots {
 		if err := removeWorkspaceSurfaceContext(workspaceRoot); err != nil {
 			log.Printf("remove workspace surface context during shutdown failed: workspace=%s err=%v", workspaceRoot, err)
 		}
 	}
-	a.workspaceContextRoots = map[string]string{}
+	a.surfaceResumeRuntime.workspaceContextRoots = map[string]string{}
 }
 
 func workspaceSurfaceContextPath(workspaceRoot string) string {

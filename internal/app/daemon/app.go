@@ -88,20 +88,6 @@ type pendingThreadHistoryRead struct {
 	ThreadID         string
 }
 
-type headlessRestoreRecoveryState struct {
-	Entry           SurfaceResumeEntry
-	NextAttemptAt   time.Time
-	LastAttemptAt   time.Time
-	LastFailureCode string
-}
-
-type surfaceResumeRecoveryState struct {
-	Entry           SurfaceResumeEntry
-	NextAttemptAt   time.Time
-	LastAttemptAt   time.Time
-	LastFailureCode string
-}
-
 type vscodeCompatibilityCacheState struct {
 	Checked         bool
 	Issue           *vscodeCompatibilityIssue
@@ -124,7 +110,7 @@ type App struct {
 	relayServer *http.Server
 	apiServer   *http.Server
 	pprofServer *http.Server
-	toolServer  *http.Server
+	toolRuntime toolRuntimeState
 
 	daemonStartedAt   time.Time
 	daemonLifecycleID string
@@ -193,16 +179,13 @@ type App struct {
 	externalAccessRuntime      ExternalAccessRuntimeConfig
 	externalAccessShutdownWait chan struct{}
 	webPreviewGrants           map[string]*previewGrantRecord
+	surfaceResumeRuntime       surfaceResumeRuntimeState
 
 	relayListener          net.Listener
 	apiListener            net.Listener
 	pprofListener          net.Listener
-	toolListener           net.Listener
 	externalAccessListener net.Listener
 	externalAccessServer   *http.Server
-	toolStatePath          string
-	toolBearerToken        string
-	workspaceContextRoots  map[string]string
 
 	shutdownGracePeriod      time.Duration
 	shutdownNoticeTimeout    time.Duration
@@ -247,11 +230,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonStartedAt:              daemonStartedAt,
 		daemonLifecycleID:            daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGatewayNotices:        map[string][]control.UIEvent{},
-		surfaceResumeRecovery:        map[string]*surfaceResumeRecoveryState{},
-		vscodeResumeNotices:          map[string]bool{},
-		vscodeMigrationPrompts:       map[string]string{},
-		headlessRestoreState:         map[string]*headlessRestoreRecoveryState{},
-		startupRefreshPending:        map[string]bool{},
+		surfaceResumeRuntime:         newSurfaceResumeRuntimeState(),
 		managedHeadless:              map[string]*managedHeadlessProcess{},
 		pendingThreadHistoryReads:    map[string]pendingThreadHistoryRead{},
 		startHeadless:                relayruntime.StartDetachedWrapper,
@@ -269,7 +248,6 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		cronExitTargets:              map[string]*cronExitTarget{},
 		adminAuth:                    authManager,
 		webPreviewGrants:             map[string]*previewGrantRecord{},
-		workspaceContextRoots:        map[string]string{},
 		shutdownGracePeriod:          5 * time.Second,
 		shutdownNoticeTimeout:        2 * time.Second,
 		gatewayStopTimeout:           3 * time.Second,
@@ -440,8 +418,8 @@ func (a *App) Run(ctx context.Context) error {
 	apiListener := a.apiListener
 	pprofListener := a.pprofListener
 	pprofServer := a.pprofServer
-	toolListener := a.toolListener
-	toolServer := a.toolServer
+	toolListener := a.toolRuntime.listener
+	toolServer := a.toolRuntime.server
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 4)

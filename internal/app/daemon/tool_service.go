@@ -2,13 +2,10 @@ package daemon
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,77 +78,6 @@ type resolvedToolSurfaceContext struct {
 	Attached           bool
 }
 
-func (a *App) SetToolRuntime(cfg ToolRuntimeConfig) {
-	if strings.TrimSpace(cfg.ListenAddr) == "" {
-		return
-	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok\n"))
-	})
-	mux.HandleFunc("GET /v1/tools/manifest", a.requireToolAuth(a.handleToolManifest))
-	mux.HandleFunc("POST /v1/tools/call", a.requireToolAuth(a.handleToolCall))
-	a.toolServer = &http.Server{Addr: cfg.ListenAddr, Handler: mux}
-	a.toolStatePath = strings.TrimSpace(cfg.StateFile)
-}
-
-func (a *App) bindToolListenerLocked() error {
-	if a.toolServer == nil || a.toolListener != nil {
-		return nil
-	}
-	listener, err := net.Listen("tcp", a.toolServer.Addr)
-	if err != nil {
-		return err
-	}
-	token, err := generateToolBearerToken()
-	if err != nil {
-		_ = listener.Close()
-		return err
-	}
-	a.toolListener = listener
-	a.toolBearerToken = token
-	if err := a.persistToolServiceStateLocked(); err != nil {
-		_ = listener.Close()
-		a.toolListener = nil
-		a.toolBearerToken = ""
-		return err
-	}
-	return nil
-}
-
-func generateToolBearerToken() (string, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func (a *App) persistToolServiceStateLocked() error {
-	if strings.TrimSpace(a.toolStatePath) == "" || a.toolListener == nil || strings.TrimSpace(a.toolBearerToken) == "" {
-		return nil
-	}
-	info := toolServiceInfo{
-		URL:         "http://" + a.toolListener.Addr().String(),
-		ManifestURL: "http://" + a.toolListener.Addr().String() + "/v1/tools/manifest",
-		CallURL:     "http://" + a.toolListener.Addr().String() + "/v1/tools/call",
-		Token:       a.toolBearerToken,
-		TokenType:   "bearer",
-		GeneratedAt: time.Now().UTC(),
-	}
-	return writeJSONFileAtomic(a.toolStatePath, info, 0o600)
-}
-
-func (a *App) removeToolServiceStateLocked() {
-	if strings.TrimSpace(a.toolStatePath) == "" {
-		return
-	}
-	if err := os.Remove(a.toolStatePath); err != nil && !os.IsNotExist(err) {
-		log.Printf("remove tool service state failed: path=%s err=%v", a.toolStatePath, err)
-	}
-}
-
 func (a *App) requireToolAuth(next func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !adminauth.IsLoopbackRequest(r) {
@@ -161,7 +87,7 @@ func (a *App) requireToolAuth(next func(http.ResponseWriter, *http.Request)) htt
 			})
 			return
 		}
-		expected := strings.TrimSpace(a.toolBearerToken)
+		expected := strings.TrimSpace(a.toolRuntime.bearerToken)
 		if expected == "" {
 			writeToolError(w, http.StatusServiceUnavailable, toolError{
 				Code:    "tool_service_not_ready",

@@ -170,8 +170,8 @@ func TestDaemonDerivesHeadlessRestoreHintFromSurfaceResumeState(t *testing.T) {
 	if hint.ThreadID != "thread-1" || hint.ThreadTitle != "修复登录流程" || hint.ThreadCWD != "/data/dl/droid" {
 		t.Fatalf("unexpected derived restore hint: %#v", hint)
 	}
-	if len(app.headlessRestoreState) != 1 {
-		t.Fatalf("expected in-memory headless restore state derived from surface resume state, got %#v", app.headlessRestoreState)
+	if len(app.surfaceResumeRuntime.headlessRestore) != 1 {
+		t.Fatalf("expected in-memory headless restore state derived from surface resume state, got %#v", app.surfaceResumeRuntime.headlessRestore)
 	}
 	if _, err := os.Stat(headlessRestoreHintsStatePath(stateDir)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected compatible startup to remove migrated legacy hint file, stat err=%v", err)
@@ -297,8 +297,8 @@ func TestDaemonModeSwitchToVSCodeClearsHeadlessRestoreState(t *testing.T) {
 	if hint := app.HeadlessRestoreHint("surface-1"); hint == nil {
 		t.Fatal("expected restore hint after headless attach")
 	}
-	if len(app.headlessRestoreState) != 1 {
-		t.Fatalf("expected one in-memory restore entry before mode switch, got %#v", app.headlessRestoreState)
+	if len(app.surfaceResumeRuntime.headlessRestore) != 1 {
+		t.Fatalf("expected one in-memory restore entry before mode switch, got %#v", app.surfaceResumeRuntime.headlessRestore)
 	}
 
 	app.HandleAction(context.Background(), control.Action{
@@ -313,8 +313,8 @@ func TestDaemonModeSwitchToVSCodeClearsHeadlessRestoreState(t *testing.T) {
 	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
 		t.Fatalf("expected restore hint to clear after /mode vscode, got %#v", hint)
 	}
-	if len(app.headlessRestoreState) != 0 {
-		t.Fatalf("expected in-memory restore state to clear after /mode vscode, got %#v", app.headlessRestoreState)
+	if len(app.surfaceResumeRuntime.headlessRestore) != 0 {
+		t.Fatalf("expected in-memory restore state to clear after /mode vscode, got %#v", app.surfaceResumeRuntime.headlessRestore)
 	}
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
@@ -388,8 +388,8 @@ func TestDaemonModeSwitchToVSCodeStaysDetachedAfterNormalAutoRestore(t *testing.
 	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
 		t.Fatalf("expected restore hint to clear after /mode vscode from auto-restored state, got %#v", hint)
 	}
-	if len(app.headlessRestoreState) != 0 {
-		t.Fatalf("expected in-memory restore state to clear after /mode vscode from auto-restored state, got %#v", app.headlessRestoreState)
+	if len(app.surfaceResumeRuntime.headlessRestore) != 0 {
+		t.Fatalf("expected in-memory restore state to clear after /mode vscode from auto-restored state, got %#v", app.surfaceResumeRuntime.headlessRestore)
 	}
 }
 
@@ -451,8 +451,8 @@ func TestDaemonMaterializesLatentSurfaceFromRestoreHintOnRestart(t *testing.T) {
 	if restarted.service.SurfaceGatewayID("surface-1") != "app-1" || restarted.service.SurfaceChatID("surface-1") != "chat-1" || restarted.service.SurfaceActorUserID("surface-1") != "user-1" {
 		t.Fatalf("unexpected materialized surface routing: gateway=%q chat=%q actor=%q", restarted.service.SurfaceGatewayID("surface-1"), restarted.service.SurfaceChatID("surface-1"), restarted.service.SurfaceActorUserID("surface-1"))
 	}
-	if len(restarted.headlessRestoreState) != 1 {
-		t.Fatalf("expected one recovery state entry after restart, got %#v", restarted.headlessRestoreState)
+	if len(restarted.surfaceResumeRuntime.headlessRestore) != 1 {
+		t.Fatalf("expected one recovery state entry after restart, got %#v", restarted.surfaceResumeRuntime.headlessRestore)
 	}
 }
 
@@ -490,8 +490,8 @@ func TestDaemonAutoRestoreReconnectsWithRecoveryNoticeOnly(t *testing.T) {
 	if hint := app.HeadlessRestoreHint("surface-1"); hint == nil || hint.ThreadCWD != "/data/dl/droid" {
 		t.Fatalf("expected persisted restore hint with cwd before disconnect, got %#v", hint)
 	}
-	if len(app.headlessRestoreState) != 1 {
-		t.Fatalf("expected one in-memory restore state before disconnect, got %#v", app.headlessRestoreState)
+	if len(app.surfaceResumeRuntime.headlessRestore) != 1 {
+		t.Fatalf("expected one in-memory restore state before disconnect, got %#v", app.surfaceResumeRuntime.headlessRestore)
 	}
 
 	app.onDisconnect(context.Background(), "inst-headless-1")

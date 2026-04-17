@@ -263,21 +263,21 @@ func TestSyncSurfaceResumeStateForInstanceLockedScopesHeadlessRecoveryState(t *t
 	})
 
 	app.mu.Lock()
-	if err := app.surfaceResumeState.Delete("surface-1"); err != nil {
+	if err := app.surfaceResumeRuntime.store.Delete("surface-1"); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("delete surface-1 resume state: %v", err)
 	}
-	if err := app.surfaceResumeState.Delete("surface-2"); err != nil {
+	if err := app.surfaceResumeRuntime.store.Delete("surface-2"); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("delete surface-2 resume state: %v", err)
 	}
-	delete(app.headlessRestoreState, "surface-1")
-	delete(app.headlessRestoreState, "surface-2")
+	delete(app.surfaceResumeRuntime.headlessRestore, "surface-1")
+	delete(app.surfaceResumeRuntime.headlessRestore, "surface-2")
 	app.syncSurfaceResumeStateForInstanceLocked("inst-1", nil)
-	_, entry1 := app.surfaceResumeState.Get("surface-1")
-	_, entry2 := app.surfaceResumeState.Get("surface-2")
-	_, recovery1 := app.headlessRestoreState["surface-1"]
-	_, recovery2 := app.headlessRestoreState["surface-2"]
+	_, entry1 := app.surfaceResumeRuntime.store.Get("surface-1")
+	_, entry2 := app.surfaceResumeRuntime.store.Get("surface-2")
+	_, recovery1 := app.surfaceResumeRuntime.headlessRestore["surface-1"]
+	_, recovery2 := app.surfaceResumeRuntime.headlessRestore["surface-2"]
 	app.mu.Unlock()
 
 	if !entry1 {
@@ -333,17 +333,17 @@ func TestSyncSurfaceResumeStateForInstanceLockedScopesToAttachedInstance(t *test
 	})
 
 	app.mu.Lock()
-	if err := app.surfaceResumeState.Delete("surface-1"); err != nil {
+	if err := app.surfaceResumeRuntime.store.Delete("surface-1"); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("delete surface-1 resume state: %v", err)
 	}
-	if err := app.surfaceResumeState.Delete("surface-2"); err != nil {
+	if err := app.surfaceResumeRuntime.store.Delete("surface-2"); err != nil {
 		app.mu.Unlock()
 		t.Fatalf("delete surface-2 resume state: %v", err)
 	}
 	app.syncSurfaceResumeStateForInstanceLocked("inst-1", nil)
-	_, entry1 := app.surfaceResumeState.Get("surface-1")
-	_, entry2 := app.surfaceResumeState.Get("surface-2")
+	_, entry1 := app.surfaceResumeRuntime.store.Get("surface-1")
+	_, entry2 := app.surfaceResumeRuntime.store.Get("surface-2")
 	app.mu.Unlock()
 
 	if !entry1 {

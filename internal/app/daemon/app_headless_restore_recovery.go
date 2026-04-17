@@ -13,29 +13,29 @@ import (
 const headlessRestoreRetryBackoff = 30 * time.Second
 
 func (a *App) syncHeadlessRestoreStateLocked() {
-	if a.headlessRestoreState == nil {
-		a.headlessRestoreState = map[string]*headlessRestoreRecoveryState{}
+	if a.surfaceResumeRuntime.headlessRestore == nil {
+		a.surfaceResumeRuntime.headlessRestore = map[string]*headlessRestoreRecoveryState{}
 	}
 	entries := map[string]SurfaceResumeEntry{}
-	if a.surfaceResumeState != nil {
-		entries = a.surfaceResumeState.Entries()
+	if a.surfaceResumeRuntime.store != nil {
+		entries = a.surfaceResumeRuntime.store.Entries()
 	}
 	for surfaceID, entry := range entries {
 		if !surfaceResumeEntrySupportsHeadlessRestore(entry) {
-			delete(a.headlessRestoreState, surfaceID)
+			delete(a.surfaceResumeRuntime.headlessRestore, surfaceID)
 			continue
 		}
 		a.service.MaterializeSurface(surfaceID, entry.GatewayID, entry.ChatID, entry.ActorUserID)
-		current := a.headlessRestoreState[surfaceID]
+		current := a.surfaceResumeRuntime.headlessRestore[surfaceID]
 		if current == nil || !sameSurfaceResumeEntryContent(current.Entry, entry) {
-			a.headlessRestoreState[surfaceID] = &headlessRestoreRecoveryState{Entry: entry}
+			a.surfaceResumeRuntime.headlessRestore[surfaceID] = &headlessRestoreRecoveryState{Entry: entry}
 			continue
 		}
 		current.Entry = entry
 	}
-	for surfaceID := range a.headlessRestoreState {
+	for surfaceID := range a.surfaceResumeRuntime.headlessRestore {
 		if entry, ok := entries[surfaceID]; !ok || !surfaceResumeEntrySupportsHeadlessRestore(entry) {
-			delete(a.headlessRestoreState, surfaceID)
+			delete(a.surfaceResumeRuntime.headlessRestore, surfaceID)
 		}
 	}
 }
@@ -64,11 +64,11 @@ func (a *App) shouldDeferHeadlessRestoreUntilInitialRefreshLocked(entry SurfaceR
 }
 
 func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEvent {
-	if len(a.headlessRestoreState) == 0 {
+	if len(a.surfaceResumeRuntime.headlessRestore) == 0 {
 		return nil
 	}
-	surfaceIDs := make([]string, 0, len(a.headlessRestoreState))
-	for surfaceID := range a.headlessRestoreState {
+	surfaceIDs := make([]string, 0, len(a.surfaceResumeRuntime.headlessRestore))
+	for surfaceID := range a.surfaceResumeRuntime.headlessRestore {
 		surfaceIDs = append(surfaceIDs, surfaceID)
 	}
 	sort.Strings(surfaceIDs)
@@ -76,7 +76,7 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEven
 	events := []control.UIEvent{}
 	updatedSurfaceIDs := make([]string, 0, len(surfaceIDs))
 	for _, surfaceID := range surfaceIDs {
-		state := a.headlessRestoreState[surfaceID]
+		state := a.surfaceResumeRuntime.headlessRestore[surfaceID]
 		if state == nil {
 			continue
 		}
@@ -111,7 +111,7 @@ func (a *App) applyHeadlessRestoreAttemptResultLocked(surfaceID string, result o
 }
 
 func (a *App) clearHeadlessRestoreBackoffLocked(surfaceID string) {
-	state := a.headlessRestoreState[strings.TrimSpace(surfaceID)]
+	state := a.surfaceResumeRuntime.headlessRestore[strings.TrimSpace(surfaceID)]
 	if state == nil {
 		return
 	}
@@ -121,7 +121,7 @@ func (a *App) clearHeadlessRestoreBackoffLocked(surfaceID string) {
 }
 
 func (a *App) setHeadlessRestoreBackoffLocked(surfaceID, code string, now time.Time) {
-	state := a.headlessRestoreState[strings.TrimSpace(surfaceID)]
+	state := a.surfaceResumeRuntime.headlessRestore[strings.TrimSpace(surfaceID)]
 	if state == nil {
 		return
 	}
@@ -153,17 +153,17 @@ func (a *App) markStartupThreadsRefreshRequestedLocked(instanceID string) {
 	if instanceID == "" {
 		return
 	}
-	if a.startupRefreshPending == nil {
-		a.startupRefreshPending = map[string]bool{}
+	if a.surfaceResumeRuntime.startupRefreshPending == nil {
+		a.surfaceResumeRuntime.startupRefreshPending = map[string]bool{}
 	}
-	a.startupRefreshSeen = true
-	a.startupRefreshPending[instanceID] = true
+	a.surfaceResumeRuntime.startupRefreshSeen = true
+	a.surfaceResumeRuntime.startupRefreshPending[instanceID] = true
 }
 
 func (a *App) markStartupThreadsRefreshSettledLocked(instanceID string) {
-	delete(a.startupRefreshPending, strings.TrimSpace(instanceID))
+	delete(a.surfaceResumeRuntime.startupRefreshPending, strings.TrimSpace(instanceID))
 }
 
 func (a *App) initialThreadsRefreshRoundCompleteLocked() bool {
-	return a.startupRefreshSeen && len(a.startupRefreshPending) == 0
+	return a.surfaceResumeRuntime.startupRefreshSeen && len(a.surfaceResumeRuntime.startupRefreshPending) == 0
 }
