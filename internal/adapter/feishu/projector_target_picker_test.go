@@ -168,3 +168,97 @@ func TestTargetPickerElementsRenderModeSwitchAndSourceSelect(t *testing.T) {
 		t.Fatalf("expected mode button callbacks and source select callback, got %#v", elements)
 	}
 }
+
+func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:         "picker-1",
+		Title:            "选择工作区与会话",
+		SelectedMode:     control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:   control.FeishuTargetPickerSourceLocalDirectory,
+		ShowModeSwitch:   true,
+		ShowSourceSelect: true,
+		ConfirmLabel:     "接入并继续",
+		CanConfirm:       false,
+		ModeOptions: []control.FeishuTargetPickerModeOption{
+			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
+			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
+		},
+		SourceOptions: []control.FeishuTargetPickerSourceOption{
+			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", Available: true},
+			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", Available: true},
+		},
+	}, "life-4")
+
+	var sawOpenPath bool
+	for _, action := range cardActionsFromElements(elements) {
+		if cardValueMap(action)[cardActionPayloadKeyKind] != cardActionKindTargetPickerOpenPathPicker {
+			continue
+		}
+		if cardValueMap(action)[cardActionPayloadKeyTargetValue] != control.FeishuTargetPickerPathFieldLocalDirectory {
+			t.Fatalf("unexpected local-directory open-path payload: %#v", cardValueMap(action))
+		}
+		sawOpenPath = true
+	}
+	if !sawOpenPath {
+		t.Fatalf("expected local-directory branch to render open-path action, got %#v", elements)
+	}
+}
+
+func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:         "picker-1",
+		Title:            "选择工作区与会话",
+		SelectedMode:     control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:   control.FeishuTargetPickerSourceGitURL,
+		ShowModeSwitch:   true,
+		ShowSourceSelect: true,
+		ConfirmLabel:     "克隆并继续",
+		CanConfirm:       true,
+		GitParentDir:     "/data/dl",
+		GitRepoURL:       "https://github.com/kxn/codex-remote-feishu.git",
+		GitDirectoryName: "crf",
+		GitFinalPath:     "/data/dl/crf",
+		ModeOptions: []control.FeishuTargetPickerModeOption{
+			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
+			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
+		},
+		SourceOptions: []control.FeishuTargetPickerSourceOption{
+			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", Available: true},
+			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", Available: true},
+		},
+	}, "life-5")
+
+	var form map[string]any
+	for _, element := range elements {
+		if cardStringValue(element["tag"]) == "form" {
+			form = element
+			break
+		}
+	}
+	if form == nil {
+		t.Fatalf("expected git branch to render form, got %#v", elements)
+	}
+	formElements, _ := form["elements"].([]map[string]any)
+	if len(formElements) < 3 {
+		t.Fatalf("expected git form inputs and actions, got %#v", form)
+	}
+	if formElements[0]["name"] != control.FeishuTargetPickerGitRepoURLFieldName || formElements[1]["name"] != control.FeishuTargetPickerGitDirectoryNameFieldName {
+		t.Fatalf("unexpected git form input names: %#v", formElements)
+	}
+
+	var sawOpenPath bool
+	var sawConfirm bool
+	for _, action := range cardActionsFromElements(formElements) {
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerOpenPathPicker:
+			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
+				sawOpenPath = true
+			}
+		case cardActionKindTargetPickerConfirm:
+			sawConfirm = true
+		}
+	}
+	if !sawOpenPath || !sawConfirm {
+		t.Fatalf("expected git form to render open-path and confirm actions, got %#v", elements)
+	}
+}

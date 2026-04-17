@@ -23,6 +23,10 @@ type activeTargetPickerRecord struct {
 	SelectedSource       control.FeishuTargetPickerSourceKind
 	SelectedWorkspaceKey string
 	SelectedSessionValue string
+	LocalDirectoryPath   string
+	GitParentDir         string
+	GitRepoURL           string
+	GitDirectoryName     string
 	CreatedAt            time.Time
 	ExpiresAt            time.Time
 }

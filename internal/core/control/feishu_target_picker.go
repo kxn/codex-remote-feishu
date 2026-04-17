@@ -32,6 +32,21 @@ const (
 	FeishuTargetPickerSourceGitURL         FeishuTargetPickerSourceKind = "git_url"
 )
 
+const (
+	FeishuTargetPickerPathFieldLocalDirectory    = "local_directory"
+	FeishuTargetPickerPathFieldGitParentDir      = "git_parent_dir"
+	FeishuTargetPickerGitRepoURLFieldName        = "target_picker_git_repo_url"
+	FeishuTargetPickerGitDirectoryNameFieldName  = "target_picker_git_directory_name"
+)
+
+type FeishuTargetPickerMessageLevel string
+
+const (
+	FeishuTargetPickerMessageInfo    FeishuTargetPickerMessageLevel = "info"
+	FeishuTargetPickerMessageWarning FeishuTargetPickerMessageLevel = "warning"
+	FeishuTargetPickerMessageDanger  FeishuTargetPickerMessageLevel = "danger"
+)
+
 // FeishuTargetPickerView is the UI-owned read model for the unified
 // workspace/session target picker card.
 type FeishuTargetPickerView struct {
@@ -64,6 +79,12 @@ type FeishuTargetPickerView struct {
 	AddModeSummary         string
 	AddModeDetail          string
 	SourceUnavailableHint  string
+	LocalDirectoryPath     string
+	GitParentDir           string
+	GitRepoURL             string
+	GitDirectoryName       string
+	GitFinalPath           string
+	SourceMessages         []FeishuTargetPickerMessage
 }
 
 type FeishuTargetPickerModeOption struct {
@@ -93,6 +114,11 @@ type FeishuTargetPickerSourceOption struct {
 	MetaText          string
 	Available         bool
 	UnavailableReason string
+}
+
+type FeishuTargetPickerMessage struct {
+	Level FeishuTargetPickerMessageLevel
+	Text  string
 }
 
 type TargetPickerResult struct {

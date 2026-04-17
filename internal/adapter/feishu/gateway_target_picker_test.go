@@ -138,3 +138,82 @@ func TestParseCardActionTriggerEventBuildsTargetPickerConfirmAction(t *testing.T
 		t.Fatalf("unexpected target picker confirm payload: %#v", action)
 	}
 }
+
+func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-open-path", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":         cardActionKindTargetPickerOpenPathPicker,
+					"picker_id":    "picker-1",
+					"target_value": control.FeishuTargetPickerPathFieldGitParentDir,
+				},
+				FormValue: map[string]interface{}{
+					control.FeishuTargetPickerGitRepoURLFieldName:       "https://github.com/kxn/codex-remote-feishu.git",
+					control.FeishuTargetPickerGitDirectoryNameFieldName: "",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-target-picker-open-path",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected target picker open-path action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerOpenPathPicker || action.PickerID != "picker-1" || action.TargetPickerValue != control.FeishuTargetPickerPathFieldGitParentDir {
+		t.Fatalf("unexpected target picker open-path action: %#v", action)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerGitRepoURLFieldName]; len(got) != 1 || got[0] != "https://github.com/kxn/codex-remote-feishu.git" {
+		t.Fatalf("unexpected git repo draft answers: %#v", action.RequestAnswers)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerGitDirectoryNameFieldName]; len(got) != 1 || got[0] != "" {
+		t.Fatalf("expected empty directory name to be preserved, got %#v", action.RequestAnswers)
+	}
+}
+
+func TestParseCardActionTriggerEventBuildsTargetPickerConfirmActionWithGitDraftAnswers(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-confirm-git", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":      cardActionKindTargetPickerConfirm,
+					"picker_id": "picker-1",
+				},
+				FormValue: map[string]interface{}{
+					control.FeishuTargetPickerGitRepoURLFieldName:       "https://github.com/kxn/codex-remote-feishu.git",
+					control.FeishuTargetPickerGitDirectoryNameFieldName: "crf",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-target-picker-confirm-git",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected target picker confirm action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerConfirm || action.PickerID != "picker-1" {
+		t.Fatalf("unexpected target picker confirm: %#v", action)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerGitRepoURLFieldName]; len(got) != 1 || got[0] != "https://github.com/kxn/codex-remote-feishu.git" {
+		t.Fatalf("unexpected git repo draft answers: %#v", action.RequestAnswers)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerGitDirectoryNameFieldName]; len(got) != 1 || got[0] != "crf" {
+		t.Fatalf("unexpected git directory draft answers: %#v", action.RequestAnswers)
+	}
+}

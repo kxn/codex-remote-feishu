@@ -505,6 +505,24 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			TargetPickerValue: targetValue,
 			Inbound:           meta,
 		}, true
+	case cardActionKindTargetPickerOpenPathPicker:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		targetValue := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
+		if pickerID == "" || targetValue == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:              control.ActionTargetPickerOpenPathPicker,
+			GatewayID:         g.config.GatewayID,
+			SurfaceSessionID:  surfaceSessionID,
+			ChatID:            chatID,
+			ActorUserID:       operatorID,
+			MessageID:         messageID,
+			PickerID:          pickerID,
+			TargetPickerValue: targetValue,
+			RequestAnswers:    targetPickerDraftAnswersFromFormValue(event.Event.Action.FormValue),
+			Inbound:           meta,
+		}, true
 	case cardActionKindTargetPickerConfirm:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		if pickerID == "" {
@@ -520,6 +538,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			PickerID:          pickerID,
 			WorkspaceKey:      selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerWorkspaceFieldName),
 			TargetPickerValue: selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSessionFieldName),
+			RequestAnswers:    targetPickerDraftAnswersFromFormValue(event.Event.Action.FormValue),
 			Inbound:           meta,
 		}, true
 	case cardActionKindHistoryPage:
@@ -673,6 +692,26 @@ func requestAnswersFromFormValue(values map[string]interface{}) map[string][]str
 			continue
 		}
 		answers[name] = []string{text}
+	}
+	if len(answers) == 0 {
+		return nil
+	}
+	return answers
+}
+
+func targetPickerDraftAnswersFromFormValue(values map[string]interface{}) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	answers := map[string][]string{}
+	for _, fieldName := range []string{
+		control.FeishuTargetPickerGitRepoURLFieldName,
+		control.FeishuTargetPickerGitDirectoryNameFieldName,
+	} {
+		if _, ok := values[fieldName]; !ok {
+			continue
+		}
+		answers[fieldName] = []string{strings.TrimSpace(formStringValue(values, fieldName))}
 	}
 	if len(answers) == 0 {
 		return nil

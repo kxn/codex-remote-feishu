@@ -65,6 +65,7 @@ const (
 	ActionTargetPickerSelectSource    ActionKind = "surface.target_picker.select_source"
 	ActionTargetPickerSelectWorkspace ActionKind = "surface.target_picker.select_workspace"
 	ActionTargetPickerSelectSession   ActionKind = "surface.target_picker.select_session"
+	ActionTargetPickerOpenPathPicker  ActionKind = "surface.target_picker.open_path_picker"
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
 	ActionHistoryPage                 ActionKind = "surface.history.page"
 	ActionHistoryDetail               ActionKind = "surface.history.detail"

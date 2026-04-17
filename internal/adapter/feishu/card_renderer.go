@@ -190,7 +190,15 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 }
 
 func cardFormSubmitButtonElement(label string, value map[string]any) map[string]any {
-	button := cardCallbackButtonElement(label, "primary", value, false, "")
+	button := cardFormActionButtonElement(label, "primary", value, false, "")
+	if len(button) == 0 {
+		return nil
+	}
+	return button
+}
+
+func cardFormActionButtonElement(label, buttonType string, value map[string]any, disabled bool, width string) map[string]any {
+	button := cardCallbackButtonElement(label, buttonType, value, disabled, width)
 	if len(button) == 0 {
 		return nil
 	}

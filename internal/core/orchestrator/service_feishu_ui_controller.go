@@ -77,13 +77,15 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 	case control.FeishuUIIntentPathPickerCancel:
 		return s.handlePathPickerCancel(surface, intent.PickerID, intent.ActorUserID)
 	case control.FeishuUIIntentTargetPickerSelectMode:
-		return s.handleTargetPickerSelectMode(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID)
+		return s.handleTargetPickerSelectMode(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerSelectSource:
-		return s.handleTargetPickerSelectSource(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID)
+		return s.handleTargetPickerSelectSource(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerSelectWorkspace:
-		return s.handleTargetPickerSelectWorkspace(surface, intent.PickerID, intent.WorkspaceKey, intent.ActorUserID)
+		return s.handleTargetPickerSelectWorkspace(surface, intent.PickerID, intent.WorkspaceKey, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerSelectSession:
-		return s.handleTargetPickerSelectSession(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID)
+		return s.handleTargetPickerSelectSession(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
+	case control.FeishuUIIntentTargetPickerOpenPathPicker:
+		return s.handleTargetPickerOpenPathPicker(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentHistoryPage:
 		return s.handleThreadHistoryPage(surface, intent.PickerID, intent.Page, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentHistoryDetail:

@@ -35,6 +35,13 @@ type ImportResult struct {
 	DirectoryName string
 }
 
+type PreviewResult struct {
+	ParentDir          string
+	DirectoryName      string
+	DestinationPath    string
+	ParentDirHasEntries bool
+}
+
 type ImportError struct {
 	Code            ImportErrorCode
 	Message         string
@@ -64,6 +71,56 @@ func (e *ImportError) Unwrap() error {
 		return nil
 	}
 	return e.Err
+}
+
+func Preview(req ImportRequest) (PreviewResult, error) {
+	repoURL := strings.TrimSpace(req.RepoURL)
+	if repoURL == "" {
+		return PreviewResult{}, &ImportError{Code: ImportErrorInvalidURL, Message: "git repo url is required"}
+	}
+	parentDir, err := resolveParentDir(req.ParentDir)
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	directoryName, err := resolveDirectoryName(repoURL, req.DirectoryName)
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	destinationPath := filepath.Join(parentDir, directoryName)
+	if _, statErr := os.Stat(destinationPath); statErr == nil {
+		return PreviewResult{}, &ImportError{
+			Code:            ImportErrorDestinationExists,
+			Message:         "destination already exists",
+			RepoURL:         repoURL,
+			ParentDir:       parentDir,
+			DestinationPath: destinationPath,
+		}
+	} else if !os.IsNotExist(statErr) {
+		return PreviewResult{}, &ImportError{
+			Code:            ImportErrorCloneFailed,
+			Message:         "failed to inspect destination",
+			RepoURL:         repoURL,
+			ParentDir:       parentDir,
+			DestinationPath: destinationPath,
+			Err:             statErr,
+		}
+	}
+	dirEntries, readErr := os.ReadDir(parentDir)
+	if readErr != nil {
+		return PreviewResult{}, &ImportError{
+			Code:      ImportErrorCloneFailed,
+			Message:   "failed to inspect parent directory",
+			RepoURL:   repoURL,
+			ParentDir: parentDir,
+			Err:       readErr,
+		}
+	}
+	return PreviewResult{
+		ParentDir:           parentDir,
+		DirectoryName:       directoryName,
+		DestinationPath:     destinationPath,
+		ParentDirHasEntries: len(dirEntries) != 0,
+	}, nil
 }
 
 func Import(ctx context.Context, req ImportRequest) (ImportResult, error) {

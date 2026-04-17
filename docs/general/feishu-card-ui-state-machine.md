@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-04-16`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（顶部 `已有工作区` / `添加工作区` 模式按钮；已有工作区路径显示工作区下拉 + 会话下拉；添加工作区路径显示来源下拉，并可分流到本地目录 path picker 或 Git URL 本地参数表单）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、orchestrator 本地 Git 参数表单复用 `request_user_input` 卡片与 `request_revision` freshness、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 当前已从“单卡 + 网关超限截断”升级成 projector 层的“主 final card + overflow reply cards”交付，主卡保留 recent final-card anchor、footer 与 second-chance patch，overflow cards 继续 append-only；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
+> Updated: `2026-04-17`
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（顶部 `已有工作区` / `添加工作区` 模式按钮；已有工作区路径显示工作区下拉 + 会话下拉；添加工作区路径显示来源按钮，本地目录会 inline replace 到 path picker 子步骤，Git URL 则在主卡内渲染仓库地址/目录名表单并通过 `target_picker_open_path_picker` 选择落地父目录）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析，以及 target picker Git 内联表单草稿在 mode/source/path 子步骤之间的保留语义、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次 reply，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 当前已从“单卡 + 网关超限截断”升级成 projector 层的“主 final card + overflow reply cards”交付，主卡保留 recent final-card anchor、footer 与 second-chance patch，overflow cards 继续 append-only；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
 
 ## 1. 文档定位
 
@@ -90,13 +90,14 @@
 | `create_workspace` | `mixed` | 旧 normal `/list` 卡片残留的 transport 兼容入口；点击后仍会直接打开本地目录 path picker，但当前 unified target picker 主路径已经改成模式切换 + 来源选择 |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/use` / `/useall` target picker；vscode mode 下仍沿用 thread selection / scoped-all 导航 |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责用指定 workspace/source 重新打开 target picker；vscode / legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的模式按钮与下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route；切模式时卡片会在“已有工作区”和“添加工作区”两套布局间切换；切真实 workspace 时会显式清空当前会话选择 |
-| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话`、打开本地目录 path picker、或打开 Git 参数表单的产品语义仍由 orchestrator 决定，并保持 append-only |
+| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | unified target picker 的模式按钮、来源按钮与工作区/会话下拉回调；命中当前 active picker 时直接原地替换当前卡，不直接改 route；切模式时卡片会在“已有工作区”和“添加工作区”两套布局间切换；切真实 workspace 时会显式清空当前会话选择 |
+| `target_picker_open_path_picker` | `feishu-ui-owned` | unified target picker 的子步骤导航回调；当前用于从主卡打开“本地目录”或“Git 落地父目录”的 path picker，并在打开前保留 Git 内联表单草稿；命中当前 active picker 时直接原地替换当前卡 |
+| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch / `新建会话`、按已选本地目录执行接入、或按主卡内联 Git 表单 + 已选父目录执行导入的产品语义仍由 orchestrator 决定，并保持 append-only |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回与文件选择；命中当前 active picker 时直接原地替换当前卡。`/sendfile` 的文件模式 projector 当前会渲染成紧凑双 `select_static`：目录下拉触发 `enter`，文件下拉触发 `select`；若当前不在根目录，目录下拉会把 `..` 固定放在第一项作为返回上一级入口；真实目录项里普通目录排在前，`.` 开头目录排在后 |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；真正确认后做什么、取消后回什么卡由 picker consumer 决定 |
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把同一张卡同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回这张 history 卡 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；真正应用参数后仍进入产品状态变更，因此 apply 继续保持 append-only |
-| `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、本地 Git 参数表单的局部草稿、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
+| `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
 | `/new` | `product-owned` | 是否进入 `new_thread_ready`、何时消耗第一条消息、request gate 是否阻断都属于 core 状态机 |
@@ -160,10 +161,11 @@
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | normal mode 下重新打开 `/useall` target picker；旧分页字段继续保留 transport 兼容 |
 | `show_workspace_threads` | `workspace_key`、`page`、`return_page` | normal mode 下以指定 workspace 重新打开 target picker；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
 | `target_picker_select_mode` | `picker_id`、`target_value` | unified target picker 的模式按钮回调；gateway 直接从 payload 里的 `target_value` 取当前模式 |
-| `target_picker_select_source` | `picker_id`、`field_name` | unified target picker 的来源下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 `local_directory` 或 `git_url` |
+| `target_picker_select_source` | `picker_id`、`target_value` | unified target picker 的来源按钮回调；当前 projector 直接在 payload 里写 `local_directory` / `git_url`，gateway 仍兼容从 `form_value[field_name]` / `option` / `options` 回退取值 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | unified target picker 的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
 | `target_picker_select_session` | `picker_id`、`field_name` | unified target picker 的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread 或 `new_thread` |
-| `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session` | unified target picker 的确认按钮；`已有工作区` 模式下把当前表单值送到产品层执行 attach / switch / `新建会话`；`添加工作区 / 本地目录` 下 append 目录 path picker；`添加工作区 / Git URL` 下 append 本地 Git 参数表单 |
+| `target_picker_open_path_picker` | `picker_id`、`target_value`、`request_answers` | unified target picker 的子步骤导航；当前 `target_value` 表示 `local_directory` 或 `git_parent_dir`，`request_answers` 用来把 Git 主卡里的 `repo_url` / `directory_name` 草稿一起带回服务端 |
+| `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session`、`request_answers` | unified target picker 的确认按钮；`已有工作区` 模式下把当前表单值送到产品层执行 attach / switch / `新建会话`；`添加工作区 / 本地目录` 下按已回填到主卡的目录执行接入；`添加工作区 / Git URL` 下按主卡 Git 表单 + 已选父目录执行导入 |
 | `history_page` | `picker_id`、`page` | `/history` 列表页翻页；命中当前 active history 时同步替换当前卡为 loading，然后异步重查当前 thread history |
 | `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；gateway 同样兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
@@ -172,9 +174,9 @@
 | `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
 | `path_picker_confirm` | `picker_id` | 用当前 active picker 的已校验结果触发 consumer handoff |
 | `path_picker_cancel` | `picker_id` | 结束当前 active picker，并把取消结果交给 consumer 或默认 notice |
-| `request_respond` | `request_id`、`request_type`、`request_option_id`、`request_answers`、`request_revision` | 响应 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation`。通用 approval 现在会保留归一化后的 `requestKind` 与 `availableDecisions`，包括 `cancel`；顶层 `tool/requestUserInput`、`item/tool/requestUserInput` 与本地 Git 参数表单共用 `request_user_input` 提交流程；`permissions_request_approval` 通过按钮直接携带 scope 语义；`mcp_server_elicitation` 在 url 模式下直接承载 continue/decline/cancel，在 form 模式下也可用局部 `request_answers` 暂存字段后再显式提交 |
+| `request_respond` | `request_id`、`request_type`、`request_option_id`、`request_answers`、`request_revision` | 响应 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation`。通用 approval 现在会保留归一化后的 `requestKind` 与 `availableDecisions`，包括 `cancel`；顶层 `tool/requestUserInput` 与 `item/tool/requestUserInput` 继续共用 `request_user_input` 提交流程；`permissions_request_approval` 通过按钮直接携带 scope 语义；`mcp_server_elicitation` 在 url 模式下直接承载 continue/decline/cancel，在 form 模式下也可用局部 `request_answers` 暂存字段后再显式提交 |
 | `submit_command_form` | `command_text` 或 `command`、`field_name` | 从表单里取参数后重新走文本命令解析 |
-| `submit_request_form` | `request_id`、`request_type`、`request_revision`、`field_name` | 从表单里提取 `request_answers` 后回到 request 响应路径；当前用于顶层/`item` 两种 `request_user_input`、本地 Git 参数表单以及 form 模式 `mcp_server_elicitation` |
+| `submit_request_form` | `request_id`、`request_type`、`request_revision`、`field_name` | 从表单里提取 `request_answers` 后回到 request 响应路径；当前用于顶层/`item` 两种 `request_user_input` 以及 form 模式 `mcp_server_elicitation` |
 
 ### 4.3 当前表单提交规则
 
@@ -188,7 +190,7 @@
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）
-  - `request_user_input` 里的 optional 字段当前不会阻止最终提交；本地 Git 参数表单因此可以把 `branch/tag` 与 `directory_name` 设计成可选项
+  - `request_user_input` 里的 optional 字段当前不会阻止最终提交
   - 表单提交按钮统一带 `request_option_id=submit`
     - `request_user_input` 的文案是“提交答案”
     - `mcp_server_elicitation` 的文案是“提交并继续”
@@ -206,6 +208,10 @@
   - gateway 当前按 `action.option -> action.options[0] -> form_value[field_name]` 的顺序提取被选中的目录/文件条目
   - 这样 projector 可以把 `/sendfile` 文件模式 path picker 收敛成紧凑双下拉，而不必继续为每个条目单独渲染按钮
   - 文件模式目录下拉当前会在 `CanGoUp=true` 时额外插入一个值为 `..` 的首项；这条值仍然走 `path_picker_enter`，最终由 orchestrator 复用现有 root-boundary 校验解析到父目录
+- `target_picker_open_path_picker` / `target_picker_confirm`
+  - `Git URL` 分支当前会把 `form_value` 里的 `target_picker_git_repo_url` 与 `target_picker_git_directory_name` 解析成 `request_answers`
+  - `open_path_picker` 与 `confirm` 都会携带这份草稿，服务端据此回填 active target picker record
+  - 这样即使用户在 Git 主卡和 path picker 子步骤之间来回切换，仓库地址与目录名草稿也不会丢失，而且不会进入 `PendingRequest`
 
 `request_user_input` 卡片当前额外的可视语义：
 
@@ -215,7 +221,6 @@
 - 对于非私密题，已暂存答案会显示为 `当前答案：...`
 - 对 direct-options 题，若已有已答值，已选项保持 `primary`，其他选项降为 `default`，用于降低误触成本
 - 顶层 `tool/requestUserInput` 与 `item/tool/requestUserInput` 当前都复用这一套卡片、草稿暂存与提交/确认状态机
-- orchestrator 本地 Git 参数表单也复用这一套卡片、草稿暂存与提交/确认状态机；额外的 `取消` 按钮通过 request card 的附加 action row 渲染
 - 真正发起 request 提交后，pending request 不会立刻从 orchestrator 状态里删除；会先记录 `PendingDispatchCommandID`
   - 成功路径仍由上游 `request_resolved` 事件最终清掉 pending request
   - 若 daemon dispatch 失败或 wrapper 显式 reject，会清掉 pending-dispatch 标记、递增 `request_revision`、刷新一张新 request 卡并附带失败 notice
@@ -324,6 +329,7 @@ MCP request 卡片当前新增的可视语义：
   - normal `/list` 的工作区切换
   - normal `/use` / `/useall` 的工作区切换
   - normal `/list` / `/use` / `/useall` 的会话切换
+  - normal `/list` / `/use` / `/useall` 的 `target_picker_open_path_picker` 子步骤切换
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 - unified target picker 当前额外有一条明确的 UI 语义：
@@ -334,8 +340,9 @@ MCP request 卡片当前新增的可视语义：
   - 如果只是当前 workspace 已选中，但 surface 处于 detached / unbound，session 会保持空值，等待用户显式选择
   - 但工作区一旦变化，session 下拉不会再 silently fallback 到新的真实 workspace 默认会话
   - 若切到真实 workspace，session 会被主动清空，confirm 按钮随之禁用，直到用户重新选定会话
-  - 若切到 `添加工作区`，卡片会改成来源选择布局；`本地目录` 的 confirm 文案是 `选择目录`，`Git URL` 的 confirm 文案是 `填写 Git URL`
-  - 若当前机器缺少 `git`，`Git URL` 仍显示在来源下拉里，但 confirm 会禁用，并额外显示不可用说明
+  - 若切到 `添加工作区`，卡片会改成来源按钮布局：`本地目录` 主卡展示路径字段 + `选择目录` 按钮 + `接入并继续` 主按钮；`Git URL` 主卡展示父目录字段、仓库地址/目录名表单、`选择目录` 按钮与 `克隆并继续` 主按钮
+  - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker；path picker confirm/cancel 后，会再 inline restore 回原 target picker 主卡
+  - 若当前机器缺少 `git`，`Git URL` 仍显示在来源按钮里，但 `克隆并继续` 会禁用，并额外显示不可用说明
 
 ### 5.3 当前明确保持 append-only 的动作
 

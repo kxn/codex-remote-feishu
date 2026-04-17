@@ -30,6 +30,7 @@ const (
 	FeishuUIIntentTargetPickerSelectSource    FeishuUIIntentKind = "target_picker_select_source"
 	FeishuUIIntentTargetPickerSelectWorkspace FeishuUIIntentKind = "target_picker_select_workspace"
 	FeishuUIIntentTargetPickerSelectSession   FeishuUIIntentKind = "target_picker_select_session"
+	FeishuUIIntentTargetPickerOpenPathPicker  FeishuUIIntentKind = "target_picker_open_path_picker"
 	FeishuUIIntentHistoryPage                 FeishuUIIntentKind = "history_page"
 	FeishuUIIntentHistoryDetail               FeishuUIIntentKind = "history_detail"
 )
@@ -50,6 +51,7 @@ type FeishuUIIntent struct {
 	TurnID          string
 	SourceMessageID string
 	Inline          bool
+	RequestAnswers  map[string][]string
 }
 
 func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
@@ -111,13 +113,15 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 	case ActionPathPickerCancel:
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerCancel, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionTargetPickerSelectMode:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectMode, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectMode, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerSelectSource:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectSource, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectSource, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerSelectWorkspace:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectWorkspace, PickerID: action.PickerID, WorkspaceKey: action.WorkspaceKey, ActorUserID: action.ActorUserID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectWorkspace, PickerID: action.PickerID, WorkspaceKey: action.WorkspaceKey, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerSelectSession:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectSession, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID}, true
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectSession, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
+	case ActionTargetPickerOpenPathPicker:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerOpenPathPicker, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionHistoryPage:
 		return &FeishuUIIntent{Kind: FeishuUIIntentHistoryPage, PickerID: action.PickerID, Page: action.Page, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionHistoryDetail:

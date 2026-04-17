@@ -1,13 +1,14 @@
 package feishu
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, 12)
+	elements := make([]map[string]any, 0, 18)
 	showWorkspaceSelect := view.ShowWorkspaceSelect || (!view.ShowSourceSelect && len(view.WorkspaceOptions) != 0)
 	showSessionSelect := view.ShowSessionSelect || (!view.ShowSourceSelect && len(view.SessionOptions) != 0)
 	showSourceSelect := view.ShowSourceSelect
@@ -67,18 +68,17 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 			"tag":     "markdown",
 			"content": "**工作区来源**",
 		})
-		elements = append(elements, pathPickerSelectStaticElement(
-			cardTargetPickerSourceFieldName,
-			firstNonEmpty(strings.TrimSpace(view.SourcePlaceholder), "选择工作区来源"),
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectSource, view.PickerID), daemonLifecycleID),
-			targetPickerSourceOptions(view.SourceOptions),
-			string(view.SelectedSource),
-		))
-		if hint := strings.TrimSpace(view.SourceUnavailableHint); hint != "" {
-			elements = append(elements, map[string]any{
-				"tag":     "markdown",
-				"content": renderSystemInlineTags(hint),
-			})
+		if group := targetPickerSourceButtons(view, daemonLifecycleID); len(group) != 0 {
+			elements = append(elements, group)
+		}
+		switch view.SelectedSource {
+		case control.FeishuTargetPickerSourceLocalDirectory:
+			elements = append(elements, targetPickerLocalDirectoryElements(view, daemonLifecycleID)...)
+		case control.FeishuTargetPickerSourceGitURL:
+			elements = append(elements, targetPickerGitURLElements(view, daemonLifecycleID)...)
+		}
+		if messages := targetPickerMessageElements(view.SourceMessages); len(messages) != 0 {
+			elements = append(elements, messages...)
 		}
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
@@ -86,6 +86,9 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 			"tag":     "markdown",
 			"content": renderSystemInlineTags(hint),
 		})
+	}
+	if targetPickerUsesInlineGitForm(view) {
+		return elements
 	}
 	elements = append(elements, cardButtonGroupElement([]map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID), !view.CanConfirm, "fill"),
@@ -137,6 +140,176 @@ func targetPickerModeButtons(view control.FeishuTargetPickerView, daemonLifecycl
 	return cardButtonGroupElement(buttons)
 }
 
+func targetPickerSourceButtons(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
+	buttons := make([]map[string]any, 0, len(view.SourceOptions))
+	for _, option := range view.SourceOptions {
+		label := strings.TrimSpace(option.Label)
+		value := strings.TrimSpace(string(option.Value))
+		if label == "" || value == "" {
+			continue
+		}
+		buttonType := "default"
+		if option.Value == view.SelectedSource {
+			buttonType = "primary"
+		}
+		buttons = append(buttons, cardCallbackButtonElement(
+			label,
+			buttonType,
+			stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectSource, view.PickerID, value), daemonLifecycleID),
+			false,
+			"fill",
+		))
+	}
+	return cardButtonGroupElement(buttons)
+}
+
+func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	elements := []map[string]any{
+		{
+			"tag":     "markdown",
+			"content": targetPickerFieldMarkdown("目录路径", strings.TrimSpace(view.LocalDirectoryPath), "未选择"),
+		},
+		{
+			"tag":     "markdown",
+			"content": "选择本机上已有的目录，并将它接入为工作区。",
+		},
+	}
+	elements = append(elements, cardButtonGroupElement([]map[string]any{
+		cardCallbackButtonElement(
+			"选择目录",
+			"default",
+			stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldLocalDirectory), daemonLifecycleID),
+			false,
+			"",
+		),
+	}))
+	return elements
+}
+
+func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	elements := []map[string]any{
+		{
+			"tag":     "markdown",
+			"content": targetPickerFieldMarkdown("落地目录", strings.TrimSpace(view.GitParentDir), "未选择"),
+		},
+		{
+			"tag":     "markdown",
+			"content": "选择仓库要克隆到哪个本地父目录。仓库会在这里创建一个新的子目录。",
+		},
+	}
+	if form := targetPickerGitURLFormElement(view, daemonLifecycleID); len(form) != 0 {
+		elements = append(elements, form)
+	}
+	elements = append(elements, map[string]any{
+		"tag":     "markdown",
+		"content": targetPickerFieldMarkdown("最终路径", strings.TrimSpace(view.GitFinalPath), "待补充"),
+	})
+	return elements
+}
+
+func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
+	elements := make([]map[string]any, 0, 4)
+	elements = append(elements, targetPickerInputElement(
+		control.FeishuTargetPickerGitRepoURLFieldName,
+		"Git 仓库地址",
+		"支持 HTTPS 或 SSH，例如 https://github.com/org/repo.git",
+		strings.TrimSpace(view.GitRepoURL),
+	))
+	elements = append(elements, targetPickerInputElement(
+		control.FeishuTargetPickerGitDirectoryNameFieldName,
+		"本地目录名（可选）",
+		"不填写时，将根据仓库地址自动生成",
+		strings.TrimSpace(view.GitDirectoryName),
+	))
+	actionRow := cardButtonGroupElement([]map[string]any{
+		cardFormActionButtonElement(
+			"选择目录",
+			"default",
+			stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldGitParentDir), daemonLifecycleID),
+			false,
+			"",
+		),
+		cardFormActionButtonElement(
+			strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "克隆并继续")),
+			"primary",
+			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID),
+			!view.CanConfirm,
+			"",
+		),
+	})
+	if len(actionRow) != 0 {
+		elements = append(elements, actionRow)
+	}
+	return map[string]any{
+		"tag":      "form",
+		"name":     "target_picker_git_form_" + strings.TrimSpace(view.PickerID),
+		"elements": elements,
+	}
+}
+
+func targetPickerInputElement(name, label, placeholder, value string) map[string]any {
+	input := map[string]any{
+		"tag":  "input",
+		"name": strings.TrimSpace(name),
+		"label": map[string]any{
+			"tag":     "plain_text",
+			"content": strings.TrimSpace(label),
+		},
+		"label_position": "left",
+	}
+	if strings.TrimSpace(placeholder) != "" {
+		input["placeholder"] = map[string]any{
+			"tag":     "plain_text",
+			"content": strings.TrimSpace(placeholder),
+		}
+	}
+	if strings.TrimSpace(value) != "" {
+		input["default_value"] = strings.TrimSpace(value)
+	}
+	return input
+}
+
+func targetPickerUsesInlineGitForm(view control.FeishuTargetPickerView) bool {
+	return view.SelectedMode == control.FeishuTargetPickerModeAddWorkspace && view.SelectedSource == control.FeishuTargetPickerSourceGitURL
+}
+
+func targetPickerFieldMarkdown(label, value, placeholder string) string {
+	if strings.TrimSpace(value) == "" {
+		value = strings.TrimSpace(firstNonEmpty(placeholder, "未填写"))
+	}
+	return fmt.Sprintf("**%s**\n%s", strings.TrimSpace(label), formatNeutralTextTag(value))
+}
+
+func targetPickerMessageElements(messages []control.FeishuTargetPickerMessage) []map[string]any {
+	if len(messages) == 0 {
+		return nil
+	}
+	elements := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		content := targetPickerMessageMarkdown(message)
+		if content == "" {
+			continue
+		}
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": content,
+		})
+	}
+	return elements
+}
+
+func targetPickerMessageMarkdown(message control.FeishuTargetPickerMessage) string {
+	text := strings.TrimSpace(message.Text)
+	if text == "" {
+		return ""
+	}
+	rendered := renderSystemInlineTags(text)
+	if message.Level != control.FeishuTargetPickerMessageDanger {
+		return rendered
+	}
+	return "<font color='red'>" + rendered + "</font>"
+}
+
 func targetPickerWorkspaceOptions(options []control.FeishuTargetPickerWorkspaceOption) []map[string]any {
 	result := make([]map[string]any, 0, len(options))
 	for _, option := range options {
@@ -146,25 +319,6 @@ func targetPickerWorkspaceOptions(options []control.FeishuTargetPickerWorkspaceO
 		}
 		result = append(result, map[string]any{
 			"text":  cardPlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
-			"value": value,
-		})
-	}
-	return result
-}
-
-func targetPickerSourceOptions(options []control.FeishuTargetPickerSourceOption) []map[string]any {
-	result := make([]map[string]any, 0, len(options))
-	for _, option := range options {
-		value := strings.TrimSpace(string(option.Value))
-		if value == "" {
-			continue
-		}
-		meta := strings.TrimSpace(option.MetaText)
-		if !option.Available && strings.TrimSpace(option.UnavailableReason) != "" {
-			meta = firstNonEmpty(meta, strings.TrimSpace(option.UnavailableReason))
-		}
-		result = append(result, map[string]any{
-			"text":  cardPlainText(targetPickerOptionLabel(option.Label, meta)),
 			"value": value,
 		})
 	}

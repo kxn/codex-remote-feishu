@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestFeishuUIIntentFromAction(t *testing.T) {
 	tests := []struct {
@@ -77,7 +80,7 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			if !ok || got == nil {
 				t.Fatalf("expected intent %#v, got nil", tt.want)
 			}
-			if *got != *tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("intent = %#v, want %#v", got, tt.want)
 			}
 		})

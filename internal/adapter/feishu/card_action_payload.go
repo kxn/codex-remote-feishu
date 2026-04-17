@@ -67,6 +67,7 @@ const (
 	cardActionKindTargetPickerSelectSource    = "target_picker_select_source"
 	cardActionKindTargetPickerSelectWorkspace = "target_picker_select_workspace"
 	cardActionKindTargetPickerSelectSession   = "target_picker_select_session"
+	cardActionKindTargetPickerOpenPathPicker  = "target_picker_open_path_picker"
 	cardActionKindTargetPickerConfirm         = "target_picker_confirm"
 	cardActionKindHistoryPage                 = "history_page"
 	cardActionKindHistoryDetail               = "history_detail"

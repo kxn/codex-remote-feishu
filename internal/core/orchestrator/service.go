@@ -223,7 +223,7 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 	}
 	svc.RegisterPathPickerConsumer(workspaceCreatePathPickerConsumerKind, workspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(targetPickerWorkspaceCreatePathPickerConsumerKind, targetPickerWorkspaceCreatePathPickerConsumer{})
-	svc.RegisterPathPickerConsumer(targetPickerGitImportPathPickerConsumerKind, targetPickerGitImportPathPickerConsumer{})
+	svc.RegisterPathPickerConsumer(targetPickerAddWorkspacePathPickerConsumerKind, targetPickerAddWorkspacePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(sendFilePathPickerConsumerKind, sendFilePathPickerConsumer{})
 	return svc
 }
@@ -399,7 +399,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionCreateWorkspace:
 		events = s.openCreateWorkspacePicker(surface)
 	case control.ActionTargetPickerConfirm:
-		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue)
+		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue, action.RequestAnswers)
 	case control.ActionShowCommandHelp:
 		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", s.buildCommandHelpCatalog(surface))}
 	case control.ActionShowHistory:

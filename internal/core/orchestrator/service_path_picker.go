@@ -36,6 +36,10 @@ func (s *Service) RegisterPathPickerConsumer(kind string, consumer PathPickerCon
 }
 
 func (s *Service) openPathPicker(surface *state.SurfaceConsoleRecord, ownerUserID string, req control.PathPickerRequest) []control.UIEvent {
+	return s.openPathPickerWithInline(surface, ownerUserID, req, false)
+}
+
+func (s *Service) openPathPickerWithInline(surface *state.SurfaceConsoleRecord, ownerUserID string, req control.PathPickerRequest, inline bool) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
@@ -49,7 +53,7 @@ func (s *Service) openPathPicker(surface *state.SurfaceConsoleRecord, ownerUserI
 		s.clearSurfacePathPicker(surface)
 		return notice(surface, "path_picker_invalid", err.Error())
 	}
-	return []control.UIEvent{s.pathPickerViewEvent(surface, view, false)}
+	return []control.UIEvent{s.pathPickerViewEvent(surface, view, inline)}
 }
 
 func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, ownerUserID string, req control.PathPickerRequest) (*activePathPickerRecord, error) {
