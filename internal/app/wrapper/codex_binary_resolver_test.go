@@ -103,6 +103,48 @@ func TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback(t *testing.T)
 	}
 }
 
+func TestResolveNormalCodexBinaryFallsBackWhenConfiguredPATHCodexMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
+
+	vscodeRoot := filepath.Join(home, ".vscode-server", "extensions")
+	entrypoint := filepath.Join(vscodeRoot, "openai.chatgpt-2", "bin", "linux-x86_64", "codex")
+	realPath := entrypoint + ".real"
+	writeResolverExecutable(t, entrypoint)
+	writeResolverExecutable(t, realPath)
+
+	configPath := writeResolverConfig(t, home, "codex")
+
+	got, err := resolveNormalCodexBinary(configPath, "codex")
+	if err != nil {
+		t.Fatalf("resolveNormalCodexBinary: %v", err)
+	}
+	if got != realPath {
+		t.Fatalf("resolved codex binary = %q, want %q", got, realPath)
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if loaded.Config.Wrapper.CodexRealBinary != "codex" {
+		t.Fatalf("config codex real binary = %q, want codex", loaded.Config.Wrapper.CodexRealBinary)
+	}
+}
+
+func TestResolveNormalCodexBinaryErrorsWhenConfiguredPATHCodexMissingWithoutFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
+
+	configPath := writeResolverConfig(t, home, "codex")
+
+	if _, err := resolveNormalCodexBinary(configPath, "codex"); err == nil {
+		t.Fatal("expected resolveNormalCodexBinary to fail")
+	}
+}
+
 func TestResolveNormalCodexBinarySkipsHealingForExplicitOverride(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

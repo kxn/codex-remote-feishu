@@ -22,6 +22,16 @@ func resolveNormalCodexBinary(configPath, configured string) (string, error) {
 	if strings.TrimSpace(os.Getenv("CODEX_REAL_BINARY")) != "" {
 		return configured, nil
 	}
+	if looksLikePATHCodexCommand(configured) {
+		if _, err := exec.LookPath(configured); err == nil {
+			return configured, nil
+		}
+		if fallback := firstUsableVSCodeBundleCodex(configured); fallback != "" {
+			log.Printf("wrapper: PATH codex binary %q is unavailable; temporarily using vscode bundle codex %q", configured, fallback)
+			return fallback, nil
+		}
+		return "", fmt.Errorf("configured codex binary %q is not available in PATH and no usable vscode bundle codex is available", configured)
+	}
 	if !looksLikeVSCodeBundleCodexPath(configured) {
 		return configured, nil
 	}
@@ -39,6 +49,15 @@ func resolveNormalCodexBinary(configPath, configured string) (string, error) {
 	}
 
 	return "", fmt.Errorf("shared normal codex binary points to vscode bundle path %q and no PATH codex or usable vscode bundle codex is available", configured)
+}
+
+func looksLikePATHCodexCommand(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "codex", "codex.exe":
+		return true
+	default:
+		return false
+	}
 }
 
 func persistNormalCodexBinary(configPath, target string) {
