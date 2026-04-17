@@ -33,11 +33,20 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 	if op.CardTitle != "工作中" {
 		t.Fatalf("expected generic processing title, got %#v", op)
 	}
-	if !strings.Contains(op.CardBody, "执行：") || !strings.Contains(op.CardBody, "npm test") || !strings.Contains(op.CardBody, "go test ./...") {
+	if !strings.Contains(op.CardBody, "执行：`npm test`") || !strings.Contains(op.CardBody, "执行：`go test ./...`") {
 		t.Fatalf("expected activity-prefixed command list body, got %#v", op)
 	}
 	if strings.Contains(op.CardBody, "bash -lc") {
 		t.Fatalf("expected command list body to strip shell wrapper, got %#v", op)
+	}
+	payload := renderOperationCard(op, op.ordinaryCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, ok := cardPayloadElementsSlice(body["elements"])
+	if !ok || len(elements) != 2 {
+		t.Fatalf("expected one markdown element per command row, got %#v", payload)
+	}
+	if elements[0]["content"] != "执行：`npm test`" || elements[1]["content"] != "执行：`go test ./...`" {
+		t.Fatalf("unexpected rendered command rows: %#v", elements)
 	}
 	if strings.Contains(op.CardBody, "状态") || strings.Contains(op.CardBody, "目录") {
 		t.Fatalf("expected command list body only, got %#v", op)
@@ -102,7 +111,7 @@ func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *te
 	}
 }
 
-func TestProjectExecCommandProgressDeletesEmptyTransientCard(t *testing.T) {
+func TestProjectExecCommandProgressDoesNotRetractEmptyTransientCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -115,8 +124,8 @@ func TestProjectExecCommandProgressDeletesEmptyTransientCard(t *testing.T) {
 			MessageID: "om-progress-1",
 		},
 	})
-	if len(ops) != 1 || ops[0].Kind != OperationDeleteMessage || ops[0].MessageID != "om-progress-1" {
-		t.Fatalf("expected empty transient progress card to delete existing message, got %#v", ops)
+	if len(ops) != 0 {
+		t.Fatalf("expected empty transient clear to leave the old card in place, got %#v", ops)
 	}
 }
 
@@ -151,7 +160,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• 已探索") || !strings.Contains(body, "  └ 读取 a.cpp、b.cpp") || !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
+	if !strings.Contains(body, "• 已探索") || !strings.Contains(body, "  └ 读取 a.cpp、b.cpp") || !strings.Contains(body, "执行：`go test ./...`") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {
@@ -195,6 +204,43 @@ func TestProjectExecCommandProgressInterleavesExplorationRowsAndEntriesByVisible
 	readBar := strings.Index(body, "读取 bar.txt")
 	if readFoo == -1 || entry == -1 || readBar == -1 || !(readFoo < entry && entry < readBar) {
 		t.Fatalf("expected exploration rows and entries to follow visible seq order, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressRendersEachLineAsSeparateMarkdownElement(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-2",
+			Entries: []control.ExecCommandProgressEntry{
+				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: `bash -lc "rg -n 'x' | sed -n '1,2p'"`, LastSeq: 1},
+				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: `bash -lc "rg --files -g '*.css' -g '*.scss'"`, LastSeq: 2},
+			},
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	payload := renderOperationCard(ops[0], ops[0].ordinaryCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, ok := cardPayloadElementsSlice(body["elements"])
+	if !ok || len(elements) != 2 {
+		t.Fatalf("expected one markdown element per progress line, got %#v", payload)
+	}
+	if elements[0]["content"] != "执行：`rg -n 'x' | sed -n '1,2p'`" {
+		t.Fatalf("unexpected first progress line: %#v", elements[0])
+	}
+	second, _ := elements[1]["content"].(string)
+	if !strings.HasPrefix(second, "执行：`rg --files -g '*.css' -g '") || !strings.HasSuffix(second, "...`") {
+		t.Fatalf("expected truncated command to stay isolated in its own markdown element, got %#v", elements[1])
+	}
+	if strings.Contains(second, "<text_tag") {
+		t.Fatalf("expected progress lines to avoid raw text_tag markup, got %#v", elements[1])
 	}
 }
 

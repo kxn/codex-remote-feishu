@@ -392,7 +392,8 @@ MCP request 卡片当前新增的可视语义：
 - 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次直接 append 到当前会话，不再 reply 到触发这轮 turn 的源消息
   - 若同一 turn 内继续收到新的可见过程项，则改用 `message.patch` 更新同一消息；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call` 与 `context_compaction` 累积到同一张“处理中”卡
-  - `reasoning_summary` 当前不会进入普通 timeline；verbose 下若能解析到稳定阶段标题，会只在卡片最底部临时显示一条本地化状态（例如 `思考中`、`规划中`）
+- `reasoning_summary` 当前不会进入普通 timeline；verbose 下若能解析到稳定阶段标题，会只在卡片最底部临时显示一条本地化状态（例如 `思考中`、`规划中`）
+- 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
   - 这条 reasoning 状态不是历史记录；一旦普通进度继续追加、assistant 正文开始输出、turn 完成/失败/中断，orchestrator 会先把它从旧卡清掉，再决定是否继续 patch 或终结这张卡
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
@@ -401,7 +402,7 @@ MCP request 卡片当前新增的可视语义：
   - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
   - 可见性当前统一收敛到 verbose：`exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 都只在 verbose 可见；normal 继续保留 plan 与 final reply，但不再显示这类共享进行中卡；若 compact 完成发生在无 attached surface 时，replay 到 non-verbose surface 也会保持静默
   - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
-  - 若清掉底部 reasoning 状态后整张卡已无任何可见行，而这张卡之前已经发出，projector 会发 `message.delete` 直接删掉旧卡，避免最终残留一张空的“工作中”
+- 若清掉底部 reasoning 状态后整张卡已无任何可见行，projector 不会再补 `message.delete` 撤回旧卡；这次清理只终止活跃 progress state，已经发出的旧卡保留为历史
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
 
 ## 6. 当前 freshness / old-card 语义
@@ -518,7 +519,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、底部瞬时 reasoning 状态的渲染位置，以及清空后 `message.delete` 的删卡语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)

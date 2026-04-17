@@ -17,18 +17,10 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 	progress := *event.ExecCommandProgress
 	lines := execCommandProgressLines(progress)
 	if len(lines) == 0 {
-		if strings.TrimSpace(progress.MessageID) == "" {
-			return nil
-		}
-		return []Operation{{
-			Kind:             OperationDeleteMessage,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			MessageID:        progress.MessageID,
-		}}
+		return nil
 	}
 	body := strings.Join(lines, "\n")
+	elements := execCommandProgressElements(lines)
 	operation := Operation{
 		GatewayID:        event.GatewayID,
 		SurfaceSessionID: event.SurfaceSessionID,
@@ -37,9 +29,10 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 		CardTitle:        "工作中",
 		CardBody:         body,
 		CardThemeKey:     cardThemeProgress,
+		CardElements:     elements,
 		CardUpdateMulti:  true,
 		cardEnvelope:     cardEnvelopeV2,
-		card:             rawCardDocument("工作中", body, cardThemeProgress, nil),
+		card:             rawCardDocument("工作中", "", cardThemeProgress, elements),
 	}
 	if strings.TrimSpace(progress.MessageID) != "" {
 		operation.Kind = OperationUpdateCard
@@ -56,6 +49,33 @@ func execCommandProgressBody(progress control.ExecCommandProgress) string {
 		return "（暂无可显示过程）"
 	}
 	return strings.Join(lines, "\n")
+}
+
+func execCommandProgressElements(lines []string) []map[string]any {
+	elements := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		content := execCommandProgressMarkdownLine(line)
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": content,
+		})
+	}
+	return elements
+}
+
+func execCommandProgressMarkdownLine(line string) string {
+	line = strings.TrimRight(line, " ")
+	switch {
+	case strings.HasPrefix(line, "  └ "):
+		return "└ " + strings.TrimSpace(strings.TrimPrefix(line, "  └ "))
+	case strings.HasPrefix(line, "    "):
+		return "· " + strings.TrimSpace(strings.TrimPrefix(line, "    "))
+	default:
+		return strings.TrimSpace(line)
+	}
 }
 
 func execCommandProgressLines(progress control.ExecCommandProgress) []string {
@@ -367,7 +387,7 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 	}
 	switch strings.TrimSpace(entry.Kind) {
 	case "command_execution":
-		return label + "：" + formatInlineCodeTextTag(truncateExecProgressSummary(entry.Summary, 30))
+		return label + "：" + markdownCodeSpan(truncateExecProgressSummary(entry.Summary, 30))
 	default:
 		return label + "：" + truncateExecProgressSummary(entry.Summary, 40)
 	}

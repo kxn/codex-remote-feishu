@@ -39,9 +39,10 @@
 1. `ExecCommandProgress` 增加了结构化 `Blocks`，其中 exploration block 可表达 `running / completed / failed` 与多条 `read / list / search` 行。
 2. `command_execution` 会把最稳定的一批命令归一进 exploration block，包括 `cat / bat / head / tail / sed / ls / rg / grep`。
 3. `dynamic_tool_call.read` 已接入同一套 exploration block，并继续沿用后端语义化而非前端猜字符串。
-4. Feishu 过程卡优先渲染 exploration block，并可在卡片底部临时附着“思考中 / 规划中”这类瞬时 reasoning 状态；这类状态不会沉淀进历史进度。
-5. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
-6. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
+4. Feishu 过程卡优先渲染 exploration block，并可在卡片底部临时附着“思考中 / 规划中”这类瞬时 reasoning 状态；这类状态不会沉淀进历史进度，清理后也不会反向撤回已经发出的旧卡。
+5. Feishu projector 当前按“每个可见行一个 markdown element”出站共享过程卡，而不是把整段 timeline 压成单个 markdown body，避免某一行的 inline 语法把后续行一起污染。
+6. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
+7. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
 
 当前仍然刻意保留的边界：
 
