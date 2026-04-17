@@ -60,6 +60,7 @@ const (
 
 const (
 	cardThemeInfo     = "info"
+	cardThemeProgress = "progress"
 	cardThemePlan     = "plan"
 	cardThemeSuccess  = "success"
 	cardThemeError    = "error"

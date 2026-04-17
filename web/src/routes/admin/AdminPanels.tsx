@@ -877,7 +877,7 @@ export function AdminInstancesPanel({
           <div>
             <h4>进行中的会话</h4>
             <p>
-              这里会显示当前还在处理中的会话，以及它刚刚进行过哪些读取、列目录和搜索动作。
+              这里会显示当前仍在进行中的会话，以及它刚刚进行过哪些读取、列目录和搜索动作。
             </p>
           </div>
           <StatusBadge
@@ -981,7 +981,7 @@ export function AdminInstancesPanel({
                     ))}
                     {blocks.length === 0 && entries.length > 0 ? (
                       <div className="surface-progress-block">
-                        <strong>处理中</strong>
+                        <strong>工作中</strong>
                         <div className="surface-progress-list" role="list">
                           {entries.map((entry, index) => (
                             <div

@@ -21,12 +21,12 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 		ChatID:           chatID,
 		MessageID:        progress.MessageID,
 		ReplyToMessageID: event.SourceMessageID,
-		CardTitle:        "处理中",
+		CardTitle:        "工作中",
 		CardBody:         body,
-		CardThemeKey:     cardThemeInfo,
+		CardThemeKey:     cardThemeProgress,
 		CardUpdateMulti:  true,
 		cardEnvelope:     cardEnvelopeV2,
-		card:             rawCardDocument("处理中", body, cardThemeInfo, nil),
+		card:             rawCardDocument("工作中", body, cardThemeProgress, nil),
 	}
 	if strings.TrimSpace(progress.MessageID) != "" {
 		operation.Kind = OperationUpdateCard
@@ -168,7 +168,7 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 		case "context_compaction":
 			entry.Label = "整理"
 		default:
-			entry.Label = "处理中"
+			entry.Label = "工作中"
 		}
 	}
 	if entry.Summary == "" {
@@ -193,26 +193,26 @@ func renderExecProgressBlockHeader(block control.ExecCommandProgressBlock) strin
 	switch strings.ToLower(strings.TrimSpace(block.Kind)) {
 	case "exploration":
 		if strings.EqualFold(strings.TrimSpace(block.Status), "running") {
-			return "• Exploring"
+			return "• 探索中"
 		}
-		return "• Explored"
+		return "• 已探索"
 	default:
-		return "• Running"
+		return "• 工作中"
 	}
 }
 
 func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
 	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
 	case "read":
-		return "Read " + truncateExecProgressSummary(strings.Join(execProgressReadNames(row.Items), ", "), 60)
+		return "读取 " + truncateExecProgressSummary(strings.Join(execProgressReadNames(row.Items), "、"), 60)
 	case "list":
-		return "List " + truncateExecProgressSummary(row.Summary, 60)
+		return "列目录 " + truncateExecProgressSummary(row.Summary, 60)
 	case "search":
 		summary := row.Summary
 		if row.Secondary != "" {
-			summary = summary + " in " + row.Secondary
+			summary = summary + "（范围：" + row.Secondary + "）"
 		}
-		return "Search " + truncateExecProgressSummary(summary, 60)
+		return "搜索 " + truncateExecProgressSummary(summary, 60)
 	default:
 		text := row.Summary
 		if text == "" && len(row.Items) != 0 {
@@ -246,7 +246,7 @@ func execProgressReadNames(items []string) []string {
 func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 	label := strings.TrimSpace(entry.Label)
 	if label == "" {
-		label = "处理中"
+		label = "工作中"
 	}
 	switch strings.TrimSpace(entry.Kind) {
 	case "command_execution":

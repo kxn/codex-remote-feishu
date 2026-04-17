@@ -582,6 +582,7 @@ func TestParseMessageEventCommandPreservesGatewayID(t *testing.T) {
 func TestCardTemplateUsesSemanticColors(t *testing.T) {
 	tests := map[string]string{
 		cardThemeInfo:     "grey",
+		cardThemeProgress: "wathet",
 		cardThemePlan:     "blue",
 		cardThemeSuccess:  "green",
 		cardThemeApproval: "green",

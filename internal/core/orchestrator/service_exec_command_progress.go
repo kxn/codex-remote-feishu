@@ -764,7 +764,7 @@ func buildDynamicToolProgressSummary(group *state.DynamicToolProgressGroupRecord
 		case "completed":
 			summary = "已完成"
 		default:
-			summary = "处理中"
+			summary = "工作中"
 		}
 	}
 	if strings.EqualFold(strings.TrimSpace(group.Status), "failed") && !strings.Contains(summary, "失败") {

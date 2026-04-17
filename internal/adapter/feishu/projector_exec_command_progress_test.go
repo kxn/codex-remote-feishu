@@ -30,7 +30,7 @@ func TestProjectExecCommandProgressCreatesReplyCard(t *testing.T) {
 	if op.Kind != OperationSendCard || op.ReplyToMessageID != "om-source-1" || !op.CardUpdateMulti {
 		t.Fatalf("expected initial exec progress card reply, got %#v", op)
 	}
-	if op.CardTitle != "处理中" {
+	if op.CardTitle != "工作中" {
 		t.Fatalf("expected generic processing title, got %#v", op)
 	}
 	if !strings.Contains(op.CardBody, "执行：") || !strings.Contains(op.CardBody, "npm test") || !strings.Contains(op.CardBody, "go test ./...") {
@@ -67,8 +67,8 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 	if op.Kind != OperationUpdateCard || op.MessageID != "om-progress-1" || op.ReplyToMessageID != "" {
 		t.Fatalf("expected update operation for existing exec progress card, got %#v", op)
 	}
-	if op.CardThemeKey != cardThemeInfo {
-		t.Fatalf("expected exec progress to use info theme, got %#v", op)
+	if op.CardThemeKey != cardThemeProgress {
+		t.Fatalf("expected exec progress to use progress theme, got %#v", op)
 	}
 }
 
@@ -103,7 +103,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• Explored") || !strings.Contains(body, "  └ Read a.cpp, b.cpp") || !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
+	if !strings.Contains(body, "• 已探索") || !strings.Contains(body, "  └ 读取 a.cpp、b.cpp") || !strings.Contains(body, "执行：") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {
@@ -137,7 +137,7 @@ func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T)
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• Exploring") || !strings.Contains(body, "  └ Read README.md, types.go") || !strings.Contains(body, "    List internal/core") || !strings.Contains(body, "    Search compact in internal/") {
+	if !strings.Contains(body, "• 探索中") || !strings.Contains(body, "  └ 读取 README.md、types.go") || !strings.Contains(body, "    列目录 internal/core") || !strings.Contains(body, "    搜索 compact（范围：internal/）") {
 		t.Fatalf("expected exploration block rendering, got %#v", ops[0])
 	}
 }
@@ -166,7 +166,7 @@ func TestProjectExecCommandProgressRendersExploredHeaderForFailedExploration(t *
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• Explored") || strings.Contains(body, "Exploration failed") || !strings.Contains(body, "Read null") {
+	if !strings.Contains(body, "• 已探索") || strings.Contains(body, "Exploration failed") || !strings.Contains(body, "读取 null") {
 		t.Fatalf("expected upstream-style explored rendering for failed block, got %#v", ops[0])
 	}
 }
