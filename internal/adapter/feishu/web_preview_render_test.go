@@ -89,6 +89,22 @@ func TestDriveMarkdownPreviewerUsesCurrentRequestPathForDownloadLinks(t *testing
 	}
 }
 
+func TestDriveMarkdownPreviewerUsesForwardedPrefixForDownloadLinks(t *testing.T) {
+	root := t.TempDir()
+	previewer := newWebPreviewerForTest(root)
+
+	_, previewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "note.txt"), []byte("hello\n"), time.Date(2026, 4, 17, 8, 5, 0, 0, time.UTC))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+previewID, nil)
+	req.Header.Set("X-Forwarded-Prefix", "/g/grant-1/")
+	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
+		t.Fatal("expected proxied text preview to be served")
+	}
+	if !strings.Contains(rec.Body.String(), `class="preview-download" href="/g/grant-1/`+previewID+`/download"`) {
+		t.Fatalf("expected topbar download link to use forwarded grant prefix, got %q", rec.Body.String())
+	}
+}
+
 func TestDriveMarkdownPreviewerServesDiffFirstForLargeText(t *testing.T) {
 	root := t.TempDir()
 	previewer := newWebPreviewerForTest(root)

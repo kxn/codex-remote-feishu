@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 		if download {
 			serveWebPreviewDownloadHTTP(w, r, current)
 		} else {
-			writeWebPreviewPage(w, buildWebPreviewPage(current, previous, previewDownloadHrefForRequest(r)))
+			writeWebPreviewPage(w, buildWebPreviewPage(current, previous, previewDownloadHrefForRequest(r, previewID)))
 		}
 		return true
 	case err == errPreviewRecordExpired || err == errPreviewArtifactExpired:
@@ -70,15 +71,37 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 	}
 }
 
-func previewDownloadHrefForRequest(r *http.Request) string {
+func previewDownloadHrefForRequest(r *http.Request, previewID string) string {
 	if r == nil {
 		return ""
+	}
+	previewID = strings.TrimSpace(previewID)
+	if previewID == "" {
+		return ""
+	}
+	if prefix := normalizedForwardedPreviewPrefix(r.Header.Get("X-Forwarded-Prefix")); prefix != "" {
+		return path.Join(strings.TrimRight(prefix, "/"), previewID, "download")
 	}
 	currentPath := strings.TrimSpace(r.URL.Path)
 	if currentPath == "" {
 		return ""
 	}
 	return strings.TrimRight(currentPath, "/") + "/download"
+}
+
+func normalizedForwardedPreviewPrefix(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	cleaned := path.Clean(value)
+	if cleaned == "." || cleaned == "/" {
+		return ""
+	}
+	return cleaned + "/"
 }
 
 func (p *DriveMarkdownPreviewer) loadWebPreviewArtifactsForServe(scopePublicID, previewID string) (*webPreviewArtifact, *webPreviewArtifact, error) {
