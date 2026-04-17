@@ -50,6 +50,12 @@ func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []con
 		a.cronSyncInFlight = true
 		go a.runCronReloadCommand(command)
 		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_reload_started", "正在重新加载 Cron 任务配置，并校验表格内容。")}
+	case cronCommandRun:
+		if a.cronSyncInFlight {
+			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
+		}
+		go a.runCronTriggerCommand(command, parsed.JobRecordID)
+		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_run_started", "正在立即触发所选 Cron 任务。")}
 	default:
 		return cronUsageEvents(command.SurfaceSessionID, "不支持的 /cron 子命令。")
 	}
@@ -65,10 +71,25 @@ func (a *App) runCronRepairCommand(command control.DaemonCommand) {
 	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
 }
 
+func (a *App) runCronTriggerCommand(command control.DaemonCommand, jobRecordID string) {
+	notice, err := a.triggerCronJob(command, jobRecordID)
+	a.finishCronAsyncCommand(command.SurfaceSessionID, notice, err)
+}
+
 func (a *App) finishCronBackgroundCommand(surfaceID string, event *control.UIEvent, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cronSyncInFlight = false
+	a.finishCronAsyncCommandLocked(surfaceID, event, err)
+}
+
+func (a *App) finishCronAsyncCommand(surfaceID string, event *control.UIEvent, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.finishCronAsyncCommandLocked(surfaceID, event, err)
+}
+
+func (a *App) finishCronAsyncCommandLocked(surfaceID string, event *control.UIEvent, err error) {
 	if a.shuttingDown {
 		return
 	}
@@ -81,6 +102,57 @@ func (a *App) finishCronBackgroundCommand(surfaceID string, event *control.UIEve
 	if event != nil {
 		a.handleUIEventsLocked(context.Background(), []control.UIEvent{*event})
 	}
+}
+
+func (a *App) triggerCronJob(command control.DaemonCommand, jobRecordID string) (*control.UIEvent, error) {
+	jobRecordID = strings.TrimSpace(jobRecordID)
+	if jobRecordID == "" {
+		return nil, fmt.Errorf("缺少要立即触发的 Cron 任务记录 ID")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	stateValue, err := a.loadCronStateLocked(false)
+	if err != nil {
+		return nil, err
+	}
+	if stateValue == nil || !cronStateHasBinding(stateValue) {
+		return nil, fmt.Errorf("当前实例还没有可用的 Cron 配置表，请先执行 `/cron repair`")
+	}
+	snapshot := cloneCronState(stateValue)
+	ownerView := a.inspectCronOwnerView(snapshot)
+	if !cronOwnerAllowsLoadedJobs(ownerView.Status) {
+		return nil, fmt.Errorf("当前 Cron 绑定需要先修复后才能手动触发任务，请先执行 `/cron repair`")
+	}
+	var job *cronJobState
+	for index := range snapshot.Jobs {
+		if strings.TrimSpace(snapshot.Jobs[index].RecordID) == jobRecordID {
+			job = &snapshot.Jobs[index]
+			break
+		}
+	}
+	if job == nil {
+		return nil, fmt.Errorf("找不到 Cron 任务 `%s`，请先执行 `/cron reload` 更新任务列表", jobRecordID)
+	}
+	activeCount := a.cronActiveRunCountLocked(job.RecordID, job.Name)
+	maxConcurrency := cronDefaultMaxConcurrency(job.MaxConcurrency)
+	if activeCount >= maxConcurrency {
+		return nil, fmt.Errorf("任务 `%s` 当前运行中实例数已达到并发上限（%d），请稍后再试", firstNonEmpty(strings.TrimSpace(job.Name), job.RecordID), maxConcurrency)
+	}
+	triggeredAt := time.Now().UTC()
+	request := a.newCronLaunchRequestLocked(*job, triggeredAt)
+	if err := a.launchCronRequestLocked(request); err != nil {
+		a.recordCronImmediateResultWithTargetLocked(request.WritebackTarget, request.Job, request.TriggeredAt, "failed", err.Error())
+		return nil, err
+	}
+	return &control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: command.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code:  "cron_run_ready",
+			Title: "Cron",
+			Text:  fmt.Sprintf("已立即触发 `%s`；本次不会改动原有下次调度时间。", firstNonEmpty(strings.TrimSpace(job.Name), job.RecordID)),
+		},
+	}, nil
 }
 
 func (a *App) defaultCronBitableFactory(gatewayID string) (feishu.BitableAPI, error) {

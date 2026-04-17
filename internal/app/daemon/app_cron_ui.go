@@ -38,13 +38,15 @@ const (
 	cronCommandMenu   cronCommandMode = "menu"
 	cronCommandStatus cronCommandMode = "status"
 	cronCommandList   cronCommandMode = "list"
+	cronCommandRun    cronCommandMode = "run"
 	cronCommandEdit   cronCommandMode = "edit"
 	cronCommandRepair cronCommandMode = "repair"
 	cronCommandReload cronCommandMode = "reload"
 )
 
 type parsedCronCommand struct {
-	Mode cronCommandMode
+	Mode        cronCommandMode
+	JobRecordID string
 }
 
 func parseCronCommandText(text string) (parsedCronCommand, error) {
@@ -52,15 +54,15 @@ func parseCronCommandText(text string) (parsedCronCommand, error) {
 	if trimmed == "" {
 		return parsedCronCommand{}, fmt.Errorf("缺少 /cron 子命令。")
 	}
-	fields := strings.Fields(strings.ToLower(trimmed))
-	if len(fields) == 0 || fields[0] != "/cron" {
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 || strings.ToLower(fields[0]) != "/cron" {
 		return parsedCronCommand{}, fmt.Errorf("不支持的 /cron 子命令。")
 	}
 	switch len(fields) {
 	case 1:
 		return parsedCronCommand{Mode: cronCommandMenu}, nil
 	case 2:
-		switch fields[1] {
+		switch strings.ToLower(fields[1]) {
 		case "status":
 			return parsedCronCommand{Mode: cronCommandStatus}, nil
 		case "list":
@@ -72,9 +74,18 @@ func parseCronCommandText(text string) (parsedCronCommand, error) {
 		case "reload":
 			return parsedCronCommand{Mode: cronCommandReload}, nil
 		}
-		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持 `/cron status`、`/cron list`、`/cron edit`、`/cron reload` 或 `/cron repair`。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持 `/cron status`、`/cron list`、`/cron edit`、`/cron reload`、`/cron repair`，以及按钮触发的 `/cron run <任务记录ID>`。")
+	case 3:
+		if strings.ToLower(fields[1]) == "run" {
+			jobRecordID := strings.TrimSpace(fields[2])
+			if jobRecordID == "" {
+				return parsedCronCommand{}, fmt.Errorf("`/cron run` 需要任务记录 ID。")
+			}
+			return parsedCronCommand{Mode: cronCommandRun, JobRecordID: jobRecordID}, nil
+		}
+		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持 `/cron status`、`/cron list`、`/cron edit`、`/cron reload`、`/cron repair`，以及按钮触发的 `/cron run <任务记录ID>`。")
 	default:
-		return parsedCronCommand{}, fmt.Errorf("`/cron status` / `/cron list` / `/cron edit` / `/cron reload` / `/cron repair` 不接受额外参数。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron status` / `/cron list` / `/cron edit` / `/cron reload` / `/cron repair` 不接受额外参数；单任务触发请使用 `/cron run <任务记录ID>`。")
 	}
 }
 
@@ -187,6 +198,8 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
 	cronZone := cronConfiguredTimeZone(stateValue)
+	sections := []control.CommandCatalogSection{}
+	interactive := false
 	switch {
 	case stateValue == nil || !cronStateHasBinding(stateValue):
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
@@ -198,8 +211,18 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	case len(stateValue.Jobs) == 0:
 		summaryLines = append(summaryLines, "当前没有已加载的 Cron 任务。编辑表格后执行 `/cron reload` 生效。")
 	default:
-		summaryLines = append(summaryLines, fmt.Sprintf("当前已加载 %d 条任务：", len(stateValue.Jobs)))
-		summaryLines = append(summaryLines, cronLoadedJobLines(stateValue.Jobs, cronZone)...)
+		summaryLines = append(summaryLines,
+			fmt.Sprintf("当前已加载 %d 条任务。", len(stateValue.Jobs)),
+			"每条任务都会显示下一次执行时间；点击 `立即触发` 可手动执行一次，不影响原有下次调度时间。",
+		)
+		entries := cronLoadedJobEntries(stateValue.Jobs, cronZone)
+		if len(entries) != 0 {
+			interactive = true
+			sections = append(sections, control.CommandCatalogSection{
+				Title:   "已加载任务",
+				Entries: entries,
+			})
+		}
 	}
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, "", strings.TrimSpace(extraSummary))
@@ -207,8 +230,9 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Cron 任务",
 		Summary:      strings.Join(summaryLines, "\n"),
-		Interactive:  false,
+		Interactive:  interactive,
 		DisplayStyle: control.CommandCatalogDisplayDefault,
+		Sections:     sections,
 	}
 }
 
@@ -252,7 +276,7 @@ func cronManualCommandSection() control.CommandCatalogSection {
 				"/cron reload",
 				"/cron repair",
 			},
-			Description: "发送 `/cron` 打开菜单；`/cron status` 查看状态；`/cron list` 查看当前有效任务；`/cron edit` 打开配置表；编辑后执行 `/cron reload` 生效；如需初始化、修 schema 或接管 Cron 配置，执行 `/cron repair`。",
+			Description: "发送 `/cron` 打开菜单；`/cron status` 查看状态；`/cron list` 查看当前有效任务并可按钮立即触发；`/cron edit` 打开配置表；编辑后执行 `/cron reload` 生效；如需初始化、修 schema 或接管 Cron 配置，执行 `/cron repair`。",
 			Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
 		}},
 	}
@@ -400,7 +424,7 @@ func cronLoadedJobCountLine(stateValue *cronStateFile, ownerView cronOwnerView) 
 	return fmt.Sprintf("当前已加载任务：%d 条", len(stateValue.Jobs))
 }
 
-func cronLoadedJobLines(jobs []cronJobState, timeZone string) []string {
+func cronSortedJobs(jobs []cronJobState) []cronJobState {
 	items := append([]cronJobState(nil), jobs...)
 	sort.Slice(items, func(i, j int) bool {
 		left := items[i].NextRunAt
@@ -418,10 +442,15 @@ func cronLoadedJobLines(jobs []cronJobState, timeZone string) []string {
 			return firstNonEmpty(items[i].Name, items[i].RecordID) < firstNonEmpty(items[j].Name, items[j].RecordID)
 		}
 	})
-	lines := make([]string, 0, len(items))
+	return items
+}
+
+func cronLoadedJobEntries(jobs []cronJobState, timeZone string) []control.CommandCatalogEntry {
+	items := cronSortedJobs(jobs)
+	entries := make([]control.CommandCatalogEntry, 0, len(items))
 	for _, job := range items {
 		item := cronReloadTaskItemFromJob(job)
-		segments := []string{fmt.Sprintf("`%s`", firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"))}
+		segments := []string{}
 		if schedule := cronReloadTaskScheduleText(item); schedule != "" {
 			segments = append(segments, schedule)
 		}
@@ -432,9 +461,26 @@ func cronLoadedJobLines(jobs []cronJobState, timeZone string) []string {
 		if source := strings.TrimSpace(cronJobDisplaySource(job)); source != "" {
 			segments = append(segments, "来源："+source)
 		}
-		lines = append(lines, "- "+strings.Join(segments, "｜"))
+		entry := control.CommandCatalogEntry{
+			Title:       firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"),
+			Description: strings.Join(segments, "｜"),
+		}
+		if commandText := cronRunCommandText(job.RecordID); commandText != "" {
+			entry.Buttons = []control.CommandCatalogButton{
+				runCommandButton("立即触发", commandText, "", false),
+			}
+		}
+		entries = append(entries, entry)
 	}
-	return lines
+	return entries
+}
+
+func cronRunCommandText(jobRecordID string) string {
+	jobRecordID = strings.TrimSpace(jobRecordID)
+	if jobRecordID == "" {
+		return ""
+	}
+	return "/cron run " + jobRecordID
 }
 
 func cronNoticeEvent(surfaceID, code, text string) control.UIEvent {
