@@ -259,6 +259,26 @@ func TestMenuActionVSCodeCurrentWorkGroupHidesNew(t *testing.T) {
 	}
 }
 
+func TestMenuActionMaintenanceGroupIncludesCron(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		Text:             "/menu maintenance",
+	})
+	catalog := commandCatalogFromEvent(t, events[0])
+	got := firstCommands(catalog.Sections[0].Entries)
+	want := []string{"/status", "/mode", "/autowhip", "/help", "/cron", "/upgrade", "/debug"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("maintenance commands = %#v, want %#v", got, want)
+	}
+}
+
 func TestMenuSubmenuShowsReturnToPreviousLevelButton(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

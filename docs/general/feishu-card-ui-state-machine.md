@@ -317,6 +317,7 @@ MCP request 卡片当前新增的可视语义：
   - `/new` 仅在 `normal_working` 可见
   - `/history` 当前不额外分阶段，normal / vscode 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
   - 其余命令默认可见
+  - `maintenance` 分组当前的 canonical menu-visible 命令为 `/status`、`/mode`、`/autowhip`、`/help`、`/cron`、`/upgrade`、`/debug`
   - `switch_target` 分组当前还带一层 mode-aware display projection：
     - `normal mode` 只显示一个入口，标题为 `选择工作区/会话`，实际命令仍是 canonical `/list`
     - `vscode mode` 继续分别显示 `/list`、`/use`、`/useall`

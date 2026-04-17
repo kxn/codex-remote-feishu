@@ -119,7 +119,7 @@ var feishuCommandGroups = []FeishuCommandGroup{
 	{
 		ID:          FeishuCommandGroupMaintenance,
 		Title:       "低频与维护",
-		Description: "查看状态、切换模式、autowhip、帮助和调试入口。",
+		Description: "查看状态、切换模式、Cron、升级、autowhip、帮助和调试入口。",
 	},
 }
 
@@ -652,7 +652,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			Description:      "打开当前服务实例专属的定时任务多维表格，或用 `/cron reload` 重新加载任务配置。",
 			Examples:         []string{"/cron", "/cron reload"},
 			ShowInHelp:       true,
-			ShowInMenu:       false,
+			ShowInMenu:       true,
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
 			{alias: "/cron", kind: ActionCronCommand},
