@@ -49,6 +49,7 @@ type cronOwnerView struct {
 	StatusLabel string
 	Detail      string
 	NextAction  string
+	NeedsRepair bool
 }
 
 type cronOwnerResolveOptions struct {
@@ -229,36 +230,38 @@ func (a *App) inspectCronOwnerView(stateValue *cronStateFile) cronOwnerView {
 	switch resolution.Status {
 	case cronOwnerStatusHealthy:
 		view.StatusLabel = "正常"
-		ownerGatewayID := resolution.Gateway.GatewayID
-		if ownerGatewayID == "" && resolution.CurrentOwner != nil {
-			ownerGatewayID = resolution.CurrentOwner.GatewayID
-		}
-		view.Detail = fmt.Sprintf("owner bot：%s", ownerGatewayID)
-		view.NextAction = "如需同步 schema 或工作区清单，执行 `/cron repair`。"
+		view.Detail = "当前 Cron 配置可正常读写。"
+		view.NextAction = "编辑表格后执行 `/cron reload` 生效；如需同步 schema 或工作区清单，执行 `/cron repair`。"
 	case cronOwnerStatusBootstrap:
 		view.StatusLabel = "待初始化"
-		view.Detail = resolution.Message
-		view.NextAction = "执行 `/cron repair` 初始化配置表。"
+		view.Detail = "当前实例还没有初始化 Cron 配置表。"
+		view.NextAction = "执行 `/cron repair` 初始化 Cron 配置。"
+		view.NeedsRepair = true
 	case cronOwnerStatusLegacy:
-		view.StatusLabel = "待回填"
-		view.Detail = resolution.Message
-		view.NextAction = "执行 `/cron repair` 或 `/cron reload` 回填正式 owner。"
+		view.StatusLabel = "待修复"
+		view.Detail = "当前 Cron 配置仍使用历史兼容绑定。"
+		view.NextAction = "执行 `/cron repair` 完成修复并同步工作区；或执行 `/cron reload` 回填并重新加载任务。"
+		view.NeedsRepair = true
 	case cronOwnerStatusUnavailable:
-		view.StatusLabel = "owner 不可用"
-		view.Detail = resolution.Message
-		view.NextAction = "恢复原 owner bot 配置，或后续使用显式迁移切换 owner。"
+		view.StatusLabel = "需要修复"
+		view.Detail = "当前 Cron 绑定已失效。"
+		view.NextAction = "执行 `/cron repair` 后，将由当前 bot 接管 Cron 配置。"
+		view.NeedsRepair = true
 	case cronOwnerStatusMismatch:
-		view.StatusLabel = "owner 不匹配"
-		view.Detail = resolution.Message
-		view.NextAction = "不要直接 fallback 到当前 bot；需要后续显式迁移处理。"
+		view.StatusLabel = "需要修复"
+		view.Detail = "当前 Cron 绑定与运行时配置不一致。"
+		view.NextAction = "执行 `/cron repair` 后，将由当前 bot 接管 Cron 配置。"
+		view.NeedsRepair = true
 	case cronOwnerStatusUnresolved:
-		view.StatusLabel = "owner 待确认"
-		view.Detail = resolution.Message
-		view.NextAction = "先确认历史绑定来源，再执行 `/cron repair`。"
+		view.StatusLabel = "需要修复"
+		view.Detail = "当前 Cron 绑定待修复。"
+		view.NextAction = "执行 `/cron repair` 后，将由当前 bot 接管 Cron 配置。"
+		view.NeedsRepair = true
 	default:
 		view.StatusLabel = "未初始化"
 		view.Detail = "当前实例还没有初始化 Cron 配置表。"
 		view.NextAction = "执行 `/cron repair` 创建配置表。"
+		view.NeedsRepair = true
 	}
 	return view
 }
@@ -274,11 +277,11 @@ func cronOwnerActionError(action string, resolution cronOwnerResolution) error {
 	case cronOwnerStatusNone:
 		return fmt.Errorf("尚未初始化 Cron 配置表，请先执行 `/cron repair`")
 	case cronOwnerStatusUnavailable:
-		return fmt.Errorf("%s失败：%s", action, firstNonEmpty(resolution.Message, "owner bot 当前不可用"))
+		return fmt.Errorf("%s失败：当前 Cron 绑定已失效，请先执行 `/cron repair`", action)
 	case cronOwnerStatusMismatch:
-		return fmt.Errorf("%s失败：%s", action, firstNonEmpty(resolution.Message, "owner bot 与已绑定 AppID 不一致"))
+		return fmt.Errorf("%s失败：当前 Cron 绑定与运行时配置不一致，请先执行 `/cron repair`", action)
 	case cronOwnerStatusUnresolved:
-		return fmt.Errorf("%s失败：%s", action, firstNonEmpty(resolution.Message, "当前无法安全确认 Cron owner"))
+		return fmt.Errorf("%s失败：当前 Cron 绑定待修复，请先执行 `/cron repair`", action)
 	default:
 		return fmt.Errorf("%s失败：Cron owner 状态无效", action)
 	}

@@ -25,11 +25,11 @@ func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []con
 		return cronUsageEvents(command.SurfaceSessionID, err.Error())
 	}
 	switch parsed.Mode {
-	case cronCommandShow:
-		catalog, err := a.prepareCronCatalogLocked(command)
+	case cronCommandMenu, cronCommandStatus, cronCommandList, cronCommandEdit:
+		catalog, err := a.prepareCronCatalogLocked(command, parsed.Mode)
 		if err != nil {
 			return append([]control.UIEvent{
-				cronNoticeEvent(command.SurfaceSessionID, "cron_status_failed", fmt.Sprintf("Cron 状态读取失败：%v", err)),
+				cronNoticeEvent(command.SurfaceSessionID, "cron_catalog_failed", fmt.Sprintf("Cron 信息读取失败：%v", err)),
 			}, cronUsageEvents(command.SurfaceSessionID, "")...)
 		}
 		if catalog == nil {
@@ -42,7 +42,7 @@ func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []con
 		}
 		a.cronSyncInFlight = true
 		go a.runCronRepairCommand(command)
-		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_repair_started", "正在修复 Cron 配置表并同步工作区清单，请稍候。")}
+		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_repair_started", "正在修复 Cron 配置表；如果检测到绑定失效，将自动由当前 bot 接管 Cron 配置，请稍候。")}
 	case cronCommandReload:
 		if a.cronSyncInFlight {
 			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
@@ -50,13 +50,6 @@ func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []con
 		a.cronSyncInFlight = true
 		go a.runCronReloadCommand(command)
 		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_reload_started", "正在重新加载 Cron 任务配置，并校验表格内容。")}
-	case cronCommandMigrateOwner:
-		if a.cronSyncInFlight {
-			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
-		}
-		a.cronSyncInFlight = true
-		go a.runCronMigrateOwnerCommand(command)
-		return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_migrate_owner_started", "正在迁移 Cron owner 到当前 surface 对应 bot，请稍候。")}
 	default:
 		return cronUsageEvents(command.SurfaceSessionID, "不支持的 /cron 子命令。")
 	}
@@ -69,11 +62,6 @@ func (a *App) runCronReloadCommand(command control.DaemonCommand) {
 
 func (a *App) runCronRepairCommand(command control.DaemonCommand) {
 	notice, err := a.repairCronBitable(command)
-	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
-}
-
-func (a *App) runCronMigrateOwnerCommand(command control.DaemonCommand) {
-	notice, err := a.migrateCronOwner(command)
 	a.finishCronBackgroundCommand(command.SurfaceSessionID, notice, err)
 }
 
@@ -119,21 +107,30 @@ func (a *App) cronBitableAPI(gatewayID string) (feishu.BitableAPI, error) {
 	return factory(strings.TrimSpace(gatewayID))
 }
 
-func (a *App) prepareCronCatalogLocked(command control.DaemonCommand) (*control.UIEvent, error) {
+func (a *App) prepareCronCatalogLocked(command control.DaemonCommand, mode cronCommandMode) (*control.UIEvent, error) {
 	stateValue, err := a.loadCronStateLocked(false)
 	if err != nil {
 		return nil, err
 	}
 	snapshot := cloneCronState(stateValue)
 	ownerView := a.inspectCronOwnerView(snapshot)
+	var catalog *control.FeishuDirectCommandCatalog
+	switch mode {
+	case cronCommandMenu:
+		catalog = buildCronMenuCatalog(snapshot, ownerView, "")
+	case cronCommandStatus:
+		catalog = buildCronStatusCatalog(snapshot, ownerView, "")
+	case cronCommandList:
+		catalog = buildCronListCatalog(snapshot, ownerView, "")
+	case cronCommandEdit:
+		catalog = buildCronEditCatalog(snapshot, ownerView, "")
+	default:
+		return nil, fmt.Errorf("unsupported cron catalog mode: %s", mode)
+	}
 	return &control.UIEvent{
-		Kind:             control.UIEventFeishuDirectCommandCatalog,
-		SurfaceSessionID: command.SurfaceSessionID,
-		FeishuDirectCommandCatalog: buildCronStatusCatalog(
-			snapshot,
-			ownerView,
-			"",
-		),
+		Kind:                       control.UIEventFeishuDirectCommandCatalog,
+		SurfaceSessionID:           command.SurfaceSessionID,
+		FeishuDirectCommandCatalog: catalog,
 	}, nil
 }
 
@@ -147,22 +144,6 @@ func (a *App) repairCronBitable(command control.DaemonCommand) (*control.UIEvent
 		SurfaceSessionID: command.SurfaceSessionID,
 		Notice: &control.Notice{
 			Code:  "cron_repair_ready",
-			Title: "Cron",
-			Text:  summary,
-		},
-	}, nil
-}
-
-func (a *App) migrateCronOwner(command control.DaemonCommand) (*control.UIEvent, error) {
-	summary, err := a.migrateCronOwnerNow(command)
-	if err != nil {
-		return nil, err
-	}
-	return &control.UIEvent{
-		Kind:             control.UIEventNotice,
-		SurfaceSessionID: command.SurfaceSessionID,
-		Notice: &control.Notice{
-			Code:  "cron_owner_migrated",
 			Title: "Cron",
 			Text:  summary,
 		},

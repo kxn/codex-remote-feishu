@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,10 +35,12 @@ var cronIntervalChoices = []cronIntervalChoice{
 type cronCommandMode string
 
 const (
-	cronCommandShow         cronCommandMode = "show"
-	cronCommandRepair       cronCommandMode = "repair"
-	cronCommandReload       cronCommandMode = "reload"
-	cronCommandMigrateOwner cronCommandMode = "migrate-owner"
+	cronCommandMenu   cronCommandMode = "menu"
+	cronCommandStatus cronCommandMode = "status"
+	cronCommandList   cronCommandMode = "list"
+	cronCommandEdit   cronCommandMode = "edit"
+	cronCommandRepair cronCommandMode = "repair"
+	cronCommandReload cronCommandMode = "reload"
 )
 
 type parsedCronCommand struct {
@@ -55,19 +58,23 @@ func parseCronCommandText(text string) (parsedCronCommand, error) {
 	}
 	switch len(fields) {
 	case 1:
-		return parsedCronCommand{Mode: cronCommandShow}, nil
+		return parsedCronCommand{Mode: cronCommandMenu}, nil
 	case 2:
 		switch fields[1] {
+		case "status":
+			return parsedCronCommand{Mode: cronCommandStatus}, nil
+		case "list":
+			return parsedCronCommand{Mode: cronCommandList}, nil
+		case "edit":
+			return parsedCronCommand{Mode: cronCommandEdit}, nil
 		case "repair":
 			return parsedCronCommand{Mode: cronCommandRepair}, nil
 		case "reload":
 			return parsedCronCommand{Mode: cronCommandReload}, nil
-		case "migrate-owner":
-			return parsedCronCommand{Mode: cronCommandMigrateOwner}, nil
 		}
-		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持查看状态、执行 `/cron repair`、`/cron reload` 或 `/cron migrate-owner`。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron` 只支持 `/cron status`、`/cron list`、`/cron edit`、`/cron reload` 或 `/cron repair`。")
 	default:
-		return parsedCronCommand{}, fmt.Errorf("`/cron repair` / `/cron reload` / `/cron migrate-owner` 不接受额外参数。")
+		return parsedCronCommand{}, fmt.Errorf("`/cron status` / `/cron list` / `/cron edit` / `/cron reload` / `/cron repair` 不接受额外参数。")
 	}
 }
 
@@ -79,24 +86,73 @@ func cronUsageEvents(surfaceID, message string) []control.UIEvent {
 	events = append(events, control.UIEvent{
 		Kind:                       control.UIEventFeishuDirectCommandCatalog,
 		SurfaceSessionID:           surfaceID,
-		FeishuDirectCommandCatalog: buildCronStatusCatalog(nil, cronOwnerView{}, ""),
+		FeishuDirectCommandCatalog: buildCronMenuCatalog(nil, cronOwnerView{}, ""),
 	})
 	return events
+}
+
+func buildCronMenuCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
+	summaryLines := []string{"选择 Cron 的下一步操作。"}
+	if strings.TrimSpace(ownerView.StatusLabel) != "" {
+		summaryLines = append(summaryLines, "当前状态："+strings.TrimSpace(ownerView.StatusLabel))
+	}
+	if stateValue != nil {
+		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
+		if line := cronLoadedJobCountLine(stateValue, ownerView); line != "" {
+			summaryLines = append(summaryLines, line)
+		}
+	}
+	if strings.TrimSpace(ownerView.NextAction) != "" {
+		summaryLines = append(summaryLines, "下一步："+strings.TrimSpace(ownerView.NextAction))
+	}
+	if strings.TrimSpace(extraSummary) != "" {
+		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
+	}
+	primaryCommand := cronPrimaryMenuCommand(stateValue, ownerView)
+	canEdit := cronCanEdit(stateValue)
+	canReload := cronCanReload(stateValue, ownerView)
+	return &control.FeishuDirectCommandCatalog{
+		Title:        "Cron",
+		Summary:      strings.Join(summaryLines, "\n"),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Sections: []control.CommandCatalogSection{
+			{
+				Title: "查看与编辑",
+				Entries: []control.CommandCatalogEntry{{
+					Buttons: []control.CommandCatalogButton{
+						runCommandButton("当前状态", "/cron status", cronPrimaryButtonStyle(primaryCommand, "/cron status"), false),
+						runCommandButton("当前任务", "/cron list", cronPrimaryButtonStyle(primaryCommand, "/cron list"), false),
+						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
+					},
+				}},
+			},
+			{
+				Title: "应用与维护",
+				Entries: []control.CommandCatalogEntry{{
+					Buttons: []control.CommandCatalogButton{
+						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
+					},
+				}},
+			},
+			cronManualCommandSection(),
+		},
+	}
 }
 
 func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
-		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 多维表格。执行 `/cron repair` 后会创建配置表。")
+		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
 	} else {
-		tableLine := fmt.Sprintf("配置表：%s", firstNonEmpty(strings.TrimSpace(stateValue.Bitable.AppURL), strings.TrimSpace(stateValue.Bitable.AppToken)))
-		if url := strings.TrimSpace(stateValue.Bitable.AppURL); url != "" {
-			tableLine = fmt.Sprintf("配置表：[%s](%s)", "打开 Cron 配置表", url)
-		}
 		summaryLines = append(summaryLines,
 			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
-			tableLine,
+			cronBindingLinkLine(stateValue),
 		)
+		if line := cronLoadedJobCountLine(stateValue, ownerView); line != "" {
+			summaryLines = append(summaryLines, line)
+		}
 		if !stateValue.LastWorkspaceSyncAt.IsZero() {
 			summaryLines = append(summaryLines, fmt.Sprintf("最近工作区同步：%s", stateValue.LastWorkspaceSyncAt.UTC().Format(time.RFC3339)))
 		}
@@ -108,7 +164,7 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 		}
 	}
 	if strings.TrimSpace(ownerView.StatusLabel) != "" {
-		summaryLines = append(summaryLines, "Owner 状态："+strings.TrimSpace(ownerView.StatusLabel))
+		summaryLines = append(summaryLines, "当前状态："+strings.TrimSpace(ownerView.StatusLabel))
 	}
 	if strings.TrimSpace(ownerView.Detail) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(ownerView.Detail))
@@ -119,32 +175,266 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
+	primaryCommand := cronPrimaryDetailCommand(stateValue, ownerView)
+	canEdit := cronCanEdit(stateValue)
+	canReload := cronCanReload(stateValue, ownerView)
 	return &control.FeishuDirectCommandCatalog{
-		Title:        "Cron",
+		Title:        "Cron 状态",
 		Summary:      strings.Join(summaryLines, "\n"),
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
 			{
-				Title: "快捷操作",
+				Title: "常用操作",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("修复配置表", "/cron repair", "primary", false),
-						runCommandButton("重新加载配置", "/cron reload", "", false),
-						runCommandButton("迁移 owner", "/cron migrate-owner", "", false),
+						runCommandButton("当前任务", "/cron list", "", false),
+						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
+						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
 					},
 				}},
 			},
-			{
-				Title: "手动输入",
-				Entries: []control.CommandCatalogEntry{{
-					Commands:    []string{"/cron", "/cron repair", "/cron reload", "/cron migrate-owner"},
-					Description: "直接发送 `/cron` 查看当前绑定与 owner 状态；`/cron repair` 修复配置表并同步工作区；`/cron reload` 重新加载任务；`/cron migrate-owner` 显式把 owner 切到当前 surface 对应 bot。",
-					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
-				}},
-			},
+			cronManualCommandSection(),
 		},
 	}
+}
+
+func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
+	summaryLines := []string{}
+	switch {
+	case stateValue == nil || !cronStateHasBinding(stateValue):
+		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
+	case !cronOwnerAllowsLoadedJobs(ownerView.Status):
+		summaryLines = append(summaryLines,
+			"当前 Cron 绑定需要先修复后才能确认有效任务。",
+			"执行 `/cron repair` 完成接管后，再执行 `/cron reload` 重新加载任务。",
+		)
+	case len(stateValue.Jobs) == 0:
+		summaryLines = append(summaryLines, "当前没有已加载的 Cron 任务。编辑表格后执行 `/cron reload` 生效。")
+	default:
+		summaryLines = append(summaryLines, fmt.Sprintf("当前已加载 %d 条任务：", len(stateValue.Jobs)))
+		summaryLines = append(summaryLines, cronLoadedJobLines(stateValue.Jobs)...)
+	}
+	if strings.TrimSpace(extraSummary) != "" {
+		summaryLines = append(summaryLines, "", strings.TrimSpace(extraSummary))
+	}
+	primaryCommand := cronPrimaryDetailCommand(stateValue, ownerView)
+	canEdit := cronCanEdit(stateValue)
+	canReload := cronCanReload(stateValue, ownerView)
+	return &control.FeishuDirectCommandCatalog{
+		Title:        "Cron 任务",
+		Summary:      strings.Join(summaryLines, "\n"),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Sections: []control.CommandCatalogSection{
+			{
+				Title: "常用操作",
+				Entries: []control.CommandCatalogEntry{{
+					Buttons: []control.CommandCatalogButton{
+						runCommandButton("当前状态", "/cron status", "", false),
+						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
+						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
+					},
+				}},
+			},
+			cronManualCommandSection(),
+		},
+	}
+}
+
+func buildCronEditCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
+	summaryLines := []string{}
+	if stateValue == nil || !cronStateHasBinding(stateValue) {
+		summaryLines = append(summaryLines, "当前还没有可编辑的 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
+	} else {
+		summaryLines = append(summaryLines,
+			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
+			cronBindingLinkLine(stateValue),
+			"编辑 `任务配置` 或 `工作区清单` 后，执行 `/cron reload` 生效。",
+		)
+		if strings.TrimSpace(ownerView.StatusLabel) != "" {
+			summaryLines = append(summaryLines, "当前状态："+strings.TrimSpace(ownerView.StatusLabel))
+		}
+		if strings.TrimSpace(ownerView.NextAction) != "" && ownerView.NeedsRepair {
+			summaryLines = append(summaryLines, "下一步："+strings.TrimSpace(ownerView.NextAction))
+		}
+	}
+	if strings.TrimSpace(extraSummary) != "" {
+		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
+	}
+	primaryCommand := cronPrimaryEditCommand(stateValue, ownerView)
+	canReload := cronCanReload(stateValue, ownerView)
+	return &control.FeishuDirectCommandCatalog{
+		Title:        "Cron 配置",
+		Summary:      strings.Join(summaryLines, "\n"),
+		Interactive:  true,
+		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+		Sections: []control.CommandCatalogSection{
+			{
+				Title: "常用操作",
+				Entries: []control.CommandCatalogEntry{{
+					Buttons: []control.CommandCatalogButton{
+						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						runCommandButton("查看任务", "/cron list", "", false),
+						runCommandButton("当前状态", "/cron status", "", false),
+						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
+					},
+				}},
+			},
+			cronManualCommandSection(),
+		},
+	}
+}
+
+func cronManualCommandSection() control.CommandCatalogSection {
+	return control.CommandCatalogSection{
+		Title: "手动输入",
+		Entries: []control.CommandCatalogEntry{{
+			Commands: []string{
+				"/cron",
+				"/cron status",
+				"/cron list",
+				"/cron edit",
+				"/cron reload",
+				"/cron repair",
+			},
+			Description: "发送 `/cron` 打开菜单；`/cron status` 查看状态；`/cron list` 查看当前有效任务；`/cron edit` 打开配置表；编辑后执行 `/cron reload` 生效；如需初始化、修 schema 或接管 Cron 配置，执行 `/cron repair`。",
+			Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
+		}},
+	}
+}
+
+func cronBindingLinkLine(stateValue *cronStateFile) string {
+	if stateValue == nil || stateValue.Bitable == nil {
+		return "配置表：未初始化"
+	}
+	if url := strings.TrimSpace(stateValue.Bitable.AppURL); url != "" {
+		return fmt.Sprintf("配置表：[%s](%s)", "打开 Cron 配置表", url)
+	}
+	return fmt.Sprintf("配置表：%s", strings.TrimSpace(stateValue.Bitable.AppToken))
+}
+
+func cronPrimaryMenuCommand(stateValue *cronStateFile, ownerView cronOwnerView) string {
+	if cronRepairShouldBePrimary(stateValue, ownerView) {
+		return "/cron repair"
+	}
+	if cronCanEdit(stateValue) {
+		return "/cron edit"
+	}
+	if cronCanReload(stateValue, ownerView) {
+		return "/cron reload"
+	}
+	return "/cron status"
+}
+
+func cronPrimaryDetailCommand(stateValue *cronStateFile, ownerView cronOwnerView) string {
+	if cronRepairShouldBePrimary(stateValue, ownerView) {
+		return "/cron repair"
+	}
+	if cronCanEdit(stateValue) {
+		return "/cron edit"
+	}
+	if cronCanReload(stateValue, ownerView) {
+		return "/cron reload"
+	}
+	return ""
+}
+
+func cronPrimaryEditCommand(stateValue *cronStateFile, ownerView cronOwnerView) string {
+	if cronRepairShouldBePrimary(stateValue, ownerView) {
+		return "/cron repair"
+	}
+	if cronCanReload(stateValue, ownerView) {
+		return "/cron reload"
+	}
+	return ""
+}
+
+func cronPrimaryButtonStyle(primaryCommand, commandText string) string {
+	if strings.TrimSpace(primaryCommand) == strings.TrimSpace(commandText) {
+		return "primary"
+	}
+	return ""
+}
+
+func cronRepairShouldBePrimary(stateValue *cronStateFile, ownerView cronOwnerView) bool {
+	if !cronStateHasBinding(stateValue) {
+		return true
+	}
+	return ownerView.NeedsRepair
+}
+
+func cronCanEdit(stateValue *cronStateFile) bool {
+	return cronStateHasBinding(stateValue)
+}
+
+func cronCanReload(stateValue *cronStateFile, ownerView cronOwnerView) bool {
+	if !cronStateHasBinding(stateValue) {
+		return false
+	}
+	switch ownerView.Status {
+	case cronOwnerStatusHealthy, cronOwnerStatusLegacy:
+		return true
+	default:
+		return false
+	}
+}
+
+func cronOwnerAllowsLoadedJobs(status cronOwnerStatus) bool {
+	switch status {
+	case cronOwnerStatusHealthy, cronOwnerStatusLegacy:
+		return true
+	default:
+		return false
+	}
+}
+
+func cronLoadedJobCountLine(stateValue *cronStateFile, ownerView cronOwnerView) string {
+	if stateValue == nil {
+		return ""
+	}
+	if !cronOwnerAllowsLoadedJobs(ownerView.Status) && cronStateHasBinding(stateValue) {
+		return "当前任务：待修复后重新加载"
+	}
+	return fmt.Sprintf("当前已加载任务：%d 条", len(stateValue.Jobs))
+}
+
+func cronLoadedJobLines(jobs []cronJobState) []string {
+	items := append([]cronJobState(nil), jobs...)
+	sort.Slice(items, func(i, j int) bool {
+		left := items[i].NextRunAt
+		right := items[j].NextRunAt
+		switch {
+		case left.IsZero() && right.IsZero():
+			return firstNonEmpty(items[i].Name, items[i].RecordID) < firstNonEmpty(items[j].Name, items[j].RecordID)
+		case left.IsZero():
+			return false
+		case right.IsZero():
+			return true
+		case !left.Equal(right):
+			return left.Before(right)
+		default:
+			return firstNonEmpty(items[i].Name, items[i].RecordID) < firstNonEmpty(items[j].Name, items[j].RecordID)
+		}
+	})
+	lines := make([]string, 0, len(items))
+	for _, job := range items {
+		item := cronReloadTaskItemFromJob(job)
+		segments := []string{fmt.Sprintf("`%s`", firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"))}
+		if schedule := cronReloadTaskScheduleText(item); schedule != "" {
+			segments = append(segments, schedule)
+		}
+		if next := cronReloadTaskNextRunText(item, "下次"); next != "" {
+			segments = append(segments, next)
+		}
+		if source := strings.TrimSpace(cronJobDisplaySource(job)); source != "" {
+			segments = append(segments, "来源："+source)
+		}
+		lines = append(lines, "- "+strings.Join(segments, "｜"))
+	}
+	return lines
 }
 
 func cronNoticeEvent(surfaceID, code, text string) control.UIEvent {

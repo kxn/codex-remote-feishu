@@ -53,63 +53,7 @@ func (a *App) repairCronBitableNow(command control.DaemonCommand) (string, error
 	if err != nil {
 		return "", err
 	}
-	if err := cronOwnerActionError("修复 Cron 配置表", resolution); err != nil {
-		return "", err
-	}
-	api, err := a.cronBitableAPI(resolution.Gateway.GatewayID)
-	if err != nil {
-		return "", err
-	}
-	a.mu.Lock()
-	workspaces := a.cronWorkspaceRowsLocked()
-	a.mu.Unlock()
-	persistProgress := func(next cronBitableState) error {
-		progressOwner := resolution.PersistOwner
-		if resolution.Status != cronOwnerStatusBootstrap {
-			progressOwner = nil
-		}
-		return a.persistCronBitableBindingProgress(resolution.ScopeKey, resolution.Label, next, progressOwner)
-	}
-	bootstrapCtx, cancelBootstrap := context.WithTimeout(context.Background(), cronBitableBootstrapTTL)
-	defer cancelBootstrap()
-	updatedBinding, err := a.ensureCronBitableRemote(bootstrapCtx, api, resolution.Binding, resolution.ScopeKey, resolution.Label, resolution.PersistOwner, persistProgress)
-	if err != nil {
-		return "", err
-	}
-	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronBitableWorkspaceTTL)
-	defer cancelWorkspace()
-	if _, err := a.syncCronWorkspaceTable(workspaceCtx, api, updatedBinding, workspaces); err != nil {
-		return "", err
-	}
-	var permissionWarning string
-	permissionCtx, cancelPermission := context.WithTimeout(context.Background(), cronBitablePermissionTTL)
-	defer cancelPermission()
-	if err := a.ensureCronUserPermission(permissionCtx, api, updatedBinding.AppToken, a.service.SurfaceActorUserID(command.SurfaceSessionID)); err != nil {
-		permissionWarning = "已跳过当前 surface 用户的编辑权限补齐：" + err.Error()
-	}
-
-	now := time.Now().UTC()
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	stateValue, err := a.loadCronStateLocked(true)
-	if err != nil {
-		return "", err
-	}
-	stateValue.InstanceScopeKey = resolution.ScopeKey
-	stateValue.InstanceLabel = resolution.Label
-	stateValue.Bitable = &updatedBinding
-	stateValue.LastWorkspaceSyncAt = now
-	if resolution.PersistOwner != nil {
-		applyCronOwnerBinding(stateValue, resolution.PersistOwner)
-	}
-	if err := a.writeCronStateLocked(); err != nil {
-		return "", err
-	}
-	summary := fmt.Sprintf("已通过 owner bot `%s` 同步 %d 个工作区。编辑表格后发送 `/cron reload` 生效。", firstNonEmpty(resolution.Gateway.GatewayID, stateValue.OwnerGatewayID), len(workspaces))
-	if permissionWarning != "" {
-		summary += "\n" + permissionWarning
-	}
-	return summary, nil
+	return a.repairCronBitableForResolution(command, resolution)
 }
 
 func (a *App) persistCronBitableBindingProgress(scopeKey, label string, binding cronBitableState, owner *cronOwnerBinding) error {

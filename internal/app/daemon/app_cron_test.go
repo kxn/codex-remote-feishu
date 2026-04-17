@@ -593,8 +593,8 @@ func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
 	if app.cronState.OwnerGatewayID != "gateway-1" || app.cronState.GatewayID != "gateway-1" {
 		t.Fatalf("view-only /cron must not rewrite owner state: %#v", app.cronState)
 	}
-	if summary := events[0].FeishuDirectCommandCatalog.Summary; !strings.Contains(summary, "Owner 状态：正常") {
-		t.Fatalf("summary = %q, want owner health", summary)
+	if summary := events[0].FeishuDirectCommandCatalog.Summary; !strings.Contains(summary, "当前状态：正常") {
+		t.Fatalf("summary = %q, want cron status summary", summary)
 	}
 }
 
