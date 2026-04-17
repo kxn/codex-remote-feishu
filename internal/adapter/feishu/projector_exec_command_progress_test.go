@@ -111,6 +111,45 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 	}
 }
 
+func TestProjectExecCommandProgressInterleavesExplorationRowsAndEntriesByVisibleSeq(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-3",
+			Blocks: []control.ExecCommandProgressBlock{{
+				BlockID: "exploration",
+				Kind:    "exploration",
+				Status:  "running",
+				Rows: []control.ExecCommandProgressBlockRow{
+					{RowID: "read-1", Kind: "read", Items: []string{"foo.txt"}, LastSeq: 1},
+					{RowID: "read-2", Kind: "read", Items: []string{"bar.txt"}, LastSeq: 3},
+				},
+			}},
+			Entries: []control.ExecCommandProgressEntry{
+				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "npm test", LastSeq: 2},
+			},
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if strings.Count(body, "• 探索中") != 2 {
+		t.Fatalf("expected split exploration headers around entry barrier, got %#v", ops[0])
+	}
+	readFoo := strings.Index(body, "读取 foo.txt")
+	entry := strings.Index(body, "执行：")
+	readBar := strings.Index(body, "读取 bar.txt")
+	if readFoo == -1 || entry == -1 || readBar == -1 || !(readFoo < entry && entry < readBar) {
+		t.Fatalf("expected exploration rows and entries to follow visible seq order, got %#v", ops[0])
+	}
+}
+
 func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

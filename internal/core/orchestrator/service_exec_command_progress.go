@@ -286,6 +286,7 @@ func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *con
 			Label:   entry.Label,
 			Summary: entry.Summary,
 			Status:  entry.Status,
+			LastSeq: entry.LastSeq,
 		})
 	}
 	return &control.ExecCommandProgress{
@@ -426,10 +427,15 @@ func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, e
 			if entry.Status != "" {
 				current.Status = entry.Status
 			}
+			if current.LastSeq == 0 {
+				progress.LastVisibleSeq++
+				current.LastSeq = progress.LastVisibleSeq
+			}
 			return
 		}
 	}
 	progress.LastVisibleSeq++
+	entry.LastSeq = progress.LastVisibleSeq
 	progress.Entries = append(progress.Entries, entry)
 }
 
