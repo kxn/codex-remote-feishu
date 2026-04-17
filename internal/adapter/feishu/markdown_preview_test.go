@@ -1278,6 +1278,41 @@ func TestDriveMarkdownPreviewerRewritesTextFileToWebPreviewLink(t *testing.T) {
 	}
 }
 
+func TestDriveMarkdownPreviewerRewritesCodeFileLocationToWebPreviewLink(t *testing.T) {
+	root := t.TempDir()
+	writePreviewFile(t, filepath.Join(root, "internal", "main.go"), "package main\n\nfunc main() {}\n")
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD: root,
+		CacheDir:   filepath.Join(root, "preview-cache"),
+	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
+
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "Open `internal/main.go:3`.",
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if !strings.Contains(result.Block.Text, "[internal/main.go:3](https://preview.example/g/shared/") {
+		t.Fatalf("expected web preview link for code file location, got %q", result.Block.Text)
+	}
+	if !strings.Contains(result.Block.Text, "loc=L3") || !strings.Contains(result.Block.Text, "#L3") {
+		t.Fatalf("expected location to be carried into preview url, got %q", result.Block.Text)
+	}
+	if len(web.issuedFor) != 1 {
+		t.Fatalf("expected one web preview grant request, got %#v", web.issuedFor)
+	}
+}
+
 func TestDriveMarkdownPreviewerUsesSameGrantKeyForMultipleLinksInOneMessage(t *testing.T) {
 	root := t.TempDir()
 	writePreviewFile(t, filepath.Join(root, "docs", "a.txt"), "a\n")
@@ -1497,6 +1532,30 @@ func TestDriveMarkdownPreviewerSupportsRegisteredHandlerPublisherChain(t *testin
 	}
 	if result.Block.Text != "Open [demo](https://preview/custom-link)." {
 		t.Fatalf("expected registered handler/publisher to rewrite link, got %q", result.Block.Text)
+	}
+}
+
+func TestSplitPreviewLocationSuffixSupportsGenericFileLocations(t *testing.T) {
+	tests := []struct {
+		target     string
+		wantBase   string
+		wantLine   int
+		wantColumn int
+		wantSuffix string
+	}{
+		{target: "docs/design.md:50", wantBase: "docs/design.md", wantLine: 50, wantSuffix: ":50"},
+		{target: "internal/main.go:92:5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: ":92:5"},
+		{target: "internal/main.go#L92C5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: "#L92C5"},
+		{target: "internal/main.go:", wantBase: "internal/main.go:", wantLine: 0, wantColumn: 0, wantSuffix: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			base, location, suffix := splitPreviewLocationSuffix(tt.target)
+			if base != tt.wantBase || location.Line != tt.wantLine || location.Column != tt.wantColumn || suffix != tt.wantSuffix {
+				t.Fatalf("splitPreviewLocationSuffix(%q) = (%q, %#v, %q), want (%q, line=%d col=%d, %q)",
+					tt.target, base, location, suffix, tt.wantBase, tt.wantLine, tt.wantColumn, tt.wantSuffix)
+			}
+		})
 	}
 }
 

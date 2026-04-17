@@ -249,18 +249,71 @@ func limitNameBytes(value string, limit int) string {
 	return strings.TrimRight(value, "-_.")
 }
 
+var previewHashLocationSuffixPattern = regexp.MustCompile(`^#L(\d+)(?:C(\d+))?$`)
+var previewLocationNumberPattern = regexp.MustCompile(`^\d+(?::\d+)?$`)
+
 func stripMarkdownLocationSuffix(target string) (string, string) {
+	base, _, suffix := splitPreviewLocationSuffix(target)
+	return base, suffix
+}
+
+func splitPreviewLocationSuffix(target string) (base string, location PreviewLocation, suffix string) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", PreviewLocation{}, ""
+	}
 	if idx := strings.Index(target, "#"); idx >= 0 {
-		base := target[:idx]
-		suffix := target[idx:]
-		if matched, _ := regexp.MatchString(`^#L\d+(?:C\d+)?$`, suffix); matched {
-			return base, suffix
+		candidateBase := target[:idx]
+		candidateSuffix := target[idx:]
+		if matched := previewHashLocationSuffixPattern.FindStringSubmatch(candidateSuffix); len(matched) == 3 {
+			location = PreviewLocation{
+				Line:   parsePreviewLocationNumber(matched[1]),
+				Column: parsePreviewLocationNumber(matched[2]),
+			}
+			if location.Valid() {
+				return candidateBase, location, candidateSuffix
+			}
 		}
 	}
-	if matched := markdownLineSuffixPattern.FindStringSubmatch(target); len(matched) == 3 {
-		return matched[1], matched[2]
+	if matched := previewColonLocationSuffixPattern.FindStringSubmatch(target); len(matched) == 3 && previewLocationNumberPattern.MatchString(matched[2][1:]) {
+		base = matched[1]
+		suffix = matched[2]
+		line, column := parsePreviewColonLocationSuffix(suffix)
+		location = PreviewLocation{Line: line, Column: column}
+		if location.Valid() {
+			return base, location, suffix
+		}
 	}
-	return target, ""
+	return target, PreviewLocation{}, ""
+}
+
+func parsePreviewColonLocationSuffix(suffix string) (line int, column int) {
+	suffix = strings.TrimPrefix(strings.TrimSpace(suffix), ":")
+	if suffix == "" {
+		return 0, 0
+	}
+	parts := strings.SplitN(suffix, ":", 3)
+	if len(parts) > 0 {
+		line = parsePreviewLocationNumber(parts[0])
+	}
+	if len(parts) > 1 {
+		column = parsePreviewLocationNumber(parts[1])
+	}
+	return line, column
+}
+
+func parsePreviewLocationNumber(text string) int {
+	if strings.TrimSpace(text) == "" {
+		return 0
+	}
+	value := 0
+	for _, ch := range text {
+		if ch < '0' || ch > '9' {
+			return 0
+		}
+		value = value*10 + int(ch-'0')
+	}
+	return value
 }
 
 func previewAllowedRoots(values ...string) []string {

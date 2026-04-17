@@ -274,7 +274,18 @@ func (p *DriveMarkdownPreviewer) issueWebPreviewURL(ctx context.Context, req Pre
 	if strings.HasSuffix(prefix, "/") {
 		parsed.Path = strings.TrimRight(parsed.Path, "/")
 	}
+	appendWebPreviewLocation(parsed, req.Reference.Location)
 	return parsed.String(), nil
+}
+
+func appendWebPreviewLocation(target *url.URL, location PreviewLocation) {
+	if target == nil || !location.Valid() {
+		return
+	}
+	query := target.Query()
+	query.Set("loc", location.QueryValue())
+	target.RawQuery = query.Encode()
+	target.Fragment = location.FragmentID()
 }
 
 func webPreviewGrantRequest(req FinalBlockPreviewRequest, scopePublicID string) WebPreviewGrantRequest {

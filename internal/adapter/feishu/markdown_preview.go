@@ -20,7 +20,7 @@ const (
 	previewPermissionView               = "view"
 )
 
-var markdownLineSuffixPattern = regexp.MustCompile(`^(.*\.md)(:\d+(?::\d+)?)$`)
+var previewColonLocationSuffixPattern = regexp.MustCompile(`^(.*?)(:\d+(?::\d+)?)$`)
 
 type PreviewDriveAdminService interface {
 	Summary(context.Context) (PreviewDriveSummary, error)

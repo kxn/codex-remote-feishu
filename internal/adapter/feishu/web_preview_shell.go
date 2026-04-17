@@ -98,6 +98,12 @@ body{margin:0;background:#f7f4ee;color:#1b1812;font-family:"Segoe UI",ui-sans-se
 .preview-prose pre,.preview-prose code{font-family:"SFMono-Regular","Cascadia Code","Consolas",monospace}
 .preview-prose pre{overflow:auto;padding:14px 0}
 .source-block,.diff-block,.summary-block{margin:0;white-space:pre-wrap;word-break:break-word;font-family:"SFMono-Regular","Cascadia Code","Consolas",monospace;font-size:13px;line-height:1.65;background:transparent;border:0;padding:0}
+.source-block--numbered{display:block;white-space:normal}
+.source-line{display:grid;grid-template-columns:minmax(48px,max-content) minmax(0,1fr);gap:14px;align-items:start;padding:0 0 0 2px;scroll-margin-block:45vh}
+.source-line-number{display:block;color:#8a7b68;text-decoration:none;text-align:right;user-select:none}
+.source-line-text{display:block;white-space:pre-wrap;word-break:break-word}
+.source-line--target,.source-line:target{background:#fff1c7;border-radius:8px}
+.source-column-target{background:#ffd778;border-radius:4px}
 .preview-image{display:block;max-width:100%%;height:auto;object-fit:contain}
 .preview-pdf{display:block;width:100%%;height:100%%;border:0;background:#fff}
 @media (max-width:640px){

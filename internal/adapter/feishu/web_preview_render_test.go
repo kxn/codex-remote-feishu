@@ -129,6 +129,50 @@ func TestDriveMarkdownPreviewerServesDiffFirstForLargeText(t *testing.T) {
 	}
 }
 
+func TestDriveMarkdownPreviewerServesLineAddressedSourcePreview(t *testing.T) {
+	root := t.TempDir()
+	previewer := newWebPreviewerForTest(root)
+
+	_, previewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "internal", "main.go"), []byte("package main\n\nfunc main() {}\n"), time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+previewID+"?loc=L3C6", nil)
+	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
+		t.Fatal("expected line-addressed preview to be served")
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="L3"`) || !strings.Contains(body, `class="source-line source-line--target"`) {
+		t.Fatalf("expected target line anchor and highlight, got %q", body)
+	}
+	if !strings.Contains(body, `href="#L3"`) || !strings.Contains(body, "已定位到第 3 行 第 6 列") {
+		t.Fatalf("expected line-addressed navigation notice, got %q", body)
+	}
+	if !strings.Contains(body, `class="source-column-target"`) {
+		t.Fatalf("expected target column highlight, got %q", body)
+	}
+}
+
+func TestDriveMarkdownPreviewerUsesSourceViewForMarkdownLocationPreview(t *testing.T) {
+	root := t.TempDir()
+	previewer := newWebPreviewerForTest(root)
+
+	_, previewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "design.md"), []byte("# Title\n\nBody\n"), time.Date(2026, 4, 17, 9, 5, 0, 0, time.UTC))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+previewID+"?loc=L3", nil)
+	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
+		t.Fatal("expected markdown location preview to be served")
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "当前按源码视图展示") {
+		t.Fatalf("expected markdown location preview to explain source fallback, got %q", body)
+	}
+	if strings.Contains(body, `class="preview-prose"`) {
+		t.Fatalf("expected markdown location preview to avoid rendered article mode, got %q", body)
+	}
+	if !strings.Contains(body, `id="L3"`) {
+		t.Fatalf("expected markdown location preview to expose source line anchors, got %q", body)
+	}
+}
+
 func TestDriveMarkdownPreviewerReturnsExpiredAndMissingPreviewResponses(t *testing.T) {
 	root := t.TempDir()
 	previewer := newWebPreviewerForTest(root)

@@ -370,6 +370,7 @@ func (p *DriveMarkdownPreviewer) rewritePreviewReferenceTarget(
 		RawTarget:   rawTarget,
 		TargetStart: targetStart,
 		TargetEnd:   targetEnd,
+		Location:    previewReferenceLocation(rawTarget),
 	}
 	published, publishedOK, err := p.materializePreviewTarget(ctx, ref, req, scopeKey, principals, runtime)
 	if err != nil {
@@ -387,6 +388,11 @@ func (p *DriveMarkdownPreviewer) rewritePreviewReferenceTarget(
 	}
 	rewrittenTargets[rawTarget] = replacement
 	return replacement, supplements, replacement != rawTarget, nil
+}
+
+func previewReferenceLocation(rawTarget string) PreviewLocation {
+	_, location, _ := splitPreviewLocationSuffix(rawTarget)
+	return location
 }
 
 func trimMarkdownInlineSpaceBounds(text string) (int, int) {
@@ -564,7 +570,7 @@ func (p *DriveMarkdownPreviewer) materializePreviewTarget(ctx context.Context, r
 		if !ok || plan == nil {
 			continue
 		}
-		result, published, publishErr := p.publishPreviewPlan(ctx, req, *plan, scopeKey, principals, runtime)
+		result, published, publishErr := p.publishPreviewPlan(ctx, req, ref, *plan, scopeKey, principals, runtime)
 		if publishErr != nil {
 			errs = append(errs, publishErr.Error())
 			continue
@@ -579,7 +585,7 @@ func (p *DriveMarkdownPreviewer) materializePreviewTarget(ctx context.Context, r
 	return nil, false, nil
 }
 
-func (p *DriveMarkdownPreviewer) publishPreviewPlan(ctx context.Context, req FinalBlockPreviewRequest, plan PreviewPlan, scopeKey string, principals []previewPrincipal, runtime *previewRewriteRuntime) (*PreviewPublishResult, bool, error) {
+func (p *DriveMarkdownPreviewer) publishPreviewPlan(ctx context.Context, req FinalBlockPreviewRequest, ref PreviewReference, plan PreviewPlan, scopeKey string, principals []previewPrincipal, runtime *previewRewriteRuntime) (*PreviewPublishResult, bool, error) {
 	var errs []string
 	for _, delivery := range plan.Deliveries {
 		for _, publisher := range p.publishers {
@@ -588,6 +594,7 @@ func (p *DriveMarkdownPreviewer) publishPreviewPlan(ctx context.Context, req Fin
 			}
 			result, ok, err := publisher.Publish(ctx, PreviewPublishRequest{
 				Request:    req,
+				Reference:  ref,
 				Plan:       plan,
 				Delivery:   delivery,
 				ScopeKey:   scopeKey,
@@ -629,7 +636,7 @@ func (h markdownFilePreviewHandler) Match(_ FinalBlockPreviewRequest, ref Previe
 	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") {
 		return false
 	}
-	cleanTarget, _ := stripMarkdownLocationSuffix(target)
+	cleanTarget, _, _ := splitPreviewLocationSuffix(target)
 	_, _, ok := previewArtifactMetadata(cleanTarget)
 	return ok
 }
@@ -925,7 +932,7 @@ func (p *DriveMarkdownPreviewer) resolvePreviewPath(rawTarget string, req Markdo
 		return "", false, nil
 	}
 
-	cleanTarget, _ := stripMarkdownLocationSuffix(target)
+	cleanTarget, _, _ := splitPreviewLocationSuffix(target)
 	if _, _, ok := previewArtifactMetadata(cleanTarget); !ok {
 		return "", false, nil
 	}

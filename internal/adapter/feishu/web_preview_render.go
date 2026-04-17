@@ -38,13 +38,14 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 		})
 		return true
 	}
+	location := previewLocationFromRequest(r)
 	current, previous, err := p.loadWebPreviewArtifactsForServe(scopePublicID, previewID)
 	switch {
 	case err == nil:
 		if download {
 			serveWebPreviewDownloadHTTP(w, r, current)
 		} else {
-			writeWebPreviewPage(w, buildWebPreviewPage(current, previous, previewRelativeDownloadHref(previewID)))
+			writeWebPreviewPage(w, buildWebPreviewPage(current, previous, previewRelativeDownloadHref(previewID), location))
 		}
 		return true
 	case err == errPreviewRecordExpired || err == errPreviewArtifactExpired:
@@ -123,7 +124,7 @@ func (p *DriveMarkdownPreviewer) loadWebPreviewArtifactsForServe(scopePublicID, 
 	return current, previous, nil
 }
 
-func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref string) webPreviewPage {
+func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref string, location PreviewLocation) webPreviewPage {
 	record := current.Record
 	page := webPreviewPage{
 		Title:        firstNonEmpty(strings.TrimSpace(record.DisplayName), "文件预览"),
@@ -131,9 +132,17 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 		DownloadHref: strings.TrimSpace(downloadHref),
 		Layout:       webPreviewLayoutDocument,
 	}
+	lineAddressed := location.Valid() && allowsLineAddressedWebPreview(record.RendererKind)
+	if lineAddressed {
+		page.Notice = previewLocationNotice(location, record.RendererKind)
+	}
 
 	switch strings.TrimSpace(record.RendererKind) {
 	case "markdown":
+		if lineAddressed {
+			page.BodyHTML = renderLineAddressedSourcePreviewHTML(current.Content, location)
+			return page
+		}
 		if shouldRenderDiffFirst(record, previous) {
 			page.Notice = "文件较大，默认展示与上一版的差异。"
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
@@ -153,6 +162,10 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 		page.BodyHTML = `<article class="preview-prose">` + html + `</article>`
 		return page
 	case "text":
+		if lineAddressed {
+			page.BodyHTML = renderLineAddressedSourcePreviewHTML(current.Content, location)
+			return page
+		}
 		if shouldRenderDiffFirst(record, previous) {
 			page.Notice = "文件较大，默认展示与上一版的差异。"
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
@@ -166,6 +179,11 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "html_source":
+		if lineAddressed {
+			page.Notice = previewLocationNotice(location, record.RendererKind) + " 出于安全考虑，HTML 以源码方式展示，不会在页面内直接执行。"
+			page.BodyHTML = renderLineAddressedSourcePreviewHTML(current.Content, location)
+			return page
+		}
 		page.Notice = "出于安全考虑，HTML 以源码方式展示，不会在页面内直接执行。"
 		if shouldRenderDiffFirst(record, previous) {
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
@@ -174,6 +192,11 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "svg_source":
+		if lineAddressed {
+			page.Notice = previewLocationNotice(location, record.RendererKind) + " 出于安全考虑，SVG 以源码方式展示，不会作为同源文档直接渲染。"
+			page.BodyHTML = renderLineAddressedSourcePreviewHTML(current.Content, location)
+			return page
+		}
 		page.Notice = "出于安全考虑，SVG 以源码方式展示，不会作为同源文档直接渲染。"
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
@@ -191,6 +214,50 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 		page.BodyHTML = `<p>这份文件保留了快照下载能力，但当前不会在页面内直接展开。</p>`
 		return page
 	}
+}
+
+func allowsLineAddressedWebPreview(rendererKind string) bool {
+	switch strings.TrimSpace(rendererKind) {
+	case "markdown", "text", "html_source", "svg_source":
+		return true
+	default:
+		return false
+	}
+}
+
+func previewLocationFromRequest(r *http.Request) PreviewLocation {
+	if r == nil || r.URL == nil {
+		return PreviewLocation{}
+	}
+	return parsePreviewLocationValue(r.URL.Query().Get("loc"))
+}
+
+func parsePreviewLocationValue(value string) PreviewLocation {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return PreviewLocation{}
+	}
+	if matched := previewHashLocationSuffixPattern.FindStringSubmatch("#" + value); len(matched) == 3 {
+		return PreviewLocation{
+			Line:   parsePreviewLocationNumber(matched[1]),
+			Column: parsePreviewLocationNumber(matched[2]),
+		}
+	}
+	return PreviewLocation{}
+}
+
+func previewLocationNotice(location PreviewLocation, rendererKind string) string {
+	if !location.Valid() {
+		return ""
+	}
+	base := "已定位到第 " + previewItoa(location.Line) + " 行"
+	if location.Column > 0 {
+		base += " 第 " + previewItoa(location.Column) + " 列"
+	}
+	if strings.TrimSpace(rendererKind) == "markdown" {
+		return base + "。为保证行号对应源码，当前按源码视图展示。"
+	}
+	return base + "。"
 }
 
 func appendPreviewInlineQuery(downloadHref string) string {
@@ -265,6 +332,64 @@ func renderMarkdownHTML(content []byte) (string, error) {
 
 func renderSourcePreviewHTML(content []byte) string {
 	return `<pre class="source-block">` + escapePreviewText(string(content)) + `</pre>`
+}
+
+func renderLineAddressedSourcePreviewHTML(content []byte, location PreviewLocation) string {
+	lines := splitPreviewSourceLines(string(content))
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	var builder strings.Builder
+	builder.WriteString(`<div class="source-block source-block--numbered">`)
+	for index, line := range lines {
+		lineNumber := index + 1
+		lineID := "L" + previewItoa(lineNumber)
+		lineClass := "source-line"
+		if location.Line == lineNumber {
+			lineClass += " source-line--target"
+		}
+		builder.WriteString(`<div id="`)
+		builder.WriteString(lineID)
+		builder.WriteString(`" class="`)
+		builder.WriteString(lineClass)
+		builder.WriteString(`"><a class="source-line-number" href="#`)
+		builder.WriteString(lineID)
+		builder.WriteString(`">`)
+		builder.WriteString(previewItoa(lineNumber))
+		builder.WriteString(`</a><span class="source-line-text">`)
+		builder.WriteString(renderPreviewSourceLineText(line, lineNumber, location))
+		builder.WriteString(`</span></div>`)
+	}
+	builder.WriteString(`</div>`)
+	return builder.String()
+}
+
+func splitPreviewSourceLines(text string) []string {
+	if text == "" {
+		return []string{""}
+	}
+	lines := strings.SplitAfter(text, "\n")
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func renderPreviewSourceLineText(line string, lineNumber int, location PreviewLocation) string {
+	if location.Line != lineNumber || location.Column <= 0 {
+		return escapePreviewText(line)
+	}
+	runes := []rune(line)
+	columnIndex := location.Column - 1
+	if columnIndex < 0 || columnIndex >= len(runes) {
+		return escapePreviewText(line)
+	}
+	prefix := string(runes[:columnIndex])
+	suffix := string(runes[columnIndex:])
+	return escapePreviewText(prefix) + `<span class="source-column-target">` + escapePreviewText(suffix) + `</span>`
 }
 
 func renderTextSummaryHTML(content []byte) string {

@@ -31,6 +31,32 @@ type FinalBlockPreviewResult struct {
 	Supplements []PreviewSupplement
 }
 
+type PreviewLocation struct {
+	Line   int
+	Column int
+}
+
+func (l PreviewLocation) Valid() bool {
+	return l.Line > 0
+}
+
+func (l PreviewLocation) QueryValue() string {
+	if l.Line <= 0 {
+		return ""
+	}
+	if l.Column > 0 {
+		return "L" + previewItoa(l.Line) + "C" + previewItoa(l.Column)
+	}
+	return "L" + previewItoa(l.Line)
+}
+
+func (l PreviewLocation) FragmentID() string {
+	if l.Line <= 0 {
+		return ""
+	}
+	return "L" + previewItoa(l.Line)
+}
+
 type PreviewSupplement struct {
 	Kind string         `json:"kind,omitempty"`
 	Data map[string]any `json:"data,omitempty"`
@@ -40,6 +66,7 @@ type PreviewReference struct {
 	RawTarget   string
 	TargetStart int
 	TargetEnd   int
+	Location    PreviewLocation
 }
 
 type PreviewPlan struct {
@@ -87,6 +114,7 @@ type PreviewPublishResult struct {
 
 type PreviewPublishRequest struct {
 	Request    FinalBlockPreviewRequest
+	Reference  PreviewReference
 	Plan       PreviewPlan
 	Delivery   PreviewDeliveryPlan
 	State      *previewState
@@ -125,4 +153,18 @@ type WebPreviewConfigurable interface {
 
 type WebPreviewRouteService interface {
 	ServeWebPreview(http.ResponseWriter, *http.Request, string, string, bool) bool
+}
+
+func previewItoa(value int) string {
+	if value == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for value > 0 {
+		i--
+		buf[i] = byte('0' + (value % 10))
+		value /= 10
+	}
+	return string(buf[i:])
 }
