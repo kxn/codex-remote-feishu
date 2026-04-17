@@ -175,28 +175,11 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
-	primaryCommand := cronPrimaryDetailCommand(stateValue, ownerView)
-	canEdit := cronCanEdit(stateValue)
-	canReload := cronCanReload(stateValue, ownerView)
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Cron 状态",
 		Summary:      strings.Join(summaryLines, "\n"),
-		Interactive:  true,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Sections: []control.CommandCatalogSection{
-			{
-				Title: "常用操作",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("当前任务", "/cron list", "", false),
-						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
-						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
-						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
-					},
-				}},
-			},
-			cronManualCommandSection(),
-		},
+		Interactive:  false,
+		DisplayStyle: control.CommandCatalogDisplayDefault,
 	}
 }
 
@@ -219,28 +202,11 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, "", strings.TrimSpace(extraSummary))
 	}
-	primaryCommand := cronPrimaryDetailCommand(stateValue, ownerView)
-	canEdit := cronCanEdit(stateValue)
-	canReload := cronCanReload(stateValue, ownerView)
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Cron 任务",
 		Summary:      strings.Join(summaryLines, "\n"),
-		Interactive:  true,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Sections: []control.CommandCatalogSection{
-			{
-				Title: "常用操作",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("当前状态", "/cron status", "", false),
-						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
-						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
-						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
-					},
-				}},
-			},
-			cronManualCommandSection(),
-		},
+		Interactive:  false,
+		DisplayStyle: control.CommandCatalogDisplayDefault,
 	}
 }
 
@@ -264,27 +230,11 @@ func buildCronEditCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
-	primaryCommand := cronPrimaryEditCommand(stateValue, ownerView)
-	canReload := cronCanReload(stateValue, ownerView)
 	return &control.FeishuDirectCommandCatalog{
 		Title:        "Cron 配置",
 		Summary:      strings.Join(summaryLines, "\n"),
-		Interactive:  true,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Sections: []control.CommandCatalogSection{
-			{
-				Title: "常用操作",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: []control.CommandCatalogButton{
-						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
-						runCommandButton("查看任务", "/cron list", "", false),
-						runCommandButton("当前状态", "/cron status", "", false),
-						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
-					},
-				}},
-			},
-			cronManualCommandSection(),
-		},
+		Interactive:  false,
+		DisplayStyle: control.CommandCatalogDisplayDefault,
 	}
 }
 

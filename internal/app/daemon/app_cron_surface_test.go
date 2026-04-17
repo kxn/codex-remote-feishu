@@ -124,6 +124,15 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		if catalog.Title != wantTitle {
 			t.Fatalf("%s title = %q, want %q", commandText, catalog.Title, wantTitle)
 		}
+		if catalog.Interactive {
+			t.Fatalf("%s interactive = true, want false", commandText)
+		}
+		if len(catalog.Sections) != 0 {
+			t.Fatalf("%s sections = %#v, want no follow-up menu sections", commandText, catalog.Sections)
+		}
+		if len(catalog.RelatedButtons) != 0 {
+			t.Fatalf("%s related buttons = %#v, want none", commandText, catalog.RelatedButtons)
+		}
 		for _, fragment := range wantFragments {
 			if !strings.Contains(catalog.Summary, fragment) {
 				t.Fatalf("%s summary missing %q: %q", commandText, fragment, catalog.Summary)
