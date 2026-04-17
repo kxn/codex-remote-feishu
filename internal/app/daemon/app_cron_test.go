@@ -28,6 +28,9 @@ type fakeCronBitableAPI struct {
 	permissions    map[string]feishu.BitablePermissionMember
 	recordsByTable map[string][]*larkbitable.AppTableRecord
 	listCalls      []fakeCronRecordWrite
+	listRecordsErr error
+	batchCreateErr error
+	batchUpdateErr error
 }
 
 type fakeCronRecordWrite struct {
@@ -104,6 +107,9 @@ func (f *fakeCronBitableAPI) UpdateField(context.Context, string, string, string
 func (f *fakeCronBitableAPI) ListRecords(_ context.Context, appToken, tableID string, _ []string) ([]*larkbitable.AppTableRecord, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listRecordsErr != nil {
+		return nil, f.listRecordsErr
+	}
 	values := f.recordsByTable
 	if len(values) == 0 {
 		return nil, nil
@@ -151,6 +157,9 @@ func (f *fakeCronBitableAPI) UpdateRecord(_ context.Context, appToken, tableID, 
 func (f *fakeCronBitableAPI) BatchCreateRecords(_ context.Context, appToken, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.batchCreateErr != nil {
+		return nil, f.batchCreateErr
+	}
 	base := len(f.createRecords)
 	records := make([]*larkbitable.AppTableRecord, 0, len(values))
 	for i, fields := range values {
@@ -169,6 +178,9 @@ func (f *fakeCronBitableAPI) BatchCreateRecords(_ context.Context, appToken, tab
 func (f *fakeCronBitableAPI) BatchUpdateRecords(_ context.Context, appToken, tableID string, values []feishu.BitableRecordUpdate) ([]*larkbitable.AppTableRecord, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.batchUpdateErr != nil {
+		return nil, f.batchUpdateErr
+	}
 	records := make([]*larkbitable.AppTableRecord, 0, len(values))
 	for _, update := range values {
 		recordID := strings.TrimSpace(update.RecordID)

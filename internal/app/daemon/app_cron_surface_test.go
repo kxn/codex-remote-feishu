@@ -1,19 +1,23 @@
 package daemon
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	api := &fakeCronBitableAPI{}
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 	app.cronState = &cronStateFile{
 		SchemaVersion:    cronStateSchemaVersion,
 		InstanceScopeKey: "stable",
@@ -26,8 +30,9 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
 			Tables: cronTableIDs{
-				Tasks: "tbl-tasks",
-				Runs:  "tbl-runs",
+				Tasks:      "tbl-tasks",
+				Runs:       "tbl-runs",
+				Workspaces: "tbl-workspaces",
 			},
 		},
 		Jobs: []cronJobState{{
@@ -72,9 +77,11 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 
 func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	api := &fakeCronBitableAPI{}
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronLoaded = true
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 	app.cronState = &cronStateFile{
 		SchemaVersion:    cronStateSchemaVersion,
 		InstanceScopeKey: "stable",
@@ -87,7 +94,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
 			TimeZone: "Asia/Shanghai",
-			Tables:   cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs"},
+			Tables:   cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs", Workspaces: "tbl-workspaces"},
 		},
 		LastWorkspaceSyncAt: time.Date(2026, 4, 17, 1, 2, 3, 0, time.UTC),
 		LastReloadAt:        time.Date(2026, 4, 17, 2, 3, 4, 0, time.UTC),
@@ -143,7 +150,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	assertCatalog("/cron status", "Cron 状态",
 		"当前状态：正常",
 		"当前已加载任务：2 条",
-		"最近工作区同步：2026-04-17 09:02",
+		"最近工作区同步：",
 		"最近 reload：2026-04-17 10:03",
 		"最近 reload 摘要：已加载 2 条任务",
 		"配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)",
@@ -185,6 +192,85 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	}
 	if len(secondEntry.Buttons) != 1 || secondEntry.Buttons[0].CommandText != "/cron run rec-1" {
 		t.Fatalf("unexpected second /cron list buttons: %#v", secondEntry.Buttons)
+	}
+}
+
+func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	api := &fakeCronBitableAPI{listRecordsErr: errors.New("bitable down")}
+	setCronGatewayLookup(app, "gateway-1", "app-1")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			AppURL:   "https://example.feishu.cn/base/app-cron",
+			Tables: cronTableIDs{
+				Tasks:      "tbl-tasks",
+				Runs:       "tbl-runs",
+				Workspaces: "tbl-workspaces",
+			},
+		},
+	}
+
+	menuEvents := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})
+	if len(menuEvents) != 1 || menuEvents[0].FeishuDirectCommandCatalog == nil {
+		t.Fatalf("menu events = %#v, want one catalog", menuEvents)
+	}
+	menuCatalog := menuEvents[0].FeishuDirectCommandCatalog
+	if !strings.Contains(menuCatalog.Summary, "配置入口：工作区清单未同步，暂不可用。") {
+		t.Fatalf("menu summary = %q, want sync-failed hint", menuCatalog.Summary)
+	}
+	if !strings.Contains(menuCatalog.Summary, "工作区清单同步失败") {
+		t.Fatalf("menu summary = %q, want failure reason", menuCatalog.Summary)
+	}
+	menuButtons := collectCronCatalogButtons(menuCatalog)
+	if !menuButtons["/cron edit"].Disabled {
+		t.Fatalf("expected /cron edit to be disabled when workspace sync fails, got %#v", menuButtons["/cron edit"])
+	}
+
+	statusEvents := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron status",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})
+	if len(statusEvents) != 1 || statusEvents[0].FeishuDirectCommandCatalog == nil {
+		t.Fatalf("status events = %#v, want one catalog", statusEvents)
+	}
+	statusSummary := statusEvents[0].FeishuDirectCommandCatalog.Summary
+	if strings.Contains(statusSummary, "[打开 Cron 配置表]") {
+		t.Fatalf("status summary must not expose config link after sync failure: %q", statusSummary)
+	}
+	if !strings.Contains(statusSummary, "配置表：工作区清单未同步，暂不开放配置入口") {
+		t.Fatalf("status summary = %q, want hidden-config wording", statusSummary)
+	}
+
+	editEvents := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron edit",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})
+	if len(editEvents) != 1 || editEvents[0].FeishuDirectCommandCatalog == nil {
+		t.Fatalf("edit events = %#v, want one catalog", editEvents)
+	}
+	editSummary := editEvents[0].FeishuDirectCommandCatalog.Summary
+	if strings.Contains(editSummary, "[打开 Cron 配置表]") {
+		t.Fatalf("edit summary must not expose config link after sync failure: %q", editSummary)
+	}
+	if !strings.Contains(editSummary, "工作区清单同步完成后才会开放配置入口") {
+		t.Fatalf("edit summary = %q, want sync-first wording", editSummary)
 	}
 }
 

@@ -11,22 +11,19 @@ import (
 )
 
 func (a *App) handleCronDaemonCommand(command control.DaemonCommand) []control.UIEvent {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.shuttingDown {
-		return nil
-	}
-	return a.handleCronDaemonCommandLocked(command)
-}
-
-func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []control.UIEvent {
 	parsed, err := parseCronCommandText(command.Text)
 	if err != nil {
 		return cronUsageEvents(command.SurfaceSessionID, err.Error())
 	}
 	switch parsed.Mode {
 	case cronCommandMenu, cronCommandStatus, cronCommandList, cronCommandEdit:
-		catalog, err := a.prepareCronCatalogLocked(command, parsed.Mode)
+		a.mu.Lock()
+		shuttingDown := a.shuttingDown
+		a.mu.Unlock()
+		if shuttingDown {
+			return nil
+		}
+		catalog, err := a.prepareCronCatalog(command, parsed.Mode)
 		if err != nil {
 			return append([]control.UIEvent{
 				cronNoticeEvent(command.SurfaceSessionID, "cron_catalog_failed", fmt.Sprintf("Cron 信息读取失败：%v", err)),
@@ -36,6 +33,42 @@ func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []con
 			return cronUsageEvents(command.SurfaceSessionID, "")
 		}
 		return []control.UIEvent{*catalog}
+	default:
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.shuttingDown {
+			return nil
+		}
+		return a.handleCronMutatingDaemonCommandLocked(command, parsed)
+	}
+}
+
+func (a *App) handleCronDaemonCommandLocked(command control.DaemonCommand) []control.UIEvent {
+	parsed, err := parseCronCommandText(command.Text)
+	if err != nil {
+		return cronUsageEvents(command.SurfaceSessionID, err.Error())
+	}
+	switch parsed.Mode {
+	case cronCommandMenu, cronCommandStatus, cronCommandList, cronCommandEdit:
+		a.mu.Unlock()
+		defer a.mu.Lock()
+		catalog, err := a.prepareCronCatalog(command, parsed.Mode)
+		if err != nil {
+			return append([]control.UIEvent{
+				cronNoticeEvent(command.SurfaceSessionID, "cron_catalog_failed", fmt.Sprintf("Cron 信息读取失败：%v", err)),
+			}, cronUsageEvents(command.SurfaceSessionID, "")...)
+		}
+		if catalog == nil {
+			return cronUsageEvents(command.SurfaceSessionID, "")
+		}
+		return []control.UIEvent{*catalog}
+	default:
+		return a.handleCronMutatingDaemonCommandLocked(command, parsed)
+	}
+}
+
+func (a *App) handleCronMutatingDaemonCommandLocked(command control.DaemonCommand, parsed parsedCronCommand) []control.UIEvent {
+	switch parsed.Mode {
 	case cronCommandRepair:
 		if a.cronSyncInFlight {
 			return []control.UIEvent{cronNoticeEvent(command.SurfaceSessionID, "cron_busy", "当前已有一个 Cron 配置同步在进行中，请稍后再试。")}
@@ -179,23 +212,21 @@ func (a *App) cronBitableAPI(gatewayID string) (feishu.BitableAPI, error) {
 	return factory(strings.TrimSpace(gatewayID))
 }
 
-func (a *App) prepareCronCatalogLocked(command control.DaemonCommand, mode cronCommandMode) (*control.UIEvent, error) {
-	stateValue, err := a.loadCronStateLocked(false)
+func (a *App) prepareCronCatalog(command control.DaemonCommand, mode cronCommandMode) (*control.UIEvent, error) {
+	stateValue, ownerView, extraSummary, configReady, err := a.prepareCronCatalogState(command, mode)
 	if err != nil {
 		return nil, err
 	}
-	snapshot := cloneCronState(stateValue)
-	ownerView := a.inspectCronOwnerView(snapshot)
 	var catalog *control.FeishuDirectCommandCatalog
 	switch mode {
 	case cronCommandMenu:
-		catalog = buildCronMenuCatalog(snapshot, ownerView, "")
+		catalog = buildCronMenuCatalog(stateValue, ownerView, extraSummary, configReady)
 	case cronCommandStatus:
-		catalog = buildCronStatusCatalog(snapshot, ownerView, "")
+		catalog = buildCronStatusCatalog(stateValue, ownerView, extraSummary, configReady)
 	case cronCommandList:
-		catalog = buildCronListCatalog(snapshot, ownerView, "")
+		catalog = buildCronListCatalog(stateValue, ownerView, extraSummary)
 	case cronCommandEdit:
-		catalog = buildCronEditCatalog(snapshot, ownerView, "")
+		catalog = buildCronEditCatalog(stateValue, ownerView, extraSummary, configReady)
 	default:
 		return nil, fmt.Errorf("unsupported cron catalog mode: %s", mode)
 	}
@@ -204,6 +235,92 @@ func (a *App) prepareCronCatalogLocked(command control.DaemonCommand, mode cronC
 		SurfaceSessionID:           command.SurfaceSessionID,
 		FeishuDirectCommandCatalog: catalog,
 	}, nil
+}
+
+func (a *App) prepareCronCatalogState(command control.DaemonCommand, mode cronCommandMode) (*cronStateFile, cronOwnerView, string, bool, error) {
+	a.mu.Lock()
+	stateValue, err := a.loadCronStateLocked(false)
+	if err != nil {
+		a.mu.Unlock()
+		return nil, cronOwnerView{}, "", false, err
+	}
+	snapshot := cloneCronState(stateValue)
+	ownerView := a.inspectCronOwnerView(snapshot)
+	a.mu.Unlock()
+
+	configReady := true
+	extraSummary := ""
+	if !cronCatalogNeedsWorkspaceSync(mode, snapshot) {
+		return snapshot, ownerView, extraSummary, configReady, nil
+	}
+
+	snapshot, ownerView, extraSummary, configReady = a.syncCronWorkspacesBeforeCatalog(command, snapshot, ownerView)
+	return snapshot, ownerView, extraSummary, configReady, nil
+}
+
+func cronCatalogNeedsWorkspaceSync(mode cronCommandMode, stateValue *cronStateFile) bool {
+	if !cronStateHasBinding(stateValue) {
+		return false
+	}
+	switch mode {
+	case cronCommandMenu, cronCommandStatus, cronCommandEdit:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *App) syncCronWorkspacesBeforeCatalog(command control.DaemonCommand, snapshot *cronStateFile, ownerView cronOwnerView) (*cronStateFile, cronOwnerView, string, bool) {
+	resolution, err := a.resolveCronOwnerFromState(snapshot, command, cronOwnerResolveOptions{})
+	if err != nil {
+		return snapshot, ownerView, "工作区清单同步失败，已暂时隐藏配置入口：" + err.Error(), false
+	}
+	if err := cronOwnerActionError("同步工作区清单", resolution); err != nil {
+		return snapshot, ownerView, "工作区清单尚未同步完成，已暂时隐藏配置入口：" + err.Error(), false
+	}
+
+	a.mu.Lock()
+	if a.cronSyncInFlight {
+		a.mu.Unlock()
+		return snapshot, ownerView, "当前已有 Cron 配置同步在进行中，已暂时隐藏配置入口，请稍后重试。", false
+	}
+	a.cronSyncInFlight = true
+	workspaces := a.cronWorkspaceRowsLocked()
+	a.mu.Unlock()
+
+	defer func() {
+		a.mu.Lock()
+		a.cronSyncInFlight = false
+		a.mu.Unlock()
+	}()
+
+	api, err := a.cronBitableAPI(resolution.Gateway.GatewayID)
+	if err != nil {
+		return snapshot, ownerView, "工作区清单同步失败，已暂时隐藏配置入口：" + err.Error(), false
+	}
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronReloadWorkspaceTTL)
+	defer cancelWorkspace()
+	if _, err := a.syncCronWorkspaceTable(workspaceCtx, api, resolution.Binding, workspaces); err != nil {
+		return snapshot, ownerView, "工作区清单同步失败，已暂时隐藏配置入口：" + err.Error(), false
+	}
+
+	now := time.Now().UTC()
+	if snapshot != nil {
+		snapshot.LastWorkspaceSyncAt = now
+	}
+	a.mu.Lock()
+	stateValue, err := a.loadCronStateLocked(false)
+	if err == nil && stateValue != nil {
+		stateValue.LastWorkspaceSyncAt = now
+		if writeErr := a.writeCronStateLocked(); writeErr != nil {
+			err = writeErr
+		}
+	}
+	a.mu.Unlock()
+	if err != nil {
+		return snapshot, ownerView, "工作区清单已同步，但最近同步时间写回失败：" + err.Error(), true
+	}
+	return snapshot, ownerView, "", true
 }
 
 func (a *App) repairCronBitable(command control.DaemonCommand) (*control.UIEvent, error) {
