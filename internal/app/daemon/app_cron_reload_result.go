@@ -58,6 +58,7 @@ type cronReloadResult struct {
 	Stopped          []cronReloadTaskItem
 	Errors           []cronReloadError
 	OwnerBoundFilled bool
+	TimeZone         string
 }
 
 func (r cronReloadResult) CompactSummary() string {
@@ -92,7 +93,7 @@ func cronReloadTaskItemFromJob(job cronJobState) cronReloadTaskItem {
 	}
 }
 
-func cronReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time) cronReloadTaskItem {
+func cronReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time, timeZone string) cronReloadTaskItem {
 	item := cronReloadTaskItem{}
 	if record == nil {
 		return item
@@ -137,7 +138,7 @@ func cronReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspa
 		GitRepoSourceInput: item.GitRepoInput,
 	}
 	item.SourceSummary = cronJobDisplaySource(job)
-	item.NextRunAt = cronNextRunAt(job, now)
+	item.NextRunAt = cronNextRunAtIn(job, now, timeZone)
 	return item
 }
 
@@ -152,7 +153,7 @@ func cronNewReloadError(record *larkbitable.AppTableRecord, tableName string, ro
 	}
 }
 
-func cronJobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time, tableName string, rowNumber int) (cronJobState, bool, *cronReloadError) {
+func cronJobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time, timeZone, tableName string, rowNumber int) (cronJobState, bool, *cronReloadError) {
 	if record == nil {
 		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, "", "", "empty task record")
 	}
@@ -240,12 +241,12 @@ func cronJobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRec
 		return cronJobState{}, false, cronNewReloadError(record, tableName, rowNumber, name, "调度类型", fmt.Sprintf("任务 `%s` 的调度类型无效：%s", name, scheduleType))
 	}
 	job = cronNormalizeJobState(job)
-	job.NextRunAt = cronNextRunAt(job, now)
+	job.NextRunAt = cronNextRunAtIn(job, now, timeZone)
 	return job, false, nil
 }
 
-func cronBuildReloadResult(records []*larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time, previousJobs []cronJobState) cronReloadResult {
-	result := cronReloadResult{}
+func cronBuildReloadResult(records []*larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time, previousJobs []cronJobState, timeZone string) cronReloadResult {
+	result := cronReloadResult{TimeZone: strings.TrimSpace(timeZone)}
 	loadedByRecord := map[string]cronReloadTaskItem{}
 	disabledByRecord := map[string]cronReloadTaskItem{}
 	errorByRecord := map[string]cronReloadError{}
@@ -259,8 +260,8 @@ func cronBuildReloadResult(records []*larkbitable.AppTableRecord, workspacesByRe
 	}
 	for index, record := range records {
 		rowNumber := index + 1
-		preview := cronReloadTaskPreviewFromRecord(record, workspacesByRecord, now)
-		job, disabled, reloadErr := cronJobFromReloadRecord(record, workspacesByRecord, now, cronTasksTableName, rowNumber)
+		preview := cronReloadTaskPreviewFromRecord(record, workspacesByRecord, now, timeZone)
+		job, disabled, reloadErr := cronJobFromReloadRecord(record, workspacesByRecord, now, timeZone, cronTasksTableName, rowNumber)
 		switch {
 		case disabled:
 			preview.Reason = "表格中已停用"

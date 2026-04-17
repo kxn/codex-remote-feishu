@@ -51,6 +51,7 @@ type cronStateFile struct {
 type cronBitableState struct {
 	AppToken     string       `json:"app_token,omitempty"`
 	AppURL       string       `json:"app_url,omitempty"`
+	TimeZone     string       `json:"time_zone,omitempty"`
 	DefaultTable string       `json:"default_table_id,omitempty"`
 	MetaRecordID string       `json:"meta_record_id,omitempty"`
 	Tables       cronTableIDs `json:"tables,omitempty"`
@@ -292,13 +293,7 @@ func cronAppTitle(instanceLabel string) string {
 }
 
 func cronTimeZone() string {
-	name := strings.TrimSpace(time.Now().Location().String())
-	switch strings.ToLower(name) {
-	case "", "local":
-		return "Asia/Shanghai"
-	default:
-		return name
-	}
+	return cronSystemTimeZone()
 }
 
 func cronDefaultTimeoutMinutes(raw int) int {
@@ -320,7 +315,11 @@ func cronStateHasBinding(stateValue *cronStateFile) bool {
 }
 
 func cronNextRunAt(job cronJobState, now time.Time) time.Time {
-	now = cronSchedulerTime(now)
+	return cronNextRunAtIn(job, now, cronSystemTimeZone())
+}
+
+func cronNextRunAtIn(job cronJobState, now time.Time, timeZone string) time.Time {
+	now = cronSchedulerTimeIn(now, timeZone)
 	switch job.ScheduleType {
 	case cronScheduleTypeDaily:
 		base := time.Date(now.Year(), now.Month(), now.Day(), job.DailyHour, job.DailyMinute, 0, 0, now.Location())
@@ -340,7 +339,11 @@ func cronNextRunAt(job cronJobState, now time.Time) time.Time {
 }
 
 func cronAdvanceRunAt(job cronJobState, current, now time.Time) time.Time {
-	now = cronSchedulerTime(now)
+	return cronAdvanceRunAtIn(job, current, now, cronSystemTimeZone())
+}
+
+func cronAdvanceRunAtIn(job cronJobState, current, now time.Time, timeZone string) time.Time {
+	now = cronSchedulerTimeIn(now, timeZone)
 	if !current.IsZero() {
 		current = current.In(now.Location())
 	}
@@ -373,14 +376,14 @@ func cronAdvanceRunAt(job cronJobState, current, now time.Time) time.Time {
 }
 
 func cronSchedulerTime(now time.Time) time.Time {
+	return cronSchedulerTimeIn(now, cronSystemTimeZone())
+}
+
+func cronSchedulerTimeIn(now time.Time, timeZone string) time.Time {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	loc, err := time.LoadLocation(cronTimeZone())
-	if err != nil || loc == nil {
-		return now.In(time.Local)
-	}
-	return now.In(loc)
+	return now.In(cronResolveLocation(timeZone))
 }
 
 func cronInstanceIDForRun(jobRecordID string, triggeredAt time.Time) string {
@@ -429,6 +432,85 @@ func cronMilliseconds(value time.Time) any {
 		return nil
 	}
 	return value.UTC().UnixMilli()
+}
+
+func cronConfiguredTimeZone(stateValue *cronStateFile) string {
+	if stateValue != nil && stateValue.Bitable != nil {
+		if value := cronNormalizeTimeZone(stateValue.Bitable.TimeZone); value != "" {
+			return value
+		}
+	}
+	return cronSystemTimeZone()
+}
+
+func cronFormatDisplayTime(value time.Time, timeZone string) string {
+	if value.IsZero() {
+		return ""
+	}
+	return cronSchedulerTimeIn(value, timeZone).Format("2006-01-02 15:04")
+}
+
+func cronResolveLocation(timeZone string) *time.Location {
+	if value := cronNormalizeTimeZone(timeZone); value != "" {
+		if loc, err := time.LoadLocation(value); err == nil && loc != nil {
+			return loc
+		}
+	}
+	if time.Local != nil {
+		return time.Local
+	}
+	return time.UTC
+}
+
+func cronSystemTimeZone() string {
+	candidates := []string{
+		os.Getenv("TZ"),
+		cronReadTimeZoneFile("/etc/timezone"),
+		cronTimeZoneFromLocaltime("/etc/localtime"),
+		time.Now().Location().String(),
+	}
+	for _, candidate := range candidates {
+		if value := cronNormalizeTimeZone(candidate); value != "" {
+			return value
+		}
+	}
+	return "UTC"
+}
+
+func cronNormalizeTimeZone(value string) string {
+	value = strings.TrimSpace(strings.TrimPrefix(value, ":"))
+	switch strings.ToLower(value) {
+	case "", "local":
+		return ""
+	}
+	if loc, err := time.LoadLocation(value); err == nil && loc != nil {
+		return loc.String()
+	}
+	return ""
+}
+
+func cronReadTimeZoneFile(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func cronTimeZoneFromLocaltime(path string) string {
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	normalized := filepath.ToSlash(strings.TrimSpace(target))
+	if normalized == "" {
+		return ""
+	}
+	const marker = "/zoneinfo/"
+	if idx := strings.Index(normalized, marker); idx >= 0 {
+		return strings.TrimPrefix(normalized[idx+len(marker):], "/")
+	}
+	return ""
 }
 
 func cronElapsedSeconds(startedAt, completedAt time.Time) any {

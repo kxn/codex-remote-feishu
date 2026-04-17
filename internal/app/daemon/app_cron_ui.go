@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -144,6 +143,7 @@ func buildCronMenuCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 
 func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
+	cronZone := cronConfiguredTimeZone(stateValue)
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
 	} else {
@@ -155,10 +155,10 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 			summaryLines = append(summaryLines, line)
 		}
 		if !stateValue.LastWorkspaceSyncAt.IsZero() {
-			summaryLines = append(summaryLines, fmt.Sprintf("最近工作区同步：%s", stateValue.LastWorkspaceSyncAt.UTC().Format(time.RFC3339)))
+			summaryLines = append(summaryLines, fmt.Sprintf("最近工作区同步：%s", cronFormatDisplayTime(stateValue.LastWorkspaceSyncAt, cronZone)))
 		}
 		if !stateValue.LastReloadAt.IsZero() {
-			summaryLines = append(summaryLines, fmt.Sprintf("最近 reload：%s", stateValue.LastReloadAt.UTC().Format(time.RFC3339)))
+			summaryLines = append(summaryLines, fmt.Sprintf("最近 reload：%s", cronFormatDisplayTime(stateValue.LastReloadAt, cronZone)))
 		}
 		if strings.TrimSpace(stateValue.LastReloadSummary) != "" {
 			summaryLines = append(summaryLines, "最近 reload 摘要："+strings.TrimSpace(stateValue.LastReloadSummary))
@@ -186,6 +186,7 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 
 func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
+	cronZone := cronConfiguredTimeZone(stateValue)
 	switch {
 	case stateValue == nil || !cronStateHasBinding(stateValue):
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
@@ -198,7 +199,7 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 		summaryLines = append(summaryLines, "当前没有已加载的 Cron 任务。编辑表格后执行 `/cron reload` 生效。")
 	default:
 		summaryLines = append(summaryLines, fmt.Sprintf("当前已加载 %d 条任务：", len(stateValue.Jobs)))
-		summaryLines = append(summaryLines, cronLoadedJobLines(stateValue.Jobs)...)
+		summaryLines = append(summaryLines, cronLoadedJobLines(stateValue.Jobs, cronZone)...)
 	}
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, "", strings.TrimSpace(extraSummary))
@@ -399,7 +400,7 @@ func cronLoadedJobCountLine(stateValue *cronStateFile, ownerView cronOwnerView) 
 	return fmt.Sprintf("当前已加载任务：%d 条", len(stateValue.Jobs))
 }
 
-func cronLoadedJobLines(jobs []cronJobState) []string {
+func cronLoadedJobLines(jobs []cronJobState, timeZone string) []string {
 	items := append([]cronJobState(nil), jobs...)
 	sort.Slice(items, func(i, j int) bool {
 		left := items[i].NextRunAt
@@ -424,7 +425,7 @@ func cronLoadedJobLines(jobs []cronJobState) []string {
 		if schedule := cronReloadTaskScheduleText(item); schedule != "" {
 			segments = append(segments, schedule)
 		}
-		if next := cronReloadTaskNextRunText(item, "下次"); next != "" {
+		if next := cronReloadTaskNextRunText(item, "下次", timeZone); next != "" {
 			segments = append(segments, next)
 		}
 		segments = append(segments, cronJobConcurrencyText(job.MaxConcurrency))

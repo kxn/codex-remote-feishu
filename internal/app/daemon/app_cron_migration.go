@@ -29,7 +29,7 @@ func (a *App) loadCronJobsFromBinding(api feishu.BitableAPI, binding *cronBitabl
 		return nil, "", err
 	}
 	now := time.Now().UTC()
-	result := cronBuildReloadResult(records, workspacesByRecord, now, nil)
+	result := cronBuildReloadResult(records, workspacesByRecord, cronSchedulerTimeIn(now, firstNonEmpty(cronNormalizeTimeZone(binding.TimeZone), cronSystemTimeZone())), nil, firstNonEmpty(cronNormalizeTimeZone(binding.TimeZone), cronSystemTimeZone()))
 	return result.Jobs, result.CompactSummary(), nil
 }
 
