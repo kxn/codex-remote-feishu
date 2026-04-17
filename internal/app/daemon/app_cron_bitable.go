@@ -375,23 +375,17 @@ func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appTo
 	}
 	for _, spec := range specs {
 		if field := existing[spec.Name]; field != nil {
-			if field.Type != nil && !cronFieldTypeMatches(spec, *field.Type) {
-				return fmt.Errorf("Cron 表 `%s` 字段 `%s` 类型不匹配：当前=%d 期望=%d", tableID, spec.Name, *field.Type, spec.Type)
-			}
-			if spec.Type == 18 && spec.Property != nil && spec.Property.TableId != nil && field.Property != nil && field.Property.TableId != nil && strings.TrimSpace(stringValue(field.Property.TableId)) != strings.TrimSpace(stringValue(spec.Property.TableId)) {
-				return fmt.Errorf("Cron 表 `%s` 字段 `%s` 关联表不匹配，请修复后重试", tableID, spec.Name)
-			}
-			if cronFieldNeedsPropertyUpdate(spec, field) {
+			if cronFieldNeedsSchemaUpdate(spec, field) {
 				fieldID := strings.TrimSpace(stringValue(field.FieldId))
 				if fieldID == "" {
-					return fmt.Errorf("Cron 表 `%s` 字段 `%s` 缺少 field id，无法修正显示格式", tableID, spec.Name)
+					return fmt.Errorf("Cron 表 `%s` 字段 `%s` 缺少 field id，无法修正 schema", tableID, spec.Name)
 				}
 				if _, err := api.UpdateField(ctx, appToken, tableID, fieldID, larkbitable.NewAppTableFieldBuilder().
 					FieldName(spec.Name).
 					Type(spec.Type).
 					Property(spec.Property).
 					Build()); err != nil {
-					return err
+					return fmt.Errorf("Cron 表 `%s` 字段 `%s` schema 修复失败：%w", tableID, spec.Name, err)
 				}
 			}
 			continue
@@ -405,6 +399,35 @@ func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appTo
 		}
 	}
 	return nil
+}
+
+func cronFieldNeedsSchemaUpdate(spec cronFieldSpec, field *larkbitable.AppTableField) bool {
+	if field == nil {
+		return false
+	}
+	if field.Type == nil {
+		return true
+	}
+	if !cronFieldTypeMatches(spec, *field.Type) {
+		return true
+	}
+	if spec.Type == 18 && !cronFieldLinkTableMatches(spec, field) {
+		return true
+	}
+	return cronFieldNeedsPropertyUpdate(spec, field)
+}
+
+func cronFieldLinkTableMatches(spec cronFieldSpec, field *larkbitable.AppTableField) bool {
+	if spec.Type != 18 {
+		return true
+	}
+	if spec.Property == nil || spec.Property.TableId == nil {
+		return true
+	}
+	if field == nil || field.Property == nil || field.Property.TableId == nil {
+		return false
+	}
+	return strings.TrimSpace(stringValue(field.Property.TableId)) == strings.TrimSpace(stringValue(spec.Property.TableId))
 }
 
 func cronFieldNeedsPropertyUpdate(spec cronFieldSpec, field *larkbitable.AppTableField) bool {

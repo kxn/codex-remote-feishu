@@ -164,3 +164,70 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
+	api := newFlakyCronBootstrapBitableAPI()
+	api.failCreateField = false
+	api.tables["tbl-workspaces"] = &larkbitable.AppTable{TableId: stringPtr("tbl-workspaces"), Name: stringPtr(cronWorkspacesTableName)}
+	api.tables["tbl-tasks"] = &larkbitable.AppTable{TableId: stringPtr("tbl-tasks"), Name: stringPtr(cronTasksTableName)}
+	api.tables["tbl-runs"] = &larkbitable.AppTable{TableId: stringPtr("tbl-runs"), Name: stringPtr(cronRunsTableName)}
+	api.tables["tbl-meta"] = &larkbitable.AppTable{TableId: stringPtr("tbl-meta"), Name: stringPtr(cronMetaTableName)}
+	api.fieldsByTable["tbl-workspaces"] = []*larkbitable.AppTableField{{
+		FieldId:   stringPtr("fld-workspaces-primary"),
+		FieldName: stringPtr("工作区名称"),
+		Type:      intPtr(1),
+		IsPrimary: boolPtr(true),
+	}}
+	api.fieldsByTable["tbl-tasks"] = []*larkbitable.AppTableField{
+		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
+		{FieldId: stringPtr("fld-tasks-git"), FieldName: stringPtr(cronTaskGitRepoInputField), Type: intPtr(15), IsPrimary: boolPtr(false)},
+	}
+	api.fieldsByTable["tbl-runs"] = []*larkbitable.AppTableField{
+		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
+	}
+	api.fieldsByTable["tbl-meta"] = []*larkbitable.AppTableField{
+		{FieldId: stringPtr("fld-meta-primary"), FieldName: stringPtr("名称"), Type: intPtr(1), IsPrimary: boolPtr(true)},
+	}
+
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	setCronGatewayLookup(app, "gateway-1", "app-1")
+	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	app.cronLoaded = true
+	app.cronState = &cronStateFile{
+		SchemaVersion:    cronStateSchemaVersion,
+		InstanceScopeKey: "stable",
+		InstanceLabel:    "stable",
+		GatewayID:        "gateway-1",
+		Bitable: &cronBitableState{
+			AppToken: "app-cron",
+			Tables: cronTableIDs{
+				Workspaces: "tbl-workspaces",
+				Tasks:      "tbl-tasks",
+				Runs:       "tbl-runs",
+				Meta:       "tbl-meta",
+			},
+		},
+		Jobs: []cronJobState{},
+	}
+	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
+
+	if _, _, err := app.ensureCronBitable(control.DaemonCommand{GatewayID: "gateway-1"}); err != nil {
+		t.Fatalf("ensureCronBitable: %v", err)
+	}
+
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	found := false
+	for _, field := range api.fieldsByTable["tbl-tasks"] {
+		if field == nil || stringValue(field.FieldName) != cronTaskGitRepoInputField {
+			continue
+		}
+		found = true
+		if field.Type == nil || *field.Type != 1 {
+			t.Fatalf("Git 仓库引用 type = %#v, want 1 (text)", field.Type)
+		}
+	}
+	if !found {
+		t.Fatalf("missing field %s in task table", cronTaskGitRepoInputField)
+	}
+}
