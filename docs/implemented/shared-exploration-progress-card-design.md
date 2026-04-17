@@ -2,7 +2,7 @@
 
 > Type: `implemented`
 > Updated: `2026-04-17`
-> Summary: 记录共用探索过程卡的已落地边界：后端输出结构化 exploration block；当前用户可见展示面为 Feishu 侧共用状态卡，Web admin 不再展示这类运行中过程。
+> Summary: 记录共用探索过程卡的已落地边界：后端输出结构化 exploration block，并支持飞书“工作中”卡底部瞬时 reasoning 状态；当前用户可见展示面为 Feishu 侧共用状态卡，Web admin 与 admin runtime API 不再承担这类运行中过程展示。
 
 ## 背景
 
@@ -39,12 +39,13 @@
 1. `ExecCommandProgress` 增加了结构化 `Blocks`，其中 exploration block 可表达 `running / completed / failed` 与多条 `read / list / search` 行。
 2. `command_execution` 会把最稳定的一批命令归一进 exploration block，包括 `cat / bat / head / tail / sed / ls / rg / grep`。
 3. `dynamic_tool_call.read` 已接入同一套 exploration block，并继续沿用后端语义化而非前端猜字符串。
-4. Feishu 过程卡优先渲染 exploration block；Web admin 已停止展示共享探索过程，避免在管理页继续暴露运行中细节。
-5. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
+4. Feishu 过程卡优先渲染 exploration block，并可在卡片底部临时附着“思考中 / 规划中”这类瞬时 reasoning 状态；这类状态不会沉淀进历史进度。
+5. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
+6. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
 
 当前仍然刻意保留的边界：
 
-1. 管理页不再承担共享探索过程的正式展示职责；当前用户可见展示面只保留 Feishu 侧共用状态卡。
+1. 管理页与 admin runtime API 都不再承担共享探索过程的正式展示职责；当前用户可见展示面只保留 Feishu 侧共用状态卡。
 2. `dynamic_tool_call` 只有语义最明确的 `read` 进入 exploration block，其他 tool 继续走 generic progress。
 3. 更广覆盖率的 shell parsing 与最近一次 exploration 摘要复用，留待后续迭代。
 

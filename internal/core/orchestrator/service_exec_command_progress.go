@@ -16,6 +16,8 @@ const execCommandProgressMinInterval = 300 * time.Millisecond
 
 func (s *Service) handleProcessProgressItemStarted(instanceID string, event agentproto.Event) []control.UIEvent {
 	switch strings.TrimSpace(event.ItemKind) {
+	case "agent_message":
+		return s.handleAssistantMessageProgressStart(instanceID, event)
 	case "command_execution":
 		return s.handleCommandExecutionProgressStarted(instanceID, event)
 	case "web_search":
@@ -30,20 +32,29 @@ func (s *Service) handleProcessProgressItemStarted(instanceID string, event agen
 }
 
 func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentproto.Event) []control.UIEvent {
-	if strings.TrimSpace(event.ItemKind) != "agent_message" || strings.TrimSpace(event.Delta) == "" {
+	if strings.TrimSpace(event.Delta) == "" {
 		return nil
 	}
-	s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
-	return nil
+	switch strings.TrimSpace(event.ItemKind) {
+	case "agent_message":
+		events := s.clearTransientExecCommandProgressStatus(instanceID, event.ThreadID, event.TurnID)
+		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
+		return events
+	case "reasoning_summary":
+		return s.handleReasoningSummaryProgressDelta(instanceID, event)
+	default:
+		return nil
+	}
 }
 
 func (s *Service) handleProcessProgressItemCompleted(instanceID string, event agentproto.Event) []control.UIEvent {
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
+		events := s.clearTransientExecCommandProgressStatus(instanceID, event.ThreadID, event.TurnID)
 		if s.eventCarriesAssistantText(instanceID, event) {
 			s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
 		}
-		return nil
+		return events
 	case "command_execution":
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
 	case "web_search":
@@ -231,7 +242,11 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
 	_ = turnStatus
 	_ = finalText
-	return nil
+	if !execCommandProgressHasVisibleTransientStatus(progress) {
+		return nil
+	}
+	clearExecCommandProgressTransientStatus(progress)
+	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }
 
 func (s *Service) RecordExecCommandProgressMessage(surfaceID, threadID, turnID, itemID, messageID string) {
@@ -290,16 +305,17 @@ func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *con
 		})
 	}
 	return &control.ExecCommandProgress{
-		ThreadID:  progress.ThreadID,
-		TurnID:    progress.TurnID,
-		ItemID:    progress.ItemID,
-		MessageID: progress.MessageID,
-		Blocks:    execCommandProgressBlocks(progress),
-		Entries:   entries,
-		Commands:  append([]string(nil), progress.Commands...),
-		Command:   progress.Command,
-		CWD:       progress.CWD,
-		Status:    progress.Status,
+		ThreadID:        progress.ThreadID,
+		TurnID:          progress.TurnID,
+		ItemID:          progress.ItemID,
+		MessageID:       progress.MessageID,
+		Blocks:          execCommandProgressBlocks(progress),
+		Entries:         entries,
+		Commands:        append([]string(nil), progress.Commands...),
+		Command:         progress.Command,
+		CWD:             progress.CWD,
+		Status:          progress.Status,
+		TransientStatus: execCommandProgressTransientStatus(progress),
 	}
 }
 
@@ -404,6 +420,7 @@ func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, e
 	if progress == nil {
 		return
 	}
+	clearExecCommandProgressTransientStatus(progress)
 	entry.ItemID = strings.TrimSpace(entry.ItemID)
 	entry.Kind = strings.TrimSpace(entry.Kind)
 	entry.Label = strings.TrimSpace(entry.Label)

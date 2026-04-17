@@ -15,7 +15,20 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 		return nil
 	}
 	progress := *event.ExecCommandProgress
-	body := execCommandProgressBody(progress)
+	lines := execCommandProgressLines(progress)
+	if len(lines) == 0 {
+		if strings.TrimSpace(progress.MessageID) == "" {
+			return nil
+		}
+		return []Operation{{
+			Kind:             OperationDeleteMessage,
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			MessageID:        progress.MessageID,
+		}}
+	}
+	body := strings.Join(lines, "\n")
 	operation := Operation{
 		GatewayID:        event.GatewayID,
 		SurfaceSessionID: event.SurfaceSessionID,
@@ -38,6 +51,14 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {
+	lines := execCommandProgressLines(progress)
+	if len(lines) == 0 {
+		return "（暂无可显示过程）"
+	}
+	return strings.Join(lines, "\n")
+}
+
+func execCommandProgressLines(progress control.ExecCommandProgress) []string {
 	items := normalizedExecProgressTimeline(progress)
 	lines := make([]string, 0, len(items)*2)
 	var activeBlock execProgressTimelineBlock
@@ -65,10 +86,12 @@ func execCommandProgressBody(progress control.ExecCommandProgress) string {
 		}
 		lines = append(lines, "    "+renderExecProgressBlockRow(*item.row))
 	}
-	if len(lines) == 0 {
-		return "（暂无可显示过程）"
+	if progress.TransientStatus != nil {
+		if rendered := renderExecProgressTransientStatus(*progress.TransientStatus); rendered != "" {
+			lines = append(lines, rendered)
+		}
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 type execProgressTimelineBlock struct {
@@ -348,6 +371,14 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 	default:
 		return label + "：" + truncateExecProgressSummary(entry.Summary, 40)
 	}
+}
+
+func renderExecProgressTransientStatus(status control.ExecCommandProgressTransientStatus) string {
+	text := strings.TrimSpace(status.Text)
+	if text == "" {
+		return ""
+	}
+	return "• " + text
 }
 
 var shellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)

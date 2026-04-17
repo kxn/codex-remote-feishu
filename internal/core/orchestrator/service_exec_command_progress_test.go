@@ -849,3 +849,190 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 		t.Fatalf("expected turn completion to clear exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 }
+
+func TestReasoningSummaryProgressVerboseEmitsLocalizedTransientStatus(t *testing.T) {
+	now := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**Thinking**",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(events) != 1 || events[0].Kind != control.UIEventExecCommandProgress || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected one transient reasoning progress event, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if progress.TransientStatus == nil || progress.TransientStatus.Text != "思考中" {
+		t.Fatalf("expected localized transient status, got %#v", progress)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatal("expected transient status to retain shared progress state")
+	}
+}
+
+func TestReasoningSummaryProgressIsClearedBeforeOrdinaryProgressEntries(t *testing.T) {
+	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**Planning**",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning progress event, got %#v", first)
+	}
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected ordinary progress update, got %#v", second)
+	}
+	progress := second[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected ordinary progress to reuse the same card, got %#v", progress)
+	}
+	if progress.TransientStatus != nil {
+		t.Fatalf("expected transient reasoning status to clear before ordinary progress, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "npm test" {
+		t.Fatalf("expected command entry after transient clear, got %#v", progress.Entries)
+	}
+}
+
+func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testing.T) {
+	now := time.Date(2026, 4, 17, 10, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**Thinking**",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning progress event, got %#v", first)
+	}
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	cleared := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	})
+	if len(cleared) != 1 || cleared[0].Kind != control.UIEventExecCommandProgress || cleared[0].ExecCommandProgress == nil {
+		t.Fatalf("expected transient reasoning clear event before assistant text card, got %#v", cleared)
+	}
+	progress := cleared[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" || progress.TransientStatus != nil {
+		t.Fatalf("expected reasoning status to be cleared on the same card, got %#v", progress)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatal("expected progress state to remain until assistant text is emitted")
+	}
+
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+		Delta:    "先给你结论。",
+	}); len(events) != 0 {
+		t.Fatalf("expected assistant text delta not to emit extra progress after clearing transient status, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected assistant text delta to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
+
+func TestReasoningSummaryProgressClearsOnTurnCompletion(t *testing.T) {
+	now := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**Planning**",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning progress event, got %#v", first)
+	}
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	var progressEvent *control.ExecCommandProgress
+	for _, event := range finished {
+		if event.Kind == control.UIEventExecCommandProgress {
+			progressEvent = event.ExecCommandProgress
+			break
+		}
+	}
+	if progressEvent == nil {
+		t.Fatalf("expected turn completion to clear transient reasoning progress, got %#v", finished)
+	}
+	progress := progressEvent
+	if progress.MessageID != "om-progress-1" || progress.TransientStatus != nil {
+		t.Fatalf("expected cleared progress snapshot on completion, got %#v", progress)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected turn completion to clear shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
