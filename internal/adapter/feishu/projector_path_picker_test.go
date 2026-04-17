@@ -93,6 +93,90 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 	}
 }
 
+func TestDirectoryModePathPickerUsesCompactDirectorySelect(t *testing.T) {
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:     "picker-1",
+		Mode:         control.PathPickerModeDirectory,
+		Title:        "选择目录",
+		RootPath:     "/root",
+		CurrentPath:  "/root",
+		SelectedPath: "/root",
+		ConfirmLabel: "确认",
+		CancelLabel:  "取消",
+		Entries: []control.FeishuPathPickerEntry{
+			{Name: "subdir", Label: "subdir", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+			{Name: ".hidden", Label: ".hidden", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+			{Name: "note.txt", Label: "note.txt", Kind: control.PathPickerEntryFile, Disabled: true, DisabledReason: "当前只可选择目录"},
+		},
+	}, "life-dir")
+
+	actions := cardActionsFromElements(elements)
+	if len(actions) < 3 {
+		t.Fatalf("expected directory picker actions, got %#v", actions)
+	}
+	selectCount := 0
+	for _, element := range elements {
+		if element["tag"] == "select_static" {
+			selectCount++
+		}
+	}
+	if selectCount != 1 {
+		t.Fatalf("expected directory picker to render one compact select, got %#v", elements)
+	}
+	if containsButtonLabel(elements, "进入 · subdir") || containsButtonLabel(elements, "进入 · .hidden") {
+		t.Fatalf("expected directory picker to avoid per-entry buttons, got %#v", elements)
+	}
+	if containsButtonLabel(elements, "上一级") {
+		t.Fatalf("expected directory picker to use .. directory option instead of up button, got %#v", elements)
+	}
+	if containsMarkdownExact(elements, "**目录内容**") || containsMarkdownWithPrefix(elements, "1. ") {
+		t.Fatalf("expected directory picker to avoid verbose entry listing, got %#v", elements)
+	}
+	options := selectStaticOptionValues(t, elements, cardPathPickerDirectorySelectFieldName)
+	if got, want := options, []string{"subdir", ".hidden"}; !equalPathPickerTestStrings(got, want) {
+		t.Fatalf("unexpected directory options: got %v want %v", got, want)
+	}
+	if placeholder := selectStaticPlaceholder(t, elements, cardPathPickerDirectorySelectFieldName); placeholder != ".. 返回上一级，或选择子目录" {
+		t.Fatalf("unexpected directory placeholder: %q", placeholder)
+	}
+	foundEnter := false
+	for _, action := range actions {
+		value := cardValueMap(action)
+		if value[cardActionPayloadKeyKind] == cardActionKindPathPickerEnter {
+			foundEnter = true
+		}
+	}
+	if !foundEnter {
+		t.Fatalf("expected compact directory picker to use enter payloads, got %#v", actions)
+	}
+}
+
+func TestDirectoryModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:     "picker-1",
+		Mode:         control.PathPickerModeDirectory,
+		Title:        "选择目录",
+		RootPath:     "/root",
+		CurrentPath:  "/root/subdir",
+		SelectedPath: "/root/subdir",
+		ConfirmLabel: "确认",
+		CancelLabel:  "取消",
+		CanGoUp:      true,
+		Entries: []control.FeishuPathPickerEntry{
+			{Name: "alpha", Label: "alpha", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+			{Name: ".hidden", Label: ".hidden", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+		},
+	}, "life-dir-up")
+
+	options := selectStaticOptionValues(t, elements, cardPathPickerDirectorySelectFieldName)
+	if got, want := options, []string{"..", "alpha", ".hidden"}; !equalPathPickerTestStrings(got, want) {
+		t.Fatalf("unexpected directory options with parent: got %v want %v", got, want)
+	}
+	if placeholder := selectStaticPlaceholder(t, elements, cardPathPickerDirectorySelectFieldName); placeholder != ".. 返回上一级，或选择子目录" {
+		t.Fatalf("unexpected directory placeholder: %q", placeholder)
+	}
+}
+
 func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 	elements := pathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
