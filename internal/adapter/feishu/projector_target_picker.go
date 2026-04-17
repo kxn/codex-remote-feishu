@@ -91,6 +91,7 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		return elements
 	}
 	elements = append(elements, cardButtonGroupElement([]map[string]any{
+		cardCallbackButtonElement("取消", "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID), false, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID), !view.CanConfirm, "fill"),
 	}))
 	return elements
@@ -222,6 +223,13 @@ func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLi
 		strings.TrimSpace(view.GitDirectoryName),
 	))
 	actionRow := cardButtonGroupElement([]map[string]any{
+		cardFormActionButtonElement(
+			"取消",
+			"default",
+			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID),
+			false,
+			"",
+		),
 		cardFormActionButtonElement(
 			"选择目录",
 			"default",

@@ -211,6 +211,7 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		control.ActionTargetPickerSelectWorkspace,
 		control.ActionTargetPickerSelectSession,
 		control.ActionTargetPickerOpenPathPicker,
+		control.ActionTargetPickerCancel,
 		control.ActionTargetPickerConfirm:
 		return "目标选择卡片动作", ""
 	default:
@@ -254,6 +255,8 @@ func rejectedInboundIntentLabel(intent control.FeishuUIIntent) (label, command s
 		return "切换会话候选", ""
 	case control.FeishuUIIntentTargetPickerOpenPathPicker:
 		return "打开目录选择子步骤", ""
+	case control.FeishuUIIntentTargetPickerCancel:
+		return "取消目标选择", ""
 	case control.FeishuUIIntentPathPickerConfirm:
 		return "确认路径选择", ""
 	case control.FeishuUIIntentPathPickerCancel:

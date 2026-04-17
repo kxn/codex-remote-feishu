@@ -129,6 +129,23 @@ func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleR
 	return []control.UIEvent{s.targetPickerViewEvent(surface, view, true)}
 }
 
+func (s *Service) handleTargetPickerCancel(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []control.UIEvent {
+	if _, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID); blocked != nil {
+		return blocked
+	}
+	s.clearSurfaceTargetPicker(surface)
+	return []control.UIEvent{{
+		Kind:                     control.UIEventNotice,
+		GatewayID:                surface.GatewayID,
+		SurfaceSessionID:         surface.SurfaceSessionID,
+		InlineReplaceCurrentCard: true,
+		Notice: &control.Notice{
+			Code: "target_picker_cancelled",
+			Text: "已取消选择工作区/会话。",
+		},
+	}}
+}
+
 func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord, pickerID, actorUserID, workspaceKey, sessionValue string, answers map[string][]string) []control.UIEvent {
 	record, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID)
 	if blocked != nil {

@@ -63,6 +63,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentTargetPickerSelectWorkspace,
 		FeishuUIIntentTargetPickerSelectSession,
 		FeishuUIIntentTargetPickerOpenPathPicker,
+		FeishuUIIntentTargetPickerCancel,
 		FeishuUIIntentHistoryPage,
 		FeishuUIIntentHistoryDetail:
 		return true

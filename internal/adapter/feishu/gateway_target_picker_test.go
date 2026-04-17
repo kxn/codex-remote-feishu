@@ -179,6 +179,35 @@ func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsTargetPickerCancelAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-cancel", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":      cardActionKindTargetPickerCancel,
+					"picker_id": "picker-1",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-target-picker-cancel",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected target picker cancel action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerCancel || action.PickerID != "picker-1" {
+		t.Fatalf("unexpected target picker cancel action: %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsTargetPickerConfirmActionWithGitDraftAnswers(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-target-picker-confirm-git", "feishu:app-1:user:user-1")

@@ -577,6 +577,68 @@ func TestTargetPickerAddWorkspacePathPickerCancelRestoresTargetCard(t *testing.T
 	}
 }
 
+func TestTargetPickerCancelClearsActivePickerAndKeepsSurfaceRoute(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 46, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "当前会话", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/web",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-web",
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	surface := svc.root.Surfaces["surface-1"]
+	beforeRouteMode := surface.RouteMode
+	beforeWorkspace := surface.ClaimedWorkspaceKey
+	beforeAttachedInstance := surface.AttachedInstanceID
+	beforeSelectedThread := surface.SelectedThreadID
+
+	cancelEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if svc.activeTargetPicker(surface) != nil {
+		t.Fatalf("expected cancel to clear active target picker, got %#v", surface)
+	}
+	if surface.RouteMode != beforeRouteMode || surface.ClaimedWorkspaceKey != beforeWorkspace || surface.AttachedInstanceID != beforeAttachedInstance || surface.SelectedThreadID != beforeSelectedThread {
+		t.Fatalf("expected cancel to keep surface route unchanged, got %#v", surface)
+	}
+	if len(cancelEvents) != 1 || !cancelEvents[0].InlineReplaceCurrentCard || cancelEvents[0].Notice == nil {
+		t.Fatalf("expected cancel to replace current card with a notice, got %#v", cancelEvents)
+	}
+	if cancelEvents[0].Notice.Code != "target_picker_cancelled" {
+		t.Fatalf("expected target_picker_cancelled notice, got %#v", cancelEvents[0].Notice)
+	}
+}
+
 func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsLocalDirectoryAndWaitsForMainConfirm(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 45, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

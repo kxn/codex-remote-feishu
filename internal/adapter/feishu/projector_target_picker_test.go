@@ -74,18 +74,20 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 		t.Fatalf("expected target picker to render two selects, got %#v", elements)
 	}
 	actions := cardActionsFromElements(elements)
-	var sawWorkspace, sawSession, sawConfirm bool
+	var sawWorkspace, sawSession, sawCancel, sawConfirm bool
 	for _, action := range actions {
 		switch cardValueMap(action)[cardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerSelectWorkspace:
 			sawWorkspace = true
 		case cardActionKindTargetPickerSelectSession:
 			sawSession = true
+		case cardActionKindTargetPickerCancel:
+			sawCancel = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
 		}
 	}
-	if !sawWorkspace || !sawSession || !sawConfirm {
+	if !sawWorkspace || !sawSession || !sawCancel || !sawConfirm {
 		t.Fatalf("expected target picker payload kinds, got %#v", actions)
 	}
 }
@@ -247,6 +249,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	}
 
 	var sawOpenPath bool
+	var sawCancel bool
 	var sawConfirm bool
 	for _, action := range cardActionsFromElements(formElements) {
 		switch cardValueMap(action)[cardActionPayloadKeyKind] {
@@ -254,11 +257,13 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
 				sawOpenPath = true
 			}
+		case cardActionKindTargetPickerCancel:
+			sawCancel = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
 		}
 	}
-	if !sawOpenPath || !sawConfirm {
+	if !sawOpenPath || !sawCancel || !sawConfirm {
 		t.Fatalf("expected git form to render open-path and confirm actions, got %#v", elements)
 	}
 }
