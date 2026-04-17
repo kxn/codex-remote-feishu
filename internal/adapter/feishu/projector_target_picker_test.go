@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -241,17 +242,38 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 		t.Fatalf("expected git branch to render form, got %#v", elements)
 	}
 	formElements, _ := form["elements"].([]map[string]any)
-	if len(formElements) < 3 {
+	if len(formElements) < 4 {
 		t.Fatalf("expected git form inputs and actions, got %#v", form)
 	}
-	if formElements[0]["name"] != control.FeishuTargetPickerGitRepoURLFieldName || formElements[1]["name"] != control.FeishuTargetPickerGitDirectoryNameFieldName {
+	if formElements[0]["tag"] != "button" || formElements[0]["name"] != "target_picker_open_path" {
+		t.Fatalf("expected git form to start with open-path button, got %#v", formElements)
+	}
+	if formElements[1]["name"] != control.FeishuTargetPickerGitRepoURLFieldName || formElements[2]["name"] != control.FeishuTargetPickerGitDirectoryNameFieldName {
 		t.Fatalf("unexpected git form input names: %#v", formElements)
 	}
 	if len(formElements) != 4 {
 		t.Fatalf("expected git form to keep two inputs plus two direct form buttons, got %#v", formElements)
 	}
-	if formElements[2]["tag"] != "button" || formElements[3]["tag"] != "button" {
+	if formElements[3]["tag"] != "button" || formElements[3]["name"] != "target_picker_confirm" {
 		t.Fatalf("expected git form actions to stay flat inside form, got %#v", formElements)
+	}
+	var sawParentDirNearForm bool
+	for i := 0; i < len(elements)-1; i++ {
+		if cardStringValue(elements[i]["tag"]) != "markdown" || cardStringValue(elements[i+1]["tag"]) != "form" {
+			continue
+		}
+		content := cardStringValue(elements[i]["content"])
+		if !strings.Contains(content, "**落地目录**") {
+			continue
+		}
+		if !strings.Contains(content, "选择仓库要克隆到哪个本地父目录") {
+			t.Fatalf("expected parent-dir helper copy to stay attached, got %#v", content)
+		}
+		sawParentDirNearForm = true
+		break
+	}
+	if !sawParentDirNearForm {
+		t.Fatalf("expected open-path form to stay directly after parent-dir block, got %#v", elements)
 	}
 
 	var sawOpenPath bool
@@ -325,15 +347,15 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 	if len(formElements) != 4 {
 		t.Fatalf("expected rendered git form to keep flat form structure, got %#v", form)
 	}
-	for i, element := range formElements {
-		if i < 2 {
-			continue
-		}
-		if element["tag"] != "button" {
-			t.Fatalf("expected rendered git form action %d to stay button, got %#v", i, element)
-		}
-		if element["form_action_type"] != "submit" {
-			t.Fatalf("expected rendered git form action %d to stay submit button, got %#v", i, element)
+	if formElements[0]["tag"] != "button" || formElements[0]["name"] != "target_picker_open_path" {
+		t.Fatalf("expected rendered git form to keep open-path button first, got %#v", formElements)
+	}
+	if formElements[3]["tag"] != "button" || formElements[3]["name"] != "target_picker_confirm" {
+		t.Fatalf("expected rendered git form to keep confirm button last, got %#v", formElements)
+	}
+	for _, index := range []int{0, 3} {
+		if formElements[index]["form_action_type"] != "submit" {
+			t.Fatalf("expected rendered git form action %d to stay submit button, got %#v", index, formElements[index])
 		}
 	}
 	for _, element := range formElements {

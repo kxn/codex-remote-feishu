@@ -192,11 +192,7 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 	elements := []map[string]any{
 		{
 			"tag":     "markdown",
-			"content": targetPickerFieldMarkdown("落地目录", strings.TrimSpace(view.GitParentDir), "未选择"),
-		},
-		{
-			"tag":     "markdown",
-			"content": "选择仓库要克隆到哪个本地父目录。仓库会在这里创建一个新的子目录。",
+			"content": targetPickerGitParentDirMarkdown(view),
 		},
 	}
 	if form := targetPickerGitURLFormElement(view, daemonLifecycleID); len(form) != 0 {
@@ -211,6 +207,17 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 
 func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
 	elements := make([]map[string]any, 0, 4)
+	openPathButton := cardFormActionButtonElement(
+		"选择目录",
+		"default",
+		stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldGitParentDir), daemonLifecycleID),
+		false,
+		"",
+	)
+	if len(openPathButton) != 0 {
+		openPathButton["name"] = "target_picker_open_path"
+		elements = append(elements, openPathButton)
+	}
 	elements = append(elements, targetPickerInputElement(
 		control.FeishuTargetPickerGitRepoURLFieldName,
 		"Git 仓库地址",
@@ -223,17 +230,6 @@ func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLi
 		"不填写时，将根据仓库地址自动生成",
 		strings.TrimSpace(view.GitDirectoryName),
 	))
-	openPathButton := cardFormActionButtonElement(
-		"选择目录",
-		"default",
-		stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldGitParentDir), daemonLifecycleID),
-		false,
-		"",
-	)
-	if len(openPathButton) != 0 {
-		openPathButton["name"] = "target_picker_open_path"
-		elements = append(elements, openPathButton)
-	}
 	confirmButton := cardFormActionButtonElement(
 		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "克隆并继续")),
 		"primary",
@@ -292,6 +288,11 @@ func targetPickerInputElement(name, label, placeholder, value string) map[string
 
 func targetPickerUsesInlineGitForm(view control.FeishuTargetPickerView) bool {
 	return view.SelectedMode == control.FeishuTargetPickerModeAddWorkspace && view.SelectedSource == control.FeishuTargetPickerSourceGitURL
+}
+
+func targetPickerGitParentDirMarkdown(view control.FeishuTargetPickerView) string {
+	content := targetPickerFieldMarkdown("落地目录", strings.TrimSpace(view.GitParentDir), "未选择")
+	return content + "\n" + renderSystemInlineTags("选择仓库要克隆到哪个本地父目录。仓库会在这里创建一个新的子目录。")
 }
 
 func targetPickerFieldMarkdown(label, value, placeholder string) string {
