@@ -54,23 +54,38 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 
 	_, imagePreviewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "shot.png"), []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, time.Date(2026, 4, 15, 11, 0, 0, 0, time.UTC))
 	imageRec := httptest.NewRecorder()
-	if ok := previewer.ServeWebPreview(imageRec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, imagePreviewID, false); !ok {
+	if ok := previewer.ServeWebPreview(imageRec, httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+imagePreviewID, nil), testPreviewScopePublicID, imagePreviewID, false); !ok {
 		t.Fatal("expected image preview to be served")
 	}
 	if !strings.Contains(imageRec.Body.String(), `class="preview-topbar"`) {
 		t.Fatalf("expected image preview to use shared shell, got %q", imageRec.Body.String())
 	}
-	if !strings.Contains(imageRec.Body.String(), `<img class="preview-image" src="./download?inline=1"`) {
+	if !strings.Contains(imageRec.Body.String(), `<img class="preview-image" src="/preview/s/`+testPreviewScopePublicID+`/`+imagePreviewID+`/download?inline=1"`) {
 		t.Fatalf("expected image preview shell, got %q", imageRec.Body.String())
 	}
 
 	_, pdfPreviewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "design.pdf"), []byte("%PDF-1.4\n"), time.Date(2026, 4, 15, 11, 1, 0, 0, time.UTC))
 	pdfRec := httptest.NewRecorder()
-	if ok := previewer.ServeWebPreview(pdfRec, httptest.NewRequest(http.MethodGet, "/preview", nil), testPreviewScopePublicID, pdfPreviewID, false); !ok {
+	if ok := previewer.ServeWebPreview(pdfRec, httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+pdfPreviewID, nil), testPreviewScopePublicID, pdfPreviewID, false); !ok {
 		t.Fatal("expected pdf preview to be served")
 	}
-	if !strings.Contains(pdfRec.Body.String(), `<iframe class="preview-pdf" src="./download?inline=1"`) {
+	if !strings.Contains(pdfRec.Body.String(), `<iframe class="preview-pdf" src="/preview/s/`+testPreviewScopePublicID+`/`+pdfPreviewID+`/download?inline=1"`) {
 		t.Fatalf("expected pdf preview shell, got %q", pdfRec.Body.String())
+	}
+}
+
+func TestDriveMarkdownPreviewerUsesCurrentRequestPathForDownloadLinks(t *testing.T) {
+	root := t.TempDir()
+	previewer := newWebPreviewerForTest(root)
+
+	_, previewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "note.txt"), []byte("hello\n"), time.Date(2026, 4, 17, 8, 0, 0, 0, time.UTC))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/g/grant-1/"+previewID, nil)
+	if ok := previewer.ServeWebPreview(rec, req, testPreviewScopePublicID, previewID, false); !ok {
+		t.Fatal("expected text preview to be served")
+	}
+	if !strings.Contains(rec.Body.String(), `class="preview-download" href="/g/grant-1/`+previewID+`/download"`) {
+		t.Fatalf("expected topbar download link to stay on current preview path, got %q", rec.Body.String())
 	}
 }
 

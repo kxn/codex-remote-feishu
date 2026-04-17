@@ -44,7 +44,7 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 		if download {
 			serveWebPreviewDownloadHTTP(w, r, current)
 		} else {
-			writeWebPreviewPage(w, buildWebPreviewPage(current, previous))
+			writeWebPreviewPage(w, buildWebPreviewPage(current, previous, previewDownloadHrefForRequest(r)))
 		}
 		return true
 	case err == errPreviewRecordExpired || err == errPreviewArtifactExpired:
@@ -68,6 +68,17 @@ func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.
 		})
 		return true
 	}
+}
+
+func previewDownloadHrefForRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	currentPath := strings.TrimSpace(r.URL.Path)
+	if currentPath == "" {
+		return ""
+	}
+	return strings.TrimRight(currentPath, "/") + "/download"
 }
 
 func (p *DriveMarkdownPreviewer) loadWebPreviewArtifactsForServe(scopePublicID, previewID string) (*webPreviewArtifact, *webPreviewArtifact, error) {
@@ -115,12 +126,12 @@ func (p *DriveMarkdownPreviewer) loadWebPreviewArtifactsForServe(scopePublicID, 
 	return current, previous, nil
 }
 
-func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
+func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref string) webPreviewPage {
 	record := current.Record
 	page := webPreviewPage{
 		Title:        firstNonEmpty(strings.TrimSpace(record.DisplayName), "文件预览"),
 		Status:       http.StatusOK,
-		DownloadHref: "./download",
+		DownloadHref: strings.TrimSpace(downloadHref),
 		Layout:       webPreviewLayoutDocument,
 	}
 
@@ -171,11 +182,11 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 		return page
 	case "image":
 		page.Layout = webPreviewLayoutImage
-		page.BodyHTML = `<img class="preview-image" src="./download?inline=1" alt="` + escapePreviewText(page.Title) + `" />`
+		page.BodyHTML = `<img class="preview-image" src="` + escapePreviewText(appendPreviewInlineQuery(page.DownloadHref)) + `" alt="` + escapePreviewText(page.Title) + `" />`
 		return page
 	case "pdf":
 		page.Layout = webPreviewLayoutPDF
-		page.BodyHTML = `<iframe class="preview-pdf" src="./download?inline=1" title="` + escapePreviewText(page.Title) + `"></iframe>`
+		page.BodyHTML = `<iframe class="preview-pdf" src="` + escapePreviewText(appendPreviewInlineQuery(page.DownloadHref)) + `" title="` + escapePreviewText(page.Title) + `"></iframe>`
 		return page
 	default:
 		page.Layout = webPreviewLayoutMessage
@@ -183,6 +194,17 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact) webPreviewPage {
 		page.BodyHTML = `<p>这份文件保留了快照下载能力，但当前不会在页面内直接展开。</p>`
 		return page
 	}
+}
+
+func appendPreviewInlineQuery(downloadHref string) string {
+	downloadHref = strings.TrimSpace(downloadHref)
+	if downloadHref == "" {
+		return ""
+	}
+	if strings.Contains(downloadHref, "?") {
+		return downloadHref + "&inline=1"
+	}
+	return downloadHref + "?inline=1"
 }
 
 func serveWebPreviewDownloadHTTP(w http.ResponseWriter, r *http.Request, artifact *webPreviewArtifact) {
