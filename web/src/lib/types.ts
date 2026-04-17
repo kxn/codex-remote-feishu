@@ -47,60 +47,9 @@ export interface BootstrapState {
 export interface RuntimeStatus {
   instances: Array<Record<string, unknown>>;
   surfaces: Array<Record<string, unknown>>;
-  surfaceStatuses?: AdminSurfaceStatusSummary[];
   gateways?: GatewayStatus[];
   pendingRemoteTurns: Array<Record<string, unknown>>;
   activeRemoteTurns: Array<Record<string, unknown>>;
-}
-
-export interface ExecCommandProgressEntry {
-  itemId?: string;
-  kind?: string;
-  label?: string;
-  summary?: string;
-  status?: string;
-}
-
-export interface ExecCommandProgressBlockRow {
-  rowId?: string;
-  kind?: string;
-  items?: string[];
-  summary?: string;
-  secondary?: string;
-}
-
-export interface ExecCommandProgressBlock {
-  blockId?: string;
-  kind?: string;
-  status?: string;
-  rows?: ExecCommandProgressBlockRow[];
-}
-
-export interface ExecCommandProgressView {
-  threadId?: string;
-  turnId?: string;
-  itemId?: string;
-  status?: string;
-  command?: string;
-  commands?: string[];
-  cwd?: string;
-  blocks?: ExecCommandProgressBlock[];
-  entries?: ExecCommandProgressEntry[];
-}
-
-export interface AdminSurfaceStatusSummary {
-  surfaceSessionId: string;
-  platform?: string;
-  productMode?: string;
-  displayTitle: string;
-  threadTitle?: string;
-  firstUserMessage?: string;
-  lastUserMessage?: string;
-  lastAssistantMessage?: string;
-  workspacePath?: string;
-  instanceDisplayName?: string;
-  lastActiveAt?: string;
-  progress?: ExecCommandProgressView;
 }
 
 export interface FeishuAppWizardState {

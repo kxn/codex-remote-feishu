@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AdminInstanceSummary,
-  AdminSurfaceStatusSummary,
   BootstrapState,
   FeishuAppSummary,
   FeishuManifest,
@@ -38,19 +37,12 @@ import {
   emptyDraft,
   formatBytes,
   formatDateTime,
-  hasVisibleSurfaceProgress,
   instanceSourceLabel,
   instanceStatusLabel,
   instanceStatusTone,
   normalizeLegacyFeishuCopy,
-  renderSurfaceProgressBlockRow,
   statusTone,
-  surfaceModeLabel,
-  surfaceProgressLabel,
-  surfaceProgressTone,
   SurfaceTone,
-  visibleSurfaceProgressBlocks,
-  visibleSurfaceProgressEntries,
   vscodeModeLabel,
 } from "./helpers";
 import type { AppDraft, Notice, PreviewMap } from "./types";
@@ -111,7 +103,6 @@ type AdminFeishuPanelProps = {
 
 type AdminInstancesPanelProps = {
   instances: AdminInstanceSummary[];
-  surfaceStatuses: AdminSurfaceStatusSummary[];
 };
 
 type AdminStoragePanelProps = {
@@ -851,165 +842,22 @@ export function AdminFeishuPanel({
 
 export function AdminInstancesPanel({
   instances,
-  surfaceStatuses,
 }: AdminInstancesPanelProps) {
-  const activeSurfaces = surfaceStatuses.filter(hasVisibleSurfaceProgress);
-
   return (
     <Panel
       id="instances"
       title="工作实例"
-      description="查看哪条会话正在处理，以及它当前接入的是哪个本地实例。后台恢复实例由系统自动管理，不再在这里手工创建或删除。"
+      description="查看本机当前有哪些实例在线，以及它们是否可继续接入使用。后台恢复实例由系统自动管理，不再在这里手工创建或删除。"
     >
       <div className="manifest-block">
         <h4>当前策略</h4>
         <ul className="wizard-bullet-list">
-          <li>先看哪条会话正在处理，再看它接入的是哪个实例。</li>
+          <li>这里主要用来确认本机当前有哪些实例在线，以及它们的来源和状态。</li>
           <li>
             后台恢复流程会由系统按需自动复用或启动，不再单独暴露成管理页操作。
           </li>
           <li>如果实例区为空，请先在 VS Code 里打开 Codex 会话。</li>
         </ul>
-      </div>
-
-      <div className="section-block">
-        <div className="section-heading">
-          <div>
-            <h4>进行中的会话</h4>
-            <p>
-              这里会显示当前仍在进行中的会话，以及它刚刚进行过哪些读取、列目录和搜索动作。
-            </p>
-          </div>
-          <StatusBadge
-            value={
-              activeSurfaces.length > 0
-                ? `进行中 ${activeSurfaces.length}`
-                : "当前空闲"
-            }
-            tone={activeSurfaces.length > 0 ? "warn" : "neutral"}
-          />
-        </div>
-
-        {activeSurfaces.length > 0 ? (
-          <div className="card-grid">
-            {activeSurfaces.map((surface) => {
-              const blocks = visibleSurfaceProgressBlocks(surface);
-              const entries = visibleSurfaceProgressEntries(surface);
-              const progressStatus =
-                blocks[0]?.status ?? surface.progress?.status;
-              return (
-                <article
-                  key={surface.surfaceSessionId}
-                  className="info-card surface-progress-card"
-                >
-                  <div className="app-card-head">
-                    <strong>{surface.displayTitle}</strong>
-                    <StatusBadge
-                      value={surfaceProgressLabel(progressStatus)}
-                      tone={surfaceProgressTone(progressStatus)}
-                    />
-                  </div>
-                  <div className="app-card-flags">
-                    <StatusBadge
-                      value={surfaceModeLabel(surface)}
-                      tone="neutral"
-                    />
-                    {surface.lastActiveAt ? (
-                      <StatusBadge
-                        value={`最近活动 ${formatDateTime(surface.lastActiveAt)}`}
-                        tone="neutral"
-                      />
-                    ) : null}
-                  </div>
-                  {surface.workspacePath ? (
-                    <p>{surface.workspacePath}</p>
-                  ) : null}
-
-                  <div className="surface-progress-copy">
-                    {surface.threadTitle &&
-                    surface.threadTitle !== surface.displayTitle ? (
-                      <p>
-                        <strong>标题：</strong>
-                        {surface.threadTitle}
-                      </p>
-                    ) : null}
-                    {surface.firstUserMessage ? (
-                      <p>
-                        <strong>会话起点：</strong>
-                        {surface.firstUserMessage}
-                      </p>
-                    ) : null}
-                    {surface.lastUserMessage ? (
-                      <p>
-                        <strong>最近提问：</strong>
-                        {surface.lastUserMessage}
-                      </p>
-                    ) : null}
-                    {surface.lastAssistantMessage ? (
-                      <p>
-                        <strong>最近回复：</strong>
-                        {surface.lastAssistantMessage}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="surface-progress-blocks">
-                    {blocks.map((block) => (
-                      <div
-                        key={
-                          block.blockId ??
-                          `${surface.surfaceSessionId}-${block.kind}-${block.status}`
-                        }
-                        className="surface-progress-block"
-                      >
-                        <strong>{surfaceProgressLabel(block.status)}</strong>
-                        <div className="surface-progress-list" role="list">
-                          {(block.rows ?? []).map((row) => (
-                            <div
-                              key={
-                                row.rowId ??
-                                `${block.blockId ?? "block"}-${row.kind}-${row.summary ?? ""}`
-                              }
-                              role="listitem"
-                              className="surface-progress-row"
-                            >
-                              {renderSurfaceProgressBlockRow(row)}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                    {blocks.length === 0 && entries.length > 0 ? (
-                      <div className="surface-progress-block">
-                        <strong>工作中</strong>
-                        <div className="surface-progress-list" role="list">
-                          {entries.map((entry, index) => (
-                            <div
-                              key={`${surface.surfaceSessionId}-${entry.itemId ?? index}`}
-                              role="listitem"
-                              className="surface-progress-row"
-                            >
-                              {entry.label
-                                ? `${entry.label}：${entry.summary}`
-                                : entry.summary}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="inline-note">
-            <StatusBadge value="当前没有进行中的会话" tone="neutral" />
-            <span>
-              当某条会话正在读取文件、列目录或搜索代码时，这里会同步展示过程状态。
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="section-block">
