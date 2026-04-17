@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-04-17`
-> Summary: 为 `internal/app/daemon` 输出拆分方案，明确职责簇、共享状态压力、建议的分阶段抽取顺序，并同步当前已落地的 phase A runtime 边界。
+> Summary: 为 `internal/app/daemon` 输出拆分方案，明确职责簇、共享状态压力、建议的分阶段抽取顺序，并同步当前已落地的 phase A / B runtime 边界。
 
 ## 1. 目标
 
@@ -333,6 +333,7 @@
 当前进展：
 
 - `#248` phase A 已先把 `toolRuntime` 和 `surfaceResumeRuntime` 的状态归属从 `App` 根字段收口到显式 runtime state；后续仍需要继续把更多 receiver / side-effect 边界从 `App` 根上剥离。
+- `#248` phase B 已继续把 `upgradeRuntime` 的检查 / 调度 / 结果刷新状态迁移到显式 runtime state，并清掉 phase A 遗留在 `App` 根 struct 上的旧字段残留。
 
 ## 9. 验证要求
 
@@ -352,4 +353,4 @@
 2. 先做同包内 runtime 对象抽取。
 3. 等 API 稳定后，再决定哪些区域值得物理拆成子包。
 
-首轮建议从 `toolRuntime` 和 `surfaceResumeRuntime` 开始。
+首轮建议从 `toolRuntime`、`surfaceResumeRuntime` 开始，并尽快补上 `upgradeRuntime` 这类边界清晰的状态收口。

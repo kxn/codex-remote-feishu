@@ -47,7 +47,7 @@ func TestBuildUpgradePromptCatalogUsesDevCommandForDevCandidate(t *testing.T) {
 func TestUpgradeDevManualCheckPromptsIdleSurface(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
-	app.devManifestLookup = func(context.Context) (install.DevManifest, install.DevManifestAsset, error) {
+	app.upgradeRuntime.devManifest = func(context.Context) (install.DevManifest, install.DevManifestAsset, error) {
 		return install.DevManifest{Version: "dev-abc123"}, install.DevManifestAsset{Name: "target", URL: "https://example.invalid/target"}, nil
 	}
 
@@ -129,7 +129,7 @@ func TestUpgradeDevClearsStalePendingCandidateMatchingLiveVersion(t *testing.T) 
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
 	app.serverIdentity.Version = "dev-abc123"
-	app.devManifestLookup = func(context.Context) (install.DevManifest, install.DevManifestAsset, error) {
+	app.upgradeRuntime.devManifest = func(context.Context) (install.DevManifest, install.DevManifestAsset, error) {
 		return install.DevManifest{Version: "dev-abc123"}, install.DevManifestAsset{Name: "target", URL: "https://example.invalid/target"}, nil
 	}
 

@@ -131,17 +131,9 @@ type App struct {
 
 	pendingGatewayNotices           map[string][]control.UIEvent
 	headlessRuntime                 HeadlessRuntimeConfig
-	surfaceResumeState              *surfaceResumeStore
-	surfaceResumeRecovery           map[string]*surfaceResumeRecoveryState
-	vscodeResumeNotices             map[string]bool
-	vscodeMigrationPrompts          map[string]string
 	vscodeDetect                    func() (vscodeDetectResponse, error)
 	detectPlatformDefaults          func() (install.PlatformDefaults, error)
 	vscodeCompatibility             vscodeCompatibilityCacheState
-	vscodeStartupCheckDue           bool
-	headlessRestoreState            map[string]*headlessRestoreRecoveryState
-	startupRefreshPending           map[string]bool
-	startupRefreshSeen              bool
 	managedHeadless                 map[string]*managedHeadlessProcess
 	pendingThreadHistoryReads       map[string]pendingThreadHistoryRead
 	startHeadless                   func(relayruntime.HeadlessLaunchOptions) (int, error)
@@ -180,6 +172,7 @@ type App struct {
 	externalAccessShutdownWait chan struct{}
 	webPreviewGrants           map[string]*previewGrantRecord
 	surfaceResumeRuntime       surfaceResumeRuntimeState
+	upgradeRuntime             upgradeRuntimeState
 
 	relayListener          net.Listener
 	apiListener            net.Listener
@@ -196,18 +189,6 @@ type App struct {
 	gatewayApplyTimeout      time.Duration
 	finalPreviewTimeout      time.Duration
 	commandAnchorRecallDelay time.Duration
-
-	upgradeLookup          releaseLookupFunc
-	devManifestLookup      devManifestLookupFunc
-	upgradeCheckInterval   time.Duration
-	upgradeStartupDelay    time.Duration
-	upgradePromptScanEvery time.Duration
-	upgradeResultScanEvery time.Duration
-	upgradeCheckInFlight   bool
-	upgradeStartInFlight   bool
-	upgradeNextCheckAt     time.Time
-	upgradeNextPromptScan  time.Time
-	upgradeNextResultScan  time.Time
 }
 
 func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agentproto.ServerIdentity) *App {
@@ -231,6 +212,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonLifecycleID:            daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGatewayNotices:        map[string][]control.UIEvent{},
 		surfaceResumeRuntime:         newSurfaceResumeRuntimeState(),
+		upgradeRuntime:               newUpgradeRuntimeState(),
 		managedHeadless:              map[string]*managedHeadlessProcess{},
 		pendingThreadHistoryReads:    map[string]pendingThreadHistoryRead{},
 		startHeadless:                relayruntime.StartDetachedWrapper,
@@ -257,14 +239,10 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gatewayApplyTimeout:          30 * time.Second,
 		finalPreviewTimeout:          90 * time.Second,
 		commandAnchorRecallDelay:     8 * time.Second,
-		upgradeCheckInterval:         3 * time.Hour,
-		upgradeStartupDelay:          1 * time.Minute,
-		upgradePromptScanEvery:       5 * time.Second,
-		upgradeResultScanEvery:       5 * time.Second,
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
-	app.upgradeLookup = app.defaultReleaseLookup
-	app.devManifestLookup = app.defaultDevManifestLookup
+	app.upgradeRuntime.lookup = app.defaultReleaseLookup
+	app.upgradeRuntime.devManifest = app.defaultDevManifestLookup
 	app.cronBitableFactory = app.defaultCronBitableFactory
 	app.cronGatewayIdentityLookup = app.defaultCronGatewayIdentityLookup
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{

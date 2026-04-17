@@ -387,7 +387,7 @@ func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, 
 	if !install.CurrentBuildAllowsReleaseTrack(nextTrack) {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unsupported", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), unsupportedTrackMessage(nextTrack), legacyAlias))}
 	}
-	if a.upgradeCheckInFlight {
+	if a.upgradeRuntime.checkInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前正在检查升级，暂时不能切换 track。", legacyAlias))}
 	}
 	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
@@ -402,7 +402,7 @@ func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, 
 		stateValue.PendingUpgrade = nil
 	}
 	now := time.Now().UTC()
-	a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+	a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_write_failed", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("切换 track 失败：%v", err), legacyAlias))}
 	}

@@ -82,7 +82,7 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 		return []control.UIEvent{{
 			Kind:                       control.UIEventFeishuDirectCommandCatalog,
 			SurfaceSessionID:           command.SurfaceSessionID,
-			FeishuDirectCommandCatalog: buildDebugStatusCatalog(stateValue, a.upgradeCheckInFlight),
+			FeishuDirectCommandCatalog: buildDebugStatusCatalog(stateValue, a.upgradeRuntime.checkInFlight),
 		}}
 	case debugCommandShowTrack:
 		return trackSummaryEvents(command.SurfaceSessionID, stateValue, true)
@@ -152,7 +152,7 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 		return []control.UIEvent{{
 			Kind:                       control.UIEventFeishuDirectCommandCatalog,
 			SurfaceSessionID:           command.SurfaceSessionID,
-			FeishuDirectCommandCatalog: buildUpgradeStatusCatalog(stateValue, a.upgradeCheckInFlight),
+			FeishuDirectCommandCatalog: buildUpgradeStatusCatalog(stateValue, a.upgradeRuntime.checkInFlight),
 		}}
 	case upgradeCommandShowTrack:
 		return trackSummaryEvents(command.SurfaceSessionID, stateValue, false)
@@ -170,10 +170,10 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 }
 
 func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateValue install.InstallState) []control.UIEvent {
-	if a.upgradeCheckInFlight {
+	if a.upgradeRuntime.checkInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_busy", "当前已经有一个升级检查在进行中，请稍后再试。")}
 	}
-	if a.upgradeStartInFlight {
+	if a.upgradeRuntime.startInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_busy", "当前升级准备已经开始，服务会短暂重启，请稍后查看结果。")}
 	}
 	if clearStalePendingCandidateOnLiveVersion(&stateValue, a.currentBinaryVersion()) {
@@ -194,7 +194,7 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 	if track == "" {
 		track = defaultUpgradeTrackForState(stateValue)
 	}
-	a.upgradeCheckInFlight = true
+	a.upgradeRuntime.checkInFlight = true
 	go a.runUpgradeCheck(upgradeCheckRequest{
 		Track:            track,
 		Manual:           true,
@@ -209,10 +209,10 @@ func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValu
 	if !install.CurrentBuildAllowsLocalUpgrade() {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_local_unsupported", "当前构建不支持 `/upgrade local`。如需本地升级，请使用 dev flavor 的源码构建。")}
 	}
-	if a.upgradeCheckInFlight {
+	if a.upgradeRuntime.checkInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_busy", "当前已有 release 检查在进行中，请稍后再试本地升级。")}
 	}
-	if a.upgradeStartInFlight || pendingUpgradeBusy(stateValue.PendingUpgrade) {
+	if a.upgradeRuntime.startInFlight || pendingUpgradeBusy(stateValue.PendingUpgrade) {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_busy", "当前已有升级事务在进行中，请稍后再试。")}
 	}
 	artifactPath := install.LocalUpgradeArtifactPath(stateValue)
@@ -233,7 +233,7 @@ func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	lookup := a.upgradeLookup
+	lookup := a.upgradeRuntime.lookup
 	if lookup == nil {
 		lookup = a.defaultReleaseLookup
 	}
@@ -243,8 +243,8 @@ func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.upgradeCheckInFlight = false
-	a.upgradeNextCheckAt = completedAt.Add(a.upgradeCheckInterval)
+	a.upgradeRuntime.checkInFlight = false
+	a.upgradeRuntime.nextCheckAt = completedAt.Add(a.upgradeRuntime.checkInterval)
 
 	events := a.applyUpgradeCheckResultLocked(request, release, err, completedAt)
 	if len(events) > 0 {
@@ -336,54 +336,54 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 }
 
 func (a *App) maybeStartAutoUpgradeCheckLocked(now time.Time) {
-	if a.upgradeCheckInFlight || a.upgradeStartInFlight || a.upgradeCheckInterval <= 0 {
+	if a.upgradeRuntime.checkInFlight || a.upgradeRuntime.startInFlight || a.upgradeRuntime.checkInterval <= 0 {
 		return
 	}
-	if a.upgradeNextCheckAt.IsZero() {
-		nextAt := a.daemonStartedAt.Add(a.upgradeStartupDelay)
+	if a.upgradeRuntime.nextCheckAt.IsZero() {
+		nextAt := a.daemonStartedAt.Add(a.upgradeRuntime.startupDelay)
 		stateValue, ok, err := a.loadUpgradeStateLocked(true)
 		if err != nil {
 			log.Printf("upgrade schedule load state failed: %v", err)
 		} else if ok && stateValue.LastCheckAt != nil {
-			candidate := stateValue.LastCheckAt.Add(a.upgradeCheckInterval)
+			candidate := stateValue.LastCheckAt.Add(a.upgradeRuntime.checkInterval)
 			if candidate.After(nextAt) {
 				nextAt = candidate
 			}
 		}
-		a.upgradeNextCheckAt = nextAt
+		a.upgradeRuntime.nextCheckAt = nextAt
 	}
-	if now.Before(a.upgradeNextCheckAt) {
+	if now.Before(a.upgradeRuntime.nextCheckAt) {
 		return
 	}
 
 	stateValue, ok, err := a.loadUpgradeStateLocked(true)
 	if err != nil {
 		log.Printf("upgrade auto-check load state failed: %v", err)
-		a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+		a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 		return
 	}
 	if !ok || stateValue.CurrentTrack == "" || stateValue.CurrentVersion == "" {
-		a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+		a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 		return
 	}
 	if stateValue.PendingUpgrade != nil {
-		a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+		a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 		return
 	}
 
-	a.upgradeCheckInFlight = true
-	a.upgradeNextCheckAt = now.Add(a.upgradeCheckInterval)
+	a.upgradeRuntime.checkInFlight = true
+	a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 	go a.runUpgradeCheck(upgradeCheckRequest{Track: stateValue.CurrentTrack})
 }
 
 func (a *App) maybePromptPendingUpgradeLocked(now time.Time) []control.UIEvent {
-	if a.upgradePromptScanEvery <= 0 {
+	if a.upgradeRuntime.promptScanEvery <= 0 {
 		return nil
 	}
-	if !a.upgradeNextPromptScan.IsZero() && now.Before(a.upgradeNextPromptScan) {
+	if !a.upgradeRuntime.nextPromptScan.IsZero() && now.Before(a.upgradeRuntime.nextPromptScan) {
 		return nil
 	}
-	a.upgradeNextPromptScan = now.Add(a.upgradePromptScanEvery)
+	a.upgradeRuntime.nextPromptScan = now.Add(a.upgradeRuntime.promptScanEvery)
 
 	stateValue, ok, err := a.loadUpgradeStateLocked(false)
 	if err != nil {
