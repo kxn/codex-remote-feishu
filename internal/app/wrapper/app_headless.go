@@ -60,8 +60,21 @@ func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader
 	}
 }
 
+func (a *App) needsSyntheticBootstrap() bool {
+	// Daemon-launched hidden clients must complete initialize/initialized
+	// themselves before the first thread/start reaches Codex app-server.
+	switch {
+	case strings.EqualFold(strings.TrimSpace(a.config.Source), "headless"):
+		return true
+	case strings.EqualFold(strings.TrimSpace(a.config.Source), "cron"):
+		return true
+	default:
+		return false
+	}
+}
+
 func (a *App) syntheticInitializeFrame() ([]byte, error) {
-	if !strings.EqualFold(strings.TrimSpace(a.config.Source), "headless") {
+	if !a.needsSyntheticBootstrap() {
 		return nil, nil
 	}
 	payload := map[string]any{
@@ -89,7 +102,7 @@ func (a *App) syntheticInitializeFrame() ([]byte, error) {
 }
 
 func (a *App) syntheticInitializedFrame() ([]byte, error) {
-	if !strings.EqualFold(strings.TrimSpace(a.config.Source), "headless") {
+	if !a.needsSyntheticBootstrap() {
 		return nil, nil
 	}
 	bytes, err := json.Marshal(map[string]any{
