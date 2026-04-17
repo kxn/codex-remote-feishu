@@ -1,8 +1,8 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-04-17`
-> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 Feishu ordinary inbound 的 early ACK + gateway-local FIFO lane 边界；同时同步 orchestrator service-owned UI runtime（target picker / thread history / path picker）与 editor 侧共享 VS Code bundle entrypoint 探测边界。
+> Updated: `2026-04-18`
+> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 daemon 作为组合根的 runtime owner 收口、Feishu adapter 的 controller/gateway/projector/preview 边界、Feishu ordinary inbound 的 early ACK + gateway-local FIFO lane、orchestrator service-owned UI/runtime cluster，以及 editor 侧共享 VS Code bundle entrypoint 探测边界。
 
 ## 1. 当前状态
 
@@ -131,6 +131,17 @@ testkit/
 
 这类状态只服务于当前进程内的交互门禁和回调继续处理，不作为领域状态根长期保存。
 
+当前 `Service` 仍是唯一产品状态中心，但内部已经开始按 owner 收口成显式 runtime cluster，而不是继续把所有字段平铺在根 struct 上。当前稳定的第一批 cluster 包括：
+
+- `pickers`
+  - 负责 target picker / path picker / thread history 及其 consumer/runtime token
+- `catalog`
+  - 负责 persisted catalog、snapshot query 与 catalog cache
+- `progress`
+  - 负责 compact notice、exec/tool progress、turn artifact 与相关派生投影
+
+这几簇当前仍留在同包内，以减少过早拆包带来的导出污染；`Service` 自己则更接近组合根和跨簇编排点。
+
 ### 4.5 `internal/core/renderer`
 
 assistant 文本切分器，负责：
@@ -164,6 +175,18 @@ Feishu 平台适配层，负责：
 - 下载图片
 - 把 `UIEvent` 投影成文本、卡片和 reaction 操作
 
+当前内部 owner 进一步收口为三层：
+
+- `MultiGatewayController`
+  - Feishu adapter 的组合根，负责持有 gateway runtime、preview runtime 与 admin/runtime 编排
+- gateway runtime
+  - 只负责 inbound 归类、callback 解析、surface 路由和与 daemon/orchestrator 的协议边界
+- projector / preview runtime
+  - projector 只消费 `UIEvent` 做文本/卡片投影
+  - preview runtime 只负责 preview 生命周期、授权与渲染辅助，不再通过宽接口横穿 gateway/projector
+
+因此 `LiveGateway` 不再承担 projector 的伪 owner 角色；daemon 主流程会直接持有 projector，而 preview 侧也通过显式 runtime 边界接入 controller。
+
 当前普通飞书入站的 ACK 边界已经前移：
 
 - 轻量 command / menu / 非同步回包 card action：尽早 ACK
@@ -190,6 +213,14 @@ Feishu 平台适配层，负责：
 - renderer
 - Feishu gateway
 - 状态 API
+
+`daemon` 当前更明确地作为组合根存在，而不是继续把所有运行态都堆进单个 `*App` 根对象。已经完成第一轮显式 runtime state 收口的区域包括：
+
+- `toolRuntime`
+- `surfaceResumeRuntime`
+- `upgradeRuntime`
+
+这些 runtime 仍留在 `internal/app/daemon` 同包内，但状态拥有者、receiver 和顶层调度边界已经分开；`App` 主要保留 lifecycle、依赖注入、跨 runtime 编排，以及少量必须集中托管的共享资源。
 
 ### 4.11 `internal/app/wrapper`
 

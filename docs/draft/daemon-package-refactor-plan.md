@@ -1,8 +1,8 @@
 # Daemon Package Refactor Plan
 
 > Type: `draft`
-> Updated: `2026-04-17`
-> Summary: 为 `internal/app/daemon` 输出拆分方案，明确职责簇、共享状态压力、建议的分阶段抽取顺序，并同步当前已落地的 phase A / B runtime 边界。
+> Updated: `2026-04-18`
+> Summary: 为 `internal/app/daemon` 输出拆分方案，明确职责簇、共享状态压力、建议的分阶段抽取顺序，并同步 `#247` 第一轮维护主线的当前落点：phase A / B 已完成 `toolRuntime`、`surfaceResumeRuntime`、`upgradeRuntime` 收口，后续仍需继续处理 headless / admin / ingress 等剩余大簇。
 
 ## 1. 目标
 
@@ -334,6 +334,7 @@
 
 - `#248` phase A 已先把 `toolRuntime` 和 `surfaceResumeRuntime` 的状态归属从 `App` 根字段收口到显式 runtime state；后续仍需要继续把更多 receiver / side-effect 边界从 `App` 根上剥离。
 - `#248` phase B 已继续把 `upgradeRuntime` 的检查 / 调度 / 结果刷新状态迁移到显式 runtime state，并清掉 phase A 遗留在 `App` 根 struct 上的旧字段残留。
+- `#247` 这轮母 issue 已完成第一批高优先级维护闭包：边界清障、`daemon`/`feishu`/`orchestrator` 三条主线都已各自收口到更清晰的 owner 边界。就 `daemon` 本身而言，当前最值得继续推进的剩余大簇已经收敛为 `headlessRuntime`、`adminRuntime` 与 ingress/UI 主执行环。
 
 ## 9. 验证要求
 

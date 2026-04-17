@@ -100,12 +100,12 @@
     {
       "number": 12,
       "title": "[Bug] MCP request 在飞书端缺少可响应路径，可能导致远端卡住",
-      "updatedAt": "2026-04-14T15:14:12Z",
+      "updatedAt": "2026-04-17T06:26:52Z",
       "closedAt": "2026-04-14T15:10:49Z",
       "decision": "skip",
-      "reason": "旧的 MCP symptom issue 已被后续 MCP 对齐与可响应链路文档吸收，当前 canonical 文档已覆盖其 durable 结论。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/12",
-      "recordedAt": "2026-04-14T16:19:52Z"
+      "recordedAt": "2026-04-17T19:07:05Z"
     },
     {
       "number": 13,
@@ -507,12 +507,12 @@
     {
       "number": 66,
       "title": "[Work] history 命令",
-      "updatedAt": "2026-04-14T12:30:44Z",
+      "updatedAt": "2026-04-17T06:26:51Z",
       "closedAt": "2026-04-14T12:30:41Z",
       "decision": "skip",
-      "reason": "/history 的入口、卡片交互与 thread 历史查询语义，已同步 user-guide、remote-surface 与 feishu-card-ui 文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/66",
-      "recordedAt": "2026-04-14T16:19:29Z"
+      "recordedAt": "2026-04-17T19:06:36Z"
     },
     {
       "number": 67,
@@ -1457,12 +1457,12 @@
     {
       "number": 167,
       "title": "[Work] 梳理并收敛 item.delta 全量文本重算渲染链",
-      "updatedAt": "2026-04-14T02:24:10Z",
+      "updatedAt": "2026-04-17T06:26:49Z",
       "closedAt": "2026-04-14T02:24:07Z",
       "decision": "skip",
-      "reason": "item.delta 惰性物化缓冲属于实现级性能收敛，当前 durable 结论已由现有 relay/backpressure 文档覆盖，无需新增独立同步文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/167",
-      "recordedAt": "2026-04-14T16:18:59Z"
+      "recordedAt": "2026-04-17T19:06:07Z"
     },
     {
       "number": 168,
@@ -1540,22 +1540,22 @@
     {
       "number": 175,
       "title": "[Feature] 支持通过目录选择创建新工作区并切换上下文",
-      "updatedAt": "2026-04-13T18:07:54Z",
+      "updatedAt": "2026-04-17T06:26:48Z",
       "closedAt": "2026-04-13T18:07:51Z",
       "decision": "skip",
-      "reason": "新建工作区的目录选择、fresh workspace/headless 落点与后续发话语义，当前已由 remote-surface 与 feishu-card-ui 两份状态机文档覆盖。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/175",
-      "recordedAt": "2026-04-14T16:18:43Z"
+      "recordedAt": "2026-04-17T19:05:38Z"
     },
     {
       "number": 176,
       "title": "[Feature] 支持通过飞书卡片选择本机文件并发送到当前 surface",
-      "updatedAt": "2026-04-14T00:08:25Z",
+      "updatedAt": "2026-04-17T06:26:47Z",
       "closedAt": "2026-04-14T00:08:21Z",
       "decision": "skip",
-      "reason": "/sendfile 的当前 workspace 文件选择与发送到当前 surface 的闭环，已由现有 Feishu/UI 状态机与产品文档覆盖。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/176",
-      "recordedAt": "2026-04-14T16:18:50Z"
+      "recordedAt": "2026-04-17T19:05:45Z"
     },
     {
       "number": 177,
@@ -1724,22 +1724,22 @@
     {
       "number": 200,
       "title": "design: request_user_input 飞书交互效果对齐 Codex client（第二轮）",
-      "updatedAt": "2026-04-13T16:57:38Z",
+      "updatedAt": "2026-04-17T06:26:45Z",
       "closedAt": "2026-04-13T16:57:36Z",
       "decision": "skip",
-      "reason": "request_user_input 的提交确认与 revision 语义已同步两份 canonical 状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/200",
-      "recordedAt": "2026-04-13T17:15:08Z"
+      "recordedAt": "2026-04-17T19:05:30Z"
     },
     {
       "number": 201,
       "title": "Improve menu card attention flow after command submission",
-      "updatedAt": "2026-04-13T16:43:06Z",
+      "updatedAt": "2026-04-17T06:26:44Z",
       "closedAt": "2026-04-13T16:43:04Z",
       "decision": "skip",
-      "reason": "菜单提交锚点与同位承接语义已同步 docs/general/feishu-card-ui-state-machine.md。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/201",
-      "recordedAt": "2026-04-13T17:15:03Z"
+      "recordedAt": "2026-04-17T19:05:23Z"
     },
     {
       "number": 202,
@@ -1754,424 +1754,526 @@
     {
       "number": 203,
       "title": "[Feature] 新增 Steer All 命令（slash + 飞书菜单）",
-      "updatedAt": "2026-04-14T00:41:06Z",
+      "updatedAt": "2026-04-17T06:26:42Z",
       "closedAt": "2026-04-14T00:41:03Z",
       "decision": "skip",
-      "reason": "/steerall 的路由语义、队列并入条件与菜单锚点卡行为，已同步 remote-surface 与 feishu-card-ui 两份 canonical 文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/203",
-      "recordedAt": "2026-04-14T16:18:53Z"
+      "recordedAt": "2026-04-17T19:05:52Z"
     },
     {
       "number": 204,
       "title": "提升 /list 历史工作区可见性与 SQLite 读取稳定性（含二次复查）",
-      "updatedAt": "2026-04-14T01:50:10Z",
+      "updatedAt": "2026-04-17T06:26:41Z",
       "closedAt": "2026-04-14T01:50:07Z",
       "decision": "skip",
-      "reason": "recoverable-only workspace 可见性、SQLite recent workspace 聚合与失败回退语义，已同步 remote-surface 与 Feishu 产品文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/204",
-      "recordedAt": "2026-04-14T16:18:56Z"
+      "recordedAt": "2026-04-17T19:06:00Z"
     },
     {
       "number": 205,
       "title": "重构 Feishu /menu：去除常用操作并按任务对象重分类（分阶段）",
-      "updatedAt": "2026-04-14T02:57:37Z",
+      "updatedAt": "2026-04-17T06:26:40Z",
       "closedAt": "2026-04-14T02:57:34Z",
       "decision": "skip",
-      "reason": "/menu 去掉“常用操作”并按当前工作对象重分类的现状，已同步到 Feishu 卡片状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/205",
-      "recordedAt": "2026-04-14T16:19:02Z"
+      "recordedAt": "2026-04-17T19:06:14Z"
     },
     {
       "number": 206,
       "title": "[Work] 重构 send file 交互：V2 双下拉（目录/文件）与紧凑卡片",
-      "updatedAt": "2026-04-14T05:01:16Z",
+      "updatedAt": "2026-04-17T06:26:38Z",
       "closedAt": "2026-04-14T05:01:13Z",
       "decision": "skip",
-      "reason": "sendfile 紧凑双下拉卡片、目录/文件分离语义与 select_static 兼容解析，已同步到 Feishu 卡片状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/206",
-      "recordedAt": "2026-04-14T16:19:06Z"
+      "recordedAt": "2026-04-17T19:06:21Z"
     },
     {
       "number": 207,
       "title": "统一 /list /use /useall 为单卡片目标选择器，并补齐新建会话 headless 路径",
-      "updatedAt": "2026-04-14T07:21:36Z",
+      "updatedAt": "2026-04-17T06:26:37Z",
       "closedAt": "2026-04-14T07:21:33Z",
       "decision": "skip",
-      "reason": "/list /use /useall 收敛到 unified target picker 与 recoverable-only workspace 的 fresh headless 新会话路径，已同步 remote-surface 与 feishu-card-ui 文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/207",
-      "recordedAt": "2026-04-14T16:19:09Z"
+      "recordedAt": "2026-04-17T19:06:28Z"
     },
     {
       "number": 208,
       "title": "[Feature] reply 当前 processing 源消息时，自动将文本/图片 steer 到当前 turn",
-      "updatedAt": "2026-04-14T13:14:17Z",
+      "updatedAt": "2026-04-17T06:26:36Z",
       "closedAt": "2026-04-14T13:14:13Z",
       "decision": "skip",
-      "reason": "reply 当前 processing 源消息时自动把文本/图片 steer 入当前 turn 的产品语义，已同步 Feishu 产品文档与 remote-surface 状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/208",
-      "recordedAt": "2026-04-14T16:19:32Z"
+      "recordedAt": "2026-04-17T19:06:43Z"
     },
     {
       "number": 211,
       "title": "[Feature] 将 merge_forward 展开为保留层级的结构化格式，并把相关图片一并纳入输入",
-      "updatedAt": "2026-04-14T14:30:45Z",
+      "updatedAt": "2026-04-17T06:26:34Z",
       "closedAt": "2026-04-14T14:30:42Z",
       "decision": "skip",
-      "reason": "merge_forward 的结构化 envelope、层级保留与图片纳入输入语义，已同步 Feishu 产品文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/211",
-      "recordedAt": "2026-04-14T16:19:38Z"
+      "recordedAt": "2026-04-17T19:06:51Z"
     },
     {
       "number": 212,
       "title": "[Work] 在 Feishu / relay 消息流中显示 context compacted 事件",
-      "updatedAt": "2026-04-14T14:55:07Z",
+      "updatedAt": "2026-04-17T06:26:33Z",
       "closedAt": "2026-04-14T14:55:03Z",
       "decision": "skip",
-      "reason": "context compacted 事件在 Feishu/relay 消息流中的暴露语义，已同步 relay protocol、Feishu 产品文档与 remote-surface 状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/212",
-      "recordedAt": "2026-04-14T16:19:41Z"
+      "recordedAt": "2026-04-17T19:06:58Z"
     },
     {
       "number": 213,
       "title": "[Work] 为 Feishu / relay 暴露手动 compact 入口并接通上游 thread/compact/start",
-      "updatedAt": "2026-04-14T15:49:09Z",
+      "updatedAt": "2026-04-17T06:26:31Z",
       "closedAt": "2026-04-14T15:49:09Z",
       "decision": "skip",
-      "reason": "manual /compact 入口、上游 thread/compact/start 接线与 gating 语义，已同步 relay protocol、Feishu 产品文档与 remote-surface 状态机文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/213",
-      "recordedAt": "2026-04-14T16:19:55Z"
+      "recordedAt": "2026-04-17T19:07:12Z"
     },
     {
       "number": 217,
       "title": "[Design] 收敛分支策略与 dev 升级通道：master 单主干 + dev-latest 滚动 release",
-      "updatedAt": "2026-04-15T01:03:58Z",
+      "updatedAt": "2026-04-17T06:26:30Z",
       "closedAt": "2026-04-15T01:03:55Z",
       "decision": "skip",
-      "reason": "发布/升级基线已同步进现有 general 文档，当前 docs 已覆盖 master 单主干、短命 release 与 dev-latest 语义。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/217",
-      "recordedAt": "2026-04-15T16:23:04Z"
+      "recordedAt": "2026-04-17T19:07:19Z"
     },
     {
       "number": 218,
       "title": "[Work] 将 Web Admin 迁移到 /admin 前缀",
-      "updatedAt": "2026-04-15T02:44:56Z",
+      "updatedAt": "2026-04-17T06:26:29Z",
       "closedAt": "2026-04-15T02:44:53Z",
-      "decision": "merge",
-      "reason": "把 Web Admin 挂载路径的最终结论并入现有实现文档，明确 /admin/ 主入口、根路径轻量说明页与 setup 回跳边界。",
-      "targetDocs": [
-        "docs/implemented/web-admin-ui-redesign.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/218",
-      "recordedAt": "2026-04-15T16:23:20Z"
+      "recordedAt": "2026-04-17T19:07:27Z"
     },
     {
       "number": 219,
       "title": "cloudflared 常驻化的 idle 回收策略",
-      "updatedAt": "2026-04-16T14:41:58Z",
+      "updatedAt": "2026-04-17T06:26:27Z",
       "closedAt": "2026-04-16T14:41:54Z",
-      "decision": "merge",
-      "reason": "warm provider / cold listener 的 idle 策略已并入 external-access 基座文档。",
-      "targetDocs": [
-        "docs/implemented/authenticated-external-access-foundation-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/219",
-      "recordedAt": "2026-04-16T19:05:57Z"
+      "recordedAt": "2026-04-17T19:10:25Z"
     },
     {
       "number": 220,
       "title": "[Feature] 增加 /preview 单文件外链预览页，作为 final message 文件链接的统一兜底",
-      "updatedAt": "2026-04-15T11:13:51Z",
+      "updatedAt": "2026-04-17T06:26:26Z",
       "closedAt": "2026-04-15T09:10:54Z",
       "decision": "skip",
-      "reason": "现有 web preview 设计基线文档已经覆盖 /preview snapshot、scope grant 复用、cache 生命周期与 diff-first 的已实现契约。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/220",
-      "recordedAt": "2026-04-15T16:23:48Z"
+      "recordedAt": "2026-04-17T19:07:41Z"
     },
     {
       "number": 221,
       "title": "[Feature] 处理中卡片支持 dynamic_tool_call 展示（含同类 tool 增量合并）",
-      "updatedAt": "2026-04-15T04:17:14Z",
+      "updatedAt": "2026-04-17T06:26:24Z",
       "closedAt": "2026-04-15T04:17:11Z",
       "decision": "skip",
-      "reason": "canonical Feishu 卡片状态机文档已同步 dynamic_tool_call 进入共享过程卡、同类 tool 聚合与失败态行内标记的最终行为。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/221",
-      "recordedAt": "2026-04-15T16:23:37Z"
+      "recordedAt": "2026-04-17T19:07:34Z"
     },
     {
       "number": 222,
       "title": "[Work] 补齐 Codex App Server 缺失的交互请求协议面，避免真实 request 被吞",
-      "updatedAt": "2026-04-15T14:29:00Z",
+      "updatedAt": "2026-04-17T06:26:23Z",
       "closedAt": "2026-04-15T14:28:56Z",
-      "decision": "merge",
-      "reason": "把新增 request surface 的最终结论并入 canonical 状态机与协议审计文档，明确 command/file/network approval 与顶层 tool/requestUserInput 不再被 relay/Feishu/headless 吞掉。",
-      "targetDocs": [
-        "docs/general/feishu-card-ui-state-machine.md",
-        "docs/general/remote-surface-state-machine.md",
-        "docs/inprogress/codex-app-server-state-machine-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/222",
-      "recordedAt": "2026-04-15T16:24:12Z"
+      "recordedAt": "2026-04-17T19:07:48Z"
     },
     {
       "number": 223,
       "title": "[Audit] 深入审计 Codex App Server 状态机：区分协议严格遵循项与产品语义适配项",
-      "updatedAt": "2026-04-15T23:19:36Z",
+      "updatedAt": "2026-04-17T06:26:22Z",
       "closedAt": "2026-04-15T23:19:33Z",
-      "decision": "merge",
-      "reason": "二次审计结论已并入 canonical app-server 状态机审计文档。",
-      "targetDocs": [
-        "docs/inprogress/codex-app-server-state-machine-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/223",
-      "recordedAt": "2026-04-16T19:04:44Z"
+      "recordedAt": "2026-04-17T19:08:18Z"
     },
     {
       "number": 224,
       "title": "[Work] Cron 配置表跨 bot surface 的 owner / 权限模型",
-      "updatedAt": "2026-04-15T17:09:33Z",
+      "updatedAt": "2026-04-17T06:26:20Z",
       "closedAt": "2026-04-15T17:09:30Z",
-      "decision": "merge",
-      "reason": "把多 bot Cron owner / 权限模型的最终实现并入现有 /cron 已实现文档，补齐 view-only /cron、显式 repair/reload/migrate-owner 与 frozen writeback 语义。",
-      "targetDocs": [
-        "docs/implemented/cron-bitable-scheduler-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/224",
-      "recordedAt": "2026-04-15T17:32:09Z"
+      "recordedAt": "2026-04-17T19:08:10Z"
     },
     {
       "number": 225,
       "title": "[Work] 共用状态卡支持上游式探索过程呈现",
-      "updatedAt": "2026-04-15T16:43:24Z",
+      "updatedAt": "2026-04-17T06:26:19Z",
       "closedAt": "2026-04-15T16:43:20Z",
       "decision": "skip",
-      "reason": "docs/implemented/shared-exploration-progress-card-design.md 与 docs/README.md 已覆盖共用探索过程卡的最终实现边界，本轮无需新增文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/225",
-      "recordedAt": "2026-04-15T16:47:07Z"
+      "recordedAt": "2026-04-17T19:08:03Z"
     },
     {
       "number": 226,
       "title": "[Bug] 收敛 Feishu API 长生命周期 context 使用并补齐统一超时策略",
-      "updatedAt": "2026-04-15T16:37:40Z",
+      "updatedAt": "2026-04-17T06:26:17Z",
       "closedAt": "2026-04-15T16:37:36Z",
-      "decision": "new-doc",
-      "reason": "新增 general 文档固化 Feishu API bounded-call 与 timeout 纪律，沉淀统一 client 构造、链路级 deadline 与高风险路径边界。",
-      "targetDocs": [
-        "docs/general/feishu-api-timeout-discipline.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/226",
-      "recordedAt": "2026-04-15T16:47:11Z"
+      "recordedAt": "2026-04-17T19:07:55Z"
     },
     {
       "number": 227,
       "title": "[Audit] 深入对比 Feidex 与当前 final message 全链路：异步 materialize、patch 与可点击内容",
-      "updatedAt": "2026-04-16T02:20:44Z",
+      "updatedAt": "2026-04-17T06:26:15Z",
       "closedAt": "2026-04-16T00:15:56Z",
-      "decision": "merge",
-      "reason": "final message 全链路审计已经沉淀到专项审计文档。",
-      "targetDocs": [
-        "docs/inprogress/final-message-feidex-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/227",
-      "recordedAt": "2026-04-16T19:04:48Z"
+      "recordedAt": "2026-04-17T19:08:25Z"
     },
     {
       "number": 228,
       "title": "[Work] 在 headless 路径补齐 `initialize -\u003e initialized`，恢复 app-server 严格握手",
-      "updatedAt": "2026-04-16T02:39:59Z",
+      "updatedAt": "2026-04-17T06:26:14Z",
       "closedAt": "2026-04-16T02:39:55Z",
-      "decision": "merge",
-      "reason": "headless initialize-\u003einitialized 严格握手已回写到 app-server 状态机审计文档。",
-      "targetDocs": [
-        "docs/inprogress/codex-app-server-state-machine-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/228",
-      "recordedAt": "2026-04-16T19:04:57Z"
+      "recordedAt": "2026-04-17T19:08:40Z"
     },
     {
       "number": 229,
       "title": "[Work] 接入 `thread/status/changed`，让 relay/headless 以官方线程运行时状态为准",
-      "updatedAt": "2026-04-16T03:56:19Z",
+      "updatedAt": "2026-04-17T06:26:13Z",
       "closedAt": "2026-04-16T03:56:16Z",
-      "decision": "merge",
-      "reason": "authoritative thread runtime status 已并入 relay 协议与 remote 状态机文档。",
-      "targetDocs": [
-        "docs/general/relay-protocol-spec.md",
-        "docs/general/remote-surface-state-machine.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/229",
-      "recordedAt": "2026-04-16T19:05:10Z"
+      "recordedAt": "2026-04-17T19:09:03Z"
     },
     {
       "number": 230,
       "title": "[Work] 接入 `turn/diff/updated`，保留官方 turn 级聚合 diff 状态机",
-      "updatedAt": "2026-04-16T04:20:33Z",
+      "updatedAt": "2026-04-17T06:26:11Z",
       "closedAt": "2026-04-16T04:20:30Z",
-      "decision": "merge",
-      "reason": "turn/diff authoritative snapshot 已并入 relay 协议与 app-server 状态机审计文档。",
-      "targetDocs": [
-        "docs/general/relay-protocol-spec.md",
-        "docs/inprogress/codex-app-server-state-machine-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/230",
-      "recordedAt": "2026-04-16T19:05:14Z"
+      "recordedAt": "2026-04-17T19:09:10Z"
     },
     {
       "number": 231,
       "title": "[Work] 接入 `model/rerouted`，保留 turn 级模型改路由语义",
-      "updatedAt": "2026-04-16T09:15:04Z",
+      "updatedAt": "2026-04-17T06:26:10Z",
       "closedAt": "2026-04-16T09:15:00Z",
-      "decision": "merge",
-      "reason": "model/rerouted 语义已并入 relay 协议与 app-server 状态机审计文档。",
-      "targetDocs": [
-        "docs/general/relay-protocol-spec.md",
-        "docs/inprogress/codex-app-server-state-machine-audit.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/231",
-      "recordedAt": "2026-04-16T19:05:19Z"
+      "recordedAt": "2026-04-17T19:09:17Z"
     },
     {
       "number": 234,
       "title": "[Work] 为 final message 建立 final card message-id 持久化与回查链路",
-      "updatedAt": "2026-04-16T02:31:24Z",
+      "updatedAt": "2026-04-17T06:26:09Z",
       "closedAt": "2026-04-16T02:31:21Z",
-      "decision": "merge",
-      "reason": "final-card anchor 与回查语义已并入 Feishu 卡片状态机文档。",
-      "targetDocs": [
-        "docs/general/feishu-card-ui-state-machine.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/234",
-      "recordedAt": "2026-04-16T19:04:53Z"
+      "recordedAt": "2026-04-17T19:08:33Z"
     },
     {
       "number": 235,
       "title": "[Work] 为 final message 增加 second-chance async patch 链路",
-      "updatedAt": "2026-04-16T02:50:09Z",
+      "updatedAt": "2026-04-17T06:26:07Z",
       "closedAt": "2026-04-16T02:50:06Z",
-      "decision": "merge",
-      "reason": "second-chance async patch 已并入 Feishu 卡片状态机文档。",
-      "targetDocs": [
-        "docs/general/feishu-card-ui-state-machine.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/235",
-      "recordedAt": "2026-04-16T19:05:02Z"
+      "recordedAt": "2026-04-17T19:08:48Z"
     },
     {
       "number": 236,
       "title": "[Work] 将 final reply 超限处理从网关截断升级为应用层 split",
-      "updatedAt": "2026-04-16T03:18:49Z",
+      "updatedAt": "2026-04-17T06:26:06Z",
       "closedAt": "2026-04-16T03:18:45Z",
-      "decision": "merge",
-      "reason": "final reply projector split 与主卡 patch 边界已并入产品与卡片状态机文档。",
-      "targetDocs": [
-        "docs/general/feishu-card-ui-state-machine.md",
-        "docs/general/feishu-product-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/236",
-      "recordedAt": "2026-04-16T19:05:06Z"
+      "recordedAt": "2026-04-17T19:08:56Z"
     },
     {
       "number": 237,
       "title": "[Work] 统一“工作区来源”产品模型，并把“接入本地目录”恢复为主路径",
-      "updatedAt": "2026-04-16T12:41:19Z",
+      "updatedAt": "2026-04-17T06:26:04Z",
       "closedAt": "2026-04-16T12:33:41Z",
-      "decision": "merge",
-      "reason": "当前 canonical 的工作区来源与 target/path picker 收口已并入 remote 与 Feishu 状态机文档。",
-      "targetDocs": [
-        "docs/general/remote-surface-state-machine.md",
-        "docs/general/feishu-card-ui-state-machine.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/237",
-      "recordedAt": "2026-04-16T19:05:48Z"
+      "recordedAt": "2026-04-17T19:10:10Z"
     },
     {
       "number": 238,
       "title": "[Work] 支持从 Git 仓库导入交互式工作区",
-      "updatedAt": "2026-04-16T11:21:09Z",
+      "updatedAt": "2026-04-17T06:26:03Z",
       "closedAt": "2026-04-16T11:21:06Z",
-      "decision": "merge",
-      "reason": "Git URL 导入与 new-thread-ready 收口已并入 remote 与 Feishu 状态机文档。",
-      "targetDocs": [
-        "docs/general/remote-surface-state-machine.md",
-        "docs/general/feishu-card-ui-state-machine.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/238",
-      "recordedAt": "2026-04-16T19:05:31Z"
+      "recordedAt": "2026-04-17T19:09:40Z"
     },
     {
       "number": 239,
       "title": "[Work] 为 Cron 提供 Git 仓库来源、缓存与临时工作副本策略",
-      "updatedAt": "2026-04-16T12:14:54Z",
+      "updatedAt": "2026-04-17T06:26:01Z",
       "closedAt": "2026-04-16T12:14:51Z",
-      "decision": "merge",
-      "reason": "Cron Git source、cache 与 detached worktree 策略已并入 Cron 实现文档。",
-      "targetDocs": [
-        "docs/implemented/cron-bitable-scheduler-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/239",
-      "recordedAt": "2026-04-16T19:05:40Z"
+      "recordedAt": "2026-04-17T19:09:54Z"
     },
     {
       "number": 242,
       "title": "design(web-preview): redesign file preview into minimal shell + pluggable renderers",
-      "updatedAt": "2026-04-16T12:15:14Z",
+      "updatedAt": "2026-04-17T06:26:00Z",
       "closedAt": "2026-04-16T12:15:11Z",
-      "decision": "merge",
-      "reason": "preview 极简 shell 与 renderer 分层已并入 preview 设计文档。",
-      "targetDocs": [
-        "docs/draft/web-preview-snapshot-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/242",
-      "recordedAt": "2026-04-16T19:05:44Z"
+      "recordedAt": "2026-04-17T19:10:02Z"
     },
     {
       "number": 243,
       "title": "[Work] 增强 /cron reload 结果反馈与错误定位",
-      "updatedAt": "2026-04-16T09:46:38Z",
+      "updatedAt": "2026-04-17T06:25:58Z",
       "closedAt": "2026-04-16T09:46:35Z",
-      "decision": "merge",
-      "reason": "cron reload 的结构化结果与错误定位已并入当前 Cron 实现文档。",
-      "targetDocs": [
-        "docs/implemented/cron-bitable-scheduler-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/243",
-      "recordedAt": "2026-04-16T19:05:23Z"
+      "recordedAt": "2026-04-17T19:09:25Z"
     },
     {
       "number": 244,
       "title": "Preview scope grant 缓存应随 external-access runtime 回收失效",
-      "updatedAt": "2026-04-16T10:46:46Z",
+      "updatedAt": "2026-04-17T06:25:57Z",
       "closedAt": "2026-04-16T10:11:42Z",
-      "decision": "merge",
-      "reason": "preview grant 与 external-access 生命周期联动失效规则已并入 external-access 基座文档。",
-      "targetDocs": [
-        "docs/implemented/authenticated-external-access-foundation-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/244",
-      "recordedAt": "2026-04-16T19:05:27Z"
+      "recordedAt": "2026-04-17T19:09:32Z"
     },
     {
       "number": 245,
       "title": "收敛 external access 生命周期的锁边界与 provider 复用前置",
-      "updatedAt": "2026-04-16T12:08:56Z",
+      "updatedAt": "2026-04-17T06:25:55Z",
       "closedAt": "2026-04-16T12:08:56Z",
-      "decision": "merge",
-      "reason": "external-access shutdown/reuse foundation 已并入 external-access 与 preview 设计文档。",
-      "targetDocs": [
-        "docs/implemented/authenticated-external-access-foundation-design.md",
-        "docs/draft/web-preview-snapshot-design.md"
-      ],
+      "decision": "skip",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/245",
-      "recordedAt": "2026-04-16T19:05:36Z"
+      "recordedAt": "2026-04-17T19:09:47Z"
     },
     {
       "number": 246,
       "title": "收敛 daemon onTick 的重操作与 App.mu 持锁边界",
-      "updatedAt": "2026-04-16T14:15:50Z",
+      "updatedAt": "2026-04-17T06:25:54Z",
       "closedAt": "2026-04-16T14:15:46Z",
       "decision": "skip",
-      "reason": "这张单主要是内部持锁边界与 tick 重路径收敛，当前无需新增独立生命周期文档。",
+      "reason": "Issue metadata changed after the previous sync, but current docs already cover the durable conclusion; refresh tracked state only.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/246",
-      "recordedAt": "2026-04-16T19:05:52Z"
+      "recordedAt": "2026-04-17T19:10:17Z"
+    },
+    {
+      "number": 247,
+      "title": "[Work] 收敛核心大包体量并清理跨层包边界",
+      "updatedAt": "2026-04-17T13:09:43Z",
+      "closedAt": "2026-04-17T13:09:39Z",
+      "decision": "merge",
+      "reason": "The architecture doc and daemon refactor plan now capture the durable close-out of the first package-boundary cleanup wave and its remaining follow-up areas.",
+      "targetDocs": [
+        "docs/general/architecture.md",
+        "docs/draft/daemon-package-refactor-plan.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/247",
+      "recordedAt": "2026-04-17T19:11:55Z"
+    },
+    {
+      "number": 248,
+      "title": "[Work] 拆薄 internal/app/daemon，把 *App 收敛为 composition root",
+      "updatedAt": "2026-04-17T12:07:31Z",
+      "closedAt": "2026-04-17T12:07:28Z",
+      "decision": "merge",
+      "reason": "The daemon refactor plan and architecture doc now reflect the durable runtime-owner boundaries landed by this worker issue.",
+      "targetDocs": [
+        "docs/draft/daemon-package-refactor-plan.md",
+        "docs/general/architecture.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/248",
+      "recordedAt": "2026-04-17T19:11:17Z"
+    },
+    {
+      "number": 249,
+      "title": "[Work] 拆分 internal/adapter/feishu，收敛 gateway/projector/preview 边界",
+      "updatedAt": "2026-04-17T12:25:25Z",
+      "closedAt": "2026-04-17T12:25:22Z",
+      "decision": "merge",
+      "reason": "The architecture doc now captures the durable Feishu adapter ownership split between controller, gateway, projector, and preview runtime.",
+      "targetDocs": [
+        "docs/general/architecture.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/249",
+      "recordedAt": "2026-04-17T19:11:24Z"
+    },
+    {
+      "number": 250,
+      "title": "[Work] 拆薄 internal/core/orchestrator，收敛 *Service 职责面",
+      "updatedAt": "2026-04-17T12:44:48Z",
+      "closedAt": "2026-04-17T12:44:45Z",
+      "decision": "merge",
+      "reason": "The architecture doc now reflects the durable orchestrator runtime-cluster ownership that this refactor established.",
+      "targetDocs": [
+        "docs/general/architecture.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/250",
+      "recordedAt": "2026-04-17T19:11:47Z"
+    },
+    {
+      "number": 251,
+      "title": "[Work] 清理跨层边界泄漏：state/control、wrapper/install 与测试 helper",
+      "updatedAt": "2026-04-17T06:25:53Z",
+      "closedAt": "2026-04-17T03:53:50Z",
+      "decision": "merge",
+      "reason": "Architecture now captures the durable cross-layer cleanup boundaries between state/control, wrapper/install, and runtime ownership.",
+      "targetDocs": [
+        "docs/general/architecture.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/251",
+      "recordedAt": "2026-04-17T19:10:41Z"
+    },
+    {
+      "number": 252,
+      "title": "[Work] 重构 Cron 命令入口并将 owner 接管收敛到 repair",
+      "updatedAt": "2026-04-17T06:25:51Z",
+      "closedAt": "2026-04-17T02:10:01Z",
+      "decision": "merge",
+      "reason": "The current Cron source-of-truth doc already owns this durable behavior; sync the newly closed issue into that canonical implemented doc.",
+      "targetDocs": [
+        "docs/implemented/cron-bitable-scheduler-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/252",
+      "recordedAt": "2026-04-17T19:10:33Z"
+    },
+    {
+      "number": 253,
+      "title": "[Enhancement] 重做 /list 目标选择卡片：统一添加工作区流程并优化模式切换",
+      "updatedAt": "2026-04-17T06:25:50Z",
+      "closedAt": "2026-04-17T05:57:24Z",
+      "decision": "merge",
+      "reason": "The canonical remote-surface and Feishu card state-machine docs already own the unified target picker behavior and were updated to match the implemented flow.",
+      "targetDocs": [
+        "docs/general/remote-surface-state-machine.md",
+        "docs/general/feishu-card-ui-state-machine.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/253",
+      "recordedAt": "2026-04-17T19:11:03Z"
+    },
+    {
+      "number": 254,
+      "title": "[Work] 调整 Web Preview 外链授权为消息级 grant，避免复用旧 scope grant 提前失效",
+      "updatedAt": "2026-04-17T06:25:48Z",
+      "closedAt": "2026-04-17T05:31:52Z",
+      "decision": "merge",
+      "reason": "The preview design doc now reflects the durable message-scoped preview grant model rather than long-lived scope-grant reuse.",
+      "targetDocs": [
+        "docs/draft/web-preview-snapshot-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/254",
+      "recordedAt": "2026-04-17T19:10:48Z"
+    },
+    {
+      "number": 255,
+      "title": "[Work] cron 的配置需要增加一个并发度",
+      "updatedAt": "2026-04-17T06:25:47Z",
+      "closedAt": "2026-04-17T05:56:37Z",
+      "decision": "merge",
+      "reason": "The implemented Cron design doc is the canonical home for per-job concurrency semantics and reload/list visibility.",
+      "targetDocs": [
+        "docs/implemented/cron-bitable-scheduler-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/255",
+      "recordedAt": "2026-04-17T19:10:56Z"
+    },
+    {
+      "number": 256,
+      "title": "调研 preview 语法高亮的范围与实现方案",
+      "updatedAt": "2026-04-17T12:01:27Z",
+      "closedAt": "2026-04-17T12:01:23Z",
+      "decision": "merge",
+      "reason": "The preview design doc now captures the implemented renderer-side syntax-highlighting boundary and its plain-text fallback rules.",
+      "targetDocs": [
+        "docs/draft/web-preview-snapshot-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/256",
+      "recordedAt": "2026-04-17T19:11:10Z"
+    },
+    {
+      "number": 258,
+      "title": "[Work] 统一“工作中”共享进度卡时间线，修复 exploration/entry 顺序失真",
+      "updatedAt": "2026-04-17T12:35:40Z",
+      "closedAt": "2026-04-17T12:35:36Z",
+      "decision": "merge",
+      "reason": "The shared progress and Feishu card state-machine docs are the canonical home for the durable ordering semantics of the working-card timeline.",
+      "targetDocs": [
+        "docs/implemented/shared-exploration-progress-card-design.md",
+        "docs/general/feishu-card-ui-state-machine.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/258",
+      "recordedAt": "2026-04-17T19:11:39Z"
+    },
+    {
+      "number": 259,
+      "title": "[Work] 从 Web admin 中移除共享进度展示",
+      "updatedAt": "2026-04-17T12:25:53Z",
+      "closedAt": "2026-04-17T12:25:49Z",
+      "decision": "merge",
+      "reason": "The shared exploration progress design doc is the canonical home for the product boundary that removes Web admin as a progress display surface.",
+      "targetDocs": [
+        "docs/implemented/shared-exploration-progress-card-design.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/259",
+      "recordedAt": "2026-04-17T19:11:32Z"
+    },
+    {
+      "number": 260,
+      "title": "[Work] 飞书“工作中”共享进度卡支持瞬时 reasoning 状态并清理 Web 目标面",
+      "updatedAt": "2026-04-17T13:45:45Z",
+      "closedAt": "2026-04-17T13:45:42Z",
+      "decision": "merge",
+      "reason": "The shared progress design doc and Feishu card state-machine doc are the canonical home for the bottom-slot transient reasoning status and its cleanup rules.",
+      "targetDocs": [
+        "docs/implemented/shared-exploration-progress-card-design.md",
+        "docs/general/feishu-card-ui-state-machine.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/260",
+      "recordedAt": "2026-04-17T19:12:02Z"
     }
   ]
 }

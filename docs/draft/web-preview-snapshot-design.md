@@ -1,8 +1,8 @@
 # Web Preview Snapshot Design
 
 > Type: `draft`
-> Updated: `2026-04-16`
-> Summary: `/preview` snapshot/cache 主设计，收束 prefix grant、blob 落盘、lineage、大文件 diff-first，并补记当前已实现的极简 shell + renderer 分层与 external-access prefix 复用前置。
+> Updated: `2026-04-18`
+> Summary: `/preview` snapshot/cache 主设计，收束消息级 preview grant、blob 落盘、lineage、大文件 diff-first，并补记当前已实现的极简 shell + renderer 分层、source/markdown 服务端语法高亮，以及 external-access provider 复用前置。
 
 ## 1. 文档定位
 
@@ -38,7 +38,7 @@
 当前 `/preview` 方向的目标可以收束为：
 
 1. 给 final message 中的本地文件链接提供统一 web 兜底预览。
-2. 预览语义上始终是“单文件”，但访问授权应支持“同一批文件共享同一外链前缀会话”。
+2. 预览语义上始终是“单文件”，但访问授权应支持“同一条 final message 内的多文件共享同一短时 grant”，而不是跨消息长期复用同一个 grant。
 3. 预览 source of truth 使用 snapshot，而不是 live path。
 4. snapshot 可以跨 turn、跨 daemon 重启复用。
 5. 对小文件给 full preview；对大文本文件，在存在上一版时优先考虑 diff-first 预览。
@@ -102,7 +102,7 @@
 4. `preview route / renderer` 层
    - 根据 `scopePublicID + previewID` 查 record/blob
    - 根据 artifact 类型、大小、是否存在上一版决定 viewer
-   - 当前用户可见页面已经收敛成“固定顶部极简 shell + 下方独立滚动 renderer”的结构：顶部只保留文件名与下载按钮，图片/PDF/文本类 renderer 共享同一套壳层
+   - 当前用户可见页面已经收敛成“固定顶部极简 shell + 下方独立滚动 renderer”的结构：顶部只保留文件名与下载按钮，图片/PDF/文本类 renderer 共享同一套壳层；其中 source-like 预览与 Markdown fenced code block 已支持服务端语法高亮，但 `loc=` 行定位路径与 diff fallback 仍保持 plain-text/source-first 语义
 
 这四层里，当前最关键的结论是：
 
@@ -129,7 +129,7 @@
 - `previewID` 表示该 scope 下的一个单文件预览对象
 - `/download` 是显式下载落点，不和默认预览渲染混用
 
-### 5.2 为什么授权要按 scope/prefix，而不是每个文件一个 grant
+### 5.2 为什么授权要按“消息级 prefix grant”，而不是每个文件一个 grant 或跨消息 scope 复用
 
 external-access 基座已经能稳定复用：
 
@@ -137,20 +137,28 @@ external-access 基座已经能稳定复用：
 - tunnel/provider
 - token -> cookie -> reverse proxy 主链路
 
-真正不适合 preview 场景的，是“如果每个文件都单独 issue grant，就会得到每个文件一个 `/g/<grant>/` cookie path”。
+真正不适合 preview 场景的，是下面两种极端：
+
+1. 每个文件都单独 issue grant
+   - 会得到每个文件一个 `/g/<grant>/` cookie path，消息内多文件体验过碎
+2. 整个 scope 长时间复用同一个 grant
+   - 新消息会继续复用旧 grant，导致“消息看起来很新，但实际点击已经因为旧 grant 过期而失效”的语义错位
 
 而 preview 的真实使用形态是：
 
 - 一次 final message 常常会产出一批文件
-- 下一轮 turn 可能又产出另一批文件
-- 两批之间通常有高重合度
+- 同一条消息里的这些链接，用户预期它们共享同一段有效期
+- 下一条 final message 则应重新开始一段新的寿命窗口，而不是顺带给旧消息续命
 
 因此推荐：
 
-- 每个 preview scope 只维护一个 external prefix grant
+- 路由仍按 preview scope 组织，cookie path 仍指向 `/preview/s/<scopePublicID>/`
+- 但 grant 的签发/缓存粒度改为 `scopePublicID + previewGrantKey`
+- `previewGrantKey` 当前按 final message 身份生成，因此“同消息内多个链接共用、跨消息不复用”
 - 该 grant 的 `TargetBasePath` 指向 `/preview/s/<scopePublicID>/`
 - 浏览器第一次点击这个 scope 下任一链接时，完成一次 token -> cookie 交换
-- 同一 scope 下其余文件链接直接复用同一 cookie path
+- 同一条消息下其余文件链接直接复用同一 cookie path
+- 后续消息即使仍落在同一 scope，也会重新签发新的 grant；旧消息剩余寿命不会被刷新，新消息也不会继承旧 grant 的剩余时间
 
 这里有一个实现层约束也已经收敛：
 
@@ -172,6 +180,8 @@ external-access 基座已经能稳定复用：
 - 不需要为 web preview 额外发明第二套 scope 语义
 
 但对外不暴露原始 scope key，而是为它生成稳定的 `scopePublicID`。
+
+在 scope 之上，当前还会为每条 final message 生成一个 `previewGrantKey`。它优先复用已有 final block 身份字段（如 gateway / surface / thread / turn / item / block）；当缺少足够稳定的身份字段时，才退回到带文本的短 hash。这个 key 只用于授权复用边界，不改变 preview record 自身仍按单文件建模的事实。
 
 ## 6. Snapshot，不是 live path
 
