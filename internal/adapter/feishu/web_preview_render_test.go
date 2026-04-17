@@ -25,8 +25,11 @@ func TestDriveMarkdownPreviewerServesHTMLAndSVGAsSourcePreview(t *testing.T) {
 	if htmlRec.Code != http.StatusOK {
 		t.Fatalf("html preview status = %d, want 200", htmlRec.Code)
 	}
-	if !strings.Contains(htmlRec.Body.String(), "&lt;script&gt;alert(1)&lt;/script&gt;") {
-		t.Fatalf("expected html source preview to escape script body, got %q", htmlRec.Body.String())
+	if !strings.Contains(htmlRec.Body.String(), `class="preview-syntax preview-syntax--source"`) {
+		t.Fatalf("expected html preview to stay in source mode, got %q", htmlRec.Body.String())
+	}
+	if !strings.Contains(htmlRec.Body.String(), "&lt;") || !strings.Contains(htmlRec.Body.String(), "script") {
+		t.Fatalf("expected html source preview to escape script markup, got %q", htmlRec.Body.String())
 	}
 	if strings.Contains(htmlRec.Body.String(), "<script>alert(1)</script>") {
 		t.Fatalf("expected html preview to stay non-executable, got %q", htmlRec.Body.String())

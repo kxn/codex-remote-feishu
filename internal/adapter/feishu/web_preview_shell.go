@@ -71,6 +71,7 @@ func renderWebPreviewPageHTML(page webPreviewPage) string {
 	if strings.TrimSpace(page.Notice) != "" {
 		noticeHTML = `<p class="preview-notice">` + escapePreviewText(page.Notice) + `</p>`
 	}
+	syntaxCSS := previewSyntaxStylesheet()
 
 	return fmt.Sprintf(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%s</title><style>
 html,body{height:100%%}
@@ -97,6 +98,10 @@ body{margin:0;background:#f7f4ee;color:#1b1812;font-family:"Segoe UI",ui-sans-se
 .preview-prose p,.preview-prose ul,.preview-prose ol,.preview-prose blockquote{margin:0 0 1em}
 .preview-prose pre,.preview-prose code{font-family:"SFMono-Regular","Cascadia Code","Consolas",monospace}
 .preview-prose pre{overflow:auto;padding:14px 0}
+.preview-syntax{overflow:auto}
+.preview-syntax .pv-chroma,.preview-prose .pv-chroma{margin:0;background:transparent !important;font-family:"SFMono-Regular","Cascadia Code","Consolas",monospace;font-size:13px;line-height:1.65;tab-size:4}
+.preview-syntax .pv-chroma{padding:0}
+.preview-prose pre.pv-chroma{padding:14px 0}
 .source-block,.diff-block,.summary-block{margin:0;white-space:pre-wrap;word-break:break-word;font-family:"SFMono-Regular","Cascadia Code","Consolas",monospace;font-size:13px;line-height:1.65;background:transparent;border:0;padding:0}
 .source-block--numbered{display:block;white-space:normal}
 .source-line{display:grid;grid-template-columns:minmax(48px,max-content) minmax(0,1fr);gap:14px;align-items:start;padding:0 0 0 2px;scroll-margin-block:45vh}
@@ -106,6 +111,7 @@ body{margin:0;background:#f7f4ee;color:#1b1812;font-family:"Segoe UI",ui-sans-se
 .source-column-target{background:#ffd778;border-radius:4px}
 .preview-image{display:block;max-width:100%%;height:auto;object-fit:contain}
 .preview-pdf{display:block;width:100%%;height:100%%;border:0;background:#fff}
+%s
 @media (max-width:640px){
 .preview-topbar{padding:10px 12px}
 .preview-logo{width:22px;height:22px}
@@ -115,6 +121,7 @@ body{margin:0;background:#f7f4ee;color:#1b1812;font-family:"Segoe UI",ui-sans-se
 }
 </style></head><body><div class="preview-shell"><header class="preview-topbar"><div class="preview-brand"><img class="preview-logo" src="%s" alt="" aria-hidden="true"><h1 class="preview-title">%s</h1></div><div class="preview-actions">%s</div></header><main class="%s"><div class="%s">%s%s</div></main></div></body></html>`,
 		escapePreviewText(title),
+		syntaxCSS,
 		escapePreviewText(branding.LogoSVGDataURI()),
 		escapePreviewText(title),
 		downloadHTML,

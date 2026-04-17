@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,15 +9,12 @@ import (
 	"time"
 
 	"github.com/pmezard/go-difflib/difflib"
-	"github.com/yuin/goldmark"
-	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 )
 
 var (
 	errPreviewRecordExpired              = fmt.Errorf("preview record expired")
 	errPreviewArtifactExpired            = fmt.Errorf("preview artifact expired")
 	previewDiffFirstThresholdBytes int64 = 2 * 1024 * 1024
-	markdownPreviewRenderer              = goldmark.New(goldmark.WithRendererOptions(goldmarkhtml.WithHardWraps()))
 )
 
 func (p *DriveMarkdownPreviewer) ServeWebPreview(w http.ResponseWriter, r *http.Request, scopePublicID, previewID string, download bool) bool {
@@ -153,7 +149,7 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 			page.BodyHTML = renderTextSummaryHTML(current.Content)
 			return page
 		}
-		html, err := renderMarkdownHTML(current.Content)
+		html, err := renderMarkdownHTML(current.Content, shouldHighlightMarkdownPreview(record))
 		if err != nil {
 			page.Notice = "Markdown 渲染失败，已回退为源码视图。"
 			page.BodyHTML = renderSourcePreviewHTML(current.Content)
@@ -176,6 +172,13 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 			page.BodyHTML = renderTextSummaryHTML(current.Content)
 			return page
 		}
+		if shouldHighlightSourcePreview(record) {
+			html, err := renderHighlightedSourcePreviewHTML(record.SourcePath, current.Content)
+			if err == nil && strings.TrimSpace(html) != "" {
+				page.BodyHTML = html
+				return page
+			}
+		}
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "html_source":
@@ -189,6 +192,13 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 			page.BodyHTML = renderDiffPreviewHTML(previous, current)
 			return page
 		}
+		if shouldHighlightSourcePreview(record) {
+			html, err := renderHighlightedSourcePreviewHTML(record.SourcePath, current.Content)
+			if err == nil && strings.TrimSpace(html) != "" {
+				page.BodyHTML = html
+				return page
+			}
+		}
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "svg_source":
@@ -198,6 +208,13 @@ func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref str
 			return page
 		}
 		page.Notice = "出于安全考虑，SVG 以源码方式展示，不会作为同源文档直接渲染。"
+		if shouldHighlightSourcePreview(record) {
+			html, err := renderHighlightedSourcePreviewHTML(record.SourcePath, current.Content)
+			if err == nil && strings.TrimSpace(html) != "" {
+				page.BodyHTML = html
+				return page
+			}
+		}
 		page.BodyHTML = renderSourcePreviewHTML(current.Content)
 		return page
 	case "image":
@@ -320,14 +337,6 @@ func shouldRenderSummaryOnly(record webPreviewRecord) bool {
 	default:
 		return false
 	}
-}
-
-func renderMarkdownHTML(content []byte) (string, error) {
-	var buf bytes.Buffer
-	if err := markdownPreviewRenderer.Convert(content, &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func renderSourcePreviewHTML(content []byte) string {
