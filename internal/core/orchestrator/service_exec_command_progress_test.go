@@ -563,6 +563,135 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 	}
 }
 
+func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "按顺序看一下", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat foo.txt"`,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first read row, got %#v", first)
+	}
+	progress := first[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
+		t.Fatalf("expected first read block row, got %#v", progress.Blocks)
+	}
+
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected exec entry update, got %#v", second)
+	}
+	progress = second[0].ExecCommandProgress
+	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "npm test" {
+		t.Fatalf("expected exec entry barrier, got %#v", progress.Entries)
+	}
+
+	third := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-3",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat bar.txt"`,
+		},
+	})
+	if len(third) != 1 || third[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second read update, got %#v", third)
+	}
+	progress = third[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
+		t.Fatalf("expected exec entry to break read merge, got %#v", progress.Blocks)
+	}
+	rows := progress.Blocks[0].Rows
+	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
+		t.Fatalf("unexpected first read row: %#v", rows)
+	}
+	if rows[1].Kind != "read" || len(rows[1].Items) != 1 || rows[1].Items[0] != "bar.txt" {
+		t.Fatalf("unexpected second read row: %#v", rows)
+	}
+}
+
+func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "看下两个文件", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "cat foo.txt"`,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first read row, got %#v", first)
+	}
+	progress := first[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
+		t.Fatalf("expected first read row, got %#v", progress.Blocks)
+	}
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": `bash -lc "sed -n '1,20p' bar.txt"`,
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second read update, got %#v", second)
+	}
+	progress = second[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
+		t.Fatalf("expected different read commands to stay separated, got %#v", progress.Blocks)
+	}
+	rows := progress.Blocks[0].Rows
+	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
+		t.Fatalf("unexpected first read row: %#v", rows)
+	}
+	if rows[1].Kind != "read" || len(rows[1].Items) != 1 || rows[1].Items[0] != "bar.txt" {
+		t.Fatalf("unexpected second read row: %#v", rows)
+	}
+}
+
 func TestCommandExecutionExplorationProgressRecognizesQuotedRgRegexSearch(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

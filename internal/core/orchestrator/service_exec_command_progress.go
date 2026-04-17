@@ -429,6 +429,7 @@ func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, e
 			return
 		}
 	}
+	progress.LastVisibleSeq++
 	progress.Entries = append(progress.Entries, entry)
 }
 

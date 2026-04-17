@@ -18,6 +18,7 @@ type execProgressExplorationAction struct {
 	Items     []string
 	Summary   string
 	Secondary string
+	MergeKey  string
 }
 
 var explorationShellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
@@ -75,10 +76,10 @@ func upsertExplorationProgress(progress *state.ExecCommandProgressRecord, itemID
 
 	if final {
 		if len(exploration.Block.Rows) == 0 {
-			appendExplorationRow(&exploration.Block, action)
+			appendExplorationRow(progress, &exploration.Block, action)
 		}
 	} else {
-		appendExplorationRow(&exploration.Block, action)
+		appendExplorationRow(progress, &exploration.Block, action)
 	}
 	if exploration.ActiveItemIDs == nil {
 		exploration.ActiveItemIDs = map[string]bool{}
@@ -120,13 +121,14 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 	return progress.Exploration
 }
 
-func appendExplorationRow(block *state.ExecCommandProgressBlockRecord, action execProgressExplorationAction) {
-	if block == nil {
+func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *state.ExecCommandProgressBlockRecord, action execProgressExplorationAction) {
+	if progress == nil || block == nil {
 		return
 	}
 	action.Kind = strings.TrimSpace(action.Kind)
 	action.Summary = strings.TrimSpace(action.Summary)
 	action.Secondary = strings.TrimSpace(action.Secondary)
+	action.MergeKey = strings.TrimSpace(action.MergeKey)
 	items := make([]string, 0, len(action.Items))
 	for _, item := range action.Items {
 		if text := strings.TrimSpace(item); text != "" {
@@ -140,24 +142,56 @@ func appendExplorationRow(block *state.ExecCommandProgressBlockRecord, action ex
 		if len(items) == 0 {
 			return
 		}
-		if len(block.Rows) > 0 && block.Rows[len(block.Rows)-1].Kind == "read" {
-			block.Rows[len(block.Rows)-1].Items = appendUniquePreserveOrder(block.Rows[len(block.Rows)-1].Items, items...)
+		if len(block.Rows) > 0 && canMergeReadExplorationRow(progress, block.Rows[len(block.Rows)-1], action.MergeKey) {
+			last := &block.Rows[len(block.Rows)-1]
+			last.Items = appendUniquePreserveOrder(last.Items, items...)
+			last.MergeKey = normalizeExplorationMergeKey(action.Kind, action.MergeKey)
+			progress.LastVisibleSeq++
+			last.LastSeq = progress.LastVisibleSeq
 			return
 		}
+		progress.LastVisibleSeq++
 		block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
-			RowID: nextExplorationRowID(block, action.Kind),
-			Kind:  action.Kind,
-			Items: append([]string(nil), items...),
+			RowID:    nextExplorationRowID(block, action.Kind),
+			Kind:     action.Kind,
+			Items:    append([]string(nil), items...),
+			MergeKey: normalizeExplorationMergeKey(action.Kind, action.MergeKey),
+			LastSeq:  progress.LastVisibleSeq,
 		})
 		return
 	}
+	progress.LastVisibleSeq++
 	block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
 		RowID:     nextExplorationRowID(block, action.Kind),
 		Kind:      action.Kind,
 		Items:     append([]string(nil), items...),
 		Summary:   action.Summary,
 		Secondary: action.Secondary,
+		MergeKey:  normalizeExplorationMergeKey(action.Kind, action.MergeKey),
+		LastSeq:   progress.LastVisibleSeq,
 	})
+}
+
+func canMergeReadExplorationRow(progress *state.ExecCommandProgressRecord, row state.ExecCommandProgressBlockRowRecord, mergeKey string) bool {
+	if progress == nil {
+		return false
+	}
+	if strings.TrimSpace(row.Kind) != "read" {
+		return false
+	}
+	if row.LastSeq != progress.LastVisibleSeq {
+		return false
+	}
+	return normalizeExplorationMergeKey("read", row.MergeKey) == normalizeExplorationMergeKey("read", mergeKey)
+}
+
+func normalizeExplorationMergeKey(kind, mergeKey string) string {
+	kind = strings.TrimSpace(kind)
+	mergeKey = strings.TrimSpace(mergeKey)
+	if mergeKey != "" {
+		return mergeKey
+	}
+	return kind
 }
 
 func nextExplorationRowID(block *state.ExecCommandProgressBlockRecord, kind string) string {
@@ -230,7 +264,7 @@ func parseDynamicToolExplorationAction(metadata map[string]any) (execProgressExp
 		if len(items) == 0 {
 			return execProgressExplorationAction{}, false
 		}
-		return execProgressExplorationAction{Kind: "read", Items: items}, true
+		return execProgressExplorationAction{Kind: "read", Items: items, MergeKey: "dynamic_tool:read"}, true
 	default:
 		return execProgressExplorationAction{}, false
 	}
@@ -252,14 +286,14 @@ func parseCommandExecutionExplorationAction(command string) (execProgressExplora
 		if len(items) == 0 {
 			return execProgressExplorationAction{}, false
 		}
-		return execProgressExplorationAction{Kind: "read", Items: items}, true
+		return execProgressExplorationAction{Kind: "read", Items: items, MergeKey: "command_execution:" + cmd}, true
 	case "head", "tail":
 		if item := lastPositionalArg(args[1:]); item != "" {
-			return execProgressExplorationAction{Kind: "read", Items: []string{item}}, true
+			return execProgressExplorationAction{Kind: "read", Items: []string{item}, MergeKey: "command_execution:" + cmd}, true
 		}
 	case "sed":
 		if item := lastPositionalArg(args[1:]); item != "" {
-			return execProgressExplorationAction{Kind: "read", Items: []string{item}}, true
+			return execProgressExplorationAction{Kind: "read", Items: []string{item}, MergeKey: "command_execution:" + cmd}, true
 		}
 	case "ls":
 		items := positionalArgs(args[1:], nil)
