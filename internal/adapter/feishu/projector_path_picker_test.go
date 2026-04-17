@@ -59,7 +59,7 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 		},
 	}, "life-2")
 	actions := cardActionsFromElements(elements)
-	if len(actions) < 5 {
+	if len(actions) < 4 {
 		t.Fatalf("expected picker navigation and entry actions, got %#v", actions)
 	}
 	selectCount := 0
@@ -73,6 +73,9 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 	}
 	if containsButtonLabel(elements, "进入 · subdir") || containsButtonLabel(elements, "选择 · a.txt") {
 		t.Fatalf("expected compact file picker to avoid per-entry buttons, got %#v", elements)
+	}
+	if containsButtonLabel(elements, "上一级") {
+		t.Fatalf("expected compact file picker to use .. directory option instead of up button, got %#v", elements)
 	}
 	foundEnter := false
 	foundSelect := false
@@ -111,6 +114,9 @@ func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 	if got, want := options, []string{"..", "alpha", ".hidden"}; !equalPathPickerTestStrings(got, want) {
 		t.Fatalf("unexpected directory options: got %v want %v", got, want)
 	}
+	if placeholder := selectStaticPlaceholder(t, elements, cardPathPickerDirectorySelectFieldName); placeholder != ".. 返回上一级，或选择子目录" {
+		t.Fatalf("unexpected directory placeholder: %q", placeholder)
+	}
 }
 
 func TestFileModePathPickerOmitsParentOptionAtRoot(t *testing.T) {
@@ -135,11 +141,24 @@ func TestFileModePathPickerOmitsParentOptionAtRoot(t *testing.T) {
 
 func selectStaticOptionValues(t *testing.T, elements []map[string]any, fieldName string) []string {
 	t.Helper()
+	selectElement := findSelectStaticElement(t, elements, fieldName)
+	return cardOptionValues(selectElement["options"])
+}
+
+func selectStaticPlaceholder(t *testing.T, elements []map[string]any, fieldName string) string {
+	t.Helper()
+	selectElement := findSelectStaticElement(t, elements, fieldName)
+	placeholder, _ := selectElement["placeholder"].(map[string]any)
+	return cardStringValue(placeholder["content"])
+}
+
+func findSelectStaticElement(t *testing.T, elements []map[string]any, fieldName string) map[string]any {
+	t.Helper()
 	for _, element := range elements {
 		if cardStringValue(element["tag"]) != "select_static" || cardStringValue(element["name"]) != fieldName {
 			continue
 		}
-		return cardOptionValues(element["options"])
+		return element
 	}
 	t.Fatalf("select_static %q not found in %#v", fieldName, elements)
 	return nil

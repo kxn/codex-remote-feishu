@@ -93,7 +93,7 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 		})
 		elements = append(elements, pathPickerSelectStaticElement(
 			cardPathPickerDirectorySelectFieldName,
-			"选择子目录并进入",
+			".. 返回上一级，或选择子目录",
 			stampActionValue(pathPickerFieldActionPayload(cardActionKindPathPickerEnter, view.PickerID, cardPathPickerDirectorySelectFieldName), daemonLifecycleID),
 			directoryOptions,
 			"",
@@ -134,7 +134,6 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 		})
 	}
 	elements = append(elements, cardButtonGroupElement([]map[string]any{
-		cardCallbackButtonElement("上一级", "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerUp, view.PickerID, ""), daemonLifecycleID), !view.CanGoUp, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
 	}))
