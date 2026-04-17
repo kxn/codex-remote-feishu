@@ -103,8 +103,12 @@ func TestTryCloudflareProviderClearsSnapshotWhenTunnelExits(t *testing.T) {
 		t.Fatalf("base = %#v, want non-empty base", base)
 	}
 
-	time.Sleep(500 * time.Millisecond)
-	snapshot := provider.Snapshot()
+	snapshot, err := waitForSnapshot(3*time.Second, func(status ProviderStatus) bool {
+		return !status.Ready && status.BaseURL == ""
+	}, provider.Snapshot)
+	if err != nil {
+		t.Fatalf("wait for cleared snapshot: %v", err)
+	}
 	if snapshot.Ready || snapshot.BaseURL != "" {
 		t.Fatalf("snapshot = %#v, want cleared stale tunnel state", snapshot)
 	}
@@ -358,6 +362,20 @@ func waitForFileContent(path string, timeout time.Duration) ([]byte, error) {
 				return nil, err
 			}
 			return raw, nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func waitForSnapshot(timeout time.Duration, predicate func(ProviderStatus) bool, snapshot func() ProviderStatus) (ProviderStatus, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		status := snapshot()
+		if predicate(status) {
+			return status, nil
+		}
+		if time.Now().After(deadline) {
+			return status, fmt.Errorf("timed out waiting for snapshot to match predicate")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

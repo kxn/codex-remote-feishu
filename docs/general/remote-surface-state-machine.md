@@ -108,9 +108,10 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. `surface resume state` 当前不仅记录 `ProductMode` / `Verbosity` / instance / thread / workspace / route，还会记录 headless 恢复所需的 thread title / thread cwd / headless 标记；它已经是唯一持久化恢复源。
    4. `normal` mode surface 随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
-      2. 只有 `ResumeHeadless=false` 的目标，visible thread 当前不可见时才允许降级回原 workspace 的 attached-unbound 语义。
-      3. `ResumeHeadless=true` 的目标不会再先掉到 workspace fallback；visible 路径没恢复成功时，会直接继续交给 headless auto-restore。
-      4. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
+   2. 只有 `ResumeHeadless=false` 的目标，visible thread 当前不可见时才允许降级回原 workspace 的 attached-unbound 语义。
+   3. `ResumeHeadless=true` 的目标不会再先掉到 workspace fallback；visible 路径没恢复成功时，会直接继续交给 headless auto-restore。
+   4. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
+   5. 若同时带着 `ResumeHeadless=true` 且 `ResumeInstanceID` 指向一个已连回的 visible instance，headless auto-restore 也会让出这一轮 startup refresh，先给 exact visible thread 恢复机会，避免刚收到 snapshot 前就抢先拉起新的 headless。
    5. `vscode` mode surface 会按 persisted `ResumeInstanceID` 继续尝试恢复：
       1. 先做本机 VS Code 兼容性检查：
          1. 若检测到旧版 `settings.json` override，或当前 managed shim 已失效，则保持 detached，并发迁移/修复卡片。
@@ -180,7 +181,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    4. 对 `normal` mode 来说，这个 latent detached 可能是短暂中间态：
       1. exact visible thread 恢复成功后会进入 `R2 AttachedPinned`。
       2. visible thread 不可见但 workspace 仍可接管时，会进入 `R1 AttachedUnbound`。
-      3. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待。
+      3. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待；若 persisted target 还带着 `ResumeHeadless=true` + 已连回的 visible `ResumeInstanceID`，headless fallback 也会一起等待这轮 refresh。
    5. 对 `vscode` mode 来说，这个 latent detached 也可能是短暂中间态：
       1. 若本机 VS Code 集成仍是旧版 `settings.json` override，或 managed shim 因扩展升级而失效，会保持 `R0 Detached` 并改发迁移/修复卡片。
       2. 兼容性检查通过后，exact instance 恢复成功会进入 `R3 FollowWaiting` 或 `R4 FollowBound`。

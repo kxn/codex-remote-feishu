@@ -46,6 +46,23 @@ func surfaceResumeEntrySupportsHeadlessRestore(entry SurfaceResumeEntry) bool {
 		strings.TrimSpace(entry.ResumeThreadID) != ""
 }
 
+func (a *App) shouldDeferHeadlessRestoreUntilInitialRefreshLocked(entry SurfaceResumeEntry, allowMissingThreadFailure bool) bool {
+	if allowMissingThreadFailure {
+		return false
+	}
+	instanceID := strings.TrimSpace(entry.ResumeInstanceID)
+	if instanceID == "" {
+		return false
+	}
+	inst := a.service.Instance(instanceID)
+	if inst == nil {
+		return false
+	}
+	// Give a connected visible-instance resume one startup refresh round before
+	// falling back to a new headless launch for the same persisted target.
+	return strings.TrimSpace(inst.Source) != "headless"
+}
+
 func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEvent {
 	if len(a.headlessRestoreState) == 0 {
 		return nil
@@ -61,6 +78,9 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []control.UIEven
 	for _, surfaceID := range surfaceIDs {
 		state := a.headlessRestoreState[surfaceID]
 		if state == nil {
+			continue
+		}
+		if a.shouldDeferHeadlessRestoreUntilInitialRefreshLocked(state.Entry, allowMissingThreadFailure) {
 			continue
 		}
 		if !state.NextAttemptAt.IsZero() && now.Before(state.NextAttemptAt) {
