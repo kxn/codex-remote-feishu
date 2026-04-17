@@ -230,9 +230,9 @@ func previewArtifactMetadata(path string) (artifactKind string, mimeType string,
 	}
 }
 
-func isSupportedPreviewArtifactKind(kind string) bool {
+func isDrivePreferredPreviewArtifactKind(kind string) bool {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "markdown", "html":
+	case "markdown":
 		return true
 	default:
 		return false

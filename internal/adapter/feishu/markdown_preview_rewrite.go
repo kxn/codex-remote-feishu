@@ -671,7 +671,7 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 	deliveries := []PreviewDeliveryPlan{{
 		Kind: PreviewDeliveryWebFileLink,
 	}}
-	if isSupportedPreviewArtifactKind(artifactKind) {
+	if isDrivePreferredPreviewArtifactKind(artifactKind) {
 		deliveries = append([]PreviewDeliveryPlan{{
 			Kind: PreviewDeliveryDriveFileLink,
 		}}, deliveries...)
@@ -702,7 +702,7 @@ func (p driveMarkdownLinkPublisher) Supports(delivery PreviewDeliveryPlan, artif
 	return p.previewer != nil &&
 		p.previewer.api != nil &&
 		delivery.Kind == PreviewDeliveryDriveFileLink &&
-		isSupportedPreviewArtifactKind(artifact.ArtifactKind)
+		isDrivePreferredPreviewArtifactKind(artifact.ArtifactKind)
 }
 
 func (p driveMarkdownLinkPublisher) Publish(ctx context.Context, req PreviewPublishRequest) (*PreviewPublishResult, bool, error) {

@@ -254,14 +254,17 @@ func TestDriveMarkdownPreviewerPersistsCacheAndReusesUpload(t *testing.T) {
 	assertPreviewStateContainsSourcePath(t, statePath, docPath)
 }
 
-func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinks(t *testing.T) {
+func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinksToWebPreview(t *testing.T) {
 	root := t.TempDir()
 	htmlPath := writePreviewFile(t, filepath.Join(root, "docs", "mock.html"), "<!doctype html><title>mock</title><h1>Mock</h1>")
 	api := newFakePreviewAPI()
 	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
 		StatePath:  filepath.Join(root, "state", "preview.json"),
 		ProcessCWD: root,
+		CacheDir:   filepath.Join(root, "preview-cache"),
 	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
 
 	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
 		SurfaceSessionID: "feishu:user:ou_user",
@@ -277,19 +280,29 @@ func TestDriveMarkdownPreviewerRewritesSingleFileHTMLLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rewrite returned error: %v", err)
 	}
-	if result.Block.Text != "Open [mock](https://preview/file-1)." {
+	if !strings.HasPrefix(result.Block.Text, "Open [mock](https://preview.example/g/shared/") || !strings.Contains(result.Block.Text, "?t=token).") {
 		t.Fatalf("unexpected rewritten text: %q", result.Block.Text)
 	}
-	if len(api.uploadFileCalls) != 1 {
-		t.Fatalf("expected one upload, got %#v", api.uploadFileCalls)
+	if len(api.uploadFileCalls) != 0 {
+		t.Fatalf("expected html preview to avoid drive upload, got %#v", api.uploadFileCalls)
 	}
-	if !strings.HasPrefix(api.uploadFileCalls[0].FileName, "mock--") || !strings.HasSuffix(api.uploadFileCalls[0].FileName, ".html") {
-		t.Fatalf("unexpected uploaded file name: %#v", api.uploadFileCalls[0])
+	scopeKey := previewScopeKey("", "feishu:user:ou_user", "", "ou_user")
+	scopePublicID := previewScopePublicID(scopeKey)
+	if len(web.issuedFor) != 1 || web.issuedFor[0].ScopePublicID != scopePublicID {
+		t.Fatalf("unexpected web preview grant requests: %#v want scope=%q", web.issuedFor, scopePublicID)
 	}
-	if api.uploadFileCalls[0].Content != "<!doctype html><title>mock</title><h1>Mock</h1>" {
-		t.Fatalf("unexpected uploaded content: %#v", api.uploadFileCalls[0])
+	manifest, err := previewer.loadWebPreviewScopeManifest(scopePublicID)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
 	}
-	assertPreviewStateContainsSourcePath(t, previewer.config.StatePath, htmlPath)
+	canonicalHTMLPath, err := previewCanonicalPath(htmlPath)
+	if err != nil {
+		t.Fatalf("canonical html path: %v", err)
+	}
+	record := findWebPreviewRecordBySourceAndHash(manifest, canonicalHTMLPath, sha256Hex("<!doctype html><title>mock</title><h1>Mock</h1>"))
+	if record == nil {
+		t.Fatalf("expected html preview record in manifest, got %#v", manifest)
+	}
 }
 
 func assertPreviewStateContainsSourcePath(t *testing.T, statePath, wantPath string) {
