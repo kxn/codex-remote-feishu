@@ -6,7 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestProjectThreadHistoryLoadingCreatesPatchableReplyCard(t *testing.T) {
+func TestProjectThreadHistoryLoadingCreatesPatchableDirectCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventFeishuThreadHistory,
@@ -24,8 +24,8 @@ func TestProjectThreadHistoryLoadingCreatesPatchableReplyCard(t *testing.T) {
 		t.Fatalf("expected one op, got %#v", ops)
 	}
 	op := ops[0]
-	if op.Kind != OperationSendCard || op.ReplyToMessageID != "om-source-1" || !op.CardUpdateMulti {
-		t.Fatalf("expected patchable reply card, got %#v", op)
+	if op.Kind != OperationSendCard || op.ReplyToMessageID != "" || !op.CardUpdateMulti {
+		t.Fatalf("expected patchable direct card, got %#v", op)
 	}
 }
 

@@ -22,7 +22,6 @@ func (p *Projector) projectThreadHistory(chatID string, event control.UIEvent) [
 		GatewayID:        event.GatewayID,
 		SurfaceSessionID: event.SurfaceSessionID,
 		ChatID:           chatID,
-		ReplyToMessageID: event.SourceMessageID,
 		CardTitle:        title,
 		CardBody:         "",
 		CardThemeKey:     threadHistoryTheme(view),

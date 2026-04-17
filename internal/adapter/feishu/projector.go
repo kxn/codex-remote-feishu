@@ -149,7 +149,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
-			ReplyToMessageID: event.SourceMessageID,
 			CardTitle:        title,
 			CardBody:         body,
 			CardThemeKey:     cardThemePlan,

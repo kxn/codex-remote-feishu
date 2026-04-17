@@ -20,7 +20,6 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 		SurfaceSessionID: event.SurfaceSessionID,
 		ChatID:           chatID,
 		MessageID:        progress.MessageID,
-		ReplyToMessageID: event.SourceMessageID,
 		CardTitle:        "工作中",
 		CardBody:         body,
 		CardThemeKey:     cardThemeProgress,

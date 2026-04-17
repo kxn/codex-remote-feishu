@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestProjectExecCommandProgressCreatesReplyCard(t *testing.T) {
+func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -27,8 +27,8 @@ func TestProjectExecCommandProgressCreatesReplyCard(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	op := ops[0]
-	if op.Kind != OperationSendCard || op.ReplyToMessageID != "om-source-1" || !op.CardUpdateMulti {
-		t.Fatalf("expected initial exec progress card reply, got %#v", op)
+	if op.Kind != OperationSendCard || op.ReplyToMessageID != "" || !op.CardUpdateMulti {
+		t.Fatalf("expected initial exec progress direct card, got %#v", op)
 	}
 	if op.CardTitle != "工作中" {
 		t.Fatalf("expected generic processing title, got %#v", op)
