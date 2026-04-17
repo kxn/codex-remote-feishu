@@ -5,10 +5,12 @@ on:
     branches:
       - master
       - main
+      - release/**
   pull_request:
     branches:
       - master
       - main
+      - release/**
 
 permissions:
   contents: read
@@ -73,6 +75,12 @@ jobs:
       - name: Build
         run: |
           go build ./cmd/...
+
+      - name: Validate release packaging
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: shipping
+          CODEX_REMOTE_PACKAGE_VERSION_LABEL: ci
+        run: bash scripts/release/build-artifacts.sh v0.0.0-ci.0 dist-ci --skip-admin-ui-build
 
       - name: Test
         run: go test ./...
