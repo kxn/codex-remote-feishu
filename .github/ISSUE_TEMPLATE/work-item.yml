@@ -1,186 +1,91 @@
-name: Work Item
-description: 功能、重构、测试、文档或状态机相关的开发工作项
-title: "[Work] "
+name: Issue
+description: 人用的轻量问题 / 需求入口；先把问题、目标和证据说清，执行结构后续再补
+title: ""
+labels:
+  - status:needs-investigation
 body:
+  - type: markdown
+    attributes:
+      value: |
+        这是原始需求入口，不要求你一开始就把范围、实现方案、验证计划都想清楚。
+
+        先把下面几项写清就够了：
+        - 你遇到了什么问题，或者你想要什么能力
+        - 你希望最后变成什么样
+        - 你手上已经有的证据、限制或担心点
+
+        后续如果进入正式 workflow，会再补 `建议范围`、`实现参考`、`检查参考`、`收尾参考` 等执行字段，并按情况调整 `status:*` 标签。
+
   - type: dropdown
-    id: work_type
+    id: issue_type
     attributes:
       label: 类型
-      description: 选择这次工作的主要性质
+      description: 选一个最接近的就行，不用纠结是否绝对准确
       options:
-        - enhancement
         - bug
-        - maintainability
-        - testing
-        - documentation
+        - feature
+        - refactor
+        - docs
+        - research
     validations:
       required: true
 
   - type: textarea
-    id: background
+    id: problem_or_request
     attributes:
-      label: 背景
-      description: 为什么要做这件事，当前存在什么问题或机会；如果原始动机无法还原，至少写“当前可确认背景”
+      label: 你遇到的问题 / 你想做什么
+      description: 用自然语言描述就可以，不要求先写成执行工单
       placeholder: |
         例如：
-        - 当前 translator.go 已经超过 1600 行，定位和回归成本高
-        - 某个状态机迁移存在死状态，用户会卡住
+        - 某个 slash command help 里有乱码
+        - 想把某条长列表卡片改成分页
+        - 当前升级链路在 Windows 下可能有文件占用问题
     validations:
       required: true
 
   - type: textarea
-    id: goal
+    id: desired_outcome
     attributes:
-      label: 目标
-      description: 这次希望达成的结果
+      label: 你希望最后变成什么样
+      description: 从用户视角或结果视角描述即可，不要求先写成严格验收条款
       placeholder: |
         例如：
-        - 按职责拆分 translator，保持行为不变
-        - 修复 attach 互斥缺失，避免进入无解状态
+        - 用户看到的 help 文案不再出现乱码
+        - list / use 这类长卡片可以翻页，默认体验更清爽
+        - 升级失败时可以稳定回滚，不会把当前安装打坏
     validations:
       required: true
 
   - type: textarea
-    id: scope
+    id: evidence
     attributes:
-      label: 范围
-      description: 这次准备覆盖哪些内容；如果暂时不清楚，可以写“待补充”
+      label: 相关证据
+      description: 可填复现步骤、日志、截图、链接、相关 issue / commit；没有可以留空
       placeholder: |
         例如：
-        - 只处理 codex translator 和对应测试
-        - 不改 orchestrator 产品行为
-    validations:
-      required: true
+        - 复现步骤
+        - 报错日志
+        - 截图
+        - 相关 issue / PR / 设计文档链接
 
   - type: textarea
-    id: non_goals
+    id: constraints
     attributes:
-      label: 非目标
-      description: 明确这次不做什么，避免后续误解；如果没有可写“无”
+      label: 已知约束 / 担心点
+      description: 如果你已经知道哪些东西不能动、哪些风险要特别注意，写在这里；没有可以留空
       placeholder: |
         例如：
-        - 不调整用户可见交互
-        - 不在本 issue 内重写整个状态机
-    validations:
-      required: true
-
-  - type: textarea
-    id: related_docs
-    attributes:
-      label: 相关文档
-      description: 已知的设计文档、协议文档、状态机文档；未知可写“待补充”
-      placeholder: |
-        例如：
-        - docs/general/relay-protocol-spec.md
-        - docs/general/remote-surface-state-machine.md
-    validations:
-      required: true
-
-  - type: textarea
-    id: related_files
-    attributes:
-      label: 涉及文件
-      description: 已知的代码路径、模块或目录；未知可写“待补充”
-      placeholder: |
-        例如：
-        - internal/adapter/codex/translator.go
-        - internal/core/orchestrator
-    validations:
-      required: true
-
-  - type: textarea
-    id: acceptance
-    attributes:
-      label: 完成标准
-      description: 用来判断这个 issue 是否可以关闭的标准
-      placeholder: |
-        例如：
-        - 行为保持不变，现有测试继续通过
-        - 用户不再能进入 attach 成功但无法继续操作的状态
-    validations:
-      required: true
-
-  - type: textarea
-    id: staged_plan
-    attributes:
-      label: 建议范围
-      description: 如果预计要分阶段推进，先写当前的阶段切分与建议顺序；单阶段工作可写“单阶段完成”
-      placeholder: |
-        例如：
-        - 阶段 1：补状态机文档与 issue 语义
-        - 阶段 2：改 orchestrator 主逻辑与测试
-        - 阶段 3：补收尾同步与回归验证
-    validations:
-      required: true
-
-  - type: textarea
-    id: validation_hint
-    attributes:
-      label: 验证建议
-      description: 如果已经知道应该怎么验证，可以先写下来；未知可写“待补充”
-      placeholder: |
-        例如：
-        - go test ./internal/adapter/codex
-        - go test ./...
-        - 手工验证 Feishu / VS Code 链路
-    validations:
-      required: true
-
-  - type: textarea
-    id: implementation_context
-    attributes:
-      label: 实现参考
-      description: 给实现阶段看的最小必要上下文：推荐切口、关键文档/代码、当前推荐方案、已确认约束；未知可写“待补充”
-      placeholder: |
-        例如：
-        - 先看 docs/general/remote-surface-state-machine.md，再看 internal/core/orchestrator
-        - 推荐切口：先收敛 issue body，再改 service attach 逻辑
-        - 已确认约束：normal mode 不允许静默跨 workspace 跳转
-    validations:
-      required: true
-
-  - type: textarea
-    id: check_context
-    attributes:
-      label: 检查参考
-      description: 给检查阶段看的风险和回归面：必须核对的链路、状态机、协议、历史 bug 或测试点；未知可写“待补充”
-      placeholder: |
-        例如：
-        - 必查 /list -> /use -> /new 的路由切换
-        - 必对照 docs/general/remote-surface-state-machine.md
-        - 需要确认不会重新引入 attach 成功但无后续动作的死状态
-    validations:
-      required: true
-
-  - type: textarea
-    id: finish_context
-    attributes:
-      label: 收尾参考
-      description: 给 finish 阶段看的同步项：哪些 issue/body/doc/状态机/技能可能要回写，以及这次可能沉淀的新约束、模式或坑；未知可写“待补充”
-      placeholder: |
-        例如：
-        - 若命令语义变化，回写 docs/general/remote-surface-state-machine.md
-        - 若 issue 阶段计划变化，先改 issue body 再继续
-        - 若发现新 gotcha，补到 AGENTS.md 或对应 skill/doc
-    validations:
-      required: true
-
-  - type: textarea
-    id: blockers
-    attributes:
-      label: 待澄清 / 阻塞项
-      description: 当前已经知道但尚未解决的问题、缺失信息或外部依赖；没有可写“无”
-      placeholder: |
-        例如：
-        - 原始产品意图待补充
-        - 需要确认 attach 失败时的用户交互
-        - 依赖上游协议字段稳定后再继续
+        - 不希望改用户可见行为
+        - Linux only
+        - 先不要动 VS Code 路径
+        - 可能和另一个 issue 有关系
 
   - type: textarea
     id: notes
     attributes:
       label: 补充说明
-      description: 其他上下文、假设、风险或拆分建议
+      description: 其他上下文、假设、想法或临时备注；没有可以留空
       placeholder: |
         例如：
-        - 如果实施中发现另一个中等以上 follow-up，请新开 issue
+        - 这件事现在只是先记一下，之后再细化
+        - 如果调研发现量太大，可以拆子 issue
