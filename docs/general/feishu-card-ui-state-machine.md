@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-17`
-> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（顶部 `已有工作区` / `添加工作区` 模式按钮；已有工作区路径显示工作区下拉 + 会话下拉，并额外提供 `target_picker_cancel` 退出当前 modal；添加工作区路径显示来源按钮，本地目录会 inline replace 到 path picker 子步骤，Git URL 则在主卡内渲染仓库地址/目录名表单并通过 `target_picker_open_path_picker` 选择落地父目录；取消会清掉 active picker，并把当前卡 inline replace 成一张“已取消选择工作区/会话”的系统提示，不改 route）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情；文本触发首卡现为直接 append 到会话，不再 reply）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析，以及 target picker Git 内联表单草稿在 mode/source/path 子步骤之间的保留语义、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次直接 append 到会话，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 当前已从“单卡 + 网关超限截断”升级成 projector 层的“主 final card + overflow reply cards”交付，主卡保留 recent final-card anchor、footer 与 second-chance patch，overflow cards 继续 append-only；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
+> Summary: 在阶段 1 的显式 Feishu UI query/context 边界和阶段 2 的 Feishu UI controller 分流之上，阶段 3 把 selection cards 拆成 view + adapter projection，阶段 4 又把 `/menu` 与 bare config cards 的最终投影 owner 下沉到 Feishu adapter；当前又补上了可复用 `FeishuPathPickerView`、normal `/list` / `/use` / `/useall` 共享的 `FeishuTargetPickerView`（顶部 `已有工作区` / `添加工作区` 模式按钮；已有工作区路径显示工作区下拉 + 会话下拉，并额外提供 `target_picker_cancel` 退出当前 modal；添加工作区路径显示来源按钮，本地目录会 inline replace 到 path picker 子步骤，Git URL 则在主卡内渲染仓库地址/目录名表单并通过 `target_picker_open_path_picker` 选择落地父目录；取消会清掉 active picker，并把当前卡 inline replace 成一张“已取消选择工作区/会话”的系统提示，不改 route）、`/history` 的 `FeishuThreadHistoryView`（同卡 loading -> async query -> `message.patch` 回填列表/详情；文本触发首卡现为直接 append 到会话，不再 reply）、`path_picker_*` / `target_picker_*` / `history_*` callback 协议、active picker / active history 的 same-daemon freshness 边界、gateway 对 `select_static` 取值的 `option` / `options` / `form_value[field_name]` 兼容解析，以及 target picker Git 内联表单草稿在 mode/source/path 子步骤之间的保留语义、多题 `request_user_input` 的分题暂存与“仅为需要手填的问题渲染表单输入”的卡片语义、题级回答进度与已答/待答状态展示、“未答题先进入确认态，再显式确认留空提交”的 request 交互路径、`permissions_request_approval` / `approval_command` / `approval_file_change` / `approval_network`、顶层 `tool/requestUserInput` 与 `mcp_server_elicitation` 已一起进入 request 卡体系（按钮/表单、`availableDecisions` 归一化、权限按钮、url continue 卡、schema 派生表单、same-daemon `request_revision` freshness、`cancel` 决策回写）、“菜单命令提交态锚点卡”路径（同步 replace 提交态 + 结果继续 append，并支持 best-effort 自动撤回，当前包含 `/steerall`）、`/menu` 首页只保留分组导航（不再额外渲染“常用操作”区块）以及 `current_work` / `switch_target` 的阶段可见性矩阵（`/new` 仅 normal，`/follow` 仅 vscode，`/history` 默认双模式可见），以及无回调的共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，首次直接 append 到会话，后续 `message.patch` 同卡更新，正文出现后终结；共享过程卡当前统一只在 verbose 可见；卡底还支持一条瞬时 reasoning 状态，失效后会从旧卡清掉，必要时整卡删除；同类 `dynamic_tool_call` 会按 tool 名单行聚合并持续追加参数；compact 完成态也改为 `整理：上下文已整理。` 单行并入同卡）；final reply 当前已从“单卡 + 网关超限截断”升级成 projector 层的“主 final card + overflow reply cards”交付，主卡保留 recent final-card anchor、footer 与 second-chance patch，overflow cards 继续 append-only；`/sendfile` 文件模式路径选择器的目录下拉当前会在可返回时把 `..` 固定置顶，并把 `.` 开头目录排在普通目录之后。
 
 ## 1. 文档定位
 
@@ -389,9 +389,11 @@ MCP request 卡片当前新增的可视语义：
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner，也不会把参数应用动作改成 inline replace。
-- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`）不走 callback replace，也不属于旧卡 freshness 判定面：
+- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次直接 append 到当前会话，不再 reply 到触发这轮 turn 的源消息
   - 若同一 turn 内继续收到新的可见过程项，则改用 `message.patch` 更新同一消息；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call` 与 `context_compaction` 累积到同一张“处理中”卡
+  - `reasoning_summary` 当前不会进入普通 timeline；verbose 下若能解析到稳定阶段标题，会只在卡片最底部临时显示一条本地化状态（例如 `思考中`、`规划中`）
+  - 这条 reasoning 状态不是历史记录；一旦普通进度继续追加、assistant 正文开始输出、turn 完成/失败/中断，orchestrator 会先把它从旧卡清掉，再决定是否继续 patch 或终结这张卡
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
   - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；若同一 turn 内连续出现同名 tool，则会复用同一行并按首次出现顺序持续追加参数（例如 `Read：a.cpp` -> `Read：a.cpp b.cpp`）；失败态会在该行内补 `（失败）`
@@ -399,6 +401,7 @@ MCP request 卡片当前新增的可视语义：
   - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
   - 可见性当前统一收敛到 verbose：`exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 都只在 verbose 可见；normal 继续保留 plan 与 final reply，但不再显示这类共享进行中卡；若 compact 完成发生在无 attached surface 时，replay 到 non-verbose surface 也会保持静默
   - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
+  - 若清掉底部 reasoning 状态后整张卡已无任何可见行，而这张卡之前已经发出，projector 会发 `message.delete` 直接删掉旧卡，避免最终残留一张空的“工作中”
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
 
 ## 6. 当前 freshness / old-card 语义
@@ -515,7 +518,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界，以及首次直接 append 与后续 update 的同卡更新语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、底部瞬时 reasoning 状态的渲染位置，以及清空后 `message.delete` 的删卡语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -525,7 +528,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
   - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 normal `/list` 的基础 target picker 语义
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、同卡复用、正文出现后终止、同类 tool 行级聚合、失败态行内标记，以及 turn 完成清理语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、同卡复用、正文出现后终止、同类 tool 行级聚合、失败态行内标记、底部瞬时 reasoning 状态的本地化/清理时机，以及 turn 完成清理语义
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)
   - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重与行级摘要更新语义
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)

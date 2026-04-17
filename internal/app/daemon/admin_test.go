@@ -225,7 +225,7 @@ func TestAdminSkeletonReturnsStructuredNotImplemented(t *testing.T) {
 	}
 }
 
-func TestRuntimeStatusPayloadIncludesSurfaceProgressSummaries(t *testing.T) {
+func TestRuntimeStatusPayloadOmitsSurfaceProgressSummaries(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.onHello(context.Background(), agentproto.Hello{
 		Instance: agentproto.InstanceHello{
@@ -270,7 +270,6 @@ func TestRuntimeStatusPayloadIncludesSurfaceProgressSummaries(t *testing.T) {
 				Status:  "running",
 				Rows: []state.ExecCommandProgressBlockRowRecord{
 					{RowID: "read", Kind: "read", Items: []string{"docs/README.md", "web/src/routes/AdminRoute.tsx"}},
-					{RowID: "list::web/src/routes", Kind: "list", Summary: "web/src/routes"},
 				},
 			},
 			ActiveItemIDs: map[string]bool{"item-1": true},
@@ -296,15 +295,5 @@ func TestRuntimeStatusPayloadIncludesSurfaceProgressSummaries(t *testing.T) {
 	}
 	if summary.InstanceDisplayName != "Demo Workspace" || !testutil.SamePath(summary.WorkspacePath, "/tmp/demo") {
 		t.Fatalf("unexpected instance summary: %#v", summary)
-	}
-	if summary.Progress == nil || len(summary.Progress.Blocks) != 1 {
-		t.Fatalf("expected exploration progress blocks, got %#v", summary.Progress)
-	}
-	block := summary.Progress.Blocks[0]
-	if block.Kind != "exploration" || block.Status != "running" {
-		t.Fatalf("unexpected progress block: %#v", block)
-	}
-	if len(block.Rows) != 2 || len(block.Rows[0].Items) != 2 || block.Rows[1].Summary != "web/src/routes" {
-		t.Fatalf("unexpected progress rows: %#v", block.Rows)
 	}
 }

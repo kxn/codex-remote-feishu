@@ -72,6 +72,54 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 	}
 }
 
+func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-1",
+			Entries: []control.ExecCommandProgressEntry{
+				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "npm test"},
+			},
+			TransientStatus: &control.ExecCommandProgressTransientStatus{
+				Kind: "reasoning",
+				Text: "思考中",
+			},
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	entry := strings.Index(body, "执行：")
+	status := strings.Index(body, "• 思考中")
+	if entry == -1 || status == -1 || status <= entry {
+		t.Fatalf("expected transient reasoning status at bottom, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressDeletesEmptyTransientCard(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+			ItemID:    "reasoning-1",
+			MessageID: "om-progress-1",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationDeleteMessage || ops[0].MessageID != "om-progress-1" {
+		t.Fatalf("expected empty transient progress card to delete existing message, got %#v", ops)
+	}
+}
+
 func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

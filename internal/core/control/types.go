@@ -525,18 +525,24 @@ type ExecCommandProgressBlock struct {
 	Rows    []ExecCommandProgressBlockRow
 }
 
+type ExecCommandProgressTransientStatus struct {
+	Kind string
+	Text string
+}
+
 type ExecCommandProgress struct {
-	ThreadID  string
-	TurnID    string
-	ItemID    string
-	MessageID string
-	Blocks    []ExecCommandProgressBlock
-	Entries   []ExecCommandProgressEntry
-	Commands  []string
-	Command   string
-	CWD       string
-	Status    string
-	Final     bool
+	ThreadID        string
+	TurnID          string
+	ItemID          string
+	MessageID       string
+	Blocks          []ExecCommandProgressBlock
+	Entries         []ExecCommandProgressEntry
+	Commands        []string
+	Command         string
+	CWD             string
+	Status          string
+	TransientStatus *ExecCommandProgressTransientStatus
+	Final           bool
 }
 
 type UIEventKind string
