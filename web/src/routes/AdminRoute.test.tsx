@@ -5,7 +5,6 @@ import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
   makeBootstrap,
-  makeSurfaceStatus,
   makeImageStagingStatus,
   makeManifest,
   makePreviewDriveStatus,
@@ -530,40 +529,12 @@ describe("AdminRoute", () => {
     expect(screen.queryByText("可由管理页删除")).not.toBeInTheDocument();
   });
 
-  it("renders shared exploration progress cards for active surfaces", async () => {
+  it("does not render shared exploration progress in the admin panel", async () => {
     installMockFetch({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/runtime-status": {
         body: makeRuntimeStatus({
-          surfaceStatuses: [
-            makeSurfaceStatus({
-              progress: {
-                status: "running",
-                blocks: [
-                  {
-                    blockId: "exploration",
-                    kind: "exploration",
-                    status: "running",
-                    rows: [
-                      {
-                        rowId: "read",
-                        kind: "read",
-                        items: [
-                          "docs/README.md",
-                          "web/src/routes/AdminRoute.tsx",
-                        ],
-                      },
-                      {
-                        rowId: "list::web/src/routes",
-                        kind: "list",
-                        summary: "web/src/routes",
-                      },
-                    ],
-                  },
-                ],
-              },
-            }),
-          ],
+          surfaces: [{ id: "surface-1" }],
         }),
       },
       "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
@@ -578,16 +549,10 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByText("进行中的会话")).toBeInTheDocument();
-    expect(screen.getByText("整理 websetup 流程")).toBeInTheDocument();
-    expect(screen.getAllByText("探索中").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText("读取：docs/README.md、web/src/routes/AdminRoute.tsx"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("列目录：web/src/routes")).toBeInTheDocument();
-    expect(screen.getByText("会话起点：")).toBeInTheDocument();
-    expect(screen.getByText("最近提问：")).toBeInTheDocument();
-    expect(screen.getByText("最近回复：")).toBeInTheDocument();
+    expect(await screen.findByText("当前实例")).toBeInTheDocument();
+    expect(screen.queryByText("进行中的会话")).not.toBeInTheDocument();
+    expect(screen.queryByText("探索中")).not.toBeInTheDocument();
+    expect(screen.queryByText("会话起点：")).not.toBeInTheDocument();
   });
 
   it("does not show preview reconcile controls in the admin panel", async () => {

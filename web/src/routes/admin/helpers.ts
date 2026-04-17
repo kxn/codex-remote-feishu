@@ -1,9 +1,5 @@
 import type {
   AdminInstanceSummary,
-  AdminSurfaceStatusSummary,
-  ExecCommandProgressBlock,
-  ExecCommandProgressBlockRow,
-  ExecCommandProgressEntry,
   FeishuAppSummary,
   PreviewDriveStatusResponse,
   VSCodeDetectResponse,
@@ -539,86 +535,6 @@ export function instanceSourceLabel(instance: AdminInstanceSummary): string {
     return "后台实例";
   }
   return "本机实例";
-}
-
-export function surfaceProgressTone(status?: string): SurfaceTone {
-  switch (status) {
-    case "completed":
-      return "good";
-    case "failed":
-      return "danger";
-    default:
-      return "warn";
-  }
-}
-
-export function surfaceProgressLabel(status?: string): string {
-  switch (status) {
-    case "completed":
-      return "已探索";
-    case "failed":
-      return "探索失败";
-    default:
-      return "探索中";
-  }
-}
-
-export function surfaceModeLabel(surface: AdminSurfaceStatusSummary): string {
-  return surface.productMode === "vscode" ? "VS Code" : "普通模式";
-}
-
-export function hasVisibleSurfaceProgress(
-  surface: AdminSurfaceStatusSummary,
-): boolean {
-  const progress = surface.progress;
-  if (!progress) {
-    return false;
-  }
-  return (
-    (progress.blocks?.length ?? 0) > 0 ||
-    (progress.entries?.length ?? 0) > 0 ||
-    Boolean(progress.command) ||
-    (progress.commands?.length ?? 0) > 0
-  );
-}
-
-export function renderSurfaceProgressBlockRow(
-  row: ExecCommandProgressBlockRow,
-): string {
-  const kind = row.kind?.trim();
-  if (kind === "read") {
-    return `读取：${(row.items ?? []).join("、")}`;
-  }
-  if (kind === "list") {
-    return `列目录：${row.summary ?? ""}`.trim();
-  }
-  if (kind === "search") {
-    const detail = row.secondary
-      ? `${row.summary ?? ""} in ${row.secondary}`
-      : (row.summary ?? "");
-    return `搜索：${detail}`.trim();
-  }
-  if ((row.summary ?? "").trim()) {
-    return row.summary ?? "";
-  }
-  return (row.items ?? []).join("、");
-}
-
-export function visibleSurfaceProgressBlocks(
-  surface: AdminSurfaceStatusSummary,
-): ExecCommandProgressBlock[] {
-  return (surface.progress?.blocks ?? []).filter(
-    (block) =>
-      (block.rows?.length ?? 0) > 0 && (block.kind ?? "").trim() !== "",
-  );
-}
-
-export function visibleSurfaceProgressEntries(
-  surface: AdminSurfaceStatusSummary,
-): ExecCommandProgressEntry[] {
-  return (surface.progress?.entries ?? []).filter(
-    (entry) => (entry.summary ?? "").trim() !== "",
-  );
 }
 
 export function vscodeModeLabel(mode?: string): string {

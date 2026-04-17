@@ -956,10 +956,7 @@ export function AdminRoute() {
             }
             onCheckPublish={() => void checkPublish()}
           />
-          <AdminInstancesPanel
-            instances={instances}
-            surfaceStatuses={runtime?.surfaceStatuses ?? []}
-          />
+          <AdminInstancesPanel instances={instances} />
           <AdminStoragePanel
             apps={apps}
             imageStaging={imageStaging}

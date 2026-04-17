@@ -1,9 +1,7 @@
 import type {
-  AdminSurfaceStatusSummary,
   AdminInstanceSummary,
   AutostartDetectResponse,
   BootstrapState,
-  ExecCommandProgressView,
   FeishuAppSummary,
   FeishuManifest,
   GatewayStatus,
@@ -196,40 +194,9 @@ export function makeRuntimeStatus(
   return {
     instances: [],
     surfaces: [],
-    surfaceStatuses: [],
     gateways: [],
     pendingRemoteTurns: [],
     activeRemoteTurns: [],
-    ...overrides,
-  };
-}
-
-export function makeExecCommandProgress(
-  overrides: Partial<ExecCommandProgressView> = {},
-): ExecCommandProgressView {
-  return {
-    status: "running",
-    blocks: [],
-    entries: [],
-    commands: [],
-    ...overrides,
-  };
-}
-
-export function makeSurfaceStatus(
-  overrides: Partial<AdminSurfaceStatusSummary> = {},
-): AdminSurfaceStatusSummary {
-  return {
-    surfaceSessionId: "surface-1",
-    productMode: "normal",
-    displayTitle: "整理 websetup 流程",
-    threadTitle: "整理 websetup 流程",
-    firstUserMessage: "请把 websetup 的体验重新整理一下",
-    lastUserMessage: "顺便把探索过程卡也接到 web 里",
-    lastAssistantMessage: "我会先补结构化探索状态卡。",
-    workspacePath: "/tmp/demo",
-    instanceDisplayName: "Demo Workspace",
-    progress: makeExecCommandProgress(),
     ...overrides,
   };
 }

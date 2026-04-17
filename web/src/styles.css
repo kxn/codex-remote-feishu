@@ -702,49 +702,6 @@ button {
   color: var(--text-soft);
 }
 
-.surface-progress-card {
-  gap: 0.9rem;
-  border-color: rgba(217, 119, 6, 0.16);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 247, 237, 0.88),
-      rgba(255, 255, 255, 0.96)
-    ),
-    var(--surface-strong);
-}
-
-.surface-progress-copy,
-.surface-progress-blocks,
-.surface-progress-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.surface-progress-copy p {
-  color: var(--text-body);
-}
-
-.surface-progress-copy strong,
-.surface-progress-block strong {
-  color: var(--text-strong);
-}
-
-.surface-progress-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.8rem 0.85rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(217, 119, 6, 0.12);
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.surface-progress-row {
-  color: var(--text-body);
-}
-
 .app-status-hero {
   border-color: rgba(20, 184, 166, 0.18);
   background:
