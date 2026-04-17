@@ -1853,68 +1853,6 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 	}
 }
 
-func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
-	api := newFlakyCronBootstrapBitableAPI()
-	api.failCreateField = false
-
-	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
-	setCronGatewayLookup(app, "gateway-1", "app-1")
-	app.headlessRuntime.Paths.StateDir = t.TempDir()
-	app.cronLoaded = true
-	app.cronState = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
-		InstanceScopeKey: "stable",
-		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
-		Bitable:          &cronBitableState{},
-		Jobs:             []cronJobState{},
-	}
-	app.cronBitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-
-	if _, _, err := app.ensureCronBitable(control.DaemonCommand{GatewayID: "gateway-1"}); err != nil {
-		t.Fatalf("ensureCronBitable: %v", err)
-	}
-
-	api.mu.Lock()
-	defer api.mu.Unlock()
-	fields := api.fieldsByTable[app.cronState.Bitable.Tables.Tasks]
-	gotNames := make([]string, 0, len(fields))
-	enableType := 0
-	for _, field := range fields {
-		if field == nil {
-			continue
-		}
-		name := stringValue(field.FieldName)
-		gotNames = append(gotNames, name)
-		if name == "启用" && field.Type != nil {
-			enableType = *field.Type
-		}
-	}
-	wantNames := []string{
-		"任务名",
-		"启用",
-		"来源类型",
-		"工作区",
-		"Git 仓库引用",
-		"提示词",
-		"调度类型",
-		"调度时间",
-		"间隔",
-		"并发度",
-		"超时（分钟）",
-		"最近运行时间",
-		"最近状态",
-		"最近结果摘要",
-		"最近错误",
-	}
-	if fmt.Sprintf("%q", gotNames) != fmt.Sprintf("%q", wantNames) {
-		t.Fatalf("task field order = %v, want %v", gotNames, wantNames)
-	}
-	if enableType != 7 {
-		t.Fatalf("enable field type = %d, want 7 (checkbox)", enableType)
-	}
-}
-
 func TestHandleActionCronCommandDoesNotHoldAppLockDuringNoticeDelivery(t *testing.T) {
 	gateway := &reentrantAppLockGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})

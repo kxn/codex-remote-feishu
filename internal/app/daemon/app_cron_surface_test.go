@@ -84,12 +84,10 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
 		Bitable: &cronBitableState{
-			AppToken: "app-cron",
-			AppURL:   "https://example.feishu.cn/base/app-cron",
-			Tables: cronTableIDs{
-				Tasks: "tbl-tasks",
-				Runs:  "tbl-runs",
-			},
+			AppToken:  "app-cron",
+			AppURL:    "https://example.feishu.cn/base/app-cron",
+			TimeZone:  "Asia/Shanghai",
+			Tables:    cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs"},
 		},
 		LastWorkspaceSyncAt: time.Date(2026, 4, 17, 1, 2, 3, 0, time.UTC),
 		LastReloadAt:        time.Date(2026, 4, 17, 2, 3, 4, 0, time.UTC),
@@ -151,11 +149,13 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	assertCatalog("/cron status", "Cron 状态",
 		"当前状态：正常",
 		"当前已加载任务：2 条",
+		"最近工作区同步：2026-04-17 09:02",
+		"最近 reload：2026-04-17 10:03",
 		"最近 reload 摘要：已加载 2 条任务",
 		"配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)",
 		"运行状态：[打开运行记录](https://example.feishu.cn/base/app-cron?table=tbl-runs)",
 	)
-	assertCatalog("/cron list", "Cron 任务", "`Nightly`", "来源：/tmp/project", "`Git Sync`", "来源：repo: github.com/kxn/codex-remote-feishu @ master")
+	assertCatalog("/cron list", "Cron 任务", "`Nightly`", "下次 04-18 11:00", "来源：/tmp/project", "`Git Sync`", "下次 04-17 17:30", "来源：repo: github.com/kxn/codex-remote-feishu @ master")
 	assertCatalog("/cron edit", "Cron 配置", "配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)", "执行 `/cron reload` 生效")
 }
 

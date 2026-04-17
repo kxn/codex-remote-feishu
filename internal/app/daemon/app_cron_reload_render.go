@@ -16,7 +16,7 @@ func (r cronReloadResult) DetailedText() string {
 		}
 		lines = append(lines, "", title)
 		for _, item := range items {
-			lines = append(lines, "- "+cronReloadTaskNoticeLine(item, plannedLabel))
+			lines = append(lines, "- "+cronReloadTaskNoticeLine(item, plannedLabel, r.TimeZone))
 		}
 	}
 	appendTaskSection("已加载：", r.Loaded, "下次")
@@ -31,7 +31,7 @@ func (r cronReloadResult) DetailedText() string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel string) string {
+func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel, timeZone string) string {
 	segments := []string{}
 	name := strings.TrimSpace(item.Name)
 	if name == "" {
@@ -50,7 +50,7 @@ func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel string) stri
 		segments = append(segments, schedule)
 	}
 	segments = append(segments, cronJobConcurrencyText(item.MaxConcurrency))
-	if next := cronReloadTaskNextRunText(item, plannedLabel); next != "" {
+	if next := cronReloadTaskNextRunText(item, plannedLabel, timeZone); next != "" {
 		segments = append(segments, next)
 	}
 	if reason := strings.TrimSpace(item.Reason); reason != "" {
@@ -76,12 +76,12 @@ func cronReloadTaskScheduleText(item cronReloadTaskItem) string {
 	}
 }
 
-func cronReloadTaskNextRunText(item cronReloadTaskItem, label string) string {
+func cronReloadTaskNextRunText(item cronReloadTaskItem, label, timeZone string) string {
 	if item.NextRunAt.IsZero() {
 		return ""
 	}
 	label = firstNonEmpty(strings.TrimSpace(label), "下次")
-	return fmt.Sprintf("%s %s", label, cronSchedulerTime(item.NextRunAt).Format("01-02 15:04"))
+	return fmt.Sprintf("%s %s", label, cronSchedulerTimeIn(item.NextRunAt, timeZone).Format("01-02 15:04"))
 }
 
 func cronReloadErrorNoticeLine(item cronReloadError) string {

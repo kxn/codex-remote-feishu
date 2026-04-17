@@ -25,20 +25,21 @@ func (a *App) maybeScheduleCronJobsLocked(now time.Time) {
 		return
 	}
 
-	now = cronSchedulerTime(now)
+	cronZone := cronConfiguredTimeZone(stateValue)
+	now = cronSchedulerTimeIn(now, cronZone)
 	dirty := false
 	launches := []cronLaunchRequest{}
 	for idx := range stateValue.Jobs {
 		job := &stateValue.Jobs[idx]
 		if job.NextRunAt.IsZero() {
-			job.NextRunAt = cronNextRunAt(*job, now)
+			job.NextRunAt = cronNextRunAtIn(*job, now, cronZone)
 			dirty = true
 		}
 		if job.NextRunAt.IsZero() || job.NextRunAt.After(now) {
 			continue
 		}
 		currentDueAt := job.NextRunAt
-		nextRunAt := cronAdvanceRunAt(*job, currentDueAt, now)
+		nextRunAt := cronAdvanceRunAtIn(*job, currentDueAt, now, cronZone)
 		activeCount := a.cronActiveRunCountLocked(job.RecordID, job.Name)
 		maxConcurrency := cronDefaultMaxConcurrency(job.MaxConcurrency)
 		if activeCount >= maxConcurrency {

@@ -18,7 +18,7 @@ func cronTaskFieldSpecs(workspacesTableID string) []cronFieldSpec {
 		{Name: "间隔", Type: 3, Property: cronSelectFieldProperty(cronIntervalLabels())},
 		{Name: cronTaskConcurrencyField, Type: 2},
 		{Name: "超时（分钟）", Type: 2},
-		{Name: "最近运行时间", Type: 5},
+		{Name: "最近运行时间", Type: 5, Property: cronDateTimeFieldProperty()},
 		{Name: "最近状态", Type: 1},
 		{Name: "最近结果摘要", Type: 1},
 		{Name: "最近错误", Type: 1},
@@ -61,6 +61,13 @@ func cronSelectFieldProperty(labels []string) *larkbitable.AppTableFieldProperty
 			Build())
 	}
 	return larkbitable.NewAppTableFieldPropertyBuilder().Options(options).Build()
+}
+
+func cronDateTimeFieldProperty() *larkbitable.AppTableFieldProperty {
+	return larkbitable.NewAppTableFieldPropertyBuilder().
+		DateFormatter("yyyy/MM/dd HH:mm").
+		AutoFill(false).
+		Build()
 }
 
 func cronIntervalLabels() []string {
