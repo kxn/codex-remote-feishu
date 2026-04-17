@@ -2,6 +2,7 @@ package cronrepo
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,11 +147,11 @@ func (m *Manager) ensureMirror(ctx context.Context, spec SourceSpec, mirrorPath 
 func (m *Manager) resolveRevision(ctx context.Context, spec SourceSpec, mirrorPath string) (string, string, error) {
 	ref := strings.TrimSpace(spec.Ref)
 	if ref == "" {
-		defaultRef, err := gitOutput(ctx, "", "--git-dir", mirrorPath, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+		defaultRef, err := resolveDefaultRef(ctx, spec, mirrorPath)
 		if err != nil {
 			return "", "", classifyGitError(ErrorRefNotFound, "git default ref resolution failed", spec, mirrorPath, err)
 		}
-		ref = strings.TrimPrefix(strings.TrimSpace(defaultRef), "origin/")
+		ref = defaultRef
 	}
 	candidates := []string{
 		"refs/remotes/origin/" + ref + "^{commit}",
@@ -171,6 +172,41 @@ func (m *Manager) resolveRevision(ctx context.Context, spec SourceSpec, mirrorPa
 		Ref:         ref,
 		Path:        mirrorPath,
 	}
+}
+
+func resolveDefaultRef(ctx context.Context, spec SourceSpec, mirrorPath string) (string, error) {
+	if ref, err := gitOutput(ctx, "", "--git-dir", mirrorPath, "symbolic-ref", "--short", "HEAD"); err == nil {
+		ref = strings.TrimSpace(ref)
+		ref = strings.TrimPrefix(ref, "refs/heads/")
+		ref = strings.TrimPrefix(ref, "origin/")
+		if ref != "" {
+			return ref, nil
+		}
+	}
+	output, err := gitOutput(ctx, "", "ls-remote", "--symref", "--", spec.RepoURL, "HEAD")
+	if err != nil {
+		return "", err
+	}
+	ref := parseDefaultRefFromLSRemote(output)
+	if ref == "" {
+		return "", fmt.Errorf("no default branch advertised for %s", strings.TrimSpace(spec.RepoURL))
+	}
+	return ref, nil
+}
+
+func parseDefaultRefFromLSRemote(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "ref: ") || !strings.HasSuffix(line, "\tHEAD") {
+			continue
+		}
+		ref := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "ref: "), "\tHEAD"))
+		ref = strings.TrimPrefix(ref, "refs/heads/")
+		if ref != "" {
+			return ref
+		}
+	}
+	return ""
 }
 
 func (m *Manager) lockSource(sourceKey string) func() {

@@ -50,6 +50,27 @@ func TestManagerMaterializeAndCleanupRun(t *testing.T) {
 	}
 }
 
+func TestManagerMaterializeUsesRepoDefaultBranchWhenRefMissing(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+	repoURL, defaultRef := createGitTestRepoWithBranch(t, "trunk")
+	manager := NewManager(t.TempDir())
+	result, err := manager.Materialize(t.Context(), "inst-cron-default", SourceSpec{
+		RawInput: repoURL,
+		RepoURL:  repoURL,
+	})
+	if err != nil {
+		t.Fatalf("Materialize(default branch): %v", err)
+	}
+	if result.ResolvedRef != defaultRef {
+		t.Fatalf("resolved ref = %q, want %q", result.ResolvedRef, defaultRef)
+	}
+	if _, err := os.Stat(filepath.Join(result.RunDirectory, "README.md")); err != nil {
+		t.Fatalf("materialized default branch worktree missing file: %v", err)
+	}
+}
+
 func runGitTestCommand(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -65,6 +86,11 @@ func runGitTestCommand(t *testing.T, dir string, args ...string) {
 
 func createGitTestRepo(t *testing.T) (string, string) {
 	t.Helper()
+	return createGitTestRepoWithBranch(t, "main")
+}
+
+func createGitTestRepoWithBranch(t *testing.T, branch string) (string, string) {
+	t.Helper()
 	repoRoot := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
 		t.Fatalf("mkdir repo root: %v", err)
@@ -75,6 +101,6 @@ func createGitTestRepo(t *testing.T) (string, string) {
 	}
 	runGitTestCommand(t, repoRoot, "add", "README.md")
 	runGitTestCommand(t, repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init")
-	runGitTestCommand(t, repoRoot, "branch", "-M", "main")
-	return "file://" + filepath.ToSlash(repoRoot), "main"
+	runGitTestCommand(t, repoRoot, "branch", "-M", branch)
+	return "file://" + filepath.ToSlash(repoRoot), branch
 }
