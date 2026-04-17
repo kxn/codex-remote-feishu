@@ -84,10 +84,10 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
 		Bitable: &cronBitableState{
-			AppToken:  "app-cron",
-			AppURL:    "https://example.feishu.cn/base/app-cron",
-			TimeZone:  "Asia/Shanghai",
-			Tables:    cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs"},
+			AppToken: "app-cron",
+			AppURL:   "https://example.feishu.cn/base/app-cron",
+			TimeZone: "Asia/Shanghai",
+			Tables:   cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs"},
 		},
 		LastWorkspaceSyncAt: time.Date(2026, 4, 17, 1, 2, 3, 0, time.UTC),
 		LastReloadAt:        time.Date(2026, 4, 17, 2, 3, 4, 0, time.UTC),
@@ -130,19 +130,13 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		if catalog.Title != wantTitle {
 			t.Fatalf("%s title = %q, want %q", commandText, catalog.Title, wantTitle)
 		}
-		if catalog.Interactive {
-			t.Fatalf("%s interactive = true, want false", commandText)
-		}
-		if len(catalog.Sections) != 0 {
-			t.Fatalf("%s sections = %#v, want no follow-up menu sections", commandText, catalog.Sections)
-		}
-		if len(catalog.RelatedButtons) != 0 {
-			t.Fatalf("%s related buttons = %#v, want none", commandText, catalog.RelatedButtons)
-		}
 		for _, fragment := range wantFragments {
 			if !strings.Contains(catalog.Summary, fragment) {
 				t.Fatalf("%s summary missing %q: %q", commandText, fragment, catalog.Summary)
 			}
+		}
+		if len(catalog.RelatedButtons) != 0 {
+			t.Fatalf("%s related buttons = %#v, want none", commandText, catalog.RelatedButtons)
 		}
 	}
 
@@ -155,8 +149,43 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		"配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)",
 		"运行状态：[打开运行记录](https://example.feishu.cn/base/app-cron?table=tbl-runs)",
 	)
-	assertCatalog("/cron list", "Cron 任务", "`Nightly`", "下次 04-18 11:00", "来源：/tmp/project", "`Git Sync`", "下次 04-17 17:30", "来源：repo: github.com/kxn/codex-remote-feishu @ master")
 	assertCatalog("/cron edit", "Cron 配置", "配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)", "执行 `/cron reload` 生效")
+
+	listEvents := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron list",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})
+	if len(listEvents) != 1 || listEvents[0].FeishuDirectCommandCatalog == nil {
+		t.Fatalf("/cron list events = %#v, want one command catalog", listEvents)
+	}
+	listCatalog := listEvents[0].FeishuDirectCommandCatalog
+	if listCatalog.Title != "Cron 任务" {
+		t.Fatalf("/cron list title = %q, want %q", listCatalog.Title, "Cron 任务")
+	}
+	if !listCatalog.Interactive {
+		t.Fatalf("/cron list interactive = false, want true")
+	}
+	if !strings.Contains(listCatalog.Summary, "当前已加载 2 条任务。") || !strings.Contains(listCatalog.Summary, "立即触发") {
+		t.Fatalf("/cron list summary = %q, want task count + trigger hint", listCatalog.Summary)
+	}
+	if len(listCatalog.Sections) != 1 || len(listCatalog.Sections[0].Entries) != 2 {
+		t.Fatalf("/cron list sections = %#v, want one section with two entries", listCatalog.Sections)
+	}
+	firstEntry := listCatalog.Sections[0].Entries[0]
+	secondEntry := listCatalog.Sections[0].Entries[1]
+	if firstEntry.Title != "Git Sync" || !strings.Contains(firstEntry.Description, "下次 04-17 17:30") || !strings.Contains(firstEntry.Description, "来源：repo: github.com/kxn/codex-remote-feishu @ master") {
+		t.Fatalf("unexpected first /cron list entry: %#v", firstEntry)
+	}
+	if len(firstEntry.Buttons) != 1 || firstEntry.Buttons[0].CommandText != "/cron run rec-2" {
+		t.Fatalf("unexpected first /cron list buttons: %#v", firstEntry.Buttons)
+	}
+	if secondEntry.Title != "Nightly" || !strings.Contains(secondEntry.Description, "下次 04-18 11:00") || !strings.Contains(secondEntry.Description, "来源：/tmp/project") {
+		t.Fatalf("unexpected second /cron list entry: %#v", secondEntry)
+	}
+	if len(secondEntry.Buttons) != 1 || secondEntry.Buttons[0].CommandText != "/cron run rec-1" {
+		t.Fatalf("unexpected second /cron list buttons: %#v", secondEntry.Buttons)
+	}
 }
 
 func TestCronBitableTableURLOverridesPreviousTableContext(t *testing.T) {
@@ -167,6 +196,16 @@ func TestCronBitableTableURLOverridesPreviousTableContext(t *testing.T) {
 	want := "https://example.feishu.cn/base/app-cron?table=tbl-runs"
 	if got != want {
 		t.Fatalf("cronBitableTableURL() = %q, want %q", got, want)
+	}
+}
+
+func TestParseCronCommandTextSupportsRunSubcommand(t *testing.T) {
+	parsed, err := parseCronCommandText("/cron run rec-task-1")
+	if err != nil {
+		t.Fatalf("parseCronCommandText() error = %v, want nil", err)
+	}
+	if parsed.Mode != cronCommandRun || parsed.JobRecordID != "rec-task-1" {
+		t.Fatalf("parsed = %#v, want run/rec-task-1", parsed)
 	}
 }
 

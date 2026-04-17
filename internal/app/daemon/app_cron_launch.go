@@ -50,43 +50,48 @@ func (a *App) cronRepoManagerLocked() *cronrepo.Manager {
 
 func (a *App) launchCronRequestsLocked(requests []cronLaunchRequest) {
 	for _, request := range requests {
-		a.mu.Unlock()
-		prepared, err := a.prepareCronRunLaunch(request)
-		a.mu.Lock()
-		if err != nil {
+		if err := a.launchCronRequestLocked(request); err != nil {
 			a.recordCronImmediateResultWithTargetLocked(request.WritebackTarget, request.Job, request.TriggeredAt, "failed", err.Error())
-			continue
 		}
-		run := prepared.Run
-		a.cronRuns[run.InstanceID] = &run
-		a.addCronActiveRunLocked(run.JobRecordID, run.JobName, run.InstanceID)
-		delete(a.cronExitTargets, run.InstanceID)
-
-		a.mu.Unlock()
-		pid, launchErr := a.startHeadless(controlToHeadlessLaunch(request.Runtime, prepared.Env, run.RunDirectory, run.InstanceID))
-		a.mu.Lock()
-
-		existing := a.cronRuns[run.InstanceID]
-		if launchErr != nil {
-			delete(a.cronRuns, run.InstanceID)
-			a.removeCronActiveRunLocked(run.JobRecordID, run.JobName, run.InstanceID)
-			a.mu.Unlock()
-			a.cleanupCronRunResources(run)
-			a.mu.Lock()
-			a.recordCronImmediateResultWithTargetLocked(request.WritebackTarget, request.Job, request.TriggeredAt, "failed", fmt.Sprintf("启动隐藏执行失败：%v", launchErr))
-			continue
-		}
-		if existing == nil {
-			a.mu.Unlock()
-			a.cleanupCronRunResources(run)
-			a.mu.Lock()
-			continue
-		}
-		if existing.PID <= 0 {
-			existing.PID = pid
-		}
-		log.Printf("cron hidden run requested: instance=%s job=%s source=%s cwd=%s pid=%d", existing.InstanceID, existing.JobName, existing.SourceLabel, existing.RunDirectory, existing.PID)
 	}
+}
+
+func (a *App) launchCronRequestLocked(request cronLaunchRequest) error {
+	a.mu.Unlock()
+	prepared, err := a.prepareCronRunLaunch(request)
+	a.mu.Lock()
+	if err != nil {
+		return err
+	}
+	run := prepared.Run
+	a.cronRuns[run.InstanceID] = &run
+	a.addCronActiveRunLocked(run.JobRecordID, run.JobName, run.InstanceID)
+	delete(a.cronExitTargets, run.InstanceID)
+
+	a.mu.Unlock()
+	pid, launchErr := a.startHeadless(controlToHeadlessLaunch(request.Runtime, prepared.Env, run.RunDirectory, run.InstanceID))
+	a.mu.Lock()
+
+	existing := a.cronRuns[run.InstanceID]
+	if launchErr != nil {
+		delete(a.cronRuns, run.InstanceID)
+		a.removeCronActiveRunLocked(run.JobRecordID, run.JobName, run.InstanceID)
+		a.mu.Unlock()
+		a.cleanupCronRunResources(run)
+		a.mu.Lock()
+		return fmt.Errorf("启动隐藏执行失败：%v", launchErr)
+	}
+	if existing == nil {
+		a.mu.Unlock()
+		a.cleanupCronRunResources(run)
+		a.mu.Lock()
+		return nil
+	}
+	if existing.PID <= 0 {
+		existing.PID = pid
+	}
+	log.Printf("cron hidden run requested: instance=%s job=%s source=%s cwd=%s pid=%d", existing.InstanceID, existing.JobName, existing.SourceLabel, existing.RunDirectory, existing.PID)
+	return nil
 }
 
 func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, error) {
