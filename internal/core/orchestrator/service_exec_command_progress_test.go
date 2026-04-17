@@ -610,6 +610,9 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "npm test" {
 		t.Fatalf("expected exec entry barrier, got %#v", progress.Entries)
 	}
+	if progress.Entries[0].LastSeq != 2 {
+		t.Fatalf("expected exec entry to carry visible order seq, got %#v", progress.Entries)
+	}
 
 	third := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -635,6 +638,9 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 	}
 	if rows[1].Kind != "read" || len(rows[1].Items) != 1 || rows[1].Items[0] != "bar.txt" {
 		t.Fatalf("unexpected second read row: %#v", rows)
+	}
+	if rows[0].LastSeq != 1 || rows[1].LastSeq != 3 {
+		t.Fatalf("expected read rows to preserve visible order seq across entry barrier, got %#v", rows)
 	}
 }
 

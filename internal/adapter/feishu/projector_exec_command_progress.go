@@ -3,6 +3,7 @@ package feishu
 import (
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -37,17 +38,123 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {
-	lines := make([]string, 0, len(progress.Blocks)+len(progress.Entries))
-	for _, block := range normalizedExecProgressBlocks(progress) {
-		lines = append(lines, renderExecProgressBlock(block)...)
-	}
-	for _, entry := range normalizedExecProgressEntries(progress) {
-		lines = append(lines, renderExecProgressEntry(entry))
+	items := normalizedExecProgressTimeline(progress)
+	lines := make([]string, 0, len(items)*2)
+	var activeBlock execProgressTimelineBlock
+	activeBlockOpen := false
+	for _, item := range items {
+		if item.entry != nil {
+			lines = append(lines, renderExecProgressEntry(*item.entry))
+			activeBlock = execProgressTimelineBlock{}
+			activeBlockOpen = false
+			continue
+		}
+		if item.row == nil {
+			continue
+		}
+		if !activeBlockOpen || !sameExecProgressTimelineBlock(activeBlock, item.block) {
+			lines = append(lines, renderExecProgressBlockHeader(control.ExecCommandProgressBlock{
+				BlockID: item.block.BlockID,
+				Kind:    item.block.Kind,
+				Status:  item.block.Status,
+			}))
+			lines = append(lines, "  └ "+renderExecProgressBlockRow(*item.row))
+			activeBlock = item.block
+			activeBlockOpen = true
+			continue
+		}
+		lines = append(lines, "    "+renderExecProgressBlockRow(*item.row))
 	}
 	if len(lines) == 0 {
 		return "（暂无可显示过程）"
 	}
 	return strings.Join(lines, "\n")
+}
+
+type execProgressTimelineBlock struct {
+	BlockID string
+	Kind    string
+	Status  string
+}
+
+type execProgressTimelineItem struct {
+	seq   int
+	order int
+	block execProgressTimelineBlock
+	row   *control.ExecCommandProgressBlockRow
+	entry *control.ExecCommandProgressEntry
+}
+
+func normalizedExecProgressTimeline(progress control.ExecCommandProgress) []execProgressTimelineItem {
+	blocks := normalizedExecProgressBlocks(progress)
+	entries := normalizedExecProgressEntries(progress)
+	maxSeq := 0
+	for _, block := range blocks {
+		for _, row := range block.Rows {
+			if row.LastSeq > maxSeq {
+				maxSeq = row.LastSeq
+			}
+		}
+	}
+	for _, entry := range entries {
+		if entry.LastSeq > maxSeq {
+			maxSeq = entry.LastSeq
+		}
+	}
+	nextFallbackSeq := maxSeq
+	items := make([]execProgressTimelineItem, 0, len(entries))
+	order := 0
+	for _, block := range blocks {
+		blockMeta := execProgressTimelineBlock{
+			BlockID: block.BlockID,
+			Kind:    block.Kind,
+			Status:  block.Status,
+		}
+		for i := range block.Rows {
+			row := block.Rows[i]
+			seq := row.LastSeq
+			if seq <= 0 {
+				nextFallbackSeq++
+				seq = nextFallbackSeq
+				row.LastSeq = seq
+			}
+			rowCopy := row
+			items = append(items, execProgressTimelineItem{
+				seq:   seq,
+				order: order,
+				block: blockMeta,
+				row:   &rowCopy,
+			})
+			order++
+		}
+	}
+	for i := range entries {
+		entry := entries[i]
+		seq := entry.LastSeq
+		if seq <= 0 {
+			nextFallbackSeq++
+			seq = nextFallbackSeq
+			entry.LastSeq = seq
+		}
+		entryCopy := entry
+		items = append(items, execProgressTimelineItem{
+			seq:   seq,
+			order: order,
+			entry: &entryCopy,
+		})
+		order++
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].seq != items[j].seq {
+			return items[i].seq < items[j].seq
+		}
+		return items[i].order < items[j].order
+	})
+	return items
+}
+
+func sameExecProgressTimelineBlock(left, right execProgressTimelineBlock) bool {
+	return left.BlockID == right.BlockID && left.Kind == right.Kind && left.Status == right.Status
 }
 
 func normalizedExecProgressBlocks(progress control.ExecCommandProgress) []control.ExecCommandProgressBlock {
@@ -174,18 +281,6 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 		return control.ExecCommandProgressEntry{}, false
 	}
 	return entry, true
-}
-
-func renderExecProgressBlock(block control.ExecCommandProgressBlock) []string {
-	lines := []string{renderExecProgressBlockHeader(block)}
-	for i, row := range block.Rows {
-		prefix := "    "
-		if i == 0 {
-			prefix = "  └ "
-		}
-		lines = append(lines, prefix+renderExecProgressBlockRow(row))
-	}
-	return lines
 }
 
 func renderExecProgressBlockHeader(block control.ExecCommandProgressBlock) string {

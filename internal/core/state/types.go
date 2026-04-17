@@ -204,6 +204,7 @@ type ExecCommandProgressEntryRecord struct {
 	Label   string
 	Summary string
 	Status  string
+	LastSeq int
 }
 
 type ExecCommandProgressBlockRowRecord struct {

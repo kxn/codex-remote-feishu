@@ -36,6 +36,7 @@ func execCommandProgressBlocks(progress *state.ExecCommandProgressRecord) []cont
 			Items:     append([]string(nil), row.Items...),
 			Summary:   row.Summary,
 			Secondary: row.Secondary,
+			LastSeq:   row.LastSeq,
 		})
 	}
 	return []control.ExecCommandProgressBlock{{

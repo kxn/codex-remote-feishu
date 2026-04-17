@@ -506,6 +506,7 @@ type ExecCommandProgressEntry struct {
 	Label   string
 	Summary string
 	Status  string
+	LastSeq int
 }
 
 type ExecCommandProgressBlockRow struct {
@@ -514,6 +515,7 @@ type ExecCommandProgressBlockRow struct {
 	Items     []string
 	Summary   string
 	Secondary string
+	LastSeq   int
 }
 
 type ExecCommandProgressBlock struct {
