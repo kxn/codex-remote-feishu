@@ -488,10 +488,10 @@ func TestTargetPickerOpenAddWorkspaceLocalDirectoryPathPickerWithoutRouteMutatio
 
 	pathEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:              control.ActionTargetPickerOpenPathPicker,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		PickerID:         updated.PickerID,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
 		TargetPickerValue: control.FeishuTargetPickerPathFieldLocalDirectory,
 	})
 	pathView := singlePathPickerEvent(t, pathEvents)
@@ -548,10 +548,10 @@ func TestTargetPickerAddWorkspacePathPickerCancelRestoresTargetCard(t *testing.T
 	}))
 	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
 		Kind:              control.ActionTargetPickerOpenPathPicker,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		PickerID:         updated.PickerID,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
 		TargetPickerValue: control.FeishuTargetPickerPathFieldLocalDirectory,
 	}))
 
@@ -615,10 +615,10 @@ func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsLocalDirectoryAndWait
 	}))
 	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
 		Kind:              control.ActionTargetPickerOpenPathPicker,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		PickerID:         updated.PickerID,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          updated.PickerID,
 		TargetPickerValue: control.FeishuTargetPickerPathFieldLocalDirectory,
 	}))
 
@@ -891,10 +891,10 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 
 	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
 		Kind:              control.ActionTargetPickerOpenPathPicker,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		PickerID:         gitSource.PickerID,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          gitSource.PickerID,
 		TargetPickerValue: control.FeishuTargetPickerPathFieldGitParentDir,
 		RequestAnswers: map[string][]string{
 			control.FeishuTargetPickerGitRepoURLFieldName:       {"https://github.com/kxn/codex-remote-feishu.git"},

@@ -255,40 +255,40 @@ func (s *Service) targetPickerDirectoryIsKnownWorkspace(surface *state.SurfaceCo
 }
 
 func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerRecord) targetPickerGitImportState {
-	state := targetPickerGitImportState{}
+	gitState := targetPickerGitImportState{}
 	if record == nil {
-		return state
+		return gitState
 	}
 	parentDir := strings.TrimSpace(record.GitParentDir)
 	repoURL := strings.TrimSpace(record.GitRepoURL)
 	directoryName := strings.TrimSpace(record.GitDirectoryName)
 	if !s.config.GitAvailable {
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。",
 		})
-		return state
+		return gitState
 	}
 	if parentDir == "" {
-		return state
+		return gitState
 	}
 	dirEntries, err := os.ReadDir(parentDir)
 	if err != nil {
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "落地目录当前不可访问，请重新选择一个本地父目录。",
 		})
-		return state
+		return gitState
 	}
-	state.ParentDir = parentDir
+	gitState.ParentDir = parentDir
 	if len(dirEntries) != 0 {
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageWarning,
 			Text:  "该目录下已有其他内容；导入时会在其中创建新的子目录。",
 		})
 	}
 	if repoURL == "" && directoryName == "" {
-		return state
+		return gitState
 	}
 	previewRepo := repoURL
 	if previewRepo == "" {
@@ -300,39 +300,40 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 		DirectoryName: directoryName,
 	})
 	if previewErr == nil {
-		state.FinalPath = preview.DestinationPath
-		state.CanConfirm = repoURL != ""
-		return state
+		gitState.FinalPath = state.NormalizeWorkspaceKey(preview.DestinationPath)
+		gitState.CanConfirm = repoURL != ""
+		return gitState
 	}
 	var importErr *gitworkspace.ImportError
 	if ok := errorAsImport(previewErr, &importErr); !ok || importErr == nil {
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "无法预检查最终路径，请重新确认落地目录和目录名。",
 		})
-		return state
+		return gitState
 	}
 	if strings.TrimSpace(importErr.DestinationPath) != "" {
-		state.FinalPath = strings.TrimSpace(importErr.DestinationPath)
+		gitState.FinalPath = state.NormalizeWorkspaceKey(importErr.DestinationPath)
 	}
 	switch importErr.Code {
 	case gitworkspace.ImportErrorDestinationExists:
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		destinationPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, state.NormalizeWorkspaceKey(importErr.DestinationPath)))
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  fmt.Sprintf("目标目录已存在：%s。请更换落地目录或本地目录名。", strings.TrimSpace(importErr.DestinationPath)),
+			Text:  fmt.Sprintf("目标目录已存在：%s。请更换落地目录或本地目录名。", destinationPath),
 		})
 	case gitworkspace.ImportErrorInvalidDirectoryName:
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "本地目录名无效，请改成不含路径分隔符的普通目录名。",
 		})
 	default:
-		state.Messages = append(state.Messages, control.FeishuTargetPickerMessage{
+		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "无法预检查最终路径，请重新确认落地目录和目录名。",
 		})
 	}
-	return state
+	return gitState
 }
 
 func errorAsImport(err error, target **gitworkspace.ImportError) bool {

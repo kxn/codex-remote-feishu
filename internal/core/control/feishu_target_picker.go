@@ -33,10 +33,10 @@ const (
 )
 
 const (
-	FeishuTargetPickerPathFieldLocalDirectory    = "local_directory"
-	FeishuTargetPickerPathFieldGitParentDir      = "git_parent_dir"
-	FeishuTargetPickerGitRepoURLFieldName        = "target_picker_git_repo_url"
-	FeishuTargetPickerGitDirectoryNameFieldName  = "target_picker_git_directory_name"
+	FeishuTargetPickerPathFieldLocalDirectory   = "local_directory"
+	FeishuTargetPickerPathFieldGitParentDir     = "git_parent_dir"
+	FeishuTargetPickerGitRepoURLFieldName       = "target_picker_git_repo_url"
+	FeishuTargetPickerGitDirectoryNameFieldName = "target_picker_git_directory_name"
 )
 
 type FeishuTargetPickerMessageLevel string

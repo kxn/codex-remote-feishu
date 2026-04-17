@@ -36,9 +36,9 @@ type ImportResult struct {
 }
 
 type PreviewResult struct {
-	ParentDir          string
-	DirectoryName      string
-	DestinationPath    string
+	ParentDir           string
+	DirectoryName       string
+	DestinationPath     string
 	ParentDirHasEntries bool
 }
 
