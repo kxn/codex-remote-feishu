@@ -260,6 +260,33 @@ func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testi
 	}
 }
 
+func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:               "picker-1",
+		StageLabel:             "模式/目标",
+		Question:               "切到哪个工作区 / 会话？",
+		SelectedWorkspaceKey:   "/data/dl/web",
+		SelectedWorkspaceLabel: "web",
+		SelectedWorkspaceMeta:  "刚刚",
+		ConfirmLabel:           "确认切换",
+		WorkspaceOptions: []control.FeishuTargetPickerWorkspaceOption{
+			{Value: "/data/dl/web", Label: "web", MetaText: "刚刚"},
+		},
+		SessionOptions: []control.FeishuTargetPickerSessionOption{
+			{Value: "thread:thread-2", Kind: control.FeishuTargetPickerSessionThread, Label: "整理样式", MetaText: "刚刚"},
+		},
+	}, "life-step")
+	if !containsMarkdownExact(elements, formatNeutralTextTag("模式/目标")) {
+		t.Fatalf("expected step header stage tag, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "**切到哪个工作区 / 会话？**") {
+		t.Fatalf("expected step header question, got %#v", elements)
+	}
+	if containsMarkdownWithPrefix(elements, "**当前工作区**") {
+		t.Fatalf("did not expect legacy summary block on editing card, got %#v", elements)
+	}
+}
+
 func TestTargetPickerElementsRenderModeSwitchAndSourceSelect(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
 		PickerID:          "picker-1",
@@ -389,11 +416,8 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 			continue
 		}
 		content := cardStringValue(elements[i]["content"])
-		if !strings.Contains(content, "**落地目录**") {
+		if !strings.Contains(content, "**落地父目录**") {
 			continue
-		}
-		if !strings.Contains(content, "选择仓库要克隆到哪个本地父目录") {
-			t.Fatalf("expected parent-dir helper copy to stay attached, got %#v", content)
 		}
 		sawParentDirNearForm = true
 		break

@@ -561,7 +561,8 @@ func TestTargetPickerOpenAddWorkspaceLocalDirectoryPathPickerWithoutRouteMutatio
 	if !pathEvents[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected local-directory path picker to replace current card inline, got %#v", pathEvents)
 	}
-	if pathView.Title != "选择目录路径" || pathView.ConfirmLabel != "使用这个目录" || pathView.CancelLabel != "返回" || !strings.Contains(pathView.Hint, "回到主卡") {
+	if pathView.Title != "选择工作区与会话" || pathView.StageLabel != "目录/选择目录" || pathView.Question != "选择要接入的目录" ||
+		pathView.ConfirmLabel != "使用这个目录" || pathView.CancelLabel != "返回" || !strings.Contains(pathView.Hint, "回到上一张卡片") {
 		t.Fatalf("unexpected local-directory path picker view: %#v", pathView)
 	}
 }
@@ -1000,8 +1001,8 @@ func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing
 		PickerID:          addMode.PickerID,
 		TargetPickerValue: string(control.FeishuTargetPickerSourceGitURL),
 	}))
-	if !gitSource.CanConfirm {
-		t.Fatalf("expected git import confirm to stay clickable and validate on submit, got %#v", gitSource)
+	if gitSource.CanConfirm {
+		t.Fatalf("expected git import confirm to stay disabled until required fields are complete, got %#v", gitSource)
 	}
 
 	invalid := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
@@ -1015,15 +1016,15 @@ func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing
 			control.FeishuTargetPickerGitDirectoryNameFieldName: {"test1122"},
 		},
 	}))
-	if !invalid.CanConfirm {
-		t.Fatalf("expected invalid submit to keep confirm clickable after inline validation, got %#v", invalid)
+	if invalid.CanConfirm {
+		t.Fatalf("expected invalid submit to keep confirm disabled after inline validation, got %#v", invalid)
 	}
 	if invalid.GitRepoURL != "https://github.com/kxn/codex-remote-feishu.git" || invalid.GitDirectoryName != "test1122" {
 		t.Fatalf("expected invalid submit to preserve draft answers on main card, got %#v", invalid)
 	}
-	if len(invalid.SourceMessages) == 0 || invalid.SourceMessages[0].Level != control.FeishuTargetPickerMessageDanger ||
-		!strings.Contains(invalid.SourceMessages[0].Text, "落地目录") {
-		t.Fatalf("expected inline blocking error on main card, got %#v", invalid.SourceMessages)
+	if len(invalid.Messages) == 0 || invalid.Messages[0].Level != control.FeishuTargetPickerMessageDanger ||
+		!strings.Contains(invalid.Messages[0].Text, "落地目录") {
+		t.Fatalf("expected inline blocking error on main card, got %#v", invalid.Messages)
 	}
 }
 
@@ -1070,8 +1071,8 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 		PickerID:          addMode.PickerID,
 		TargetPickerValue: string(control.FeishuTargetPickerSourceGitURL),
 	}))
-	if !gitSource.CanConfirm {
-		t.Fatalf("expected git source confirm to stay enabled before preview, got %#v", gitSource)
+	if gitSource.CanConfirm {
+		t.Fatalf("expected git source confirm to stay disabled before parent directory / repo are complete, got %#v", gitSource)
 	}
 
 	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
@@ -1086,7 +1087,7 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 			control.FeishuTargetPickerGitDirectoryNameFieldName: {"crf"},
 		},
 	}))
-	if pathView.Title != "选择落地目录" || pathView.CancelLabel != "返回" {
+	if pathView.Title != "选择工作区与会话" || pathView.StageLabel != "Git/选择目录" || pathView.Question != "选择仓库要落到哪个本地父目录" || pathView.CancelLabel != "返回" {
 		t.Fatalf("expected git parent-directory picker, got %#v", pathView)
 	}
 

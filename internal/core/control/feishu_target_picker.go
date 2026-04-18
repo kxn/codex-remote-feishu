@@ -65,6 +65,8 @@ type FeishuTargetPickerView struct {
 	Title                  string
 	Source                 TargetPickerRequestSource
 	Stage                  FeishuTargetPickerStage
+	StageLabel             string
+	Question               string
 	StatusTitle            string
 	StatusText             string
 	StatusSections         []FeishuCardTextSection

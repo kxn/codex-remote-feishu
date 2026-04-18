@@ -27,6 +27,8 @@ const (
 type PathPickerRequest struct {
 	Mode         PathPickerMode
 	Title        string
+	StageLabel   string
+	Question     string
 	RootPath     string
 	InitialPath  string
 	Hint         string
@@ -58,6 +60,8 @@ type FeishuPathPickerView struct {
 	MessageID      string
 	Mode           PathPickerMode
 	Title          string
+	StageLabel     string
+	Question       string
 	RootPath       string
 	CurrentPath    string
 	SelectedPath   string

@@ -75,20 +75,24 @@ func (s *Service) openTargetPickerAddWorkspacePathPicker(surface *state.SurfaceC
 		return nil
 	}
 	rootPath, initialPath := workspacePickerPaths(s.surfaceCurrentWorkspaceKey(surface))
-	title := "选择目录"
+	title := "选择工作区与会话"
+	stageLabel := ""
+	question := ""
 	hint := ""
 	confirmLabel := "使用这个目录"
 	cancelLabel := "返回"
 	switch strings.TrimSpace(fieldKind) {
 	case control.FeishuTargetPickerPathFieldLocalDirectory:
-		title = "选择目录路径"
-		hint = "选择本机上已有的目录。确认后会回到主卡，你再决定是否继续接入。"
+		stageLabel = "目录/选择目录"
+		question = "选择要接入的目录"
+		hint = "确认后会回到上一张卡片继续确认。"
 		if current := strings.TrimSpace(record.LocalDirectoryPath); current != "" {
 			initialPath = current
 		}
 	case control.FeishuTargetPickerPathFieldGitParentDir:
-		title = "选择落地目录"
-		hint = "选择仓库要克隆到哪个本地父目录。确认后会回到主卡并回填落地目录。"
+		stageLabel = "Git/选择目录"
+		question = "选择仓库要落到哪个本地父目录"
+		hint = "确认后会回到上一张卡片，并回填落地目录。"
 		if current := strings.TrimSpace(record.GitParentDir); current != "" {
 			initialPath = current
 		}
@@ -98,6 +102,8 @@ func (s *Service) openTargetPickerAddWorkspacePathPicker(surface *state.SurfaceC
 	return s.openPathPickerWithInline(surface, surface.ActorUserID, control.PathPickerRequest{
 		Mode:         control.PathPickerModeDirectory,
 		Title:        title,
+		StageLabel:   stageLabel,
+		Question:     question,
 		RootPath:     rootPath,
 		InitialPath:  initialPath,
 		Hint:         hint,
@@ -377,7 +383,19 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
 		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(localState.ResolvedPath) {
-		processing := s.startTargetPickerProcessing(surface, flow, record, targetPickerPendingNewThread, localState.ResolvedPath, "", "正在准备新会话", "正在接入工作区并准备新会话待命，完成后你就可以直接继续说话。")
+		status := targetPickerLocalDirectoryProcessingStatus(localState.ResolvedPath)
+		processing := s.startTargetPickerProcessingWithSections(
+			surface,
+			flow,
+			record,
+			targetPickerPendingNewThread,
+			localState.ResolvedPath,
+			"",
+			"正在接入工作区",
+			"",
+			status.Sections,
+			status.Footer,
+		)
 		return append(processing, filtered...)
 	}
 	failureText := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), "当前目录暂时无法接入为工作区，请重新选择后再试。"))

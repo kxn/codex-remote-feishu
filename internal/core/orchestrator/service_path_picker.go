@@ -71,6 +71,8 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 		OwnerFlowID:  strings.TrimSpace(req.OwnerFlowID),
 		Mode:         mode,
 		Title:        strings.TrimSpace(firstNonEmpty(req.Title, defaultPathPickerTitle(mode))),
+		StageLabel:   strings.TrimSpace(req.StageLabel),
+		Question:     strings.TrimSpace(req.Question),
 		RootPath:     rootPath,
 		CurrentPath:  currentPath,
 		SelectedPath: selectedPath,
@@ -224,6 +226,8 @@ func (s *Service) buildPathPickerView(record *activePathPickerRecord) (control.F
 		PickerID:     record.PickerID,
 		Mode:         control.PathPickerMode(record.Mode),
 		Title:        strings.TrimSpace(record.Title),
+		StageLabel:   strings.TrimSpace(record.StageLabel),
+		Question:     strings.TrimSpace(record.Question),
 		RootPath:     record.RootPath,
 		CurrentPath:  current.path,
 		SelectedPath: currentSelectedPath(record),
@@ -237,7 +241,7 @@ func (s *Service) buildPathPickerView(record *activePathPickerRecord) (control.F
 		return control.FeishuPathPickerView{}, err
 	}
 	view.Entries = entries
-	if len(entries) == 0 {
+	if len(entries) == 0 && strings.TrimSpace(record.StageLabel) == "" && strings.TrimSpace(record.Question) == "" {
 		view.Hint = "当前目录为空。"
 	}
 	if record.Mode == pathPickerModeFile && view.SelectedPath == "" {

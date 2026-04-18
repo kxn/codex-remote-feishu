@@ -193,9 +193,14 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 		if view.SelectedMode == control.FeishuTargetPickerModeAddWorkspace {
 			switch view.SelectedSource {
 			case control.FeishuTargetPickerSourceLocalDirectory:
-				message = "请先选择一个可接入的本地目录。"
+				localState := s.buildTargetPickerLocalDirectoryState(surface, record)
+				message = targetPickerFirstBlockingMessage(localState.Messages)
+				if message == "" {
+					message = "请先选择一个可接入的本地目录。"
+				}
 			case control.FeishuTargetPickerSourceGitURL:
-				message = "请先补全可执行的 Git 工作区配置。"
+				gitState := s.buildTargetPickerGitImportState(record)
+				message = targetPickerGitImportValidationMessage(record, gitState.Messages)
 			default:
 				message = "请选择一个可用的工作区来源后再确认。"
 			}
@@ -268,13 +273,37 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 	}
 	if kind == control.FeishuTargetPickerSessionThread && surface.PendingHeadless != nil && strings.TrimSpace(surface.PendingHeadless.ThreadID) == threadID {
 		filtered := targetPickerFilteredFollowupEvents(events)
-		processing := s.startTargetPickerProcessing(surface, flow, record, targetPickerPendingUseThread, workspaceKey, threadID, "正在切换会话", "正在恢复目标会话，完成后会自动切换到新的工作目标。")
+		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, view.SelectedSessionLabel)
+		processing := s.startTargetPickerProcessingWithSections(
+			surface,
+			flow,
+			record,
+			targetPickerPendingUseThread,
+			workspaceKey,
+			threadID,
+			"正在切换工作区 / 会话",
+			"",
+			status.Sections,
+			status.Footer,
+		)
 		return append(processing, filtered...)
 	}
 	if kind == control.FeishuTargetPickerSessionNewThread && surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
 		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == workspaceKey {
 		filtered := targetPickerFilteredFollowupEvents(events)
-		processing := s.startTargetPickerProcessing(surface, flow, record, targetPickerPendingNewThread, workspaceKey, "", "正在准备新会话", "正在准备新会话待命，完成后你就可以直接继续说话。")
+		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, "新会话")
+		processing := s.startTargetPickerProcessingWithSections(
+			surface,
+			flow,
+			record,
+			targetPickerPendingNewThread,
+			workspaceKey,
+			"",
+			"正在准备新会话",
+			"",
+			status.Sections,
+			status.Footer,
+		)
 		return append(processing, filtered...)
 	}
 	filtered := targetPickerFilteredFollowupEvents(events)
@@ -388,8 +417,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 
 	selectedWorkspaceLabel, selectedWorkspaceMeta := targetPickerSelectedWorkspaceSummary(workspaceOptions, selectedWorkspace)
 	selectedSessionLabel, selectedSessionMeta := targetPickerSelectedSessionSummary(sessionOptions, selectedSession)
-	confirmLabel := "使用会话"
-	hint := "下拉变化不会立即切换，点击下方按钮后才会真正生效。"
+	confirmLabel := "确认切换"
+	hint := "选择完成后点击确认，才会真正切换当前工作目标。"
 	canConfirm := selectedWorkspace != "" && selectedSession != ""
 	sourceUnavailableHint := ""
 	addModeSummary := ""
@@ -407,9 +436,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	sessionPlaceholder := "选择会话"
 	if mode == control.FeishuTargetPickerModeAddWorkspace {
 		canConfirm = targetPickerSourceAvailable(sourceOptions, sourceKind)
-		hint = "填写完成后再点击下方按钮，未确认前不会切换当前工作目标。"
-		addModeSummary = "准备一个新的工作区"
-		addModeDetail = "完成后会直接进入新会话待命。"
+		hint = ""
 		switch sourceKind {
 		case control.FeishuTargetPickerSourceLocalDirectory:
 			localState := s.buildTargetPickerLocalDirectoryState(surface, record)
@@ -426,14 +453,14 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 			}
 			gitFinalPath = strings.TrimSpace(firstNonEmpty(record.GitFinalPath, gitState.FinalPath))
 			sourceMessages = append(sourceMessages, gitState.Messages...)
+			canConfirm = canConfirm && gitState.CanConfirm
 			confirmLabel = "克隆并继续"
-			hint = "填写完成后再点击下方按钮；系统会在点击时校验配置，并把错误直接显示在这张卡片里。"
 		default:
 			confirmLabel = "继续"
 		}
 		sourceUnavailableHint = targetPickerSourceUnavailableReason(sourceOptions, sourceKind)
 		if sourceUnavailableHint != "" {
-			hint = "当前选择的来源暂不可用，请改选其他来源后再继续。"
+			hint = "当前来源暂不可用，请先改选其他来源。"
 		}
 	} else if kind, _ := parseTargetPickerSessionValue(selectedSession); kind == control.FeishuTargetPickerSessionNewThread {
 		confirmLabel = "进入新会话"
@@ -449,6 +476,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Title:                  targetPickerTitle(record.Source),
 		Source:                 record.Source,
 		Stage:                  stage,
+		StageLabel:             targetPickerViewStageLabel(record, mode, sourceKind),
+		Question:               targetPickerViewQuestion(record, mode, sourceKind),
 		StatusTitle:            strings.TrimSpace(record.StatusTitle),
 		StatusText:             strings.TrimSpace(record.StatusText),
 		StatusSections:         cloneFeishuCardSections(record.StatusSections),
@@ -720,7 +749,7 @@ func targetPickerModeOptions(addSupported bool, selected control.FeishuTargetPic
 	}
 	return []control.FeishuTargetPickerModeOption{
 		{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区", Selected: selected == control.FeishuTargetPickerModeExistingWorkspace},
-		{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: selected == control.FeishuTargetPickerModeAddWorkspace},
+		{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "新建工作区", Selected: selected == control.FeishuTargetPickerModeAddWorkspace},
 	}
 }
 
@@ -736,13 +765,13 @@ func normalizeTargetPickerSourceKind(value string) control.FeishuTargetPickerSou
 func (s *Service) targetPickerSourceOptions() []control.FeishuTargetPickerSourceOption {
 	options := []control.FeishuTargetPickerSourceOption{{
 		Value:     control.FeishuTargetPickerSourceLocalDirectory,
-		Label:     "本地目录",
-		MetaText:  "选择本机上已经存在的目录，并在完成后进入新会话待命",
+		Label:     "已有目录",
+		MetaText:  "接入本机上已经存在的目录，并在完成后进入新会话待命",
 		Available: true,
 	}}
 	gitOption := control.FeishuTargetPickerSourceOption{
 		Value:     control.FeishuTargetPickerSourceGitURL,
-		Label:     "Git URL",
+		Label:     "从 Git URL",
 		MetaText:  "填写仓库地址后拉取到本地，并在完成后进入新会话待命",
 		Available: s.config.GitAvailable,
 	}

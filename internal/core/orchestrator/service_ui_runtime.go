@@ -85,6 +85,8 @@ type activePathPickerRecord struct {
 	OwnerFlowID  string
 	Mode         pathPickerMode
 	Title        string
+	StageLabel   string
+	Question     string
 	RootPath     string
 	CurrentPath  string
 	SelectedPath string

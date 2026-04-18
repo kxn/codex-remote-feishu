@@ -9,12 +9,6 @@ import (
 
 func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, 18)
-	if summary := targetPickerSummaryMarkdown(view); summary != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": summary,
-		})
-	}
 	if view.Stage != "" && view.Stage != control.FeishuTargetPickerStageEditing {
 		if view.Stage == control.FeishuTargetPickerStageProcessing {
 			if processing := targetPickerProcessingElements(view, daemonLifecycleID); len(processing) != 0 {
@@ -27,14 +21,14 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		}
 		return elements
 	}
+	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.Question)...)
 	showWorkspaceSelect := view.ShowWorkspaceSelect || (!view.ShowSourceSelect && len(view.WorkspaceOptions) != 0)
 	showSessionSelect := view.ShowSessionSelect || (!view.ShowSourceSelect && len(view.SessionOptions) != 0)
 	showSourceSelect := view.ShowSourceSelect
 	if view.ShowModeSwitch && len(view.ModeOptions) != 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**模式**",
-		})
+		if label := targetPickerMinorLabelElement("切换模式"); len(label) != 0 {
+			elements = append(elements, label)
+		}
 		if group := targetPickerModeButtons(view, daemonLifecycleID); len(group) != 0 {
 			elements = append(elements, group)
 		}
@@ -66,20 +60,9 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		))
 	}
 	if showSourceSelect {
-		if summary := strings.TrimSpace(view.AddModeSummary); summary != "" {
-			content := "**添加工作区**\n" + formatNeutralTextTag(summary)
-			if detail := strings.TrimSpace(view.AddModeDetail); detail != "" {
-				content += "\n" + renderSystemInlineTags(detail)
-			}
-			elements = append(elements, map[string]any{
-				"tag":     "markdown",
-				"content": content,
-			})
+		if label := targetPickerMinorLabelElement("切换来源"); len(label) != 0 {
+			elements = append(elements, label)
 		}
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**工作区来源**",
-		})
 		if group := targetPickerSourceButtons(view, daemonLifecycleID); len(group) != 0 {
 			elements = append(elements, group)
 		}
@@ -97,10 +80,9 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		elements = append(elements, messages...)
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
-		})
+		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+			elements = append(elements, block)
+		}
 	}
 	if targetPickerUsesInlineGitForm(view) {
 		elements = append(elements, targetPickerInlineGitFormTerminalButtons(view, daemonLifecycleID)...)
@@ -113,44 +95,9 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 	return elements
 }
 
-func targetPickerSummaryMarkdown(view control.FeishuTargetPickerView) string {
-	lines := make([]string, 0, 2)
-	if label := strings.TrimSpace(view.SelectedWorkspaceLabel); label != "" {
-		line := "**当前工作区**\n" + formatNeutralTextTag(label)
-		if meta := strings.TrimSpace(view.SelectedWorkspaceMeta); meta != "" {
-			line += "\n" + renderSystemInlineTags(meta)
-		}
-		lines = append(lines, line)
-	}
-	if label := strings.TrimSpace(view.SelectedSessionLabel); label != "" {
-		line := "**当前会话**\n" + formatNeutralTextTag(label)
-		if meta := strings.TrimSpace(view.SelectedSessionMeta); meta != "" {
-			line += "\n" + renderSystemInlineTags(meta)
-		}
-		lines = append(lines, line)
-	}
-	if view.SelectedMode == control.FeishuTargetPickerModeAddWorkspace {
-		if path := strings.TrimSpace(view.LocalDirectoryPath); path != "" {
-			lines = append(lines, targetPickerFieldMarkdown("目录路径", path, "未选择"))
-		}
-		if parent := strings.TrimSpace(view.GitParentDir); parent != "" {
-			lines = append(lines, targetPickerFieldMarkdown("落地目录", parent, "未选择"))
-		}
-		if repo := strings.TrimSpace(view.GitRepoURL); repo != "" {
-			lines = append(lines, targetPickerFieldMarkdown("Git 仓库", repo, "未填写"))
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 func targetPickerTerminalElements(view control.FeishuTargetPickerView) []map[string]any {
 	elements := make([]map[string]any, 0, 6)
-	if title := strings.TrimSpace(view.StatusTitle); title != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**" + renderSystemInlineTags(title) + "**",
-		})
-	}
+	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.StatusTitle)...)
 	if len(view.StatusSections) != 0 {
 		elements = appendCardTextSections(elements, view.StatusSections)
 		if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
@@ -159,10 +106,9 @@ func targetPickerTerminalElements(view control.FeishuTargetPickerView) []map[str
 		return elements
 	}
 	if text := strings.TrimSpace(view.StatusText); text != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(text),
-		})
+		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+			elements = append(elements, block)
+		}
 	}
 	if len(elements) == 0 {
 		return nil
@@ -250,11 +196,7 @@ func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, dae
 	elements := []map[string]any{
 		{
 			"tag":     "markdown",
-			"content": targetPickerFieldMarkdown("目录路径", strings.TrimSpace(view.LocalDirectoryPath), "未选择"),
-		},
-		{
-			"tag":     "markdown",
-			"content": "选择本机上已有的目录，并将它接入为工作区。",
+			"content": targetPickerFieldMarkdown("目录", strings.TrimSpace(view.LocalDirectoryPath), "未选择"),
 		},
 	}
 	elements = append(elements, cardButtonGroupElement([]map[string]any{
@@ -372,8 +314,7 @@ func targetPickerUsesInlineGitForm(view control.FeishuTargetPickerView) bool {
 }
 
 func targetPickerGitParentDirMarkdown(view control.FeishuTargetPickerView) string {
-	content := targetPickerFieldMarkdown("落地目录", strings.TrimSpace(view.GitParentDir), "未选择")
-	return content + "\n" + renderSystemInlineTags("选择仓库要克隆到哪个本地父目录。仓库会在这里创建一个新的子目录。")
+	return targetPickerFieldMarkdown("落地父目录", strings.TrimSpace(view.GitParentDir), "未选择")
 }
 
 func targetPickerFieldMarkdown(label, value, placeholder string) string {

@@ -113,26 +113,26 @@ func targetPickerGitImportFlowStale(surface *state.SurfaceConsoleRecord, workspa
 func targetPickerGitImportCloneProcessingStatus(repoURL, finalPath string) feishuCardStatusPayload {
 	return targetPickerGitImportStatusPayload(repoURL, finalPath,
 		[]string{
-			"- [x] 校验参数",
-			"- [>] 克隆仓库",
-			"- [ ] 接入工作区",
-			"- [ ] 准备会话",
+			"✅ 校验参数",
+			"🔄 克隆仓库",
+			"⚪ 接入工作区",
+			"⚪ 准备新会话",
 		},
-		[]string{"正在执行 `git clone`，请稍候。"},
-		"执行中。普通输入已暂停，请等待完成或取消；如需查看状态，可继续使用 `/status`。",
+		[]string{"正在执行 git clone ..."},
+		"普通输入已暂停，请等待完成或取消；如需查看状态，可继续使用 /status。",
 	)
 }
 
 func targetPickerGitImportPostCloneProcessingStatus(repoURL, finalPath string) feishuCardStatusPayload {
 	return targetPickerGitImportStatusPayload(repoURL, finalPath,
 		[]string{
-			"- [x] 校验参数",
-			"- [x] 克隆仓库",
-			"- [>] 接入工作区",
-			"- [ ] 准备会话",
+			"✅ 校验参数",
+			"✅ 克隆仓库",
+			"🔄 接入工作区",
+			"⚪ 准备新会话",
 		},
 		[]string{"仓库已拉取完成，正在接入工作区并准备新会话。"},
-		"执行中。普通输入已暂停，请等待完成或取消；如需查看状态，可继续使用 `/status`。",
+		"普通输入已暂停，请等待完成或取消；如需查看状态，可继续使用 /status。",
 	)
 }
 
@@ -192,7 +192,7 @@ func targetPickerGitImportCancelledStatus(workspaceKey string) feishuCardStatusP
 func targetPickerGitImportStatusPayload(repoURL, finalPath string, stageLines, outputLines []string, footer string) feishuCardStatusPayload {
 	sections := targetPickerGitImportObjectSections(repoURL, finalPath)
 	if len(stageLines) != 0 {
-		sections = append(sections, control.FeishuCardTextSection{Label: "阶段", Lines: stageLines})
+		sections = append(sections, control.FeishuCardTextSection{Label: "当前阶段", Lines: stageLines})
 	}
 	if len(outputLines) != 0 {
 		normalized := make([]string, 0, len(outputLines))

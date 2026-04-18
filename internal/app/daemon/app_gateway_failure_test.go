@@ -42,7 +42,10 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	sawAddWorkspaceText := false
 	for _, element := range gateway.operations[1].CardElements {
 		content, _ := element["content"].(string)
-		sawAddWorkspaceText = sawAddWorkspaceText || strings.Contains(content, "完成后会直接进入新会话待命") || strings.Contains(content, "工作区来源")
+		sawAddWorkspaceText = sawAddWorkspaceText ||
+			strings.Contains(content, "模式/来源/目录") ||
+			strings.Contains(content, "要接入哪个本地目录？") ||
+			strings.Contains(content, "切换来源")
 	}
 	if !sawAddWorkspaceText {
 		t.Fatalf("expected recovered target picker to expose add-workspace flow, got %#v", gateway.operations[1])

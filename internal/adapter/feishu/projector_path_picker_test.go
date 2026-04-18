@@ -265,6 +265,37 @@ func TestDirectoryModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 	}
 }
 
+func TestOwnerSubpageDirectoryPathPickerUsesStepHeaderLayout(t *testing.T) {
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:     "picker-1",
+		Mode:         control.PathPickerModeDirectory,
+		Title:        "选择工作区与会话",
+		StageLabel:   "目录/选择目录",
+		Question:     "选择要接入的目录",
+		RootPath:     "/workspace",
+		CurrentPath:  "/workspace/projects",
+		SelectedPath: "/workspace/projects",
+		ConfirmLabel: "使用这个目录",
+		CancelLabel:  "返回",
+		CanConfirm:   true,
+		Entries: []control.FeishuPathPickerEntry{
+			{Name: "demo", Label: "demo", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
+		},
+	}, "life-owner-subpage")
+	if !containsMarkdownExact(elements, formatNeutralTextTag("目录/选择目录")) {
+		t.Fatalf("expected owner-subpage stage tag, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "**选择要接入的目录**") {
+		t.Fatalf("expected owner-subpage question, got %#v", elements)
+	}
+	if containsMarkdownExact(elements, "**当前选择**") {
+		t.Fatalf("did not expect legacy current-selection summary, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "**当前位置**") {
+		t.Fatalf("expected current-path block in owner-subpage layout, got %#v", elements)
+	}
+}
+
 func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 	elements := pathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
