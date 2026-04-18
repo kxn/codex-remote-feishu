@@ -7,16 +7,22 @@ import (
 )
 
 func commandCatalogBody(catalog control.FeishuDirectCommandCatalog) string {
+	if len(catalog.SummarySections) != 0 {
+		return ""
+	}
 	return renderSystemInlineTags(strings.TrimSpace(catalog.Summary))
 }
 
 func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, len(catalog.Sections)*3+2)
+	elements := make([]map[string]any, 0, len(catalog.Sections)*3+len(catalog.SummarySections)*2+2)
 	if breadcrumb := commandCatalogBreadcrumbMarkdown(catalog.Breadcrumbs); breadcrumb != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": breadcrumb,
 		})
+	}
+	if len(catalog.SummarySections) != 0 {
+		elements = appendCardTextSections(elements, catalog.SummarySections)
 	}
 	for _, section := range catalog.Sections {
 		title := strings.TrimSpace(section.Title)

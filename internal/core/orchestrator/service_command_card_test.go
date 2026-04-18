@@ -38,11 +38,12 @@ func TestCardOwnedVerboseApplyReturnsSealedCommandCard(t *testing.T) {
 	if catalog.Interactive {
 		t.Fatalf("expected sealed card to be non-interactive, got %#v", catalog)
 	}
-	if !strings.Contains(catalog.Summary, "已将当前飞书会话的前端详细程度切换为 quiet。") {
-		t.Fatalf("expected sealed summary to include success text, got %q", catalog.Summary)
+	summaryText := commandCatalogSummaryText(catalog)
+	if !strings.Contains(summaryText, "已将当前飞书会话的前端详细程度切换为 quiet。") {
+		t.Fatalf("expected sealed summary to include success text, got %q", summaryText)
 	}
-	if !strings.Contains(catalog.Summary, "如需再次调整，请重新发送 `/verbose`。") {
-		t.Fatalf("expected sealed summary to include reopen hint, got %q", catalog.Summary)
+	if !strings.Contains(summaryText, "如需再次调整，请重新发送 /verbose。") {
+		t.Fatalf("expected sealed summary to include reopen hint, got %q", summaryText)
 	}
 }
 
@@ -82,8 +83,9 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 	if !catalog.Interactive {
 		t.Fatalf("expected invalid input card to remain interactive, got %#v", catalog)
 	}
-	if !strings.Contains(catalog.Summary, "推理强度建议使用") {
-		t.Fatalf("expected invalid input summary, got %q", catalog.Summary)
+	summaryText := commandCatalogSummaryText(catalog)
+	if !strings.Contains(summaryText, "推理强度建议使用") {
+		t.Fatalf("expected invalid input summary, got %q", summaryText)
 	}
 	form := catalog.Sections[1].Entries[0].Form
 	if form == nil || form.Field.DefaultValue != "gpt-5.4 wrong" {
@@ -115,8 +117,9 @@ func TestCardOwnedReasoningApplyWithoutAttachmentShowsRecoveryCard(t *testing.T)
 	if !catalog.Interactive {
 		t.Fatalf("expected recovery card to remain interactive, got %#v", catalog)
 	}
-	if !strings.Contains(catalog.Summary, "您没有接管任何工作区") || !strings.Contains(catalog.Summary, "还没接管目标") {
-		t.Fatalf("expected recovery summary to explain detached state, got %q", catalog.Summary)
+	summaryText := commandCatalogSummaryText(catalog)
+	if !strings.Contains(summaryText, "您没有接管任何工作区") || !strings.Contains(summaryText, "还没接管目标") {
+		t.Fatalf("expected recovery summary to explain detached state, got %q", summaryText)
 	}
 	if len(catalog.Sections) != 1 || len(catalog.Sections[0].Entries) != 3 {
 		t.Fatalf("expected recovery actions to remain available, got %#v", catalog.Sections)

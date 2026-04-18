@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -161,9 +160,9 @@ func commandConfigCatalogFromView(view control.FeishuCommandConfigView) control.
 
 func modeCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandMode)
-	baseSummary := fmt.Sprintf("当前模式：`%s`。", displayPromptValue(strings.TrimSpace(view.CurrentValue), "未设置"))
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	sections := []control.CommandCatalogSection{{
 		Title: "立即切换",
@@ -178,25 +177,21 @@ func modeCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDir
 		})
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:          def.Title,
-		Summary:        commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
+		Title:           def.Title,
+		SummarySections: summarySections,
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
+		Sections:        sections,
+		RelatedButtons:  commandBackButtons(def.GroupID),
 	}
 }
 
 func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandAutoContinue)
-	statusText := "关闭"
-	if strings.EqualFold(strings.TrimSpace(view.CurrentValue), "on") {
-		statusText = "开启"
-	}
-	baseSummary := fmt.Sprintf("当前：`%s`。", statusText)
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	sections := []control.CommandCatalogSection{{
 		Title: "立即切换",
@@ -211,24 +206,24 @@ func autoContinueCatalogFromView(view control.FeishuCommandConfigView) control.F
 		})
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:          def.Title,
-		Summary:        commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
+		Title:           def.Title,
+		SummarySections: summarySections,
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
+		Sections:        sections,
+		RelatedButtons:  commandBackButtons(def.GroupID),
 	}
 }
 
 func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandReasoning)
-	baseSummary := fmt.Sprintf("当前：`%s`；飞书覆盖：`%s`。", displayPromptValue(strings.TrimSpace(view.EffectiveValue), "未设置"), displayPromptValue(strings.TrimSpace(view.OverrideValue), "无"))
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	sections := []control.CommandCatalogSection{{
 		Title: "立即应用",
@@ -243,24 +238,24 @@ func reasoningCatalogFromView(view control.FeishuCommandConfigView) control.Feis
 		})
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:          def.Title,
-		Summary:        commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
+		Title:           def.Title,
+		SummarySections: summarySections,
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
+		Sections:        sections,
+		RelatedButtons:  commandBackButtons(def.GroupID),
 	}
 }
 
 func accessCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandAccess)
-	baseSummary := fmt.Sprintf("当前：`%s`；飞书覆盖：`%s`。", displayPromptValue(strings.TrimSpace(view.EffectiveValue), "未设置"), displayPromptValue(strings.TrimSpace(view.OverrideValue), "无"))
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	sections := []control.CommandCatalogSection{{
 		Title: "立即应用",
@@ -275,30 +270,24 @@ func accessCatalogFromView(view control.FeishuCommandConfigView) control.FeishuD
 		})
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:          def.Title,
-		Summary:        commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
+		Title:           def.Title,
+		SummarySections: summarySections,
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
+		Sections:        sections,
+		RelatedButtons:  commandBackButtons(def.GroupID),
 	}
 }
 
 func modelCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandModel)
-	lines := []string{
-		fmt.Sprintf("当前模型：`%s`；飞书覆盖：`%s`。", displayPromptValue(strings.TrimSpace(view.EffectiveValue), "未设置"), displayPromptValue(strings.TrimSpace(view.OverrideValue), "无")),
-	}
-	if strings.TrimSpace(view.OverrideExtraValue) != "" {
-		lines = append(lines, fmt.Sprintf("附带推理覆盖：`%s`。", view.OverrideExtraValue))
-	}
-	baseSummary := strings.Join(lines, "\n")
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.RequiresAttachment {
 		return attachmentRequiredCatalogForDefinition(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	presetButtons := []control.CommandCatalogButton{
 		choiceCommandButton("gpt-5.4", "/model gpt-5.4", strings.TrimSpace(view.OverrideValue) == "gpt-5.4", ""),
@@ -329,18 +318,17 @@ func modelCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDi
 		},
 		RelatedButtons: commandBackButtons(def.GroupID),
 	}
-	catalog.Summary = commandSummaryWithFeedback(baseSummary, def, view)
+	catalog.SummarySections = summarySections
 	return catalog
 }
 
 func attachmentRequiredCatalogForDefinition(def control.FeishuCommandDefinition, view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
-	baseSummary := "还没接管目标。先开始或继续工作，再回来调整这个参数。"
 	return control.FeishuDirectCommandCatalog{
-		Title:        def.Title,
-		Summary:      commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:  true,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
+		Title:           def.Title,
+		SummarySections: control.BuildFeishuCommandConfigSummarySections(def, view),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
 		Sections: []control.CommandCatalogSection{{
 			Title: "开始 / 继续工作",
 			Entries: []control.CommandCatalogEntry{
@@ -356,9 +344,9 @@ func attachmentRequiredCatalogForDefinition(def control.FeishuCommandDefinition,
 func verboseCatalogFromView(view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandVerbose)
 	current := strings.TrimSpace(view.CurrentValue)
-	baseSummary := fmt.Sprintf("当前：`%s`。", displayPromptValue(current, "normal"))
+	summarySections := control.BuildFeishuCommandConfigSummarySections(def, view)
 	if view.Sealed {
-		return sealedCommandCatalogForDefinition(def, baseSummary, view)
+		return sealedCommandCatalogForDefinition(def, summarySections)
 	}
 	sections := []control.CommandCatalogSection{{
 		Title: "立即切换",
@@ -373,13 +361,13 @@ func verboseCatalogFromView(view control.FeishuCommandConfigView) control.Feishu
 		})
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:          def.Title,
-		Summary:        commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:    true,
-		DisplayStyle:   control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:    commandBreadcrumbs(def.GroupID, def.Title),
-		Sections:       sections,
-		RelatedButtons: commandBackButtons(def.GroupID),
+		Title:           def.Title,
+		SummarySections: summarySections,
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
+		Sections:        sections,
+		RelatedButtons:  commandBackButtons(def.GroupID),
 	}
 }
 
@@ -387,44 +375,13 @@ func commandFormWithViewDefault(commandID string, view control.FeishuCommandConf
 	return control.FeishuCommandFormWithDefault(commandID, strings.TrimSpace(view.FormDefaultValue))
 }
 
-func commandSummaryWithFeedback(baseSummary string, def control.FeishuCommandDefinition, view control.FeishuCommandConfigView) string {
-	lines := []string{}
-	if feedback := commandFeedbackLine(view); feedback != "" {
-		lines = append(lines, feedback)
-	}
-	if summary := strings.TrimSpace(baseSummary); summary != "" {
-		lines = append(lines, summary)
-	}
-	if view.Sealed {
-		if command := strings.TrimSpace(def.CanonicalSlash); command != "" {
-			lines = append(lines, fmt.Sprintf("如需再次调整，请重新发送 `%s`。", command))
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-func commandFeedbackLine(view control.FeishuCommandConfigView) string {
-	text := strings.TrimSpace(view.StatusText)
-	if text == "" {
-		return ""
-	}
-	switch strings.TrimSpace(view.StatusKind) {
-	case "error":
-		return "错误：" + text
-	case "info":
-		return "说明：" + text
-	default:
-		return "状态：" + text
-	}
-}
-
-func sealedCommandCatalogForDefinition(def control.FeishuCommandDefinition, baseSummary string, view control.FeishuCommandConfigView) control.FeishuDirectCommandCatalog {
+func sealedCommandCatalogForDefinition(def control.FeishuCommandDefinition, summarySections []control.FeishuCardTextSection) control.FeishuDirectCommandCatalog {
 	return control.FeishuDirectCommandCatalog{
-		Title:        def.Title,
-		Summary:      commandSummaryWithFeedback(baseSummary, def, view),
-		Interactive:  false,
-		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  commandBreadcrumbs(def.GroupID, def.Title),
+		Title:           def.Title,
+		SummarySections: append([]control.FeishuCardTextSection(nil), summarySections...),
+		Interactive:     false,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:     commandBreadcrumbs(def.GroupID, def.Title),
 	}
 }
 
@@ -533,11 +490,4 @@ func fixedChoiceButtonsFromOptions(options []control.FeishuCommandOption, curren
 		})
 	}
 	return buttons
-}
-
-func displayPromptValue(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return strings.TrimSpace(value)
 }

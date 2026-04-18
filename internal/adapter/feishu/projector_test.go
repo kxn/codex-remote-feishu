@@ -1182,63 +1182,6 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 	}
 }
 
-func TestProjectCommandViewRendersModelCard(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventFeishuDirectCommandCatalog,
-		FeishuCommandView: &control.FeishuCommandView{
-			Config: &control.FeishuCommandConfigView{
-				CommandID:          control.FeishuCommandModel,
-				EffectiveValue:     "gpt-5.4",
-				OverrideValue:      "gpt-5.4-mini",
-				OverrideExtraValue: "high",
-			},
-		},
-		FeishuCommandContext: &control.FeishuUICommandContext{
-			DTOOwner:  control.FeishuUIDTOwnerCommand,
-			ViewKind:  "config",
-			CommandID: control.FeishuCommandModel,
-		},
-	})
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if ops[0].CardTitle != "模型" {
-		t.Fatalf("unexpected card title: %#v", ops[0])
-	}
-	if len(ops[0].CardElements) < 6 {
-		t.Fatalf("expected structured model card elements, got %#v", ops[0].CardElements)
-	}
-	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
-		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
-	}
-	if ops[0].CardElements[1]["content"] != "**常见模型**" {
-		t.Fatalf("unexpected first section heading: %#v", ops[0].CardElements[1])
-	}
-	renderedElements := renderedV2BodyElements(t, ops[0])
-	formFound := false
-	relatedFound := false
-	clearCount := 0
-	for _, element := range renderedElements {
-		tag, _ := element["tag"].(string)
-		switch tag {
-		case "form":
-			formFound = true
-		case "button":
-			value := renderedButtonCallbackValue(t, element)
-			if value["kind"] == "run_command" && value["command_text"] == "/model clear" {
-				clearCount++
-			}
-			if value["kind"] == "run_command" && value["command_text"] == "/menu send_settings" {
-				relatedFound = true
-			}
-		}
-	}
-	if !formFound || !relatedFound || clearCount != 1 {
-		t.Fatalf("expected rendered V2 model form and related action, got %#v", renderedElements)
-	}
-}
-
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

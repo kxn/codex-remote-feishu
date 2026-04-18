@@ -146,6 +146,24 @@ func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.Feish
 	return catalog
 }
 
+func commandCatalogSummaryText(catalog *control.FeishuDirectCommandCatalog) string {
+	if catalog == nil {
+		return ""
+	}
+	parts := []string{}
+	if summary := strings.TrimSpace(catalog.Summary); summary != "" {
+		parts = append(parts, summary)
+	}
+	for _, section := range catalog.SummarySections {
+		normalized := section.Normalized()
+		if normalized.Label != "" {
+			parts = append(parts, normalized.Label)
+		}
+		parts = append(parts, normalized.Lines...)
+	}
+	return strings.Join(parts, "\n")
+}
+
 func singleSelectionPromptEvent(t *testing.T, events []control.UIEvent) *control.FeishuDirectSelectionPrompt {
 	t.Helper()
 	if len(events) != 1 {

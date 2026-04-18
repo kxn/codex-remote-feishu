@@ -443,13 +443,14 @@ type CommandCatalogSection struct {
 // daemon-owned command cards that are intentionally not routed through the
 // newer command view path.
 type FeishuDirectCommandCatalog struct {
-	Title          string
-	Summary        string
-	Interactive    bool
-	DisplayStyle   CommandCatalogDisplayStyle
-	Breadcrumbs    []CommandCatalogBreadcrumb
-	Sections       []CommandCatalogSection
-	RelatedButtons []CommandCatalogButton
+	Title           string
+	Summary         string
+	SummarySections []FeishuCardTextSection
+	Interactive     bool
+	DisplayStyle    CommandCatalogDisplayStyle
+	Breadcrumbs     []CommandCatalogBreadcrumb
+	Sections        []CommandCatalogSection
+	RelatedButtons  []CommandCatalogButton
 }
 
 type FileChangeSummaryEntry struct {
