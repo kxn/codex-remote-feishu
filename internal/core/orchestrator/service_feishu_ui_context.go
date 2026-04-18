@@ -51,6 +51,11 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 		context.RouteMutationBlockedBy = "request_capture"
 		return context
 	}
+	if s.targetPickerHasBlockingProcessing(surface) {
+		context.RouteMutationBlocked = true
+		context.RouteMutationBlockedBy = "target_picker"
+		return context
+	}
 	if s.activePathPicker(surface) != nil {
 		context.RouteMutationBlocked = true
 		context.RouteMutationBlockedBy = "path_picker"

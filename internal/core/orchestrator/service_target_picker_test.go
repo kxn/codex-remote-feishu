@@ -1111,8 +1111,12 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 		ActorUserID:      "user-1",
 		PickerID:         backfilled.PickerID,
 	})
-	if len(confirmEvents) != 2 || confirmEvents[1].DaemonCommand == nil {
-		t.Fatalf("expected starting notice plus daemon command, got %#v", confirmEvents)
+	if len(confirmEvents) != 2 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[1].DaemonCommand == nil {
+		t.Fatalf("expected processing card plus daemon command, got %#v", confirmEvents)
+	}
+	processing := confirmEvents[0].FeishuTargetPickerView
+	if processing.Stage != control.FeishuTargetPickerStageProcessing || processing.StatusTitle != "正在导入 Git 工作区" {
+		t.Fatalf("expected git import processing card, got %#v", processing)
 	}
 	command := confirmEvents[1].DaemonCommand
 	if command.Kind != control.DaemonCommandGitWorkspaceImport || command.PickerID != gitSource.PickerID {
@@ -1120,5 +1124,138 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 	}
 	if command.RepoURL != "https://github.com/kxn/codex-remote-feishu.git" || command.RefName != "" || command.DirectoryName != "crf" || !testutil.SamePath(command.LocalPath, workspaceRoot) {
 		t.Fatalf("unexpected git import daemon command payload: %#v", command)
+	}
+}
+
+func TestTargetPickerGitImportProcessingBlocksOrdinaryInputButAllowsStatus(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 57, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	addMode := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerSelectMode,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          view.PickerID,
+		TargetPickerValue: string(control.FeishuTargetPickerModeAddWorkspace),
+	}))
+	gitSource := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerSelectSource,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          addMode.PickerID,
+		TargetPickerValue: string(control.FeishuTargetPickerSourceGitURL),
+	}))
+	pathView := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerOpenPathPicker,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          gitSource.PickerID,
+		TargetPickerValue: control.FeishuTargetPickerPathFieldGitParentDir,
+		RequestAnswers: map[string][]string{
+			control.FeishuTargetPickerGitRepoURLFieldName:       {"https://github.com/kxn/codex-remote-feishu.git"},
+			control.FeishuTargetPickerGitDirectoryNameFieldName: {"crf"},
+		},
+	}))
+	backfilled := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         pathView.PickerID,
+	}))
+	confirmEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         backfilled.PickerID,
+	})
+	if len(confirmEvents) == 0 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[0].FeishuTargetPickerView.Stage != control.FeishuTargetPickerStageProcessing {
+		t.Fatalf("expected git import processing state before blocking checks, got %#v", confirmEvents)
+	}
+
+	blocked := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "继续说话",
+	})
+	if len(blocked) != 1 || blocked[0].Notice == nil || blocked[0].Notice.Code != "target_picker_processing" {
+		t.Fatalf("expected ordinary input to be blocked by target picker processing, got %#v", blocked)
+	}
+
+	statusEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(statusEvents) != 1 || statusEvents[0].Snapshot == nil || statusEvents[0].Snapshot.Gate.Kind != "target_picker" {
+		t.Fatalf("expected /status to stay available and expose target picker gate, got %#v", statusEvents)
+	}
+}
+
+func TestTargetPickerCancelGitImportProcessingSealsCardAndDispatchesCancel(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 58, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	record := &activeTargetPickerRecord{
+		PickerID:            "picker-1",
+		OwnerUserID:         "user-1",
+		Source:              control.TargetPickerRequestSourceList,
+		SelectedMode:        control.FeishuTargetPickerModeAddWorkspace,
+		Stage:               control.FeishuTargetPickerStageProcessing,
+		PendingKind:         targetPickerPendingGitImport,
+		PendingWorkspaceKey: "/data/dl/projects/repo-a",
+		GitRepoURL:          "https://github.com/kxn/codex-remote-feishu.git",
+		GitFinalPath:        "/data/dl/projects/repo-a",
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
+	svc.RecordTargetPickerMessage("surface-1", record.PickerID, "om-card-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         record.PickerID,
+	})
+	if len(events) != 2 || events[0].FeishuTargetPickerView == nil || events[1].DaemonCommand == nil {
+		t.Fatalf("expected cancelled same-card result plus daemon cancel, got %#v", events)
+	}
+	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消导入" || got.MessageID != "om-card-1" {
+		t.Fatalf("expected cancelled git-import terminal card on original owner card, got %#v", got)
+	}
+	if got := events[1].DaemonCommand; got.Kind != control.DaemonCommandGitWorkspaceImportCancel || got.PickerID != record.PickerID {
+		t.Fatalf("expected git import cancel daemon command, got %#v", got)
+	}
+	if svc.activeTargetPicker(surface) != nil || svc.activeOwnerCardFlow(surface) != nil {
+		t.Fatalf("expected cancel to clear target picker runtime, got %#v", svc.SurfaceUIRuntime("surface-1"))
 	}
 }

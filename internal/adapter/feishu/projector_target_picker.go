@@ -16,6 +16,12 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		})
 	}
 	if view.Stage != "" && view.Stage != control.FeishuTargetPickerStageEditing {
+		if view.Stage == control.FeishuTargetPickerStageProcessing {
+			if processing := targetPickerProcessingElements(view, daemonLifecycleID); len(processing) != 0 {
+				elements = append(elements, processing...)
+			}
+			return elements
+		}
 		if terminal := targetPickerTerminalElements(view); len(terminal) != 0 {
 			elements = append(elements, terminal...)
 		}
@@ -152,6 +158,26 @@ func targetPickerTerminalElements(view control.FeishuTargetPickerView) []map[str
 		"tag":     "markdown",
 		"content": content,
 	}}
+}
+
+func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	elements := targetPickerTerminalElements(view)
+	if !view.CanCancelProcessing {
+		return elements
+	}
+	button := cardButtonGroupElement([]map[string]any{
+		cardCallbackButtonElement(
+			strings.TrimSpace(firstNonEmpty(view.ProcessingCancelLabel, "取消")),
+			"default",
+			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID),
+			false,
+			"",
+		),
+	})
+	if len(button) != 0 {
+		elements = append(elements, button)
+	}
+	return elements
 }
 
 func targetPickerTheme(view control.FeishuTargetPickerView) string {

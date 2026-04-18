@@ -100,13 +100,53 @@ func TestHandleGitWorkspaceImportCommandLockedCompletesTargetPickerRoute(t *test
 	if runtime := app.service.SurfaceUIRuntime("surface-1"); runtime.ActiveTargetPickerID != "" {
 		t.Fatalf("expected successful git import to clear active target picker, got %#v", runtime)
 	}
-	var sawReady bool
-	for _, event := range commandEvents {
-		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
-			sawReady = true
-		}
+	if len(commandEvents) != 1 || commandEvents[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected same-card success after git import success, got %#v", commandEvents)
 	}
-	if !sawReady {
-		t.Fatalf("expected new-thread-ready notice after git import success, got %#v", commandEvents)
+	if got := commandEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+		t.Fatalf("expected succeeded git-import terminal card, got %#v", got)
+	}
+}
+
+func TestHandleGitWorkspaceImportCancelCommandLockedSuppressesCancelledFollowup(t *testing.T) {
+	original := runGitWorkspaceImport
+	defer func() { runGitWorkspaceImport = original }()
+
+	started := make(chan struct{})
+	done := make(chan []control.UIEvent, 1)
+	runGitWorkspaceImport = func(ctx context.Context, _ gitworkspace.ImportRequest) (gitworkspace.ImportResult, error) {
+		close(started)
+		<-ctx.Done()
+		return gitworkspace.ImportResult{}, ctx.Err()
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	command := control.DaemonCommand{
+		Kind:             control.DaemonCommandGitWorkspaceImport,
+		SurfaceSessionID: "surface-1",
+		PickerID:         "picker-1",
+		LocalPath:        t.TempDir(),
+		RepoURL:          "https://github.com/kxn/codex-remote-feishu.git",
+	}
+	go func() {
+		app.mu.Lock()
+		done <- app.handleGitWorkspaceImportCommandLocked(command)
+		app.mu.Unlock()
+	}()
+	<-started
+
+	app.mu.Lock()
+	cancelEvents := app.handleGitWorkspaceImportCancelCommandLocked(control.DaemonCommand{
+		Kind:             control.DaemonCommandGitWorkspaceImportCancel,
+		SurfaceSessionID: "surface-1",
+		PickerID:         "picker-1",
+	})
+	app.mu.Unlock()
+
+	if len(cancelEvents) != 0 {
+		t.Fatalf("expected cancel command to stay silent, got %#v", cancelEvents)
+	}
+	if events := <-done; len(events) != 0 {
+		t.Fatalf("expected cancelled git import to suppress followup events, got %#v", events)
 	}
 }

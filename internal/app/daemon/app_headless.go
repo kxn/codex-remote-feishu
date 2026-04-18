@@ -42,6 +42,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []control
 		return a.handleSendIMFileCommandLocked(command)
 	case control.DaemonCommandGitWorkspaceImport:
 		return a.handleGitWorkspaceImportCommandLocked(command)
+	case control.DaemonCommandGitWorkspaceImportCancel:
+		return a.handleGitWorkspaceImportCancelCommandLocked(command)
 	default:
 		return nil
 	}

@@ -64,6 +64,7 @@ type activeTargetPickerRecord struct {
 	GitParentDir         string
 	GitRepoURL           string
 	GitDirectoryName     string
+	GitFinalPath         string
 	CreatedAt            time.Time
 	ExpiresAt            time.Time
 }

@@ -141,6 +141,10 @@ func (s *Service) handleTargetPickerCancel(surface *state.SurfaceConsoleRecord, 
 	if blocked != nil {
 		return blocked
 	}
+	if record.Stage == control.FeishuTargetPickerStageProcessing && record.PendingKind == targetPickerPendingGitImport {
+		appendEvents := s.cancelTargetPickerGitImport(surface, record)
+		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消导入", targetPickerGitImportCancelledText(record.PendingWorkspaceKey), false, appendEvents)
+	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消", "当前选择流程已结束，工作目标保持不变。", true, nil)
 }
 
@@ -228,7 +232,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		case control.FeishuTargetPickerSourceLocalDirectory:
 			return s.confirmTargetPickerLocalDirectory(surface, flow, record, view)
 		case control.FeishuTargetPickerSourceGitURL:
-			return s.confirmTargetPickerGitImport(surface, record, view)
+			return s.confirmTargetPickerGitImport(surface, flow, record, view)
 		default:
 			return notice(surface, "target_picker_selection_missing", "请选择一个可用的工作区来源后再确认。")
 		}
@@ -393,7 +397,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	gitParentDir := strings.TrimSpace(record.GitParentDir)
 	gitRepoURL := strings.TrimSpace(record.GitRepoURL)
 	gitDirectoryName := strings.TrimSpace(record.GitDirectoryName)
-	gitFinalPath := ""
+	gitFinalPath := strings.TrimSpace(record.GitFinalPath)
 	messages := append([]control.FeishuTargetPickerMessage(nil), record.Messages...)
 	sourceMessages := []control.FeishuTargetPickerMessage(nil)
 	showWorkspaceSelect := mode == control.FeishuTargetPickerModeExistingWorkspace
@@ -419,7 +423,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 			if strings.TrimSpace(gitState.ParentDir) != "" {
 				gitParentDir = strings.TrimSpace(gitState.ParentDir)
 			}
-			gitFinalPath = strings.TrimSpace(gitState.FinalPath)
+			gitFinalPath = strings.TrimSpace(firstNonEmpty(record.GitFinalPath, gitState.FinalPath))
 			sourceMessages = append(sourceMessages, gitState.Messages...)
 			confirmLabel = "克隆并继续"
 			hint = "填写完成后再点击下方按钮；系统会在点击时校验配置，并把错误直接显示在这张卡片里。"
@@ -433,6 +437,12 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	} else if kind, _ := parseTargetPickerSessionValue(selectedSession); kind == control.FeishuTargetPickerSessionNewThread {
 		confirmLabel = "进入新会话"
 	}
+	record.GitFinalPath = gitFinalPath
+	canCancelProcessing := stage == control.FeishuTargetPickerStageProcessing && record.PendingKind == targetPickerPendingGitImport
+	processingCancelLabel := ""
+	if canCancelProcessing {
+		processingCancelLabel = "取消导入"
+	}
 	return control.FeishuTargetPickerView{
 		PickerID:               record.PickerID,
 		Title:                  targetPickerTitle(record.Source),
@@ -440,6 +450,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Stage:                  stage,
 		StatusTitle:            strings.TrimSpace(record.StatusTitle),
 		StatusText:             strings.TrimSpace(record.StatusText),
+		CanCancelProcessing:    canCancelProcessing,
+		ProcessingCancelLabel:  processingCancelLabel,
 		SelectedMode:           mode,
 		SelectedSource:         sourceKind,
 		ShowModeSwitch:         addSupported,

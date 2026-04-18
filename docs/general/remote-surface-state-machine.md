@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-17`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm，并新增 `target_picker_cancel` 作为显式退出动作；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `本地目录` 通过 `target_picker_open_path_picker` 打开目录子步骤再回到主卡确认，`Git URL` 则在主卡内联填写仓库地址/目录名并通过同一子步骤选择父目录，最终由 daemon-side non-interactive `git clone` 在持锁外执行；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用；取消则会清掉 active picker 并回到当前 surface 的普通待命态，不改 route）；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载。
+> Updated: `2026-04-18`
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm，并新增 `target_picker_cancel` 作为显式退出动作；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `本地目录` 通过 `target_picker_open_path_picker` 打开目录子步骤再回到主卡确认，`Git URL` 则在主卡内联填写仓库地址/目录名并通过同一子步骤选择父目录，最终由 daemon-side non-interactive `git clone` 在持锁外执行；Git confirm 后先让同一张 owner card 进入 processing，并在 clone 完成后继续推进“接入工作区 / 准备会话”；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；成功/失败/取消都封回同卡 terminal。两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载。
 
 ## 1. 文档定位
 
@@ -147,10 +147,13 @@ surface 不是单一枚举，而是五层正交状态叠加。
       3. `本地目录` 只有在主卡上已经回填出有效目录后，`接入并继续` 才会真正执行接入，并统一走 `PrepareNewThread=true` 语义进入当前 workspace attach / fresh headless `R5` 路径。
       4. `Git URL` 主卡会内联收集 `repo_url` 与可选 `directory_name`，并通过 `target_picker_open_path_picker` 选择父目录；这些草稿跟随同一个 active target picker runtime 保存，不会进入 `PendingRequest`。
       5. `Git URL` 的主卡 confirm 会直接下发 daemon-side `workspace.git_import` 命令；真正的 `git clone` 在 daemon 持锁外执行，不阻塞主锁。
-      6. clone 成功后，若原始 picker 仍是当前 active picker，则继续进入 `R5`；若 flow 已失效或后续 attach 失败，则保留本地目录，只追加 notice，不自动删除 clone 结果。
-      7. 当本机缺少 `git` 时，`Git URL` 仍会保留在来源按钮里，但 `克隆并继续` 会禁用，并附带不可用说明，不会进入死流程。
+      6. confirm 后 owner card 立即进入 processing：先显示“正在导入 Git 工作区”，clone 成功后若 flow 仍有效，则继续 patch 成“正在接入工作区”；success / failure / cancel 都封回同卡 terminal。
+      7. clone / prepare 期间，surface 会进入 coarse-grained `target_picker` gate：普通输入与 competing route mutation 被拒绝，只保留 `/status`、reaction/recall 与同卡 `取消导入`。
+      8. `取消导入` 会优先停止业务流，并对 clone / fresh-workspace prepare 做 best-effort 取消；若本地已留下目录残留，不自动清理，只在 terminal card 提醒用户按需手动处理。
+      9. clone 成功但 flow stale 时，只保留本地目录并回 stale notice；后续接入失败时，则同卡显示失败 terminal，并明确目录已保留。
+      10. 当本机缺少 `git` 时，`Git URL` 仍会保留在来源按钮里，但 `克隆并继续` 会禁用，并附带不可用说明，不会进入死流程。
    5. `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_open_path_picker` 都只刷新同一张卡或其子步骤，不会立即 attach、switch 或创建新会话。
-   6. `target_picker_cancel` 是 unified target picker 的显式退出路径：会清掉 active picker，把当前卡换成一张 notice，并回到当前 surface 原本的 attach/use/new-thread 状态；不会 silently reopen 其他菜单卡。
+   6. `target_picker_cancel` 是 unified target picker 的显式退出路径：编辑态会把当前卡封成 `已取消` 终态；若 Git 长链路正处于 processing，则会封成 `已取消导入` 并执行 best-effort cancel。
    7. `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 normal mode 下当前都只负责“重新打开或刷新 target picker”，不再维持旧的分页 selection-card 主路径。
    8. `/new` 已变成 workspace-owned prepared state。
    9. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
@@ -255,8 +258,9 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
 | `G4 CommandCapture` | `ActiveCommandCapture != nil` | 仅保留旧 `/model` 历史兼容：当前 UI 不再创建新 capture；若 surface 上残留旧 capture，下一条普通文本会被直接转换成 `/model <输入>` |
 | `G5 PathPicker` | 当前 surface 的 active path picker runtime 非空 | 当前存在一个仍有效的飞书路径选择器；core 只关心“gate 是否存在、是否阻断 competing UI / route mutation、confirm/cancel 后如何交给 consumer”，不关心目录浏览细节 |
-| `G6 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autowhip` 继续正常，其余动作被挡 |
-| `G7 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
+| `G6 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
+| `G7 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autowhip` 继续正常，其余动作被挡 |
+| `G8 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
 
 补充说明：
 
@@ -345,14 +349,14 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    4. `target_picker_select_session`
    5. `target_picker_open_path_picker`
    6. `target_picker_cancel`
-   7. 这些回调里，前五个属于 same-context pure navigation，满足 daemon freshness 时会 inline replace 当前卡；`target_picker_cancel` 也会 inline replace，但它的效果是清掉 active picker 并把卡片收束成 notice。
+   7. 这些回调里，前五个属于 same-context pure navigation，满足 daemon freshness 时会 inline replace 当前卡；`target_picker_cancel` 也会 inline replace，但它的效果是把当前 owner card 收束成 sealed terminal，并清掉 active picker / owner-card flow。
 5. 真正的产品状态变化只发生在 `target_picker_confirm`。
    1. `已有工作区` 模式下，选既有会话时，复用现有 `/use` / `use_thread` / cross-workspace attach 语义；必要时仍会走 existing visible / reusable headless / create headless 的既有 resolver。
    2. `已有工作区` 模式下，选 `新建会话` 且目标 workspace 已 attach 或可直接 attach 时，会直接进入（或先 attach 再进入）`R5 NewThreadReady`。
    3. `已有工作区` 模式下，选 `新建会话` 且目标 workspace 只剩 recoverable-only 语义时，会启动 fresh managed headless，并把 `PrepareNewThread=true` 记入 `PendingHeadless`；实例连回后直接进入 `R5`，不再先停在 `R1`。
    4. `添加工作区 / 本地目录` 下，`target_picker_open_path_picker` 会先打开目录 path picker，并在 confirm/cancel 后 inline 回到主卡；只有主卡已经回填出有效目录时，`target_picker_confirm` 才会把该目录解析成 workspace，并按 `PrepareNewThread=true` 的语义进入 `R5` / fresh headless `R5` 路径。
    5. `添加工作区 / Git URL` 下，主卡会内联保存 `repo_url` / `directory_name` 草稿，并通过 `target_picker_open_path_picker` 选择父目录；`target_picker_confirm` 随后直接下发 daemon-side `workspace.git_import` 命令。
-   6. Git import 的 path picker cancel 不会改 route，只会回到 target picker 主卡；clone 成功但 flow stale 或 attach 失败时，也只会追加 notice，并保留本地目录。
+   6. Git import 的 path picker cancel 不会改 route，只会回到 target picker 主卡；clone 成功但 flow stale 时会回 stale notice 并保留本地目录；若后续 attach / prepare 失败，则会把同一张 owner card 封成 failed terminal，并明确目录已保留。
 6. `target_picker_confirm` 当前还有一条显式防呆。
    1. 若用户按下确认时，工作区或会话候选已经变化到不再包含原选择，服务端不会再 silent fallback 到别的默认候选。
    2. 当前行为是追加一张最新 target picker + `target_picker_selection_changed` notice，要求用户在最新卡片上重新确认。
@@ -769,14 +773,14 @@ R5 NewThreadReady
    4. `已有工作区` 模式下，会话下拉固定是“该 workspace 下可接管/可恢复 thread + `新建会话`”。
    5. `添加工作区 / 本地目录` 主卡会显示 `选择目录` 按钮与 `接入并继续` 主按钮；`添加工作区 / Git URL` 主卡会显示 `选择目录` 按钮与 `克隆并继续` 主按钮。
    6. normal mode 下的 `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 当前都只负责在 same-context 中重新打开或刷新这张卡。
-   7. `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_open_path_picker` 是 pure navigation，会 inline replace；`target_picker_confirm` 是 append-only 产品动作。
+   7. `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_open_path_picker` 是 pure navigation，会 inline replace；`target_picker_confirm` 虽然仍是异步产品动作，但三条主路径现在都会把结果收回同一张 owner card，而不再额外 append 主结果卡。
    8. 若 confirm 时原选择已经失效，当前会刷新一张最新 picker 并返回 `target_picker_selection_changed`，不会 silent fallback 到别的 thread / workspace。
 7. target picker confirm 的产品落点当前分三类：
    1. 既有 thread：复用现有 resolver 顺序 `当前 attached instance 内可见 thread -> free existing visible instance -> reusable managed headless -> create managed headless`。
    2. 既有 thread 但需要跨 workspace / 跨实例：仍会先走 detach-like 清理，丢弃 staged/queued draft、清 request / capture / prompt override，再 attach 到新目标。
    3. `新建会话`：当前或可直接 attach 的 workspace 会进入 `R5`；recoverable-only workspace 则启动 fresh managed headless，并在实例连回后直接进入 `R5`。
    4. `添加工作区 / 本地目录`：不会立即改 route，而是先打开目录 path picker 并 inline 回到主卡；只有主卡确认时才真正进入 `R5` / fresh managed headless `R5`，cancel 则保持当前 route 不变。
-   5. `添加工作区 / Git URL`：不会立即改 route，而是在同一张主卡上填写仓库地址/目录名、选择父目录，并由 daemon-side `workspace.git_import` 在持锁外执行 `git clone`；成功后进入 `R5`，失败则只回 notice，不回退到隐式默认 workspace。
+   5. `添加工作区 / Git URL`：不会立即改 route，而是在同一张主卡上填写仓库地址/目录名、选择父目录，并由 daemon-side `workspace.git_import` 在持锁外执行 `git clone`；confirm 后 surface 进入 `G6 TargetPickerProcessing`，success / failure / cancel 都封回同卡 terminal，其中 success 最终进入 `R5`。
 8. attached `vscode /use` / `/useall` 当前有两条额外约束：
    1. 只展示当前 attached instance 的可见 thread，不再走 merged global thread view。
    2. force-pick 后会保留 `RouteMode=follow_local`，后续 observed focus 变化仍可覆盖。
@@ -1115,8 +1119,9 @@ transport degraded retained attachment
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `G4 CommandCapture` | 当前只可能来自旧 runtime 残留兼容态；下一条普通文本会被直接转换成 `/model <输入>` 并立即应用；图片会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` 并提示重新打开 `/model` 卡片 |
 | `G5 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片、revoke/reaction；`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
-| `E6 Abandoning` | 只允许 `/status`、`/autowhip`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
-| `G7 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
+| `G6 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成、取消，或使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
+| `G7 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G7` 一致：只允许 `/status`、`/autowhip`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
+| `G8 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
 
 retained-offline overlay 额外规则：
 
@@ -1154,7 +1159,7 @@ retained-offline overlay 额外规则：
 | `target_picker_select_workspace` | `ActionTargetPickerSelectWorkspace` | unified target picker 的工作区下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_select_session` | `ActionTargetPickerSelectSession` | unified target picker 的会话下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_open_path_picker` | `ActionTargetPickerOpenPathPicker` | unified target picker 的子步骤导航回调；会打开本地目录或 Git 落地父目录 path picker，并把 Git 主卡草稿一起保存在 active target picker runtime 里 |
-| `target_picker_cancel` | `ActionTargetPickerCancel` | unified target picker 的退出按钮；会清掉 active target picker，并把当前卡 inline replace 成 notice；surface route 保持原样 |
+| `target_picker_cancel` | `ActionTargetPickerCancel` | unified target picker 的退出按钮；编辑态会把当前卡 inline replace 成 `已取消`，Git processing 态会 replace 成 `已取消导入` 并 best-effort 停止 clone / prepare；surface route 只保留取消后的安全状态 |
 | `target_picker_confirm` | `ActionTargetPickerConfirm` | unified target picker 的确认按钮；`已有工作区` 模式下真正执行 attach / switch / `新建会话`，`添加工作区` 模式下则消费主卡里已保存的目录/Git 草稿来执行接入或导入 |
 | `request_respond` | `ActionRespondRequest` | 承载 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation` 的按钮回传。通用 approval 会沿用归一化后的 `requestKind` 与 `availableDecisions`，包括 `cancel`；`request_user_input` 支持分题局部提交并在 pending request 上暂存答案，局部保存后会刷新当前 request 卡并递增 `request_revision`；`permissions_request_approval` 会按按钮回写 `{permissions, scope}`；`mcp_server_elicitation` 会按按钮回写 `{action, content, _meta}`，其中 form 模式的 direct-response 按钮也先写入局部草稿，再由显式提交触发 accept |
 | `submit_request_form` | `ActionRespondRequest` | 顶层/`item` 两种 `request_user_input` 与 form 模式 `mcp_server_elicitation` 的表单提交入口；按 `question.id -> answers[]` 回传。`request_user_input` 的表单“提交答案”会带 `request_option_id=submit`；`mcp_server_elicitation` 的表单“提交并继续”同样带 `request_option_id=submit`，由 orchestrator 决定是先保存草稿还是最终 accept |

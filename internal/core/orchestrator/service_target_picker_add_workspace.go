@@ -384,7 +384,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "接入失败", failureText, false, filtered)
 }
 
-func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord, view control.FeishuTargetPickerView) []control.UIEvent {
+func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, view control.FeishuTargetPickerView) []control.UIEvent {
 	if surface == nil || record == nil {
 		return nil
 	}
@@ -400,18 +400,19 @@ func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleReco
 		return []control.UIEvent{s.targetPickerViewEvent(surface, view, false)}
 	}
 	finalPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, gitState.ParentDir))
-	noticeText := fmt.Sprintf("正在把 `%s` 拉取到 `%s`，完成后会直接进入新会话待命。", strings.TrimSpace(record.GitRepoURL), finalPath)
-	return []control.UIEvent{
-		{
-			Kind:             control.UIEventNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:  "git_import_starting",
-				Title: "正在导入 Git 工作区",
-				Text:  noticeText,
-			},
-		},
-		{
+	record.GitFinalPath = finalPath
+	processing := s.startTargetPickerProcessing(
+		surface,
+		flow,
+		record,
+		targetPickerPendingGitImport,
+		finalPath,
+		"",
+		"正在导入 Git 工作区",
+		targetPickerGitImportCloneProcessingText(strings.TrimSpace(record.GitRepoURL), finalPath),
+	)
+	return append(processing,
+		control.UIEvent{
 			Kind:             control.UIEventDaemonCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			DaemonCommand: &control.DaemonCommand{
@@ -423,7 +424,7 @@ func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleReco
 				DirectoryName:    strings.TrimSpace(record.GitDirectoryName),
 			},
 		},
-	}
+	)
 }
 
 func targetPickerFirstBlockingMessage(messages []control.FeishuTargetPickerMessage) string {

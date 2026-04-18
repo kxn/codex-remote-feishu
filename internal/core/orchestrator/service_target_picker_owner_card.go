@@ -13,6 +13,7 @@ const (
 	targetPickerPendingNone      targetPickerPendingKind = ""
 	targetPickerPendingUseThread targetPickerPendingKind = "use_thread"
 	targetPickerPendingNewThread targetPickerPendingKind = "new_thread"
+	targetPickerPendingGitImport targetPickerPendingKind = "git_import"
 )
 
 func (s *Service) clearTargetPickerRuntime(surface *state.SurfaceConsoleRecord) {
@@ -209,11 +210,21 @@ func targetPickerPendingStillRunning(surface *state.SurfaceConsoleRecord, record
 		return strings.TrimSpace(record.PendingThreadID) != "" &&
 			strings.TrimSpace(surface.PendingHeadless.ThreadID) == strings.TrimSpace(record.PendingThreadID)
 	case targetPickerPendingNewThread:
+		fallthrough
+	case targetPickerPendingGitImport:
 		return surface.PendingHeadless.PrepareNewThread &&
 			normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
 	default:
 		return false
 	}
+}
+
+func (s *Service) targetPickerHasBlockingProcessing(surface *state.SurfaceConsoleRecord) bool {
+	record := s.activeTargetPicker(surface)
+	if record == nil || record.Stage != control.FeishuTargetPickerStageProcessing {
+		return false
+	}
+	return record.PendingKind == targetPickerPendingGitImport
 }
 
 func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsoleRecord, events []control.UIEvent, fallbackFailureText string) []control.UIEvent {
@@ -235,6 +246,10 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
 			return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "当前工作目标已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 		}
+	case targetPickerPendingGitImport:
+		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
+			return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", targetPickerGitImportSuccessText(record.PendingWorkspaceKey), false, filtered)
+		}
 	}
 	failureText := strings.TrimSpace(firstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
 	if failureText == "" && targetPickerPendingStillRunning(surface, record) {
@@ -242,6 +257,9 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 	}
 	if failureText == "" {
 		failureText = "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"
+	}
+	if record.PendingKind == targetPickerPendingGitImport {
+		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", targetPickerGitImportPostCloneFailureText(record.PendingWorkspaceKey, failureText), false, filtered)
 	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "切换失败", failureText, false, filtered)
 }

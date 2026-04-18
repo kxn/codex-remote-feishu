@@ -152,6 +152,9 @@ func (s *Service) snapshotGateSummary(surface *state.SurfaceConsoleRecord) contr
 	if surface.ActiveRequestCapture != nil {
 		return control.GateSummary{Kind: "request_capture"}
 	}
+	if s.targetPickerHasBlockingProcessing(surface) {
+		return control.GateSummary{Kind: "target_picker"}
+	}
 	if s.activePathPicker(surface) != nil {
 		return control.GateSummary{Kind: "path_picker"}
 	}

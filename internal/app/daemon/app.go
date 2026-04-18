@@ -136,6 +136,7 @@ type App struct {
 	vscodeCompatibility             vscodeCompatibilityCacheState
 	managedHeadless                 map[string]*managedHeadlessProcess
 	pendingThreadHistoryReads       map[string]pendingThreadHistoryRead
+	gitWorkspaceImports             map[string]*gitWorkspaceImportRuntime
 	startHeadless                   func(relayruntime.HeadlessLaunchOptions) (int, error)
 	stopProcess                     func(int, time.Duration) error
 	sendAgentCommand                func(string, agentproto.Command) error
@@ -215,6 +216,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		upgradeRuntime:               newUpgradeRuntimeState(),
 		managedHeadless:              map[string]*managedHeadlessProcess{},
 		pendingThreadHistoryReads:    map[string]pendingThreadHistoryRead{},
+		gitWorkspaceImports:          map[string]*gitWorkspaceImportRuntime{},
 		startHeadless:                relayruntime.StartDetachedWrapper,
 		stopProcess:                  relayruntime.TerminateProcess,
 		ingress:                      newIngressPump(),

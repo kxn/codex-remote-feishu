@@ -569,15 +569,16 @@ const (
 type DaemonCommandKind string
 
 const (
-	DaemonCommandStartHeadless      DaemonCommandKind = "headless.start"
-	DaemonCommandKillHeadless       DaemonCommandKind = "headless.kill"
-	DaemonCommandDebug              DaemonCommandKind = "debug.command"
-	DaemonCommandCron               DaemonCommandKind = "cron.command"
-	DaemonCommandUpgrade            DaemonCommandKind = "upgrade.command"
-	DaemonCommandVSCodeMigrate      DaemonCommandKind = "vscode.migrate"
-	DaemonCommandThreadHistoryRead  DaemonCommandKind = "thread.history.read"
-	DaemonCommandSendIMFile         DaemonCommandKind = "feishu.im_file.send"
-	DaemonCommandGitWorkspaceImport DaemonCommandKind = "workspace.git_import"
+	DaemonCommandStartHeadless            DaemonCommandKind = "headless.start"
+	DaemonCommandKillHeadless             DaemonCommandKind = "headless.kill"
+	DaemonCommandDebug                    DaemonCommandKind = "debug.command"
+	DaemonCommandCron                     DaemonCommandKind = "cron.command"
+	DaemonCommandUpgrade                  DaemonCommandKind = "upgrade.command"
+	DaemonCommandVSCodeMigrate            DaemonCommandKind = "vscode.migrate"
+	DaemonCommandThreadHistoryRead        DaemonCommandKind = "thread.history.read"
+	DaemonCommandSendIMFile               DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandGitWorkspaceImport       DaemonCommandKind = "workspace.git_import"
+	DaemonCommandGitWorkspaceImportCancel DaemonCommandKind = "workspace.git_import.cancel"
 )
 
 type DaemonCommand struct {

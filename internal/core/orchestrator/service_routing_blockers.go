@@ -100,6 +100,21 @@ func (s *Service) blockActionForActivePathPicker(surface *state.SurfaceConsoleRe
 	}
 }
 
+func (s *Service) blockActionForActiveTargetPicker(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	if surface == nil || !s.targetPickerHasBlockingProcessing(surface) {
+		return nil
+	}
+	switch action.Kind {
+	case control.ActionStatus,
+		control.ActionReactionCreated,
+		control.ActionMessageRecalled,
+		control.ActionTargetPickerCancel:
+		return nil
+	default:
+		return notice(surface, "target_picker_processing", "当前正在导入 Git 工作区，请等待完成或取消；如需查看状态，可继续使用 /status。")
+	}
+}
+
 func (s *Service) blockNewThreadPreparation(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	if surface == nil {
 		return nil

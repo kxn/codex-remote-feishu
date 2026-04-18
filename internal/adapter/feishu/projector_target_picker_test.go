@@ -73,6 +73,32 @@ func TestProjectTargetPickerUsesUpdateCardWhenMessageIDPresent(t *testing.T) {
 	}
 }
 
+func TestTargetPickerProcessingStageRendersCancelOnlyForGitImport(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:              "picker-1",
+		Stage:                 control.FeishuTargetPickerStageProcessing,
+		StatusTitle:           "正在导入 Git 工作区",
+		StatusText:            "执行中。普通输入已暂停，请等待完成或取消。",
+		CanCancelProcessing:   true,
+		ProcessingCancelLabel: "取消导入",
+	}, "life-processing")
+	var sawCancel bool
+	for _, action := range cardActionsFromElements(elements) {
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerCancel:
+			sawCancel = true
+		case cardActionKindTargetPickerConfirm:
+			t.Fatalf("did not expect processing card to keep confirm action, got %#v", elements)
+		}
+	}
+	if !sawCancel {
+		t.Fatalf("expected processing git-import card to render cancel action, got %#v", elements)
+	}
+	if !containsMarkdownWithPrefix(elements, "**正在导入 Git 工作区**") {
+		t.Fatalf("expected processing git-import card to render status markdown, got %#v", elements)
+	}
+}
+
 func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
 		PickerID:             "picker-1",

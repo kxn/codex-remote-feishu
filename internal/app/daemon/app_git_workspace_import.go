@@ -31,11 +31,15 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 	}
 
 	importCtx, cancel := context.WithTimeout(context.Background(), gitWorkspaceImportCommandTimeout)
+	runtimeKey := a.beginGitWorkspaceImportRuntimeLocked(command.SurfaceSessionID, command.PickerID, cancel)
 	defer cancel()
 
 	a.mu.Unlock()
 	result, err := runGitWorkspaceImport(importCtx, request)
 	a.mu.Lock()
+	if a.finishGitWorkspaceImportRuntimeLocked(runtimeKey) {
+		return nil
+	}
 	if err != nil {
 		var importErr *gitworkspace.ImportError
 		if errors.As(err, &importErr) {
@@ -50,6 +54,9 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 				importErr.Err,
 				importErr.Stderr,
 			)
+			if events := a.service.FailTargetPickerGitImport(command.SurfaceSessionID, command.PickerID, importErr); len(events) != 0 {
+				return events
+			}
 			return gitWorkspaceImportNotice(command.SurfaceSessionID, string(importErr.Code), gitWorkspaceImportErrorText(importErr))
 		}
 		log.Printf("git import failed: surface=%s picker=%s repo=%s parent=%s err=%v", command.SurfaceSessionID, command.PickerID, request.RepoURL, request.ParentDir, err)
@@ -61,6 +68,11 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 		return events
 	}
 	return gitWorkspaceImportNotice(command.SurfaceSessionID, "git_import_completed", fmt.Sprintf("仓库已拉取到 `%s`。", result.WorkspacePath))
+}
+
+func (a *App) handleGitWorkspaceImportCancelCommandLocked(command control.DaemonCommand) []control.UIEvent {
+	a.cancelGitWorkspaceImportRuntimeLocked(command.SurfaceSessionID, command.PickerID)
+	return nil
 }
 
 func gitWorkspaceImportNotice(surfaceID, code, text string) []control.UIEvent {

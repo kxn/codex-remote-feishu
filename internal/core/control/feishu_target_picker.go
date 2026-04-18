@@ -67,6 +67,8 @@ type FeishuTargetPickerView struct {
 	Stage                  FeishuTargetPickerStage
 	StatusTitle            string
 	StatusText             string
+	CanCancelProcessing    bool
+	ProcessingCancelLabel  string
 	SelectedMode           FeishuTargetPickerMode
 	SelectedSource         FeishuTargetPickerSourceKind
 	ShowModeSwitch         bool

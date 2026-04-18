@@ -29,12 +29,16 @@ func TestCompleteTargetPickerGitImportEntersNewThreadReadyAndClearsPicker(t *tes
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	svc.setActiveTargetPicker(surface, &activeTargetPickerRecord{
+	record := &activeTargetPickerRecord{
 		PickerID:     "picker-1",
 		OwnerUserID:  "user-1",
 		Source:       control.TargetPickerRequestSourceList,
 		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
-	})
+		Stage:        control.FeishuTargetPickerStageProcessing,
+		PendingKind:  targetPickerPendingGitImport,
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
 
 	events := svc.CompleteTargetPickerGitImport("surface-1", "picker-1", workspaceRoot)
 
@@ -44,14 +48,12 @@ func TestCompleteTargetPickerGitImportEntersNewThreadReadyAndClearsPicker(t *tes
 	if picker := svc.activeTargetPicker(surface); picker != nil {
 		t.Fatalf("expected successful git import completion to clear target picker, got %#v", picker)
 	}
-	var sawReady bool
-	for _, event := range events {
-		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
-			sawReady = true
-		}
+	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected same-card success after git import completion, got %#v", events)
 	}
-	if !sawReady {
-		t.Fatalf("expected new-thread-ready notice after git import completion, got %#v", events)
+	got := events[0].FeishuTargetPickerView
+	if got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+		t.Fatalf("expected succeeded git-import terminal card, got %#v", got)
 	}
 }
 
@@ -101,33 +103,66 @@ func TestCompleteTargetPickerGitImportAttachFailureMentionsDirectoryPreserved(t 
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	svc.setActiveTargetPicker(surface, &activeTargetPickerRecord{
+	record := &activeTargetPickerRecord{
 		PickerID:     "picker-1",
 		OwnerUserID:  "user-1",
 		Source:       control.TargetPickerRequestSourceList,
 		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
-	})
+		Stage:        control.FeishuTargetPickerStageProcessing,
+		PendingKind:  targetPickerPendingGitImport,
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
 
 	events := svc.CompleteTargetPickerGitImport("surface-1", "picker-1", workspaceRoot)
 
-	var sawBusy bool
-	var sawAttachFailed bool
-	for _, event := range events {
-		if event.Notice == nil {
-			continue
-		}
-		switch event.Notice.Code {
-		case "workspace_busy":
-			sawBusy = true
-		case "git_import_workspace_attach_failed":
-			sawAttachFailed = true
-			if !containsAll(event.Notice.Text, normalizeWorkspaceClaimKey(workspaceRoot), "目录已保留") {
-				t.Fatalf("expected attach-failed notice to mention preserved directory, got %#v", event.Notice)
-			}
-		}
+	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected failed same-card result on attach failure, got %#v", events)
 	}
-	if !sawBusy || !sawAttachFailed {
-		t.Fatalf("expected busy + attach-failed notices, got %#v", events)
+	got := events[0].FeishuTargetPickerView
+	if got.Stage != control.FeishuTargetPickerStageFailed || got.StatusTitle != "导入失败" {
+		t.Fatalf("expected failed git-import terminal card, got %#v", got)
+	}
+	if !containsAll(got.StatusText, normalizeWorkspaceClaimKey(workspaceRoot), "目录已保留") {
+		t.Fatalf("expected failed card to mention preserved directory, got %#v", got)
+	}
+}
+
+func TestCompleteTargetPickerGitImportStartsFreshWorkspacePreparationOnSameCard(t *testing.T) {
+	now := time.Date(2026, 4, 16, 18, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := t.TempDir()
+
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	record := &activeTargetPickerRecord{
+		PickerID:     "picker-1",
+		OwnerUserID:  "user-1",
+		Source:       control.TargetPickerRequestSourceList,
+		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
+		Stage:        control.FeishuTargetPickerStageProcessing,
+		PendingKind:  targetPickerPendingGitImport,
+		GitRepoURL:   "https://github.com/kxn/codex-remote-feishu.git",
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
+
+	events := svc.CompleteTargetPickerGitImport("surface-1", "picker-1", workspaceRoot)
+
+	if surface.PendingHeadless == nil || !surface.PendingHeadless.PrepareNewThread || !testutil.SamePath(surface.PendingHeadless.ThreadCWD, workspaceRoot) {
+		t.Fatalf("expected git import completion to continue into fresh-workspace preparation, got %#v", surface.PendingHeadless)
+	}
+	if len(events) != 2 || events[0].FeishuTargetPickerView == nil || events[1].DaemonCommand == nil {
+		t.Fatalf("expected processing card plus headless start command, got %#v", events)
+	}
+	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在接入工作区" {
+		t.Fatalf("expected processing same-card transition after clone, got %#v", got)
+	}
+	if got := events[1].DaemonCommand; got.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected headless start command after clone completion, got %#v", got)
 	}
 }
 

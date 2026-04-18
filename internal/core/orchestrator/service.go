@@ -355,6 +355,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	if blocked := s.blockActionForActivePathPicker(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
+	if blocked := s.blockActionForActiveTargetPicker(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	s.noteAutoContinueAction(surface, action)
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, *intent))
