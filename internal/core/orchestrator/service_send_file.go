@@ -44,6 +44,10 @@ func (sendFilePathPickerConsumer) PathPickerCancelled(_ *Service, surface *state
 }
 
 func (s *Service) openSendFilePicker(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.openSendFilePickerWithInline(surface, false)
+}
+
+func (s *Service) openSendFilePickerWithInline(surface *state.SurfaceConsoleRecord, inline bool) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
@@ -62,7 +66,7 @@ func (s *Service) openSendFilePicker(surface *state.SurfaceConsoleRecord) []cont
 			workspaceKey = root
 		}
 	}
-	return s.openPathPicker(surface, surface.ActorUserID, control.PathPickerRequest{
+	return s.openPathPickerWithInline(surface, surface.ActorUserID, control.PathPickerRequest{
 		Mode:         control.PathPickerModeFile,
 		Title:        "选择要发送的文件",
 		RootPath:     workspaceKey,
@@ -70,7 +74,7 @@ func (s *Service) openSendFilePicker(surface *state.SurfaceConsoleRecord) []cont
 		ConfirmLabel: "发送到当前聊天",
 		CancelLabel:  "取消",
 		ConsumerKind: sendFilePathPickerConsumerKind,
-	})
+	}, inline)
 }
 
 func (s *Service) HandleSendFilePreflightFailure(surfaceID, pickerID, text string) []control.UIEvent {

@@ -238,9 +238,14 @@ func (s *Service) buildFeishuThreadHistoryContextFromView(surface *state.Surface
 }
 
 func (s *Service) feishuDirectSelectionPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) control.UIEvent {
+	return s.feishuDirectSelectionPromptEventWithInline(surface, prompt, false)
+}
+
+func (s *Service) feishuDirectSelectionPromptEventWithInline(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt, inline bool) control.UIEvent {
 	return control.UIEvent{
 		Kind:                        control.UIEventFeishuDirectSelectionPrompt,
 		SurfaceSessionID:            surface.SurfaceSessionID,
+		InlineReplaceCurrentCard:    inline,
 		FeishuDirectSelectionPrompt: &prompt,
 		FeishuSelectionContext:      s.buildFeishuSelectionContext(surface, prompt),
 	}

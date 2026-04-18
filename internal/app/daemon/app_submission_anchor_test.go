@@ -91,3 +91,34 @@ func TestHandleGatewayActionContinuesBareUpgradeInPlace(t *testing.T) {
 		t.Fatalf("expected no appended card for bare upgrade continuation, got %#v", gateway.operations)
 	}
 }
+
+func TestHandleGatewayActionContinuesBareCronInPlace(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionCronCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/cron",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline continuation replacement result, got %#v", result)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "Cron" {
+		t.Fatalf("expected in-place cron card, got %#v", result.ReplaceCurrentCard)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended card for bare cron continuation, got %#v", gateway.operations)
+	}
+}

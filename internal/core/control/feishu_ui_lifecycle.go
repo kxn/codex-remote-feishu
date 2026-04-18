@@ -47,6 +47,8 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentShowAccessCatalog,
 		FeishuUIIntentShowModelCatalog,
 		FeishuUIIntentShowVerboseCatalog,
+		FeishuUIIntentShowList,
+		FeishuUIIntentOpenSendFilePicker,
 		FeishuUIIntentShowRecentWorkspaces,
 		FeishuUIIntentShowAllWorkspaces,
 		FeishuUIIntentShowThreads,
@@ -94,8 +96,7 @@ func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
 		return false
 	}
 	switch action.Kind {
-	case ActionListInstances,
-		ActionShowThreads,
+	case ActionShowThreads,
 		ActionShowAllThreads,
 		ActionStatus,
 		ActionStop,
@@ -104,7 +105,7 @@ func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
 		ActionFollowLocal,
 		ActionDetach:
 		return true
-	case ActionUpgradeCommand, ActionDebugCommand, ActionCronCommand:
+	case ActionUpgradeCommand, ActionDebugCommand:
 		return isSingleTokenSlashCommand(action.Text)
 	default:
 		return false

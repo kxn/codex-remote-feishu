@@ -28,6 +28,13 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 		return []control.UIEvent{s.commandViewEvent(surface, s.buildModelCommandView(surface))}
 	case control.FeishuUIIntentShowVerboseCatalog:
 		return []control.UIEvent{s.commandViewEvent(surface, s.buildVerboseCommandView(surface))}
+	case control.FeishuUIIntentShowList:
+		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+			return s.openTargetPicker(surface, control.TargetPickerRequestSourceList, "", intent.SourceMessageID, true)
+		}
+		return s.presentInstanceSelectionWithInline(surface, true)
+	case control.FeishuUIIntentOpenSendFilePicker:
+		return s.openSendFilePickerWithInline(surface, true)
 	case control.FeishuUIIntentShowRecentWorkspaces:
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceList, intent.WorkspaceKey, intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowAllWorkspaces:

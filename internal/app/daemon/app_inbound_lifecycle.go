@@ -233,6 +233,10 @@ func rejectedInboundIntentLabel(intent control.FeishuUIIntent) (label, command s
 		return "查看执行权限设置", "/access"
 	case control.FeishuUIIntentShowModelCatalog:
 		return "查看模型设置", "/model"
+	case control.FeishuUIIntentShowList:
+		return "查看工作区与实例列表", "/list"
+	case control.FeishuUIIntentOpenSendFilePicker:
+		return "打开文件发送选择器", "/sendfile"
 	case control.FeishuUIIntentShowRecentWorkspaces, control.FeishuUIIntentShowAllWorkspaces:
 		return "查看工作区列表", "/list"
 	case control.FeishuUIIntentShowThreads, control.FeishuUIIntentShowScopedThreads:

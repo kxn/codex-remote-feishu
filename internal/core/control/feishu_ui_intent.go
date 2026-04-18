@@ -13,6 +13,8 @@ const (
 	FeishuUIIntentShowAccessCatalog           FeishuUIIntentKind = "show_access_catalog"
 	FeishuUIIntentShowModelCatalog            FeishuUIIntentKind = "show_model_catalog"
 	FeishuUIIntentShowVerboseCatalog          FeishuUIIntentKind = "show_verbose_catalog"
+	FeishuUIIntentShowList                    FeishuUIIntentKind = "show_list"
+	FeishuUIIntentOpenSendFilePicker          FeishuUIIntentKind = "open_send_file_picker"
 	FeishuUIIntentShowRecentWorkspaces        FeishuUIIntentKind = "show_recent_workspaces"
 	FeishuUIIntentShowAllWorkspaces           FeishuUIIntentKind = "show_all_workspaces"
 	FeishuUIIntentShowThreads                 FeishuUIIntentKind = "show_threads"
@@ -87,6 +89,10 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		if isBareInlineCommand(action.Text, "/verbose") {
 			return &FeishuUIIntent{Kind: FeishuUIIntentShowVerboseCatalog, RawText: action.Text}, true
 		}
+	case ActionListInstances:
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowList, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionSendFile:
+		return &FeishuUIIntent{Kind: FeishuUIIntentOpenSendFilePicker, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionShowRecentWorkspaces:
 		return &FeishuUIIntent{Kind: FeishuUIIntentShowRecentWorkspaces, Page: action.Page, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionShowAllWorkspaces:

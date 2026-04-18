@@ -356,7 +356,7 @@ func allowsBareCommandContinuation(action control.Action) bool {
 		return false
 	}
 	switch action.Kind {
-	case control.ActionUpgradeCommand, control.ActionDebugCommand:
+	case control.ActionUpgradeCommand, control.ActionDebugCommand, control.ActionCronCommand:
 		return true
 	default:
 		return false
@@ -369,6 +369,8 @@ func daemonCommandMatchesBareContinuation(action control.Action, command control
 		return command.Kind == control.DaemonCommandUpgrade
 	case control.ActionDebugCommand:
 		return command.Kind == control.DaemonCommandDebug
+	case control.ActionCronCommand:
+		return command.Kind == control.DaemonCommandCron
 	default:
 		return false
 	}

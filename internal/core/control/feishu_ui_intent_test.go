@@ -47,6 +47,24 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowVerboseCatalog, RawText: "/verbose"},
 		},
 		{
+			name: "list handoff",
+			action: Action{
+				Kind:      ActionListInstances,
+				MessageID: "om-card-1",
+				Inbound:   &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: &FeishuUIIntent{Kind: FeishuUIIntentShowList, SourceMessageID: "om-card-1", Inline: true},
+		},
+		{
+			name: "send file handoff",
+			action: Action{
+				Kind:      ActionSendFile,
+				MessageID: "om-card-2",
+				Inbound:   &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: &FeishuUIIntent{Kind: FeishuUIIntentOpenSendFilePicker, SourceMessageID: "om-card-2", Inline: true},
+		},
+		{
 			name:   "verbose apply stays product owned",
 			action: Action{Kind: ActionVerboseCommand, Text: "/verbose quiet"},
 			want:   nil,

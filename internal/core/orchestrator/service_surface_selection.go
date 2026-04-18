@@ -11,6 +11,10 @@ import (
 )
 
 func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) []control.UIEvent {
+	return s.presentInstanceSelectionWithInline(surface, false)
+}
+
+func (s *Service) presentInstanceSelectionWithInline(surface *state.SurfaceConsoleRecord, inline bool) []control.UIEvent {
 	instances := make([]*state.InstanceRecord, 0, len(s.root.Instances))
 	for _, inst := range s.root.Instances {
 		if inst.Online && isVSCodeInstance(inst) {
@@ -84,7 +88,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 	if contextTitle != "" && len(options) == 0 {
 		hint = "当前没有其他可接管实例。"
 	}
-	return []control.UIEvent{s.feishuDirectSelectionPromptEvent(surface, control.FeishuDirectSelectionPrompt{
+	return []control.UIEvent{s.feishuDirectSelectionPromptEventWithInline(surface, control.FeishuDirectSelectionPrompt{
 		Kind:         control.SelectionPromptAttachInstance,
 		Layout:       "grouped_attach_instance",
 		Title:        "在线 VS Code 实例",
@@ -92,7 +96,7 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 		ContextTitle: contextTitle,
 		ContextText:  contextText,
 		Options:      options,
-	})}
+	}, inline)}
 }
 
 type instanceSelectionEntry struct {

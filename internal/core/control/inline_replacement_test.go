@@ -47,6 +47,16 @@ func TestInlineCardReplacementPolicyActionSet(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "list handoff",
+			action: Action{Kind: ActionListInstances},
+			want:   true,
+		},
+		{
+			name:   "send file handoff",
+			action: Action{Kind: ActionSendFile},
+			want:   true,
+		},
+		{
 			name:   "bare history",
 			action: Action{Kind: ActionShowHistory, Text: "/history"},
 			want:   true,
@@ -189,7 +199,7 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 				Kind:    ActionListInstances,
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "bare menu navigation stays inline policy path",
@@ -233,6 +243,15 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
 			want: true,
+		},
+		{
+			name: "bare cron from stamped card callback",
+			action: Action{
+				Kind:    ActionCronCommand,
+				Text:    "/cron",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
 		},
 		{
 			name: "debug with form args stays async",
