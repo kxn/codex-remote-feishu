@@ -143,7 +143,8 @@ func (s *Service) handleTargetPickerCancel(surface *state.SurfaceConsoleRecord, 
 	}
 	if record.Stage == control.FeishuTargetPickerStageProcessing && record.PendingKind == targetPickerPendingGitImport {
 		appendEvents := s.cancelTargetPickerGitImport(surface, record)
-		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消导入", targetPickerGitImportCancelledText(record.PendingWorkspaceKey), false, appendEvents)
+		status := targetPickerGitImportCancelledStatus(record.PendingWorkspaceKey)
+		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消导入", "", status.Sections, status.Footer, false, appendEvents)
 	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消", "当前选择流程已结束，工作目标保持不变。", true, nil)
 }
@@ -450,6 +451,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Stage:                  stage,
 		StatusTitle:            strings.TrimSpace(record.StatusTitle),
 		StatusText:             strings.TrimSpace(record.StatusText),
+		StatusSections:         cloneFeishuCardSections(record.StatusSections),
+		StatusFooter:           strings.TrimSpace(record.StatusFooter),
 		CanCancelProcessing:    canCancelProcessing,
 		ProcessingCancelLabel:  processingCancelLabel,
 		SelectedMode:           mode,

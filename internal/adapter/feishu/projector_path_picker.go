@@ -28,6 +28,15 @@ func terminalPathPickerElements(view control.FeishuPathPickerView) []map[string]
 			"content": "**" + title + "**",
 		})
 	}
+	if len(view.StatusSections) != 0 {
+		elements = appendCardTextSections(elements, view.StatusSections)
+		if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
+			if block := cardPlainTextBlockElement(footer); len(block) != 0 {
+				elements = append(elements, block)
+			}
+		}
+		return elements
+	}
 	if text := strings.TrimSpace(view.StatusText); text != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",

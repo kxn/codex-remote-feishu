@@ -123,7 +123,12 @@ func TestCompleteTargetPickerGitImportAttachFailureMentionsDirectoryPreserved(t 
 	if got.Stage != control.FeishuTargetPickerStageFailed || got.StatusTitle != "导入失败" {
 		t.Fatalf("expected failed git-import terminal card, got %#v", got)
 	}
-	if !containsAll(got.StatusText, normalizeWorkspaceClaimKey(workspaceRoot), "目录已保留") {
+	var combined []string
+	for _, section := range got.StatusSections {
+		combined = append(combined, section.Label)
+		combined = append(combined, section.Lines...)
+	}
+	if !containsAll(strings.Join(combined, "\n"), normalizeWorkspaceClaimKey(workspaceRoot), "目录已保留") {
 		t.Fatalf("expected failed card to mention preserved directory, got %#v", got)
 	}
 }

@@ -82,10 +82,13 @@ func TestPathPickerTerminalElementsHideSelectorsAndButtons(t *testing.T) {
 		Title:       "发送文件",
 		Terminal:    true,
 		StatusTitle: "已开始发送，可继续其他操作",
-		StatusText:  "**文件**\n`report.txt`\n\n**大小**\n`101.0 MB`",
+		StatusSections: []control.FeishuCardTextSection{
+			{Label: "文件", Lines: []string{"report.txt"}},
+			{Label: "大小", Lines: []string{"101.0 MB"}},
+		},
 	}, "life-terminal")
-	if len(elements) != 2 {
-		t.Fatalf("expected compact terminal picker elements, got %#v", elements)
+	if len(elements) != 5 {
+		t.Fatalf("expected title plus two labeled plain-text sections, got %#v", elements)
 	}
 	if containsButtonLabel(elements, "确认") || containsButtonLabel(elements, "取消") {
 		t.Fatalf("expected terminal picker to omit buttons, got %#v", elements)
@@ -98,8 +101,34 @@ func TestPathPickerTerminalElementsHideSelectorsAndButtons(t *testing.T) {
 	if !containsMarkdownExact(elements, "**已开始发送，可继续其他操作**") {
 		t.Fatalf("expected terminal status title, got %#v", elements)
 	}
-	if !containsMarkdownWithPrefix(elements, "**文件**") {
-		t.Fatalf("expected terminal status body, got %#v", elements)
+	if !containsMarkdownExact(elements, "**文件**") || !containsCardTextExact(elements, "report.txt") {
+		t.Fatalf("expected terminal picker file section, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "**大小**") || !containsCardTextExact(elements, "101.0 MB") {
+		t.Fatalf("expected terminal picker size section, got %#v", elements)
+	}
+}
+
+func TestPathPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) {
+	dynamic := "report `*.md`"
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:    "picker-1",
+		Mode:        control.PathPickerModeFile,
+		Title:       "发送文件",
+		Terminal:    true,
+		StatusTitle: "已开始发送，可继续其他操作",
+		StatusSections: []control.FeishuCardTextSection{
+			{Label: "文件", Lines: []string{dynamic}},
+			{Label: "大小", Lines: []string{"101.0 MB"}},
+		},
+	}, "life-dynamic")
+	if !containsCardTextExact(elements, dynamic) {
+		t.Fatalf("expected dynamic file name in plain_text block, got %#v", elements)
+	}
+	for _, element := range elements {
+		if markdown := markdownContent(element); markdown != "" && markdown == dynamic {
+			t.Fatalf("expected dynamic value to stay out of markdown, got %#v", elements)
+		}
 	}
 }
 

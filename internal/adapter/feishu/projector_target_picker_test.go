@@ -168,6 +168,57 @@ func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing
 	}
 }
 
+func TestTargetPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) {
+	dynamic := "https://example.com/repo`name`.git"
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:    "picker-1",
+		Stage:       control.FeishuTargetPickerStageProcessing,
+		StatusTitle: "正在导入 Git 工作区",
+		StatusSections: []control.FeishuCardTextSection{
+			{Label: "对象", Lines: []string{dynamic, "-> /tmp/demo"}},
+			{Label: "阶段", Lines: []string{"- [>] 克隆仓库"}},
+		},
+		StatusFooter: "执行中。普通输入已暂停，请等待完成或取消。",
+	}, "life-sections")
+	var sawDynamicPlainText bool
+	for _, element := range elements {
+		if strings.Contains(plainTextContent(element), dynamic) {
+			sawDynamicPlainText = true
+			break
+		}
+	}
+	if !sawDynamicPlainText {
+		t.Fatalf("expected dynamic repo url in plain_text section, got %#v", elements)
+	}
+	for _, element := range elements {
+		if markdown := markdownContent(element); markdown != "" && markdown == dynamic {
+			t.Fatalf("expected dynamic repo url to stay out of markdown, got %#v", elements)
+		}
+	}
+	if !containsCardTextExact(elements, "执行中。普通输入已暂停，请等待完成或取消。") {
+		t.Fatalf("expected footer to render as plain_text, got %#v", elements)
+	}
+}
+
+func TestTargetPickerMessageDynamicTextUsesPlainText(t *testing.T) {
+	dynamic := "目标目录已存在：/tmp/*/`demo`。"
+	elements := targetPickerMessageElements([]control.FeishuTargetPickerMessage{{
+		Level: control.FeishuTargetPickerMessageDanger,
+		Text:  dynamic,
+	}})
+	if !containsCardTextExact(elements, dynamic) {
+		t.Fatalf("expected dynamic message text in card output, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "<font color='red'>请先处理这个问题</font>") {
+		t.Fatalf("expected danger label markdown, got %#v", elements)
+	}
+	for _, element := range elements {
+		if markdown := markdownContent(element); markdown != "" && markdown == dynamic {
+			t.Fatalf("expected dynamic message text to avoid markdown rendering, got %#v", elements)
+		}
+	}
+}
+
 func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
 		PickerID:             "picker-1",

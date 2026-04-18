@@ -11,6 +11,11 @@ import (
 
 const targetPickerGitImportOutputTailLines = 3
 
+type feishuCardStatusPayload struct {
+	Sections []control.FeishuCardTextSection
+	Footer   string
+}
+
 func (s *Service) respondLocalRequest(surface *state.SurfaceConsoleRecord, _ *state.RequestPromptRecord, _ control.Action) []control.UIEvent {
 	return notice(surface, "request_unsupported", "这张本地交互卡片已经失效，请重新发送最新命令。")
 }
@@ -33,15 +38,18 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
 	filtered := targetPickerFilteredFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, workspaceKey) {
-		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", targetPickerGitImportSuccessText(workspaceKey), false, filtered)
+		status := targetPickerGitImportSuccessStatus(workspaceKey)
+		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
 		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == workspaceKey {
-		processing := s.startTargetPickerProcessing(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", targetPickerGitImportPostCloneProcessingText(strings.TrimSpace(record.GitRepoURL), workspaceKey))
+		status := targetPickerGitImportPostCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), workspaceKey)
+		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
 	reason := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("仓库已拉取到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey)))
-	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", targetPickerGitImportPostCloneFailureText(workspaceKey, reason), false, filtered)
+	status := targetPickerGitImportPostCloneFailureStatus(workspaceKey, reason)
+	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
 }
 
 func (s *Service) FailTargetPickerGitImport(surfaceSessionID, pickerID string, importErr *gitworkspace.ImportError) []control.UIEvent {
@@ -60,7 +68,8 @@ func (s *Service) FailTargetPickerGitImport(surfaceSessionID, pickerID string, i
 	if destination := strings.TrimSpace(importErr.DestinationPath); destination != "" {
 		record.GitFinalPath = normalizeWorkspaceClaimKey(destination)
 	}
-	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", targetPickerGitImportCloneFailureText(importErr), false, nil)
+	status := targetPickerGitImportCloneFailureStatus(importErr)
+	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, nil)
 }
 
 func (s *Service) cancelTargetPickerGitImport(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord) []control.UIEvent {
@@ -101,8 +110,8 @@ func targetPickerGitImportFlowStale(surface *state.SurfaceConsoleRecord, workspa
 	return notice(surface, "git_import_flow_stale", fmt.Sprintf("仓库已拉取到 `%s`，但原始选择流程已经失效。目录会保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey))
 }
 
-func targetPickerGitImportCloneProcessingText(repoURL, finalPath string) string {
-	return targetPickerGitImportStatusText(repoURL, finalPath,
+func targetPickerGitImportCloneProcessingStatus(repoURL, finalPath string) feishuCardStatusPayload {
+	return targetPickerGitImportStatusPayload(repoURL, finalPath,
 		[]string{
 			"- [x] 校验参数",
 			"- [>] 克隆仓库",
@@ -114,8 +123,8 @@ func targetPickerGitImportCloneProcessingText(repoURL, finalPath string) string 
 	)
 }
 
-func targetPickerGitImportPostCloneProcessingText(repoURL, finalPath string) string {
-	return targetPickerGitImportStatusText(repoURL, finalPath,
+func targetPickerGitImportPostCloneProcessingStatus(repoURL, finalPath string) feishuCardStatusPayload {
+	return targetPickerGitImportStatusPayload(repoURL, finalPath,
 		[]string{
 			"- [x] 校验参数",
 			"- [x] 克隆仓库",
@@ -127,114 +136,102 @@ func targetPickerGitImportPostCloneProcessingText(repoURL, finalPath string) str
 	)
 }
 
-func targetPickerGitImportSuccessText(workspaceKey string) string {
-	parts := []string{}
+func targetPickerGitImportSuccessStatus(workspaceKey string) feishuCardStatusPayload {
+	sections := []control.FeishuCardTextSection{}
 	if strings.TrimSpace(workspaceKey) != "" {
-		parts = append(parts, "**工作区**\n`"+strings.TrimSpace(workspaceKey)+"`")
+		sections = append(sections, control.FeishuCardTextSection{Label: "工作区", Lines: []string{strings.TrimSpace(workspaceKey)}})
 	}
-	parts = append(parts,
-		"**会话**\n新会话",
-		"**结果**\n仓库已导入完成，下一条文本会直接在这个新工作区/会话里开始执行。",
+	sections = append(sections,
+		control.FeishuCardTextSection{Label: "会话", Lines: []string{"新会话"}},
+		control.FeishuCardTextSection{Label: "结果", Lines: []string{"仓库已导入完成，下一条文本会直接在这个新工作区/会话里开始执行。"}},
 	)
-	return strings.Join(parts, "\n\n")
+	return feishuCardStatusPayload{Sections: sections}
 }
 
-func targetPickerGitImportCloneFailureText(importErr *gitworkspace.ImportError) string {
+func targetPickerGitImportCloneFailureStatus(importErr *gitworkspace.ImportError) feishuCardStatusPayload {
 	if importErr == nil {
-		return "**失败原因**\nGit 仓库导入失败，请稍后重试。"
+		return feishuCardStatusPayload{
+			Sections: []control.FeishuCardTextSection{{Label: "失败原因", Lines: []string{"Git 仓库导入失败，请稍后重试。"}}},
+		}
 	}
 	repoURL := strings.TrimSpace(importErr.RepoURL)
 	finalPath := normalizeWorkspaceClaimKey(importErr.DestinationPath)
-	parts := []string{targetPickerGitImportObjectBlock(repoURL, finalPath)}
-	parts = append(parts,
-		"**停在阶段**\n克隆仓库",
-		"**失败原因**\n"+targetPickerGitImportErrorText(importErr),
-		"**最近输出**\n"+targetPickerGitImportOutputBlock(importErr.Stderr),
-		"**下一步**\n"+targetPickerGitImportNextStep(importErr),
+	sections := targetPickerGitImportObjectSections(repoURL, finalPath)
+	sections = append(sections,
+		control.FeishuCardTextSection{Label: "停在阶段", Lines: []string{"克隆仓库"}},
+		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{targetPickerGitImportErrorText(importErr)}},
+		control.FeishuCardTextSection{Label: "最近输出", Lines: targetPickerGitImportOutputLines(importErr.Stderr)},
+		control.FeishuCardTextSection{Label: "下一步", Lines: []string{targetPickerGitImportNextStep(importErr)}},
 	)
-	return joinNonEmptyMarkdown(parts...)
+	return feishuCardStatusPayload{Sections: sections}
 }
 
-func targetPickerGitImportPostCloneFailureText(workspaceKey, reason string) string {
-	parts := []string{}
-	if object := targetPickerGitImportObjectBlock("", workspaceKey); object != "" {
-		parts = append(parts, object)
-	}
+func targetPickerGitImportPostCloneFailureStatus(workspaceKey, reason string) feishuCardStatusPayload {
+	sections := targetPickerGitImportObjectSections("", workspaceKey)
 	reason = strings.TrimSpace(firstNonEmpty(reason, "仓库已拉取完成，但后续工作区接入失败。"))
 	if workspaceKey != "" && !strings.Contains(reason, "目录已保留") {
 		reason += " 目录已保留。"
 	}
-	parts = append(parts,
-		"**停在阶段**\n接入工作区 / 准备会话",
-		"**失败原因**\n"+reason,
-		"**下一步**\n稍后可通过“添加工作区 / 本地目录”继续接入，或重新发起一次 Git 导入。",
+	sections = append(sections,
+		control.FeishuCardTextSection{Label: "停在阶段", Lines: []string{"接入工作区 / 准备会话"}},
+		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{reason}},
+		control.FeishuCardTextSection{Label: "下一步", Lines: []string{"稍后可通过“添加工作区 / 本地目录”继续接入，或重新发起一次 Git 导入。"}},
 	)
-	return joinNonEmptyMarkdown(parts...)
+	return feishuCardStatusPayload{Sections: sections}
 }
 
-func targetPickerGitImportCancelledText(workspaceKey string) string {
-	parts := []string{}
-	if object := targetPickerGitImportObjectBlock("", workspaceKey); object != "" {
-		parts = append(parts, object)
-	}
-	parts = append(parts,
-		"**结果**\n当前业务流已停止。",
-		"**提示**\n如本地已经产生部分目录残留，可按需手动处理。",
+func targetPickerGitImportCancelledStatus(workspaceKey string) feishuCardStatusPayload {
+	sections := targetPickerGitImportObjectSections("", workspaceKey)
+	sections = append(sections,
+		control.FeishuCardTextSection{Label: "结果", Lines: []string{"当前业务流已停止。"}},
+		control.FeishuCardTextSection{Label: "提示", Lines: []string{"如本地已经产生部分目录残留，可按需手动处理。"}},
 	)
-	return joinNonEmptyMarkdown(parts...)
+	return feishuCardStatusPayload{Sections: sections}
 }
 
-func targetPickerGitImportStatusText(repoURL, finalPath string, stageLines, outputLines []string, footer string) string {
-	parts := []string{}
-	if object := targetPickerGitImportObjectBlock(repoURL, finalPath); object != "" {
-		parts = append(parts, object)
-	}
+func targetPickerGitImportStatusPayload(repoURL, finalPath string, stageLines, outputLines []string, footer string) feishuCardStatusPayload {
+	sections := targetPickerGitImportObjectSections(repoURL, finalPath)
 	if len(stageLines) != 0 {
-		parts = append(parts, "**阶段**\n"+strings.Join(stageLines, "\n"))
+		sections = append(sections, control.FeishuCardTextSection{Label: "阶段", Lines: stageLines})
 	}
 	if len(outputLines) != 0 {
-		bulletLines := make([]string, 0, len(outputLines))
+		normalized := make([]string, 0, len(outputLines))
 		for _, line := range outputLines {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
 			}
-			bulletLines = append(bulletLines, "- "+line)
+			normalized = append(normalized, line)
 		}
-		if len(bulletLines) != 0 {
-			parts = append(parts, "**最近输出**\n"+strings.Join(bulletLines, "\n"))
-		}
+		sections = append(sections, control.FeishuCardTextSection{Label: "最近输出", Lines: normalized})
 	}
-	if footer = strings.TrimSpace(footer); footer != "" {
-		parts = append(parts, footer)
+	return feishuCardStatusPayload{
+		Sections: sections,
+		Footer:   strings.TrimSpace(footer),
 	}
-	return joinNonEmptyMarkdown(parts...)
 }
 
-func targetPickerGitImportObjectBlock(repoURL, finalPath string) string {
+func targetPickerGitImportObjectSections(repoURL, finalPath string) []control.FeishuCardTextSection {
 	repoURL = strings.TrimSpace(repoURL)
 	finalPath = strings.TrimSpace(finalPath)
 	switch {
 	case repoURL != "" && finalPath != "":
-		return "**对象**\n`" + repoURL + "`\n-> `" + finalPath + "`"
+		return []control.FeishuCardTextSection{{Label: "对象", Lines: []string{repoURL, "-> " + finalPath}}}
 	case finalPath != "":
-		return "**对象**\n`" + finalPath + "`"
+		return []control.FeishuCardTextSection{{Label: "对象", Lines: []string{finalPath}}}
 	case repoURL != "":
-		return "**对象**\n`" + repoURL + "`"
+		return []control.FeishuCardTextSection{{Label: "对象", Lines: []string{repoURL}}}
 	default:
-		return ""
+		return nil
 	}
 }
 
-func targetPickerGitImportOutputBlock(stderr string) string {
+func targetPickerGitImportOutputLines(stderr string) []string {
 	lines := targetPickerGitImportTailLines(stderr, targetPickerGitImportOutputTailLines)
 	if len(lines) == 0 {
-		return "- 未返回更多输出。"
+		return []string{"未返回更多输出。"}
 	}
-	for i := range lines {
-		lines[i] = "- " + lines[i]
-	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 func targetPickerGitImportTailLines(text string, limit int) []string {

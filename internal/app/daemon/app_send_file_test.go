@@ -610,10 +610,22 @@ func TestHandleActionPathPickerConfirmSendFileBackgroundFailureEmitsLightNotice(
 func cardMarkdownContents(elements []map[string]any) []string {
 	var contents []string
 	for _, element := range elements {
-		if element["tag"] != "markdown" {
-			continue
-		}
-		if content, ok := element["content"].(string); ok && strings.TrimSpace(content) != "" {
+		switch element["tag"] {
+		case "markdown":
+			content, ok := element["content"].(string)
+			if !ok || strings.TrimSpace(content) == "" {
+				continue
+			}
+			contents = append(contents, content)
+		case "div":
+			text, _ := element["text"].(map[string]any)
+			if text["tag"] != "plain_text" {
+				continue
+			}
+			content, ok := text["content"].(string)
+			if !ok || strings.TrimSpace(content) == "" {
+				continue
+			}
 			contents = append(contents, content)
 		}
 	}

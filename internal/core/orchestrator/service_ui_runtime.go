@@ -52,6 +52,8 @@ type activeTargetPickerRecord struct {
 	Stage                control.FeishuTargetPickerStage
 	StatusTitle          string
 	StatusText           string
+	StatusSections       []control.FeishuCardTextSection
+	StatusFooter         string
 	Messages             []control.FeishuTargetPickerMessage
 	PendingKind          targetPickerPendingKind
 	PendingWorkspaceKey  string

@@ -401,7 +401,8 @@ func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleReco
 	}
 	finalPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, gitState.ParentDir))
 	record.GitFinalPath = finalPath
-	processing := s.startTargetPickerProcessing(
+	status := targetPickerGitImportCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), finalPath)
+	processing := s.startTargetPickerProcessingWithSections(
 		surface,
 		flow,
 		record,
@@ -409,7 +410,9 @@ func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleReco
 		finalPath,
 		"",
 		"正在导入 Git 工作区",
-		targetPickerGitImportCloneProcessingText(strings.TrimSpace(record.GitRepoURL), finalPath),
+		"",
+		status.Sections,
+		status.Footer,
 	)
 	return append(processing,
 		control.UIEvent{

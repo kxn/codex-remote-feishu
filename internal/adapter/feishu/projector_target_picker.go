@@ -144,20 +144,30 @@ func targetPickerSummaryMarkdown(view control.FeishuTargetPickerView) string {
 }
 
 func targetPickerTerminalElements(view control.FeishuTargetPickerView) []map[string]any {
-	content := strings.TrimSpace(view.StatusText)
+	elements := make([]map[string]any, 0, 6)
 	if title := strings.TrimSpace(view.StatusTitle); title != "" {
-		content = "**" + renderSystemInlineTags(title) + "**"
-		if text := strings.TrimSpace(view.StatusText); text != "" {
-			content += "\n" + renderSystemInlineTags(text)
-		}
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**" + renderSystemInlineTags(title) + "**",
+		})
 	}
-	if content == "" {
+	if len(view.StatusSections) != 0 {
+		elements = appendCardTextSections(elements, view.StatusSections)
+		if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
+			elements = append(elements, cardPlainTextBlockElement(footer))
+		}
+		return elements
+	}
+	if text := strings.TrimSpace(view.StatusText); text != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": renderSystemInlineTags(text),
+		})
+	}
+	if len(elements) == 0 {
 		return nil
 	}
-	return []map[string]any{{
-		"tag":     "markdown",
-		"content": content,
-	}}
+	return elements
 }
 
 func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -379,28 +389,32 @@ func targetPickerMessageElements(messages []control.FeishuTargetPickerMessage) [
 	}
 	elements := make([]map[string]any, 0, len(messages))
 	for _, message := range messages {
-		content := targetPickerMessageMarkdown(message)
-		if content == "" {
+		text := strings.TrimSpace(message.Text)
+		if text == "" {
 			continue
 		}
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": content,
-		})
+		if label := targetPickerMessageLevelLabel(message.Level); label != "" {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": label,
+			})
+		}
+		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+			elements = append(elements, block)
+		}
 	}
 	return elements
 }
 
-func targetPickerMessageMarkdown(message control.FeishuTargetPickerMessage) string {
-	text := strings.TrimSpace(message.Text)
-	if text == "" {
+func targetPickerMessageLevelLabel(level control.FeishuTargetPickerMessageLevel) string {
+	switch level {
+	case control.FeishuTargetPickerMessageDanger:
+		return "<font color='red'>请先处理这个问题</font>"
+	case control.FeishuTargetPickerMessageWarning:
+		return "**请注意**"
+	default:
 		return ""
 	}
-	rendered := renderSystemInlineTags(text)
-	if message.Level != control.FeishuTargetPickerMessageDanger {
-		return rendered
-	}
-	return "<font color='red'>" + rendered + "</font>"
 }
 
 func targetPickerWorkspaceOptions(options []control.FeishuTargetPickerWorkspaceOption) []map[string]any {

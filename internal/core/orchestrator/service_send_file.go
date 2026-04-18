@@ -118,33 +118,33 @@ func (s *Service) HandleSendFileStarted(surfaceID, pickerID, selectedPath string
 		return notice(surface, "send_file_failed", "这张发送文件卡片已失效，请重新发起。"), false
 	}
 	view := control.FeishuPathPickerView{
-		PickerID:     strings.TrimSpace(record.PickerID),
-		MessageID:    strings.TrimSpace(record.MessageID),
-		Mode:         control.PathPickerModeFile,
-		Title:        strings.TrimSpace(firstNonEmpty(record.Title, "发送文件")),
-		SelectedPath: strings.TrimSpace(selectedPath),
-		Terminal:     true,
-		StatusTitle:  "已开始发送，可继续其他操作",
-		StatusText:   sendFileStartedStatusText(selectedPath, sizeBytes),
+		PickerID:       strings.TrimSpace(record.PickerID),
+		MessageID:      strings.TrimSpace(record.MessageID),
+		Mode:           control.PathPickerModeFile,
+		Title:          strings.TrimSpace(firstNonEmpty(record.Title, "发送文件")),
+		SelectedPath:   strings.TrimSpace(selectedPath),
+		Terminal:       true,
+		StatusTitle:    "已开始发送，可继续其他操作",
+		StatusSections: sendFileStartedStatusSections(selectedPath, sizeBytes),
 	}
 	s.clearSurfacePathPicker(surface)
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, false)}, true
 }
 
-func sendFileStartedStatusText(selectedPath string, sizeBytes int64) string {
+func sendFileStartedStatusSections(selectedPath string, sizeBytes int64) []control.FeishuCardTextSection {
 	name := strings.TrimSpace(filepath.Base(strings.TrimSpace(selectedPath)))
 	if name == "" {
 		name = strings.TrimSpace(selectedPath)
 	}
-	parts := []string{
-		"**文件**\n`" + name + "`",
-		"**大小**\n`" + formatSendFileSize(sizeBytes) + "`",
-		"**结果**\n后台已开始发送；成功后会直接出现在当前聊天里。",
+	sections := []control.FeishuCardTextSection{
+		{Label: "文件", Lines: []string{name}},
+		{Label: "大小", Lines: []string{formatSendFileSize(sizeBytes)}},
+		{Label: "结果", Lines: []string{"后台已开始发送；成功后会直接出现在当前聊天里。"}},
 	}
 	if sizeBytes > sendFileLargeThresholdBytes {
-		parts = append(parts, "**提示**\n文件较大，请耐心等待")
+		sections = append(sections, control.FeishuCardTextSection{Label: "提示", Lines: []string{"文件较大，请耐心等待"}})
 	}
-	return strings.Join(parts, "\n\n")
+	return sections
 }
 
 func formatSendFileSize(sizeBytes int64) string {

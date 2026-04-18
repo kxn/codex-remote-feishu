@@ -69,6 +69,8 @@ func resetTargetPickerEditingState(record *activeTargetPickerRecord) {
 	record.Stage = control.FeishuTargetPickerStageEditing
 	record.StatusTitle = ""
 	record.StatusText = ""
+	record.StatusSections = nil
+	record.StatusFooter = ""
 	record.Messages = nil
 	record.PendingKind = targetPickerPendingNone
 	record.PendingWorkspaceKey = ""
@@ -82,6 +84,8 @@ func setTargetPickerMessages(record *activeTargetPickerRecord, messages ...contr
 	record.Stage = control.FeishuTargetPickerStageEditing
 	record.StatusTitle = ""
 	record.StatusText = ""
+	record.StatusSections = nil
+	record.StatusFooter = ""
 	record.Messages = append([]control.FeishuTargetPickerMessage(nil), messages...)
 	record.PendingKind = targetPickerPendingNone
 	record.PendingWorkspaceKey = ""
@@ -95,12 +99,26 @@ func (s *Service) startTargetPickerProcessing(
 	pendingKind targetPickerPendingKind,
 	workspaceKey, threadID, title, text string,
 ) []control.UIEvent {
+	return s.startTargetPickerProcessingWithSections(surface, flow, record, pendingKind, workspaceKey, threadID, title, text, nil, "")
+}
+
+func (s *Service) startTargetPickerProcessingWithSections(
+	surface *state.SurfaceConsoleRecord,
+	flow *activeOwnerCardFlowRecord,
+	record *activeTargetPickerRecord,
+	pendingKind targetPickerPendingKind,
+	workspaceKey, threadID, title, text string,
+	sections []control.FeishuCardTextSection,
+	footer string,
+) []control.UIEvent {
 	if flow == nil || record == nil {
 		return nil
 	}
 	record.Stage = control.FeishuTargetPickerStageProcessing
 	record.StatusTitle = strings.TrimSpace(title)
 	record.StatusText = strings.TrimSpace(text)
+	record.StatusSections = cloneFeishuCardSections(sections)
+	record.StatusFooter = strings.TrimSpace(footer)
 	record.Messages = nil
 	record.PendingKind = pendingKind
 	record.PendingWorkspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
@@ -122,12 +140,28 @@ func (s *Service) finishTargetPickerWithStage(
 	inline bool,
 	appendEvents []control.UIEvent,
 ) []control.UIEvent {
+	return s.finishTargetPickerWithStageAndSections(surface, flow, record, stage, title, text, nil, "", inline, appendEvents)
+}
+
+func (s *Service) finishTargetPickerWithStageAndSections(
+	surface *state.SurfaceConsoleRecord,
+	flow *activeOwnerCardFlowRecord,
+	record *activeTargetPickerRecord,
+	stage control.FeishuTargetPickerStage,
+	title, text string,
+	sections []control.FeishuCardTextSection,
+	footer string,
+	inline bool,
+	appendEvents []control.UIEvent,
+) []control.UIEvent {
 	if record == nil {
 		return append([]control.UIEvent(nil), appendEvents...)
 	}
 	record.Stage = stage
 	record.StatusTitle = strings.TrimSpace(title)
 	record.StatusText = strings.TrimSpace(text)
+	record.StatusSections = cloneFeishuCardSections(sections)
+	record.StatusFooter = strings.TrimSpace(footer)
 	record.Messages = nil
 	record.PendingKind = targetPickerPendingNone
 	record.PendingWorkspaceKey = ""
@@ -183,6 +217,24 @@ func targetPickerFirstNoticeText(events []control.UIEvent) string {
 		}
 	}
 	return ""
+}
+
+func cloneFeishuCardSections(sections []control.FeishuCardTextSection) []control.FeishuCardTextSection {
+	if len(sections) == 0 {
+		return nil
+	}
+	cloned := make([]control.FeishuCardTextSection, 0, len(sections))
+	for _, section := range sections {
+		normalized := section.Normalized()
+		if normalized.Label == "" && len(normalized.Lines) == 0 {
+			continue
+		}
+		cloned = append(cloned, normalized)
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
 }
 
 func targetPickerThreadReady(surface *state.SurfaceConsoleRecord, threadID string) bool {
@@ -248,7 +300,8 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 		}
 	case targetPickerPendingGitImport:
 		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
-			return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", targetPickerGitImportSuccessText(record.PendingWorkspaceKey), false, filtered)
+			status := targetPickerGitImportSuccessStatus(record.PendingWorkspaceKey)
+			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}
 	}
 	failureText := strings.TrimSpace(firstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
@@ -259,7 +312,8 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 		failureText = "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"
 	}
 	if record.PendingKind == targetPickerPendingGitImport {
-		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", targetPickerGitImportPostCloneFailureText(record.PendingWorkspaceKey, failureText), false, filtered)
+		status := targetPickerGitImportPostCloneFailureStatus(record.PendingWorkspaceKey, failureText)
+		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
 	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "切换失败", failureText, false, filtered)
 }
