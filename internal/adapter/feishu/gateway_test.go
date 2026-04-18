@@ -1422,7 +1422,7 @@ func TestHandleCardActionTriggerKeepsUnstampedNavigationAsync(t *testing.T) {
 	}
 }
 
-func TestHandleCardActionTriggerKeepsParameterApplyAsync(t *testing.T) {
+func TestHandleCardActionTriggerWaitsForParameterApplyReplacement(t *testing.T) {
 	action := control.Action{
 		Kind: control.ActionModeCommand,
 		Text: "/mode vscode",
@@ -1432,35 +1432,52 @@ func TestHandleCardActionTriggerKeepsParameterApplyAsync(t *testing.T) {
 	}
 	started := make(chan struct{})
 	release := make(chan struct{})
-	done := make(chan struct{})
+	resultCh := make(chan *larkcallback.CardActionTriggerResponse, 1)
+	errCh := make(chan error, 1)
 	handler := func(context.Context, control.Action) *ActionResult {
 		close(started)
 		<-release
-		close(done)
-		return nil
+		return &ActionResult{
+			ReplaceCurrentCard: &Operation{
+				Kind:         OperationSendCard,
+				CardTitle:    "切换模式",
+				CardBody:     "已切换到 vscode 模式。",
+				CardThemeKey: cardThemeInfo,
+			},
+		}
 	}
 
-	begin := time.Now()
-	resp, err := handleCardActionTrigger(context.Background(), action, handler)
-	if err != nil {
-		t.Fatalf("handleCardActionTrigger returned error: %v", err)
-	}
-	if resp == nil {
-		t.Fatal("expected empty callback response")
-	}
-	if elapsed := time.Since(begin); elapsed > 100*time.Millisecond {
-		t.Fatalf("expected async callback ack, took %s", elapsed)
-	}
+	go func() {
+		resp, err := handleCardActionTrigger(context.Background(), action, handler)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- resp
+	}()
+
 	select {
 	case <-started:
 	case <-time.After(time.Second):
-		t.Fatal("expected background handler to start")
+		t.Fatal("expected handler to start synchronously")
+	}
+	select {
+	case <-resultCh:
+		t.Fatal("expected parameter apply callback to wait for replacement")
+	case err := <-errCh:
+		t.Fatalf("handleCardActionTrigger returned error: %v", err)
+	case <-time.After(50 * time.Millisecond):
 	}
 	close(release)
 	select {
-	case <-done:
+	case err := <-errCh:
+		t.Fatalf("handleCardActionTrigger returned error: %v", err)
+	case resp := <-resultCh:
+		if resp == nil || resp.Card == nil {
+			t.Fatalf("expected replacement callback response, got %#v", resp)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("expected background handler to finish")
+		t.Fatal("expected parameter apply callback to return after handler finished")
 	}
 }
 
