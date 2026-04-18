@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-18`
-> Summary: 新增飞书卡片与 OpenAPI 约束文档，并同步更新索引。
+> Summary: 新增统一飞书调用入口设计草案，并补充索引。
 
 ## 1. 适用范围
 
@@ -156,6 +156,7 @@
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
+- [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
