@@ -119,6 +119,32 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksInline(
 	)
 	last := 0
 	for i := 0; i < len(text); {
+		if rewrittenLink, ok := p.tryRewriteNeutralizedLocalMarkdownLink(
+			ctx,
+			req,
+			principals,
+			runtime,
+			scopeKey,
+			rewrittenTargets,
+			text,
+			last,
+			i,
+			baseOffset,
+		); ok {
+			builder.WriteString(rewrittenLink.text)
+			if rewrittenLink.changed {
+				changed = true
+			}
+			if len(rewrittenLink.supplements) > 0 {
+				supplements = append(supplements, rewrittenLink.supplements...)
+			}
+			if len(rewrittenLink.errs) > 0 {
+				errs = append(errs, rewrittenLink.errs...)
+			}
+			i = rewrittenLink.end
+			last = i
+			continue
+		}
 		if text[i] != '`' {
 			i++
 			continue
