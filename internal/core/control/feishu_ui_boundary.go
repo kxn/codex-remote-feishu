@@ -22,6 +22,16 @@ const (
 	FeishuUICallbackPayloadOwnerAdapter FeishuUICallbackPayloadOwner = "feishu_adapter_payload"
 )
 
+// FeishuUIOwnerCardFlowContext describes the stable owner-card flow runtime
+// state currently attached to a surface or specific business card.
+type FeishuUIOwnerCardFlowContext struct {
+	FlowID    string
+	Kind      string
+	Revision  int
+	Phase     string
+	MessageID string
+}
+
 // FeishuUISurfaceContext is the stable read-only surface summary used by the
 // Feishu UI layer. It deliberately mirrors only queryable product state and
 // policy signals, not mutable orchestrator internals.
@@ -41,6 +51,7 @@ type FeishuUISurfaceContext struct {
 	InlineReplaceViewSession       string
 	InlineReplaceRequiresViewState bool
 	CallbackPayloadOwner           FeishuUICallbackPayloadOwner
+	ActiveOwnerCard                *FeishuUIOwnerCardFlowContext
 }
 
 // FeishuUISelectionContext describes the stable query/policy inputs that back a
@@ -116,6 +127,7 @@ type FeishuUITargetPickerContext struct {
 type FeishuUIThreadHistoryContext struct {
 	DTOOwner       FeishuUIDTOwner
 	Surface        FeishuUISurfaceContext
+	OwnerCard      *FeishuUIOwnerCardFlowContext
 	PickerID       string
 	ThreadID       string
 	Mode           FeishuThreadHistoryViewMode

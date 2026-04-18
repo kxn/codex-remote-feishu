@@ -32,30 +32,29 @@ func (s *Service) openThreadHistory(surface *state.SurfaceConsoleRecord, sourceM
 	if inst == nil || strings.TrimSpace(threadID) == "" {
 		return notice(surface, noticeCode, noticeText)
 	}
-	record := &activeThreadHistoryRecord{
-		PickerID:    s.pickers.nextThreadHistoryToken(),
-		OwnerUserID: strings.TrimSpace(firstNonEmpty(surface.ActorUserID)),
-		ThreadID:    strings.TrimSpace(threadID),
-		ViewMode:    control.FeishuThreadHistoryViewList,
-		Page:        0,
-		CreatedAt:   s.now(),
-		ExpiresAt:   s.now().Add(defaultThreadHistoryTTL),
-	}
+	now := s.now()
+	flow := newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, s.pickers.nextThreadHistoryToken(), firstNonEmpty(surface.ActorUserID), now, defaultThreadHistoryTTL, ownerCardFlowPhaseLoading)
 	if inline {
-		record.MessageID = strings.TrimSpace(sourceMessageID)
+		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
+	record := &activeThreadHistoryRecord{
+		ThreadID: strings.TrimSpace(threadID),
+		ViewMode: control.FeishuThreadHistoryViewList,
+		Page:     0,
+	}
+	s.setActiveOwnerCardFlow(surface, flow)
 	s.setActiveThreadHistory(surface, record)
-	return s.startThreadHistoryQuery(surface, inst, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
 }
 
 func (s *Service) handleThreadHistoryPage(surface *state.SurfaceConsoleRecord, pickerID string, page int, actorUserID, sourceMessageID string, inline bool) []control.UIEvent {
-	record, blocked := s.requireActiveThreadHistory(surface, pickerID, actorUserID)
+	flow, record, blocked := s.requireActiveThreadHistory(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
-		s.clearSurfaceThreadHistory(surface)
+		s.clearThreadHistoryRuntime(surface)
 		return notice(surface, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 	}
 	record.ViewMode = control.FeishuThreadHistoryViewList
@@ -64,16 +63,15 @@ func (s *Service) handleThreadHistoryPage(surface *state.SurfaceConsoleRecord, p
 	}
 	record.Page = page
 	record.TurnID = ""
-	record.CreatedAt = s.now()
-	record.ExpiresAt = s.now().Add(defaultThreadHistoryTTL)
+	refreshOwnerCardFlow(flow, ownerCardFlowPhaseLoading, s.now(), defaultThreadHistoryTTL)
 	if inline {
-		record.MessageID = strings.TrimSpace(sourceMessageID)
+		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
-	return s.startThreadHistoryQuery(surface, inst, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
 }
 
 func (s *Service) handleThreadHistoryDetail(surface *state.SurfaceConsoleRecord, pickerID, turnID, actorUserID, sourceMessageID string, inline bool) []control.UIEvent {
-	record, blocked := s.requireActiveThreadHistory(surface, pickerID, actorUserID)
+	flow, record, blocked := s.requireActiveThreadHistory(surface, pickerID, actorUserID)
 	if blocked != nil {
 		return blocked
 	}
@@ -83,24 +81,29 @@ func (s *Service) handleThreadHistoryDetail(surface *state.SurfaceConsoleRecord,
 	}
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
-		s.clearSurfaceThreadHistory(surface)
+		s.clearThreadHistoryRuntime(surface)
 		return notice(surface, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 	}
 	record.ViewMode = control.FeishuThreadHistoryViewDetail
 	record.TurnID = turnID
-	record.CreatedAt = s.now()
-	record.ExpiresAt = s.now().Add(defaultThreadHistoryTTL)
+	refreshOwnerCardFlow(flow, ownerCardFlowPhaseLoading, s.now(), defaultThreadHistoryTTL)
 	if inline {
-		record.MessageID = strings.TrimSpace(sourceMessageID)
+		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
-	return s.startThreadHistoryQuery(surface, inst, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
 }
 
-func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, record *activeThreadHistoryRecord, sourceMessageID string, inline bool) []control.UIEvent {
-	if surface == nil || inst == nil || record == nil {
+func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord, sourceMessageID string, inline bool) []control.UIEvent {
+	if surface == nil || inst == nil || flow == nil || record == nil {
 		return nil
 	}
-	view := s.buildThreadHistoryLoadingView(surface, inst, record)
+	view := s.buildThreadHistoryLoadingView(surface, inst, flow, record)
+	if inline {
+		view.MessageID = ""
+		if sourceMessageID = strings.TrimSpace(sourceMessageID); sourceMessageID != "" {
+			flow.MessageID = sourceMessageID
+		}
+	}
 	events := []control.UIEvent{s.threadHistoryViewEvent(surface, view, inline, sourceMessageID)}
 	events = append(events, control.UIEvent{
 		Kind:             control.UIEventDaemonCommand,
@@ -149,50 +152,39 @@ func (s *Service) currentThreadHistoryTarget(surface *state.SurfaceConsoleRecord
 	return inst, threadID, "", ""
 }
 
-func (s *Service) requireActiveThreadHistory(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activeThreadHistoryRecord, []control.UIEvent) {
-	if surface == nil || s.activeThreadHistory(surface) == nil {
-		return nil, notice(surface, "history_expired", "这张历史卡片已失效，请重新发送 /history。")
+func (s *Service) requireActiveThreadHistory(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activeOwnerCardFlowRecord, *activeThreadHistoryRecord, []control.UIEvent) {
+	flow, blocked := s.requireActiveOwnerCardFlow(surface, ownerCardFlowKindThreadHistory, pickerID, actorUserID, "这张历史卡片已失效，请重新发送 /history。", "这张历史卡片只允许发起者本人操作。")
+	if blocked != nil {
+		return nil, nil, blocked
 	}
 	record := s.activeThreadHistory(surface)
-	if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(s.now()) {
-		s.clearSurfaceThreadHistory(surface)
-		return nil, notice(surface, "history_expired", "这张历史卡片已过期，请重新发送 /history。")
+	if record == nil {
+		s.clearSurfaceOwnerCardFlow(surface)
+		return nil, nil, notice(surface, "history_expired", "这张历史卡片已失效，请重新发送 /history。")
 	}
-	if strings.TrimSpace(pickerID) == "" || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
-		return nil, notice(surface, "history_expired", "这张旧历史卡片已失效，请重新发送 /history。")
-	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, surface.ActorUserID))
-	if ownerUserID := strings.TrimSpace(record.OwnerUserID); ownerUserID != "" && actorUserID != "" && ownerUserID != actorUserID {
-		return nil, notice(surface, "history_unauthorized", "这张历史卡片只允许发起者本人操作。")
-	}
-	return record, nil
+	return flow, record, nil
 }
 
 func (s *Service) RecordThreadHistoryMessage(surfaceID, pickerID, messageID string) {
-	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
-	record := s.activeThreadHistory(surface)
-	if surface == nil || record == nil {
-		return
-	}
-	if strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
-		return
-	}
-	record.MessageID = strings.TrimSpace(messageID)
+	s.RecordOwnerCardFlowMessage(surfaceID, pickerID, messageID)
 }
 
 func (s *Service) HandleSurfaceThreadHistoryLoaded(surfaceID string) []control.UIEvent {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	flow := s.activeOwnerCardFlow(surface)
 	record := s.activeThreadHistory(surface)
-	if surface == nil || record == nil {
+	if surface == nil || flow == nil || flow.Kind != ownerCardFlowKindThreadHistory || record == nil {
 		return nil
 	}
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
-		view := s.buildThreadHistoryErrorView(surface, nil, record, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
-		s.clearSurfaceThreadHistory(surface)
+		view := s.buildThreadHistoryErrorView(surface, nil, flow, record, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
+		s.clearThreadHistoryRuntime(surface)
 		return []control.UIEvent{s.threadHistoryViewEvent(surface, view, false, "")}
 	}
-	view := s.buildThreadHistoryResolvedView(surface, inst, record)
+	flow.Phase = ownerCardFlowPhaseResolved
+	bumpOwnerCardFlowRevision(flow)
+	view := s.buildThreadHistoryResolvedView(surface, inst, flow, record)
 	return []control.UIEvent{s.threadHistoryViewEvent(surface, view, false, "")}
 }
 
@@ -208,52 +200,57 @@ func (s *Service) HandleSurfaceThreadHistoryFailure(surfaceID, code, text string
 			},
 		}}
 	}
-	if s.activeThreadHistory(surface) == nil {
+	flow := s.activeOwnerCardFlow(surface)
+	record := s.activeThreadHistory(surface)
+	if flow == nil || flow.Kind != ownerCardFlowKindThreadHistory || record == nil {
 		return notice(surface, code, text)
 	}
-	view := s.buildThreadHistoryErrorView(surface, nil, s.activeThreadHistory(surface), code, text)
+	flow.Phase = ownerCardFlowPhaseError
+	bumpOwnerCardFlowRevision(flow)
+	view := s.buildThreadHistoryErrorView(surface, nil, flow, record, code, text)
 	return []control.UIEvent{s.threadHistoryViewEvent(surface, view, false, "")}
 }
 
-func (s *Service) buildThreadHistoryLoadingView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, record *activeThreadHistoryRecord) control.FeishuThreadHistoryView {
+func (s *Service) buildThreadHistoryLoadingView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord) control.FeishuThreadHistoryView {
 	return control.FeishuThreadHistoryView{
-		PickerID:       strings.TrimSpace(record.PickerID),
+		PickerID:       strings.TrimSpace(flow.FlowID),
+		MessageID:      strings.TrimSpace(flow.MessageID),
 		Mode:           record.ViewMode,
 		Title:          "历史记录",
 		ThreadID:       strings.TrimSpace(record.ThreadID),
 		ThreadLabel:    s.threadHistoryThreadLabel(inst, record.ThreadID),
 		Loading:        true,
 		LoadingText:    "正在读取当前会话历史，请稍候...",
-		CreatedAt:      record.CreatedAt,
-		ExpiresAt:      record.ExpiresAt,
+		CreatedAt:      flow.CreatedAt,
+		ExpiresAt:      flow.ExpiresAt,
 		SelectedTurnID: strings.TrimSpace(record.TurnID),
 	}
 }
 
-func (s *Service) buildThreadHistoryResolvedView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, record *activeThreadHistoryRecord) control.FeishuThreadHistoryView {
+func (s *Service) buildThreadHistoryResolvedView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord) control.FeishuThreadHistoryView {
 	history := s.SurfaceThreadHistory(surface.SurfaceSessionID)
 	if history == nil {
-		return s.buildThreadHistoryErrorView(surface, inst, record, "history_unavailable", "还没有拿到可展示的历史结果，请稍后重试。")
+		return s.buildThreadHistoryErrorView(surface, inst, flow, record, "history_unavailable", "还没有拿到可展示的历史结果，请稍后重试。")
 	}
 	summaries := buildThreadHistoryTurnSummaries(*history, strings.TrimSpace(inst.ActiveTurnID))
 	view := control.FeishuThreadHistoryView{
-		PickerID:         strings.TrimSpace(record.PickerID),
-		MessageID:        strings.TrimSpace(record.MessageID),
+		PickerID:         strings.TrimSpace(flow.FlowID),
+		MessageID:        strings.TrimSpace(flow.MessageID),
 		Mode:             record.ViewMode,
 		Title:            "历史记录",
 		ThreadID:         firstNonEmpty(strings.TrimSpace(history.Thread.ThreadID), strings.TrimSpace(record.ThreadID)),
 		ThreadLabel:      s.threadHistoryResolvedLabel(inst, history),
 		TurnCount:        len(summaries),
 		SelectedTurnID:   strings.TrimSpace(record.TurnID),
-		CreatedAt:        record.CreatedAt,
-		ExpiresAt:        record.ExpiresAt,
+		CreatedAt:        flow.CreatedAt,
+		ExpiresAt:        flow.ExpiresAt,
 		CurrentTurnLabel: threadHistoryCurrentTurnLabel(summaries),
 	}
 	switch record.ViewMode {
 	case control.FeishuThreadHistoryViewDetail:
 		summary, index := findThreadHistoryTurnSummary(summaries, record.TurnID)
 		if summary == nil {
-			return s.buildThreadHistoryErrorView(surface, inst, record, "history_turn_missing", "当前选择的那一轮已经不可用了，请返回列表重新选择。")
+			return s.buildThreadHistoryErrorView(surface, inst, flow, record, "history_turn_missing", "当前选择的那一轮已经不可用了，请返回列表重新选择。")
 		}
 		view.Detail = &control.FeishuThreadHistoryTurnDetail{
 			TurnID:      summary.TurnID,
@@ -298,25 +295,29 @@ func (s *Service) buildThreadHistoryResolvedView(surface *state.SurfaceConsoleRe
 	return view
 }
 
-func (s *Service) buildThreadHistoryErrorView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, record *activeThreadHistoryRecord, code, text string) control.FeishuThreadHistoryView {
+func (s *Service) buildThreadHistoryErrorView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord, code, text string) control.FeishuThreadHistoryView {
 	threadID := ""
+	pickerID := ""
 	messageID := ""
 	mode := control.FeishuThreadHistoryViewList
 	page := 0
 	turnID := ""
 	createdAt := time.Time{}
 	expiresAt := time.Time{}
+	if flow != nil {
+		pickerID = strings.TrimSpace(flow.FlowID)
+		messageID = strings.TrimSpace(flow.MessageID)
+		createdAt = flow.CreatedAt
+		expiresAt = flow.ExpiresAt
+	}
 	if record != nil {
 		threadID = strings.TrimSpace(record.ThreadID)
-		messageID = strings.TrimSpace(record.MessageID)
 		mode = record.ViewMode
 		page = record.Page
 		turnID = strings.TrimSpace(record.TurnID)
-		createdAt = record.CreatedAt
-		expiresAt = record.ExpiresAt
 	}
 	return control.FeishuThreadHistoryView{
-		PickerID:       strings.TrimSpace(firstNonEmpty(recordPickerID(record), "")),
+		PickerID:       pickerID,
 		MessageID:      messageID,
 		Mode:           mode,
 		Title:          "历史记录",
@@ -489,9 +490,13 @@ func truncateThreadHistoryText(text string, limit int) string {
 	return string(runes[:limit-3]) + "..."
 }
 
-func recordPickerID(record *activeThreadHistoryRecord) string {
-	if record == nil {
-		return ""
+func (s *Service) clearThreadHistoryRuntime(surface *state.SurfaceConsoleRecord) {
+	if surface == nil {
+		return
 	}
-	return record.PickerID
+	s.clearSurfaceThreadHistory(surface)
+	flow := s.activeOwnerCardFlow(surface)
+	if flow != nil && flow.Kind == ownerCardFlowKindThreadHistory {
+		s.clearSurfaceOwnerCardFlow(surface)
+	}
 }

@@ -7,6 +7,19 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func (s *Service) buildFeishuUIOwnerCardFlowContext(flow *activeOwnerCardFlowRecord) *control.FeishuUIOwnerCardFlowContext {
+	if flow == nil {
+		return nil
+	}
+	return &control.FeishuUIOwnerCardFlowContext{
+		FlowID:    strings.TrimSpace(flow.FlowID),
+		Kind:      strings.TrimSpace(string(flow.Kind)),
+		Revision:  flow.Revision,
+		Phase:     strings.TrimSpace(string(flow.Phase)),
+		MessageID: strings.TrimSpace(flow.MessageID),
+	}
+}
+
 func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecord) control.FeishuUISurfaceContext {
 	if surface == nil {
 		return control.FeishuUISurfaceContext{
@@ -31,6 +44,7 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 		InlineReplaceViewSession:       control.FeishuUIInlineReplaceViewSessionSurfaceState,
 		InlineReplaceRequiresViewState: false,
 		CallbackPayloadOwner:           control.FeishuUICallbackPayloadOwnerAdapter,
+		ActiveOwnerCard:                s.buildFeishuUIOwnerCardFlowContext(s.activeOwnerCardFlow(surface)),
 	}
 	if surface.ActiveRequestCapture != nil {
 		context.RouteMutationBlocked = true
@@ -201,9 +215,14 @@ func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceC
 }
 
 func (s *Service) buildFeishuThreadHistoryContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView) *control.FeishuUIThreadHistoryContext {
+	flow := s.activeOwnerCardFlow(surface)
+	if flow != nil && (flow.Kind != ownerCardFlowKindThreadHistory || strings.TrimSpace(flow.FlowID) != strings.TrimSpace(view.PickerID)) {
+		flow = nil
+	}
 	return &control.FeishuUIThreadHistoryContext{
 		DTOOwner:       control.FeishuUIDTOwnerThreadHistory,
 		Surface:        s.buildFeishuUISurfaceContext(surface),
+		OwnerCard:      s.buildFeishuUIOwnerCardFlowContext(flow),
 		PickerID:       strings.TrimSpace(view.PickerID),
 		ThreadID:       strings.TrimSpace(view.ThreadID),
 		Mode:           view.Mode,

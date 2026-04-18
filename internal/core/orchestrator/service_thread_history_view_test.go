@@ -46,6 +46,9 @@ func TestApplySurfaceActionHistoryStartsQueryForCurrentThread(t *testing.T) {
 	if record := svc.activeThreadHistory(surface); record == nil || record.ThreadID != "thread-1" {
 		t.Fatalf("expected active history record, got %#v", record)
 	}
+	if flow := svc.activeOwnerCardFlow(surface); flow == nil || flow.Kind != ownerCardFlowKindThreadHistory || flow.FlowID == "" || flow.Phase != ownerCardFlowPhaseLoading {
+		t.Fatalf("expected active owner flow for history, got %#v", flow)
+	}
 }
 
 func TestHandleSurfaceThreadHistoryLoadedBuildsNewestFirstList(t *testing.T) {
@@ -66,13 +69,10 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsNewestFirstList(t *testing.T) {
 	surface.AttachedInstanceID = "inst-1"
 	surface.RouteMode = state.RouteModePinned
 	surface.SelectedThreadID = "thread-1"
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, "history-1", "user-1", now, time.Minute, ownerCardFlowPhaseLoading))
 	svc.setActiveThreadHistory(surface, &activeThreadHistoryRecord{
-		PickerID:    "history-1",
-		OwnerUserID: "user-1",
-		ThreadID:    "thread-1",
-		ViewMode:    control.FeishuThreadHistoryViewList,
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(time.Minute),
+		ThreadID: "thread-1",
+		ViewMode: control.FeishuThreadHistoryViewList,
 	})
 	svc.RecordSurfaceThreadHistory("surface-1", agentproto.ThreadHistoryRecord{
 		Thread: agentproto.ThreadSnapshotRecord{ThreadID: "thread-1", Name: "修复登录流程"},
@@ -123,6 +123,9 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsNewestFirstList(t *testing.T) {
 	if view.TurnOptions[0].TurnID != "turn-3" || !strings.Contains(view.TurnOptions[0].Label, "#3") || !view.TurnOptions[0].Current {
 		t.Fatalf("expected newest turn first with original ordinal, got %#v", view.TurnOptions[0])
 	}
+	if flow := svc.activeOwnerCardFlow(surface); flow == nil || flow.Phase != ownerCardFlowPhaseResolved || flow.Revision < 2 {
+		t.Fatalf("expected resolved owner flow after load, got %#v", flow)
+	}
 }
 
 func TestHandleSurfaceThreadHistoryLoadedBuildsDetailNavigation(t *testing.T) {
@@ -142,14 +145,11 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsDetailNavigation(t *testing.T) {
 	surface.AttachedInstanceID = "inst-1"
 	surface.RouteMode = state.RouteModePinned
 	surface.SelectedThreadID = "thread-1"
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, "history-1", "user-1", now, time.Minute, ownerCardFlowPhaseLoading))
 	svc.setActiveThreadHistory(surface, &activeThreadHistoryRecord{
-		PickerID:    "history-1",
-		OwnerUserID: "user-1",
-		ThreadID:    "thread-1",
-		ViewMode:    control.FeishuThreadHistoryViewDetail,
-		TurnID:      "turn-2",
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(time.Minute),
+		ThreadID: "thread-1",
+		ViewMode: control.FeishuThreadHistoryViewDetail,
+		TurnID:   "turn-2",
 	})
 	svc.RecordSurfaceThreadHistory("surface-1", agentproto.ThreadHistoryRecord{
 		Thread: agentproto.ThreadSnapshotRecord{ThreadID: "thread-1", Name: "修复登录流程"},
