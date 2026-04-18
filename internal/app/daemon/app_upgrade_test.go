@@ -274,7 +274,8 @@ func TestUpgradeLatestClearsStalePendingCandidateMatchingLiveVersion(t *testing.
 	for time.Now().Before(deadline) {
 		ops := gateway.snapshotOperations()
 		for _, op := range ops {
-			if op.CardTitle == "已是最新版本" && strings.Contains(op.CardBody, "当前已经是 production track 的最新版本 v1.1.0。") {
+			cardText := op.CardBody + "\n" + strings.Join(cardMarkdownContents(op.CardElements), "\n")
+			if op.CardTitle == "已是最新版本" && strings.Contains(cardText, "当前已经是 production track 的最新版本 v1.1.0。") {
 				updated, err := install.LoadState(statePath)
 				if err != nil {
 					t.Fatalf("LoadState updated: %v", err)
@@ -287,7 +288,7 @@ func TestUpgradeLatestClearsStalePendingCandidateMatchingLiveVersion(t *testing.
 				}
 				return
 			}
-			if op.CardTitle == "Upgrade" && strings.Contains(op.CardBody, "正在准备升级到 v1.1.0") {
+			if op.CardTitle == "Upgrade" && strings.Contains(cardText, "正在准备升级到 v1.1.0") {
 				t.Fatalf("expected stale candidate to be cleared before starting upgrade, got %#v", op)
 			}
 		}
