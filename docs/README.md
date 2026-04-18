@@ -114,6 +114,7 @@
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
 - [dev-conversation-trace.md](./general/dev-conversation-trace.md)
 - [feishu-api-timeout-discipline.md](./general/feishu-api-timeout-discipline.md)
+- [feishu-business-card-interaction-principles.md](./general/feishu-business-card-interaction-principles.md)
 - [feishu-product-design.md](./general/feishu-product-design.md)
 - [feishu-im-message-research.md](./general/feishu-im-message-research.md)
 - [feishu-card-ui-state-machine.md](./general/feishu-card-ui-state-machine.md)
