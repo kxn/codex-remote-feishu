@@ -274,7 +274,7 @@ func TestUpgradeLatestClearsStalePendingCandidateMatchingLiveVersion(t *testing.
 	for time.Now().Before(deadline) {
 		ops := gateway.snapshotOperations()
 		for _, op := range ops {
-			if op.CardTitle == "Debug" && strings.Contains(op.CardBody, "当前已经是 production track 的最新版本 v1.1.0。") {
+			if op.CardTitle == "已是最新版本" && strings.Contains(op.CardBody, "当前已经是 production track 的最新版本 v1.1.0。") {
 				updated, err := install.LoadState(statePath)
 				if err != nil {
 					t.Fatalf("LoadState updated: %v", err)
@@ -322,7 +322,7 @@ func TestFlushUpgradeResultEmitsNoticeAndClearsPendingState(t *testing.T) {
 
 	waitForUpgradeOperation(t, gateway, func(ops []feishuOperationView) bool {
 		for _, op := range ops {
-			if op.CardTitle == "Debug" && op.SurfaceSessionID == "feishu:chat:9" {
+			if op.CardTitle == "Upgrade" && op.SurfaceSessionID == "feishu:chat:9" {
 				return true
 			}
 		}

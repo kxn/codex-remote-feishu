@@ -437,7 +437,24 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 				GatewayID:        surface.GatewayID,
 				SurfaceSessionID: surface.SurfaceSessionID,
 				SourceMessageID:  action.MessageID,
+				FromCardAction:   action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != "",
 				Text:             action.Text,
+			},
+		}}
+	case control.ActionUpgradeOwnerFlow:
+		events = []control.UIEvent{{
+			Kind:             control.UIEventDaemonCommand,
+			GatewayID:        surface.GatewayID,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			SourceMessageID:  action.MessageID,
+			DaemonCommand: &control.DaemonCommand{
+				Kind:             control.DaemonCommandUpgradeOwnerFlow,
+				GatewayID:        surface.GatewayID,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				SourceMessageID:  action.MessageID,
+				FromCardAction:   action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != "",
+				PickerID:         action.PickerID,
+				OptionID:         action.OptionID,
 			},
 		}}
 	case control.ActionStartCommandCapture:

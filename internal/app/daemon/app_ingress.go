@@ -232,6 +232,12 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncSurfaceResumeStateLocked(nil)
 		return nil
 	}
+	if a.upgradeOwnerFlowBlocksInputLocked() && !upgradeOwnerFlowAllowsAction(action) {
+		a.ensureSurfaceRouteForNotice(action)
+		a.handleUIEventsLocked(ctx, upgradeOwnerFlowBlockedEvents(action.SurfaceSessionID))
+		a.syncSurfaceResumeStateLocked(nil)
+		return nil
+	}
 	events := a.applyIngressActionLocked(action)
 	inlineResult, appendEvents := a.inlineCardActionResultLocked(action, events)
 	commandSubmissionAnchorReplace := false

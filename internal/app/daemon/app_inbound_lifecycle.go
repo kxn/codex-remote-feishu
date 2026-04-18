@@ -182,6 +182,8 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "查看调试升级状态", "/debug"
 	case control.ActionUpgradeCommand:
 		return "发起升级", "/upgrade"
+	case control.ActionUpgradeOwnerFlow:
+		return "升级卡片动作", ""
 	case control.ActionModelCommand:
 		return "设置下一条消息模型", "/model"
 	case control.ActionReasoningCommand:

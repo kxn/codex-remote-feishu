@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
@@ -51,6 +52,10 @@ type upgradeRuntimeState struct {
 	nextCheckAt     time.Time
 	nextPromptScan  time.Time
 	nextResultScan  time.Time
+	nextFlowSeq     int64
+	activeFlow      *upgradeOwnerCardFlowRecord
+	startCancel     context.CancelFunc
+	startFlowID     string
 }
 
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {

@@ -24,6 +24,7 @@ const (
 	ActionDebugCommand                ActionKind = "surface.command.debug"
 	ActionCronCommand                 ActionKind = "surface.command.cron"
 	ActionUpgradeCommand              ActionKind = "surface.command.upgrade"
+	ActionUpgradeOwnerFlow            ActionKind = "surface.command.upgrade_owner_flow"
 	ActionStartCommandCapture         ActionKind = "surface.command.capture.start"
 	ActionCancelCommandCapture        ActionKind = "surface.command.capture.cancel"
 	ActionModelCommand                ActionKind = "surface.command.model"
@@ -380,6 +381,7 @@ type CommandCatalogButtonKind string
 
 const (
 	CommandCatalogButtonRunCommand           CommandCatalogButtonKind = "run_command"
+	CommandCatalogButtonCallbackAction       CommandCatalogButtonKind = "callback_action"
 	CommandCatalogButtonStartCommandCapture  CommandCatalogButtonKind = "start_command_capture"
 	CommandCatalogButtonCancelCommandCapture CommandCatalogButtonKind = "cancel_command_capture"
 )
@@ -402,12 +404,13 @@ type CommandCatalogBreadcrumb struct {
 }
 
 type CommandCatalogButton struct {
-	Label       string
-	Kind        CommandCatalogButtonKind
-	CommandText string
-	CommandID   string
-	Style       string
-	Disabled    bool
+	Label         string
+	Kind          CommandCatalogButtonKind
+	CommandText   string
+	CommandID     string
+	CallbackValue map[string]any
+	Style         string
+	Disabled      bool
 }
 
 type CommandCatalogFormField struct {
@@ -446,8 +449,12 @@ type CommandCatalogSection struct {
 // daemon-owned command cards that are intentionally not routed through the
 // newer command view path.
 type FeishuDirectCommandCatalog struct {
-	Title   string
-	Summary string
+	Title       string
+	Summary     string
+	MessageID   string
+	TrackingKey string
+	ThemeKey    string
+	Patchable   bool
 	// LegacySummaryMarkdown marks Summary as an intentional legacy markdown body.
 	// When false, the Feishu adapter should render Summary via safer plain-text fallback.
 	LegacySummaryMarkdown bool
@@ -582,6 +589,7 @@ const (
 	DaemonCommandDebug                    DaemonCommandKind = "debug.command"
 	DaemonCommandCron                     DaemonCommandKind = "cron.command"
 	DaemonCommandUpgrade                  DaemonCommandKind = "upgrade.command"
+	DaemonCommandUpgradeOwnerFlow         DaemonCommandKind = "upgrade.owner_flow"
 	DaemonCommandVSCodeMigrate            DaemonCommandKind = "vscode.migrate"
 	DaemonCommandThreadHistoryRead        DaemonCommandKind = "thread.history.read"
 	DaemonCommandSendIMFile               DaemonCommandKind = "feishu.im_file.send"
@@ -594,7 +602,9 @@ type DaemonCommand struct {
 	GatewayID        string
 	SurfaceSessionID string
 	SourceMessageID  string
+	FromCardAction   bool
 	PickerID         string
+	OptionID         string
 	InstanceID       string
 	ThreadID         string
 	ThreadTitle      string

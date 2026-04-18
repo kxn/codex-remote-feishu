@@ -105,6 +105,7 @@ type lifecycleGateway struct {
 	stoppedCh chan struct{}
 
 	mu         sync.Mutex
+	next       int
 	operations []feishu.Operation
 }
 
@@ -131,6 +132,13 @@ func (g *lifecycleGateway) Start(ctx context.Context, _ feishu.ActionHandler) er
 func (g *lifecycleGateway) Apply(_ context.Context, operations []feishu.Operation) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	for i := range operations {
+		if operations[i].Kind != feishu.OperationSendCard || operations[i].MessageID != "" {
+			continue
+		}
+		g.next++
+		operations[i].MessageID = fmt.Sprintf("om-life-%d", g.next)
+	}
 	g.operations = append(g.operations, operations...)
 	return nil
 }

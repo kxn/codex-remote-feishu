@@ -299,6 +299,18 @@ func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.O
 			break
 		}
 	}
+	if event.FeishuDirectCommandCatalog != nil && strings.TrimSpace(event.FeishuDirectCommandCatalog.TrackingKey) != "" {
+		for _, operation := range operations {
+			if operation.Kind != feishu.OperationSendCard {
+				continue
+			}
+			if strings.TrimSpace(operation.MessageID) == "" {
+				continue
+			}
+			a.recordUpgradeOwnerCardMessageLocked(event.FeishuDirectCommandCatalog.TrackingKey, operation.MessageID)
+			break
+		}
+	}
 	if event.ExecCommandProgress == nil {
 		return
 	}

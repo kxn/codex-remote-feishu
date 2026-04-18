@@ -282,6 +282,11 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 				label = commandText
 			}
 			payload = actionPayloadRunCommand(commandText)
+		case control.CommandCatalogButtonCallbackAction:
+			if len(button.CallbackValue) == 0 {
+				continue
+			}
+			payload = cloneActionPayload(button.CallbackValue)
 		case control.CommandCatalogButtonStartCommandCapture:
 			commandID := strings.TrimSpace(button.CommandID)
 			if commandID == "" {
@@ -307,4 +312,15 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 		actions = append(actions, cardCallbackButtonElement(label, buttonType, stampActionValue(payload, daemonLifecycleID), button.Disabled, ""))
 	}
 	return actions
+}
+
+func cloneActionPayload(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(value))
+	for key, item := range value {
+		cloned[key] = item
+	}
+	return cloned
 }

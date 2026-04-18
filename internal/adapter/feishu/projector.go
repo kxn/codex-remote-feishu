@@ -220,18 +220,24 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		}
 		body := commandCatalogBody(*catalog)
 		elements := commandCatalogElements(*catalog, event.DaemonLifecycleID)
+		theme := firstNonEmpty(strings.TrimSpace(catalog.ThemeKey), cardThemeInfo)
 		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
+			MessageID:        strings.TrimSpace(catalog.MessageID),
 			CardTitle:        title,
 			CardBody:         body,
-			CardThemeKey:     cardThemeInfo,
+			CardThemeKey:     theme,
 			CardElements:     elements,
+			CardUpdateMulti:  catalog.Patchable,
+		}
+		if operation.MessageID != "" {
+			operation.Kind = OperationUpdateCard
 		}
 		operation.cardEnvelope = cardEnvelopeV2
-		operation.card = rawCardDocument(title, body, cardThemeInfo, elements)
+		operation.card = rawCardDocument(title, body, theme, elements)
 		return []Operation{operation}
 	case control.UIEventFeishuDirectRequestPrompt:
 		if event.FeishuDirectRequestPrompt == nil {

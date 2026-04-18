@@ -53,6 +53,7 @@ type upgradeCheckRequest struct {
 	GatewayID        string
 	SurfaceSessionID string
 	SourceMessageID  string
+	FlowID           string
 }
 
 func (a *App) defaultReleaseLookup(ctx context.Context, track install.ReleaseTrack) (install.ReleaseInfo, error) {
@@ -182,7 +183,7 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 		}
 	}
 	if pendingUpgradeCandidateFromSource(stateValue.PendingUpgrade, install.UpgradeSourceRelease) {
-		return a.beginPendingUpgradeLocked(command, stateValue)
+		return a.openUpgradeLatestOwnerConfirmLocked(command, stateValue)
 	}
 	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_busy", fmt.Sprintf("当前升级事务处于 %s，暂时不能发起新检查。", stateValue.PendingUpgrade.Phase))}
@@ -194,15 +195,7 @@ func (a *App) handleUpgradeLatestCommand(command control.DaemonCommand, stateVal
 	if track == "" {
 		track = defaultUpgradeTrackForState(stateValue)
 	}
-	a.upgradeRuntime.checkInFlight = true
-	go a.runUpgradeCheck(upgradeCheckRequest{
-		Track:            track,
-		Manual:           true,
-		GatewayID:        command.GatewayID,
-		SurfaceSessionID: command.SurfaceSessionID,
-		SourceMessageID:  command.SourceMessageID,
-	})
-	return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_started", fmt.Sprintf("正在按 %s track 检查最新版本。", track))}
+	return a.startUpgradeLatestOwnerCheckLocked(command, stateValue)
 }
 
 func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValue install.InstallState) []control.UIEvent {
@@ -267,6 +260,9 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 		if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 			log.Printf("upgrade check write state failed: %v", err)
 		}
+		if strings.TrimSpace(request.FlowID) != "" {
+			return a.finishUpgradeOwnerFlowFailureLocked(request.SurfaceSessionID, request.FlowID, fmt.Sprintf("检查更新失败：%v", lookupErr))
+		}
 		if request.Manual {
 			return []control.UIEvent{debugNoticeEvent(request.SurfaceSessionID, "debug_upgrade_check_failed", fmt.Sprintf("检查更新失败：%v", lookupErr))}
 		}
@@ -287,6 +283,9 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 		}
 		if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 			log.Printf("upgrade check write latest state failed: %v", err)
+		}
+		if strings.TrimSpace(request.FlowID) != "" {
+			return a.finishUpgradeOwnerFlowLatestLocked(request.SurfaceSessionID, request.FlowID, stateValue, latestVersion)
 		}
 		if request.Manual {
 			return []control.UIEvent{debugNoticeEvent(request.SurfaceSessionID, "debug_upgrade_latest", fmt.Sprintf("当前已经是 %s track 的最新版本 %s。", stateValue.CurrentTrack, latestVersion))}
@@ -314,6 +313,16 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 			pending.ChatID = a.service.SurfaceChatID(request.SurfaceSessionID)
 			pending.ActorUserID = a.service.SurfaceActorUserID(request.SurfaceSessionID)
 			pending.SourceMessageID = request.SourceMessageID
+		}
+		if strings.TrimSpace(request.FlowID) != "" {
+			if stateValue.PendingUpgrade != nil {
+				stateValue.PendingUpgrade.Phase = install.PendingUpgradePhasePrompted
+			}
+			if err := a.writeUpgradeStateLocked(stateValue); err != nil {
+				log.Printf("upgrade check write state before owner confirm failed: %v", err)
+				return a.finishUpgradeOwnerFlowFailureLocked(request.SurfaceSessionID, request.FlowID, fmt.Sprintf("写入升级状态失败：%v", err))
+			}
+			return a.finishUpgradeOwnerFlowConfirmLocked(request.SurfaceSessionID, request.FlowID, stateValue)
 		}
 		if a.surfaceAllowsManualUpgradePromptLocked(request.SurfaceSessionID) {
 			events := a.promptPendingUpgradeOnSurfaceLocked(request.SurfaceSessionID, stateValue, completedAt)
@@ -393,6 +402,9 @@ func (a *App) maybePromptPendingUpgradeLocked(now time.Time) []control.UIEvent {
 	if !ok || stateValue.PendingUpgrade == nil || !pendingUpgradeCandidate(stateValue.PendingUpgrade) {
 		return nil
 	}
+	if a.activeUpgradeOwnerFlowMatchesPendingLocked(stateValue.PendingUpgrade) {
+		return nil
+	}
 	return a.promptPendingUpgradeOnBestSurfaceLocked(stateValue, now)
 }
 
@@ -421,6 +433,14 @@ func (a *App) promptPendingUpgradeOnSurfaceLocked(surfaceID string, stateValue i
 	if pending.RequestedAt == nil {
 		promptedAt := now
 		pending.RequestedAt = &promptedAt
+	}
+	if pending.Source == install.UpgradeSourceRelease {
+		flow := a.newUpgradeOwnerFlowLocked(surface.SurfaceSessionID, surface.ActorUserID, "", upgradeOwnerFlowStageConfirm)
+		flow.Source = pending.Source
+		flow.Track = stateValue.CurrentTrack
+		flow.CurrentVersion = strings.TrimSpace(stateValue.CurrentVersion)
+		flow.TargetVersion = pendingTargetVersion(pending)
+		return []control.UIEvent{upgradeOwnerConfirmEvent(surface.SurfaceSessionID, flow, stateValue)}
 	}
 	return []control.UIEvent{{
 		Kind:                       control.UIEventFeishuDirectCommandCatalog,

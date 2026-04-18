@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ type upgradeStartRequest struct {
 	GatewayID        string
 	SurfaceSessionID string
 	SourceMessageID  string
+	FlowID           string
+	Context          context.Context
 }
 
 func (a *App) beginPendingUpgradeLocked(command control.DaemonCommand, stateValue install.InstallState) []control.UIEvent {
@@ -47,11 +50,20 @@ func (a *App) beginPendingUpgradeLocked(command control.DaemonCommand, stateValu
 }
 
 func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	baseCtx := request.Context
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
 	defer cancel()
 
 	stateValue := request.State
 	targetVersion := strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)
+	if request.FlowID != "" {
+		a.mu.Lock()
+		a.handleUIEventsLocked(context.Background(), a.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgradeOwnerFlowStageRunning, "正在下载目标版本", "正在下载升级所需的目标版本。", true))
+		a.mu.Unlock()
+	}
 	var targetBinary string
 	var err error
 	switch stateValue.PendingUpgrade.Source {
@@ -85,12 +97,25 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		err = fmt.Errorf("不支持的升级来源 %q", stateValue.PendingUpgrade.Source)
 	}
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			a.finishUpgradeStartFailure(request, context.Canceled)
+			return
+		}
 		a.finishUpgradeStartFailure(request, fmt.Errorf("下载目标版本失败：%w", err))
 		return
 	}
 
+	if request.FlowID != "" {
+		a.mu.Lock()
+		a.handleUIEventsLocked(context.Background(), a.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgradeOwnerFlowStageRunning, "正在准备回滚方案", "目标版本已下载，正在准备回滚信息和切换事务。", true))
+		a.mu.Unlock()
+	}
 	rollbackCandidate, err := install.PrepareRollbackCandidate(stateValue, targetVersion)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			a.finishUpgradeStartFailure(request, context.Canceled)
+			return
+		}
 		a.finishUpgradeStartFailure(request, fmt.Errorf("准备回滚候选失败：%w", err))
 		return
 	}
@@ -109,6 +134,8 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	logPath := a.upgradeHelperLogPathLocked()
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		a.upgradeRuntime.startInFlight = false
+		a.upgradeRuntime.startCancel = nil
+		a.upgradeRuntime.startFlowID = ""
 		a.mu.Unlock()
 		a.finishUpgradeStartFailure(request, fmt.Errorf("写入 prepared journal 失败：%w", err))
 		return
@@ -116,9 +143,14 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	helperPath, err := a.prepareUpgradeHelperShimLocked(stateValue)
 	if err != nil {
 		a.upgradeRuntime.startInFlight = false
+		a.upgradeRuntime.startCancel = nil
+		a.upgradeRuntime.startFlowID = ""
 		a.mu.Unlock()
 		a.finishUpgradeStartFailure(request, fmt.Errorf("复制 upgrade helper 失败：%w", err))
 		return
+	}
+	if request.FlowID != "" {
+		a.handleUIEventsLocked(context.Background(), a.sealUpgradeOwnerFlowRestartingLocked(request.SurfaceSessionID, request.FlowID))
 	}
 	a.mu.Unlock()
 
@@ -137,23 +169,28 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	a.mu.Lock()
 	stateValue.PendingUpgrade.HelperUnitName = strings.TrimSpace(launchResult.UnitName)
 	_ = a.writeUpgradeStateLocked(stateValue)
+	a.upgradeRuntime.startCancel = nil
+	a.upgradeRuntime.startFlowID = ""
 	a.mu.Unlock()
 
 	_ = targetBinary
-	a.mu.Lock()
-	a.upgradeRuntime.startInFlight = false
-	a.mu.Unlock()
 }
 
 func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.upgradeRuntime.startInFlight = false
+	a.upgradeRuntime.startCancel = nil
+	a.upgradeRuntime.startFlowID = ""
 
 	stateValue, ok, loadErr := a.loadUpgradeStateLocked(true)
 	if loadErr == nil && ok && stateValue.PendingUpgrade != nil {
 		stateValue.PendingUpgrade = nil
 		_ = a.writeUpgradeStateLocked(stateValue)
+	}
+	if request.FlowID != "" {
+		a.handleUIEventsLocked(context.Background(), a.finishUpgradeOwnerStartErrorLocked(request, err))
+		return
 	}
 	if request.SurfaceSessionID != "" {
 		a.handleUIEventsLocked(context.Background(), []control.UIEvent{
@@ -200,7 +237,7 @@ func (a *App) maybeFlushUpgradeResultLocked(now time.Time) []control.UIEvent {
 		return nil
 	}
 	a.service.MaterializeSurface(pending.SurfaceSessionID, pending.GatewayID, pending.ChatID, pending.ActorUserID)
-	events := []control.UIEvent{debugNoticeEvent(pending.SurfaceSessionID, "debug_upgrade_result", buildUpgradeResultText(stateValue))}
+	events := []control.UIEvent{upgradeNoticeEvent(pending.SurfaceSessionID, "upgrade_result", buildUpgradeResultText(stateValue))}
 	stateValue.PendingUpgrade = nil
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		return nil

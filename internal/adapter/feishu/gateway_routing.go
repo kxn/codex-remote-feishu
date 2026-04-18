@@ -289,6 +289,23 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		action.MessageID = messageID
 		action.Inbound = meta
 		return action, true
+	case cardActionKindUpgradeOwnerFlow:
+		flowID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
+		if flowID == "" || optionID == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionUpgradeOwnerFlow,
+			GatewayID:        g.config.GatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         flowID,
+			OptionID:         optionID,
+			Inbound:          meta,
+		}, true
 	case cardActionKindStartCommandCapture:
 		commandID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandID))
 		if commandID == "" {

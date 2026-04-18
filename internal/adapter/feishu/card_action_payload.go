@@ -54,6 +54,7 @@ const (
 	cardActionKindPromptSelect                = "prompt_select"
 	cardActionKindRequestRespond              = "request_respond"
 	cardActionKindRunCommand                  = "run_command"
+	cardActionKindUpgradeOwnerFlow            = "upgrade_owner_flow"
 	cardActionKindStartCommandCapture         = "start_command_capture"
 	cardActionKindCancelCommandCapture        = "cancel_command_capture"
 	cardActionKindSubmitCommandForm           = "submit_command_form"
@@ -170,6 +171,14 @@ func actionPayloadRunCommand(commandText string) map[string]any {
 	return map[string]any{
 		cardActionPayloadKeyKind:        cardActionKindRunCommand,
 		cardActionPayloadKeyCommandText: strings.TrimSpace(commandText),
+	}
+}
+
+func actionPayloadUpgradeOwnerFlow(flowID, optionID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:     cardActionKindUpgradeOwnerFlow,
+		cardActionPayloadKeyPickerID: strings.TrimSpace(flowID),
+		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
 	}
 }
 
