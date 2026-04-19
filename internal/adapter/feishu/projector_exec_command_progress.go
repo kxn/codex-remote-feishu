@@ -82,30 +82,15 @@ func execCommandProgressMarkdownLine(line string) string {
 func execCommandProgressLines(progress control.ExecCommandProgress) []string {
 	items := normalizedExecProgressTimeline(progress)
 	lines := make([]string, 0, len(items)*2)
-	var activeBlock execProgressTimelineBlock
-	activeBlockOpen := false
 	for _, item := range items {
 		if item.entry != nil {
 			lines = append(lines, renderExecProgressEntry(*item.entry))
-			activeBlock = execProgressTimelineBlock{}
-			activeBlockOpen = false
 			continue
 		}
 		if item.row == nil {
 			continue
 		}
-		if !activeBlockOpen || !sameExecProgressTimelineBlock(activeBlock, item.block) {
-			lines = append(lines, renderExecProgressBlockHeader(control.ExecCommandProgressBlock{
-				BlockID: item.block.BlockID,
-				Kind:    item.block.Kind,
-				Status:  item.block.Status,
-			}))
-			lines = append(lines, "  └ "+renderExecProgressBlockRow(*item.row))
-			activeBlock = item.block
-			activeBlockOpen = true
-			continue
-		}
-		lines = append(lines, "    "+renderExecProgressBlockRow(*item.row))
+		lines = append(lines, renderExecProgressBlockRow(*item.row))
 	}
 	if progress.TransientStatus != nil {
 		if rendered := renderExecProgressTransientStatus(*progress.TransientStatus); rendered != "" {
@@ -195,10 +180,6 @@ func normalizedExecProgressTimeline(progress control.ExecCommandProgress) []exec
 		return items[i].order < items[j].order
 	})
 	return items
-}
-
-func sameExecProgressTimelineBlock(left, right execProgressTimelineBlock) bool {
-	return left.BlockID == right.BlockID && left.Kind == right.Kind && left.Status == right.Status
 }
 
 func normalizedExecProgressBlocks(progress control.ExecCommandProgress) []control.ExecCommandProgressBlock {
@@ -316,10 +297,12 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 		case "dynamic_tool_call":
 			entry.Label = "工具"
 		case "context_compaction":
-			entry.Label = "整理"
+			entry.Label = "压缩"
 		default:
 			entry.Label = "工作中"
 		}
+	} else if entry.Kind == "context_compaction" {
+		entry.Label = "压缩"
 	}
 	if entry.Summary == "" {
 		return control.ExecCommandProgressEntry{}, false
@@ -327,22 +310,10 @@ func normalizeExecProgressEntry(entry control.ExecCommandProgressEntry) (control
 	return entry, true
 }
 
-func renderExecProgressBlockHeader(block control.ExecCommandProgressBlock) string {
-	switch strings.ToLower(strings.TrimSpace(block.Kind)) {
-	case "exploration":
-		if strings.EqualFold(strings.TrimSpace(block.Status), "running") {
-			return "• 探索中"
-		}
-		return "• 已探索"
-	default:
-		return "• 工作中"
-	}
-}
-
 func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
 	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
 	case "read":
-		return "读取 " + truncateExecProgressSummary(strings.Join(execProgressReadNames(row.Items), "、"), 60)
+		return "读取 " + strings.Join(execProgressReadNames(row.Items), "、")
 	case "list":
 		return "列目录 " + truncateExecProgressSummary(row.Summary, 60)
 	case "search":
@@ -395,11 +366,23 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 }
 
 func renderExecProgressTransientStatus(status control.ExecCommandProgressTransientStatus) string {
-	text := strings.TrimSpace(status.Text)
+	text := ensureExecProgressTransientEllipsis(strings.TrimSpace(status.Text))
 	if text == "" {
 		return ""
 	}
 	return "• " + text
+}
+
+func ensureExecProgressTransientEllipsis(text string) string {
+	text = strings.TrimSpace(text)
+	switch {
+	case text == "":
+		return ""
+	case strings.HasSuffix(text, "..."), strings.HasSuffix(text, "…"):
+		return text
+	default:
+		return text + "..."
+	}
 }
 
 var shellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)

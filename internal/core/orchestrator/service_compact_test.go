@@ -37,7 +37,7 @@ func TestCompactCommandDispatchesThreadCompactStart(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 	catalog, command := requireCompactStartEvents(t, events)
-	if catalog.Title != "正在整理上下文" || catalog.ThemeKey != "progress" || !catalog.Patchable || catalog.TrackingKey == "" {
+	if catalog.Title != "正在压缩上下文" || catalog.ThemeKey != "progress" || !catalog.Patchable || catalog.TrackingKey == "" {
 		t.Fatalf("unexpected compact owner card: %#v", catalog)
 	}
 	if command.Target.ThreadID != "thread-1" {
@@ -260,7 +260,7 @@ func TestCompactStartFailureRestoresQueuedDispatch(t *testing.T) {
 	dispatched := false
 	gotFailedCard := false
 	for _, event := range events {
-		if catalog, ok := eventCommandCatalog(event); ok && catalog.Title == "上下文整理失败" && catalog.ThemeKey == "error" {
+		if catalog, ok := eventCommandCatalog(event); ok && catalog.Title == "上下文压缩失败" && catalog.ThemeKey == "error" {
 			gotFailedCard = true
 		}
 		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
@@ -382,7 +382,7 @@ func TestCompactTurnLifecycleKeepsUpdatingSameOwnerCard(t *testing.T) {
 		t.Fatalf("expected one running owner-card update, got %#v", started)
 	}
 	running := commandCatalogFromEvent(t, started[0])
-	if running.MessageID != "om-compact-1" || running.Title != "正在整理上下文" || running.ThemeKey != "progress" {
+	if running.MessageID != "om-compact-1" || running.Title != "正在压缩上下文" || running.ThemeKey != "progress" {
 		t.Fatalf("unexpected running owner-card update: %#v", running)
 	}
 
@@ -397,7 +397,7 @@ func TestCompactTurnLifecycleKeepsUpdatingSameOwnerCard(t *testing.T) {
 		t.Fatalf("expected one completion owner-card update, got %#v", completedItem)
 	}
 	completedCatalog := commandCatalogFromEvent(t, completedItem[0])
-	if completedCatalog.MessageID != "om-compact-1" || completedCatalog.Title != "上下文已整理" || completedCatalog.ThemeKey != "success" {
+	if completedCatalog.MessageID != "om-compact-1" || completedCatalog.Title != "上下文已压缩" || completedCatalog.ThemeKey != "success" {
 		t.Fatalf("unexpected completion owner-card update: %#v", completedCatalog)
 	}
 
@@ -447,7 +447,7 @@ func TestCompactTurnCompletedWithoutCompactionItemFallsBackToTerminalOwnerCard(t
 		t.Fatalf("expected one fallback terminal owner-card update, got %#v", completedTurn)
 	}
 	completedCatalog := commandCatalogFromEvent(t, completedTurn[0])
-	if completedCatalog.MessageID != "om-compact-2" || completedCatalog.Title != "上下文已整理" || completedCatalog.ThemeKey != "success" {
+	if completedCatalog.MessageID != "om-compact-2" || completedCatalog.Title != "上下文已压缩" || completedCatalog.ThemeKey != "success" {
 		t.Fatalf("unexpected fallback terminal owner-card update: %#v", completedCatalog)
 	}
 }

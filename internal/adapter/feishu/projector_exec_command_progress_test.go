@@ -105,7 +105,7 @@ func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *te
 	}
 	body := ops[0].CardBody
 	entry := strings.Index(body, "执行：")
-	status := strings.Index(body, "• 思考中")
+	status := strings.Index(body, "• 思考中...")
 	if entry == -1 || status == -1 || status <= entry {
 		t.Fatalf("expected transient reasoning status at bottom, got %#v", ops[0])
 	}
@@ -144,7 +144,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "上海天气"},
 				{ItemID: "web-2", Kind: "web_search", Label: "打开网页", Summary: "https://example.com/weather"},
 				{ItemID: "mcp-1", Kind: "mcp_tool_call", Label: "MCP", Summary: "docs.lookup（12 ms）"},
-				{ItemID: "compact-1", Kind: "context_compaction", Summary: "上下文已整理。"},
+				{ItemID: "compact-1", Kind: "context_compaction", Summary: "上下文已压缩。"},
 			},
 			Blocks: []control.ExecCommandProgressBlock{{
 				BlockID: "exploration",
@@ -160,7 +160,7 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• 已探索") || !strings.Contains(body, "  └ 读取 a.cpp、b.cpp") || !strings.Contains(body, "执行：`go test ./...`") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "整理：上下文已整理。") {
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "读取 a.cpp、b.cpp") || !strings.Contains(body, "执行：`go test ./...`") || !strings.Contains(body, "搜索：上海天气") || !strings.Contains(body, "打开网页：https://example.com/weather") || !strings.Contains(body, "MCP：docs.lookup（12 ms）") || !strings.Contains(body, "压缩：上下文已压缩。") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {
@@ -196,8 +196,8 @@ func TestProjectExecCommandProgressInterleavesExplorationRowsAndEntriesByVisible
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if strings.Count(body, "• 探索中") != 2 {
-		t.Fatalf("expected split exploration headers around entry barrier, got %#v", ops[0])
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") {
+		t.Fatalf("expected exploration rows to render without headers, got %#v", ops[0])
 	}
 	readFoo := strings.Index(body, "读取 foo.txt")
 	entry := strings.Index(body, "执行：")
@@ -270,7 +270,7 @@ func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T)
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• 探索中") || !strings.Contains(body, "  └ 读取 README.md、types.go") || !strings.Contains(body, "    列目录 internal/core") || !strings.Contains(body, "    搜索 compact（范围：internal/）") {
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "读取 README.md、types.go") || !strings.Contains(body, "列目录 internal/core") || !strings.Contains(body, "搜索 compact（范围：internal/）") {
 		t.Fatalf("expected exploration block rendering, got %#v", ops[0])
 	}
 }
@@ -299,8 +299,43 @@ func TestProjectExecCommandProgressRendersExploredHeaderForFailedExploration(t *
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "• 已探索") || strings.Contains(body, "Exploration failed") || !strings.Contains(body, "读取 null") {
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || strings.Contains(body, "Exploration failed") || !strings.Contains(body, "读取 null") {
 		t.Fatalf("expected upstream-style explored rendering for failed block, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressKeepsMergedReadFilenamesVisible(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "read-1",
+			Blocks: []control.ExecCommandProgressBlock{{
+				BlockID: "exploration",
+				Kind:    "exploration",
+				Status:  "completed",
+				Rows: []control.ExecCommandProgressBlockRow{{
+					RowID: "read-1",
+					Kind:  "read",
+					Items: []string{
+						"/tmp/alpha-really-long-file-name.md",
+						"/tmp/beta-really-long-file-name.md",
+						"/tmp/gamma-really-long-file-name.md",
+					},
+				}},
+			}},
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if strings.Contains(body, "...") || !strings.Contains(body, "alpha-really-long-file-name.md") || !strings.Contains(body, "beta-really-long-file-name.md") || !strings.Contains(body, "gamma-really-long-file-name.md") {
+		t.Fatalf("expected merged read filenames to stay fully visible, got %#v", ops[0])
 	}
 }
 

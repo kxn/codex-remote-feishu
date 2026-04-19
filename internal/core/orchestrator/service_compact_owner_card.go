@@ -104,10 +104,10 @@ func (s *Service) emitCompactOwnerDispatching(surface *state.SurfaceConsoleRecor
 	sections := compactOwnerCardSections(
 		binding.ThreadID,
 		s.compactThreadForBinding(binding),
-		"正在向本地 Codex 发起上下文整理请求。",
-		"整理期间普通输入会排队，完成后会自动恢复。",
+		"正在向本地 Codex 发起上下文压缩请求。",
+		"压缩期间普通输入会排队，完成后会自动恢复。",
 	)
-	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "正在整理上下文", "progress", sections)}
+	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "正在压缩上下文", "progress", sections)}
 }
 
 func (s *Service) emitCompactOwnerRunning(surface *state.SurfaceConsoleRecord, binding *compactTurnBinding) []control.UIEvent {
@@ -119,10 +119,10 @@ func (s *Service) emitCompactOwnerRunning(surface *state.SurfaceConsoleRecord, b
 	sections := compactOwnerCardSections(
 		binding.ThreadID,
 		s.compactThreadForBinding(binding),
-		"正在整理当前会话的上下文。",
-		"整理期间普通输入会排队，完成后会自动恢复。",
+		"正在压缩当前会话的上下文。",
+		"压缩期间普通输入会排队，完成后会自动恢复。",
 	)
-	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "正在整理上下文", "progress", sections)}
+	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "正在压缩上下文", "progress", sections)}
 }
 
 func (s *Service) emitCompactOwnerCompleted(surface *state.SurfaceConsoleRecord, binding *compactTurnBinding) []control.UIEvent {
@@ -134,9 +134,9 @@ func (s *Service) emitCompactOwnerCompleted(surface *state.SurfaceConsoleRecord,
 	sections := compactOwnerCardSections(
 		binding.ThreadID,
 		s.compactThreadForBinding(binding),
-		"当前会话的上下文已整理完成。",
+		"当前会话的上下文已压缩完成。",
 	)
-	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "上下文已整理", "success", sections)}
+	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "上下文已压缩", "success", sections)}
 }
 
 func compactFailureText(problem agentproto.ErrorInfo, fallback string) string {
@@ -158,5 +158,5 @@ func (s *Service) emitCompactOwnerFailed(surface *state.SurfaceConsoleRecord, bi
 		detail,
 		"现在可以重新发送 /compact，或继续普通输入。",
 	)
-	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "上下文整理失败", "error", sections)}
+	return []control.UIEvent{compactOwnerCardEvent(surface.SurfaceSessionID, flow, "上下文压缩失败", "error", sections)}
 }

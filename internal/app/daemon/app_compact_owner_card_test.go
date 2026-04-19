@@ -63,7 +63,7 @@ func TestCompactOwnerCardUpdatesReuseInitialMessageID(t *testing.T) {
 
 	var initialMessageID string
 	for _, op := range gateway.snapshotOperations() {
-		if op.CardTitle == "正在整理上下文" {
+		if op.CardTitle == "正在压缩上下文" {
 			initialMessageID = op.MessageID
 			break
 		}
@@ -95,10 +95,10 @@ func TestCompactOwnerCardUpdatesReuseInitialMessageID(t *testing.T) {
 		if op.MessageID != initialMessageID {
 			continue
 		}
-		if op.CardTitle == "正在整理上下文" && op.Kind == "update_card" {
+		if op.CardTitle == "正在压缩上下文" && op.Kind == "update_card" {
 			sawRunningUpdate = true
 		}
-		if op.CardTitle == "上下文已整理" && op.Kind == "update_card" {
+		if op.CardTitle == "上下文已压缩" && op.Kind == "update_card" {
 			sawCompletedUpdate = true
 		}
 	}

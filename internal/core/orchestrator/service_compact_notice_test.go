@@ -45,7 +45,7 @@ func TestContextCompactionRendersSingleNoticeOnAttachedSurface(t *testing.T) {
 		t.Fatalf("expected compact progress event, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "context_compaction" || progress.Entries[0].Label != "整理" || progress.Entries[0].Summary != "上下文已整理。" {
+	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "context_compaction" || progress.Entries[0].Label != "压缩" || progress.Entries[0].Summary != "上下文已压缩。" {
 		t.Fatalf("unexpected compact progress payload: %#v", progress)
 	}
 	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {
@@ -126,7 +126,7 @@ func TestManualCompactStillUsesForegroundOwnerCardOutsideVerbose(t *testing.T) {
 		t.Fatalf("expected explicit compact to emit one owner-card update outside verbose, got %#v", events)
 	}
 	got := commandCatalogFromEvent(t, events[0])
-	if got.MessageID != "om-compact-notice" || got.Title != "上下文已整理" || got.ThemeKey != "success" {
+	if got.MessageID != "om-compact-notice" || got.Title != "上下文已压缩" || got.ThemeKey != "success" {
 		t.Fatalf("unexpected explicit compact owner-card update: %#v", got)
 	}
 }
@@ -158,7 +158,7 @@ func TestContextCompactionStoresReplayWhenNoSurfaceAndReplaysOnce(t *testing.T) 
 		t.Fatalf("expected no UI events without attached surface, got %#v", events)
 	}
 	replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay
-	if replay == nil || replay.Kind != state.ThreadReplayNotice || replay.NoticeCode != "context_compacted" || replay.NoticeText != "上下文已整理。" {
+	if replay == nil || replay.Kind != state.ThreadReplayNotice || replay.NoticeCode != "context_compacted" || replay.NoticeText != "上下文已压缩。" {
 		t.Fatalf("expected compact replay to be stored, got %#v", replay)
 	}
 
@@ -182,7 +182,7 @@ func TestContextCompactionStoresReplayWhenNoSurfaceAndReplaysOnce(t *testing.T) 
 	for _, event := range attach {
 		if event.ExecCommandProgress != nil && len(event.ExecCommandProgress.Entries) == 1 {
 			entry := event.ExecCommandProgress.Entries[0]
-			if entry.Kind == "context_compaction" && entry.Label == "整理" && entry.Summary == "上下文已整理。" {
+			if entry.Kind == "context_compaction" && entry.Label == "压缩" && entry.Summary == "上下文已压缩。" {
 				sawProgress = true
 			}
 		}

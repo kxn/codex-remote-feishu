@@ -11,7 +11,7 @@ import (
 func compactCompletionNotice() control.Notice {
 	return control.Notice{
 		Code: "context_compacted",
-		Text: "上下文已整理。",
+		Text: "上下文已压缩。",
 	}
 }
 
@@ -23,8 +23,8 @@ func compactCompletionProgressEntryRecord(itemID string) state.ExecCommandProgre
 	return state.ExecCommandProgressEntryRecord{
 		ItemID:  itemID,
 		Kind:    "context_compaction",
-		Label:   "整理",
-		Summary: "上下文已整理。",
+		Label:   "压缩",
+		Summary: "上下文已压缩。",
 		Status:  "completed",
 	}
 }
