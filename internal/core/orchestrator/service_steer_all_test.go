@@ -102,10 +102,13 @@ func TestSteerAllCommandAcceptedMarksAllQueuedItemsSteered(t *testing.T) {
 
 	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-all-1")
 	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-all-1", Accepted: true})
-	if len(accepted) != 2 {
-		t.Fatalf("expected two pending-input acknowledgements, got %#v", accepted)
+	if len(accepted) != 3 {
+		t.Fatalf("expected supplement text plus two pending-input acknowledgements, got %#v", accepted)
 	}
-	for _, event := range accepted {
+	if accepted[0].TimelineText == nil || accepted[0].TimelineText.Type != control.TimelineTextSteerUserSupplement || accepted[0].TimelineText.Text != "用户补充：补充信息一\n\n补充信息二" {
+		t.Fatalf("unexpected steer-all supplement event: %#v", accepted[0])
+	}
+	for _, event := range accepted[1:] {
 		if event.PendingInput == nil || !event.PendingInput.QueueOff || !event.PendingInput.ThumbsUp || event.PendingInput.Status != string(state.QueueItemSteered) {
 			t.Fatalf("unexpected steer-all accepted projection: %#v", accepted)
 		}
@@ -146,12 +149,15 @@ func TestSteerAllMenuActionAcceptedPatchesSameCard(t *testing.T) {
 
 	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-all-menu-1")
 	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-all-menu-1", Accepted: true})
-	if len(accepted) != 3 {
-		t.Fatalf("expected owner-card completion plus two pending-input updates, got %#v", accepted)
+	if len(accepted) != 4 {
+		t.Fatalf("expected owner-card completion, supplement text, plus two pending-input updates, got %#v", accepted)
 	}
 	completed := commandCatalogFromEvent(t, accepted[0])
 	if completed.MessageID != "om-menu-steer-2" || completed.Title != "已并入排队输入" || completed.ThemeKey != "success" {
 		t.Fatalf("unexpected completed owner card: %#v", completed)
+	}
+	if accepted[1].TimelineText == nil || accepted[1].TimelineText.Type != control.TimelineTextSteerUserSupplement || accepted[1].TimelineText.Text != "用户补充：补充信息一\n\n补充信息二" {
+		t.Fatalf("unexpected steer-all menu supplement event: %#v", accepted[1])
 	}
 }
 

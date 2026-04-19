@@ -785,6 +785,50 @@ func TestProjectProcessAssistantBlockAsPlainText(t *testing.T) {
 	}
 }
 
+func TestProjectProcessAssistantBlockRepliesToTurnAnchor(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:            control.UIEventBlockCommitted,
+		SourceMessageID: "om-source-1",
+		Block: &render.Block{
+			Kind:        render.BlockAssistantMarkdown,
+			Text:        "我先看一下目录结构。",
+			ThreadID:    "thread-1",
+			ThreadTitle: "droid · 修复登录流程",
+			ThemeKey:    "thread-1",
+			Final:       false,
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendText {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "om-source-1" {
+		t.Fatalf("expected process text to reply to turn anchor, got %#v", ops[0])
+	}
+}
+
+func TestProjectTimelineTextRepliesToTurnAnchor(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:            control.UIEventTimelineText,
+		SourceMessageID: "om-source-1",
+		TimelineText: &control.TimelineText{
+			ThreadID:              "thread-1",
+			TurnID:                "turn-1",
+			Type:                  control.TimelineTextSteerUserSupplement,
+			Text:                  "用户补充：只改 Linux。",
+			ReplyToMessageID:      "om-source-1",
+			ReplyToMessagePreview: "先开始",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendText {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "om-source-1" || ops[0].Text != "用户补充：只改 Linux。" {
+		t.Fatalf("unexpected timeline text operation: %#v", ops[0])
+	}
+}
+
 func TestProjectSnapshotIncludesEffectivePromptConfig(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

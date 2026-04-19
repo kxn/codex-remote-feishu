@@ -1167,10 +1167,16 @@ func TestReactionCreatedSteersQueuedItemAndAcknowledgesWholeInputSet(t *testing.
 	if item.Status != state.QueueItemSteered {
 		t.Fatalf("expected queue item to be marked steered, got %#v", item)
 	}
-	if len(accepted) != 2 {
-		t.Fatalf("expected queue-off + thumbs-up for text and image sources, got %#v", accepted)
+	if len(accepted) != 3 {
+		t.Fatalf("expected supplement text plus queue-off + thumbs-up for text and image sources, got %#v", accepted)
 	}
-	for _, event := range accepted {
+	if accepted[0].TimelineText == nil || accepted[0].TimelineText.Type != control.TimelineTextSteerUserSupplement || accepted[0].TimelineText.Text != "用户补充：补充信息（追加 1 张图片）" {
+		t.Fatalf("unexpected steer supplement event: %#v", accepted[0])
+	}
+	if accepted[0].TimelineText.ReplyToMessageID != "msg-active" {
+		t.Fatalf("expected supplement to reply to turn anchor, got %#v", accepted[0].TimelineText)
+	}
+	for _, event := range accepted[1:] {
 		if event.PendingInput == nil || !event.PendingInput.QueueOff || !event.PendingInput.ThumbsUp || event.PendingInput.Status != string(state.QueueItemSteered) {
 			t.Fatalf("unexpected steer acknowledgement projection: %#v", accepted)
 		}

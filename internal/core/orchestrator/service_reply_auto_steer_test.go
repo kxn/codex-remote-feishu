@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,21 @@ func TestReplyToActiveRunningSourceAutoSteersText(t *testing.T) {
 	}
 	if len(item.SteerInputs) != 1 || item.SteerInputs[0].Text != "请重点看最后一段" {
 		t.Fatalf("expected steering item to keep current-only steer inputs, got %#v", item)
+	}
+
+	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-reply-accepted-1")
+	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-reply-accepted-1", Accepted: true})
+	if len(accepted) != 2 {
+		t.Fatalf("expected supplement text plus pending-input acknowledgement, got %#v", accepted)
+	}
+	if accepted[0].TimelineText == nil || accepted[0].TimelineText.Type != control.TimelineTextSteerUserSupplement || accepted[0].TimelineText.Text != "用户补充：请重点看最后一段" {
+		t.Fatalf("unexpected reply-auto-steer supplement: %#v", accepted[0])
+	}
+	if accepted[0].TimelineText.ReplyToMessageID != "msg-active" {
+		t.Fatalf("expected supplement to reply to active turn anchor, got %#v", accepted[0].TimelineText)
+	}
+	if accepted[1].PendingInput == nil || !accepted[1].PendingInput.QueueOff || !accepted[1].PendingInput.ThumbsUp || accepted[1].PendingInput.Status != string(state.QueueItemSteered) {
+		t.Fatalf("unexpected reply-auto-steer acknowledgement: %#v", accepted[1])
 	}
 }
 
@@ -183,6 +199,69 @@ func TestReplyImageSteerRejectedFallsBackToStagedImage(t *testing.T) {
 	}
 	if len(rejected) == 0 || rejected[0].Notice == nil || rejected[0].Notice.Code != "steer_failed" {
 		t.Fatalf("expected steer_failed notice, got %#v", rejected)
+	}
+}
+
+func TestRenderProcessAssistantTextUsesTurnReplyAnchor(t *testing.T) {
+	now := time.Date(2026, 4, 14, 13, 18, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	startReplyAutoSteerTurn(svc)
+
+	events := svc.renderTextItemWithSummary("inst-1", "thread-1", "turn-1", "item-1", "我先看一下目录结构。", false, nil, nil, nil)
+	if len(events) != 1 || events[0].Kind != control.UIEventBlockCommitted || events[0].Block == nil {
+		t.Fatalf("expected one process block event, got %#v", events)
+	}
+	if events[0].SourceMessageID != "msg-active" {
+		t.Fatalf("expected process block to reuse turn reply anchor, got %#v", events[0])
+	}
+}
+
+func TestReplyAutoSteerSupplementCountsStructuredFilesWithoutLeakingTaggedText(t *testing.T) {
+	now := time.Date(2026, 4, 14, 13, 20, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	startReplyAutoSteerTurn(svc)
+
+	forwardedBundle := "<forwarded_chat_bundle_v1>\n" +
+		"{\n" +
+		"  \"schema\": \"forwarded_chat_bundle.v1\",\n" +
+		"  \"root\": {\n" +
+		"    \"kind\": \"bundle\",\n" +
+		"    \"items\": [\n" +
+		"      {\"kind\": \"message\", \"message_type\": \"file\"},\n" +
+		"      {\"kind\": \"message\", \"message_type\": \"file\"}\n" +
+		"    ]\n" +
+		"  }\n" +
+		"}\n" +
+		"</forwarded_chat_bundle_v1>"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-reply-structured",
+		TargetMessageID:  "msg-active",
+		Inputs: []agentproto.Input{
+			{Type: agentproto.InputText, Text: forwardedBundle},
+			{Type: agentproto.InputLocalImage, Path: "/tmp/reply-structured.png", MIMEType: "image/png"},
+		},
+		SteerInputs: []agentproto.Input{
+			{Type: agentproto.InputText, Text: forwardedBundle},
+			{Type: agentproto.InputLocalImage, Path: "/tmp/reply-structured.png", MIMEType: "image/png"},
+		},
+	})
+	if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandTurnSteer {
+		t.Fatalf("expected structured reply to auto-steer, got %#v", events)
+	}
+
+	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-reply-structured-1")
+	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-reply-structured-1", Accepted: true})
+	if len(accepted) != 2 {
+		t.Fatalf("expected supplement text plus pending-input acknowledgement, got %#v", accepted)
+	}
+	if accepted[0].TimelineText == nil || accepted[0].TimelineText.Text != "用户补充（追加 1 张图片，2 个文件）" {
+		t.Fatalf("unexpected structured supplement event: %#v", accepted[0])
+	}
+	if strings.Contains(accepted[0].TimelineText.Text, "forwarded_chat_bundle") {
+		t.Fatalf("expected structured bundle tag not to leak into supplement text, got %#v", accepted[0].TimelineText)
 	}
 }
 

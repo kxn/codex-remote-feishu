@@ -407,7 +407,7 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 	}
 	replySourceMessageID := strings.TrimSpace(sourceMessageID)
 	replySourceMessagePreview := strings.TrimSpace(sourceMessagePreview)
-	if final && replySourceMessageID == "" && inst != nil {
+	if replySourceMessageID == "" && inst != nil {
 		replySourceMessageID, replySourceMessagePreview = s.replyAnchorForTurn(inst.InstanceID, threadID, turnID)
 	}
 	events := []control.UIEvent{}

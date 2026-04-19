@@ -1722,14 +1722,17 @@ func TestDaemonAcceptedSteerRemovesQueueReactionAndAddsThumbsUp(t *testing.T) {
 		Accepted:  true,
 	})
 	ops := gateway.operations[beforeAck:]
-	if len(ops) != 4 {
-		t.Fatalf("expected queue-off + thumbs-up for text and image sources, got %#v", ops)
+	if len(ops) != 5 {
+		t.Fatalf("expected supplement text plus queue-off + thumbs-up for text and image sources, got %#v", ops)
+	}
+	if ops[0].Kind != feishu.OperationSendText || ops[0].ReplyToMessageID != "msg-active" || ops[0].Text != "用户补充：补充信息（追加 1 张图片）" {
+		t.Fatalf("expected first op to send steer supplement into turn reply thread, got %#v", ops)
 	}
 	want := map[string]map[string]bool{
 		"msg-queued": {"remove:OneSecond": false, "add:THUMBSUP": false},
 		"msg-img":    {"remove:OneSecond": false, "add:THUMBSUP": false},
 	}
-	for _, op := range ops {
+	for _, op := range ops[1:] {
 		switch op.Kind {
 		case feishu.OperationRemoveReaction:
 			if op.EmojiType == "OneSecond" {

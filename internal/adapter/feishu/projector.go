@@ -261,6 +261,23 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, body, cardThemeApproval, elements),
 		}}
+	case control.UIEventTimelineText:
+		if event.TimelineText == nil {
+			return nil
+		}
+		text := strings.TrimSpace(event.TimelineText.Text)
+		if text == "" {
+			return nil
+		}
+		replyToMessageID := strings.TrimSpace(firstNonEmpty(event.TimelineText.ReplyToMessageID, event.SourceMessageID))
+		return []Operation{{
+			Kind:             OperationSendText,
+			GatewayID:        event.GatewayID,
+			SurfaceSessionID: event.SurfaceSessionID,
+			ChatID:           chatID,
+			ReplyToMessageID: replyToMessageID,
+			Text:             text,
+		}}
 	case control.UIEventFeishuPathPicker:
 		if event.FeishuPathPickerView == nil {
 			return nil
@@ -465,6 +482,7 @@ func (p *Projector) projectBlock(gatewayID, surfaceSessionID, chatID, sourceMess
 			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
+			ReplyToMessageID: sourceMessageID,
 			Text:             block.Text,
 		}}
 	}

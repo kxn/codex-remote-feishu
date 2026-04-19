@@ -100,13 +100,16 @@ func TestDaemonAutoSteerReplyAddsQueueReactionThenThumbsUp(t *testing.T) {
 		Accepted:  true,
 	})
 	ackOps := gateway.operations[beforeAck:]
-	if len(ackOps) != 2 {
-		t.Fatalf("expected queue-off + thumbs-up after accepted steer, got %#v", ackOps)
+	if len(ackOps) != 3 {
+		t.Fatalf("expected supplement text plus queue-off + thumbs-up after accepted steer, got %#v", ackOps)
 	}
-	if ackOps[0].Kind != feishu.OperationRemoveReaction || ackOps[0].MessageID != "msg-reply" || ackOps[0].EmojiType != "OneSecond" {
-		t.Fatalf("expected first op to remove pending queue reaction, got %#v", ackOps)
+	if ackOps[0].Kind != feishu.OperationSendText || ackOps[0].ReplyToMessageID != "msg-active" || ackOps[0].Text != "用户补充：请重点看最后一段" {
+		t.Fatalf("expected first op to send steer supplement into turn reply thread, got %#v", ackOps)
 	}
-	if ackOps[1].Kind != feishu.OperationAddReaction || ackOps[1].MessageID != "msg-reply" || ackOps[1].EmojiType != "THUMBSUP" {
-		t.Fatalf("expected second op to add thumbs up, got %#v", ackOps)
+	if ackOps[1].Kind != feishu.OperationRemoveReaction || ackOps[1].MessageID != "msg-reply" || ackOps[1].EmojiType != "OneSecond" {
+		t.Fatalf("expected second op to remove pending queue reaction, got %#v", ackOps)
+	}
+	if ackOps[2].Kind != feishu.OperationAddReaction || ackOps[2].MessageID != "msg-reply" || ackOps[2].EmojiType != "THUMBSUP" {
+		t.Fatalf("expected third op to add thumbs up, got %#v", ackOps)
 	}
 }

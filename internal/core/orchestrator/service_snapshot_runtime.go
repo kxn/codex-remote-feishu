@@ -215,6 +215,9 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 	if strings.TrimSpace(binding.OwnerCardMessageID) != "" {
 		events = append(events, steerAllCompletedOwnerCardEvent(surface.SurfaceSessionID, binding.OwnerCardMessageID, len(pendingSteerQueueItemIDs(binding))))
 	}
+	if supplement := s.steerUserSupplementEvent(surface, binding); supplement != nil {
+		events = append(events, *supplement)
+	}
 	for _, queueItemID := range pendingSteerQueueItemIDs(binding) {
 		item := surface.QueueItems[queueItemID]
 		if item == nil || item.Status != state.QueueItemSteering {

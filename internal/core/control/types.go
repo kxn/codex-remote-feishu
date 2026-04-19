@@ -505,6 +505,21 @@ type FinalTurnSummary struct {
 	ModelContextWindow   *int
 }
 
+type TimelineTextType string
+
+const (
+	TimelineTextSteerUserSupplement TimelineTextType = "steer_user_supplement"
+)
+
+type TimelineText struct {
+	ThreadID              string
+	TurnID                string
+	Type                  TimelineTextType
+	Text                  string
+	ReplyToMessageID      string
+	ReplyToMessagePreview string
+}
+
 type ImageOutput struct {
 	ThreadID    string
 	TurnID      string
@@ -574,6 +589,7 @@ const (
 	UIEventPlanUpdated                 UIEventKind = "plan.updated"
 	UIEventThreadSelectionChange       UIEventKind = "thread.selection.changed"
 	UIEventBlockCommitted              UIEventKind = "block.committed"
+	UIEventTimelineText                UIEventKind = "timeline.text"
 	UIEventImageOutput                 UIEventKind = "image.output"
 	UIEventExecCommandProgress         UIEventKind = "exec_command.progress"
 	UIEventAgentCommand                UIEventKind = "agent.command"
@@ -644,6 +660,7 @@ type UIEvent struct {
 	PlanUpdate                  *PlanUpdate
 	ThreadSelection             *ThreadSelectionChanged
 	Block                       *render.Block
+	TimelineText                *TimelineText
 	ImageOutput                 *ImageOutput
 	ExecCommandProgress         *ExecCommandProgress
 	FileChangeSummary           *FileChangeSummary

@@ -152,6 +152,24 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send text failed: missing receive target")
 		}
+		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "text", string(body))
+			if err == nil && resp != nil && resp.Success() {
+				if resp.Data != nil {
+					operation.MessageID = stringPtr(resp.Data.MessageId)
+					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
+				}
+				return nil
+			}
+			log.Printf(
+				"feishu text reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
+				operation.SurfaceSessionID,
+				operation.ReplyToMessageID,
+				err,
+				replyRespCode(resp),
+				replyRespMsg(resp),
+			)
+		}
 		resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, "text", string(body))
 		if err != nil {
 			return err
