@@ -150,6 +150,9 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 	if len(actions) < 4 {
 		t.Fatalf("expected picker navigation and entry actions, got %#v", actions)
 	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected file picker footer actions to be separated by divider, got %#v", elements)
+	}
 	selectCount := 0
 	for _, element := range elements {
 		if element["tag"] == "select_static" {
@@ -201,6 +204,9 @@ func TestDirectoryModePathPickerUsesCompactDirectorySelect(t *testing.T) {
 	actions := cardActionsFromElements(elements)
 	if len(actions) < 3 {
 		t.Fatalf("expected directory picker actions, got %#v", actions)
+	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected directory picker footer actions to be separated by divider, got %#v", elements)
 	}
 	selectCount := 0
 	for _, element := range elements {

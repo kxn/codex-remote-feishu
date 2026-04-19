@@ -1000,6 +1000,39 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStaticFormValue(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-form-3", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":       "submit_command_form",
+					"command":    "/model",
+					"field_name": "command_args",
+				},
+				FormValue: map[string]interface{}{
+					"command_args": []interface{}{"gpt-5.4-mini"},
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-form-3",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected submit_command_form callback to be parsed")
+	}
+	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4-mini" {
+		t.Fatalf("unexpected select_static form submit action: %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsDirectAttachInstanceAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-4", "feishu:app-1:user:user-1")

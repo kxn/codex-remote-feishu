@@ -97,6 +97,9 @@ func TestTargetPickerProcessingStageRendersCancelOnlyForGitImport(t *testing.T) 
 	if !containsMarkdownWithPrefix(elements, "**正在导入 Git 工作区**") {
 		t.Fatalf("expected processing git-import card to render status markdown, got %#v", elements)
 	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected processing git-import card to separate footer actions with divider, got %#v", elements)
+	}
 }
 
 func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
@@ -142,6 +145,9 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 	}
 	if !sawWorkspace || !sawSession || !sawCancel || !sawConfirm {
 		t.Fatalf("expected target picker payload kinds, got %#v", actions)
+	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected target picker editing card to render footer divider, got %#v", elements)
 	}
 }
 
@@ -447,6 +453,9 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	}
 	if !sawOpenPath || !sawCancel || !sawConfirm {
 		t.Fatalf("expected git form to render open-path/confirm in form and cancel outside form, got %#v", elements)
+	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected git target picker card to separate footer cancel action with divider, got %#v", elements)
 	}
 }
 

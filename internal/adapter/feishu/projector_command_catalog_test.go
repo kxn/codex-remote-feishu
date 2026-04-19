@@ -6,83 +6,157 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestProjectCommandCatalogSupportsPatchableUpdateAndTheme(t *testing.T) {
+func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind:             control.UIEventFeishuDirectCommandCatalog,
-		SurfaceSessionID: "surface-1",
+		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:       "Upgrade",
-			Summary:     "正在检查升级。",
-			MessageID:   "om-card-1",
-			Patchable:   true,
-			ThemeKey:    "progress",
-			Interactive: false,
+			Title:        "模型",
+			Summary:      "直接在卡片里输入模型名。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+			Breadcrumbs:  []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
+			Sections: []control.CommandCatalogSection{{
+				Title: "手动输入",
+				Entries: []control.CommandCatalogEntry{{
+					Form: &control.CommandCatalogForm{
+						CommandID:   control.FeishuCommandModel,
+						CommandText: "/model",
+						SubmitLabel: "应用",
+						Field: control.CommandCatalogFormField{
+							Name:        "command_args",
+							Kind:        control.CommandCatalogFormFieldText,
+							Label:       "输入模型名，或输入“模型名 推理强度”。",
+							Placeholder: "gpt-5.4 high",
+						},
+					},
+				}},
+			}},
+			RelatedButtons: []control.CommandCatalogButton{{
+				Label:       "返回发送设置",
+				CommandText: "/menu send_settings",
+			}},
 		},
 	})
-	if len(ops) != 1 {
-		t.Fatalf("expected one op, got %#v", ops)
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if ops[0].Kind != OperationUpdateCard || ops[0].MessageID != "om-card-1" {
-		t.Fatalf("expected update-card op, got %#v", ops[0])
+	if len(ops[0].CardElements) != 6 {
+		t.Fatalf("expected breadcrumb + summary + section + form + divider + related action, got %#v", ops[0].CardElements)
 	}
-	if !ops[0].CardUpdateMulti {
-		t.Fatalf("expected patchable command catalog to keep update_multi, got %#v", ops[0])
+	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
+		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
 	}
-	if ops[0].CardThemeKey != "progress" {
-		t.Fatalf("unexpected theme key: %#v", ops[0])
+	if !containsCardTextExact(ops[0].CardElements, "直接在卡片里输入模型名。") {
+		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
+	}
+	formContainer := ops[0].CardElements[3]
+	if formContainer["tag"] != "form" {
+		t.Fatalf("expected form container, got %#v", formContainer)
+	}
+	formElements, _ := formContainer["elements"].([]map[string]any)
+	if len(formElements) != 2 {
+		t.Fatalf("expected input + submit button, got %#v", formContainer)
+	}
+	input, _ := formElements[0]["name"].(string)
+	if input != "command_args" {
+		t.Fatalf("unexpected form field name: %#v", formElements[0])
+	}
+	if formElements[1]["action_type"] != nil || formElements[1]["form_action_type"] != "submit" {
+		t.Fatalf("expected V2 form submit button, got %#v", formElements[1])
+	}
+	value := cardButtonPayload(t, formElements[1])
+	if value["kind"] != "submit_command_form" || value["command"] != "/model" || value["field_name"] != "command_args" {
+		t.Fatalf("unexpected submit payload: %#v", value)
+	}
+	if ops[0].CardElements[4]["tag"] != "hr" {
+		t.Fatalf("expected divider before related action row, got %#v", ops[0].CardElements)
+	}
+	relatedRow := cardElementButtons(t, ops[0].CardElements[5])
+	relatedValue := cardButtonPayload(t, relatedRow[0])
+	if relatedValue["kind"] != "run_command" || relatedValue["command_text"] != "/menu send_settings" {
+		t.Fatalf("unexpected related button payload: %#v", relatedValue)
+	}
+	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
+		t.Fatalf("expected command catalog with form to use V2 in #120, got %#v", ops[0])
+	}
+	assertNoLegacyCardModelMarkers(t, ops[0].CardElements)
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if renderedElements[3]["tag"] != "form" {
+		t.Fatalf("expected rendered V2 form element, got %#v", renderedElements)
+	}
+	if renderedElements[4]["tag"] != "hr" {
+		t.Fatalf("expected rendered V2 divider before related button, got %#v", renderedElements)
+	}
+	renderedFormElements, _ := renderedElements[3]["elements"].([]map[string]any)
+	if len(renderedFormElements) != 2 {
+		t.Fatalf("expected rendered V2 form to keep input and submit button, got %#v", renderedElements[3])
+	}
+	if renderedFormElements[1]["action_type"] != nil || renderedFormElements[1]["form_action_type"] != "submit" {
+		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
+	}
+	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
+	if renderedSubmitValue["kind"] != "submit_command_form" || renderedSubmitValue["command"] != "/model" {
+		t.Fatalf("unexpected rendered command form payload: %#v", renderedSubmitValue)
+	}
+	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[5])
+	if renderedRelatedValue["kind"] != "run_command" || renderedRelatedValue["command_text"] != "/menu send_settings" {
+		t.Fatalf("unexpected rendered related button payload: %#v", renderedRelatedValue)
 	}
 }
 
-func TestCommandCatalogButtonsSupportCallbackActions(t *testing.T) {
-	elements := commandCatalogElements(control.FeishuDirectCommandCatalog{
-		Interactive: true,
-		RelatedButtons: []control.CommandCatalogButton{{
-			Label: "确认升级",
-			Kind:  control.CommandCatalogButtonCallbackAction,
-			CallbackValue: map[string]any{
-				"kind":      "upgrade_owner_flow",
-				"picker_id": "flow-1",
-				"option_id": "confirm",
-			},
-		}},
-	}, "life-1")
-
-	actions := cardActionsFromElements(elements)
-	if len(actions) != 1 {
-		t.Fatalf("expected one callback action button, got %#v", elements)
+func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind: control.UIEventFeishuDirectCommandCatalog,
+		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
+			Title:       "模型",
+			Interactive: true,
+			Sections: []control.CommandCatalogSection{{
+				Title: "常见模型",
+				Entries: []control.CommandCatalogEntry{{
+					Form: &control.CommandCatalogForm{
+						CommandID:   control.FeishuCommandModel,
+						CommandText: "/model",
+						SubmitLabel: "应用",
+						Field: control.CommandCatalogFormField{
+							Name:         "command_args",
+							Kind:         control.CommandCatalogFormFieldSelectStatic,
+							Label:        "从下拉里选择常见模型。",
+							Placeholder:  "选择模型",
+							DefaultValue: "gpt-5.4-mini",
+							Options: []control.CommandCatalogFormFieldOption{
+								{Label: "gpt-5.4", Value: "gpt-5.4"},
+								{Label: "gpt-5.4-mini", Value: "gpt-5.4-mini"},
+							},
+						},
+					},
+				}},
+			}},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	value := cardValueMap(actions[0])
-	if value[cardActionPayloadKeyKind] != "upgrade_owner_flow" {
-		t.Fatalf("unexpected callback kind: %#v", value)
+	formContainer := ops[0].CardElements[1]
+	if formContainer["tag"] != "form" {
+		t.Fatalf("expected form container, got %#v", formContainer)
 	}
-	if value[cardActionPayloadKeyPickerID] != "flow-1" || value[cardActionPayloadKeyOptionID] != "confirm" {
-		t.Fatalf("unexpected callback payload: %#v", value)
+	formElements, _ := formContainer["elements"].([]map[string]any)
+	if len(formElements) != 2 {
+		t.Fatalf("expected select + submit button, got %#v", formContainer)
 	}
-	if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
-		t.Fatalf("expected daemon lifecycle stamp, got %#v", value)
+	if formElements[0]["tag"] != "select_static" {
+		t.Fatalf("expected select_static field, got %#v", formElements[0])
 	}
-}
-
-func TestCommandCatalogButtonsSupportOpenURLActions(t *testing.T) {
-	elements := commandCatalogElements(control.FeishuDirectCommandCatalog{
-		Interactive: true,
-		RelatedButtons: []control.CommandCatalogButton{{
-			Label:   "打开配置表",
-			Kind:    control.CommandCatalogButtonOpenURL,
-			OpenURL: "https://example.com/cron",
-		}},
-	}, "life-1")
-
-	actions := cardActionsFromElements(elements)
-	if len(actions) != 1 {
-		t.Fatalf("expected one open-url action button, got %#v", elements)
+	if formElements[0]["initial_option"] != "gpt-5.4-mini" {
+		t.Fatalf("expected initial option, got %#v", formElements[0])
 	}
-	behaviors, _ := actions[0]["behaviors"].([]map[string]any)
-	if len(behaviors) != 1 || behaviors[0]["type"] != "open_url" {
-		t.Fatalf("expected open_url behavior, got %#v", actions[0])
+	options, _ := formElements[0]["options"].([]map[string]any)
+	if len(options) != 2 || options[0]["value"] != "gpt-5.4" || options[1]["value"] != "gpt-5.4-mini" {
+		t.Fatalf("unexpected select_static options: %#v", formElements[0])
 	}
-	if behaviors[0]["default_url"] != "https://example.com/cron" {
-		t.Fatalf("unexpected open_url target: %#v", behaviors[0])
+	if formElements[1]["form_action_type"] != "submit" {
+		t.Fatalf("expected V2 submit button, got %#v", formElements[1])
 	}
 }

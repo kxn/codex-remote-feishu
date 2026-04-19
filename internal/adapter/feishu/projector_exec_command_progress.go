@@ -211,11 +211,7 @@ func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string 
 	case "list":
 		return execProgressMarkdownLabel("列目录") + " " + truncateExecProgressSummary(row.Summary, 60)
 	case "search":
-		summary := row.Summary
-		if row.Secondary != "" {
-			summary = summary + "（范围：" + row.Secondary + "）"
-		}
-		return execProgressMarkdownLabel("搜索") + " " + truncateExecProgressSummary(summary, 60)
+		return execProgressMarkdownLabel("搜索") + " " + renderExecProgressSearchSummary(row.Summary, row.Secondary, 60)
 	default:
 		text := row.Summary
 		if text == "" && len(row.Items) != 0 {
@@ -257,6 +253,12 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 		return prefix + " " + markdownCodeSpan(truncateExecProgressSummary(entry.Summary, 30))
 	case "reasoning_summary":
 		return truncateExecProgressSummary(entry.Summary, 60)
+	case "web_search":
+		prefix := execProgressMarkdownLabel(label)
+		if label == "搜索" {
+			return prefix + " " + renderExecProgressSearchSummary(entry.Summary, "", 40)
+		}
+		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
 	default:
 		prefix := execProgressMarkdownLabel(label)
 		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
@@ -302,4 +304,37 @@ func truncateExecProgressSummary(text string, limit int) string {
 		return text
 	}
 	return string(runes[:limit-3]) + "..."
+}
+
+func renderExecProgressSearchSummary(summary, secondary string, limit int) string {
+	summary = strings.TrimSpace(summary)
+	secondary = strings.TrimSpace(secondary)
+	if summary == "" {
+		return ""
+	}
+	suffix := ""
+	if secondary != "" {
+		suffix = "（范围：" + secondary + "）"
+	}
+	if !shouldCodeSpanExecProgressSearchSummary(summary) {
+		return truncateExecProgressSummary(summary+suffix, limit)
+	}
+	available := limit - len([]rune(suffix))
+	if available <= 3 {
+		available = 3
+	}
+	return markdownCodeSpan(truncateExecProgressSummary(summary, available)) + suffix
+}
+
+func shouldCodeSpanExecProgressSearchSummary(summary string) bool {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return false
+	}
+	switch summary {
+	case "正在搜索网络", "搜索完成":
+		return false
+	}
+	lower := strings.ToLower(summary)
+	return !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://")
 }

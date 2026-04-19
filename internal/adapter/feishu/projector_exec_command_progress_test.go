@@ -288,11 +288,35 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "**读取** `a.cpp`、`b.cpp`") || !strings.Contains(body, "**执行** `go test ./...`") || !strings.Contains(body, "**搜索** 上海天气") || !strings.Contains(body, "**打开网页** https://example.com/weather") || !strings.Contains(body, "**MCP** docs.lookup（12 ms）") || !strings.Contains(body, "**压缩** 上下文已压缩。") {
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "**读取** `a.cpp`、`b.cpp`") || !strings.Contains(body, "**执行** `go test ./...`") || !strings.Contains(body, "**搜索** `上海天气`") || !strings.Contains(body, "**打开网页** https://example.com/weather") || !strings.Contains(body, "**MCP** docs.lookup（12 ms）") || !strings.Contains(body, "**压缩** 上下文已压缩。") {
 		t.Fatalf("expected shared command and web search rows, got %#v", ops[0])
 	}
 	if strings.Contains(body, `bash -lc`) {
 		t.Fatalf("expected command row to still strip shell wrapper, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressKeepsWebSearchStatusPlainText(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "web-1",
+			Entries: []control.ExecCommandProgressEntry{
+				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "正在搜索网络"},
+			},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if !strings.Contains(body, "**搜索** 正在搜索网络") || strings.Contains(body, "**搜索** `正在搜索网络`") {
+		t.Fatalf("expected web search status to stay plain text, got %#v", ops[0])
 	}
 }
 
@@ -530,7 +554,7 @@ func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T)
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "**读取** `README.md`、`types.go`") || !strings.Contains(body, "**列目录** internal/core") || !strings.Contains(body, "**搜索** compact（范围：internal/）") {
+	if strings.Contains(body, "探索中") || strings.Contains(body, "已探索") || !strings.Contains(body, "**读取** `README.md`、`types.go`") || !strings.Contains(body, "**列目录** internal/core") || !strings.Contains(body, "**搜索** `compact`（范围：internal/）") {
 		t.Fatalf("expected exploration block rendering, got %#v", ops[0])
 	}
 }

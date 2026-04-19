@@ -52,35 +52,13 @@ func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLi
 		}
 	}
 	if len(catalog.RelatedButtons) > 0 {
-		if group := cardButtonGroupElement(commandCatalogButtons(catalog.RelatedButtons, daemonLifecycleID)); len(group) != 0 {
-			elements = append(elements, group)
-		}
+		elements = appendCardFooterButtonGroup(elements, commandCatalogButtons(catalog.RelatedButtons, daemonLifecycleID))
 	}
 	return elements
 }
 
 func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleID string) map[string]any {
 	field := form.Field
-	input := map[string]any{
-		"tag":  "input",
-		"name": strings.TrimSpace(field.Name),
-	}
-	if label := strings.TrimSpace(field.Label); label != "" {
-		input["label"] = map[string]any{
-			"tag":     "plain_text",
-			"content": label,
-		}
-		input["label_position"] = "left"
-	}
-	if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
-		input["placeholder"] = map[string]any{
-			"tag":     "plain_text",
-			"content": placeholder,
-		}
-	}
-	if value := strings.TrimSpace(field.DefaultValue); value != "" {
-		input["default_value"] = value
-	}
 	submitValue := stampActionValue(map[string]any{
 		cardActionPayloadKeyKind:          cardActionKindSubmitCommandForm,
 		cardActionPayloadKeyCommandID:     strings.TrimSpace(form.CommandID),
@@ -97,10 +75,65 @@ func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleI
 		"tag":  "form",
 		"name": formName,
 		"elements": []map[string]any{
-			input,
+			commandCatalogFormFieldElement(field),
 			cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue),
 		},
 	}
+}
+
+func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[string]any {
+	name := strings.TrimSpace(field.Name)
+	element := map[string]any{
+		"tag":  "input",
+		"name": name,
+	}
+	switch field.Kind {
+	case control.CommandCatalogFormFieldSelectStatic:
+		element["tag"] = "select_static"
+		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
+			element["placeholder"] = cardPlainText(placeholder)
+		}
+		if options := commandCatalogSelectStaticOptions(field.Options); len(options) != 0 {
+			element["options"] = options
+		}
+		if value := strings.TrimSpace(field.DefaultValue); value != "" {
+			element["initial_option"] = value
+		}
+	default:
+		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
+			element["placeholder"] = map[string]any{
+				"tag":     "plain_text",
+				"content": placeholder,
+			}
+		}
+		if value := strings.TrimSpace(field.DefaultValue); value != "" {
+			element["default_value"] = value
+		}
+	}
+	if label := strings.TrimSpace(field.Label); label != "" {
+		element["label"] = map[string]any{
+			"tag":     "plain_text",
+			"content": label,
+		}
+		element["label_position"] = "left"
+	}
+	return element
+}
+
+func commandCatalogSelectStaticOptions(options []control.CommandCatalogFormFieldOption) []map[string]any {
+	result := make([]map[string]any, 0, len(options))
+	for _, option := range options {
+		value := strings.TrimSpace(option.Value)
+		label := strings.TrimSpace(option.Label)
+		if value == "" || label == "" {
+			continue
+		}
+		result = append(result, map[string]any{
+			"text":  cardPlainText(label),
+			"value": value,
+		})
+	}
+	return result
 }
 
 func commandCatalogCompactButtonElements(buttons []control.CommandCatalogButton, daemonLifecycleID string) []map[string]any {

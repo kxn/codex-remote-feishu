@@ -1206,99 +1206,6 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 	}
 }
 
-func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventFeishuDirectCommandCatalog,
-		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:        "模型",
-			Summary:      "直接在卡片里输入模型名。",
-			Interactive:  true,
-			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
-			Breadcrumbs:  []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
-			Sections: []control.CommandCatalogSection{{
-				Title: "手动输入",
-				Entries: []control.CommandCatalogEntry{{
-					Form: &control.CommandCatalogForm{
-						CommandID:   control.FeishuCommandModel,
-						CommandText: "/model",
-						SubmitLabel: "应用",
-						Field: control.CommandCatalogFormField{
-							Name:        "command_args",
-							Kind:        control.CommandCatalogFormFieldText,
-							Label:       "输入模型名，或输入“模型名 推理强度”。",
-							Placeholder: "gpt-5.4 high",
-						},
-					},
-				}},
-			}},
-			RelatedButtons: []control.CommandCatalogButton{{
-				Label:       "返回发送设置",
-				CommandText: "/menu send_settings",
-			}},
-		},
-	})
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if len(ops[0].CardElements) != 5 {
-		t.Fatalf("expected breadcrumb + summary + section + form + related action, got %#v", ops[0].CardElements)
-	}
-	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
-		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
-	}
-	if !containsCardTextExact(ops[0].CardElements, "直接在卡片里输入模型名。") {
-		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
-	}
-	formContainer := ops[0].CardElements[3]
-	if formContainer["tag"] != "form" {
-		t.Fatalf("expected form container, got %#v", formContainer)
-	}
-	formElements, _ := formContainer["elements"].([]map[string]any)
-	if len(formElements) != 2 {
-		t.Fatalf("expected input + submit button, got %#v", formContainer)
-	}
-	input, _ := formElements[0]["name"].(string)
-	if input != "command_args" {
-		t.Fatalf("unexpected form field name: %#v", formElements[0])
-	}
-	if formElements[1]["action_type"] != nil || formElements[1]["form_action_type"] != "submit" {
-		t.Fatalf("expected V2 form submit button, got %#v", formElements[1])
-	}
-	value := cardButtonPayload(t, formElements[1])
-	if value["kind"] != "submit_command_form" || value["command"] != "/model" || value["field_name"] != "command_args" {
-		t.Fatalf("unexpected submit payload: %#v", value)
-	}
-	relatedRow := cardElementButtons(t, ops[0].CardElements[4])
-	relatedValue := cardButtonPayload(t, relatedRow[0])
-	if relatedValue["kind"] != "run_command" || relatedValue["command_text"] != "/menu send_settings" {
-		t.Fatalf("unexpected related button payload: %#v", relatedValue)
-	}
-	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
-		t.Fatalf("expected command catalog with form to use V2 in #120, got %#v", ops[0])
-	}
-	assertNoLegacyCardModelMarkers(t, ops[0].CardElements)
-	renderedElements := renderedV2BodyElements(t, ops[0])
-	if renderedElements[3]["tag"] != "form" {
-		t.Fatalf("expected rendered V2 form element, got %#v", renderedElements)
-	}
-	renderedFormElements, _ := renderedElements[3]["elements"].([]map[string]any)
-	if len(renderedFormElements) != 2 {
-		t.Fatalf("expected rendered V2 form to keep input and submit button, got %#v", renderedElements[3])
-	}
-	if renderedFormElements[1]["action_type"] != nil || renderedFormElements[1]["form_action_type"] != "submit" {
-		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
-	}
-	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
-	if renderedSubmitValue["kind"] != "submit_command_form" || renderedSubmitValue["command"] != "/model" {
-		t.Fatalf("unexpected rendered command form payload: %#v", renderedSubmitValue)
-	}
-	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[4])
-	if renderedRelatedValue["kind"] != "run_command" || renderedRelatedValue["command_text"] != "/menu send_settings" {
-		t.Fatalf("unexpected rendered related button payload: %#v", renderedRelatedValue)
-	}
-}
-
 func firstCommandTexts(entries []control.CommandCatalogEntry) []string {
 	commands := make([]string, 0, len(entries))
 	for _, entry := range entries {
@@ -1386,10 +1293,13 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 		t.Fatalf("expected related-buttons catalog without form to use V2, got %#v", ops[0])
 	}
 	renderedElements := renderedV2BodyElements(t, ops[0])
-	if len(renderedElements) != 2 {
-		t.Fatalf("expected summary text plus related button, got %#v", renderedElements)
+	if len(renderedElements) != 3 {
+		t.Fatalf("expected summary text plus divider and related button, got %#v", renderedElements)
 	}
-	renderedValue := renderedButtonCallbackValue(t, renderedElements[1])
+	if renderedElements[1]["tag"] != "hr" {
+		t.Fatalf("expected divider before related button, got %#v", renderedElements)
+	}
+	renderedValue := renderedButtonCallbackValue(t, renderedElements[2])
 	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/menu" {
 		t.Fatalf("unexpected related button callback payload: %#v", renderedValue)
 	}

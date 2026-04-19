@@ -118,10 +118,10 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 			"content": renderSystemInlineTags(hint),
 		})
 	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
+	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
-	}))
+	})
 	return elements
 }
 
@@ -170,10 +170,10 @@ func directoryModePathPickerElements(view control.FeishuPathPickerView, daemonLi
 			"content": renderSystemInlineTags(hint),
 		})
 	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
+	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
-	}))
+	})
 	return elements
 }
 
@@ -220,10 +220,10 @@ func ownerSubpageDirectoryModePathPickerElements(view control.FeishuPathPickerVi
 			elements = append(elements, block)
 		}
 	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
+	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "返回")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "使用这个目录")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
-	}))
+	})
 	return elements
 }
 

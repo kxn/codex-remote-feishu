@@ -393,7 +393,8 @@ const (
 type CommandCatalogFormFieldKind string
 
 const (
-	CommandCatalogFormFieldText CommandCatalogFormFieldKind = "text"
+	CommandCatalogFormFieldText         CommandCatalogFormFieldKind = "text"
+	CommandCatalogFormFieldSelectStatic CommandCatalogFormFieldKind = "select_static"
 )
 
 type CommandCatalogDisplayStyle string
@@ -418,12 +419,18 @@ type CommandCatalogButton struct {
 	Disabled      bool
 }
 
+type CommandCatalogFormFieldOption struct {
+	Label string
+	Value string
+}
+
 type CommandCatalogFormField struct {
 	Name         string
 	Kind         CommandCatalogFormFieldKind
 	Label        string
 	Placeholder  string
 	DefaultValue string
+	Options      []CommandCatalogFormFieldOption
 }
 
 type CommandCatalogForm struct {

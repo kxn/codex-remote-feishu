@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status` 现在会直接把首个结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；共享过程卡当前在 projector 层按行做超长续卡，旧卡在可容纳边界封住后，新卡继续承接后续 patch；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status` 现在会直接把首个结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；共享过程卡当前在 projector 层按行做超长续卡，旧卡在可容纳边界封住后，新卡继续承接后续 patch；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
 
 ## 1. 文档定位
 
@@ -105,7 +105,7 @@
 | stamped `/menu maintenance -> /help` / `/status` | `mixed` | 当前不再走 append-only 帮助卡或提交态锚点；点击后 daemon 会把 handler 产出的首个结果卡（帮助目录或 snapshot 状态卡）直接作为 `ReplaceCurrentCard`，让原菜单卡继续承担结果承载。纯文本 `/help` / `/status` 仍保持 append-only |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/detach` | `mixed` | 当前不再走提交态锚点；点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并把重复 notice 留在原卡内收口，不再额外 append 终态 notice，也不再做 recall |
 | stamped `/menu current_work -> /steerall` | `mixed` | 当前不再走提交态锚点；点击后会把当前菜单卡直接封成 steer-all owner/terminal card。no-op、requested、accepted、failed / disconnect restore 都继续回写同一张原卡，不再留下可重复点击的旧菜单 |
-| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
+| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/reasoning` `/access` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
@@ -199,6 +199,7 @@
   - 先读 `value.command_text`，没有则读 `value.command`
   - 参数默认从 `form_value["command_args"]` 读取
   - 若 `value.field_name` 存在，则改为读取该字段
+  - 命令表单当前同时兼容普通 `input` 与 `select_static`；若字段是下拉，gateway 会统一取第一条非空选项值
   - 若 `form_value` 为空，则回退 `input_value`
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
@@ -310,6 +311,7 @@ MCP request 卡片当前新增的可视语义：
 - bare `/reasoning`
 - bare `/access`
 - bare `/model`
+- bare `/verbose`
 - `ActionListInstances`
 - `ActionSendFile`
 - `ActionShowAllWorkspaces`

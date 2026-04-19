@@ -85,13 +85,13 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 		}
 	}
 	if targetPickerUsesInlineGitForm(view) {
-		elements = append(elements, targetPickerInlineGitFormTerminalButtons(view, daemonLifecycleID)...)
+		elements = appendCardFooterButtonGroup(elements, targetPickerInlineGitFormTerminalButtons(view, daemonLifecycleID))
 		return elements
 	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
+	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement("取消", "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID), false, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID), !view.CanConfirm, "fill"),
-	}))
+	})
 	return elements
 }
 
@@ -121,7 +121,7 @@ func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonL
 	if !view.CanCancelProcessing {
 		return elements
 	}
-	button := cardButtonGroupElement([]map[string]any{
+	return appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(
 			strings.TrimSpace(firstNonEmpty(view.ProcessingCancelLabel, "取消")),
 			"default",
@@ -130,10 +130,6 @@ func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonL
 			"",
 		),
 	})
-	if len(button) != 0 {
-		elements = append(elements, button)
-	}
-	return elements
 }
 
 func targetPickerTheme(view control.FeishuTargetPickerView) string {
@@ -272,7 +268,7 @@ func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLi
 }
 
 func targetPickerInlineGitFormTerminalButtons(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	buttons := []map[string]any{
+	return []map[string]any{
 		cardCallbackButtonElement(
 			"取消",
 			"default",
@@ -281,10 +277,6 @@ func targetPickerInlineGitFormTerminalButtons(view control.FeishuTargetPickerVie
 			"",
 		),
 	}
-	if group := cardButtonGroupElement(buttons); len(group) != 0 {
-		return []map[string]any{group}
-	}
-	return nil
 }
 
 func targetPickerInputElement(name, label, placeholder, value string) map[string]any {

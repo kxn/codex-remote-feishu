@@ -255,6 +255,24 @@ func cardButtonGroupElement(buttons []map[string]any) map[string]any {
 	}
 }
 
+func cardDividerElement() map[string]any {
+	return map[string]any{
+		"tag": "hr",
+	}
+}
+
+func appendCardFooterButtonGroup(elements []map[string]any, buttons []map[string]any) []map[string]any {
+	group := cardButtonGroupElement(buttons)
+	if len(group) == 0 {
+		return elements
+	}
+	if len(elements) != 0 {
+		elements = append(elements, cardDividerElement())
+	}
+	elements = append(elements, group)
+	return elements
+}
+
 func cloneCardMap(value map[string]any) map[string]any {
 	if len(value) == 0 {
 		return nil

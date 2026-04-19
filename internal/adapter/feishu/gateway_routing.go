@@ -502,21 +502,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 }
 
 func formStringValue(values map[string]interface{}, key string) string {
-	if len(values) == 0 || strings.TrimSpace(key) == "" {
-		return ""
-	}
-	raw, ok := values[key]
-	if !ok || raw == nil {
-		return ""
-	}
-	switch value := raw.(type) {
-	case string:
-		return value
-	case fmt.Stringer:
-		return value.String()
-	default:
-		return fmt.Sprint(raw)
-	}
+	return selectStaticFormValue(values, key)
 }
 
 func pathPickerSelectedEntryName(event *larkcallback.CardActionTriggerEvent, fieldName string) string {

@@ -108,5 +108,8 @@ func FeishuCommandFormWithDefault(commandID, defaultValue string) *CommandCatalo
 	cloned := *form
 	cloned.Field = form.Field
 	cloned.Field.DefaultValue = strings.TrimSpace(defaultValue)
+	if len(form.Field.Options) > 0 {
+		cloned.Field.Options = append([]CommandCatalogFormFieldOption(nil), form.Field.Options...)
+	}
 	return &cloned
 }

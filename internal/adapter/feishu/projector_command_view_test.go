@@ -53,14 +53,24 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 		t.Fatalf("expected model card to keep section headings, got %#v", ops[0].CardElements)
 	}
 	renderedElements := renderedV2BodyElements(t, ops[0])
-	formFound := false
+	selectFormFound := false
+	textFormFound := false
 	relatedFound := false
 	clearCount := 0
 	for _, element := range renderedElements {
 		tag, _ := element["tag"].(string)
 		switch tag {
 		case "form":
-			formFound = true
+			formElements, _ := element["elements"].([]map[string]any)
+			if len(formElements) == 0 {
+				continue
+			}
+			switch formElements[0]["tag"] {
+			case "select_static":
+				selectFormFound = true
+			case "input":
+				textFormFound = true
+			}
 		case "button":
 			value := renderedButtonCallbackValue(t, element)
 			if value["kind"] == "run_command" && value["command_text"] == "/model clear" {
@@ -71,7 +81,7 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 			}
 		}
 	}
-	if !formFound || !relatedFound || clearCount != 1 {
+	if !selectFormFound || !textFormFound || !relatedFound || clearCount != 1 {
 		t.Fatalf("expected rendered V2 model form and related action, got %#v", renderedElements)
 	}
 }

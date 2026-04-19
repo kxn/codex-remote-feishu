@@ -335,12 +335,12 @@ func TestBareReasoningCommandBuildsParameterCard(t *testing.T) {
 	if len(buttons) != 5 || buttons[0].CommandText != "/reasoning low" || buttons[4].CommandText != "/reasoning clear" {
 		t.Fatalf("unexpected reasoning buttons: %#v", buttons)
 	}
-	if len(catalog.Sections) < 2 || catalog.Sections[1].Entries[0].Form == nil {
-		t.Fatalf("expected reasoning card to expose manual form input, got %#v", catalog.Sections)
+	if len(catalog.Sections) != 1 || catalog.Sections[0].Entries[0].Form != nil {
+		t.Fatalf("expected reasoning card to keep fixed choices only, got %#v", catalog.Sections)
 	}
 }
 
-func TestBareModelCommandBuildsPresetAndFormCard(t *testing.T) {
+func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
@@ -366,11 +366,18 @@ func TestBareModelCommandBuildsPresetAndFormCard(t *testing.T) {
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.Sections) != 2 {
-		t.Fatalf("expected preset + manual sections, got %#v", catalog.Sections)
+		t.Fatalf("expected dropdown + manual sections, got %#v", catalog.Sections)
 	}
-	buttons := catalog.Sections[0].Entries[0].Buttons
-	if len(buttons) != 2 || buttons[0].CommandText != "/model gpt-5.4" || buttons[1].CommandText != "/model gpt-5.4-mini" {
-		t.Fatalf("unexpected model preset buttons: %#v", buttons)
+	preset := catalog.Sections[0].Entries[0]
+	if preset.Form == nil || preset.Form.CommandText != "/model" {
+		t.Fatalf("expected preset model dropdown form, got %#v", preset)
+	}
+	if preset.Form.Field.Kind != control.CommandCatalogFormFieldSelectStatic {
+		t.Fatalf("expected preset form to use select_static, got %#v", preset.Form.Field)
+	}
+	options := preset.Form.Field.Options
+	if len(options) != 5 || options[0].Value != "gpt-5.4" || options[1].Value != "gpt-5.4-mini" || options[2].Value != "gpt-5.3-codex" || options[3].Value != "gpt-5.2" || options[4].Value != "gpt-5.2-codex" {
+		t.Fatalf("unexpected model preset options: %#v", options)
 	}
 	manual := catalog.Sections[1].Entries[0]
 	if manual.Form == nil || manual.Form.CommandText != "/model" {
