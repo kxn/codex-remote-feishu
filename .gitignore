@@ -12,4 +12,7 @@ coverage.out
 .tools/
 web/node_modules/
 web/.vite/
-.codex/state/issue-workflow/
+.vscode/
+.codex/state/*
+!.codex/state/issue-doc-sync/
+!.codex/state/issue-doc-sync/**
