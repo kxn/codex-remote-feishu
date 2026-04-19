@@ -95,8 +95,8 @@ func TestDaemonModeSwitchToVSCodePromptsMigrationForLegacySettings(t *testing.T)
 	})
 
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入需要迁移")
-	if !strings.Contains(card.CardBody, "旧版 settings.json 覆盖") {
-		t.Fatalf("expected migration reason in card body, got %#v", card)
+	if !strings.Contains(operationCardText(card), "旧版 settings.json 覆盖") {
+		t.Fatalf("expected migration reason in structured card text, got %#v", card)
 	}
 	if !operationHasCommandButton(card, "迁移并重新接入", vscodeMigrateCommandText) {
 		t.Fatalf("expected migration card button, got %#v", card.CardElements)
@@ -298,6 +298,9 @@ func TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface(t *
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入需要迁移")
 	if card.CardTitle == "" {
 		t.Fatalf("expected migration card for restored vscode surface")
+	}
+	if !strings.Contains(operationCardText(card), "旧版 settings.json 覆盖") {
+		t.Fatalf("expected restored vscode surface prompt to keep migration reason, got %#v", card)
 	}
 }
 

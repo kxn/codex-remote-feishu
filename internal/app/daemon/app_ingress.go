@@ -305,11 +305,10 @@ func (a *App) commandSubmissionAnchorResultLocked(action control.Action) *feishu
 		return nil
 	}
 	catalog := control.FeishuDirectCommandCatalog{
-		Title:                 "命令已提交",
-		Summary:               fmt.Sprintf("已执行 `%s`，结果会显示在下方。", commandText),
-		LegacySummaryMarkdown: true,
-		Interactive:           true,
-		DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
+		Title:           "命令已提交",
+		SummarySections: commandCatalogSummarySections(fmt.Sprintf("已执行 %s，结果会显示在下方。", commandText)),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		RelatedButtons: []control.CommandCatalogButton{{
 			Label:       "重新打开菜单",
 			Kind:        control.CommandCatalogButtonRunCommand,

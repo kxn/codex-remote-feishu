@@ -384,6 +384,7 @@ const (
 	CommandCatalogButtonCallbackAction       CommandCatalogButtonKind = "callback_action"
 	CommandCatalogButtonStartCommandCapture  CommandCatalogButtonKind = "start_command_capture"
 	CommandCatalogButtonCancelCommandCapture CommandCatalogButtonKind = "cancel_command_capture"
+	CommandCatalogButtonOpenURL              CommandCatalogButtonKind = "open_url"
 )
 
 type CommandCatalogFormFieldKind string
@@ -408,6 +409,7 @@ type CommandCatalogButton struct {
 	Kind          CommandCatalogButtonKind
 	CommandText   string
 	CommandID     string
+	OpenURL       string
 	CallbackValue map[string]any
 	Style         string
 	Disabled      bool

@@ -63,3 +63,26 @@ func TestCommandCatalogButtonsSupportCallbackActions(t *testing.T) {
 		t.Fatalf("expected daemon lifecycle stamp, got %#v", value)
 	}
 }
+
+func TestCommandCatalogButtonsSupportOpenURLActions(t *testing.T) {
+	elements := commandCatalogElements(control.FeishuDirectCommandCatalog{
+		Interactive: true,
+		RelatedButtons: []control.CommandCatalogButton{{
+			Label:   "打开配置表",
+			Kind:    control.CommandCatalogButtonOpenURL,
+			OpenURL: "https://example.com/cron",
+		}},
+	}, "life-1")
+
+	actions := cardActionsFromElements(elements)
+	if len(actions) != 1 {
+		t.Fatalf("expected one open-url action button, got %#v", elements)
+	}
+	behaviors, _ := actions[0]["behaviors"].([]map[string]any)
+	if len(behaviors) != 1 || behaviors[0]["type"] != "open_url" {
+		t.Fatalf("expected open_url behavior, got %#v", actions[0])
+	}
+	if behaviors[0]["default_url"] != "https://example.com/cron" {
+		t.Fatalf("unexpected open_url target: %#v", behaviors[0])
+	}
+}

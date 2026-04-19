@@ -126,11 +126,10 @@ func buildCronMenuCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	canEdit := cronCanEdit(stateValue) && configReady
 	canReload := cronCanReload(stateValue, ownerView)
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Cron",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           true,
-		DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
+		Title:           "Cron",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
 			{
 				Title: "查看与编辑",
@@ -159,13 +158,14 @@ func buildCronMenuCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
 	cronZone := cronConfiguredTimeZone(stateValue)
+	sections := []control.CommandCatalogSection{}
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
-		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
+		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
 		summaryLines = append(summaryLines,
 			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
 		)
-		summaryLines = append(summaryLines, cronBindingLinkLines(stateValue, configReady)...)
+		summaryLines = append(summaryLines, cronBindingSummaryLines(stateValue, configReady)...)
 		if line := cronLoadedJobCountLine(stateValue, ownerView); line != "" {
 			summaryLines = append(summaryLines, line)
 		}
@@ -177,6 +177,9 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 		}
 		if strings.TrimSpace(stateValue.LastReloadSummary) != "" {
 			summaryLines = append(summaryLines, "最近 reload 摘要："+strings.TrimSpace(stateValue.LastReloadSummary))
+		}
+		if section, ok := cronExternalLinkSection(stateValue, configReady); ok {
+			sections = append(sections, section)
 		}
 	}
 	if strings.TrimSpace(ownerView.StatusLabel) != "" {
@@ -192,11 +195,11 @@ func buildCronStatusCatalog(stateValue *cronStateFile, ownerView cronOwnerView, 
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Cron 状态",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           false,
-		DisplayStyle:          control.CommandCatalogDisplayDefault,
+		Title:           "Cron 状态",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     len(sections) != 0,
+		DisplayStyle:    control.CommandCatalogDisplayDefault,
+		Sections:        sections,
 	}
 }
 
@@ -207,18 +210,18 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 	interactive := false
 	switch {
 	case stateValue == nil || !cronStateHasBinding(stateValue):
-		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
+		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	case !cronOwnerAllowsLoadedJobs(ownerView.Status):
 		summaryLines = append(summaryLines,
 			"当前 Cron 绑定需要先修复后才能确认有效任务。",
-			"执行 `/cron repair` 完成接管后，再执行 `/cron reload` 重新加载任务。",
+			"执行 /cron repair 完成接管后，再执行 /cron reload 重新加载任务。",
 		)
 	case len(stateValue.Jobs) == 0:
-		summaryLines = append(summaryLines, "当前没有已加载的 Cron 任务。编辑表格后执行 `/cron reload` 生效。")
+		summaryLines = append(summaryLines, "当前没有已加载的 Cron 任务。编辑表格后执行 /cron reload 生效。")
 	default:
 		summaryLines = append(summaryLines,
 			fmt.Sprintf("当前已加载 %d 条任务。", len(stateValue.Jobs)),
-			"每条任务都会显示下一次执行时间；点击 `立即触发` 可手动执行一次，不影响原有下次调度时间。",
+			"每条任务都会显示下一次执行时间；点击立即触发可手动执行一次，不影响原有下次调度时间。",
 		)
 		entries := cronLoadedJobEntries(stateValue.Jobs, cronZone)
 		if len(entries) != 0 {
@@ -230,31 +233,39 @@ func buildCronListCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 		}
 	}
 	if strings.TrimSpace(extraSummary) != "" {
-		summaryLines = append(summaryLines, "", strings.TrimSpace(extraSummary))
+		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Cron 任务",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           interactive,
-		DisplayStyle:          control.CommandCatalogDisplayDefault,
-		Sections:              sections,
+		Title:           "Cron 任务",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     interactive,
+		DisplayStyle:    control.CommandCatalogDisplayDefault,
+		Sections:        sections,
 	}
 }
 
 func buildCronEditCatalog(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) *control.FeishuDirectCommandCatalog {
 	summaryLines := []string{}
+	sections := []control.CommandCatalogSection{}
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
-		summaryLines = append(summaryLines, "当前还没有可编辑的 Cron 配置表。执行 `/cron repair` 后会创建配置表。")
+		summaryLines = append(summaryLines, "当前还没有可编辑的 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
 		summaryLines = append(summaryLines,
 			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
 		)
-		summaryLines = append(summaryLines, cronConfigLinkLine(stateValue, configReady))
+		summaryLines = append(summaryLines, cronConfigSummaryLine(stateValue, configReady))
 		if configReady {
-			summaryLines = append(summaryLines, "编辑 `任务配置` 或 `工作区清单` 后，执行 `/cron reload` 生效。")
+			summaryLines = append(summaryLines, "编辑任务配置或工作区清单后，执行 /cron reload 生效。")
+			if button, ok := cronConfigLinkButton(stateValue, configReady); ok {
+				sections = append(sections, control.CommandCatalogSection{
+					Title: "外部入口",
+					Entries: []control.CommandCatalogEntry{{
+						Buttons: []control.CommandCatalogButton{button},
+					}},
+				})
+			}
 		} else {
-			summaryLines = append(summaryLines, "工作区清单同步完成后才会开放配置入口；如需立即修复可执行 `/cron repair`。")
+			summaryLines = append(summaryLines, "工作区清单同步完成后才会开放配置入口；如需立即修复可执行 /cron repair。")
 		}
 		if strings.TrimSpace(ownerView.StatusLabel) != "" {
 			summaryLines = append(summaryLines, "当前状态："+strings.TrimSpace(ownerView.StatusLabel))
@@ -267,11 +278,11 @@ func buildCronEditCatalog(stateValue *cronStateFile, ownerView cronOwnerView, ex
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Cron 配置",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           false,
-		DisplayStyle:          control.CommandCatalogDisplayDefault,
+		Title:           "Cron 配置",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     len(sections) != 0,
+		DisplayStyle:    control.CommandCatalogDisplayDefault,
+		Sections:        sections,
 	}
 }
 
@@ -287,27 +298,24 @@ func cronManualCommandSection() control.CommandCatalogSection {
 				"/cron reload",
 				"/cron repair",
 			},
-			Description:    "发送 `/cron` 打开菜单；`/cron status` 查看状态；`/cron list` 查看当前有效任务并可按钮立即触发；`/cron edit` 打开配置表；编辑后执行 `/cron reload` 生效；如需初始化、修 schema 或接管 Cron 配置，执行 `/cron repair`。",
-			LegacyMarkdown: true,
-			Form:           control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
+			Description: "发送 /cron 打开菜单；/cron status 查看状态；/cron list 查看当前有效任务并可按钮立即触发；/cron edit 打开配置表；编辑后执行 /cron reload 生效；如需初始化、修 schema 或接管 Cron 配置，执行 /cron repair。",
+			Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandCron, ""),
 		}},
 	}
 }
 
-func cronBindingLinkLines(stateValue *cronStateFile, configReady bool) []string {
+func cronBindingSummaryLines(stateValue *cronStateFile, configReady bool) []string {
 	if stateValue == nil || stateValue.Bitable == nil {
 		return []string{"配置表：未初始化"}
 	}
-	lines := []string{cronConfigLinkLine(stateValue, configReady)}
-	if line := cronRunsLinkLine(stateValue); line != "" {
-		if configReady {
-			lines = append(lines, line)
-		}
+	lines := []string{cronConfigSummaryLine(stateValue, configReady)}
+	if line := cronRunsSummaryLine(stateValue, configReady); line != "" {
+		lines = append(lines, line)
 	}
 	return lines
 }
 
-func cronConfigLinkLine(stateValue *cronStateFile, configReady bool) string {
+func cronConfigSummaryLine(stateValue *cronStateFile, configReady bool) string {
 	if stateValue == nil || stateValue.Bitable == nil {
 		return "配置表：未初始化"
 	}
@@ -315,22 +323,74 @@ func cronConfigLinkLine(stateValue *cronStateFile, configReady bool) string {
 		return "配置表：工作区清单未同步，暂不开放配置入口"
 	}
 	if url := cronBitableTableURL(stateValue.Bitable.AppURL, stateValue.Bitable.Tables.Tasks); url != "" {
-		return fmt.Sprintf("配置表：[%s](%s)", "打开 Cron 配置表", url)
+		return "配置表：可从下方外部入口打开"
 	}
 	return fmt.Sprintf("配置表：%s", strings.TrimSpace(stateValue.Bitable.AppToken))
 }
 
-func cronRunsLinkLine(stateValue *cronStateFile) string {
+func cronRunsSummaryLine(stateValue *cronStateFile, configReady bool) string {
 	if stateValue == nil || stateValue.Bitable == nil {
+		return ""
+	}
+	if !configReady {
 		return ""
 	}
 	if strings.TrimSpace(stateValue.Bitable.Tables.Runs) == "" {
 		return ""
 	}
 	if url := cronBitableTableURL(stateValue.Bitable.AppURL, stateValue.Bitable.Tables.Runs); url != "" {
-		return fmt.Sprintf("运行状态：[%s](%s)", "打开运行记录", url)
+		return "运行状态：可从下方外部入口打开"
 	}
 	return ""
+}
+
+func cronExternalLinkSection(stateValue *cronStateFile, configReady bool) (control.CommandCatalogSection, bool) {
+	buttons := cronExternalLinkButtons(stateValue, configReady)
+	if len(buttons) == 0 {
+		return control.CommandCatalogSection{}, false
+	}
+	return control.CommandCatalogSection{
+		Title: "外部入口",
+		Entries: []control.CommandCatalogEntry{{
+			Buttons: buttons,
+		}},
+	}, true
+}
+
+func cronExternalLinkButtons(stateValue *cronStateFile, configReady bool) []control.CommandCatalogButton {
+	if stateValue == nil || stateValue.Bitable == nil || !configReady {
+		return nil
+	}
+	buttons := []control.CommandCatalogButton{}
+	if button, ok := cronConfigLinkButton(stateValue, configReady); ok {
+		buttons = append(buttons, button)
+	}
+	if button, ok := cronRunsLinkButton(stateValue, configReady); ok {
+		buttons = append(buttons, button)
+	}
+	return buttons
+}
+
+func cronConfigLinkButton(stateValue *cronStateFile, configReady bool) (control.CommandCatalogButton, bool) {
+	if stateValue == nil || stateValue.Bitable == nil || !configReady {
+		return control.CommandCatalogButton{}, false
+	}
+	url := cronBitableTableURL(stateValue.Bitable.AppURL, stateValue.Bitable.Tables.Tasks)
+	if url == "" {
+		return control.CommandCatalogButton{}, false
+	}
+	return openURLButton("打开 Cron 配置表", url, "", false), true
+}
+
+func cronRunsLinkButton(stateValue *cronStateFile, configReady bool) (control.CommandCatalogButton, bool) {
+	if stateValue == nil || stateValue.Bitable == nil || !configReady {
+		return control.CommandCatalogButton{}, false
+	}
+	url := cronBitableTableURL(stateValue.Bitable.AppURL, stateValue.Bitable.Tables.Runs)
+	if url == "" {
+		return control.CommandCatalogButton{}, false
+	}
+	return openURLButton("打开运行记录", url, "", false), true
 }
 
 func cronBitableTableURL(appURL, tableID string) string {
@@ -479,9 +539,8 @@ func cronLoadedJobEntries(jobs []cronJobState, timeZone string) []control.Comman
 			segments = append(segments, "来源："+source)
 		}
 		entry := control.CommandCatalogEntry{
-			Title:          firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"),
-			Description:    strings.Join(segments, "｜"),
-			LegacyMarkdown: true,
+			Title:       firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"),
+			Description: strings.Join(segments, "｜"),
 		}
 		if commandText := cronRunCommandText(job.RecordID); commandText != "" {
 			entry.Buttons = []control.CommandCatalogButton{

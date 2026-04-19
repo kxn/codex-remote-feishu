@@ -114,11 +114,10 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 		quickButtons = append(quickButtons, runCommandButton("本地升级", "/upgrade local", "", false))
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Debug",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           true,
-		DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
+		Title:           "Debug",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
 			{
 				Title: "快捷操作",
@@ -129,10 +128,9 @@ func buildDebugStatusCatalog(stateValue install.InstallState, checkInFlight bool
 			{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:       []string{"/debug"},
-					Description:    "输入 `/debug` 后面的参数，例如 `admin`。",
-					LegacyMarkdown: true,
-					Form:           control.FeishuCommandFormWithDefault(control.FeishuCommandDebug, ""),
+					Commands:    []string{"/debug"},
+					Description: "输入 /debug 后面的参数，例如 admin。",
+					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandDebug, ""),
 				}},
 			},
 		},
@@ -167,11 +165,10 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 		quickButtons = append(quickButtons, runCommandButton("本地升级", "/upgrade local", "", false))
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 "Upgrade",
-		Summary:               strings.Join(summaryLines, "\n"),
-		LegacySummaryMarkdown: true,
-		Interactive:           true,
-		DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
+		Title:           "Upgrade",
+		SummarySections: commandCatalogSummarySections(summaryLines...),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
 			{
 				Title: "快捷操作",
@@ -188,10 +185,9 @@ func buildUpgradeStatusCatalog(stateValue install.InstallState, checkInFlight bo
 			{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:       []string{"/upgrade"},
-					Description:    "输入 `/upgrade` 后面的参数，例如 `track beta`、`latest`、`dev` 或 `local`。",
-					LegacyMarkdown: true,
-					Form:           control.FeishuCommandFormWithDefault(control.FeishuCommandUpgrade, ""),
+					Commands:    []string{"/upgrade"},
+					Description: "输入 /upgrade 后面的参数，例如 track beta、latest、dev 或 local。",
+					Form:        control.FeishuCommandFormWithDefault(control.FeishuCommandUpgrade, ""),
 				}},
 			},
 		},
@@ -203,39 +199,44 @@ func buildUpgradePromptCatalog(stateValue install.InstallState) *control.FeishuD
 	title := "发现可升级版本"
 	confirmCommand := "/upgrade latest"
 	description := "继续升级到当前 track 的最新版本。"
-	summary := ""
+	summarySections := []control.FeishuCardTextSection{}
 	if stateValue.PendingUpgrade != nil {
 		targetVersion = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
 		if stateValue.PendingUpgrade.Source == install.UpgradeSourceDev {
 			title = "发现开发版更新"
 			confirmCommand = "/upgrade dev"
 			description = "继续升级到最新的 dev 构建。"
-			summary = fmt.Sprintf(
-				"检测到新的 dev 构建可用。\n当前版本：%s\n目标版本：%s\n\n再次发送 /upgrade dev 继续升级流程。",
-				firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
-				firstNonEmpty(targetVersion, "unknown"),
-			)
+			summarySections = []control.FeishuCardTextSection{
+				commandCatalogTextSection(
+					"",
+					"检测到新的 dev 构建可用。",
+					fmt.Sprintf("当前版本：%s", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
+					fmt.Sprintf("目标版本：%s", firstNonEmpty(targetVersion, "unknown")),
+				),
+				commandCatalogTextSection("下一步", "再次发送 /upgrade dev 继续升级流程。"),
+			}
 		}
 	}
-	if summary == "" {
-		summary = fmt.Sprintf(
-			"检测到 %s track 有新版本可用。\n当前版本：%s\n目标版本：%s\n\n再次发送 /upgrade latest 继续升级流程。",
-			firstNonEmpty(string(stateValue.CurrentTrack), "unknown"),
-			firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
-			firstNonEmpty(targetVersion, "unknown"),
-		)
+	if len(summarySections) == 0 {
+		summarySections = []control.FeishuCardTextSection{
+			commandCatalogTextSection(
+				"",
+				fmt.Sprintf("检测到 %s track 有新版本可用。", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
+				fmt.Sprintf("当前版本：%s", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
+				fmt.Sprintf("目标版本：%s", firstNonEmpty(targetVersion, "unknown")),
+			),
+			commandCatalogTextSection("下一步", "再次发送 /upgrade latest 继续升级流程。"),
+		}
 	}
 	return &control.FeishuDirectCommandCatalog{
-		Title:                 title,
-		Summary:               summary,
-		LegacySummaryMarkdown: true,
-		Interactive:           true,
+		Title:           title,
+		SummarySections: summarySections,
+		Interactive:     true,
 		Sections: []control.CommandCatalogSection{{
 			Title: "操作",
 			Entries: []control.CommandCatalogEntry{{
-				Commands:       []string{confirmCommand},
-				Description:    description,
-				LegacyMarkdown: true,
+				Commands:    []string{confirmCommand},
+				Description: description,
 				Buttons: []control.CommandCatalogButton{
 					{Label: "确认升级", CommandText: confirmCommand},
 					{Label: "查看状态", CommandText: "/upgrade"},

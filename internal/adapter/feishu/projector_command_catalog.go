@@ -282,6 +282,14 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 				label = commandText
 			}
 			payload = actionPayloadRunCommand(commandText)
+		case control.CommandCatalogButtonOpenURL:
+			openURL := strings.TrimSpace(button.OpenURL)
+			if openURL == "" {
+				continue
+			}
+			if label == "" {
+				label = openURL
+			}
 		case control.CommandCatalogButtonCallbackAction:
 			if len(button.CallbackValue) == 0 {
 				continue
@@ -308,6 +316,10 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 		buttonType := defaultType
 		if style := strings.TrimSpace(button.Style); style != "" {
 			buttonType = style
+		}
+		if button.Kind == control.CommandCatalogButtonOpenURL {
+			actions = append(actions, cardOpenURLButtonElement(label, buttonType, button.OpenURL, button.Disabled, ""))
+			continue
 		}
 		actions = append(actions, cardCallbackButtonElement(label, buttonType, stampActionValue(payload, daemonLifecycleID), button.Disabled, ""))
 	}

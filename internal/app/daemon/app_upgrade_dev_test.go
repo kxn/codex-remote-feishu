@@ -32,6 +32,7 @@ func TestBuildUpgradePromptCatalogUsesDevCommandForDevCandidate(t *testing.T) {
 	if catalog == nil {
 		t.Fatal("expected prompt catalog")
 	}
+	assertCatalogUsesNonLegacyContracts(t, catalog)
 	if catalog.Title != "发现开发版更新" {
 		t.Fatalf("title = %q, want 开发版更新", catalog.Title)
 	}
@@ -39,8 +40,9 @@ func TestBuildUpgradePromptCatalogUsesDevCommandForDevCandidate(t *testing.T) {
 	if got := entry.Buttons[0].CommandText; got != "/upgrade dev" {
 		t.Fatalf("confirm command = %q, want /upgrade dev", got)
 	}
-	if !strings.Contains(catalog.Summary, "再次发送 /upgrade dev") {
-		t.Fatalf("summary = %q, want /upgrade dev guidance", catalog.Summary)
+	summary := catalogSummaryText(catalog)
+	if !strings.Contains(summary, "再次发送 /upgrade dev") {
+		t.Fatalf("summary = %q, want /upgrade dev guidance", summary)
 	}
 }
 

@@ -54,11 +54,13 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 		t.Fatalf("events = %#v, want one command catalog", events)
 	}
 	catalog := events[0].FeishuDirectCommandCatalog
-	if !strings.Contains(catalog.Summary, "当前状态：正常") {
-		t.Fatalf("summary = %q, want healthy state", catalog.Summary)
+	assertCatalogUsesNonLegacyContracts(t, catalog)
+	summary := catalogSummaryText(catalog)
+	if !strings.Contains(summary, "当前状态：正常") {
+		t.Fatalf("summary = %q, want healthy state", summary)
 	}
-	if !strings.Contains(catalog.Summary, "当前已加载任务：1 条") {
-		t.Fatalf("summary = %q, want loaded job count", catalog.Summary)
+	if !strings.Contains(summary, "当前已加载任务：1 条") {
+		t.Fatalf("summary = %q, want loaded job count", summary)
 	}
 	buttons := collectCronCatalogButtons(catalog)
 	if _, ok := buttons["/cron migrate-owner"]; ok {
@@ -137,9 +139,11 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		if catalog.Title != wantTitle {
 			t.Fatalf("%s title = %q, want %q", commandText, catalog.Title, wantTitle)
 		}
+		assertCatalogUsesNonLegacyContracts(t, catalog)
+		summary := catalogSummaryText(catalog)
 		for _, fragment := range wantFragments {
-			if !strings.Contains(catalog.Summary, fragment) {
-				t.Fatalf("%s summary missing %q: %q", commandText, fragment, catalog.Summary)
+			if !strings.Contains(summary, fragment) {
+				t.Fatalf("%s summary missing %q: %q", commandText, fragment, summary)
 			}
 		}
 		if len(catalog.RelatedButtons) != 0 {
@@ -153,10 +157,33 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		"最近工作区同步：",
 		"最近 reload：2026-04-17 10:03",
 		"最近 reload 摘要：已加载 2 条任务",
-		"配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)",
-		"运行状态：[打开运行记录](https://example.feishu.cn/base/app-cron?table=tbl-runs)",
+		"配置表：可从下方外部入口打开",
+		"运行状态：可从下方外部入口打开",
 	)
-	assertCatalog("/cron edit", "Cron 配置", "配置表：[打开 Cron 配置表](https://example.feishu.cn/base/app-cron?table=tbl-tasks)", "执行 `/cron reload` 生效")
+	assertCatalog("/cron edit", "Cron 配置", "配置表：可从下方外部入口打开", "执行 /cron reload 生效")
+
+	statusCatalog := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron status",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})[0].FeishuDirectCommandCatalog
+	if !catalogHasOpenURLButton(statusCatalog, "打开 Cron 配置表", "https://example.feishu.cn/base/app-cron?table=tbl-tasks") {
+		t.Fatalf("expected status catalog to expose config url button, got %#v", statusCatalog.Sections)
+	}
+	if !catalogHasOpenURLButton(statusCatalog, "打开运行记录", "https://example.feishu.cn/base/app-cron?table=tbl-runs") {
+		t.Fatalf("expected status catalog to expose runs url button, got %#v", statusCatalog.Sections)
+	}
+	editCatalog := app.handleCronDaemonCommand(control.DaemonCommand{
+		Text:             "/cron edit",
+		GatewayID:        "gateway-1",
+		SurfaceSessionID: "surface-1",
+	})[0].FeishuDirectCommandCatalog
+	if !catalogHasOpenURLButton(editCatalog, "打开 Cron 配置表", "https://example.feishu.cn/base/app-cron?table=tbl-tasks") {
+		t.Fatalf("expected edit catalog to expose config url button, got %#v", editCatalog.Sections)
+	}
+	if catalogHasOpenURLButton(editCatalog, "打开运行记录", "https://example.feishu.cn/base/app-cron?table=tbl-runs") {
+		t.Fatalf("did not expect edit catalog to expose runs url button, got %#v", editCatalog.Sections)
+	}
 
 	listEvents := app.handleCronDaemonCommand(control.DaemonCommand{
 		Text:             "/cron list",
@@ -167,14 +194,16 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		t.Fatalf("/cron list events = %#v, want one command catalog", listEvents)
 	}
 	listCatalog := listEvents[0].FeishuDirectCommandCatalog
+	assertCatalogUsesNonLegacyContracts(t, listCatalog)
 	if listCatalog.Title != "Cron 任务" {
 		t.Fatalf("/cron list title = %q, want %q", listCatalog.Title, "Cron 任务")
 	}
 	if !listCatalog.Interactive {
 		t.Fatalf("/cron list interactive = false, want true")
 	}
-	if !strings.Contains(listCatalog.Summary, "当前已加载 2 条任务。") || !strings.Contains(listCatalog.Summary, "立即触发") {
-		t.Fatalf("/cron list summary = %q, want task count + trigger hint", listCatalog.Summary)
+	listSummary := catalogSummaryText(listCatalog)
+	if !strings.Contains(listSummary, "当前已加载 2 条任务。") || !strings.Contains(listSummary, "立即触发") {
+		t.Fatalf("/cron list summary = %q, want task count + trigger hint", listSummary)
 	}
 	if len(listCatalog.Sections) != 1 || len(listCatalog.Sections[0].Entries) != 2 {
 		t.Fatalf("/cron list sections = %#v, want one section with two entries", listCatalog.Sections)
@@ -230,11 +259,13 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 		t.Fatalf("menu events = %#v, want one catalog", menuEvents)
 	}
 	menuCatalog := menuEvents[0].FeishuDirectCommandCatalog
-	if !strings.Contains(menuCatalog.Summary, "配置入口：工作区清单未同步，暂不可用。") {
-		t.Fatalf("menu summary = %q, want sync-failed hint", menuCatalog.Summary)
+	assertCatalogUsesNonLegacyContracts(t, menuCatalog)
+	menuSummary := catalogSummaryText(menuCatalog)
+	if !strings.Contains(menuSummary, "配置入口：工作区清单未同步，暂不可用。") {
+		t.Fatalf("menu summary = %q, want sync-failed hint", menuSummary)
 	}
-	if !strings.Contains(menuCatalog.Summary, "工作区清单同步失败") {
-		t.Fatalf("menu summary = %q, want failure reason", menuCatalog.Summary)
+	if !strings.Contains(menuSummary, "工作区清单同步失败") {
+		t.Fatalf("menu summary = %q, want failure reason", menuSummary)
 	}
 	menuButtons := collectCronCatalogButtons(menuCatalog)
 	if !menuButtons["/cron edit"].Disabled {
@@ -249,12 +280,17 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 	if len(statusEvents) != 1 || statusEvents[0].FeishuDirectCommandCatalog == nil {
 		t.Fatalf("status events = %#v, want one catalog", statusEvents)
 	}
-	statusSummary := statusEvents[0].FeishuDirectCommandCatalog.Summary
+	statusCatalog := statusEvents[0].FeishuDirectCommandCatalog
+	assertCatalogUsesNonLegacyContracts(t, statusCatalog)
+	statusSummary := catalogSummaryText(statusCatalog)
 	if strings.Contains(statusSummary, "[打开 Cron 配置表]") {
 		t.Fatalf("status summary must not expose config link after sync failure: %q", statusSummary)
 	}
 	if !strings.Contains(statusSummary, "配置表：工作区清单未同步，暂不开放配置入口") {
 		t.Fatalf("status summary = %q, want hidden-config wording", statusSummary)
+	}
+	if catalogHasOpenURLButton(statusCatalog, "打开 Cron 配置表", "https://example.feishu.cn/base/app-cron?table=tbl-tasks") {
+		t.Fatalf("status catalog must not expose config url button after sync failure: %#v", statusCatalog.Sections)
 	}
 
 	editEvents := app.handleCronDaemonCommand(control.DaemonCommand{
@@ -265,12 +301,17 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 	if len(editEvents) != 1 || editEvents[0].FeishuDirectCommandCatalog == nil {
 		t.Fatalf("edit events = %#v, want one catalog", editEvents)
 	}
-	editSummary := editEvents[0].FeishuDirectCommandCatalog.Summary
+	editCatalog := editEvents[0].FeishuDirectCommandCatalog
+	assertCatalogUsesNonLegacyContracts(t, editCatalog)
+	editSummary := catalogSummaryText(editCatalog)
 	if strings.Contains(editSummary, "[打开 Cron 配置表]") {
 		t.Fatalf("edit summary must not expose config link after sync failure: %q", editSummary)
 	}
 	if !strings.Contains(editSummary, "工作区清单同步完成后才会开放配置入口") {
 		t.Fatalf("edit summary = %q, want sync-first wording", editSummary)
+	}
+	if catalogHasOpenURLButton(editCatalog, "打开 Cron 配置表", "https://example.feishu.cn/base/app-cron?table=tbl-tasks") {
+		t.Fatalf("edit catalog must not expose config url button after sync failure: %#v", editCatalog.Sections)
 	}
 }
 

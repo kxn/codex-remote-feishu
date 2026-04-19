@@ -71,8 +71,7 @@ func vscodeHasMigrationTarget(detect vscodeDetectResponse) bool {
 
 func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.FeishuDirectCommandCatalog {
 	entry := control.CommandCatalogEntry{
-		Description:    strings.TrimSpace(issue.ActionText),
-		LegacyMarkdown: true,
+		Description: strings.TrimSpace(issue.ActionText),
 	}
 	interactive := strings.TrimSpace(issue.ButtonLabel) != ""
 	if interactive {
@@ -82,10 +81,9 @@ func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.FeishuDirect
 		}}
 	}
 	return control.FeishuDirectCommandCatalog{
-		Title:                 issue.Title,
-		Summary:               issue.Summary,
-		LegacySummaryMarkdown: true,
-		Interactive:           interactive,
+		Title:           issue.Title,
+		SummarySections: commandCatalogSummarySections(issue.Summary),
+		Interactive:     interactive,
 		Sections: []control.CommandCatalogSection{{
 			Entries: []control.CommandCatalogEntry{entry},
 		}},

@@ -27,8 +27,10 @@ func TestBuildUpgradeStatusCatalogHidesShippingOnlyOptions(t *testing.T) {
 		CurrentTrack:   install.ReleaseTrackProduction,
 		CurrentVersion: "v1.0.0",
 	}, false)
-	if strings.Contains(catalog.Summary, "本地升级产物：") {
-		t.Fatalf("shipping catalog should hide local upgrade artifact path, got %#v", catalog.Summary)
+	assertCatalogUsesNonLegacyContracts(t, catalog)
+	summary := catalogSummaryText(catalog)
+	if strings.Contains(summary, "本地升级产物：") {
+		t.Fatalf("shipping catalog should hide local upgrade artifact path, got %#v", summary)
 	}
 	if got := len(catalog.Sections[0].Entries[0].Buttons); got != 2 {
 		t.Fatalf("shipping quick buttons = %d, want 2", got)

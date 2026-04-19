@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,12 @@ func TestHandleGatewayActionReplacesMenuCardWithSubmittedAnchorAndKeepsStatusApp
 	}
 	if result.ReplaceCurrentCard.CardTitle != "命令已提交" {
 		t.Fatalf("unexpected submitted-anchor card: %#v", result.ReplaceCurrentCard)
+	}
+	if result.ReplaceCurrentCard.CardBody != "" {
+		t.Fatalf("expected submitted-anchor card body to stay empty after summary migration, got %#v", result.ReplaceCurrentCard)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已执行 /status，结果会显示在下方。") {
+		t.Fatalf("expected submitted-anchor summary text in structured elements, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/menu") {
 		t.Fatalf("expected submitted-anchor card to include reopen menu action, got %#v", result.ReplaceCurrentCard.CardElements)

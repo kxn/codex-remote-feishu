@@ -189,6 +189,22 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 	return button
 }
 
+func cardOpenURLButtonElement(label, buttonType, openURL string, disabled bool, width string) map[string]any {
+	openURL = strings.TrimSpace(openURL)
+	if openURL == "" {
+		return nil
+	}
+	button := cardCallbackButtonElement(label, buttonType, nil, disabled, width)
+	if len(button) == 0 {
+		return nil
+	}
+	button["behaviors"] = []map[string]any{{
+		"type":        "open_url",
+		"default_url": openURL,
+	}}
+	return button
+}
+
 func cardFormSubmitButtonElement(label string, value map[string]any) map[string]any {
 	button := cardFormActionButtonElement(label, "primary", value, false, "")
 	if len(button) == 0 {
