@@ -101,14 +101,16 @@ func AllowsInlineCardReplacement(action Action) bool {
 // command should synchronously replace the current card with its first real
 // result card instead of acknowledging immediately or using a submitted anchor.
 func AllowsCommandCardResultReplacement(action Action) bool {
-	if AllowsInlineCardReplacement(action) {
-		return false
-	}
 	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
 		return false
 	}
 	switch action.Kind {
-	case ActionShowCommandHelp,
+	case ActionListInstances,
+		ActionShowThreads,
+		ActionShowAllThreads,
+		ActionAttachInstance,
+		ActionUseThread,
+		ActionShowCommandHelp,
 		ActionStatus,
 		ActionStop,
 		ActionNewThread,
@@ -134,7 +136,7 @@ func AllowsBareCommandContinuation(action Action) bool {
 		return false
 	}
 	switch action.Kind {
-	case ActionUpgradeCommand, ActionDebugCommand, ActionCronCommand:
+	case ActionUpgradeCommand, ActionDebugCommand, ActionCronCommand, ActionVSCodeMigrate:
 		return true
 	default:
 		return false
@@ -153,13 +155,7 @@ func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
 	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
 		return false
 	}
-	switch action.Kind {
-	case ActionShowThreads,
-		ActionShowAllThreads:
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func isSingleTokenSlashCommand(text string) bool {

@@ -103,6 +103,54 @@ func TestDaemonModeSwitchToVSCodePromptsMigrationForLegacySettings(t *testing.T)
 	}
 }
 
+func TestHandleGatewayActionReplacesModeCardWithVSCodeMigrationPrompt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	defaults, err := install.DetectPlatformDefaults()
+	if err != nil {
+		t.Fatalf("DetectPlatformDefaults: %v", err)
+	}
+	writeLegacyVSCodeSettings(t, defaults.VSCodeSettingsPath, binaryPath)
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	gateway := &recordingGateway{}
+	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionModeCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-mode-vscode-1",
+		Text:             "/mode vscode",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected stamped mode switch to replace current card, got %#v", result)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "VS Code 接入需要迁移" {
+		t.Fatalf("expected migration prompt to stay on current card, got %#v", result.ReplaceCurrentCard)
+	}
+	if !operationHasCommandButton(*result.ReplaceCurrentCard, "迁移并重新接入", vscodeMigrateCommandText) {
+		t.Fatalf("expected in-place migration button, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
 func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -232,6 +280,54 @@ func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing
 	}
 	if !found {
 		t.Fatalf("expected reopen-vscode success notice, got %#v", gateway.operations)
+	}
+}
+
+func TestHandleGatewayActionReplacesVSCodeMigrationCardWithResult(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	defaults, err := install.DetectPlatformDefaults()
+	if err != nil {
+		t.Fatalf("DetectPlatformDefaults: %v", err)
+	}
+	writeLegacyVSCodeSettings(t, defaults.VSCodeSettingsPath, binaryPath)
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	gateway := &recordingGateway{}
+	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionVSCodeMigrate,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-vscode-migrate-1",
+		Text:             "/vscode-migrate",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected stamped /vscode-migrate to replace current card, got %#v", result)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "请重新打开 VS Code 开始使用") {
+		t.Fatalf("expected in-place migrate result text, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypoint)); err != nil {
+		t.Fatalf("expected shim backup after in-place migration: %v", err)
 	}
 }
 

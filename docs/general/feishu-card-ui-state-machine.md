@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status` 现在会直接把首个结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，bare `/vscode-migrate` 的结果同样改成原卡收口；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
 
 ## 1. 文档定位
 
@@ -55,9 +55,9 @@
   - 负责只在安全条件下把同上下文导航转成 `ReplaceCurrentCard`
   - 当前有四条 replace 路径：
     - inline navigation：当 action 命中 **inline-replace allow-list**（并非所有 `FeishuUIIntent`）、且 controller 产出的 `UIEvent` 显式标记 `InlineReplaceCurrentCard`
-    - stamped command result replacement：当 stamped 菜单命令命中原卡结果/终态规则（当前 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`），daemon 会把 handler 返回的首个可投影结果卡直接作为 `ReplaceCurrentCard`
-    - bare command continuation：当 stamped callback 命中 bare `/upgrade`、bare `/debug`、bare `/cron` 的 continuation 路径时，daemon 会直接把 follow-up 卡同位替到当前卡
-    - command submission anchor：当 action 命中剩余提交态锚点 allow-list（当前主要是 `/use`、`/useall`）时，daemon 回一张轻量“命令已提交”替换卡，同时保留原结果 append
+    - stamped command result replacement：当 stamped 菜单命令命中原卡结果/终态规则（当前 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread`、`/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`），daemon 会把 handler 返回的首个可投影结果卡直接作为 `ReplaceCurrentCard`
+    - bare command continuation：当 stamped callback 命中 bare `/upgrade`、bare `/debug`、bare `/cron`、bare `/vscode-migrate` 的 continuation 路径时，daemon 会直接把 follow-up 卡同位替到当前卡
+    - command submission anchor：lifecycle helper 里仍保留这条兼容分支，但当前 stamped action 已没有命中 allow-list；也就是说当前 owner-card / menu-card 路径不再使用“命令已提交”锚点卡
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
@@ -103,9 +103,11 @@
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把 owner-card runtime v1 中的当前 history flow 同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回同一张 history owner card |
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card，仍走 verbose-only 共享过程卡 |
 | stamped `/menu maintenance -> /help` / `/status` | `mixed` | 当前不再走 append-only 帮助卡或提交态锚点；点击后 daemon 会把 handler 产出的首个结果卡（帮助目录或 snapshot 状态卡）直接作为 `ReplaceCurrentCard`，让原菜单卡继续承担结果承载。纯文本 `/help` / `/status` 仍保持 append-only |
+| stamped `/menu switch_target -> /list` / `/use` / `/useall` | `mixed` | 当前不再走 submission-anchor；点击后 daemon 会把首个可投影结果卡直接作为 `ReplaceCurrentCard`。`/list` 的空态、实例列表与 attach 结果，`/use` / `/useall` 的 detached 提示、线程列表与 `use_thread` 结果，都会继续在原菜单卡收口；attach 若同一事件流后面还带 `thread_selection_change`，daemon 会抑制这条重复 append，避免原卡收口后再补第二张选择卡 |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/detach` | `mixed` | 当前不再走提交态锚点；点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并把重复 notice 留在原卡内收口，不再额外 append 终态 notice，也不再做 recall |
 | stamped `/menu current_work -> /steerall` | `mixed` | 当前不再走提交态锚点；点击后会把当前菜单卡直接封成 steer-all owner/terminal card。no-op、requested、accepted、failed / disconnect restore 都继续回写同一张原卡，不再留下可重复点击的旧菜单 |
-| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/reasoning` `/access` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
+| bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/reasoning` `/access` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；其中 stamped `/mode vscode` 若切换后立刻命中 VS Code 兼容修复、open prompt 或恢复提示，daemon 会优先把首张可投影提示卡同位替回当前卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
+| stamped bare `/vscode-migrate` | `mixed` | 当前只由 VS Code 迁移/修复卡发出；若来自带 `daemon_lifecycle_id` 的当前迁移卡 callback，daemon 会沿 bare continuation 路径把迁移结果卡同位替回当前卡，不再额外 append 独立 catalog / notice |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
@@ -287,17 +289,19 @@ MCP request 卡片当前新增的可视语义：
   - daemon 侧产出的单个 `UIEvent` 显式标记 `InlineReplaceCurrentCard == true`
 2. stamped command result replacement 路径
   - callback payload 带有非空 `daemon_lifecycle_id`
-  - action 命中 daemon 侧“原卡结果 / 终态” allow-list（当前 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`）
+  - action 命中 daemon 侧“原卡结果 / 终态” allow-list（当前 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread`、`/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`）
   - 当前事件流里至少存在一张可直接投影成卡片的结果事件；daemon 取第一张作为 `ReplaceCurrentCard`
   - 对 `/stop`、`/new`、`/follow`、`/detach`，replacement 落地后会额外抑制重复 notice append，避免又出现“原卡已终态、旁边再补一张同义终态 notice”
+  - 对 `attach_instance`，若同一动作后续还带 `UIEventThreadSelectionChange`，daemon 会抑制这类重复 append，避免菜单卡已经收口后又补一张线程选择卡
 3. bare command continuation 路径
   - callback payload 带有非空 `daemon_lifecycle_id`
-  - action 命中 bare `/upgrade`、bare `/debug`、bare `/cron`
+  - action 命中 bare `/upgrade`、bare `/debug`、bare `/cron`、bare `/vscode-migrate`
   - daemon command 的首张 follow-up 卡可直接同位承接到当前卡
 4. command submission anchor 路径
   - callback payload 带有非空 `daemon_lifecycle_id`
-  - action 命中 `control.AllowsCommandSubmissionAnchorReplacement(action)`
-  - daemon 返回轻量“命令已提交”替换卡（并且不会吞掉原事件 append）
+  - lifecycle helper 里仍保留这条兼容分支
+  - 但当前 stamped action 已没有命中 `control.AllowsCommandSubmissionAnchorReplacement(action)` 的 allow-list
+  - 因此当前实现里不会再对 current-card callback 生成“命令已提交”锚点卡
 
 少任一条，都不会同步等待 replace。
 
@@ -402,11 +406,14 @@ MCP request 卡片当前新增的可视语义：
   - 成功与 no-op 会把原卡封成 sealed terminal card，并附带“如需再次调整，请重新发送对应命令”的 reopen 提示
   - 校验失败、参数格式错误、或仍未接管目标等前置条件失败，会继续留在同一张参数卡上，保留可重试表单；必要时把刚才输入的参数回填到默认值
   - 若动作不是从当前参数卡 callback 进入，例如用户直接发送 `/mode vscode`、`/autowhip on`，则仍保持 append-only，不会把普通文本 slash 升级成 inline replace
-- stamped 菜单命令里的非 inline 命令当前分成四类：
+- stamped 菜单命令里的非 inline 命令当前分成几类：
   - `/help`、`/status` 会直接把首个结果卡替成当前菜单卡；不再 append 一张脱离原卡的帮助卡/状态卡
+  - `/list`、`/use`、`/useall` 会直接把首个实例列表 / 线程列表 / 提示 / 结果卡替成当前菜单卡；不再回退到 submission anchor。`/list` attach 成功后若同一事件流里还带 thread-selection follow-up，daemon 也会抑制这张重复卡
   - `/stop`、`/new`、`/follow`、`/detach` 会把首个 notice / thread-selection 结果卡直接作为当前菜单卡；不再走 submission anchor，也不再 recall
   - `/compact`、`/steerall`、`/sendfile` 的 `current_work` 菜单入口不再复用锚点路径，而是直接把原菜单卡交给 owner/terminal card 流继续收口
-  - `/use`、`/useall` 当前仍保留 submission-anchor replace + append 结果的旧路径
+- stamped 参数卡与迁移卡的非 inline 命令当前额外分两类：
+  - stamped `/mode vscode` 若切换后立刻命中 VS Code 兼容修复、open prompt 或恢复提示，daemon 会优先把首张可投影提示卡替回当前参数卡；这条强制同步兼容性检测只用于 stamped callback，纯文本 `/mode vscode` 仍保持旧的异步提示语义
+  - bare `/vscode-migrate` 当前会沿 bare continuation 路径把迁移结果卡继续承接在当前迁移/修复卡上，不再额外 append 独立 command catalog / notice
 - bare `/upgrade`、bare `/debug`、bare `/cron` 当前不再走“命令已提交”锚点，而是直接在当前卡内同步承接到下一张 command catalog。
 - `/upgrade latest` 当前不走 callback 同步 replace；但只要进入 daemon owner-card 流，同一张升级卡会继续通过 `message.patch` 在 `checking -> confirm -> running/cancelling -> restarting(sealed)` 之间推进，不再依赖“再次发送 `/upgrade latest`”。
 - turn-owned 的投递策略当前已经改成“高价值文本 reply、过程卡仍顶层 append”：
@@ -445,11 +452,12 @@ MCP request 卡片当前新增的可视语义：
 - `global runtime` 提示当前也明确保持 append-only，但它和普通 turn-owned notice 的差异不再是 reply anchor，而是独立 delivery lane：
   - 它们通过 `control.Notice.DeliveryClass=global_runtime` 明确标记，不再只靠“刚好没传 `SourceMessageID`”这种隐式约定
   - projector 当前对所有 notice 都不会 reply 到任何 turn 源消息；`global runtime` 的特殊点只剩 dedupe / family 与独立系统车道
-  - 当前这条车道覆盖：surface / VS Code resume failure、`open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
+  - 当前这条车道覆盖真正脱离当前 owner-card 上下文的：surface / VS Code resume failure、`open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
+  - 若 `VS Code` 兼容修复、`open VS Code` prompt 或恢复提示是由 stamped `/mode vscode` callback 同步显露出来，daemon 会先尝试把首张可投影提示卡承接到当前卡；只有脱离当前 card 上下文的后台 runtime 路径才会落到这条独立车道
   - 这些提示不会 patch 当前 owner-card，也不会借用 final-card anchor 或 turn reply-chain；它们始终作为独立系统提示出现在主时间线
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
-- “命令已提交”锚点卡当前只剩少量命令继续使用（主要是 `/use`、`/useall`）；这批锚点卡会在短延时后尝试 best-effort 自动撤回，撤回失败时仅静默降级，不影响主流程。
-- 这条路径不会改变产品动作 owner；参数卡 apply 的同卡收口也不复用“命令已提交”锚点，而是由产品 handler 直接返回可 patch 的 command card 结果。
+- “命令已提交”锚点卡路径当前在 lifecycle helper 与 gateway 里仍保留兼容骨架，但已经没有命中 current-card stamped action 的 allow-list；本轮审计范围内的菜单 / 参数卡 owner-flow 已不再依赖这条路径。
+- 这条兼容骨架不会改变产品动作 owner；参数卡 apply、VS Code 菜单 handoff 与迁移卡收口都不复用“命令已提交”锚点，而是由产品 handler 直接返回可 replace / patch 的结果卡。
 - 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次当前固定顶层 append，不继承当前 turn 的 `SourceMessageID`
   - 若同一 turn 内继续收到新的可见过程项，则优先对当前 active progress card 做 `message.patch`；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call` 与 `context_compaction` 累积到同一条共享“工作中”时间线里
@@ -602,7 +610,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_target_picker_test.go](../../internal/adapter/feishu/gateway_target_picker_test.go)
   - 锁定 `target_picker_*` callback payload 能正确回到 `control.Action`
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
-  - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + stamped command result replacement + remaining command submission anchor）、无 lifecycle 导航仍异步 ack、`OperationSendText` 的 reply/fallback 出站路径，以及共享更新卡的 `message.patch` 出站路径
+  - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + stamped command result replacement + dormant command submission anchor compatibility branch）、无 lifecycle 导航仍异步 ack、`OperationSendText` 的 reply/fallback 出站路径，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
   - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、首卡顶层 append / 后续 patch 语义、超长时单卡滚动窗口与顶部省略提示、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
@@ -648,9 +656,13 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
   - 锁定 `global runtime` 提示维持独立 delivery lane，并按 family + dedupe key 做短窗节流 / pending queue 去重
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
-  - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，以及 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口；`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
+  - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，vscode `/list` / `/use` / `/useall` 的空态、attach 结果与 `use_thread` 结果都会继续收口在原菜单卡；同时 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口，`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)
-  - 锁定 `/status` 已退出菜单提交态锚点并直接改成同卡状态结果，同时纯文本 `/status` 继续 append-only；bare `/upgrade` / `/cron` 仍保持同位承接 replace，剩余提交态锚点只保留 `/use` / `/useall`
+  - 锁定 `/status` 已退出菜单提交态锚点并直接改成同卡状态结果，同时纯文本 `/status` 继续 append-only；bare `/upgrade` / `/cron` 仍保持同位承接 replace，而 stamped current-card 路径不再命中提交态锚点
+- [internal/app/daemon/app_vscode_migration_test.go](../../internal/app/daemon/app_vscode_migration_test.go)
+  - 锁定 stamped `/mode vscode` 命中的兼容修复提示会继续替换当前卡，以及 stamped `/vscode-migrate` 的结果会同位收口到当前迁移卡
+- [internal/core/control/inline_replacement_test.go](../../internal/core/control/inline_replacement_test.go)
+  - 锁定 `AllowsCommandCardResultReplacement(...)` 已把 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread` 纳入 stamped result replacement，同时 `/vscode-migrate` 进入 bare continuation，stamped current-card 路径不再命中 submission-anchor
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)

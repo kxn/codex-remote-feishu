@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 仍留在 verbose 共享过程卡里）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm，并新增 `target_picker_cancel` 作为显式退出动作；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `本地目录` 通过 `target_picker_open_path_picker` 打开目录子步骤再回到主卡确认，`Git URL` 则在主卡内联填写仓库地址/目录名并通过同一子步骤选择父目录，最终由 daemon-side non-interactive `git clone` 在持锁外执行；Git confirm 后先让同一张 owner card 进入 processing，并在 clone 完成后继续推进“接入工作区 / 准备会话”；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；成功/失败/取消都封回同卡 terminal。两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 仍留在 verbose 共享过程卡里）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm，并新增 `target_picker_cancel` 作为显式退出动作；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `本地目录` 通过 `target_picker_open_path_picker` 打开目录子步骤再回到主卡确认，`Git URL` 则在主卡内联填写仓库地址/目录名并通过同一子步骤选择父目录，最终由 daemon-side non-interactive `git clone` 在持锁外执行；Git confirm 后先让同一张 owner card 进入 processing，并在 clone 完成后继续推进“接入工作区 / 准备会话”；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；成功/失败/取消都封回同卡 terminal。两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；`vscode mode` 下菜单进入的 `/list`、`/use`、`/useall` 现在也会把实例/线程结果、attach / use 终态继续收口在原菜单卡；stamped `/mode vscode` 若立刻命中兼容修复、open prompt 或恢复提示，以及 stamped `/vscode-migrate` 的结果，也优先沿当前卡时间线承接；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖真正脱离当前 owner-card 上下文的 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
 
 ## 1. 文档定位
 
@@ -163,6 +163,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. detached `vscode /use` / `/useall` 会直接拒绝，并要求先 `/list`。
    4. attached `vscode /use` / `/useall` 只看当前 attached instance 的已知 thread 集合；其中 `/use` 也是最近 5 个 + `show_scoped_threads`，`/useall` 才是当前实例全部会话。
    5. `vscode /use` 的 one-shot force-pick 会保留 `RouteMode=follow_local`，后续 observed focus 仍可覆盖。
+   6. 若 `/list`、`/use`、`/useall` 来自带 `daemon_lifecycle_id` 的当前菜单卡 callback，实例列表 / 线程列表 / attach 结果 / use 结果会继续沿当前菜单卡时间线收口，不再退回 submission-anchor 或额外 detached notice。
+   7. 若 stamped `/mode vscode` 在切换后立刻命中迁移/修复、open prompt 或 resume failure，可投影的首张提示卡会优先替换当前卡；纯文本 `/mode vscode` 仍保留原来的异步提示语义。
 
 ### 3.2 路由主状态
 
@@ -260,7 +262,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `G5 PathPicker` | 当前 surface 的 active path picker runtime 非空 | 当前存在一个仍有效的飞书路径选择器；core 只关心“gate 是否存在、是否阻断 competing UI / route mutation、confirm/cancel 后如何交给 consumer”，不关心目录浏览细节 |
 | `G6 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
 | `G7 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autowhip` 继续正常，其余动作被挡 |
-| `G8 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片 |
+| `G8 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片；若这张提示是由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡，否则保持独立 runtime 提示 |
 
 补充说明：
 
@@ -389,6 +391,29 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    5. 组内排序优先 `ObservedFocusedThreadID` 非空的实例，再按该实例可见 thread 的最近活跃时间倒序；无时间时再回退到 `InstanceID`。
 3. 卡片按钮仍走 `attach_instance -> ActionAttachInstance`。
 4. attach / switch 成功后，surface 仍会进入既有的 follow-local 语义：有 observed focus 时进入 `R4 FollowBound`，否则进入 `R3 FollowWaiting`。
+5. 若 `attach_instance` 来自 stamped 菜单卡 callback，attach 成功 / 失败结果会直接替换当前实例选择卡；若同一动作后面还带 thread-selection follow-up，daemon 会抑制这张重复 append，避免菜单卡已经收口后又补第二张卡。
+
+### 4.1.2 vscode `/use` / `/useall` 仍是 instance-scoped thread 选择，但菜单路径会把结果留在原卡
+
+当前 `vscode mode` 的 `/use` / `/useall` 产品语义没有放宽，仍然只围绕当前 attached VS Code instance 的 thread 集合展开。
+
+对应实现里：
+
+1. detached `/use` / `/useall` 仍直接拒绝，并提示先 `/list` 选择一个 VS Code 实例；若入口来自 stamped 菜单卡，这张提示卡会直接替换当前菜单卡，不再外跳提交态锚点。
+2. attached `/use` 继续显示当前实例最近 5 个 thread，并保留 `show_scoped_threads`；`/useall` 继续显示当前实例全部 thread。
+3. thread 选择按钮仍走 `use_thread -> ActionUseThread`。
+4. 选择 thread 后，same-thread / busy / attach-known-thread / visible-thread 切换等既有产品语义保持不变；但若入口来自 stamped 菜单卡，首张可投影结果卡会继续替回当前菜单卡，不再额外 append 一张 detached notice 或“命令已提交”锚点卡。
+
+### 4.1.3 stamped `/mode vscode` 与 `/vscode-migrate` 的 owner-card 收口边界
+
+这轮实现没有改 `vscode` 兼容性检查本身的产品语义，只改了它在 card callback 场景下的承接 carrier。
+
+对应实现里：
+
+1. 若 `/mode vscode` 来自带 `daemon_lifecycle_id` 的当前参数卡 / 菜单卡 callback，daemon 会在切换成功后立即失效旧缓存，并对 VS Code 兼容性做一次同步判定。
+2. 若这次同步判定直接得到迁移/修复卡、`open VS Code` prompt，或恢复失败提示，daemon 会把首张可投影提示卡直接替换当前卡，而不是再走独立 runtime notice / catalog。
+3. 若 `/mode vscode` 是纯文本 slash 入口，仍保持原来的异步检测与提示语义，不把普通文本入口升级成 current-card replace。
+4. `run_command(/vscode-migrate)` 当前只由迁移/修复卡发出；若命中当前卡的 stamped callback，迁移结果会沿 bare continuation 路径继续承接在同一张卡上。
 
 ### 4.2 thread claim 仍是全局的，但在 normal mode 下退回 workspace 内仲裁
 
@@ -1090,14 +1115,14 @@ transport degraded retained attachment
 7. 如果该 surface 的 `surface resume state` 仍保留 `ResumeHeadless=true` 的恢复目标，hard disconnect 回到 `R0 Detached` 后会重新进入上面的后台 auto-restore 判定。
 8. daemon graceful shutdown 也不是 `transport_degraded`。当前实现会在真正停掉 Feishu gateway 前，对内存里已知的 surface best-effort 广播单条 `daemon_shutting_down` notice；如果某个 surface 或 gateway 发送失败，只记录日志，不阻塞最终退出。
 9. 这几类提示当前统一归类为 `global runtime` 独立车道，而不是 `owner-flow` 或 `turn-owned`：
-   1. surface resume / VS Code resume failure
-   2. `open VS Code` prompt
+   1. 真正脱离当前 owner-card 上下文的 surface resume / VS Code resume failure
+   2. 真正脱离当前 owner-card 上下文的 `open VS Code` prompt
    3. `attached_instance_transport_degraded`
    4. `daemon_shutting_down`
    5. `gateway_apply_failed`
 10. `global runtime` 提示当前统一保持顶层 append-only：
    1. 不 reply 到 turn 源消息
-   2. 不 patch 当前 owner-card / target picker / request prompt
+   2. 不 patch 当前 owner-card / target picker / request prompt；当前唯一例外是 stamped `/mode vscode` 会在 fallback 到这条车道前，先尝试把首张可投影兼容提示卡承接到当前卡
    3. 不借用 turn-owned reply-chain 或 final-card anchor
 11. 当前的重复触发策略已经按 family 收口到同一 helper，而不再散在各入口各写一份：
    1. resume failure / VS Code open prompt 仍以 source 侧恢复 backoff 为主，helper 只额外做短窗去重，避免同批次重复弹出
@@ -1147,7 +1172,7 @@ transport degraded retained attachment
 | `G6 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成、取消，或使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
 | `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
 | `G7 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G7` 一致：只允许 `/status`、`/autowhip`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
-| `G8 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理 |
+| `G8 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若迁移/修复提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示 |
 
 retained-offline overlay 额外规则：
 
@@ -1270,6 +1295,7 @@ retained-offline overlay 额外规则：
 33. **normal `/list` 只能展示仍有 online instance 的 workspace，导致仅能从 persisted/offline thread 恢复的 workspace（例如 `picdetect`）完全不可见**：已修复。当前 normal `/list` 会把 recoverable-only workspace 也列出来，但不会伪装成 attach；按钮会直接进入该 workspace 的会话列表，再复用现有 `/use` 恢复链路。
 34. **transport degraded / hard disconnect / remove instance 后 compact overlay 可能残留，导致后续 `/compact` 永久 busy**：已修复。当前这三条路径都会清掉 `compactTurns`，不会再把实例卡在伪 `compact_in_progress`；若仍保留当前 surface + compact owner-card，上层还会 best-effort 把显式 `/compact` 卡封成失败态。
 35. **hard disconnect 时 pending steer 没恢复，steering 中的 queued 输入会脱离普通队列后直接消失**：已修复。当前 disconnect 也会按原顺序恢复 `pendingSteers`，再继续 offline/detach 语义。
+36. **VS Code 菜单进入的 `/list`、`/use`、`/useall` 与迁移/恢复提示会在菜单首跳后逃逸成 submission-anchor / notice / runtime prompt**：已修复。当前 stamped 菜单卡会把实例 / 线程结果、attach / use 终态，以及 stamped `/mode vscode` 与 `/vscode-migrate` 命中的兼容提示 / 迁移结果优先收口到原卡；只有真正脱离当前 card 上下文的后台 runtime 提示才继续走独立 `global runtime` 车道。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

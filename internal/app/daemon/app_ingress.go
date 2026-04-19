@@ -272,9 +272,24 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		if !switchedIntoVSCode {
 			return inlineResult
 		}
+		now := time.Now().UTC()
 		a.invalidateVSCodeCompatibilityCacheLocked()
-		promptEvents, _ := a.maybePromptVSCodeCompatibilityAtLocked(action.SurfaceSessionID, time.Now().UTC())
+		forceSyncPrompt := action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""
+		promptEvents, blocked := a.promptVSCodeCompatibilityAtLocked(action.SurfaceSessionID, now, forceSyncPrompt)
+		if replace, rest := a.firstProjectableCardReplacementLocked(action, promptEvents); replace != nil {
+			inlineResult = replace
+			promptEvents = rest
+		}
 		a.handleUIEventsLocked(ctx, promptEvents)
+		if !blocked {
+			recoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
+			recoveryEvents = append(recoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
+			if replace, rest := a.firstProjectableCardReplacementLocked(action, recoveryEvents); replace != nil {
+				inlineResult = replace
+				recoveryEvents = rest
+			}
+			a.handleUIEventsLocked(ctx, recoveryEvents)
+		}
 	}
 	return inlineResult
 }
@@ -328,20 +343,41 @@ func filterNoticeUIEvents(events []control.UIEvent) []control.UIEvent {
 	return out
 }
 
+func filterThreadSelectionUIEvents(events []control.UIEvent) []control.UIEvent {
+	out := make([]control.UIEvent, 0, len(events))
+	for _, event := range events {
+		if event.Kind == control.UIEventThreadSelectionChange {
+			continue
+		}
+		out = append(out, event)
+	}
+	return out
+}
+
 func (a *App) commandCardResultReplacementLocked(action control.Action, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
 	if !control.AllowsCommandCardResultReplacement(action) || len(events) == 0 {
 		return nil, events
 	}
+	replace, appendEvents := a.firstProjectableCardReplacementLocked(action, events)
+	if replace == nil {
+		return nil, events
+	}
+	if commandCardTerminalResult(action) {
+		appendEvents = filterNoticeUIEvents(appendEvents)
+	}
+	if action.Kind == control.ActionAttachInstance {
+		appendEvents = filterThreadSelectionUIEvents(appendEvents)
+	}
+	return replace, appendEvents
+}
+
+func (a *App) firstProjectableCardReplacementLocked(action control.Action, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
 	for i, event := range events {
 		replace := a.projectFirstCardAsReplacementLocked(action, event)
 		if replace == nil {
 			continue
 		}
-		appendEvents := removeUIEventAt(events, i)
-		if commandCardTerminalResult(action) {
-			appendEvents = filterNoticeUIEvents(appendEvents)
-		}
-		return replace, appendEvents
+		return replace, removeUIEventAt(events, i)
 	}
 	return nil, events
 }
@@ -409,6 +445,8 @@ func daemonCommandMatchesBareContinuation(action control.Action, command control
 		return command.Kind == control.DaemonCommandDebug
 	case control.ActionCronCommand:
 		return command.Kind == control.DaemonCommandCron
+	case control.ActionVSCodeMigrate:
+		return command.Kind == control.DaemonCommandVSCodeMigrate
 	default:
 		return false
 	}

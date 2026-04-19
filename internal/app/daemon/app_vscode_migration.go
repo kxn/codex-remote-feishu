@@ -99,10 +99,14 @@ func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, erro
 }
 
 func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]control.UIEvent, bool) {
-	return a.maybePromptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC())
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC(), false)
 }
 
 func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time) ([]control.UIEvent, bool) {
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, now, false)
+}
+
+func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time, forceSync bool) ([]control.UIEvent, bool) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -115,6 +119,9 @@ func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now t
 		return nil, false
 	}
 	issue, pending := a.cachedVSCodeCompatibilityIssueLocked(now)
+	if pending && forceSync {
+		issue, pending = a.resolveVSCodeCompatibilityIssueSynchronouslyLocked(now)
+	}
 	if pending {
 		return nil, true
 	}
@@ -138,6 +145,38 @@ func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now t
 		})
 	}
 	return events, true
+}
+
+func (a *App) resolveVSCodeCompatibilityIssueSynchronouslyLocked(now time.Time) (*vscodeCompatibilityIssue, bool) {
+	if a.vscodeCompatibility.Checked {
+		return a.vscodeCompatibility.Issue, false
+	}
+	a.vscodeCompatibility.RefreshToken++
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.Checked = false
+	a.vscodeCompatibility.Issue = nil
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+
+	a.mu.Unlock()
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+
+	if err != nil {
+		log.Printf("detect vscode compatibility issue failed during stamped prompt: err=%v", err)
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		a.vscodeCompatibility.Checked = false
+		a.vscodeCompatibility.Issue = nil
+		a.vscodeCompatibility.RefreshInFlight = false
+		a.vscodeCompatibility.NextRetryAt = now.Add(vscodeCompatibilityRetryBackoff)
+		return nil, true
+	}
+	a.vscodeCompatibility.Checked = true
+	a.vscodeCompatibility.Issue = issue
+	a.vscodeCompatibility.RefreshInFlight = false
+	a.vscodeCompatibility.NextRetryAt = time.Time{}
+	return issue, false
 }
 
 func (a *App) syncVSCodeMigrationPromptStateLocked() {

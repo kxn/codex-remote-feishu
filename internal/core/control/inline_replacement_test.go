@@ -221,12 +221,36 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "list does not become stamped result replacement",
+			name: "list can replace stamped card with first real result",
 			action: Action{
 				Kind:    ActionListInstances,
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
-			want: false,
+			want: true,
+		},
+		{
+			name: "use can replace stamped card with first real result",
+			action: Action{
+				Kind:    ActionShowThreads,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "attach result can replace stamped selection card",
+			action: Action{
+				Kind:    ActionAttachInstance,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "use thread result can replace stamped selection card",
+			action: Action{
+				Kind:    ActionUseThread,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
 		},
 	}
 
@@ -289,6 +313,15 @@ func TestAllowsBareCommandContinuation(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "vscode migrate continues in place from stamped card callback",
+			action: Action{
+				Kind:    ActionVSCodeMigrate,
+				Text:    "/vscode-migrate",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -318,6 +351,14 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 			name: "list from stamped card callback",
 			action: Action{
 				Kind:    ActionListInstances,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
+			name: "use no longer falls back to submission anchor",
+			action: Action{
+				Kind:    ActionShowThreads,
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
 			want: false,

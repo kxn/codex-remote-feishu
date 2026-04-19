@@ -99,6 +99,206 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInVSCodeMode(t *testin
 	}
 }
 
+func TestHandleGatewayActionReplacesMenuCardForVSCodeListEmptyState(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionListInstances,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-list-empty-1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected list empty-state to replace current card, got %#v", result)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "当前没有在线 VS Code 实例") {
+		t.Fatalf("expected empty-state text in replacement card, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
+func TestHandleGatewayActionReplacesMenuCardForVSCodeDetachedThreadCommands(t *testing.T) {
+	tests := []struct {
+		name  string
+		kind  control.ActionKind
+		text  string
+		msgID string
+	}{
+		{name: "use", kind: control.ActionShowThreads, text: "/use", msgID: "om-menu-use-detached-1"},
+		{name: "useall", kind: control.ActionShowAllThreads, text: "/useall", msgID: "om-menu-useall-detached-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gateway := &recordingGateway{}
+			app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+				PID:       42,
+				StartedAt: time.Date(2026, 4, 19, 10, 1, 0, 0, time.UTC),
+			})
+			app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+			app.service.ApplySurfaceAction(control.Action{
+				Kind:             control.ActionModeCommand,
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				Text:             "/mode vscode",
+			})
+
+			result := app.HandleGatewayAction(context.Background(), control.Action{
+				Kind:             tt.kind,
+				GatewayID:        "app-1",
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				MessageID:        tt.msgID,
+				Text:             tt.text,
+				Inbound: &control.ActionInboundMeta{
+					CardDaemonLifecycleID: app.daemonLifecycleID,
+				},
+			})
+
+			if result == nil || result.ReplaceCurrentCard == nil {
+				t.Fatalf("expected detached %s to replace current card, got %#v", tt.text, result)
+			}
+			if result.ReplaceCurrentCard.CardTitle == "命令已提交" {
+				t.Fatalf("did not expect %s detached state to fall back to submission anchor, got %#v", tt.text, result.ReplaceCurrentCard)
+			}
+			if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "请先 /list 选择一个 VS Code 实例") {
+				t.Fatalf("expected detached %s guidance in replacement card, got %#v", tt.text, result.ReplaceCurrentCard.CardElements)
+			}
+			if len(gateway.operations) != 0 {
+				t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+			}
+		})
+	}
+}
+
+func TestHandleGatewayActionReplacesVSCodeInstanceSelectionCardForAttachResult(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 10, 2, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "vscode",
+		Online:        true,
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-vscode-list-1",
+		InstanceID:       "inst-vscode-1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected attach result to replace current selection card, got %#v", result)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已接管 droid") {
+		t.Fatalf("expected attach success text in replacement card, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
+func TestHandleGatewayActionReplacesVSCodeThreadSelectionCardForUseResult(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 10, 3, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode vscode",
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "vscode",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "会话1", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode-1",
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionUseThread,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-vscode-use-1",
+		ThreadID:         "thread-1",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected /use result to replace current selection card, got %#v", result)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "当前输入目标已切换到：droid · 会话1") {
+		t.Fatalf("expected thread-selection result text in replacement card, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
 func TestHandleGatewayActionReplacesMenuCardForSendFileHandoff(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
