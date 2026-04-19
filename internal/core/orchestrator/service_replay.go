@@ -43,6 +43,7 @@ func (s *Service) storeThreadReplayText(inst *state.InstanceRecord, threadID, tu
 	if text == "" {
 		return
 	}
+	sourceMessageID, sourceMessagePreview := s.replyAnchorForTurn(inst.InstanceID, threadID, turnID)
 	thread := s.ensureThread(inst, threadID)
 	s.clearThreadReplay(inst, threadID)
 	snippet := previewOfText(text)
@@ -50,14 +51,29 @@ func (s *Service) storeThreadReplayText(inst *state.InstanceRecord, threadID, tu
 	thread.Preview = snippet
 	s.touchThread(thread)
 	thread.UndeliveredReplay = &state.ThreadReplayRecord{
-		Kind:   state.ThreadReplayAssistantFinal,
-		TurnID: turnID,
-		ItemID: itemID,
-		Text:   text,
+		Kind:                 state.ThreadReplayAssistantFinal,
+		TurnID:               turnID,
+		ItemID:               itemID,
+		Text:                 text,
+		SourceMessageID:      sourceMessageID,
+		SourceMessagePreview: sourceMessagePreview,
 	}
 }
 
 func (s *Service) storeThreadReplayNotice(inst *state.InstanceRecord, threadID string, notice control.Notice) {
+	s.storeThreadReplayNoticeWithSource(inst, threadID, notice, "", "")
+}
+
+func (s *Service) storeThreadReplayTurnNotice(inst *state.InstanceRecord, threadID, turnID string, notice control.Notice) {
+	sourceMessageID := ""
+	sourceMessagePreview := ""
+	if inst != nil {
+		sourceMessageID, sourceMessagePreview = s.replyAnchorForTurn(inst.InstanceID, threadID, turnID)
+	}
+	s.storeThreadReplayNoticeWithSource(inst, threadID, notice, sourceMessageID, sourceMessagePreview)
+}
+
+func (s *Service) storeThreadReplayNoticeWithSource(inst *state.InstanceRecord, threadID string, notice control.Notice, sourceMessageID, sourceMessagePreview string) {
 	if inst == nil || strings.TrimSpace(threadID) == "" {
 		return
 	}
@@ -67,11 +83,13 @@ func (s *Service) storeThreadReplayNotice(inst *state.InstanceRecord, threadID s
 	thread := s.ensureThread(inst, threadID)
 	s.clearThreadReplay(inst, threadID)
 	thread.UndeliveredReplay = &state.ThreadReplayRecord{
-		Kind:           state.ThreadReplayNotice,
-		NoticeCode:     notice.Code,
-		NoticeTitle:    notice.Title,
-		NoticeText:     notice.Text,
-		NoticeThemeKey: notice.ThemeKey,
+		Kind:                 state.ThreadReplayNotice,
+		SourceMessageID:      strings.TrimSpace(sourceMessageID),
+		SourceMessagePreview: strings.TrimSpace(sourceMessagePreview),
+		NoticeCode:           notice.Code,
+		NoticeTitle:          notice.Title,
+		NoticeText:           notice.Text,
+		NoticeThemeKey:       notice.ThemeKey,
 	}
 }
 
@@ -140,7 +158,7 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 
 	switch replay.Kind {
 	case state.ThreadReplayAssistantFinal:
-		return s.renderTextToSurface(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true, nil, nil, nil)
+		return s.renderTextToSurfaceWithSource(surface, inst, threadID, replay.TurnID, replay.ItemID, replay.Text, true, nil, nil, nil, replay.SourceMessageID, replay.SourceMessagePreview)
 	case state.ThreadReplayNotice:
 		if replay.NoticeCode == "context_compacted" {
 			if !s.surfaceAllowsProcessProgress(surface, "context_compaction") {
@@ -150,6 +168,7 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 				Kind:             control.UIEventExecCommandProgress,
 				GatewayID:        surface.GatewayID,
 				SurfaceSessionID: surface.SurfaceSessionID,
+				SourceMessageID:  replay.SourceMessageID,
 				ExecCommandProgress: &control.ExecCommandProgress{
 					ThreadID: threadID,
 					Entries: []control.ExecCommandProgressEntry{
@@ -168,6 +187,7 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 			Kind:             control.UIEventNotice,
 			GatewayID:        surface.GatewayID,
 			SurfaceSessionID: surface.SurfaceSessionID,
+			SourceMessageID:  replay.SourceMessageID,
 			Notice:           &notice,
 		}}
 	default:

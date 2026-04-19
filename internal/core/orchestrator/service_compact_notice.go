@@ -59,7 +59,7 @@ func (r *serviceProgressRuntime) renderCompactNotice(instanceID string, event ag
 	surface := r.service.surfaceForInitiator(instanceID, event)
 	if surface == nil {
 		if inst != nil && strings.TrimSpace(event.ThreadID) != "" {
-			r.service.storeThreadReplayNotice(inst, event.ThreadID, notice)
+			r.service.storeThreadReplayTurnNotice(inst, event.ThreadID, event.TurnID, notice)
 		}
 		return nil
 	}

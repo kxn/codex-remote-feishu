@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（dispatching / running / completed / failed 同卡 patch，且不受 `verbose` 影响）、被动 compact 继续保留在 verbose 共享过程卡里，同时 `/upgrade latest`、bare `/cron`、`/sendfile` 子步骤与共享过程卡也都已同步到同卡 patch / append-only 的最新边界。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（dispatching / running / completed / failed 同卡 patch，且不受 `verbose` 影响）、被动 compact 继续保留在 verbose 共享过程卡里，同时 `/upgrade latest`、bare `/cron`、`/sendfile` 子步骤与共享过程卡也都已同步到同卡 patch / append-only 的最新边界；turn-owned 的 request / plan / 共享过程卡 / replay 当前若命中 turn reply anchor，也会优先回到触发消息的回复链。
 
 ## 1. 文档定位
 
@@ -66,7 +66,7 @@
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
-  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / 被动 `context_compaction`），负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新
+  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / 被动 `context_compaction`），负责在首次发送时打开 `config.update_multi=true`，让后续同一张卡可被 `message.patch` 更新；若 `UIEvent.SourceMessageID` 存在，则首卡会先 reply 到这轮 turn 的源消息
   - 对显式 `/compact` 这种 direct-command owner card，当前通过 patchable `FeishuDirectCommandCatalog` 发送首卡，并依赖 `TrackingKey -> message_id` 回写把 running / terminal 状态继续 patch 回同一张卡
   - 当前是 selection / target-picker / command/config cards 最终 projection 的 owner：
     [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
@@ -386,7 +386,10 @@ MCP request 卡片当前新增的可视语义：
 - stamped 菜单命令里的非 inline 命令（例如 `/status`、`/stop`、`/steerall`、`/new`、`/follow`、`/detach`）会先同步 replace 为“命令已提交”锚点卡，再继续 append 原命令结果卡。
 - bare `/upgrade`、bare `/debug`、bare `/cron` 当前不再走“命令已提交”锚点，而是直接在当前卡内同步承接到下一张 command catalog。
 - `/upgrade latest` 当前不走 callback 同步 replace；但只要进入 daemon owner-card 流，同一张升级卡会继续通过 `message.patch` 在 `checking -> confirm -> running/cancelling -> restarting(sealed)` 之间推进，不再依赖“再次发送 `/upgrade latest`”。
-- 中间结果卡当前统一偏向直接 append 到会话，而不再 reply 到触发消息；当前命中的路径包括 `当前计划`、共享过程卡，以及文本触发 `/history` 的首张 patchable history card。保留 reply 语义的主路径只剩 final reply（以及图片输出这类非卡片结果）。
+- turn-owned 的中间结果卡当前不再一律顶层 append：
+  - `当前计划`、request prompt、共享过程卡若事件里带 `SourceMessageID`，会优先 reply 到触发这轮 turn 的源消息；没有 anchor 时仍退回顶层 append
+  - 文本触发 `/history` 的首张 patchable history card 仍保持顶层 append；它属于 owner-card / history 混合路径，不跟随 turn reply anchor
+  - final reply、图片输出继续保留 reply 语义；replay 到 later surface 时，若当时已记录 reply anchor，也会优先回到原回复链
 - `/history` 当前是单独的混合路径：
   - bare `/history`、`history_page`、`history_detail` 都在 inline-replace allow-list 里
   - `openThreadHistory(...)` 现在会先建立 owner-card runtime v1 flow，再建立 history 专用业务态；flow 持有 `flow id / owner / message id / revision / phase / created / expires`
@@ -411,11 +414,12 @@ MCP request 卡片当前新增的可视语义：
     - 这意味着 overflow cards 继续保持 append-only，不会被后台 preview patch 追补，也不会在 patch 时重发
     - patch 目标固定是这张 final reply 自己，不会追加第二张 final card，也不会回填 preview supplement
     - 若 anchor 已因 detach、daemon lifecycle 变化或 turn identity 不匹配而失效，则静默放弃，不再尝试补丁
+  - 若 final / turn-owned notice / compact completion 发生在当时无可投递 surface 的时刻，replay state 现在也会一并保存原始 `SourceMessageID` / 预览；later replay 命中这份 anchor 时，会继续回到原回复链，而不是降级成顶层新卡
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner；参数卡 apply 的同卡收口也不复用“命令已提交”锚点，而是由产品 handler 直接返回可 patch 的 command card 结果。
 - 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
-  - 第一次直接 append 到当前会话，不再 reply 到触发这轮 turn 的源消息
+  - 第一次若命中当前 turn 的 `SourceMessageID`，会先 reply 到触发这轮 turn 的源消息；若没有 anchor，则退回顶层 append
   - 若同一 turn 内继续收到新的可见过程项，则改用 `message.patch` 更新同一消息；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call` 与 `context_compaction` 累积到同一张“处理中”卡
 - `reasoning_summary` 当前不会进入普通 timeline；verbose 下若能解析到稳定阶段标题，会只在卡片最底部临时显示一条本地化状态（例如 `思考中`、`规划中`）
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
@@ -537,7 +541,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/control/feishu_ui_intent_test.go](../../internal/core/control/feishu_ui_intent_test.go)
   - 锁定哪些动作会被分流到 Feishu UI controller，哪些 mixed/product-owned 动作仍留在主 reducer
 - [internal/adapter/feishu/projector_test.go](../../internal/adapter/feishu/projector_test.go)
-  - 锁定 `FeishuDirectSelectionPrompt` / `FeishuSelectionView` / `FeishuCommandView` / `FeishuDirectCommandCatalog` / `FeishuDirectRequestPrompt` 的 lifecycle stamp、projection 结果与 callback payload 结构
+  - 锁定 `FeishuDirectSelectionPrompt` / `FeishuSelectionView` / `FeishuCommandView` / `FeishuDirectCommandCatalog` / `FeishuDirectRequestPrompt` 的 lifecycle stamp、projection 结果、request prompt reply-anchor 语义与 callback payload 结构
 - [internal/adapter/feishu/projector_target_picker_test.go](../../internal/adapter/feishu/projector_target_picker_test.go)
   - 锁定 `FeishuTargetPickerView` 的页头 `StageLabel` / `Question`、模式/来源次级标签、双下拉与 Git 表单 payload、`daemon_lifecycle_id` stamp、confirm 按钮结构，以及带 `MessageID` 时改走 `OperationUpdateCard`、terminal stage 移除交互控件
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
@@ -553,7 +557,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + command submission anchor）、无 lifecycle 导航仍异步 ack，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、首卡 reply-anchor / 后续 patch 语义、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -563,11 +567,11 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
   - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 normal `/list` 的基础 target picker 语义
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、同卡复用、正文出现后终止、同类 tool 行级聚合、失败态行内标记、底部瞬时 reasoning 状态的本地化/清理时机，以及 turn 完成清理语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、reply-anchor 继承、同卡复用、正文出现后终止、同类 tool 行级聚合、失败态行内标记、底部瞬时 reasoning 状态的本地化/清理时机，以及 turn 完成清理语义
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)
   - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重与行级摘要更新语义
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)
-  - 锁定 `context_compaction` 已并入共享过程卡：attached verbose 进入 `整理` 行、normal/quiet 保持静默，以及无 surface 时的 replay 只在 verbose attach 下可见
+  - 锁定 `context_compaction` 已并入共享过程卡：attached verbose 进入 `整理` 行、normal/quiet 保持静默，以及无 surface 时的 replay 只在 verbose attach 下可见，并在已记录 turn anchor 时继续回到原回复链
 - [internal/core/orchestrator/service_image_output_test.go](../../internal/core/orchestrator/service_image_output_test.go)
   - 锁定 `dynamic_tool_call` 在有文本/图片输出时仍走原结果渲染路径，而空输出场景保持静默、不再补缺省 notice
 - [internal/core/orchestrator/service_target_picker_test.go](../../internal/core/orchestrator/service_target_picker_test.go)

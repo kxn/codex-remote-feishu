@@ -272,10 +272,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 		return nil
 	}
 	progress.LastEmittedAt = s.now()
-	sourceMessageID := ""
-	if binding := s.lookupRemoteTurn(progress.InstanceID, threadID, turnID); binding != nil {
-		sourceMessageID = firstNonEmpty(binding.ReplyToMessageID, binding.SourceMessageID)
-	}
+	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := ExecCommandProgressSnapshot(progress)
 	if snapshot == nil {
 		return nil

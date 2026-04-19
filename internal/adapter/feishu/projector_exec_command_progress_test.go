@@ -27,7 +27,7 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	op := ops[0]
-	if op.Kind != OperationSendCard || op.ReplyToMessageID != "" || !op.CardUpdateMulti {
+	if op.Kind != OperationSendCard || op.ReplyToMessageID != "om-source-1" || !op.CardUpdateMulti {
 		t.Fatalf("expected initial exec progress direct card, got %#v", op)
 	}
 	if op.CardTitle != "工作中" {

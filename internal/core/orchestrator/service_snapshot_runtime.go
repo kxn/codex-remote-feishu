@@ -280,17 +280,7 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 		if !requestPromptRenderable(request.RequestType) {
 			return notice(surface, noticeCode, noticeText)
 		}
-		return []control.UIEvent{
-			s.requestPromptEvent(surface, request, ""),
-			{
-				Kind:             control.UIEventNotice,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				Notice: &control.Notice{
-					Code: noticeCode,
-					Text: noticeText,
-				},
-			},
-		}
+		return s.requestPromptRefreshWithNotice(surface, request, noticeCode, noticeText)
 	}
 	return nil
 }

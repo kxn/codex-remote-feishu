@@ -39,6 +39,7 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 		operation.ReplyToMessageID = ""
 	} else {
 		operation.Kind = OperationSendCard
+		operation.ReplyToMessageID = strings.TrimSpace(event.SourceMessageID)
 	}
 	return []Operation{operation}
 }

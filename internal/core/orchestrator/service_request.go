@@ -145,12 +145,16 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		}
 	}
 	record := &state.RequestPromptRecord{
-		RequestID:    event.RequestID,
-		RequestType:  requestType,
-		Prompt:       event.RequestPrompt,
-		InstanceID:   instanceID,
-		ThreadID:     event.ThreadID,
-		TurnID:       event.TurnID,
+		RequestID:   event.RequestID,
+		RequestType: requestType,
+		Prompt:      event.RequestPrompt,
+		InstanceID:  instanceID,
+		ThreadID:    event.ThreadID,
+		TurnID:      event.TurnID,
+		SourceMessageID: func() string {
+			sourceMessageID, _ := s.replyAnchorForTurn(instanceID, event.ThreadID, event.TurnID)
+			return sourceMessageID
+		}(),
 		ItemID:       strings.TrimSpace(metadataString(event.Metadata, "itemId")),
 		Title:        title,
 		Body:         body,
@@ -480,7 +484,7 @@ func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record
 		}
 		threadTitle = displayThreadTitle(inst, thread, record.ThreadID)
 	}
-	return s.feishuDirectRequestPromptEvent(surface, control.FeishuDirectRequestPrompt{
+	event := s.feishuDirectRequestPromptEvent(surface, control.FeishuDirectRequestPrompt{
 		RequestID:                          record.RequestID,
 		RequestType:                        record.RequestType,
 		RequestRevision:                    record.CardRevision,
@@ -493,11 +497,21 @@ func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record
 		SubmitWithUnansweredConfirmPending: record.SubmitWithUnansweredConfirmPending,
 		SubmitWithUnansweredMissingLabels:  append([]string(nil), record.SubmitWithUnansweredMissingLabels...),
 	})
+	event.SourceMessageID = strings.TrimSpace(record.SourceMessageID)
+	return event
 }
 
 func (s *Service) requestPromptRefreshWithNotice(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, code, text string) []control.UIEvent {
 	events := []control.UIEvent{s.requestPromptEvent(surface, record, "")}
-	events = append(events, notice(surface, code, text)...)
+	events = append(events, control.UIEvent{
+		Kind:             control.UIEventNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		SourceMessageID:  strings.TrimSpace(record.SourceMessageID),
+		Notice: &control.Notice{
+			Code: code,
+			Text: text,
+		},
+	})
 	return events
 }
 

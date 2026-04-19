@@ -1388,7 +1388,8 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 func TestProjectRequestPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
-		Kind: control.UIEventFeishuDirectRequestPrompt,
+		Kind:            control.UIEventFeishuDirectRequestPrompt,
+		SourceMessageID: "om-source-1",
 		FeishuDirectRequestPrompt: &control.FeishuDirectRequestPrompt{
 			RequestID:   "req-1",
 			RequestType: "approval",
@@ -1406,6 +1407,9 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "om-source-1" {
+		t.Fatalf("expected request prompt to reply to source message, got %#v", ops[0])
 	}
 	if ops[0].CardTitle != "需要确认" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
@@ -1851,6 +1855,24 @@ func TestProjectNoticeAsSystemCard(t *testing.T) {
 	}
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected notice to use structured V2 send path, got %#v", ops[0])
+	}
+}
+
+func TestProjectTurnOwnedNoticeRepliesToSourceMessage(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:            control.UIEventNotice,
+		SourceMessageID: "om-source-1",
+		Notice: &control.Notice{
+			Code: "request_refresh",
+			Text: "请在最新卡片上重试。",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "om-source-1" {
+		t.Fatalf("expected notice to reply to source message, got %#v", ops[0])
 	}
 }
 

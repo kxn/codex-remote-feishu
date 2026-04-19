@@ -241,3 +241,22 @@ func TestContextCompactionReplayStaysSilentWhenAttachedSurfaceNotVerbose(t *test
 		t.Fatalf("expected suppressed compact replay to drain after attach, got %#v", replay)
 	}
 }
+
+func TestCompactReplayKeepsStoredReplyAnchor(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 9, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "整理一下", "turn-1")
+
+	svc.storeThreadReplayTurnNotice(svc.root.Instances["inst-1"], "thread-1", "turn-1", compactCompletionNotice())
+	svc.root.Instances["inst-1"].ActiveTurnID = ""
+
+	events := svc.replayThreadUpdate(surface, svc.root.Instances["inst-1"], "thread-1")
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected one compact replay progress event, got %#v", events)
+	}
+	if events[0].SourceMessageID != "msg-1" {
+		t.Fatalf("expected compact replay to keep source anchor, got %#v", events[0])
+	}
+}

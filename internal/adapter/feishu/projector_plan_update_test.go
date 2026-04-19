@@ -30,7 +30,7 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 		t.Fatalf("expected one card operation, got %#v", ops)
 	}
 	op := ops[0]
-	if op.CardTitle != "当前计划" || op.ReplyToMessageID != "" {
+	if op.CardTitle != "当前计划" || op.ReplyToMessageID != "om_1" {
 		t.Fatalf("unexpected plan update card envelope: %#v", op)
 	}
 	if op.CardThemeKey != cardThemePlan {

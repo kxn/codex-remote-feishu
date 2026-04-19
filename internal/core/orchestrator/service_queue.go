@@ -10,6 +10,18 @@ import (
 	"strings"
 )
 
+func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (string, string) {
+	if strings.TrimSpace(instanceID) == "" || strings.TrimSpace(threadID) == "" || strings.TrimSpace(turnID) == "" {
+		return "", ""
+	}
+	binding := s.lookupRemoteTurn(instanceID, threadID, turnID)
+	if binding == nil {
+		return "", ""
+	}
+	return strings.TrimSpace(firstNonEmpty(binding.ReplyToMessageID, binding.SourceMessageID)),
+		strings.TrimSpace(firstNonEmpty(binding.ReplyToMessagePreview, binding.SourceMessagePreview))
+}
+
 func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []control.UIEvent {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	item := &state.QueueItemRecord{
@@ -329,7 +341,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []c
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 	if surface == nil {
 		if inst != nil && (savedPath == "" && imageBase64 == "") && strings.TrimSpace(event.ThreadID) != "" {
-			s.storeThreadReplayNotice(inst, event.ThreadID, NoticeForProblem(problem))
+			s.storeThreadReplayTurnNotice(inst, event.ThreadID, event.TurnID, NoticeForProblem(problem))
 		}
 		return nil
 	}
@@ -353,12 +365,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []c
 		})
 	}
 
-	replySourceMessageID := ""
-	replySourceMessagePreview := ""
-	if binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID); binding != nil {
-		replySourceMessageID = strings.TrimSpace(binding.ReplyToMessageID)
-		replySourceMessagePreview = strings.TrimSpace(binding.ReplyToMessagePreview)
-	}
+	replySourceMessageID, replySourceMessagePreview := s.replyAnchorForTurn(instanceID, event.ThreadID, event.TurnID)
 	return append(events, control.UIEvent{
 		Kind:                 control.UIEventImageOutput,
 		SurfaceSessionID:     surface.SurfaceSessionID,
@@ -391,16 +398,17 @@ func (s *Service) renderTextItemWithSummary(instanceID, threadID, turnID, itemID
 }
 
 func (s *Service) renderTextToSurface(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary) []control.UIEvent {
+	return s.renderTextToSurfaceWithSource(surface, inst, threadID, turnID, itemID, text, final, summary, turnDiff, finalSummary, "", "")
+}
+
+func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID, turnID, itemID, text string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary, sourceMessageID, sourceMessagePreview string) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
-	replySourceMessageID := ""
-	replySourceMessagePreview := ""
-	if final && inst != nil {
-		if binding := s.lookupRemoteTurn(inst.InstanceID, threadID, turnID); binding != nil {
-			replySourceMessageID = strings.TrimSpace(binding.ReplyToMessageID)
-			replySourceMessagePreview = strings.TrimSpace(binding.ReplyToMessagePreview)
-		}
+	replySourceMessageID := strings.TrimSpace(sourceMessageID)
+	replySourceMessagePreview := strings.TrimSpace(sourceMessagePreview)
+	if final && replySourceMessageID == "" && inst != nil {
+		replySourceMessageID, replySourceMessagePreview = s.replyAnchorForTurn(inst.InstanceID, threadID, turnID)
 	}
 	events := []control.UIEvent{}
 	if surface.ActiveTurnOrigin != agentproto.InitiatorLocalUI {

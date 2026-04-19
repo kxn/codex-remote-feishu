@@ -153,14 +153,16 @@ const (
 )
 
 type ThreadReplayRecord struct {
-	Kind           ThreadReplayKind
-	TurnID         string
-	ItemID         string
-	Text           string
-	NoticeCode     string
-	NoticeTitle    string
-	NoticeText     string
-	NoticeThemeKey string
+	Kind                 ThreadReplayKind
+	TurnID               string
+	ItemID               string
+	Text                 string
+	SourceMessageID      string
+	SourceMessagePreview string
+	NoticeCode           string
+	NoticeTitle          string
+	NoticeText           string
+	NoticeThemeKey       string
 }
 
 type SurfaceConsoleRecord struct {
@@ -349,6 +351,7 @@ type RequestPromptRecord struct {
 	InstanceID               string
 	ThreadID                 string
 	TurnID                   string
+	SourceMessageID          string
 	ItemID                   string
 	Title                    string
 	Body                     string

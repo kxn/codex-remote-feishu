@@ -483,6 +483,9 @@ func TestNormalVerbosityKeepsPlanUpdates(t *testing.T) {
 	if len(planEvents) != 1 || planEvents[0].Kind != control.UIEventPlanUpdated {
 		t.Fatalf("expected normal verbosity to keep plan event, got %#v", planEvents)
 	}
+	if planEvents[0].SourceMessageID != "msg-1" {
+		t.Fatalf("expected plan update to inherit turn reply anchor, got %#v", planEvents[0])
+	}
 }
 
 func TestVerbosityFilterNeverDropsDaemonOrAgentCommands(t *testing.T) {
