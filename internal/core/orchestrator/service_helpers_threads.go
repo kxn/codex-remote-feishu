@@ -121,6 +121,30 @@ func (s *Service) markImagesForMessages(surface *state.SurfaceConsoleRecord, sou
 	}
 }
 
+func (s *Service) markFilesForMessages(surface *state.SurfaceConsoleRecord, sourceMessageIDs []string, next state.FileState) {
+	if surface == nil || len(surface.StagedFiles) == 0 {
+		return
+	}
+	targets := map[string]struct{}{}
+	for _, messageID := range uniqueStrings(sourceMessageIDs) {
+		if messageID == "" {
+			continue
+		}
+		targets[messageID] = struct{}{}
+	}
+	if len(targets) == 0 {
+		return
+	}
+	for _, file := range surface.StagedFiles {
+		if file == nil {
+			continue
+		}
+		if _, ok := targets[file.SourceMessageID]; ok {
+			file.State = next
+		}
+	}
+}
+
 func countPendingDrafts(surface *state.SurfaceConsoleRecord) int {
 	if surface == nil {
 		return 0
@@ -128,6 +152,11 @@ func countPendingDrafts(surface *state.SurfaceConsoleRecord) int {
 	total := 0
 	for _, image := range surface.StagedImages {
 		if image != nil && image.State == state.ImageStaged {
+			total++
+		}
+	}
+	for _, file := range surface.StagedFiles {
+		if file != nil && file.State == state.FileStaged {
 			total++
 		}
 	}

@@ -25,6 +25,7 @@ type Service struct {
 	renderer             *renderer.Planner
 	nextQueueItemID      int
 	nextImageID          int
+	nextFileID           int
 	nextPromptID         int
 	nextRequestCommandID int
 	nextLocalRequestID   int
@@ -508,6 +509,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		events = s.handleText(surface, action)
 	case control.ActionImageMessage:
 		events = s.stageImage(surface, action)
+	case control.ActionFileMessage:
+		events = s.stageFile(surface, action)
 	case control.ActionReactionCreated:
 		events = s.handleReactionCreated(surface, action)
 	case control.ActionMessageRecalled:

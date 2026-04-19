@@ -79,6 +79,7 @@ func (s *Service) noteAutoContinueAction(surface *state.SurfaceConsoleRecord, ac
 	switch action.Kind {
 	case control.ActionTextMessage,
 		control.ActionImageMessage,
+		control.ActionFileMessage,
 		control.ActionAttachInstance,
 		control.ActionNewThread,
 		control.ActionShowThreads,

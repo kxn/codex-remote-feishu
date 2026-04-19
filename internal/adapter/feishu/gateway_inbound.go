@@ -94,6 +94,22 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 		action.SteerInputs = []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
 		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
+	case "file":
+		fileKey, fileName, err := parseFileContent(stringPtr(message.Content))
+		if err != nil {
+			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_file_content", err)
+			return control.Action{}, false, err
+		}
+		path, err := g.downloadFileFn(ctx, stringPtr(message.MessageId), fileKey, fileName)
+		if err != nil {
+			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "download_file", err)
+			return control.Action{}, false, err
+		}
+		action.Kind = control.ActionFileMessage
+		action.LocalPath = path
+		action.FileName = fileName
+		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		return action, true, nil
 	case "merge_forward":
 		payload, err := g.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
 		if err != nil {
@@ -329,4 +345,24 @@ func parseImageKey(rawContent string) (string, error) {
 		return "", fmt.Errorf("missing image_key")
 	}
 	return strings.TrimSpace(content.ImageKey), nil
+}
+
+func parseFileContent(rawContent string) (string, string, error) {
+	var content struct {
+		FileKey  string `json:"file_key"`
+		FileName string `json:"file_name"`
+		Name     string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(rawContent), &content); err != nil {
+		return "", "", err
+	}
+	fileKey := strings.TrimSpace(content.FileKey)
+	if fileKey == "" {
+		return "", "", fmt.Errorf("missing file_key")
+	}
+	fileName := strings.TrimSpace(content.FileName)
+	if fileName == "" {
+		fileName = strings.TrimSpace(content.Name)
+	}
+	return fileKey, fileName, nil
 }

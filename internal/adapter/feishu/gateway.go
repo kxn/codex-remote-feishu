@@ -42,6 +42,7 @@ type LiveGateway struct {
 	broker *FeishuCallBroker
 
 	downloadImageFn    func(context.Context, string, string) (string, string, error)
+	downloadFileFn     func(context.Context, string, string, string) (string, error)
 	uploadImagePathFn  func(context.Context, string) (string, error)
 	uploadImageBytesFn func(context.Context, []byte) (string, error)
 	uploadFilePathFn   func(context.Context, string) (string, string, error)
@@ -102,6 +103,7 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 		messages:  map[string]string{},
 	}
 	gateway.downloadImageFn = gateway.downloadImage
+	gateway.downloadFileFn = gateway.downloadFile
 	gateway.uploadImagePathFn = gateway.uploadImagePath
 	gateway.uploadImageBytesFn = gateway.uploadImageBytes
 	gateway.uploadFilePathFn = gateway.uploadFilePath

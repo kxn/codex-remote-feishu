@@ -90,7 +90,7 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 		s.clearPreparedNewThread(surface)
 		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
 	}
-	events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
+	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
 	surface.SelectedThreadID = threadID
 	s.clearPreparedNewThread(surface)
 	surface.RouteMode = routeMode

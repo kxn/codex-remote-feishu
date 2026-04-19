@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-19`
+> Updated: `2026-04-20`
 > Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 仍留在 verbose 共享过程卡里）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（顶部 `已有工作区` / `添加工作区` 模式切换；已有工作区路径仍是工作区下拉 + 会话下拉 + confirm，并新增 `target_picker_cancel` 作为显式退出动作；添加工作区路径改成 `本地目录` / `Git URL` 来源选择，其中 `本地目录` 通过 `target_picker_open_path_picker` 打开目录子步骤再回到主卡确认，`Git URL` 则在主卡内联填写仓库地址/目录名并通过同一子步骤选择父目录，最终由 daemon-side non-interactive `git clone` 在持锁外执行；Git confirm 后先让同一张 owner card 进入 processing，并在 clone 完成后继续推进“接入工作区 / 准备会话”；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；成功/失败/取消都封回同卡 terminal。两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；`vscode mode` 下菜单进入的 `/list`、`/use`、`/useall` 现在也会把实例/线程结果、attach / use 终态继续收口在原菜单卡；stamped `/mode vscode` 若立刻命中兼容修复、open prompt 或恢复提示，以及 stamped `/vscode-migrate` 的结果，也优先沿当前卡时间线承接；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖真正脱离当前 owner-card 上下文的 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
 
 ## 1. 文档定位
@@ -122,7 +122,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
       5. `vscode` mode 不会参与 headless auto-restore；旧版 `headless-restore-hints.json` 若仍存在，也只会在 startup 迁移期被导入/忽略，不会进入运行时判定。
 3. `/mode` 当前只在没有 live remote work 的 surface 上执行切换：
    1. 会先走 detach-like 清理。
-   2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image 与 queued draft。
+   2. 清掉 attachment / workspace claim / thread claim、`PromptOverride`、`PendingRequest`、`RequestCapture`、`PreparedThread*`、staged image / staged file 与 queued draft。
    3. 如果当时还带着 `PendingHeadless`，会先显式 kill 当前 headless 启动流程，并清掉 `surface resume state` 里的 headless 恢复目标与内存恢复状态。
 4. 若当前仍有 live remote work，则 `/mode` 直接拒绝，并明确提示用户 `/stop` 或 `/detach`。
 5. `Abandoning` 仍是更高优先级 gate；但 `PendingHeadless` 不再阻塞 `/mode`，用户可以直接切到 `vscode` 终止恢复流程。
@@ -242,7 +242,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 1. 当前还存在一个**可叠加**的 steering overlay：
    1. 某个 queued item 被点赞升级后，会离开 `QueuedQueueItemIDs`
-   2. 或者用户 reply 当前 processing 的 source message，且 reply 内容属于当前 v1 支持的文本/图片输入时，会创建一个临时 steering item
+   2. 或者用户 reply 当前 processing 的 source message，且 reply 内容属于当前 v1 支持的文本/图片输入时，会创建一个临时 steering item；独立文件 reply 当前不会走 steering，而是保留为 staged file
    3. 该 item 进入 `QueueItemStatus=steering`
    4. 相关命令记录在 `pendingSteers`
 2. 这个 overlay 不占用 `ActiveQueueItemID`，所以可以与 `E3 Running` 并存。
@@ -256,11 +256,11 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | --- | --- | --- |
 | `G0 None` | 无附加门禁 | 普通输入按主路由走 |
 | `G1 PendingHeadlessStarting` | `PendingHeadless.Status=starting` | headless 仍在启动 |
-| `G2 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片会被待处理请求门禁挡住；当前可能是 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval` 或 `mcp_server_elicitation`。顶层 `tool/requestUserInput` 与 `item` 形式共用同一 `request_user_input` gate；这些请求在 resolve 前都会继续保持 gate |
+| `G2 PendingRequest` | `PendingRequests` 非空 | 普通文本/图片/文件会被待处理请求门禁挡住；当前可能是 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval` 或 `mcp_server_elicitation`。顶层 `tool/requestUserInput` 与 `item` 形式共用同一 `request_user_input` gate；这些请求在 resolve 前都会继续保持 gate |
 | `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
 | `G4 CommandCapture` | `ActiveCommandCapture != nil` | 仅保留旧 `/model` 历史兼容：当前 UI 不再创建新 capture；若 surface 上残留旧 capture，下一条普通文本会被直接转换成 `/model <输入>` |
 | `G5 PathPicker` | 当前 surface 的 active path picker runtime 非空 | 当前存在一个仍有效的飞书路径选择器；core 只关心“gate 是否存在、是否阻断 competing UI / route mutation、confirm/cancel 后如何交给 consumer”，不关心目录浏览细节 |
-| `G6 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
+| `G6 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
 | `G7 AbandoningGate` | `Abandoning=true` | 只有 `/status` 与 `/autowhip` 继续正常，其余动作被挡 |
 | `G8 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到 legacy `settings.json` override 或 stale managed shim | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发迁移/修复卡片；若这张提示是由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡，否则保持独立 runtime 提示 |
 
@@ -281,8 +281,8 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 | 代号 | 条件 | 含义 |
 | --- | --- | --- |
-| `D0 NoDraft` | 无 staged image，无 queued draft | 没有待绑定输入 |
-| `D1 StagedImages` | `StagedImages` 中存在 `ImageStaged` | 图片已上传，但尚未冻结到 queue item |
+| `D0 NoDraft` | 无 staged image / staged file，无 queued draft | 没有待绑定输入 |
+| `D1 StagedAttachments` | `StagedImages` 中存在 `ImageStaged`，或 `StagedFiles` 中存在 `FileStaged` | 附件已到达，但尚未冻结到 queue item；图片直接作为 image input 带入，文件则会在真正 dispatch 时生成本地路径引用块 |
 | `D2 QueuedDrafts` | `QueuedQueueItemIDs` 非空 | 已冻结 route/cwd/override，等待派发 |
 | `D3 NewThreadFirstInput` | `RouteMode=new_thread_ready` 且已存在 queued/dispatching/running 的首条消息 | 新 thread 尚未落地，但本轮创建已占用 |
 
@@ -481,10 +481,10 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 当前有两类固定规则：
 
 1. 普通 route change，例如 `/use`、`vscode mode /follow`、follow 自动切换、claim 丢失回退：
-   1. 只丢 staged image。
-   2. 不会静默把未冻结图片串到新 thread。
+   1. 丢 staged image 与 staged file。
+   2. 不会静默把未冻结附件串到新 thread。
 2. clear 语义，例如 `/stop`、`/detach`、`/mode`、`/new`、`R5` 下的 `/use` / `vscode mode /follow`：
-   1. staged image 和 queued draft 都会被显式丢弃。
+   1. staged image / staged file 和 queued draft 都会被显式丢弃。
    2. 会发 discard reaction / notice。
 
 当前实现不允许未发送草稿在 route change 时 silently retarget。
@@ -726,6 +726,7 @@ R0 Detached
 R1 AttachedUnbound
   -- 普通文本(normal mode，workspace 已知) --> 隐式进入 R5 并立刻消费首条文本（R5 + E1/E2）
   -- 图片消息(normal mode，workspace 已知) --> 隐式进入 R5，并先停留在 D1 StagedImages（不会仅凭图片创建新 thread）
+  -- 文件消息(normal mode，workspace 已知) --> 隐式进入 R5，并先停留在 D1 StagedAttachments（不会仅凭文件创建新 thread）
   -- /list(normal mode) --> 保持 R1 AttachedUnbound，打开 target picker
   -- /use(normal mode) --> 保持 R1 AttachedUnbound，打开 target picker（默认当前 workspace）
   -- /useall(normal mode) --> 保持 R1 AttachedUnbound，打开 target picker（允许跨 workspace）
@@ -780,8 +781,8 @@ R5 NewThreadReady
 
 补充说明：
 
-1. `R5` 下首条文本 queued 后，第二条文本与新图片都会被拒绝，直到该新 thread 真正落地。
-2. 若是在 `R1 AttachedUnbound` 下先发图片，当前实现会先隐式进入 `R5` 并把图片保留为 staged；随后第一条文本会按“新 thread 首条输入”把 staged image + 文本一起发送。
+1. `R5` 下首条文本 queued 后，第二条文本、新图片与新文件都会被拒绝，直到该新 thread 真正落地。
+2. 若是在 `R1 AttachedUnbound` 下先发图片或文件，当前实现会先隐式进入 `R5` 并把附件保留为 staged；随后第一条文本会按“新 thread 首条输入”把 staged image / staged file + 文本一起发送。
 3. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
 4. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
    1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
@@ -1074,7 +1075,7 @@ E6 Abandoning
 detach 时额外保证：
 
 1. 未发送 queue item 会被丢弃。
-2. staged image 会被丢弃。
+2. staged image / staged file 会被丢弃。
 3. request prompt / request capture 会被清空。
 
 ### 5.6 transport degraded / reconnect / hard disconnect
@@ -1151,6 +1152,7 @@ transport degraded retained attachment
 | `/steerall` | 允许；通常返回 noop 提示 | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 |
 | 文本 | 拒绝 | `normal`: 允许并隐式进入新会话首条输入；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
 | 图片 | 拒绝 | `normal`: 允许并隐式进入 `R5` 后暂存；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
+| 文件 | 拒绝 | `normal`: 允许并隐式进入 `R5` 后暂存；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
 | 请求按钮 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 理论上通常不会出现；若出现仍按 attached surface 处理 |
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
@@ -1165,12 +1167,12 @@ transport degraded retained attachment
 | 覆盖状态 | 当前行为 |
 | --- | --- |
 | `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/debug`、`/upgrade`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` / 历史 `resume_headless_thread` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` / `/upgrade dev` 允许继续弹候选升级卡 |
-| `G2 PendingRequest` | 普通文本、图片、`/new`、`/compact` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。通用 approval 现在覆盖 approval、`approval_command`、`approval_file_change`、`approval_network`，并直接按归一化后的 `availableDecisions` 响应，当前包含 `accept`、`acceptForSession`、`decline`、`cancel`；`request_user_input` 现在支持“分题暂存”：按钮/表单先记录局部答案，待问题凑齐后提交；用户点击“提交答案”后若仍有未答题，会先进入确认态，再决定是否留空提交并清 gate。顶层 `tool/requestUserInput` 与 `item` alias 继续共用这套状态机。`permissions_request_approval` 现在会投影成权限授予卡，支持“允许本次 / 本会话允许 / 拒绝”；`mcp_server_elicitation` 现在会按 mode 投影成“继续/拒绝/取消”卡，或带 schema 派生字段的表单卡。表单型 elicitation 也会暂存局部答案，并在 `request_revision` 上做 same-daemon freshness 校验 |
-| `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
-| `G4 CommandCapture` | 当前只可能来自旧 runtime 残留兼容态；下一条普通文本会被直接转换成 `/model <输入>` 并立即应用；图片会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` 并提示重新打开 `/model` 卡片 |
-| `G5 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片、revoke/reaction；`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
-| `G6 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成、取消，或使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
-| `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
+| `G2 PendingRequest` | 普通文本、图片、文件、`/new`、`/compact` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。通用 approval 现在覆盖 approval、`approval_command`、`approval_file_change`、`approval_network`，并直接按归一化后的 `availableDecisions` 响应，当前包含 `accept`、`acceptForSession`、`decline`、`cancel`；`request_user_input` 现在支持“分题暂存”：按钮/表单先记录局部答案，待问题凑齐后提交；用户点击“提交答案”后若仍有未答题，会先进入确认态，再决定是否留空提交并清 gate。顶层 `tool/requestUserInput` 与 `item` alias 继续共用这套状态机。`permissions_request_approval` 现在会投影成权限授予卡，支持“允许本次 / 本会话允许 / 拒绝”；`mcp_server_elicitation` 现在会按 mode 投影成“继续/拒绝/取消”卡，或带 schema 派生字段的表单卡。表单型 elicitation 也会暂存局部答案，并在 `request_revision` 上做 same-daemon freshness 校验 |
+| `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、文件、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
+| `G4 CommandCapture` | 当前只可能来自旧 runtime 残留兼容态；下一条普通文本会被直接转换成 `/model <输入>` 并立即应用；图片和文件都会被拒绝；新的 slash command 或卡片动作会直接清掉这次 capture；超时后会发 `command_capture_expired` 并提示重新打开 `/model` 卡片 |
+| `G5 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片/文件、revoke/reaction；`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
+| `G6 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成、取消，或使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
+| `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
 | `G7 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G7` 一致：只允许 `/status`、`/autowhip`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
 | `G8 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发迁移/修复卡片；surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若迁移/修复提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示 |
 
@@ -1263,7 +1265,7 @@ retained-offline overlay 额外规则：
 1. **instance 半 attach**：已修复。第二个 surface attach 同一 instance 会直接失败。
 2. **数字文本误切换 thread**：已修复。数字文本现在是普通消息。
 3. **headless 选择期还能旁路 `/use` `/follow` `/new`**：已修复。`PendingHeadless` 仍是顶层 gate。
-4. **staged image 跟着 route change 串 thread**：已修复。route change 或 clear 会显式丢图并告知用户。
+4. **staged attachment 跟着 route change 串 thread**：已修复。route change 或 clear 会显式丢弃 staged image / staged file 并告知用户。
 5. **`PausedForLocal` 永久卡住**：已修复。现在有 watchdog。
 6. **`Abandoning` 永久锁死**：已修复。现在有 watchdog。
 7. **`/follow` 切模式但 thread 不变时 UI 不知道 route mode 已变**：已修复。现在会补发 route-mode selection 投影。
@@ -1315,7 +1317,7 @@ retained-offline overlay 额外规则：
 2. `/use`、`/follow`、`/new`
 3. `PendingHeadless`
 4. queue/dispatch/turn ownership
-5. staged image / draft 命运
+5. staged image / staged file / draft 命运
 6. request capture / request prompt
 7. Feishu 卡片动作协议
 8. watchdog 与恢复路径

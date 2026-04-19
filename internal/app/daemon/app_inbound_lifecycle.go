@@ -122,6 +122,8 @@ func rejectedInboundActionDetail(action control.Action) string {
 		return "一条消息"
 	case control.ActionImageMessage:
 		return "一张图片消息"
+	case control.ActionFileMessage:
+		return "一个文件消息"
 	case control.ActionReactionCreated:
 		return "一条消息表情操作"
 	case control.ActionMessageRecalled:
@@ -151,7 +153,7 @@ func explicitActionCommand(action control.Action) string {
 		return ""
 	}
 	switch action.Kind {
-	case control.ActionTextMessage, control.ActionImageMessage, control.ActionReactionCreated, control.ActionMessageRecalled:
+	case control.ActionTextMessage, control.ActionImageMessage, control.ActionFileMessage, control.ActionReactionCreated, control.ActionMessageRecalled:
 		return ""
 	case control.ActionRemovedCommand:
 		return control.LegacyActionCommand(text)

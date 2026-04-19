@@ -84,7 +84,7 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []control.UIE
 	}
 	prevThreadID := surface.SelectedThreadID
 	prevRouteMode := surface.RouteMode
-	events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)...)
+	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)...)
 	s.clearPreparedNewThread(surface)
 	surface.RouteMode = state.RouteModeFollowLocal
 	reevaluated := s.reevaluateFollowSurface(surface)
@@ -160,7 +160,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		}
 		prevThreadID := surface.SelectedThreadID
 		prevRouteMode := surface.RouteMode
-		events := s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
+		events := s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
 		s.releaseSurfaceThreadClaim(surface)
 		return append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）", "")...)
 	}
@@ -170,7 +170,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		}
 		prevThreadID := surface.SelectedThreadID
 		prevRouteMode := surface.RouteMode
-		events := s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
+		events := s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
 		s.releaseSurfaceThreadClaim(surface)
 		return append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）", "")...)
 	}
@@ -273,11 +273,11 @@ func (s *Service) releaseVictimThread(surface *state.SurfaceConsoleRecord, inst 
 	s.releaseSurfaceThreadClaim(surface)
 	routeMode := state.RouteModeUnbound
 	title := "未绑定会话"
-	events := s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)
+	events := s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)
 	if surface.RouteMode == state.RouteModeFollowLocal {
 		routeMode = state.RouteModeFollowLocal
 		title = "跟随当前 VS Code（等待中）"
-		events = s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
+		events = s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)
 	}
 	surface.RouteMode = routeMode
 	events = append(events, s.threadSelectionEvents(surface, "", string(routeMode), title, "")...)

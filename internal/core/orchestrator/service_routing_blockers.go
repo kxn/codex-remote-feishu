@@ -87,6 +87,7 @@ func (s *Service) blockActionForActivePathPicker(surface *state.SurfaceConsoleRe
 	case control.ActionStatus,
 		control.ActionTextMessage,
 		control.ActionImageMessage,
+		control.ActionFileMessage,
 		control.ActionReactionCreated,
 		control.ActionMessageRecalled,
 		control.ActionPathPickerEnter,
@@ -299,6 +300,12 @@ func (s *Service) restoreStagedInputs(surface *state.SurfaceConsoleRecord, sourc
 			continue
 		}
 		image.State = state.ImageStaged
+	}
+	for _, file := range surface.StagedFiles {
+		if file == nil || file.State != state.FileBound || !allowed[file.SourceMessageID] {
+			continue
+		}
+		file.State = state.FileStaged
 	}
 }
 

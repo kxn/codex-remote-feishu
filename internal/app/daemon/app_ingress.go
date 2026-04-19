@@ -294,10 +294,6 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	return inlineResult
 }
 
-func (a *App) applyIngressActionLocked(action control.Action) []control.UIEvent {
-	return a.service.ApplySurfaceAction(action)
-}
-
 func (a *App) inlineCardActionResultLocked(action control.Action, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
 	if !control.AllowsInlineCardReplacement(action) || len(events) == 0 {
 		return nil, events

@@ -1350,7 +1350,7 @@ func TestUseThreadDiscardsStagedImagesOnRouteChange(t *testing.T) {
 		if event.PendingInput != nil && event.PendingInput.Status == string(state.ImageDiscarded) && event.PendingInput.QueueOff && event.PendingInput.ThumbsDown {
 			sawDiscard = true
 		}
-		if event.Notice != nil && event.Notice.Code == "staged_images_discarded_on_route_change" {
+		if event.Notice != nil && event.Notice.Code == "staged_inputs_discarded_on_route_change" {
 			sawNotice = true
 		}
 		if event.ThreadSelection != nil && event.ThreadSelection.ThreadID == "thread-2" && event.ThreadSelection.RouteMode == string(state.RouteModePinned) {
@@ -1398,7 +1398,7 @@ func TestFollowLocalDiscardsStagedImagesOnRouteModeChange(t *testing.T) {
 		if event.PendingInput != nil && event.PendingInput.Status == string(state.ImageDiscarded) && event.PendingInput.QueueOff && event.PendingInput.ThumbsDown {
 			sawDiscard = true
 		}
-		if event.Notice != nil && event.Notice.Code == "staged_images_discarded_on_route_change" {
+		if event.Notice != nil && event.Notice.Code == "staged_inputs_discarded_on_route_change" {
 			sawNotice = true
 		}
 	}

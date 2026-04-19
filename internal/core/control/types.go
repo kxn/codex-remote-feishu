@@ -37,6 +37,7 @@ const (
 	ActionRespondRequest              ActionKind = "surface.request.respond"
 	ActionTextMessage                 ActionKind = "surface.message.text"
 	ActionImageMessage                ActionKind = "surface.message.image"
+	ActionFileMessage                 ActionKind = "surface.message.file"
 	ActionReactionCreated             ActionKind = "surface.message.reaction.created"
 	ActionMessageRecalled             ActionKind = "surface.message.recalled"
 	ActionSelectPrompt                ActionKind = "surface.selection.prompt"
@@ -125,6 +126,7 @@ type Action struct {
 	TargetPickerValue   string
 	AllowCrossWorkspace bool
 	LocalPath           string
+	FileName            string
 	MIMEType            string
 	ReactionType        string
 	TargetMessageID     string

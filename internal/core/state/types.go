@@ -87,6 +87,15 @@ const (
 	ImageDiscarded ImageState = "discarded"
 )
 
+type FileState string
+
+const (
+	FileStaged    FileState = "staged"
+	FileCancelled FileState = "cancelled"
+	FileBound     FileState = "bound"
+	FileDiscarded FileState = "discarded"
+)
+
 type AutoContinueReason string
 
 const (
@@ -184,6 +193,7 @@ type SurfaceConsoleRecord struct {
 	ActiveQueueItemID    string
 	QueuedQueueItemIDs   []string
 	StagedImages         map[string]*StagedImageRecord
+	StagedFiles          map[string]*StagedFileRecord
 	QueueItems           map[string]*QueueItemRecord
 	PreparedThreadCWD    string
 	PreparedFromThreadID string
@@ -425,6 +435,15 @@ type StagedImageRecord struct {
 	LocalPath        string
 	MIMEType         string
 	State            ImageState
+}
+
+type StagedFileRecord struct {
+	FileID           string
+	SurfaceSessionID string
+	SourceMessageID  string
+	LocalPath        string
+	FileName         string
+	State            FileState
 }
 
 func NewRoot() *Root {

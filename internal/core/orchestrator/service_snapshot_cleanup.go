@@ -105,6 +105,18 @@ func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []control.U
 			ThumbsDown:  true,
 		}, []string{image.SourceMessageID})...)
 	}
+	for _, file := range surface.StagedFiles {
+		if file.State != state.FileStaged {
+			continue
+		}
+		file.State = state.FileDiscarded
+		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: file.FileID,
+			Status:      string(file.State),
+			QueueOff:    true,
+			ThumbsDown:  true,
+		}, []string{file.SourceMessageID})...)
+	}
 	for _, queueID := range append([]string{}, surface.QueuedQueueItemIDs...) {
 		item := surface.QueueItems[queueID]
 		if item == nil || item.Status != state.QueueItemQueued {
@@ -112,6 +124,7 @@ func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []control.U
 		}
 		item.Status = state.QueueItemDiscarded
 		s.markImagesForMessages(surface, queueItemSourceMessageIDs(item), state.ImageDiscarded)
+		s.markFilesForMessages(surface, queueItemSourceMessageIDs(item), state.FileDiscarded)
 		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
 			QueueItemID: item.ID,
 			Status:      string(item.Status),
@@ -121,10 +134,11 @@ func (s *Service) discardDrafts(surface *state.SurfaceConsoleRecord) []control.U
 	}
 	surface.QueuedQueueItemIDs = nil
 	surface.StagedImages = map[string]*state.StagedImageRecord{}
+	surface.StagedFiles = map[string]*state.StagedFileRecord{}
 	return events
 }
 
-func (s *Service) discardStagedImagesForRouteChange(surface *state.SurfaceConsoleRecord, prevThreadID string, prevRouteMode state.RouteMode, nextThreadID string, nextRouteMode state.RouteMode) []control.UIEvent {
+func (s *Service) discardStagedInputsForRouteChange(surface *state.SurfaceConsoleRecord, prevThreadID string, prevRouteMode state.RouteMode, nextThreadID string, nextRouteMode state.RouteMode) []control.UIEvent {
 	if surface == nil {
 		return nil
 	}
@@ -149,6 +163,20 @@ func (s *Service) discardStagedImagesForRouteChange(surface *state.SurfaceConsol
 		}, []string{image.SourceMessageID})...)
 		delete(surface.StagedImages, imageID)
 	}
+	for fileID, file := range surface.StagedFiles {
+		if file == nil || file.State != state.FileStaged {
+			continue
+		}
+		file.State = state.FileDiscarded
+		discarded++
+		events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: fileID,
+			Status:      string(file.State),
+			QueueOff:    true,
+			ThumbsDown:  true,
+		}, []string{file.SourceMessageID})...)
+		delete(surface.StagedFiles, fileID)
+	}
 	if discarded == 0 {
 		return nil
 	}
@@ -156,8 +184,8 @@ func (s *Service) discardStagedImagesForRouteChange(surface *state.SurfaceConsol
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Notice: &control.Notice{
-			Code: "staged_images_discarded_on_route_change",
-			Text: fmt.Sprintf("由于输入目标发生变化，已丢弃 %d 张尚未绑定的图片。", discarded),
+			Code: "staged_inputs_discarded_on_route_change",
+			Text: fmt.Sprintf("由于输入目标发生变化，已丢弃 %d 个尚未绑定的附件。", discarded),
 		},
 	})
 	return events

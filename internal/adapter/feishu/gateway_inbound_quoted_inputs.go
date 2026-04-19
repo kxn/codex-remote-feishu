@@ -337,6 +337,60 @@ func (g *LiveGateway) downloadImage(ctx context.Context, messageID, imageKey str
 	return target, mimeType, nil
 }
 
+func (g *LiveGateway) downloadFile(ctx context.Context, messageID, fileKey, fileName string) (string, error) {
+	resp, err := DoSDK(ctx, g.broker, CallSpec{
+		GatewayID: g.config.GatewayID,
+		API:       "im.v1.message_resource.get",
+		Class:     CallClassIMRead,
+		Priority:  CallPriorityReadAssist,
+		ResourceKey: FeishuResourceKey{
+			MessageID: messageID,
+			FileKey:   fileKey,
+		},
+		Retry:      RetrySafe,
+		Permission: PermissionCooldownOnly,
+	}, func(callCtx context.Context, client *lark.Client) (*larkim.GetMessageResourceResp, error) {
+		resp, err := client.Im.V1.MessageResource.Get(callCtx, larkim.NewGetMessageResourceReqBuilder().
+			MessageId(messageID).
+			FileKey(fileKey).
+			Type("file").
+			Build())
+		if err != nil {
+			return resp, err
+		}
+		if !resp.Success() {
+			return resp, newAPIError("im.v1.message_resource.get", resp.ApiResp, resp.CodeError)
+		}
+		return resp, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	dir := g.config.TempDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	pattern := "codex-remote-file-*"
+	if trimmed := strings.TrimSpace(fileName); trimmed != "" {
+		pattern = strings.NewReplacer("\n", "-", "\r", "-", "\\", "-", "/", "-").Replace(trimmed) + "-*"
+	}
+	file, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	if _, err := io.Copy(file, resp.File); err != nil {
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	return file.Name(), nil
+}
+
 func boolPtr(value *bool) bool {
 	if value == nil {
 		return false

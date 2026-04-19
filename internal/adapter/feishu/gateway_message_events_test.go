@@ -1,11 +1,8 @@
 package feishu
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log"
-	"strings"
 	"testing"
 	"time"
 
@@ -694,8 +691,15 @@ func TestParseMessageEventQuotesFetchedMergeForwardMessageWithSpeakerLabels(t *t
 	}
 }
 
-func TestParseMessageEventLogsUnsupportedMessageType(t *testing.T) {
+func TestParseMessageEventBuildsFileAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	var gotMessageID, gotFileKey, gotFileName string
+	gateway.downloadFileFn = func(_ context.Context, messageID, fileKey, fileName string) (string, error) {
+		gotMessageID = messageID
+		gotFileKey = fileKey
+		gotFileName = fileName
+		return "/tmp/notes.txt", nil
+	}
 	event := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{
 			Header: &larkevent.EventHeader{
@@ -718,45 +722,25 @@ func TestParseMessageEventLogsUnsupportedMessageType(t *testing.T) {
 				ChatType:    stringRef("group"),
 				ThreadId:    stringRef("omt-thread-1"),
 				MessageType: stringRef("file"),
-				Content:     stringRef(`{"file_name":"notes.txt"}`),
+				Content:     stringRef(`{"file_key":"file-key-1","file_name":"notes.txt"}`),
 			},
 		},
 	}
-
-	var buf bytes.Buffer
-	oldWriter := log.Writer()
-	oldFlags := log.Flags()
-	oldPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(oldWriter)
-		log.SetFlags(oldFlags)
-		log.SetPrefix(oldPrefix)
-	}()
 
 	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
 	if err != nil {
 		t.Fatalf("parseMessageEvent returned error: %v", err)
 	}
-	if ok || action.Kind != "" {
-		t.Fatalf("expected unsupported file message to be ignored, got ok=%v action=%#v", ok, action)
+	if !ok || action.Kind != control.ActionFileMessage {
+		t.Fatalf("expected file message action, got ok=%v action=%#v", ok, action)
 	}
-	got := buf.String()
-	for _, want := range []string{
-		"feishu inbound message ignored:",
-		"gateway=app-1",
-		"message=om-file-1",
-		"type=file",
-		"thread=omt-thread-1",
-		"event=evt-file-1",
-		"request=req-file-1",
-		"reason=unsupported_message_type",
-		"notes.txt",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected log output to contain %q, got %q", want, got)
-		}
+	if action.LocalPath != "/tmp/notes.txt" || action.FileName != "notes.txt" {
+		t.Fatalf("unexpected file action payload: %#v", action)
+	}
+	if len(action.SteerInputs) != 0 {
+		t.Fatalf("expected file action not to produce steer inputs, got %#v", action.SteerInputs)
+	}
+	if gotMessageID != "om-file-1" || gotFileKey != "file-key-1" || gotFileName != "notes.txt" {
+		t.Fatalf("unexpected file download args: message=%q key=%q name=%q", gotMessageID, gotFileKey, gotFileName)
 	}
 }

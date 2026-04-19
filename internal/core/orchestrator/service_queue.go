@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -98,16 +99,21 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 	return append(events, s.dispatchNext(surface)...)
 }
 
-func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]agentproto.Input, []string) {
-	keys := make([]string, 0, len(surface.StagedImages))
+func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]agentproto.Input, []string, string) {
+	imageKeys := make([]string, 0, len(surface.StagedImages))
 	for imageID := range surface.StagedImages {
-		keys = append(keys, imageID)
+		imageKeys = append(imageKeys, imageID)
 	}
-	sort.Strings(keys)
+	sort.Strings(imageKeys)
+	fileKeys := make([]string, 0, len(surface.StagedFiles))
+	for fileID := range surface.StagedFiles {
+		fileKeys = append(fileKeys, fileID)
+	}
+	sort.Strings(fileKeys)
 
 	var inputs []agentproto.Input
 	var sourceMessageIDs []string
-	for _, imageID := range keys {
+	for _, imageID := range imageKeys {
 		image := surface.StagedImages[imageID]
 		if image.State != state.ImageStaged {
 			continue
@@ -120,7 +126,36 @@ func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]ag
 		image.State = state.ImageBound
 		sourceMessageIDs = append(sourceMessageIDs, image.SourceMessageID)
 	}
-	return inputs, sourceMessageIDs
+	filePrompt := stagedFilePrompt(surface, fileKeys, &sourceMessageIDs)
+	return inputs, sourceMessageIDs, filePrompt
+}
+
+func stagedFilePrompt(surface *state.SurfaceConsoleRecord, fileKeys []string, sourceMessageIDs *[]string) string {
+	if surface == nil || len(fileKeys) == 0 {
+		return ""
+	}
+	lines := []string{"附带参考文件（内容未直接注入上下文，可按需读取以下本地路径）："}
+	for _, fileID := range fileKeys {
+		file := surface.StagedFiles[fileID]
+		if file == nil || file.State != state.FileStaged {
+			continue
+		}
+		path := strings.TrimSpace(file.LocalPath)
+		if path == "" {
+			continue
+		}
+		name := strings.TrimSpace(file.FileName)
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", name, path))
+		file.State = state.FileBound
+		*sourceMessageIDs = append(*sourceMessageIDs, file.SourceMessageID)
+	}
+	if len(lines) == 1 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
 }
 
 func freezeRoute(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord) (threadID, cwd string, routeMode state.RouteMode, createThread bool) {

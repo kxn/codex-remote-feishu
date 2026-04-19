@@ -10,6 +10,10 @@ func (s *Service) Instance(instanceID string) *state.InstanceRecord {
 	return s.root.Instances[instanceID]
 }
 
+func (s *Service) Surface(surfaceID string) *state.SurfaceConsoleRecord {
+	return s.root.Surfaces[surfaceID]
+}
+
 func (s *Service) Instances() []*state.InstanceRecord {
 	instances := make([]*state.InstanceRecord, 0, len(s.root.Instances))
 	for _, instance := range s.root.Instances {

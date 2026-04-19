@@ -75,6 +75,7 @@ func shouldAcknowledgeGatewayActionImmediately(action control.Action) bool {
 	switch action.Kind {
 	case control.ActionTextMessage,
 		control.ActionImageMessage,
+		control.ActionFileMessage,
 		control.ActionReactionCreated,
 		control.ActionMessageRecalled:
 		return false

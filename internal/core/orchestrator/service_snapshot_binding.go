@@ -36,7 +36,7 @@ func (s *Service) bindSurfaceToThreadMode(surface *state.SurfaceConsoleRecord, i
 	if !s.claimThread(surface, inst, threadID) {
 		return nil
 	}
-	events := s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)
+	events := s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)
 	surface.SelectedThreadID = threadID
 	s.clearPreparedNewThread(surface)
 	surface.RouteMode = routeMode

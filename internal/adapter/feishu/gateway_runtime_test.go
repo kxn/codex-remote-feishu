@@ -28,6 +28,7 @@ func TestShouldAcknowledgeGatewayActionImmediately(t *testing.T) {
 		{name: "use thread button", action: control.Action{Kind: control.ActionUseThread}, want: true},
 		{name: "text message", action: control.Action{Kind: control.ActionTextMessage}, want: false},
 		{name: "image message", action: control.Action{Kind: control.ActionImageMessage}, want: false},
+		{name: "file message", action: control.Action{Kind: control.ActionFileMessage}, want: false},
 		{name: "reaction created", action: control.Action{Kind: control.ActionReactionCreated}, want: false},
 		{name: "message recalled", action: control.Action{Kind: control.ActionMessageRecalled}, want: false},
 	}

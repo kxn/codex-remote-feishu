@@ -66,7 +66,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []contro
 	surface.PreparedThreadCWD = cwd
 	surface.PreparedFromThreadID = threadID
 	surface.PreparedAt = s.now()
-	events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeNewThreadReady)...)
+	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeNewThreadReady)...)
 	events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle(), "")...)
 	text := "已清空当前远端上下文。下一条文本会创建新会话。"
 	if discarded > 0 {
@@ -114,6 +114,10 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnboundText(surface *state.Su
 }
 
 func (s *Service) maybePrepareImplicitNewThreadFromUnboundImage(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []control.UIEvent {
+	return s.maybePrepareImplicitNewThreadFromUnbound(surface, inst)
+}
+
+func (s *Service) maybePrepareImplicitNewThreadFromUnboundFile(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []control.UIEvent {
 	return s.maybePrepareImplicitNewThreadFromUnbound(surface, inst)
 }
 
@@ -188,7 +192,10 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	}
 
 	threadID, cwd, routeMode, createThread := freezeRoute(inst, surface)
-	inputs, stagedMessageIDs := s.consumeStagedInputs(surface)
+	inputs, stagedMessageIDs, filePrompt := s.consumeStagedInputs(surface)
+	if filePrompt != "" {
+		inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: filePrompt})
+	}
 	messageInputs := append([]agentproto.Input{}, action.Inputs...)
 	if len(messageInputs) == 0 {
 		messageInputs = []agentproto.Input{{Type: agentproto.InputText, Text: text}}
@@ -249,6 +256,55 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 			QueueItemID:     image.ImageID,
 			SourceMessageID: image.SourceMessageID,
 			Status:          string(image.State),
+			QueueOn:         true,
+		},
+	}}
+}
+
+func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	if inst == nil {
+		return notice(surface, "not_attached", s.notAttachedText(surface))
+	}
+	if blocked := s.maybePrepareImplicitNewThreadFromUnboundFile(surface, inst); blocked != nil {
+		return blocked
+	}
+	if blocked := s.unboundInputBlocked(surface); blocked != nil {
+		return blocked
+	}
+	if surface.ActiveRequestCapture != nil {
+		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+	}
+	if surface.ActiveCommandCapture != nil {
+		return notice(surface, "command_capture_waiting_text", "当前正在等待你发送一条模型名，请先发送文本，或重新打开 `/model` 卡片。")
+	}
+	if pending := activePendingRequest(surface); pending != nil {
+		_ = pending
+		return notice(surface, "request_pending", pendingRequestNoticeText(pending))
+	}
+	if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
+		return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；如需带文件，请等它创建完成后再发送下一条。")
+	}
+	if surface.StagedFiles == nil {
+		surface.StagedFiles = map[string]*state.StagedFileRecord{}
+	}
+	s.nextFileID++
+	file := &state.StagedFileRecord{
+		FileID:           fmt.Sprintf("file-%d", s.nextFileID),
+		SurfaceSessionID: surface.SurfaceSessionID,
+		SourceMessageID:  action.MessageID,
+		LocalPath:        action.LocalPath,
+		FileName:         action.FileName,
+		State:            state.FileStaged,
+	}
+	surface.StagedFiles[file.FileID] = file
+	return []control.UIEvent{{
+		Kind:             control.UIEventPendingInput,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		PendingInput: &control.PendingInputState{
+			QueueItemID:     file.FileID,
+			SourceMessageID: file.SourceMessageID,
+			Status:          string(file.State),
 			QueueOn:         true,
 		},
 	}}
@@ -445,6 +501,7 @@ func (s *Service) handleMessageRecalled(surface *state.SurfaceConsoleRecord, tar
 		}
 		item.Status = state.QueueItemDiscarded
 		s.markImagesForMessages(surface, queueItemSourceMessageIDs(item), state.ImageDiscarded)
+		s.markFilesForMessages(surface, queueItemSourceMessageIDs(item), state.FileDiscarded)
 		surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
 		return s.pendingInputEvents(surface, control.PendingInputState{
 			QueueItemID: item.ID,
@@ -462,6 +519,17 @@ func (s *Service) handleMessageRecalled(surface *state.SurfaceConsoleRecord, tar
 				QueueOff:    true,
 				ThumbsDown:  true,
 			}, []string{image.SourceMessageID})
+		}
+	}
+	for _, file := range surface.StagedFiles {
+		if file.SourceMessageID == targetMessageID && file.State == state.FileStaged {
+			file.State = state.FileCancelled
+			return s.pendingInputEvents(surface, control.PendingInputState{
+				QueueItemID: file.FileID,
+				Status:      string(file.State),
+				QueueOff:    true,
+				ThumbsDown:  true,
+			}, []string{file.SourceMessageID})
 		}
 	}
 	return nil

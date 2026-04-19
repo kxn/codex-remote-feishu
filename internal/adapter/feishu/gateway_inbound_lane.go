@@ -48,6 +48,8 @@ type queuedMessageWork struct {
 	inbound         *control.ActionInboundMeta
 	text            string
 	imageKey        string
+	fileKey         string
+	fileName        string
 }
 
 type queuedActionWork struct {
@@ -301,6 +303,15 @@ func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGatewa
 		action.MIMEType = mimeType
 		action.SteerInputs = []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
 		return action, true, nil
+	case "file":
+		path, err := gateway.downloadFileFn(ctx, w.messageID, w.fileKey, w.fileName)
+		if err != nil {
+			return control.Action{}, false, err
+		}
+		action.Kind = control.ActionFileMessage
+		action.LocalPath = path
+		action.FileName = w.fileName
+		return action, true, nil
 	case "merge_forward":
 		payload, err := gateway.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
 		if err != nil {
@@ -515,6 +526,29 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 				imageKey:        imageKey,
 			},
 		}, true, nil
+	case "file":
+		fileKey, fileName, err := parseFileContent(content)
+		if err != nil {
+			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, inbound, message, "parse_file_content", err)
+			return plannedInboundMessage{}, false, err
+		}
+		g.recordSurfaceMessage(messageID, surfaceSessionID)
+		return plannedInboundMessage{
+			queue: &queuedMessageWork{
+				gatewayID:       g.config.GatewayID,
+				surfaceID:       surfaceSessionID,
+				chatID:          chatID,
+				actorUserID:     senderUserID,
+				messageID:       messageID,
+				messageType:     messageType,
+				content:         content,
+				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				inbound:         cloneInboundMeta(inbound),
+				fileKey:         fileKey,
+				fileName:        fileName,
+			},
+		}, true, nil
 	case "merge_forward":
 		g.recordSurfaceMessage(messageID, surfaceSessionID)
 		return plannedInboundMessage{
@@ -574,6 +608,8 @@ func asyncInboundFailureNoticeBody(messageType string) string {
 		return "这条图文消息已经收到，但后台读取其中的内容或图片时失败了，暂时没有继续转交给 Codex。\n\n请稍后重试，或先简化内容后再发送。"
 	case "image":
 		return "这张图片已经收到，但后台读取图片时失败了，暂时没有继续转交给 Codex。\n\n请稍后重试。"
+	case "file":
+		return "这个文件已经收到，但后台读取文件时失败了，暂时没有继续转交给 Codex。\n\n请稍后重试。"
 	default:
 		return "这条消息已经收到，但后台处理引用内容或附件时失败了，暂时没有继续转交给 Codex。\n\n请稍后重试。"
 	}

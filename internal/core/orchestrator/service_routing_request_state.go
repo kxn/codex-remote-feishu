@@ -28,12 +28,12 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []control.U
 		s.releaseSurfaceThreadClaim(surface)
 		switch surface.RouteMode {
 		case state.RouteModeFollowLocal:
-			events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)...)
+			events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)...)
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）", "")...)
 			events = append(events, s.reevaluateFollowSurface(surface)...)
 		default:
 			surface.RouteMode = state.RouteModeUnbound
-			events = append(events, s.discardStagedImagesForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)...)
+			events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)...)
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeUnbound), "未绑定会话", "")...)
 			events = append(events, control.UIEvent{
 				Kind:             control.UIEventNotice,

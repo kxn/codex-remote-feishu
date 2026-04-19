@@ -123,6 +123,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		LastInboundAt:    s.now(),
 		QueueItems:       map[string]*state.QueueItemRecord{},
 		StagedImages:     map[string]*state.StagedImageRecord{},
+		StagedFiles:      map[string]*state.StagedFileRecord{},
 		PendingRequests:  map[string]*state.RequestPromptRecord{},
 	}
 	s.root.Surfaces[action.SurfaceSessionID] = surface
