@@ -122,16 +122,17 @@ func execCommandProgressTimelineItemFromEntry(entry ExecCommandProgressEntry) (E
 	entry.Label = strings.TrimSpace(entry.Label)
 	entry.Summary = strings.TrimSpace(entry.Summary)
 	entry.Status = strings.TrimSpace(entry.Status)
-	if entry.Summary == "" {
+	if entry.Summary == "" && entry.FileChange == nil {
 		return ExecCommandProgressTimelineItem{}, false
 	}
 	return ExecCommandProgressTimelineItem{
-		ID:      entry.ItemID,
-		Kind:    entry.Kind,
-		Label:   entry.Label,
-		Summary: entry.Summary,
-		Status:  entry.Status,
-		LastSeq: entry.LastSeq,
+		ID:         entry.ItemID,
+		Kind:       entry.Kind,
+		Label:      entry.Label,
+		Summary:    entry.Summary,
+		Status:     entry.Status,
+		FileChange: entry.FileChange,
+		LastSeq:    entry.LastSeq,
 	}, true
 }
 

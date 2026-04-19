@@ -185,6 +185,142 @@ func TestExecCommandProgressNormalVerbositySuppressesCard(t *testing.T) {
 	}
 }
 
+func TestFileChangeProgressNormalVerbosityShowsSharedProgressCard(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "file-1",
+		ItemKind: "file_change",
+		Status:   "in_progress",
+		FileChanges: []agentproto.FileChangeRecord{
+			{
+				Path: "internal/core/orchestrator/service.go",
+				Kind: agentproto.FileChangeUpdate,
+				Diff: "@@ -1 +1 @@\n-old\n+new",
+			},
+			{
+				Path:     "docs/guide.md",
+				MovePath: "docs/guide-v2.md",
+				Kind:     agentproto.FileChangeUpdate,
+				Diff:     "@@ -1 +1 @@\n-old title\n+new title",
+			},
+		},
+	})
+	if len(started) != 1 || started[0].Kind != control.UIEventExecCommandProgress || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected file_change to emit shared progress in normal verbosity, got %#v", started)
+	}
+	progress := started[0].ExecCommandProgress
+	if progress.Verbosity != string(state.SurfaceVerbosityNormal) || progress.ItemID != "file-1" {
+		t.Fatalf("unexpected file_change progress payload: %#v", progress)
+	}
+	if len(progress.Entries) != 2 {
+		t.Fatalf("expected one shared progress entry per changed file, got %#v", progress.Entries)
+	}
+	if progress.Entries[0].Kind != "file_change" || progress.Entries[0].Label != "修改" || progress.Entries[0].FileChange == nil {
+		t.Fatalf("expected first file change entry to stay structured, got %#v", progress.Entries)
+	}
+	if progress.Entries[0].FileChange.Path != "internal/core/orchestrator/service.go" || progress.Entries[0].FileChange.AddedLines != 1 || progress.Entries[0].FileChange.RemovedLines != 1 {
+		t.Fatalf("unexpected first file change payload: %#v", progress.Entries[0].FileChange)
+	}
+	if progress.Entries[1].FileChange == nil || progress.Entries[1].FileChange.MovePath != "docs/guide-v2.md" {
+		t.Fatalf("expected rename payload to stay structured, got %#v", progress.Entries[1].FileChange)
+	}
+	if len(progress.Timeline) != 2 || progress.Timeline[0].Kind != "file_change" || progress.Timeline[1].Kind != "file_change" {
+		t.Fatalf("expected file changes to enter canonical shared progress timeline, got %#v", progress.Timeline)
+	}
+}
+
+func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "file-1",
+		ItemKind: "file_change",
+		Status:   "in_progress",
+		FileChanges: []agentproto.FileChangeRecord{{
+			Path: "service.go",
+			Kind: agentproto.FileChangeUpdate,
+			Diff: "@@ -1 +1 @@\n-old\n+new",
+		}},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected started file_change event, got %#v", started)
+	}
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "file-1", "om-progress-1")
+
+	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "file-1",
+		ItemKind: "file_change",
+		Status:   "completed",
+		FileChanges: []agentproto.FileChangeRecord{{
+			Path: "service.go",
+			Kind: agentproto.FileChangeUpdate,
+			Diff: "@@ -1 +2 @@\n-old\n+new\n+newer",
+		}},
+	})
+	if len(completed) != 1 || completed[0].ExecCommandProgress == nil {
+		t.Fatalf("expected completed file_change to refresh shared progress, got %#v", completed)
+	}
+	progress := completed[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected completed file_change to reuse existing card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].FileChange == nil {
+		t.Fatalf("expected updated file_change entry, got %#v", progress.Entries)
+	}
+	if progress.Entries[0].FileChange.AddedLines != 2 || progress.Entries[0].FileChange.RemovedLines != 1 {
+		t.Fatalf("expected completed file_change to refresh line counts, got %#v", progress.Entries[0].FileChange)
+	}
+}
+
+func TestFileChangeProgressQuietVerbositySuppressesCard(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoContinueSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityQuiet
+
+	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "file-1",
+		ItemKind: "file_change",
+		Status:   "in_progress",
+		FileChanges: []agentproto.FileChangeRecord{{
+			Path: "service.go",
+			Kind: agentproto.FileChangeUpdate,
+			Diff: "@@ -1 +1 @@\n-old\n+new",
+		}},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected quiet verbosity to suppress file_change progress, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected quiet verbosity not to retain file_change progress, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
+
 func TestWebSearchProgressNormalVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

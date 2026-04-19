@@ -320,6 +320,87 @@ func TestProjectExecCommandProgressKeepsWebSearchStatusPlainText(t *testing.T) {
 	}
 }
 
+func TestProjectExecCommandProgressRendersFileChangeSummaryInNormal(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID:     "thread-1",
+			TurnID:       "turn-1",
+			ItemID:       "file-1",
+			Verbosity:    "normal",
+			MessageID:    "om-progress-1",
+			CardStartSeq: 1,
+			Entries: []control.ExecCommandProgressEntry{{
+				ItemID:  "file-1::service.go",
+				Kind:    "file_change",
+				Label:   "修改",
+				Summary: "service.go",
+				FileChange: &control.ExecCommandProgressFileChange{
+					Path:         "service.go",
+					Kind:         "update",
+					Diff:         "@@ -1 +1 @@\n-old\n+new",
+					AddedLines:   1,
+					RemovedLines: 1,
+				},
+				LastSeq: 1,
+			}},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if !strings.Contains(body, "**修改** <text_tag color='neutral'>service.go</text_tag>  <font color='green'>+1</font> <font color='red'>-1</font>") {
+		t.Fatalf("expected normal file_change summary row, got %#v", ops[0])
+	}
+	if strings.Contains(body, "```diff") || strings.Contains(body, "@@ -1 +1 @@") {
+		t.Fatalf("expected normal verbosity not to inline diff block, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressRendersFileChangeDiffInVerbose(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+			ItemID:    "file-1",
+			Verbosity: "verbose",
+			Entries: []control.ExecCommandProgressEntry{{
+				ItemID:  "file-1::guide",
+				Kind:    "file_change",
+				Label:   "修改",
+				Summary: "docs/guide.md -> docs/guide-v2.md",
+				FileChange: &control.ExecCommandProgressFileChange{
+					Path:         "docs/guide.md",
+					MovePath:     "docs/guide-v2.md",
+					Kind:         "update",
+					Diff:         "@@ -1 +1 @@\n-old title\n+new title",
+					AddedLines:   1,
+					RemovedLines: 1,
+				},
+				LastSeq: 1,
+			}},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if !strings.Contains(body, "**修改** <text_tag color='neutral'>guide.md</text_tag> → <text_tag color='neutral'>guide-v2.md</text_tag>  <font color='green'>+1</font> <font color='red'>-1</font>") {
+		t.Fatalf("expected verbose file_change summary row, got %#v", ops[0])
+	}
+	if !strings.Contains(body, "```diff\n@@ -1 +1 @@\n-old title\n+new title\n```") {
+		t.Fatalf("expected verbose file_change to append diff code block, got %#v", ops[0])
+	}
+}
+
 func TestProjectExecCommandProgressInterleavesExplorationRowsAndEntriesByVisibleSeq(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{

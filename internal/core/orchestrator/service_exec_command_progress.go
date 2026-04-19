@@ -20,6 +20,8 @@ func (s *Service) handleProcessProgressItemStarted(instanceID string, event agen
 		return s.handleAssistantMessageProgressStart(instanceID, event)
 	case "command_execution":
 		return s.handleCommandExecutionProgressStarted(instanceID, event)
+	case "file_change":
+		return s.handleFileChangeProgressStarted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressStarted(instanceID, event)
 	case "mcp_tool_call":
@@ -86,6 +88,8 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 		return events
 	case "command_execution":
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
+	case "file_change":
+		return s.handleFileChangeProgressCompleted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressCompleted(instanceID, event)
 	case "mcp_tool_call":
@@ -306,6 +310,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if surface == nil || progress == nil {
 		return nil
 	}
+	progress.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	progress.LastEmittedAt = s.now()
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := ExecCommandProgressSnapshot(progress)
@@ -328,12 +333,13 @@ func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *con
 	entries := make([]control.ExecCommandProgressEntry, 0, len(progress.Entries))
 	for _, entry := range progress.Entries {
 		entries = append(entries, control.ExecCommandProgressEntry{
-			ItemID:  entry.ItemID,
-			Kind:    entry.Kind,
-			Label:   entry.Label,
-			Summary: entry.Summary,
-			Status:  entry.Status,
-			LastSeq: entry.LastSeq,
+			ItemID:     entry.ItemID,
+			Kind:       entry.Kind,
+			Label:      entry.Label,
+			Summary:    entry.Summary,
+			Status:     entry.Status,
+			FileChange: cloneExecCommandProgressFileChange(entry.FileChange),
+			LastSeq:    entry.LastSeq,
 		})
 	}
 	snapshot := &control.ExecCommandProgress{
@@ -342,6 +348,7 @@ func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *con
 		ItemID:       progress.ItemID,
 		MessageID:    progress.MessageID,
 		CardStartSeq: progress.CardStartSeq,
+		Verbosity:    string(progress.Verbosity),
 		Blocks:       execCommandProgressBlocks(progress),
 		Entries:      entries,
 		Commands:     append([]string(nil), progress.Commands...),
@@ -384,6 +391,8 @@ func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleReco
 		return false
 	}
 	switch strings.TrimSpace(itemKind) {
+	case "file_change":
+		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	case "command_execution", "dynamic_tool_call", "web_search", "mcp_tool_call", "context_compaction":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose
 	default:
@@ -479,6 +488,9 @@ func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, e
 			}
 			if entry.Status != "" {
 				current.Status = entry.Status
+			}
+			if entry.FileChange != nil {
+				current.FileChange = entry.FileChange
 			}
 			if current.LastSeq == 0 {
 				progress.LastVisibleSeq++

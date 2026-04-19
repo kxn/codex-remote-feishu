@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，bare `/vscode-migrate` 的结果同样改成原卡收口；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，bare `/vscode-migrate` 的结果同样改成原卡收口；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示，同时 `file_change` 已并入这条过程卡：normal 显示文件行与 `+/-` 统计，verbose 再追加 diff code block；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
 
 ## 1. 文档定位
 
@@ -68,7 +68,7 @@
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
-  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / 被动 `context_compaction`），负责在首次发送时打开 `config.update_multi=true`，让后续同一窗口卡可被 `message.patch` 更新；首卡当前固定顶层 append，不继承 turn reply anchor。若当前窗口卡在 projector 层按“每行一个 element”的粒度已放不下，projector 会继续 patch 同一张卡：丢弃最旧可见行、把 `card_start_seq` 前移到当前窗口首行，并在顶部补一行“较早过程已省略，仅保留最近进度。”
+  - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / 被动 `context_compaction`），负责在首次发送时打开 `config.update_multi=true`，让后续同一窗口卡可被 `message.patch` 更新；首卡当前固定顶层 append，不继承 turn reply anchor。若当前窗口卡在 projector 层按“每行一个 element”的粒度已放不下，projector 会继续 patch 同一张卡：丢弃最旧可见行、把 `card_start_seq` 前移到当前窗口首行，并在顶部补一行“较早过程已省略，仅保留最近进度。”
   - 对 turn timeline 文本（final reply、非 final assistant 文本、`用户补充` 这类轻量 text event），负责根据 `ReplyToMessageID` 选择 reply 发送；reply 失败时 gateway 会回退到普通 text/card create
   - 对显式 `/compact` 这种 direct-command owner card，当前通过 patchable `FeishuDirectCommandCatalog` 发送首卡，并依赖 `TrackingKey -> message_id` 回写把 running / terminal 状态继续 patch 回同一张卡
   - 当前是 selection / target-picker / command/config cards 最终 projection 的 owner：
@@ -454,13 +454,13 @@ MCP request 卡片当前新增的可视语义：
   - projector 当前对所有 notice 都不会 reply 到任何 turn 源消息；`global runtime` 的特殊点只剩 dedupe / family 与独立系统车道
   - 当前这条车道覆盖真正脱离当前 owner-card 上下文的：surface / VS Code resume failure、`open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
   - 若 `VS Code` 兼容修复、`open VS Code` prompt 或恢复提示是由 stamped `/mode vscode` callback 同步显露出来，daemon 会先尝试把首张可投影提示卡承接到当前卡；只有脱离当前 card 上下文的后台 runtime 路径才会落到这条独立车道
-  - 这些提示不会 patch 当前 owner-card，也不会借用 final-card anchor 或 turn reply-chain；它们始终作为独立系统提示出现在主时间线
+- 这些提示不会 patch 当前 owner-card，也不会借用 final-card anchor 或 turn reply-chain；它们始终作为独立系统提示出现在主时间线
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
-- “命令已提交”锚点卡路径当前在 lifecycle helper 与 gateway 里仍保留兼容骨架，但已经没有命中 current-card stamped action 的 allow-list；本轮审计范围内的菜单 / 参数卡 owner-flow 已不再依赖这条路径。
-- 这条兼容骨架不会改变产品动作 owner；参数卡 apply、VS Code 菜单 handoff 与迁移卡收口都不复用“命令已提交”锚点，而是由产品 handler 直接返回可 replace / patch 的结果卡。
-- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
+- “命令已提交”锚点卡当前只剩少量命令继续使用（主要是 `/use`、`/useall`）；这批锚点卡会在短延时后尝试 best-effort 自动撤回，撤回失败时仅静默降级，不影响主流程。
+- 这条路径不会改变产品动作 owner；参数卡 apply、VS Code 菜单 handoff 与迁移卡收口都不复用“命令已提交”锚点，而是由产品 handler 直接返回可 replace / patch 的结果卡。
+- 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次当前固定顶层 append，不继承当前 turn 的 `SourceMessageID`
-  - 若同一 turn 内继续收到新的可见过程项，则优先对当前 active progress card 做 `message.patch`；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call` 与 `context_compaction` 累积到同一条共享“工作中”时间线里
+  - 若同一 turn 内继续收到新的可见过程项，则优先对当前 active progress card 做 `message.patch`；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call`、`file_change` 与 `context_compaction` 累积到同一条共享“工作中”时间线里
   - 若 projector 发现当前 active progress card 在 Feishu payload 限制内已无法继续容纳新增的可见行，则不会再依赖 gateway 的尾部截断来“省略后文”；当前实现会：
     - 保持同一张共享过程卡作为 patch 目标，不再追加 continuation card
     - 从窗口头部按“可见进度行”为单位丢弃最旧历史，直到当前 payload 重新落回预算内
@@ -474,9 +474,10 @@ MCP request 卡片当前新增的可视语义：
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
   - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；若同一 turn 内连续出现同名 tool，则会复用同一行并按首次出现顺序持续追加参数（例如 `Read：a.cpp` -> `Read：a.cpp b.cpp`）；失败态会在该行内补 `（失败）`
+  - `file_change` 现在会以“修改 + 文件路径 + 绿色/红色 `+/-` 行数统计”的形式进入同一张卡；quiet 保持静默，normal 就会显示这一层文件行，verbose 则会在该文件行下面继续内联一个 diff fenced code block。这里仍是过程观察，不承担 final summary / authoritative diff 的最终审阅语义
   - `context_compaction` 不再单独 append 一张 notice 卡；attached surface 命中 verbose 时，会以 `整理：上下文已整理。` 单行并入共享过程卡
   - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
-  - 可见性当前统一收敛到 verbose：`exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 都只在 verbose 可见；normal 继续保留 plan 与 final reply，但不再显示这类共享进行中卡；若 compact 完成发生在无 attached surface 时，replay 到 non-verbose surface 也会保持静默
+  - 可见性当前分两层：`file_change` 在 normal / verbose 可见，quiet 静默；`exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 仍只在 verbose 可见。normal 继续保留 plan、final reply，以及 `file_change` 这种较轻量的过程观察；若 compact 完成发生在无 attached surface 时，replay 到 non-verbose surface 也会保持静默
   - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
 - 若清掉底部 reasoning 状态后整张卡已无任何可见行，projector 不会再补 `message.delete` 撤回旧卡；这次清理只终止活跃 progress state，已经发出的旧卡保留为历史
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
@@ -612,7 +613,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + stamped command result replacement + dormant command submission anchor compatibility branch）、无 lifecycle 导航仍异步 ack、`OperationSendText` 的 reply/fallback 出站路径，以及共享更新卡的 `message.patch` 出站路径
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `context_compaction` 行级摘要的投影边界、首卡顶层 append / 后续 patch 语义、超长时单卡滚动窗口与顶部省略提示、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` 行级摘要的投影边界、首卡顶层 append / 后续 patch 语义、`file_change` 在 normal/verbose 下的分层投影、超长时单卡滚动窗口与顶部省略提示、底部瞬时 reasoning 状态的渲染位置、逐行 markdown element 投影，以及空 transient 清理不会撤回旧卡的语义
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -622,7 +623,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
   - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 normal `/list` 的基础 target picker 语义
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` 的可见性分档、首卡顶层 append、同卡复用、滚动窗口时 `card_start_seq` 前移、正文出现后终止、同类 tool 行级聚合、失败态行内标记、底部瞬时 reasoning 状态的本地化/清理时机，以及 turn 完成清理语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` / `file_change` 的可见性分档、首卡顶层 append、同卡复用、`file_change` 在 normal 下也会进入共享过程卡、滚动窗口时 `card_start_seq` 前移、正文出现后终止、同类 tool 行级聚合、失败态行内标记，以及底部瞬时 reasoning 状态的本地化/清理时机
 - [internal/app/daemon/app_ui_progress_test.go](../../internal/app/daemon/app_ui_progress_test.go)
   - 锁定共享过程卡在 `message.patch` 回来时也会把 active progress 的 `card_start_seq` 回写到当前同卡窗口，而不是只在首卡发送时记录
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)

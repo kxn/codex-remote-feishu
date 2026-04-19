@@ -22,9 +22,11 @@ const execProgressOmittedHistoryText = "较早过程已省略，仅保留最近�
 
 func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []execProgressRenderedLine {
 	items := normalizedExecProgressTimeline(progress)
+	verbose := strings.EqualFold(strings.TrimSpace(progress.Verbosity), "verbose")
+	fileLabels := execProgressFileChangeDisplayLabels(items)
 	lines := make([]execProgressRenderedLine, 0, len(items))
 	for _, item := range items {
-		content := renderExecProgressTimelineItem(item)
+		content := renderExecProgressTimelineItem(item, verbose, fileLabels)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}

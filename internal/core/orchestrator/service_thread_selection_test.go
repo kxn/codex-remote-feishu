@@ -931,7 +931,7 @@ func TestTurnCompletedEmbedsFileChangeSummaryIntoFinalAssistantBlock(t *testing.
 		TurnID:    "turn-1",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
-	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
 		ThreadID: "thread-1",
 		TurnID:   "turn-1",
@@ -943,8 +943,15 @@ func TestTurnCompletedEmbedsFileChangeSummaryIntoFinalAssistantBlock(t *testing.
 			Kind: agentproto.FileChangeUpdate,
 			Diff: "@@ -1 +1,2 @@\n-old\n+new\n+more",
 		}},
-	}); len(events) != 0 {
-		t.Fatalf("expected file change completion to stay buffered until turn completion, got %#v", events)
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected file change completion to refresh shared progress card before turn completion, got %#v", events)
+	}
+	if events[0].ExecCommandProgress.Verbosity != string(state.SurfaceVerbosityNormal) {
+		t.Fatalf("expected file change progress to inherit normal verbosity, got %#v", events[0].ExecCommandProgress)
+	}
+	if len(events[0].ExecCommandProgress.Entries) != 1 || events[0].ExecCommandProgress.Entries[0].Kind != "file_change" {
+		t.Fatalf("expected structured file change entry on shared progress card, got %#v", events[0].ExecCommandProgress)
 	}
 	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,

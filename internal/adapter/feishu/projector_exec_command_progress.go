@@ -165,6 +165,8 @@ func normalizeExecProgressTimelineItem(item control.ExecCommandProgressTimelineI
 				item.Label = "MCP"
 			case "dynamic_tool_call":
 				item.Label = "工具"
+			case "file_change":
+				item.Label = "修改"
 			case "context_compaction":
 				item.Label = "压缩"
 			default:
@@ -180,7 +182,7 @@ func normalizeExecProgressTimelineItem(item control.ExecCommandProgressTimelineI
 	return item, true
 }
 
-func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem) string {
+func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
 	switch strings.ToLower(strings.TrimSpace(item.Kind)) {
 	case "read", "list", "search":
 		return renderExecProgressBlockRow(control.ExecCommandProgressBlockRow{
@@ -191,10 +193,11 @@ func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem
 		})
 	default:
 		return renderExecProgressEntry(control.ExecCommandProgressEntry{
-			Kind:    item.Kind,
-			Label:   item.Label,
-			Summary: item.Summary,
-		})
+			Kind:       item.Kind,
+			Label:      item.Label,
+			Summary:    item.Summary,
+			FileChange: item.FileChange,
+		}, verbose, fileLabels)
 	}
 }
 
@@ -236,7 +239,7 @@ func execProgressReadNames(items []string) []string {
 	return names
 }
 
-func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
+func renderExecProgressEntry(entry control.ExecCommandProgressEntry, verbose bool, fileLabels map[string]string) string {
 	label := strings.TrimSpace(entry.Label)
 	if label == "" {
 		label = "工作中"
@@ -253,10 +256,91 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 			return prefix + " " + renderExecProgressSearchSummary(entry.Summary, "", 40)
 		}
 		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
+	case "file_change":
+		return renderExecProgressFileChangeEntry(entry, verbose, fileLabels)
 	default:
 		prefix := execProgressMarkdownLabel(label)
 		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
 	}
+}
+
+func renderExecProgressFileChangeEntry(entry control.ExecCommandProgressEntry, verbose bool, fileLabels map[string]string) string {
+	if entry.FileChange == nil {
+		prefix := execProgressMarkdownLabel(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"))
+		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
+	}
+	file := execProgressFileChangeSummaryEntry(*entry.FileChange)
+	prefix := execProgressMarkdownLabel(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"))
+	line := prefix + " " + formatFileChangePath(file, fileLabels) + "  " + formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines)
+	if !verbose {
+		return line
+	}
+	diff := truncateExecProgressFileChangeDiff(strings.TrimSpace(entry.FileChange.Diff))
+	if diff == "" {
+		return line
+	}
+	return line + "\n" + markdownFencedCodeBlock("diff", diff)
+}
+
+func execProgressFileChangeDisplayLabels(items []control.ExecCommandProgressTimelineItem) map[string]string {
+	files := make([]control.FileChangeSummaryEntry, 0, len(items))
+	for _, item := range items {
+		if item.FileChange == nil {
+			continue
+		}
+		files = append(files, execProgressFileChangeSummaryEntry(*item.FileChange))
+	}
+	return fileChangeDisplayLabels(files)
+}
+
+func execProgressFileChangeSummaryEntry(change control.ExecCommandProgressFileChange) control.FileChangeSummaryEntry {
+	return control.FileChangeSummaryEntry{
+		Path:         strings.TrimSpace(change.Path),
+		MovePath:     strings.TrimSpace(change.MovePath),
+		AddedLines:   change.AddedLines,
+		RemovedLines: change.RemovedLines,
+	}
+}
+
+func truncateExecProgressFileChangeDiff(diff string) string {
+	diff = strings.ReplaceAll(diff, "\r\n", "\n")
+	diff = strings.TrimSpace(diff)
+	if diff == "" {
+		return ""
+	}
+	const maxLines = 24
+	const maxChars = 1200
+	lines := strings.Split(diff, "\n")
+	truncated := false
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+		truncated = true
+	}
+	out := strings.Join(lines, "\n")
+	if len([]rune(out)) > maxChars {
+		runes := []rune(out)
+		out = string(runes[:maxChars])
+		truncated = true
+	}
+	out = strings.TrimRight(out, "\n")
+	if truncated {
+		out += "\n..."
+	}
+	return out
+}
+
+func markdownFencedCodeBlock(language, text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	fenceRun := maxBacktickRun(text) + 3
+	fence := strings.Repeat("`", fenceRun)
+	language = strings.TrimSpace(language)
+	if language != "" {
+		return fence + language + "\n" + text + "\n" + fence
+	}
+	return fence + "\n" + text + "\n" + fence
 }
 
 func execProgressMarkdownLabel(label string) string {

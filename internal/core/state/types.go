@@ -201,12 +201,22 @@ type SurfaceConsoleRecord struct {
 }
 
 type ExecCommandProgressEntryRecord struct {
-	ItemID  string
-	Kind    string
-	Label   string
-	Summary string
-	Status  string
-	LastSeq int
+	ItemID     string
+	Kind       string
+	Label      string
+	Summary    string
+	Status     string
+	FileChange *ExecCommandProgressFileChangeRecord
+	LastSeq    int
+}
+
+type ExecCommandProgressFileChangeRecord struct {
+	Path         string
+	MovePath     string
+	Kind         string
+	Diff         string
+	AddedLines   int
+	RemovedLines int
 }
 
 type ExecCommandProgressBlockRowRecord struct {
@@ -239,6 +249,7 @@ type ExecCommandProgressRecord struct {
 	ItemID               string
 	MessageID            string
 	CardStartSeq         int
+	Verbosity            SurfaceVerbosity
 	Entries              []ExecCommandProgressEntryRecord
 	Commands             []string
 	Command              string

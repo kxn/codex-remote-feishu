@@ -537,23 +537,34 @@ type ImageOutput struct {
 }
 
 type ExecCommandProgressEntry struct {
-	ItemID  string
-	Kind    string
-	Label   string
-	Summary string
-	Status  string
-	LastSeq int
+	ItemID     string
+	Kind       string
+	Label      string
+	Summary    string
+	Status     string
+	FileChange *ExecCommandProgressFileChange
+	LastSeq    int
+}
+
+type ExecCommandProgressFileChange struct {
+	Path         string
+	MovePath     string
+	Kind         string
+	Diff         string
+	AddedLines   int
+	RemovedLines int
 }
 
 type ExecCommandProgressTimelineItem struct {
-	ID        string
-	Kind      string
-	Label     string
-	Items     []string
-	Summary   string
-	Secondary string
-	Status    string
-	LastSeq   int
+	ID         string
+	Kind       string
+	Label      string
+	Items      []string
+	Summary    string
+	Secondary  string
+	Status     string
+	FileChange *ExecCommandProgressFileChange
+	LastSeq    int
 }
 
 type ExecCommandProgressBlockRow struct {
@@ -578,6 +589,7 @@ type ExecCommandProgress struct {
 	ItemID       string
 	MessageID    string
 	CardStartSeq int
+	Verbosity    string
 	Blocks       []ExecCommandProgressBlock
 	Entries      []ExecCommandProgressEntry
 	Timeline     []ExecCommandProgressTimelineItem
