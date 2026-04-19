@@ -434,7 +434,7 @@ func TestBuildDebugStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if catalog == nil || !catalog.Interactive {
 		t.Fatalf("expected interactive debug catalog, got %#v", catalog)
 	}
-	assertCatalogUsesNonLegacyContracts(t, catalog)
+	assertCatalogUsesPlainTextContracts(t, catalog)
 	if len(catalog.Sections) != 2 {
 		t.Fatalf("expected quick actions + form sections, got %#v", catalog.Sections)
 	}
@@ -464,7 +464,7 @@ func TestBuildUpgradeStatusCatalogIsInteractiveAndIncludesForm(t *testing.T) {
 	if catalog == nil || !catalog.Interactive {
 		t.Fatalf("expected interactive upgrade catalog, got %#v", catalog)
 	}
-	assertCatalogUsesNonLegacyContracts(t, catalog)
+	assertCatalogUsesPlainTextContracts(t, catalog)
 	if len(catalog.Sections) != 3 {
 		t.Fatalf("expected quick actions + track + form sections, got %#v", catalog.Sections)
 	}

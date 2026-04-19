@@ -7,13 +7,7 @@ import (
 )
 
 func commandCatalogBody(catalog control.FeishuDirectCommandCatalog) string {
-	if len(catalog.SummarySections) != 0 {
-		return ""
-	}
-	if !catalog.LegacySummaryMarkdown {
-		return ""
-	}
-	return renderSystemInlineTags(strings.TrimSpace(catalog.Summary))
+	return ""
 }
 
 func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLifecycleID string) []map[string]any {
@@ -26,7 +20,7 @@ func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLi
 	}
 	if len(catalog.SummarySections) != 0 {
 		elements = appendCardTextSections(elements, catalog.SummarySections)
-	} else if !catalog.LegacySummaryMarkdown {
+	} else {
 		elements = appendCardTextSections(elements, commandCatalogSummaryFallbackSections(catalog.Summary))
 	}
 	for _, section := range catalog.Sections {
@@ -46,16 +40,7 @@ func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLi
 					continue
 				}
 			}
-			if entry.LegacyMarkdown {
-				if markdown := commandCatalogEntryMarkdown(entry); markdown != "" {
-					elements = append(elements, map[string]any{
-						"tag":     "markdown",
-						"content": markdown,
-					})
-				}
-			} else {
-				elements = appendCardTextSections(elements, commandCatalogEntryFallbackSections(entry))
-			}
+			elements = appendCardTextSections(elements, commandCatalogEntryFallbackSections(entry))
 			if catalog.Interactive && len(entry.Buttons) > 0 && !renderedCompactButtons {
 				if group := cardButtonGroupElement(commandCatalogButtons(entry.Buttons, daemonLifecycleID)); len(group) != 0 {
 					elements = append(elements, group)
@@ -132,27 +117,6 @@ func commandCatalogCompactButtonElements(buttons []control.CommandCatalogButton,
 	return elements
 }
 
-func commandCatalogEntryMarkdown(entry control.CommandCatalogEntry) string {
-	parts := []string{}
-	if title := strings.TrimSpace(entry.Title); title != "" {
-		parts = append(parts, "**"+title+"**")
-	}
-	if commands := formatCommandTags(entry.Commands); commands != "" {
-		parts = append(parts, commands)
-	}
-	if desc := strings.TrimSpace(entry.Description); desc != "" {
-		parts = append(parts, desc)
-	}
-	line := strings.Join(parts, " ")
-	if examples := formatCommandExamples(entry.Examples); examples != "" {
-		if line == "" {
-			return "例如：" + examples
-		}
-		return line + "\n例如：" + examples
-	}
-	return line
-}
-
 func commandCatalogSummaryFallbackSections(summary string) []control.FeishuCardTextSection {
 	lines := splitCommandCatalogPlainTextLines(summary)
 	if len(lines) == 0 {
@@ -194,18 +158,6 @@ func splitCommandCatalogPlainTextLines(text string) []string {
 	return lines
 }
 
-func formatCommandTags(commands []string) string {
-	tags := make([]string, 0, len(commands))
-	for _, command := range commands {
-		command = strings.TrimSpace(command)
-		if command == "" {
-			continue
-		}
-		tags = append(tags, formatCommandTextTag(command))
-	}
-	return strings.Join(tags, " / ")
-}
-
 func formatCommandPlainText(commands []string) string {
 	parts := make([]string, 0, len(commands))
 	for _, command := range commands {
@@ -216,18 +168,6 @@ func formatCommandPlainText(commands []string) string {
 		parts = append(parts, command)
 	}
 	return strings.Join(parts, " / ")
-}
-
-func formatCommandExamples(examples []string) string {
-	tags := make([]string, 0, len(examples))
-	for _, example := range examples {
-		example = strings.TrimSpace(example)
-		if example == "" {
-			continue
-		}
-		tags = append(tags, formatCommandTextTag(example))
-	}
-	return strings.Join(tags, "，")
 }
 
 func formatExamplesPlainText(examples []string) string {

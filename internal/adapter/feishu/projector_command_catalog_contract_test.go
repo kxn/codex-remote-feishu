@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestProjectCommandCatalogSummaryFallsBackToPlainTextWithoutLegacyMarkdown(t *testing.T) {
+func TestProjectCommandCatalogSummaryUsesPlainTextSections(t *testing.T) {
 	projector := NewProjector()
 	summary := "状态：`ok`\n下一步：[打开 Cron](https://example.com/cron)"
 	ops := projector.Project("chat-1", control.UIEvent{
@@ -33,7 +33,7 @@ func TestProjectCommandCatalogSummaryFallsBackToPlainTextWithoutLegacyMarkdown(t
 	}
 }
 
-func TestProjectCommandCatalogEntryFallsBackToPlainTextWithoutLegacyMarkdown(t *testing.T) {
+func TestProjectCommandCatalogEntryUsesPlainTextSections(t *testing.T) {
 	projector := NewProjector()
 	title := "标题 `x` [link](https://example.com)"
 	command := "/do `x`"

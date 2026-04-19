@@ -926,16 +926,14 @@ func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "Slash 命令帮助",
-			Summary:               "当前支持的 slash command 如下。",
-			LegacySummaryMarkdown: true,
+			Title:   "Slash 命令帮助",
+			Summary: "当前支持的 slash command 如下。",
 			Sections: []control.CommandCatalogSection{{
 				Title: "帮助",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:       []string{"/help", "menu"},
-					Description:    "查看帮助或再次打开命令菜单。",
-					Examples:       []string{"/menu"},
-					LegacyMarkdown: true,
+					Commands:    []string{"/help", "menu"},
+					Description: "查看帮助或再次打开命令菜单。",
+					Examples:    []string{"/menu"},
 				}},
 			}},
 		},
@@ -946,36 +944,37 @@ func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 	if ops[0].CardTitle != "Slash 命令帮助" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
-	if ops[0].CardBody != "当前支持的 slash command 如下。" {
+	if ops[0].CardBody != "" {
 		t.Fatalf("unexpected card body: %#v", ops[0])
 	}
-	if len(ops[0].CardElements) != 2 {
-		t.Fatalf("expected section header and entry markdown, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 3 {
+		t.Fatalf("expected summary, section header, and entry text, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**帮助**" {
-		t.Fatalf("unexpected section element: %#v", ops[0].CardElements[0])
+	if !containsCardTextExact(ops[0].CardElements, "当前支持的 slash command 如下。") {
+		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
 	}
-	content, _ := ops[0].CardElements[1]["content"].(string)
-	if !containsAll(content, "<text_tag color='neutral'>/help</text_tag>", "<text_tag color='neutral'>menu</text_tag>", "查看帮助或再次打开命令菜单。", "<text_tag color='neutral'>/menu</text_tag>") {
-		t.Fatalf("unexpected entry markdown: %#v", ops[0].CardElements[1])
+	if !containsMarkdownExact(ops[0].CardElements, "**帮助**") {
+		t.Fatalf("unexpected section element: %#v", ops[0].CardElements)
+	}
+	want := "命令：/help / menu\n查看帮助或再次打开命令菜单。\n例如：/menu"
+	if !containsCardTextExact(ops[0].CardElements, want) {
+		t.Fatalf("unexpected entry text: %#v", ops[0].CardElements)
 	}
 }
 
-func TestProjectCommandHelpCatalogPreservesAmpersandsInCommandTags(t *testing.T) {
+func TestProjectCommandHelpCatalogPreservesAmpersandsInPlainText(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "命令帮助",
-			Summary:               "常用联调命令。",
-			LegacySummaryMarkdown: true,
+			Title:   "命令帮助",
+			Summary: "常用联调命令。",
 			Sections: []control.CommandCatalogSection{{
 				Title: "联调",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:       []string{"go test ./internal/app/daemon ./internal/core/orchestrator"},
-					Description:    "先跑 daemon/orchestrator。",
-					Examples:       []string{"cd web && npm test -- --run src/lib/api.test.ts"},
-					LegacyMarkdown: true,
+					Commands:    []string{"go test ./internal/app/daemon ./internal/core/orchestrator"},
+					Description: "先跑 daemon/orchestrator。",
+					Examples:    []string{"cd web && npm test -- --run src/lib/api.test.ts"},
 				}},
 			}},
 		},
@@ -983,15 +982,21 @@ func TestProjectCommandHelpCatalogPreservesAmpersandsInCommandTags(t *testing.T)
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	content, _ := ops[0].CardElements[1]["content"].(string)
+	rendered := []string{}
+	for _, element := range ops[0].CardElements {
+		if text := cardTextContent(element); text != "" {
+			rendered = append(rendered, text)
+		}
+	}
+	content := strings.Join(rendered, "\n")
 	if strings.Contains(content, "&amp;&amp;") {
-		t.Fatalf("expected command tag to preserve &&, got %q", content)
+		t.Fatalf("expected plain-text command catalog to preserve &&, got %q", content)
 	}
 	if !containsAll(content,
-		"<text_tag color='neutral'>go test ./internal/app/daemon ./internal/core/orchestrator</text_tag>",
-		"<text_tag color='neutral'>cd web && npm test -- --run src/lib/api.test.ts</text_tag>",
+		"命令：go test ./internal/app/daemon ./internal/core/orchestrator",
+		"例如：cd web && npm test -- --run src/lib/api.test.ts",
 	) {
-		t.Fatalf("unexpected command catalog markdown: %q", content)
+		t.Fatalf("unexpected command catalog text: %q", content)
 	}
 }
 
@@ -1041,16 +1046,14 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "命令菜单",
-			Summary:               "固定动作可直接点击。",
-			LegacySummaryMarkdown: true,
-			Interactive:           true,
+			Title:       "命令菜单",
+			Summary:     "固定动作可直接点击。",
+			Interactive: true,
 			Sections: []control.CommandCatalogSection{{
 				Title: "实例与会话",
 				Entries: []control.CommandCatalogEntry{{
-					Commands:       []string{"/list"},
-					Description:    "列出当前在线实例。",
-					LegacyMarkdown: true,
+					Commands:    []string{"/list"},
+					Description: "列出当前在线实例。",
 					Buttons: []control.CommandCatalogButton{
 						{Label: "查看实例", CommandText: "/list"},
 					},
@@ -1061,12 +1064,15 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if len(ops[0].CardElements) != 3 {
-		t.Fatalf("expected section + entry + action row, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 4 {
+		t.Fatalf("expected summary + section + entry + action row, got %#v", ops[0].CardElements)
 	}
-	actionRow := cardElementButtons(t, ops[0].CardElements[2])
+	if !containsCardTextExact(ops[0].CardElements, "固定动作可直接点击。") {
+		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
+	}
+	actionRow := cardElementButtons(t, ops[0].CardElements[3])
 	if len(actionRow) != 1 {
-		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[2])
+		t.Fatalf("expected one action button, got %#v", ops[0].CardElements[3])
 	}
 	if cardButtonLabel(t, actionRow[0]) != "查看实例" {
 		t.Fatalf("unexpected button label: %#v", actionRow[0])
@@ -1094,11 +1100,10 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "推理强度",
-			Summary:               "当前：`high`；飞书覆盖：`high`。",
-			LegacySummaryMarkdown: true,
-			Interactive:           true,
-			DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
+			Title:        "推理强度",
+			Summary:      "当前：`high`；飞书覆盖：`high`。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
 			Sections: []control.CommandCatalogSection{{
 				Title: "立即应用",
 				Entries: []control.CommandCatalogEntry{{
@@ -1115,17 +1120,26 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if len(ops[0].CardElements) != 3 {
-		t.Fatalf("expected section + two stacked action rows, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 4 {
+		t.Fatalf("expected summary + section + two stacked action rows, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "**立即应用**" {
-		t.Fatalf("unexpected section element: %#v", ops[0].CardElements[0])
+	if !containsCardTextExact(ops[0].CardElements, "当前：`high`；飞书覆盖：`high`。") {
+		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
 	}
-	if content, _ := ops[0].CardElements[1]["content"].(string); content != "" {
-		t.Fatalf("compact layout should not render entry markdown, got %#v", ops[0].CardElements[1])
+	if ops[0].CardElements[1]["content"] != "**立即应用**" {
+		t.Fatalf("unexpected section element: %#v", ops[0].CardElements[1])
 	}
-	firstRow := cardElementButtons(t, ops[0].CardElements[1])
-	secondRow := cardElementButtons(t, ops[0].CardElements[2])
+	rendered := []string{}
+	for _, element := range ops[0].CardElements {
+		if text := cardTextContent(element); text != "" {
+			rendered = append(rendered, text)
+		}
+	}
+	if strings.Contains(strings.Join(rendered, "\n"), "这段说明在紧凑布局里不应该出现。") {
+		t.Fatalf("compact layout should not render entry text, got %#v", ops[0].CardElements)
+	}
+	firstRow := cardElementButtons(t, ops[0].CardElements[2])
+	secondRow := cardElementButtons(t, ops[0].CardElements[3])
 	if len(firstRow) != 1 || len(secondRow) != 1 {
 		t.Fatalf("expected one button per stacked row, got %#v / %#v", firstRow, secondRow)
 	}
@@ -1164,11 +1178,6 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 	if got := firstCommandTexts(catalog.Sections[0].Entries); len(got) != 0 {
 		t.Fatalf("detached menu home should only expose group navigation entries, got %#v", got)
 	}
-	for _, entry := range catalog.Sections[0].Entries {
-		if entry.LegacyMarkdown {
-			t.Fatalf("expected menu home to use non-legacy entries, got %#v", entry)
-		}
-	}
 }
 
 func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
@@ -1202,12 +1211,11 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "模型",
-			Summary:               "直接在卡片里输入模型名。",
-			LegacySummaryMarkdown: true,
-			Interactive:           true,
-			DisplayStyle:          control.CommandCatalogDisplayCompactButtons,
-			Breadcrumbs:           []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
+			Title:        "模型",
+			Summary:      "直接在卡片里输入模型名。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayCompactButtons,
+			Breadcrumbs:  []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
 			Sections: []control.CommandCatalogSection{{
 				Title: "手动输入",
 				Entries: []control.CommandCatalogEntry{{
@@ -1233,13 +1241,16 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if len(ops[0].CardElements) != 4 {
-		t.Fatalf("expected breadcrumb + section + form + related action, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 5 {
+		t.Fatalf("expected breadcrumb + summary + section + form + related action, got %#v", ops[0].CardElements)
 	}
 	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
 		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
 	}
-	formContainer := ops[0].CardElements[2]
+	if !containsCardTextExact(ops[0].CardElements, "直接在卡片里输入模型名。") {
+		t.Fatalf("expected summary plain text block, got %#v", ops[0].CardElements)
+	}
+	formContainer := ops[0].CardElements[3]
 	if formContainer["tag"] != "form" {
 		t.Fatalf("expected form container, got %#v", formContainer)
 	}
@@ -1258,7 +1269,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if value["kind"] != "submit_command_form" || value["command"] != "/model" || value["field_name"] != "command_args" {
 		t.Fatalf("unexpected submit payload: %#v", value)
 	}
-	relatedRow := cardElementButtons(t, ops[0].CardElements[3])
+	relatedRow := cardElementButtons(t, ops[0].CardElements[4])
 	relatedValue := cardButtonPayload(t, relatedRow[0])
 	if relatedValue["kind"] != "run_command" || relatedValue["command_text"] != "/menu send_settings" {
 		t.Fatalf("unexpected related button payload: %#v", relatedValue)
@@ -1358,11 +1369,10 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind: control.UIEventFeishuDirectCommandCatalog,
 		FeishuDirectCommandCatalog: &control.FeishuDirectCommandCatalog{
-			Title:                 "发送设置",
-			Summary:               "请选择操作。",
-			LegacySummaryMarkdown: true,
-			Interactive:           true,
-			DisplayStyle:          control.CommandCatalogDisplayDefault,
+			Title:        "发送设置",
+			Summary:      "请选择操作。",
+			Interactive:  true,
+			DisplayStyle: control.CommandCatalogDisplayDefault,
 			RelatedButtons: []control.CommandCatalogButton{{
 				Label:       "返回菜单",
 				CommandText: "/menu",
@@ -1377,7 +1387,7 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 	}
 	renderedElements := renderedV2BodyElements(t, ops[0])
 	if len(renderedElements) != 2 {
-		t.Fatalf("expected summary markdown plus related button, got %#v", renderedElements)
+		t.Fatalf("expected summary text plus related button, got %#v", renderedElements)
 	}
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[1])
 	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/menu" {

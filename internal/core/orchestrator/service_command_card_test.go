@@ -124,12 +124,4 @@ func TestCardOwnedReasoningApplyWithoutAttachmentShowsRecoveryCard(t *testing.T)
 	if len(catalog.Sections) != 1 || len(catalog.Sections[0].Entries) != 3 {
 		t.Fatalf("expected recovery actions to remain available, got %#v", catalog.Sections)
 	}
-	if catalog.LegacySummaryMarkdown {
-		t.Fatalf("expected recovery card to avoid legacy summary markdown, got %#v", catalog)
-	}
-	for _, entry := range catalog.Sections[0].Entries {
-		if entry.LegacyMarkdown {
-			t.Fatalf("expected recovery entry to avoid legacy markdown, got %#v", entry)
-		}
-	}
 }

@@ -54,7 +54,7 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 		t.Fatalf("events = %#v, want one command catalog", events)
 	}
 	catalog := events[0].FeishuDirectCommandCatalog
-	assertCatalogUsesNonLegacyContracts(t, catalog)
+	assertCatalogUsesPlainTextContracts(t, catalog)
 	summary := catalogSummaryText(catalog)
 	if !strings.Contains(summary, "当前状态：正常") {
 		t.Fatalf("summary = %q, want healthy state", summary)
@@ -139,7 +139,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		if catalog.Title != wantTitle {
 			t.Fatalf("%s title = %q, want %q", commandText, catalog.Title, wantTitle)
 		}
-		assertCatalogUsesNonLegacyContracts(t, catalog)
+		assertCatalogUsesPlainTextContracts(t, catalog)
 		summary := catalogSummaryText(catalog)
 		for _, fragment := range wantFragments {
 			if !strings.Contains(summary, fragment) {
@@ -194,7 +194,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 		t.Fatalf("/cron list events = %#v, want one command catalog", listEvents)
 	}
 	listCatalog := listEvents[0].FeishuDirectCommandCatalog
-	assertCatalogUsesNonLegacyContracts(t, listCatalog)
+	assertCatalogUsesPlainTextContracts(t, listCatalog)
 	if listCatalog.Title != "Cron 任务" {
 		t.Fatalf("/cron list title = %q, want %q", listCatalog.Title, "Cron 任务")
 	}
@@ -259,7 +259,7 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 		t.Fatalf("menu events = %#v, want one catalog", menuEvents)
 	}
 	menuCatalog := menuEvents[0].FeishuDirectCommandCatalog
-	assertCatalogUsesNonLegacyContracts(t, menuCatalog)
+	assertCatalogUsesPlainTextContracts(t, menuCatalog)
 	menuSummary := catalogSummaryText(menuCatalog)
 	if !strings.Contains(menuSummary, "配置入口：工作区清单未同步，暂不可用。") {
 		t.Fatalf("menu summary = %q, want sync-failed hint", menuSummary)
@@ -281,7 +281,7 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 		t.Fatalf("status events = %#v, want one catalog", statusEvents)
 	}
 	statusCatalog := statusEvents[0].FeishuDirectCommandCatalog
-	assertCatalogUsesNonLegacyContracts(t, statusCatalog)
+	assertCatalogUsesPlainTextContracts(t, statusCatalog)
 	statusSummary := catalogSummaryText(statusCatalog)
 	if strings.Contains(statusSummary, "[打开 Cron 配置表]") {
 		t.Fatalf("status summary must not expose config link after sync failure: %q", statusSummary)
@@ -302,7 +302,7 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 		t.Fatalf("edit events = %#v, want one catalog", editEvents)
 	}
 	editCatalog := editEvents[0].FeishuDirectCommandCatalog
-	assertCatalogUsesNonLegacyContracts(t, editCatalog)
+	assertCatalogUsesPlainTextContracts(t, editCatalog)
 	editSummary := catalogSummaryText(editCatalog)
 	if strings.Contains(editSummary, "[打开 Cron 配置表]") {
 		t.Fatalf("edit summary must not expose config link after sync failure: %q", editSummary)

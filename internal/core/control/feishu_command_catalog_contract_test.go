@@ -1,8 +1,11 @@
 package control
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestStaticCommandCatalogsUseNonLegacyContracts(t *testing.T) {
+func TestStaticCommandCatalogsUsePlainTextContracts(t *testing.T) {
 	cases := []struct {
 		name    string
 		catalog FeishuDirectCommandCatalog
@@ -12,12 +15,12 @@ func TestStaticCommandCatalogsUseNonLegacyContracts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertCommandCatalogUsesNonLegacyContracts(t, tc.catalog)
+			assertCommandCatalogUsesPlainTextContracts(t, tc.catalog)
 		})
 	}
 }
 
-func TestDisplayCatalogBuilderUsesNonLegacyContracts(t *testing.T) {
+func TestDisplayCatalogBuilderUsesPlainTextContracts(t *testing.T) {
 	catalog := BuildFeishuCommandCatalogForDisplay(
 		"Slash 命令帮助",
 		"当前展示 canonical 命令。",
@@ -25,16 +28,16 @@ func TestDisplayCatalogBuilderUsesNonLegacyContracts(t *testing.T) {
 		"normal",
 		"",
 	)
-	assertCommandCatalogUsesNonLegacyContracts(t, catalog)
+	assertCommandCatalogUsesPlainTextContracts(t, catalog)
 }
 
-func TestCommandViewCatalogBuildersUseNonLegacyContracts(t *testing.T) {
+func TestCommandViewCatalogBuildersUsePlainTextContracts(t *testing.T) {
 	t.Run("menu_home", func(t *testing.T) {
-		assertCommandCatalogUsesNonLegacyContracts(t, BuildFeishuCommandMenuHomeCatalog())
+		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuHomeCatalog())
 	})
 
 	t.Run("menu_group", func(t *testing.T) {
-		assertCommandCatalogUsesNonLegacyContracts(t, BuildFeishuCommandMenuGroupCatalog("current_work", "normal", "normal_working"))
+		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuGroupCatalog("current_work", "normal", "normal_working"))
 	})
 
 	t.Run("attachment_required", func(t *testing.T) {
@@ -49,20 +52,42 @@ func TestCommandViewCatalogBuildersUseNonLegacyContracts(t *testing.T) {
 		if len(catalog.SummarySections) == 0 {
 			t.Fatalf("expected attachment-required catalog to expose summary sections: %#v", catalog)
 		}
-		assertCommandCatalogUsesNonLegacyContracts(t, catalog)
+		assertCommandCatalogUsesPlainTextContracts(t, catalog)
 	})
 }
 
-func assertCommandCatalogUsesNonLegacyContracts(t *testing.T, catalog FeishuDirectCommandCatalog) {
+func assertCommandCatalogUsesPlainTextContracts(t *testing.T, catalog FeishuDirectCommandCatalog) {
 	t.Helper()
-	if catalog.LegacySummaryMarkdown {
-		t.Fatalf("expected non-legacy summary contract: %#v", catalog)
+	assertCatalogTextAvoidsFeishuMarkdown(t, "summary", catalog.Summary)
+	for _, section := range catalog.SummarySections {
+		assertCardTextSectionUsesPlainText(t, section)
 	}
 	for _, section := range catalog.Sections {
 		for _, entry := range section.Entries {
-			if entry.LegacyMarkdown {
-				t.Fatalf("expected non-legacy entry contract: %#v", entry)
+			assertCatalogTextAvoidsFeishuMarkdown(t, "entry title", entry.Title)
+			assertCatalogTextAvoidsFeishuMarkdown(t, "entry description", entry.Description)
+			for _, command := range entry.Commands {
+				assertCatalogTextAvoidsFeishuMarkdown(t, "entry command", command)
+			}
+			for _, example := range entry.Examples {
+				assertCatalogTextAvoidsFeishuMarkdown(t, "entry example", example)
 			}
 		}
+	}
+}
+
+func assertCardTextSectionUsesPlainText(t *testing.T, section FeishuCardTextSection) {
+	t.Helper()
+	normalized := section.Normalized()
+	assertCatalogTextAvoidsFeishuMarkdown(t, "summary section label", normalized.Label)
+	for _, line := range normalized.Lines {
+		assertCatalogTextAvoidsFeishuMarkdown(t, "summary section line", line)
+	}
+}
+
+func assertCatalogTextAvoidsFeishuMarkdown(t *testing.T, label, text string) {
+	t.Helper()
+	if strings.Contains(strings.TrimSpace(text), "<text_tag") {
+		t.Fatalf("expected %s to stay in plain-text fields, got %q", label, text)
 	}
 }

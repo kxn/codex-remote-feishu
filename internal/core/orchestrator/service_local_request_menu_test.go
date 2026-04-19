@@ -166,11 +166,6 @@ func TestMenuActionDetachedHomepageShowsGroupNavigationOnly(t *testing.T) {
 	if len(firstCommands(catalog.Sections[0].Entries)) != 0 {
 		t.Fatalf("expected home catalog to be pure group navigation, got %#v", catalog.Sections[0].Entries)
 	}
-	for _, entry := range catalog.Sections[0].Entries {
-		if entry.LegacyMarkdown {
-			t.Fatalf("expected detached home to use non-legacy entries, got %#v", entry)
-		}
-	}
 }
 
 func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {

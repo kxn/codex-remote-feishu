@@ -32,7 +32,7 @@ func TestBuildUpgradePromptCatalogUsesDevCommandForDevCandidate(t *testing.T) {
 	if catalog == nil {
 		t.Fatal("expected prompt catalog")
 	}
-	assertCatalogUsesNonLegacyContracts(t, catalog)
+	assertCatalogUsesPlainTextContracts(t, catalog)
 	if catalog.Title != "发现开发版更新" {
 		t.Fatalf("title = %q, want 开发版更新", catalog.Title)
 	}

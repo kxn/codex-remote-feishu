@@ -26,20 +26,37 @@ func catalogSummaryText(catalog *control.FeishuDirectCommandCatalog) string {
 	return strings.Join(parts, "\n")
 }
 
-func assertCatalogUsesNonLegacyContracts(t *testing.T, catalog *control.FeishuDirectCommandCatalog) {
+func assertCatalogUsesPlainTextContracts(t *testing.T, catalog *control.FeishuDirectCommandCatalog) {
 	t.Helper()
 	if catalog == nil {
 		t.Fatal("expected command catalog")
 	}
-	if catalog.LegacySummaryMarkdown {
-		t.Fatalf("expected non-legacy summary contract: %#v", catalog)
+	assertCatalogTextAvoidsFeishuMarkdown(t, "summary", catalog.Summary)
+	for _, section := range catalog.SummarySections {
+		normalized := section.Normalized()
+		assertCatalogTextAvoidsFeishuMarkdown(t, "summary section label", normalized.Label)
+		for _, line := range normalized.Lines {
+			assertCatalogTextAvoidsFeishuMarkdown(t, "summary section line", line)
+		}
 	}
 	for _, section := range catalog.Sections {
 		for _, entry := range section.Entries {
-			if entry.LegacyMarkdown {
-				t.Fatalf("expected non-legacy entry contract: %#v", entry)
+			assertCatalogTextAvoidsFeishuMarkdown(t, "entry title", entry.Title)
+			assertCatalogTextAvoidsFeishuMarkdown(t, "entry description", entry.Description)
+			for _, command := range entry.Commands {
+				assertCatalogTextAvoidsFeishuMarkdown(t, "entry command", command)
+			}
+			for _, example := range entry.Examples {
+				assertCatalogTextAvoidsFeishuMarkdown(t, "entry example", example)
 			}
 		}
+	}
+}
+
+func assertCatalogTextAvoidsFeishuMarkdown(t *testing.T, label, text string) {
+	t.Helper()
+	if strings.Contains(strings.TrimSpace(text), "<text_tag") {
+		t.Fatalf("expected %s to stay in plain-text fields, got %q", label, text)
 	}
 }
 

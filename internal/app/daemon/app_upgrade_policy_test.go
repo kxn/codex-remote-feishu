@@ -27,7 +27,7 @@ func TestBuildUpgradeStatusCatalogHidesShippingOnlyOptions(t *testing.T) {
 		CurrentTrack:   install.ReleaseTrackProduction,
 		CurrentVersion: "v1.0.0",
 	}, false)
-	assertCatalogUsesNonLegacyContracts(t, catalog)
+	assertCatalogUsesPlainTextContracts(t, catalog)
 	summary := catalogSummaryText(catalog)
 	if strings.Contains(summary, "本地升级产物：") {
 		t.Fatalf("shipping catalog should hide local upgrade artifact path, got %#v", summary)
