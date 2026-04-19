@@ -120,11 +120,34 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 	}
 }
 
+// AllowsBareCommandContinuation returns whether this stamped card-triggered
+// command should synchronously replace the current card with the first follow-up
+// card produced by the daemon command continuation path.
+func AllowsBareCommandContinuation(action Action) bool {
+	if AllowsInlineCardReplacement(action) || AllowsCommandCardResultReplacement(action) {
+		return false
+	}
+	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
+		return false
+	}
+	if !isSingleTokenSlashCommand(action.Text) {
+		return false
+	}
+	switch action.Kind {
+	case ActionUpgradeCommand, ActionDebugCommand, ActionCronCommand:
+		return true
+	default:
+		return false
+	}
+}
+
 // AllowsCommandSubmissionAnchorReplacement returns whether this card-triggered
 // command should synchronously return a lightweight "已提交" replacement card
 // while keeping command results append-only.
 func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
-	if AllowsInlineCardReplacement(action) || AllowsCommandCardResultReplacement(action) {
+	if AllowsInlineCardReplacement(action) ||
+		AllowsCommandCardResultReplacement(action) ||
+		AllowsBareCommandContinuation(action) {
 		return false
 	}
 	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
@@ -132,11 +155,8 @@ func AllowsCommandSubmissionAnchorReplacement(action Action) bool {
 	}
 	switch action.Kind {
 	case ActionShowThreads,
-		ActionShowAllThreads,
-		ActionSteerAll:
+		ActionShowAllThreads:
 		return true
-	case ActionUpgradeCommand, ActionDebugCommand:
-		return isSingleTokenSlashCommand(action.Text)
 	default:
 		return false
 	}

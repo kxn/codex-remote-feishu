@@ -239,6 +239,67 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 	}
 }
 
+func TestAllowsBareCommandContinuation(t *testing.T) {
+	tests := []struct {
+		name   string
+		action Action
+		want   bool
+	}{
+		{
+			name: "bare upgrade from stamped card callback",
+			action: Action{
+				Kind:    ActionUpgradeCommand,
+				Text:    "/upgrade",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "bare debug from stamped card callback",
+			action: Action{
+				Kind:    ActionDebugCommand,
+				Text:    "/debug",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "bare cron from stamped card callback",
+			action: Action{
+				Kind:    ActionCronCommand,
+				Text:    "/cron",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "cron with args stays async",
+			action: Action{
+				Kind:    ActionCronCommand,
+				Text:    "/cron status",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
+			name: "typed bare cron stays async",
+			action: Action{
+				Kind: ActionCronCommand,
+				Text: "/cron",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := AllowsBareCommandContinuation(tt.action); got != tt.want {
+				t.Fatalf("AllowsBareCommandContinuation(%#v) = %v, want %v", tt.action, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -293,7 +354,7 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 				Text:    "/upgrade",
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "bare debug from stamped card callback",
@@ -302,13 +363,22 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 				Text:    "/debug",
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "bare cron from stamped card callback",
 			action: Action{
 				Kind:    ActionCronCommand,
 				Text:    "/cron",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
+			name: "steerall from stamped card callback",
+			action: Action{
+				Kind:    ActionSteerAll,
+				Text:    "/steerall",
 				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 			},
 			want: false,

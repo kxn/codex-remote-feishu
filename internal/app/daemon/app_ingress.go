@@ -380,7 +380,7 @@ func (a *App) commandSubmissionAnchorResultLocked(action control.Action) *feishu
 }
 
 func (a *App) bareCommandContinuationResultLocked(action control.Action, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
-	if !allowsBareCommandContinuation(action) || len(events) != 1 || events[0].DaemonCommand == nil {
+	if !control.AllowsBareCommandContinuation(action) || len(events) != 1 || events[0].DaemonCommand == nil {
 		return nil, events
 	}
 	daemonCommand := *events[0].DaemonCommand
@@ -399,22 +399,6 @@ func (a *App) bareCommandContinuationResultLocked(action control.Action, events 
 		return replace, nil
 	}
 	return replace, followup[1:]
-}
-
-func allowsBareCommandContinuation(action control.Action) bool {
-	if action.Inbound == nil || strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) == "" {
-		return false
-	}
-	fields := strings.Fields(strings.TrimSpace(action.Text))
-	if len(fields) != 1 {
-		return false
-	}
-	switch action.Kind {
-	case control.ActionUpgradeCommand, control.ActionDebugCommand, control.ActionCronCommand:
-		return true
-	default:
-		return false
-	}
 }
 
 func daemonCommandMatchesBareContinuation(action control.Action, command control.DaemonCommand) bool {
@@ -450,18 +434,10 @@ func (a *App) projectFirstCardAsReplacementLocked(action control.Action, event c
 
 func commandSubmissionAnchorCommandText(action control.Action) string {
 	switch action.Kind {
-	case control.ActionListInstances:
-		return "/list"
 	case control.ActionShowThreads:
 		return "/use"
 	case control.ActionShowAllThreads:
 		return "/useall"
-	case control.ActionUpgradeCommand, control.ActionDebugCommand:
-		fields := strings.Fields(strings.TrimSpace(action.Text))
-		if len(fields) == 1 {
-			return fields[0]
-		}
-		return ""
 	default:
 		return ""
 	}

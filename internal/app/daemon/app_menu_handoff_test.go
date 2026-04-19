@@ -179,6 +179,38 @@ func TestHandleGatewayActionReplacesMenuCardForHelpHandoff(t *testing.T) {
 	}
 }
 
+func TestHandleGatewayActionUpdatesMenuCardForSteerAllNoopHandoff(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 9, 11, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionSteerAll,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-steer-1",
+		Text:             "/steerall",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result != nil {
+		t.Fatalf("expected steerall noop handoff to patch current card asynchronously, got %#v", result)
+	}
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected one gateway patch op, got %#v", gateway.operations)
+	}
+	if gateway.operations[0].Kind != feishu.OperationUpdateCard || gateway.operations[0].CardTitle != "没有可并入的排队输入" {
+		t.Fatalf("unexpected steerall noop patch: %#v", gateway.operations[0])
+	}
+}
+
 func TestHandleGatewayActionSealsMenuCardForStopHandoff(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

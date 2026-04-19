@@ -632,9 +632,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
   - 锁定 `global runtime` 提示维持独立 delivery lane，并按 family + dedupe key 做短窗节流 / pending queue 去重
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
-  - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，以及 `/help`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口；`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
+  - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，以及 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口；`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)
-  - 锁定 `/status` 已退出菜单提交态锚点并直接改成同卡状态结果，同时纯文本 `/status` 继续 append-only；bare `/upgrade` / `/cron` 仍保持同位承接 replace
+  - 锁定 `/status` 已退出菜单提交态锚点并直接改成同卡状态结果，同时纯文本 `/status` 继续 append-only；bare `/upgrade` / `/cron` 仍保持同位承接 replace，剩余提交态锚点只保留 `/use` / `/useall`
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)

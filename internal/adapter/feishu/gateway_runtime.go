@@ -89,6 +89,7 @@ func shouldAcknowledgeGatewayActionImmediately(action control.Action) bool {
 func shouldAcknowledgeCardActionImmediately(action control.Action) bool {
 	if control.AllowsInlineCardReplacement(action) ||
 		control.AllowsCommandCardResultReplacement(action) ||
+		control.AllowsBareCommandContinuation(action) ||
 		control.AllowsCommandSubmissionAnchorReplacement(action) {
 		return false
 	}
