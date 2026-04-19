@@ -326,7 +326,7 @@ func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.O
 		return
 	}
 	for _, operation := range operations {
-		if operation.Kind != feishu.OperationSendCard {
+		if operation.Kind != feishu.OperationSendCard && operation.Kind != feishu.OperationUpdateCard {
 			continue
 		}
 		if strings.TrimSpace(operation.MessageID) == "" {

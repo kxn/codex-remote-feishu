@@ -19,38 +19,32 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 	if len(renderedLines) == 0 {
 		return nil
 	}
-	cardStartSeq := normalizeExecProgressCardStartSeq(progress, renderedLines)
-	chunks := partitionExecProgressChunks(renderedLines, cardStartSeq)
-	if len(chunks) == 0 {
+	window := execProgressCardWindow(progress, renderedLines)
+	if len(window.Lines) == 0 {
 		return nil
 	}
-	ops := make([]Operation, 0, len(chunks))
-	for index, chunk := range chunks {
-		lines := execProgressRenderedContent(chunk.Lines)
-		elements := execCommandProgressElements(lines)
-		op := Operation{
-			GatewayID:            event.GatewayID,
-			SurfaceSessionID:     event.SurfaceSessionID,
-			ChatID:               chatID,
-			CardTitle:            "工作中",
-			CardBody:             strings.Join(lines, "\n"),
-			CardThemeKey:         cardThemeProgress,
-			CardElements:         elements,
-			CardUpdateMulti:      true,
-			ProgressCardStartSeq: chunk.StartSeq,
-			cardEnvelope:         cardEnvelopeV2,
-			card:                 rawCardDocument("工作中", "", cardThemeProgress, elements),
-		}
-		switch {
-		case index == 0 && strings.TrimSpace(progress.MessageID) != "":
-			op.Kind = OperationUpdateCard
-			op.MessageID = progress.MessageID
-		default:
-			op.Kind = OperationSendCard
-		}
-		ops = append(ops, op)
+	lines := execProgressRenderedContent(window.Lines)
+	elements := execCommandProgressElements(lines)
+	op := Operation{
+		GatewayID:            event.GatewayID,
+		SurfaceSessionID:     event.SurfaceSessionID,
+		ChatID:               chatID,
+		CardTitle:            "工作中",
+		CardBody:             strings.Join(lines, "\n"),
+		CardThemeKey:         cardThemeProgress,
+		CardElements:         elements,
+		CardUpdateMulti:      true,
+		ProgressCardStartSeq: window.StartSeq,
+		cardEnvelope:         cardEnvelopeV2,
+		card:                 rawCardDocument("工作中", "", cardThemeProgress, elements),
 	}
-	return ops
+	if strings.TrimSpace(progress.MessageID) != "" {
+		op.Kind = OperationUpdateCard
+		op.MessageID = progress.MessageID
+	} else {
+		op.Kind = OperationSendCard
+	}
+	return []Operation{op}
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {

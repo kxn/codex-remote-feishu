@@ -12,11 +12,13 @@ type execProgressRenderedLine struct {
 	Transient bool
 }
 
-type execProgressCardChunk struct {
+type execProgressCardWindowState struct {
 	StartSeq int
 	EndSeq   int
 	Lines    []execProgressRenderedLine
 }
+
+const execProgressOmittedHistoryText = "较早过程已省略，仅保留最近进度。"
 
 func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []execProgressRenderedLine {
 	items := normalizedExecProgressTimeline(progress)
@@ -68,6 +70,12 @@ func execProgressRenderedElements(lines []execProgressRenderedLine) []map[string
 	return execCommandProgressElements(execProgressRenderedContent(lines))
 }
 
+func execProgressOmittedHistoryLine() execProgressRenderedLine {
+	return execProgressRenderedLine{
+		Content: formatNeutralTextTag(execProgressOmittedHistoryText),
+	}
+}
+
 func execProgressCardFits(lines []execProgressRenderedLine) bool {
 	if len(lines) == 0 {
 		return true
@@ -86,7 +94,8 @@ func execProgressCardFits(lines []execProgressRenderedLine) bool {
 	return err == nil && size <= maxFeishuCardBytes
 }
 
-func partitionExecProgressChunks(lines []execProgressRenderedLine, startSeq int) []execProgressCardChunk {
+func execProgressCardWindow(progress control.ExecCommandProgress, lines []execProgressRenderedLine) execProgressCardWindowState {
+	startSeq := normalizeExecProgressCardStartSeq(progress, lines)
 	persistent := make([]execProgressRenderedLine, 0, len(lines))
 	transient := make([]execProgressRenderedLine, 0, 1)
 	for _, line := range lines {
@@ -94,52 +103,72 @@ func partitionExecProgressChunks(lines []execProgressRenderedLine, startSeq int)
 			transient = append(transient, line)
 			continue
 		}
-		if line.Seq < startSeq {
-			continue
-		}
 		persistent = append(persistent, line)
 	}
 	if len(persistent) == 0 {
 		if len(transient) == 0 || !execProgressCardFits(transient) {
-			return nil
+			return execProgressCardWindowState{}
 		}
-		return []execProgressCardChunk{{
+		return execProgressCardWindowState{
 			StartSeq: startSeq,
 			EndSeq:   startSeq - 1,
 			Lines:    append([]execProgressRenderedLine(nil), transient...),
-		}}
+		}
 	}
+	windowIndex := 0
+	for index, line := range persistent {
+		if line.Seq >= startSeq {
+			windowIndex = index
+			break
+		}
+		if index == len(persistent)-1 {
+			windowIndex = 0
+		}
+	}
+	for windowIndex < len(persistent) {
+		window, ok := buildExecProgressCardWindow(persistent, transient, windowIndex)
+		if ok {
+			return window
+		}
+		windowIndex++
+	}
+	lastLine := persistent[len(persistent)-1]
+	fallbackLines := []execProgressRenderedLine{lastLine}
+	if execProgressCardFits(fallbackLines) {
+		return execProgressCardWindowState{
+			StartSeq: lastLine.Seq,
+			EndSeq:   lastLine.Seq,
+			Lines:    fallbackLines,
+		}
+	}
+	return execProgressCardWindowState{}
+}
 
-	chunks := make([]execProgressCardChunk, 0, 4)
-	for index := 0; index < len(persistent); {
-		current := make([]execProgressRenderedLine, 0, 8)
-		next := index
-		for next < len(persistent) {
-			candidate := append(append([]execProgressRenderedLine(nil), current...), persistent[next])
-			if !execProgressCardFits(candidate) {
-				break
-			}
-			current = candidate
-			next++
+func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLine, windowIndex int) (execProgressCardWindowState, bool) {
+	if windowIndex >= len(persistent) {
+		return execProgressCardWindowState{}, false
+	}
+	base := append([]execProgressRenderedLine(nil), persistent[windowIndex:]...)
+	if windowIndex > 0 {
+		base = append([]execProgressRenderedLine{execProgressOmittedHistoryLine()}, base...)
+	}
+	lines := append([]execProgressRenderedLine(nil), base...)
+	if len(transient) != 0 {
+		lines = append(lines, transient...)
+		if execProgressCardFits(lines) {
+			return execProgressCardWindowState{
+				StartSeq: persistent[windowIndex].Seq,
+				EndSeq:   persistent[len(persistent)-1].Seq,
+				Lines:    lines,
+			}, true
 		}
-		if len(current) == 0 {
-			current = append(current, persistent[index])
-			next = index + 1
-		}
-		chunks = append(chunks, execProgressCardChunk{
-			StartSeq: current[0].Seq,
-			EndSeq:   current[len(current)-1].Seq,
-			Lines:    current,
-		})
-		index = next
 	}
-	if len(chunks) == 0 || len(transient) == 0 {
-		return chunks
+	if !execProgressCardFits(base) {
+		return execProgressCardWindowState{}, false
 	}
-	last := &chunks[len(chunks)-1]
-	candidate := append(append([]execProgressRenderedLine(nil), last.Lines...), transient...)
-	if execProgressCardFits(candidate) {
-		last.Lines = candidate
-	}
-	return chunks
+	return execProgressCardWindowState{
+		StartSeq: persistent[windowIndex].Seq,
+		EndSeq:   persistent[len(persistent)-1].Seq,
+		Lines:    base,
+	}, true
 }

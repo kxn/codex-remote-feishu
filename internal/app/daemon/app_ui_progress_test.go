@@ -10,7 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestRecordUIEventDeliveryTracksNewestExecProgressContinuationCard(t *testing.T) {
+func TestRecordUIEventDeliveryTracksExecProgressPatchedWindowStart(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{
 		PID:       42,
 		StartedAt: time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
@@ -39,12 +39,10 @@ func TestRecordUIEventDeliveryTracksNewestExecProgressContinuationCard(t *testin
 			ItemID:   "cmd-3",
 		},
 	}, []feishu.Operation{
-		{Kind: feishu.OperationUpdateCard, MessageID: "om-progress-1", ProgressCardStartSeq: 1},
-		{Kind: feishu.OperationSendCard, MessageID: "om-progress-2", ProgressCardStartSeq: 40},
-		{Kind: feishu.OperationSendCard, MessageID: "om-progress-3", ProgressCardStartSeq: 73},
+		{Kind: feishu.OperationUpdateCard, MessageID: "om-progress-1", ProgressCardStartSeq: 73},
 	})
 
-	if surface.ActiveExecProgress.MessageID != "om-progress-3" || surface.ActiveExecProgress.CardStartSeq != 73 {
-		t.Fatalf("expected last continuation card to become active patch target, got %#v", surface.ActiveExecProgress)
+	if surface.ActiveExecProgress.MessageID != "om-progress-1" || surface.ActiveExecProgress.CardStartSeq != 73 {
+		t.Fatalf("expected patched shared progress card to keep same message and advance visible window, got %#v", surface.ActiveExecProgress)
 	}
 }

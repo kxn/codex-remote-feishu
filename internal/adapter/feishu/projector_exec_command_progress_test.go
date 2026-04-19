@@ -396,7 +396,7 @@ func TestProjectExecCommandProgressRendersEachLineAsSeparateMarkdownElement(t *t
 	}
 }
 
-func TestProjectExecCommandProgressContinuesIntoNewCardWhenOversized(t *testing.T) {
+func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 	projector := NewProjector()
 	entries := make([]control.ExecCommandProgressEntry, 0, 480)
 	for i := 1; i <= 480; i++ {
@@ -420,35 +420,39 @@ func TestProjectExecCommandProgressContinuesIntoNewCardWhenOversized(t *testing.
 			Entries:      entries,
 		},
 	})
-	if len(ops) < 2 {
-		t.Fatalf("expected oversized shared progress to continue into a new card, got %#v", ops)
+	if len(ops) != 1 {
+		t.Fatalf("expected oversized shared progress to stay on one card, got %#v", ops)
 	}
-	if ops[0].Kind != OperationUpdateCard || ops[0].MessageID != "om-progress-1" {
-		t.Fatalf("expected first chunk to seal existing progress card, got %#v", ops[0])
+	op := ops[0]
+	if op.Kind != OperationUpdateCard || op.MessageID != "om-progress-1" {
+		t.Fatalf("expected oversized shared progress to keep patching current card, got %#v", op)
 	}
-	last := ops[len(ops)-1]
-	if last.Kind != OperationSendCard {
-		t.Fatalf("expected last chunk to create a continuation card, got %#v", last)
+	if op.ProgressCardStartSeq <= 1 {
+		t.Fatalf("expected oversized shared progress to advance visible window start, got %#v", op)
 	}
-	if last.ProgressCardStartSeq <= 1 {
-		t.Fatalf("expected continuation card to advance start seq, got %#v", last)
+	payload := renderOperationCard(op, op.ordinaryCardEnvelope())
+	size, err := jsonSize(payload)
+	if err != nil {
+		t.Fatalf("marshal shared progress payload: %v", err)
 	}
-	for i, op := range ops {
-		payload := renderOperationCard(op, op.ordinaryCardEnvelope())
-		size, err := jsonSize(payload)
-		if err != nil {
-			t.Fatalf("marshal chunk %d payload: %v", i, err)
-		}
-		if size > maxFeishuCardBytes {
-			t.Fatalf("expected shared progress chunk %d <= %d bytes, got %d", i, maxFeishuCardBytes, size)
-		}
-		if strings.Contains(op.CardBody, oversizedCardMessage) {
-			t.Fatalf("expected projector continuation to avoid gateway truncation marker on chunk %d, got %#v", i, op.CardBody)
-		}
+	if size > maxFeishuCardBytes {
+		t.Fatalf("expected shared progress card <= %d bytes, got %d", maxFeishuCardBytes, size)
+	}
+	if strings.Contains(op.CardBody, oversizedCardMessage) {
+		t.Fatalf("expected projector FIFO trimming to avoid gateway truncation marker, got %#v", op)
+	}
+	if !strings.Contains(op.CardBody, execProgressOmittedHistoryText) {
+		t.Fatalf("expected oversized shared progress to explain omitted history, got %#v", op)
+	}
+	if strings.Contains(op.CardBody, "`go test ./pkg/1`") || strings.Contains(op.CardBody, "`go test ./pkg/2`") {
+		t.Fatalf("expected oldest progress lines to fall out of active window, got %#v", op)
+	}
+	if !strings.Contains(op.CardBody, "`go test ./pkg/480`") {
+		t.Fatalf("expected newest progress lines to stay visible, got %#v", op)
 	}
 }
 
-func TestProjectExecCommandProgressUsesContinuationWindowStartSeq(t *testing.T) {
+func TestProjectExecCommandProgressUsesStoredWindowStartSeq(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -468,18 +472,24 @@ func TestProjectExecCommandProgressUsesContinuationWindowStartSeq(t *testing.T) 
 		},
 	})
 	if len(ops) != 1 {
-		t.Fatalf("expected continuation window to stay on one card, got %#v", ops)
+		t.Fatalf("expected stored window to stay on one card, got %#v", ops)
 	}
 	body := ops[0].CardBody
 	if strings.Contains(body, "./one") || strings.Contains(body, "./two") {
-		t.Fatalf("expected old lines before current continuation window to stay out of active card, got %#v", ops[0])
+		t.Fatalf("expected old lines before current stored window to stay out of active card, got %#v", ops[0])
 	}
 	if !strings.Contains(body, "./three") || !strings.Contains(body, "./four") {
-		t.Fatalf("expected active continuation window lines to stay visible, got %#v", ops[0])
+		t.Fatalf("expected active stored window lines to stay visible, got %#v", ops[0])
+	}
+	if !strings.Contains(body, execProgressOmittedHistoryText) {
+		t.Fatalf("expected stored window to show omitted-history marker, got %#v", ops[0])
+	}
+	if ops[0].ProgressCardStartSeq != 3 {
+		t.Fatalf("expected stored window to preserve start seq, got %#v", ops[0])
 	}
 }
 
-func TestProjectExecCommandProgressFallsBackWhenContinuationWindowIsStale(t *testing.T) {
+func TestProjectExecCommandProgressFallsBackWhenStoredWindowIsStale(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -497,14 +507,20 @@ func TestProjectExecCommandProgressFallsBackWhenContinuationWindowIsStale(t *tes
 		},
 	})
 	if len(ops) != 1 {
-		t.Fatalf("expected stale continuation window to fall back to visible lines, got %#v", ops)
+		t.Fatalf("expected stale stored window to fall back to visible lines, got %#v", ops)
 	}
 	if !strings.Contains(ops[0].CardBody, "./one") || !strings.Contains(ops[0].CardBody, "./two") {
-		t.Fatalf("expected stale continuation window to fall back to earliest visible chunk, got %#v", ops[0])
+		t.Fatalf("expected stale stored window to fall back to earliest visible lines, got %#v", ops[0])
+	}
+	if strings.Contains(ops[0].CardBody, execProgressOmittedHistoryText) {
+		t.Fatalf("did not expect stale stored window fallback to invent omitted-history marker, got %#v", ops[0])
+	}
+	if ops[0].ProgressCardStartSeq != 1 {
+		t.Fatalf("expected stale stored window fallback to reset start seq, got %#v", ops[0])
 	}
 }
 
-func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutContinuation(t *testing.T) {
+func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutOverflowWindowRotation(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -521,7 +537,7 @@ func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutContinuat
 		}),
 	})
 	if len(ops) != 1 {
-		t.Fatalf("expected long reasoning summary to stay on current card without continuation, got %#v", ops)
+		t.Fatalf("expected long reasoning summary to stay on current card without overflow window rotation, got %#v", ops)
 	}
 	if strings.Count(ops[0].CardBody, "Thinking about command sequencing") != 1 || !strings.Contains(ops[0].CardBody, "...") {
 		t.Fatalf("expected long reasoning summary to be truncated in-place, got %#v", ops[0])
