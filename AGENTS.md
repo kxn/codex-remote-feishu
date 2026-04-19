@@ -207,6 +207,29 @@ Baseline requirements:
 - if a design may exceed limits, specify fallback up front: truncate, summarize, paginate, split card, or spill to text/file/link
 - when relying on a numeric Feishu platform limit in code or product design, re-check the latest official docs and sync `docs/general/feishu-card-api-constraints.md` if the baseline changed
 
+## Feishu Card Content Context Baseline
+
+For any design or implementation that touches Feishu card text contracts, markdown/plain_text split, or card text render helpers, consult:
+
+- `docs/general/feishu-card-content-context-guidelines.md`
+
+Trigger area:
+
+- `internal/adapter/feishu/**`
+- `internal/core/control/**` when adding or changing Feishu card DTO text fields
+- `internal/core/orchestrator/**`
+- `internal/app/daemon/**` when constructing Feishu-facing summary/status/message/notice/catalog text
+- any design/doc discussing Feishu card markdown contracts, `plain_text`, `FeishuCardTextSection`, `SummarySections`, or `renderSystemInlineTags(...)`
+
+Baseline requirements:
+
+- external or dynamic text must not be precomposed into raw markdown upstream
+- adapter owns the final markdown/plain_text split and Feishu-specific tags
+- `renderSystemInlineTags(...)` and similar helpers are local formatting helpers, not general sanitizers
+- new card text defaults to structured/plain-text carriers such as `FeishuCardTextSection` and `SummarySections`
+- when a new structured path replaces an old markdown contract, remove the old path instead of leaving permanent legacy/fallback coexistence
+- add regression tests that prove dynamic text stays out of markdown, or explicitly justify the remaining markdown contract
+
 ## Documentation Convention
 
 For lifecycle/reference docs under `docs/`:

@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-18`
-> Summary: 补充剩余 Feishu system-markdown 边界设计草稿，并更新 draft 文档索引。
+> Updated: `2026-04-19`
+> Summary: 新增 Feishu 卡片内容语境基线文档，并更新文档索引。
 
 ## 1. 适用范围
 
@@ -116,6 +116,7 @@
 - [feishu-api-timeout-discipline.md](./general/feishu-api-timeout-discipline.md)
 - [feishu-business-card-interaction-principles.md](./general/feishu-business-card-interaction-principles.md)
 - [feishu-card-api-constraints.md](./general/feishu-card-api-constraints.md)
+- [feishu-card-content-context-guidelines.md](./general/feishu-card-content-context-guidelines.md)
 - [feishu-product-design.md](./general/feishu-product-design.md)
 - [feishu-im-message-research.md](./general/feishu-im-message-research.md)
 - [feishu-card-ui-state-machine.md](./general/feishu-card-ui-state-machine.md)
