@@ -390,6 +390,54 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 	}
 }
 
+func TestHandleGatewayActionReplacesBareModelCardForCardNavigation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionModelCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/model",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline replacement result, got %#v", result)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "模型" {
+		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/menu send_settings") {
+		t.Fatalf("expected replacement model card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+}
+
 func TestHandleGatewayActionReplacesCardOwnedParameterApply(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
@@ -418,6 +466,54 @@ func TestHandleGatewayActionReplacesCardOwnedParameterApply(t *testing.T) {
 	}
 	if result.ReplaceCurrentCard.CardTitle != "autowhip" {
 		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
+	}
+}
+
+func TestHandleGatewayActionReplacesCardOwnedModelPresetApply(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 10, 1, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionModelCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/model gpt-5.4-mini",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline replacement for card-owned model apply, got %#v", result)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "模型" {
+		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已更新飞书临时模型覆盖") {
+		t.Fatalf("expected success status on replacement model card, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
 

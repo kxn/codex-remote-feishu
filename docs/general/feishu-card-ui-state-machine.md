@@ -201,8 +201,9 @@
   - 先读 `value.command_text`，没有则读 `value.command`
   - 参数默认从 `form_value["command_args"]` 读取
   - 若 `value.field_name` 存在，则改为读取该字段
-  - 命令表单当前同时兼容普通 `input` 与 `select_static`；若字段是下拉，gateway 会统一取第一条非空选项值
-  - 若 `form_value` 为空，则回退 `input_value`
+  - 命令表单当前同时兼容普通 `input` 与 `select_static`
+  - 若字段是下拉，gateway 当前按 `form_value[field_name] -> action.option -> action.options[0]` 的顺序提取第一条非空选项值
+  - 若上面都为空，则最后回退 `input_value`
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）

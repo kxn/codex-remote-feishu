@@ -348,10 +348,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		if fieldName == "" {
 			fieldName = cardActionPayloadDefaultCommandFieldName
 		}
-		args := strings.TrimSpace(formStringValue(event.Event.Action.FormValue, fieldName))
-		if args == "" {
-			args = strings.TrimSpace(event.Event.Action.InputValue)
-		}
+		args := commandFormArgumentValue(event.Event.Action, fieldName)
 		if args != "" {
 			commandText += " " + args
 		}
@@ -503,6 +500,24 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 
 func formStringValue(values map[string]interface{}, key string) string {
 	return selectStaticFormValue(values, key)
+}
+
+func commandFormArgumentValue(action *larkcallback.CallBackAction, fieldName string) string {
+	if action == nil {
+		return ""
+	}
+	if text := strings.TrimSpace(formStringValue(action.FormValue, fieldName)); text != "" {
+		return text
+	}
+	if option := strings.TrimSpace(action.Option); option != "" {
+		return option
+	}
+	for _, option := range action.Options {
+		if option = strings.TrimSpace(option); option != "" {
+			return option
+		}
+	}
+	return strings.TrimSpace(action.InputValue)
 }
 
 func pathPickerSelectedEntryName(event *larkcallback.CardActionTriggerEvent, fieldName string) string {
