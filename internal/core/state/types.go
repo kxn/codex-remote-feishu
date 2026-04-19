@@ -245,17 +245,16 @@ type ExecCommandProgressRecord struct {
 	CWD                  string
 	Status               string
 	Exploration          *ExecCommandProgressExplorationRecord
-	TransientStatus      *ExecCommandProgressTransientStatusRecord
+	Reasoning            *ExecCommandProgressReasoningRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord
 	LastVisibleSeq       int
 	LastEmittedAt        time.Time
 }
 
-type ExecCommandProgressTransientStatusRecord struct {
-	Kind                string
+type ExecCommandProgressReasoningRecord struct {
+	ItemID              string
 	Text                string
-	RawText             string
 	VisibleSummaryIndex int
 	Buffer              string
 	BufferSummaryIndex  int

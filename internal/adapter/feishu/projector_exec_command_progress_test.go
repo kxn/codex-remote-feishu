@@ -89,7 +89,7 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 	}
 }
 
-func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *testing.T) {
+func TestProjectExecCommandProgressRendersReasoningSummaryInsideTimeline(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
@@ -100,11 +100,8 @@ func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *te
 			TurnID:   "turn-1",
 			ItemID:   "cmd-1",
 			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "npm test"},
-			},
-			TransientStatus: &control.ExecCommandProgressTransientStatus{
-				Kind: "reasoning",
-				Text: "正在思考中.",
+				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "npm test", LastSeq: 1},
+				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: "Thinking.", LastSeq: 2},
 			},
 		}),
 	})
@@ -113,9 +110,12 @@ func TestProjectExecCommandProgressRendersTransientReasoningStatusAtBottom(t *te
 	}
 	body := ops[0].CardBody
 	entry := strings.Index(body, "**执行**")
-	status := strings.Index(body, "正在思考中.")
-	if entry == -1 || status == -1 || status <= entry {
-		t.Fatalf("expected transient reasoning status at bottom, got %#v", ops[0])
+	reasoning := strings.Index(body, "Thinking.")
+	if entry == -1 || reasoning == -1 || reasoning <= entry {
+		t.Fatalf("expected reasoning summary to render as a timeline line after command entry, got %#v", ops[0])
+	}
+	if strings.Contains(body, "**工作中** Thinking.") || strings.Contains(body, "**思考**") {
+		t.Fatalf("expected raw reasoning text without synthetic label, got %#v", ops[0])
 	}
 }
 
@@ -480,31 +480,27 @@ func TestProjectExecCommandProgressFallsBackWhenContinuationWindowIsStale(t *tes
 	}
 }
 
-func TestProjectExecCommandProgressDropsTransientOverflowWithoutNewCard(t *testing.T) {
+func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutContinuation(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", control.UIEvent{
 		Kind:             control.UIEventExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: &control.ExecCommandProgress{
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
 			ThreadID:     "thread-1",
 			TurnID:       "turn-1",
-			ItemID:       "cmd-1",
+			ItemID:       "reasoning-1",
 			MessageID:    "om-progress-1",
 			CardStartSeq: 1,
 			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "npm test", LastSeq: 1},
+				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: strings.Repeat("Thinking about command sequencing ", 200), LastSeq: 1},
 			},
-			TransientStatus: &control.ExecCommandProgressTransientStatus{
-				Kind: "reasoning",
-				Text: strings.Repeat("正在思考", 10000),
-			},
-		},
+		}),
 	})
 	if len(ops) != 1 {
-		t.Fatalf("expected transient overflow to stay on current card without continuation, got %#v", ops)
+		t.Fatalf("expected long reasoning summary to stay on current card without continuation, got %#v", ops)
 	}
-	if strings.Contains(ops[0].CardBody, "正在思考") {
-		t.Fatalf("expected oversized transient status to be dropped instead of forcing continuation, got %#v", ops[0])
+	if strings.Count(ops[0].CardBody, "Thinking about command sequencing") != 1 || !strings.Contains(ops[0].CardBody, "...") {
+		t.Fatalf("expected long reasoning summary to be truncated in-place, got %#v", ops[0])
 	}
 }
 

@@ -126,7 +126,7 @@ func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *stat
 	if progress == nil || block == nil {
 		return
 	}
-	clearExecCommandProgressTransientStatus(progress)
+	clearExecCommandProgressReasoningRecord(progress)
 	action.Kind = strings.TrimSpace(action.Kind)
 	action.Summary = strings.TrimSpace(action.Summary)
 	action.Secondary = strings.TrimSpace(action.Secondary)

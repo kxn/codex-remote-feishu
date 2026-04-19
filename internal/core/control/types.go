@@ -565,26 +565,20 @@ type ExecCommandProgressBlock struct {
 	Rows    []ExecCommandProgressBlockRow
 }
 
-type ExecCommandProgressTransientStatus struct {
-	Kind string
-	Text string
-}
-
 type ExecCommandProgress struct {
-	ThreadID        string
-	TurnID          string
-	ItemID          string
-	MessageID       string
-	CardStartSeq    int
-	Blocks          []ExecCommandProgressBlock
-	Entries         []ExecCommandProgressEntry
-	Timeline        []ExecCommandProgressTimelineItem
-	Commands        []string
-	Command         string
-	CWD             string
-	Status          string
-	TransientStatus *ExecCommandProgressTransientStatus
-	Final           bool
+	ThreadID     string
+	TurnID       string
+	ItemID       string
+	MessageID    string
+	CardStartSeq int
+	Blocks       []ExecCommandProgressBlock
+	Entries      []ExecCommandProgressEntry
+	Timeline     []ExecCommandProgressTimelineItem
+	Commands     []string
+	Command      string
+	CWD          string
+	Status       string
+	Final        bool
 }
 
 type UIEventKind string

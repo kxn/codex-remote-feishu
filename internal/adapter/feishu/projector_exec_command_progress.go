@@ -251,17 +251,16 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry) string {
 	if label == "" {
 		label = "工作中"
 	}
-	prefix := execProgressMarkdownLabel(label)
 	switch strings.TrimSpace(entry.Kind) {
 	case "command_execution":
+		prefix := execProgressMarkdownLabel(label)
 		return prefix + " " + markdownCodeSpan(truncateExecProgressSummary(entry.Summary, 30))
+	case "reasoning_summary":
+		return truncateExecProgressSummary(entry.Summary, 60)
 	default:
+		prefix := execProgressMarkdownLabel(label)
 		return prefix + " " + truncateExecProgressSummary(entry.Summary, 40)
 	}
-}
-
-func renderExecProgressTransientStatus(status control.ExecCommandProgressTransientStatus) string {
-	return strings.TrimSpace(status.Text)
 }
 
 func execProgressMarkdownLabel(label string) string {

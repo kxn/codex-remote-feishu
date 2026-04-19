@@ -12,7 +12,7 @@ import (
 const execCommandProgressTransientAnimationInterval = 1500 * time.Millisecond
 
 func (s *Service) handleAssistantMessageProgressStart(instanceID string, event agentproto.Event) []control.UIEvent {
-	return s.clearTransientExecCommandProgressStatus(instanceID, event.ThreadID, event.TurnID)
+	return s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 }
 
 func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event agentproto.Event) []control.UIEvent {
@@ -27,87 +27,117 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 	if strings.TrimSpace(event.ItemID) != "" {
 		progress.ItemID = strings.TrimSpace(event.ItemID)
 	}
-	if !upsertExecCommandProgressTransientStatus(progress, event, s.now()) {
+	if !upsertExecCommandProgressReasoning(progress, event, s.now()) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
-func (s *Service) clearTransientExecCommandProgressStatus(instanceID, threadID, turnID string) []control.UIEvent {
+func (s *Service) clearExecCommandProgressReasoning(instanceID, threadID, turnID string) []control.UIEvent {
 	surface := s.turnSurface(instanceID, threadID, turnID)
 	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
-	if progress == nil || !execCommandProgressHasVisibleTransientStatus(progress) {
+	if !clearExecCommandProgressReasoningRecord(progress) {
 		return nil
 	}
-	clearExecCommandProgressTransientStatus(progress)
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }
 
-func execCommandProgressTransientStatus(progress *state.ExecCommandProgressRecord) *control.ExecCommandProgressTransientStatus {
-	if progress == nil || progress.TransientStatus == nil {
-		return nil
-	}
-	text := strings.TrimSpace(progress.TransientStatus.Text)
-	if text == "" {
-		return nil
-	}
-	return &control.ExecCommandProgressTransientStatus{
-		Kind: strings.TrimSpace(progress.TransientStatus.Kind),
-		Text: formatExecProgressTransientStatus(text, progress.TransientStatus.AnimationStep),
-	}
-}
-
-func upsertExecCommandProgressTransientStatus(progress *state.ExecCommandProgressRecord, event agentproto.Event, now time.Time) bool {
+func upsertExecCommandProgressReasoning(progress *state.ExecCommandProgressRecord, event agentproto.Event, now time.Time) bool {
 	if progress == nil || strings.TrimSpace(event.Delta) == "" {
 		return false
 	}
-	record := progress.TransientStatus
-	if record == nil {
-		record = &state.ExecCommandProgressTransientStatusRecord{Kind: "reasoning"}
-		progress.TransientStatus = record
+	itemID := strings.TrimSpace(event.ItemID)
+	if itemID == "" && progress.Reasoning != nil {
+		itemID = strings.TrimSpace(progress.Reasoning.ItemID)
 	}
+	if itemID == "" {
+		itemID = "reasoning_summary"
+	}
+	if progress.Reasoning != nil && strings.TrimSpace(progress.Reasoning.ItemID) != "" && progress.Reasoning.ItemID != itemID {
+		clearExecCommandProgressReasoningRecord(progress)
+	}
+	record := progress.Reasoning
+	if record == nil {
+		record = &state.ExecCommandProgressReasoningRecord{ItemID: itemID}
+		progress.Reasoning = record
+	}
+	record.ItemID = itemID
 	summaryIndex := lookupIntFromAny(event.Metadata["summaryIndex"])
 	if summaryIndex != record.BufferSummaryIndex {
 		record.Buffer = ""
 		record.BufferSummaryIndex = summaryIndex
 	}
 	record.Buffer += event.Delta
-	title := extractFirstMarkdownBold(record.Buffer)
-	if title == "" {
+	text := normalizeExecCommandProgressReasoningText(extractFirstMarkdownBold(record.Buffer))
+	if text == "" {
 		return false
 	}
-	display := localizeExecProgressTransientStatus(title)
-	if display == "" {
+	if strings.TrimSpace(record.Text) == text && record.VisibleSummaryIndex == summaryIndex {
 		return false
 	}
-	if strings.TrimSpace(record.Text) == display && record.VisibleSummaryIndex == summaryIndex {
-		return false
-	}
-	record.RawText = title
-	record.Text = display
+	record.Text = text
 	record.VisibleSummaryIndex = summaryIndex
 	record.AnimationStep = 0
 	record.LastAnimatedAt = now
+	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+		ItemID:  record.ItemID,
+		Kind:    "reasoning_summary",
+		Summary: formatExecCommandProgressReasoningText(record.Text, record.AnimationStep),
+		Status:  "running",
+	})
 	return true
 }
 
-func clearExecCommandProgressTransientStatus(progress *state.ExecCommandProgressRecord) {
-	if progress == nil || progress.TransientStatus == nil {
-		return
+func clearExecCommandProgressReasoningRecord(progress *state.ExecCommandProgressRecord) bool {
+	if progress == nil {
+		return false
 	}
-	progress.TransientStatus.Text = ""
-	progress.TransientStatus.RawText = ""
-	progress.TransientStatus.VisibleSummaryIndex = 0
-	progress.TransientStatus.Buffer = ""
-	progress.TransientStatus.BufferSummaryIndex = 0
-	progress.TransientStatus.AnimationStep = 0
-	progress.TransientStatus.LastAnimatedAt = time.Time{}
+	itemID := ""
+	if progress.Reasoning != nil {
+		itemID = strings.TrimSpace(progress.Reasoning.ItemID)
+		progress.Reasoning = nil
+	}
+	changed := false
+	if removeExecCommandProgressEntry(progress, itemID, "reasoning_summary") {
+		changed = true
+	}
+	if itemID == "" && removeExecCommandProgressEntry(progress, "", "reasoning_summary") {
+		changed = true
+	}
+	return changed
 }
 
-func execCommandProgressHasVisibleTransientStatus(progress *state.ExecCommandProgressRecord) bool {
+func execCommandProgressHasVisibleReasoning(progress *state.ExecCommandProgressRecord) bool {
 	return progress != nil &&
-		progress.TransientStatus != nil &&
-		strings.TrimSpace(progress.TransientStatus.Text) != ""
+		progress.Reasoning != nil &&
+		strings.TrimSpace(progress.Reasoning.Text) != "" &&
+		progressHasEntry(progress, progress.Reasoning.ItemID, "reasoning_summary")
+}
+
+func removeExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, itemID, kind string) bool {
+	if progress == nil || len(progress.Entries) == 0 {
+		return false
+	}
+	itemID = strings.TrimSpace(itemID)
+	kind = strings.TrimSpace(kind)
+	changed := false
+	filtered := progress.Entries[:0]
+	for _, entry := range progress.Entries {
+		match := true
+		if itemID != "" && entry.ItemID != itemID {
+			match = false
+		}
+		if kind != "" && entry.Kind != kind {
+			match = false
+		}
+		if match {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	progress.Entries = filtered
+	return changed
 }
 
 func extractFirstMarkdownBold(value string) string {
@@ -130,99 +160,19 @@ func extractFirstMarkdownBold(value string) string {
 	return ""
 }
 
-func localizeExecProgressTransientStatus(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if containsHan(raw) {
-		return normalizeExecProgressTransientBaseText(raw)
-	}
-	normalized := strings.ToLower(strings.Join(strings.Fields(raw), " "))
-	switch normalized {
-	case "thinking":
-		return "思考中"
-	case "planning":
-		return "规划中"
-	case "analyzing":
-		return "分析中"
-	case "reviewing":
-		return "审查中"
-	case "checking":
-		return "检查中"
-	case "exploring":
-		return "探索中"
-	case "investigating":
-		return "排查中"
-	}
-	switch transientStatusVerb(normalized) {
-	case "thinking", "considering", "evaluating", "assessing", "deciding", "using", "continuing":
-		return "思考中"
-	case "planning":
-		return "规划中"
-	case "analyzing":
-		return "分析中"
-	case "reviewing":
-		return "审查中"
-	case "checking", "verifying", "inspecting", "monitoring":
-		return "检查中"
-	case "exploring":
-		return "探索中"
-	case "investigating", "troubleshooting", "debugging":
-		return "排查中"
-	case "searching", "locating", "identifying":
-		return "查找中"
-	case "preparing", "finalizing", "creating", "restoring":
-		return "准备中"
-	case "summarizing", "clarifying", "refining":
-		return "整理中"
-	case "modifying", "updating", "editing":
-		return "修改中"
-	default:
-		return "思考中"
-	}
-}
-
-func transientStatusVerb(normalized string) string {
-	if normalized == "" {
-		return ""
-	}
-	head := normalized
-	if idx := strings.IndexByte(head, ' '); idx >= 0 {
-		head = head[:idx]
-	}
-	head = strings.Trim(head, ".,:;!?()[]{}\"'")
-	return head
-}
-
-func normalizeExecProgressTransientBaseText(text string) string {
+func normalizeExecCommandProgressReasoningText(text string) string {
 	text = strings.TrimSpace(text)
 	text = strings.TrimRight(text, ".")
 	text = strings.TrimRight(text, "。")
 	text = strings.TrimRight(text, "…")
-	text = strings.TrimSpace(text)
-	text = strings.TrimPrefix(text, "正在")
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
-	return text
+	return strings.TrimSpace(text)
 }
 
-func formatExecProgressTransientStatus(text string, step int) string {
-	text = normalizeExecProgressTransientBaseText(text)
+func formatExecCommandProgressReasoningText(text string, step int) string {
+	text = normalizeExecCommandProgressReasoningText(text)
 	if text == "" {
 		return ""
 	}
 	dotCount := (step % 3) + 1
-	return "正在" + text + strings.Repeat(".", dotCount)
-}
-
-func containsHan(value string) bool {
-	for _, r := range value {
-		if r >= 0x4e00 && r <= 0x9fff {
-			return true
-		}
-	}
-	return false
+	return text + strings.Repeat(".", dotCount)
 }

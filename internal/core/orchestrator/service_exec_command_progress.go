@@ -37,7 +37,7 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 	}
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
-		events := s.clearTransientExecCommandProgressStatus(instanceID, event.ThreadID, event.TurnID)
+		events := s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
 		return events
 	case "reasoning_summary":
@@ -52,10 +52,10 @@ func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsol
 		return nil
 	}
 	progress := surface.ActiveExecProgress
-	if strings.TrimSpace(progress.MessageID) == "" || !execCommandProgressHasVisibleTransientStatus(progress) {
+	if strings.TrimSpace(progress.MessageID) == "" || !execCommandProgressHasVisibleReasoning(progress) {
 		return nil
 	}
-	record := progress.TransientStatus
+	record := progress.Reasoning
 	if record == nil {
 		return nil
 	}
@@ -67,13 +67,19 @@ func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsol
 	}
 	record.AnimationStep = (record.AnimationStep + 1) % 3
 	record.LastAnimatedAt = now
+	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+		ItemID:  record.ItemID,
+		Kind:    "reasoning_summary",
+		Summary: formatExecCommandProgressReasoningText(record.Text, record.AnimationStep),
+		Status:  "running",
+	})
 	return s.emitExecCommandProgress(surface, progress, progress.ThreadID, progress.TurnID, false)
 }
 
 func (s *Service) handleProcessProgressItemCompleted(instanceID string, event agentproto.Event) []control.UIEvent {
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
-		events := s.clearTransientExecCommandProgressStatus(instanceID, event.ThreadID, event.TurnID)
+		events := s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		if s.eventCarriesAssistantText(instanceID, event) {
 			s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
 		}
@@ -265,10 +271,9 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
 	_ = turnStatus
 	_ = finalText
-	if !execCommandProgressHasVisibleTransientStatus(progress) {
+	if !clearExecCommandProgressReasoningRecord(progress) {
 		return nil
 	}
-	clearExecCommandProgressTransientStatus(progress)
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }
 
@@ -332,18 +337,17 @@ func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *con
 		})
 	}
 	snapshot := &control.ExecCommandProgress{
-		ThreadID:        progress.ThreadID,
-		TurnID:          progress.TurnID,
-		ItemID:          progress.ItemID,
-		MessageID:       progress.MessageID,
-		CardStartSeq:    progress.CardStartSeq,
-		Blocks:          execCommandProgressBlocks(progress),
-		Entries:         entries,
-		Commands:        append([]string(nil), progress.Commands...),
-		Command:         progress.Command,
-		CWD:             progress.CWD,
-		Status:          progress.Status,
-		TransientStatus: execCommandProgressTransientStatus(progress),
+		ThreadID:     progress.ThreadID,
+		TurnID:       progress.TurnID,
+		ItemID:       progress.ItemID,
+		MessageID:    progress.MessageID,
+		CardStartSeq: progress.CardStartSeq,
+		Blocks:       execCommandProgressBlocks(progress),
+		Entries:      entries,
+		Commands:     append([]string(nil), progress.Commands...),
+		Command:      progress.Command,
+		CWD:          progress.CWD,
+		Status:       progress.Status,
 	}
 	snapshot.Timeline = control.BuildExecCommandProgressTimeline(*snapshot)
 	return snapshot
@@ -450,12 +454,14 @@ func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, e
 	if progress == nil {
 		return
 	}
-	clearExecCommandProgressTransientStatus(progress)
 	entry.ItemID = strings.TrimSpace(entry.ItemID)
 	entry.Kind = strings.TrimSpace(entry.Kind)
 	entry.Label = strings.TrimSpace(entry.Label)
 	entry.Summary = strings.TrimSpace(entry.Summary)
 	entry.Status = strings.TrimSpace(entry.Status)
+	if entry.Kind != "reasoning_summary" {
+		clearExecCommandProgressReasoningRecord(progress)
+	}
 	if entry.Summary == "" {
 		return
 	}

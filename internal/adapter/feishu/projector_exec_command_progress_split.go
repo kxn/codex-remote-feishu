@@ -20,7 +20,7 @@ type execProgressCardChunk struct {
 
 func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []execProgressRenderedLine {
 	items := normalizedExecProgressTimeline(progress)
-	lines := make([]execProgressRenderedLine, 0, len(items)+1)
+	lines := make([]execProgressRenderedLine, 0, len(items))
 	for _, item := range items {
 		content := renderExecProgressTimelineItem(item)
 		if strings.TrimSpace(content) == "" {
@@ -30,14 +30,6 @@ func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []ex
 			Seq:     item.LastSeq,
 			Content: content,
 		})
-	}
-	if progress.TransientStatus != nil {
-		if rendered := renderExecProgressTransientStatus(*progress.TransientStatus); rendered != "" {
-			lines = append(lines, execProgressRenderedLine{
-				Content:   rendered,
-				Transient: true,
-			})
-		}
 	}
 	return lines
 }
