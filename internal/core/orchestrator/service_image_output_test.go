@@ -522,7 +522,7 @@ func TestRemoteTurnImageGenerationProducesImmediateImageEventAndFinalText(t *tes
 	}
 }
 
-func TestRemoteTurnDynamicToolCallProducesSummaryAndImageEvents(t *testing.T) {
+func TestRemoteTurnDynamicToolCallProducesSummaryWithoutImageEvent(t *testing.T) {
 	now := time.Date(2026, 4, 10, 12, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -568,17 +568,16 @@ func TestRemoteTurnDynamicToolCallProducesSummaryAndImageEvents(t *testing.T) {
 	})
 
 	var sawText bool
-	var sawImage bool
 	for _, event := range events {
 		if event.Block != nil && strings.Contains(event.Block.Text, "工具 `demo_tool` 返回") {
 			sawText = true
 		}
-		if event.ImageOutput != nil && event.ImageOutput.ImageBase64 == "data:image/png;base64,AAA" && event.SourceMessageID == "msg-1" {
-			sawImage = true
+		if event.ImageOutput != nil {
+			t.Fatalf("expected dynamic tool image result to stay model-consumable unless a delivery tool is called, got %#v", events)
 		}
 	}
-	if !sawText || !sawImage {
-		t.Fatalf("expected dynamic tool text summary and image output, got %#v", events)
+	if !sawText {
+		t.Fatalf("expected dynamic tool text summary without auto image output, got %#v", events)
 	}
 }
 

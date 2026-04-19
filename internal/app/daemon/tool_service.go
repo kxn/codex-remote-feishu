@@ -19,9 +19,11 @@ import (
 
 const feishuSurfaceResolverToolName = "feishu_resolve_surface_context"
 const feishuSendIMFileToolName = "feishu_send_im_file"
+const feishuSendIMImageToolName = "feishu_send_im_image"
 
 const feishuSurfaceResolverDescription = "Resolve the current Feishu remote surface context. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. If the file is missing, invalid, or you are not in normal remote workspace mode, do not guess."
-const feishuSendIMFileDescription = "Send a local file to the current Feishu remote surface as an IM file message. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local file path and do not guess a surface, chat, or remote URL."
+const feishuSendIMFileDescription = "Send a local file to the current Feishu remote surface as an IM file attachment. Use this when the artifact should be delivered as a downloadable file, or when inline image display is not appropriate. For screenshots and other user-facing images, prefer feishu_send_im_image so the image renders directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local file path and do not guess a surface, chat, or remote URL."
+const feishuSendIMImageDescription = "Send a local image to the current Feishu remote surface as an inline IM image message. Use this proactively when you created or saved a screenshot, visual diff, rendered preview, chart, mockup, or another image artifact that would directly help the current conversation. Prefer this tool over feishu_send_im_file for PNG, JPEG, GIF, WebP, or BMP images because the image will render directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local image path and do not guess a surface, chat, or remote URL."
 
 type toolServiceInfo struct {
 	URL         string    `json:"url"`
@@ -97,6 +99,25 @@ func toolDefinitions() []toolDefinition {
 					"path": map[string]any{
 						"type":        "string",
 						"description": "Existing local file path to send as a Feishu IM file message",
+					},
+				},
+				"required":             []string{"surface_session_id", "path"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        feishuSendIMImageToolName,
+			Description: feishuSendIMImageDescription,
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"surface_session_id": map[string]any{
+						"type":        "string",
+						"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
+					},
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Existing local image path to send as a Feishu IM image message",
 					},
 				},
 				"required":             []string{"surface_session_id", "path"},
@@ -249,6 +270,104 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 		"file_key":           result.FileKey,
 		"message_id":         result.MessageID,
 	}, nil
+}
+
+func (a *App) sendIMImageTool(ctx context.Context, arguments map[string]any) (map[string]any, *toolError) {
+	surfaceID, _ := arguments["surface_session_id"].(string)
+	path, _ := arguments["path"].(string)
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, &toolError{
+			Code:    "path_required",
+			Message: "path is required",
+		}
+	}
+	if apiErr := validateSendImagePath(path); apiErr != nil {
+		return nil, apiErr
+	}
+
+	a.mu.Lock()
+	resolved, apiErr := a.resolveToolSurfaceContextLocked(surfaceID)
+	a.mu.Unlock()
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	if !resolved.Attached {
+		return nil, &toolError{
+			Code:    "surface_not_attached",
+			Message: "surface is not attached to a workspace",
+		}
+	}
+
+	sender, ok := a.gateway.(feishu.IMImageSender)
+	if !ok {
+		return nil, &toolError{
+			Code:    "tool_unavailable",
+			Message: "Feishu IM image sending is not available in this runtime",
+		}
+	}
+	result, err := sender.SendIMImage(ctx, feishu.IMImageSendRequest{
+		GatewayID:        resolved.GatewayID,
+		SurfaceSessionID: resolved.SurfaceSessionID,
+		ChatID:           resolved.ChatID,
+		ActorUserID:      resolved.ActorUserID,
+		Path:             path,
+	})
+	if err != nil {
+		_ = a.observeFeishuPermissionError(resolved.GatewayID, err)
+		var sendErr *feishu.IMImageSendError
+		if errors.As(err, &sendErr) {
+			switch sendErr.Code {
+			case feishu.IMImageSendErrorUploadFailed:
+				return nil, &toolError{Code: "upload_failed", Message: sendErr.Error()}
+			case feishu.IMImageSendErrorSendFailed, feishu.IMImageSendErrorMissingReceiveTarget, feishu.IMImageSendErrorGatewayNotRunning:
+				return nil, &toolError{Code: "send_failed", Message: sendErr.Error(), Retryable: true}
+			}
+		}
+		return nil, &toolError{
+			Code:      "send_failed",
+			Message:   err.Error(),
+			Retryable: true,
+		}
+	}
+	log.Printf("tool call: tool=%s surface=%s path=%s status=ok message=%s", feishuSendIMImageToolName, resolved.SurfaceSessionID, path, result.MessageID)
+	return map[string]any{
+		"surface_session_id": result.SurfaceSessionID,
+		"gateway_id":         result.GatewayID,
+		"image_name":         result.ImageName,
+		"image_key":          result.ImageKey,
+		"message_id":         result.MessageID,
+	}, nil
+}
+
+func validateSendImagePath(path string) *toolError {
+	info, err := os.Stat(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return &toolError{
+			Code:    "image_not_found",
+			Message: "path does not exist",
+		}
+	case err != nil:
+		return &toolError{
+			Code:    "image_access_failed",
+			Message: "failed to access local image",
+		}
+	case info.IsDir():
+		return &toolError{
+			Code:    "invalid_image_path",
+			Message: "path must point to an image file",
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(filepath.Ext(path))) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
+		return nil
+	default:
+		return &toolError{
+			Code:    "invalid_image_path",
+			Message: "path must point to a supported image file",
+		}
+	}
 }
 
 func (a *App) resolveToolSurfaceContextLocked(surfaceID string) (resolvedToolSurfaceContext, *toolError) {

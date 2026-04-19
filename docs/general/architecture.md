@@ -1,8 +1,8 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-04-19`
-> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 daemon 作为组合根的 runtime owner 收口、Feishu adapter 的 controller/gateway/projector/preview 边界、Feishu ordinary inbound 的 early ACK + gateway-local FIFO lane、orchestrator service-owned UI/runtime cluster、daemon 本地 Feishu tool listener 升级为 MCP-native streamable HTTP 协议面，以及 editor 侧共享 VS Code bundle entrypoint 探测边界。
+> Updated: `2026-04-20`
+> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 daemon 作为组合根的 runtime owner 收口、Feishu adapter 的 controller/gateway/projector/preview 边界、Feishu ordinary inbound 的 early ACK + gateway-local FIFO lane、orchestrator service-owned UI/runtime cluster、daemon 本地 Feishu tool listener 升级为 MCP-native streamable HTTP 协议面、current-surface 显式图片/文件投递 contract，以及 editor 侧共享 VS Code bundle entrypoint 探测边界。
 
 ## 1. 当前状态
 
@@ -307,7 +307,8 @@ normal 模式下的 workspace 排他接管
   -> 本地 Feishu MCP tool description 要求 Codex 先读取该文件
   -> tool call 显式带回 surface_session_id
   -> daemon local MCP tool service 校验 bearer token、解析 surface context 并执行 tools/list / tools/call
-  -> `feishu_send_im_file` 可继续用显式 `surface_session_id` 把本地文件发送回当前 Feishu surface
+  -> `feishu_send_im_image` / `feishu_send_im_file` 可继续用显式 `surface_session_id` 把本地图片或文件发送回当前 Feishu surface
+  -> generic tool result 先归模型消费；只有模型显式调用 delivery tool 时，产物才会变成用户可见消息
 ```
 
 ### 6.2 本地 VS Code 交互

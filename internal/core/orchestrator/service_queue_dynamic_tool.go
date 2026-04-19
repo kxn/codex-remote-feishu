@@ -32,34 +32,6 @@ func (s *Service) renderDynamicToolCallItem(instanceID string, event agentproto.
 	if text != "" {
 		events = append(events, s.renderTextItem(instanceID, event.ThreadID, event.TurnID, event.ItemID, text, false)...)
 	}
-	if len(imageItems) == 0 {
-		return events
-	}
-
-	replySourceMessageID := ""
-	replySourceMessagePreview := ""
-	if binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID); binding != nil {
-		replySourceMessageID = strings.TrimSpace(binding.ReplyToMessageID)
-		replySourceMessagePreview = strings.TrimSpace(binding.ReplyToMessagePreview)
-	}
-	for index, image := range imageItems {
-		itemID := event.ItemID
-		if len(imageItems) > 1 {
-			itemID = fmt.Sprintf("%s-img-%d", event.ItemID, index+1)
-		}
-		events = append(events, control.UIEvent{
-			Kind:                 control.UIEventImageOutput,
-			SurfaceSessionID:     surface.SurfaceSessionID,
-			SourceMessageID:      replySourceMessageID,
-			SourceMessagePreview: replySourceMessagePreview,
-			ImageOutput: &control.ImageOutput{
-				ThreadID:    event.ThreadID,
-				TurnID:      event.TurnID,
-				ItemID:      itemID,
-				ImageBase64: image,
-			},
-		})
-	}
 	return events
 }
 

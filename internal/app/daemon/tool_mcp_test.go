@@ -121,7 +121,7 @@ func decodeToolMCPResponse(t *testing.T, rec *httptest.ResponseRecorder) map[str
 }
 
 func TestToolMCPListAndCallTools(t *testing.T) {
-	sender := &fakeToolFileSender{}
+	sender := &fakeToolSender{}
 	app, _ := newToolServiceTestApp(t, sender)
 	if err := app.Bind(); err != nil {
 		t.Fatalf("Bind() error = %v", err)
@@ -163,7 +163,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 2 {
+	if len(tools) != 3 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -177,6 +177,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	}
 	if !strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), ".codex-remote/surface-context.json") {
 		t.Fatalf("file-send description missing workspace context rule: %#v", seen[feishuSendIMFileToolName])
+	}
+	if !strings.Contains(seen[feishuSendIMImageToolName]["description"].(string), ".codex-remote/surface-context.json") {
+		t.Fatalf("image-send description missing workspace context rule: %#v", seen[feishuSendIMImageToolName])
 	}
 
 	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
@@ -224,14 +227,44 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("send file tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if len(sender.calls) != 1 {
-		t.Fatalf("expected one send call, got %#v", sender.calls)
+	if len(sender.fileCalls) != 1 {
+		t.Fatalf("expected one file send call, got %#v", sender.fileCalls)
 	}
 	sendPayload := decodeToolMCPResponse(t, rec)
 	sendResult, _ := sendPayload["result"].(map[string]any)
 	sendStructured, _ := sendResult["structuredContent"].(map[string]any)
 	if sendStructured["surface_session_id"] != "surface-normal" || sendStructured["message_id"] != "msg-file" {
 		t.Fatalf("unexpected send result: %#v", sendPayload)
+	}
+
+	imagePath := filepath.Join(t.TempDir(), "preview.png")
+	if err := os.WriteFile(imagePath, []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.bearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 5, "tools/call", map[string]any{
+			"name": feishuSendIMImageToolName,
+			"arguments": map[string]any{
+				"surface_session_id": "surface-normal",
+				"path":               imagePath,
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send image tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.imageCalls) != 1 {
+		t.Fatalf("expected one image send call, got %#v", sender.imageCalls)
+	}
+	sendPayload = decodeToolMCPResponse(t, rec)
+	sendResult, _ = sendPayload["result"].(map[string]any)
+	sendStructured, _ = sendResult["structuredContent"].(map[string]any)
+	if sendStructured["surface_session_id"] != "surface-normal" || sendStructured["message_id"] != "msg-image" {
+		t.Fatalf("unexpected image send result: %#v", sendPayload)
 	}
 }
 

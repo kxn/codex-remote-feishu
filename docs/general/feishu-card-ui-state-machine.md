@@ -633,7 +633,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)
   - 锁定 `context_compaction` 已并入共享过程卡：attached verbose 进入 `整理` 行、normal/quiet 保持静默，以及无 surface 时的 replay 只在 verbose attach 下可见，并继续保持顶层 append-only
 - [internal/core/orchestrator/service_image_output_test.go](../../internal/core/orchestrator/service_image_output_test.go)
-  - 锁定 `dynamic_tool_call` 在有文本/图片输出时仍走原结果渲染路径，而空输出场景保持静默、不再补缺省 notice
+  - 锁定 `dynamic_tool_call` 只产出文字摘要 / 图片链接摘要，不再因图片 rich result 自动生成 `UIEventImageOutput`；空输出场景保持静默、不再补缺省 notice
 - [internal/core/orchestrator/service_target_picker_test.go](../../internal/core/orchestrator/service_target_picker_test.go)
   - 锁定 target picker 的 inline refresh、页头单题文案、owner-subpage path picker 回流、confirm attach / `新建会话`、`新建工作区` 路径的前置阻塞校验、recoverable-only workspace headless 路径、Git 长链路的 processing / cancel / blocked-input / terminal 收口，以及 stale selection 不会 silent fallback
 - [internal/core/orchestrator/service_path_picker_test.go](../../internal/core/orchestrator/service_path_picker_test.go)

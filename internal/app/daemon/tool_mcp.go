@@ -64,6 +64,8 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 		result, apiErr = a.resolveSurfaceContextTool(arguments)
 	case feishuSendIMFileToolName:
 		result, apiErr = a.sendIMFileTool(ctx, arguments)
+	case feishuSendIMImageToolName:
+		result, apiErr = a.sendIMImageTool(ctx, arguments)
 	default:
 		return nil, &jsonrpc.Error{
 			Code:    jsonrpc.CodeMethodNotFound,
