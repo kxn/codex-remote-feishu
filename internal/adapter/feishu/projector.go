@@ -126,6 +126,10 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if title == "" {
 			title = "系统提示"
 		}
+		replyToMessageID := event.SourceMessageID
+		if event.Notice.IsGlobalRuntime() {
+			replyToMessageID = ""
+		}
 		body, elements := projectNoticeContent(*event.Notice)
 		theme := noticeThemeKey(*event.Notice)
 		return []Operation{{
@@ -133,7 +137,7 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
-			ReplyToMessageID: event.SourceMessageID,
+			ReplyToMessageID: replyToMessageID,
 			CardTitle:        title,
 			CardBody:         body,
 			CardThemeKey:     theme,

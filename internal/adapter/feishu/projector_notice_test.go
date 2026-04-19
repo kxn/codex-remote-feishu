@@ -41,3 +41,24 @@ func TestProjectStructuredDebugErrorNoticeUsesPlainTextSections(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectGlobalRuntimeNoticeIgnoresReplyAnchor(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", control.UIEvent{
+		Kind:            control.UIEventNotice,
+		SourceMessageID: "msg-1",
+		Notice: &control.Notice{
+			Code:             "daemon_shutting_down",
+			Text:             "服务正在关闭。",
+			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
+			DeliveryFamily:   control.NoticeDeliveryFamilyDaemonShutdown,
+			DeliveryDedupKey: "daemon_shutting_down",
+		},
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one op, got %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "" {
+		t.Fatalf("expected global runtime notice to stay top-level, got %#v", ops[0])
+	}
+}

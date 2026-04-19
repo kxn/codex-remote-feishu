@@ -567,29 +567,17 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 func surfaceResumeFailureNotice(code string) *control.Notice {
 	switch strings.TrimSpace(code) {
 	case "workspace_busy":
-		return &control.Notice{
-			Code:  "surface_resume_workspace_busy",
-			Title: "恢复失败",
-			Text:  "之前的工作区当前被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择工作区。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilySurfaceResume, "surface_resume_workspace_busy", "恢复失败", "之前的工作区当前被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择工作区。")
+		return &notice
 	case "workspace_instance_busy":
-		return &control.Notice{
-			Code:  "surface_resume_workspace_instance_busy",
-			Title: "恢复失败",
-			Text:  "之前的工作区当前暂时不可接管。请稍后重试，或发送 /list 重新选择工作区。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilySurfaceResume, "surface_resume_workspace_instance_busy", "恢复失败", "之前的工作区当前暂时不可接管。请稍后重试，或发送 /list 重新选择工作区。")
+		return &notice
 	case "thread_busy":
-		return &control.Notice{
-			Code:  "surface_resume_thread_busy",
-			Title: "恢复失败",
-			Text:  "之前的会话当前被其他飞书会话占用，暂时无法直接恢复。请稍后重试，或发送 /use 选择其他会话。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilySurfaceResume, "surface_resume_thread_busy", "恢复失败", "之前的会话当前被其他飞书会话占用，暂时无法直接恢复。请稍后重试，或发送 /use 选择其他会话。")
+		return &notice
 	default:
-		return &control.Notice{
-			Code:  "surface_resume_target_not_found",
-			Title: "恢复失败",
-			Text:  "暂时无法恢复到之前会话。请稍后重试，或发送 /list 重新选择工作区。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilySurfaceResume, "surface_resume_target_not_found", "恢复失败", "暂时无法恢复到之前会话。请稍后重试，或发送 /list 重新选择工作区。")
+		return &notice
 	}
 }
 
@@ -600,17 +588,11 @@ func NoticeForSurfaceResumeFailure(code string) *control.Notice {
 func vscodeSurfaceResumeFailureNotice(code string) *control.Notice {
 	switch strings.TrimSpace(code) {
 	case "instance_busy":
-		return &control.Notice{
-			Code:  "surface_resume_instance_busy",
-			Title: "恢复失败",
-			Text:  "之前的 VS Code 实例当前已被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择实例。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilyVSCodeResume, "surface_resume_instance_busy", "恢复失败", "之前的 VS Code 实例当前已被其他飞书会话接管，暂时无法恢复。请稍后重试，或发送 /list 重新选择实例。")
+		return &notice
 	default:
-		return &control.Notice{
-			Code:  "surface_resume_instance_not_found",
-			Title: "恢复失败",
-			Text:  "暂时无法恢复到之前的 VS Code 实例。请稍后重试，或发送 /list 重新选择实例。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilyVSCodeResume, "surface_resume_instance_not_found", "恢复失败", "暂时无法恢复到之前的 VS Code 实例。请稍后重试，或发送 /list 重新选择实例。")
+		return &notice
 	}
 }
 
@@ -620,15 +602,9 @@ func NoticeForVSCodeSurfaceResumeFailure(code string) *control.Notice {
 
 func NoticeForVSCodeOpenPrompt(hadPreviousInstance bool) *control.Notice {
 	if hadPreviousInstance {
-		return &control.Notice{
-			Code:  "surface_resume_open_vscode",
-			Title: "请先打开 VS Code",
-			Text:  "还没有找到之前的 VS Code 实例。请先打开 VS Code 中的 Codex，然后再回来使用。",
-		}
+		notice := globalRuntimeNotice(control.NoticeDeliveryFamilyVSCodeOpenPrompt, "surface_resume_open_vscode", "请先打开 VS Code", "还没有找到之前的 VS Code 实例。请先打开 VS Code 中的 Codex，然后再回来使用。")
+		return &notice
 	}
-	return &control.Notice{
-		Code:  "vscode_open_required",
-		Title: "请先打开 VS Code",
-		Text:  "当前还没有可用的 VS Code 实例。请先打开 VS Code 中的 Codex，然后再回来使用。",
-	}
+	notice := globalRuntimeNotice(control.NoticeDeliveryFamilyVSCodeOpenPrompt, "vscode_open_required", "请先打开 VS Code", "当前还没有可用的 VS Code 实例。请先打开 VS Code 中的 Codex，然后再回来使用。")
+	return &notice
 }

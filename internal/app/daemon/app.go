@@ -129,7 +129,8 @@ type App struct {
 	upgradeStateIOMu   sync.Mutex
 	cronStateIOMu      sync.Mutex
 
-	pendingGatewayNotices           map[string][]control.UIEvent
+	pendingGlobalRuntimeNotices     map[string][]control.UIEvent
+	recentGlobalRuntimeNotices      map[string]map[string]time.Time
 	headlessRuntime                 HeadlessRuntimeConfig
 	vscodeDetect                    func() (vscodeDetectResponse, error)
 	detectPlatformDefaults          func() (install.PlatformDefaults, error)
@@ -211,7 +212,8 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		serverIdentity:               serverIdentity,
 		daemonStartedAt:              daemonStartedAt,
 		daemonLifecycleID:            daemonLifecycleID(serverIdentity, daemonStartedAt),
-		pendingGatewayNotices:        map[string][]control.UIEvent{},
+		pendingGlobalRuntimeNotices:  map[string][]control.UIEvent{},
+		recentGlobalRuntimeNotices:   map[string]map[string]time.Time{},
 		surfaceResumeRuntime:         newSurfaceResumeRuntimeState(),
 		upgradeRuntime:               newUpgradeRuntimeState(),
 		managedHeadless:              map[string]*managedHeadlessProcess{},

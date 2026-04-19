@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-19`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（dispatching / running / completed / failed 同卡 patch，且不受 `verbose` 影响）、被动 compact 继续保留在 verbose 共享过程卡里，同时 `/upgrade latest`、bare `/cron`、`/sendfile` 子步骤与共享过程卡也都已同步到同卡 patch / append-only 的最新边界；turn-owned 的 request / plan / 共享过程卡 / replay 当前若命中 turn reply anchor，也会优先回到触发消息的回复链。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（dispatching / running / completed / failed 同卡 patch，且不受 `verbose` 影响）、被动 compact 继续保留在 verbose 共享过程卡里，同时 `/upgrade latest`、bare `/cron`、`/sendfile` 子步骤与共享过程卡也都已同步到同卡 patch / append-only 的最新边界；turn-owned 的 request / plan / 共享过程卡 / replay 当前若命中 turn reply anchor，也会优先回到触发消息的回复链；`global runtime` 提示则显式保持独立顶层 append-only，不继承任何 turn reply anchor。
 
 ## 1. 文档定位
 
@@ -415,6 +415,11 @@ MCP request 卡片当前新增的可视语义：
     - patch 目标固定是这张 final reply 自己，不会追加第二张 final card，也不会回填 preview supplement
     - 若 anchor 已因 detach、daemon lifecycle 变化或 turn identity 不匹配而失效，则静默放弃，不再尝试补丁
   - 若 final / turn-owned notice / compact completion 发生在当时无可投递 surface 的时刻，replay state 现在也会一并保存原始 `SourceMessageID` / 预览；later replay 命中这份 anchor 时，会继续回到原回复链，而不是降级成顶层新卡
+- `global runtime` 提示当前也明确保持 append-only，但和 turn-owned append-only 不同：
+  - 它们通过 `control.Notice.DeliveryClass=global_runtime` 明确标记，不再只靠“刚好没传 `SourceMessageID`”这种隐式约定
+  - projector 命中这类 notice 时会主动忽略 `UIEvent.SourceMessageID`，因此不会 reply 到任何 turn 源消息
+  - 当前这条车道覆盖：surface / VS Code resume failure、`open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
+  - 这些提示不会 patch 当前 owner-card，也不会借用 final-card anchor 或 turn reply-chain；它们始终作为独立系统提示出现在主时间线
 - bare `/upgrade`、bare `/debug` 在 stamped 菜单卡里会直接同位承接为对应状态/输入卡（replace 当前菜单卡），不再先外跳 append 一张新卡。
 - “命令已提交”锚点卡当前会在短延时后尝试 best-effort 自动撤回；撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner；参数卡 apply 的同卡收口也不复用“命令已提交”锚点，而是由产品 handler 直接返回可 patch 的 command card 结果。
@@ -542,6 +547,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定哪些动作会被分流到 Feishu UI controller，哪些 mixed/product-owned 动作仍留在主 reducer
 - [internal/adapter/feishu/projector_test.go](../../internal/adapter/feishu/projector_test.go)
   - 锁定 `FeishuDirectSelectionPrompt` / `FeishuSelectionView` / `FeishuCommandView` / `FeishuDirectCommandCatalog` / `FeishuDirectRequestPrompt` 的 lifecycle stamp、projection 结果、request prompt reply-anchor 语义与 callback payload 结构
+- [internal/adapter/feishu/projector_notice_test.go](../../internal/adapter/feishu/projector_notice_test.go)
+  - 锁定结构化 notice 继续走纯文本 section 渲染，以及 `global runtime` notice 即使带着 `SourceMessageID` 也仍保持顶层 append-only
 - [internal/adapter/feishu/projector_target_picker_test.go](../../internal/adapter/feishu/projector_target_picker_test.go)
   - 锁定 `FeishuTargetPickerView` 的页头 `StageLabel` / `Question`、模式/来源次级标签、双下拉与 Git 表单 payload、`daemon_lifecycle_id` stamp、confirm 按钮结构，以及带 `MessageID` 时改走 `OperationUpdateCard`、terminal stage 移除交互控件
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
@@ -596,6 +603,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定参数卡 apply 的同卡收口边界：成功 / no-op 封成 sealed terminal card、格式错误保留同卡重试、未接管目标时回到同卡恢复态
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
   - 锁定 daemon ingress 统一入口下的 inline replace 结果、菜单命令提交态锚点（replace 提交态 + append 结果）、参数卡 callback apply 走同卡 replace 而纯文本参数 apply 继续 append-only、`/help` 保持 append-only、active path picker 会阻断 competing `/menu`、same-daemon pure navigation 采用 current-surface rerender，以及 old-card 导航/命令被拒绝而不是继续 replace
+- [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
+  - 锁定 `global runtime` 提示会清掉 reply anchor，并按 family + dedupe key 做短窗节流 / pending queue 去重
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
   - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，以及 `/sendfile` 会直接把菜单卡替换成文件选择卡
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)

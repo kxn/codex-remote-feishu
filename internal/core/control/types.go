@@ -320,11 +320,14 @@ type PendingInputState struct {
 }
 
 type Notice struct {
-	Code     string
-	Title    string
-	Text     string
-	ThemeKey string
-	Sections []FeishuCardTextSection
+	Code             string
+	Title            string
+	Text             string
+	ThemeKey         string
+	Sections         []FeishuCardTextSection
+	DeliveryClass    NoticeDeliveryClass
+	DeliveryFamily   NoticeDeliveryFamily
+	DeliveryDedupKey string
 }
 
 type ThreadSelectionChanged struct {

@@ -110,11 +110,17 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []control.UIEvent
 			}
 			continue
 		}
-		a.flushPendingGatewayNoticesLocked(event.SurfaceSessionID)
+		a.flushPendingGlobalRuntimeNoticesLocked(event.SurfaceSessionID)
+		event, isGlobalRuntimeNotice := normalizeGlobalRuntimeNoticeEvent(event)
+		if isGlobalRuntimeNotice && a.shouldSuppressGlobalRuntimeNoticeLocked(event, time.Now()) {
+			continue
+		}
 		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
 			chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 			log.Printf("gateway apply failed: chat=%s event=%s err=%v", chatID, event.Kind, err)
 			a.queueGatewayFailureNotice(event, err)
+		} else if isGlobalRuntimeNotice {
+			a.recordGlobalRuntimeNoticeLocked(event, time.Now())
 		}
 	}
 }
@@ -348,22 +354,6 @@ func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (
 	return context.WithTimeout(base, timeout)
 }
 
-func (a *App) flushPendingGatewayNoticesLocked(surfaceID string) {
-	if strings.TrimSpace(surfaceID) == "" {
-		return
-	}
-	pending := a.pendingGatewayNotices[surfaceID]
-	if len(pending) == 0 {
-		return
-	}
-	for _, event := range pending {
-		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
-			return
-		}
-	}
-	delete(a.pendingGatewayNotices, surfaceID)
-}
-
 func (a *App) queueGatewayFailureNotice(event control.UIEvent, err error) {
 	if strings.TrimSpace(event.SurfaceSessionID) == "" {
 		return
@@ -371,7 +361,7 @@ func (a *App) queueGatewayFailureNotice(event control.UIEvent, err error) {
 	if event.Notice != nil && event.Notice.Code == "gateway_apply_failed" {
 		return
 	}
-	notice := orchestrator.NoticeForProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+	notice := orchestrator.GlobalRuntimeGatewayApplyFailureNotice(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 		Code:             "gateway_apply_failed",
 		Layer:            "daemon",
 		Stage:            "gateway_apply",
@@ -380,20 +370,11 @@ func (a *App) queueGatewayFailureNotice(event control.UIEvent, err error) {
 		SurfaceSessionID: event.SurfaceSessionID,
 		Retryable:        true,
 	}))
-	notice.Code = "gateway_apply_failed"
-	queued := control.UIEvent{
+	a.queueGlobalRuntimeNoticeLocked(control.UIEvent{
 		Kind:             control.UIEventNotice,
 		SurfaceSessionID: event.SurfaceSessionID,
 		Notice:           &notice,
-	}
-	pending := a.pendingGatewayNotices[event.SurfaceSessionID]
-	if len(pending) > 0 {
-		last := pending[len(pending)-1]
-		if last.Notice != nil && last.Notice.Code == queued.Notice.Code && last.Notice.Text == queued.Notice.Text {
-			return
-		}
-	}
-	a.pendingGatewayNotices[event.SurfaceSessionID] = append(pending, queued)
+	})
 }
 
 func (a *App) previewWorkspaceRoot(surfaceID string, block render.Block) string {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
@@ -113,13 +114,11 @@ func (a *App) beginShutdownNotices() []control.UIEvent {
 			continue
 		}
 		seen[surfaceID] = struct{}{}
+		notice := orchestrator.GlobalRuntimeShutdownNotice(daemonShutdownNoticeText)
 		events = append(events, control.UIEvent{
 			Kind:             control.UIEventNotice,
 			SurfaceSessionID: surfaceID,
-			Notice: &control.Notice{
-				Code: "daemon_shutting_down",
-				Text: daemonShutdownNoticeText,
-			},
+			Notice:           &notice,
 		})
 	}
 	return events

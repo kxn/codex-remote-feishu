@@ -628,13 +628,11 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 					Status:      string(item.Status),
 				}, queueItemSourceMessageIDs(item)), item.SourceMessageID, false)...)
 				if emitNotice {
+					notice := globalRuntimeNotice(control.NoticeDeliveryFamilyTransportDegraded, "attached_instance_transport_degraded", "", noticeText)
 					events = append(events, control.UIEvent{
 						Kind:             control.UIEventNotice,
 						SurfaceSessionID: surface.SurfaceSessionID,
-						Notice: &control.Notice{
-							Code: "attached_instance_transport_degraded",
-							Text: noticeText,
-						},
+						Notice:           &notice,
 					})
 				}
 				continue
@@ -650,10 +648,8 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 			if item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
 				var noticePtr *control.Notice
 				if emitNotice {
-					noticePtr = &control.Notice{
-						Code: "attached_instance_transport_degraded",
-						Text: noticeText,
-					}
+					notice := globalRuntimeNotice(control.NoticeDeliveryFamilyTransportDegraded, "attached_instance_transport_degraded", "", noticeText)
+					noticePtr = &notice
 				}
 				events = append(events, s.failSurfaceActiveQueueItem(surface, item, noticePtr, true)...)
 				continue
@@ -664,13 +660,11 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 		s.clearRemoteOwnership(surface)
 		events = append(events, s.finishSurfaceAfterWork(surface)...)
 		if emitNotice {
+			notice := globalRuntimeNotice(control.NoticeDeliveryFamilyTransportDegraded, "attached_instance_transport_degraded", "", noticeText)
 			events = append(events, control.UIEvent{
 				Kind:             control.UIEventNotice,
 				SurfaceSessionID: surface.SurfaceSessionID,
-				Notice: &control.Notice{
-					Code: "attached_instance_transport_degraded",
-					Text: noticeText,
-				},
+				Notice:           &notice,
 			})
 		}
 	}
