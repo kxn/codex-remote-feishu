@@ -119,7 +119,7 @@ func vscodeMigrationOwnerButton(label, flowID string) control.CommandCatalogButt
 		Label: label,
 		Kind:  control.CommandCatalogButtonCallbackAction,
 		CallbackValue: map[string]any{
-			"kind":                       vscodeMigrationOwnerPayloadKind,
+			"kind":                             vscodeMigrationOwnerPayloadKind,
 			vscodeMigrationOwnerPayloadFlowKey: strings.TrimSpace(flowID),
 			vscodeMigrationOwnerPayloadRunKey:  vscodeMigrationOwnerActionRun,
 		},

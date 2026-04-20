@@ -72,12 +72,12 @@ type upgradeRuntimeState struct {
 
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
 	return surfaceResumeRuntimeState{
-		recovery:               map[string]*surfaceResumeRecoveryState{},
-		vscodeMigrationFlows:   map[string]*vscodeMigrationFlowRecord{},
-		vscodeResumeNotices:    map[string]bool{},
-		headlessRestore:        map[string]*headlessRestoreRecoveryState{},
-		startupRefreshPending:  map[string]bool{},
-		workspaceContextRoots:  map[string]string{},
+		recovery:              map[string]*surfaceResumeRecoveryState{},
+		vscodeMigrationFlows:  map[string]*vscodeMigrationFlowRecord{},
+		vscodeResumeNotices:   map[string]bool{},
+		headlessRestore:       map[string]*headlessRestoreRecoveryState{},
+		startupRefreshPending: map[string]bool{},
+		workspaceContextRoots: map[string]string{},
 	}
 }
 
