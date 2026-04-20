@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -59,16 +58,19 @@ func execCommandProgressBody(progress control.ExecCommandProgress) string {
 func execCommandProgressElements(lines []string) []map[string]any {
 	elements := make([]map[string]any, 0, len(lines))
 	for _, line := range lines {
-		content := execCommandProgressTextLine(line)
+		content := execCommandProgressMarkdownLine(line)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		elements = append(elements, cardPlainTextBlockElement(content))
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": content,
+		})
 	}
 	return elements
 }
 
-func execCommandProgressTextLine(line string) string {
+func execCommandProgressMarkdownLine(line string) string {
 	return strings.TrimSpace(strings.TrimRight(line, " "))
 }
 
@@ -194,11 +196,11 @@ func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem
 func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
 	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
 	case "read":
-		return execProgressPrefixedText("读取", strings.Join(execProgressReadNames(row.Items), "、"))
+		return execProgressPrefixedMarkdown("读取", strings.Join(execProgressReadNames(row.Items), "、"))
 	case "list":
-		return execProgressPrefixedText("列目录", truncateExecProgressSummary(row.Summary, 60))
+		return execProgressPrefixedMarkdown("列目录", renderExecProgressEntitySummary(row.Summary, 60))
 	case "search":
-		return execProgressPrefixedText("搜索", renderExecProgressSearchSummary(row.Summary, row.Secondary, 60))
+		return execProgressPrefixedMarkdown("搜索", renderExecProgressSearchSummary(row.Summary, row.Secondary, 60))
 	default:
 		text := row.Summary
 		if text == "" && len(row.Items) != 0 {
@@ -224,7 +226,7 @@ func execProgressReadNames(items []string) []string {
 			continue
 		}
 		seen[name] = true
-		names = append(names, name)
+		names = append(names, markdownCodeSpan(name))
 	}
 	return names
 }
@@ -236,27 +238,31 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry, verbose boo
 	}
 	switch strings.TrimSpace(entry.Kind) {
 	case "command_execution":
-		return execProgressPrefixedText(label, truncateExecProgressSummary(entry.Summary, 30))
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 30))
 	case "reasoning_summary":
 		return truncateExecProgressSummary(entry.Summary, 60)
 	case "web_search":
 		if label == "搜索" {
-			return execProgressPrefixedText(label, renderExecProgressSearchSummary(entry.Summary, "", 40))
+			return execProgressPrefixedMarkdown(label, renderExecProgressSearchSummary(entry.Summary, "", 40))
 		}
-		return execProgressPrefixedText(label, truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
+	case "mcp_tool_call", "dynamic_tool_call":
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
 	case "file_change":
 		return renderExecProgressFileChangeEntry(entry, verbose, fileLabels)
+	case "context_compaction":
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
 	default:
-		return execProgressPrefixedText(label, truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
 	}
 }
 
 func renderExecProgressFileChangeEntry(entry control.ExecCommandProgressEntry, verbose bool, fileLabels map[string]string) string {
 	if entry.FileChange == nil {
-		return execProgressPrefixedText(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), renderExecProgressEntitySummary(entry.Summary, 40))
 	}
 	file := execProgressFileChangeSummaryEntry(*entry.FileChange)
-	line := execProgressPrefixedText(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), formatFileChangePathText(file, fileLabels)+"  "+formatFileChangeCountsText(file.AddedLines, file.RemovedLines))
+	line := execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), renderExecProgressFileChangePathMarkdown(file, fileLabels)+"  "+formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines))
 	if !verbose {
 		return line
 	}
@@ -264,7 +270,7 @@ func renderExecProgressFileChangeEntry(entry control.ExecCommandProgressEntry, v
 	if diff == "" {
 		return line
 	}
-	return line + "\n" + diff
+	return line + "\n" + markdownFencedCodeBlock("diff", diff)
 }
 
 func execProgressFileChangeDisplayLabels(items []control.ExecCommandProgressTimelineItem) map[string]string {
@@ -314,17 +320,26 @@ func truncateExecProgressFileChangeDiff(diff string) string {
 	return out
 }
 
-func execProgressPrefixedText(label, value string) string {
+func execProgressPrefixedMarkdown(label, value string) string {
 	label = strings.TrimSpace(label)
 	value = strings.TrimSpace(value)
+	labelMarkdown := execProgressMarkdownLabel(label)
 	switch {
-	case label == "":
+	case labelMarkdown == "":
 		return value
 	case value == "":
-		return label
+		return labelMarkdown
 	default:
-		return label + "：" + value
+		return labelMarkdown + "：" + value
 	}
+}
+
+func execProgressMarkdownLabel(label string) string {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return ""
+	}
+	return "**" + label + "**"
 }
 
 var shellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
@@ -368,33 +383,63 @@ func renderExecProgressSearchSummary(summary, secondary string, limit int) strin
 	}
 	suffix := ""
 	if secondary != "" {
-		suffix = "（在 " + truncateExecProgressSummary(secondary, 24) + " 内）"
+		suffix = "（在 " + markdownCodeSpan(truncateExecProgressSummary(secondary, 24)) + " 内）"
 	}
-	if suffix == "" {
-		return truncateExecProgressSummary(summary, limit)
+	if !shouldCodeSpanExecProgressSearchSummary(summary) {
+		return truncateExecProgressSummary(summary+suffix, limit)
 	}
 	available := limit - len([]rune(suffix))
 	if available <= 3 {
 		available = 3
 	}
-	return truncateExecProgressSummary(summary, available) + suffix
+	return markdownCodeSpan(truncateExecProgressSummary(summary, available)) + suffix
 }
 
-func formatFileChangePathText(file control.FileChangeSummaryEntry, labels map[string]string) string {
+func shouldCodeSpanExecProgressSearchSummary(summary string) bool {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return false
+	}
+	switch summary {
+	case "正在搜索网络", "搜索完成":
+		return false
+	}
+	return true
+}
+
+func renderExecProgressEntitySummary(summary string, limit int) string {
+	summary = truncateExecProgressSummary(summary, limit)
+	if summary == "" {
+		return ""
+	}
+	return markdownCodeSpan(summary)
+}
+
+func renderExecProgressFileChangePathMarkdown(file control.FileChangeSummaryEntry, labels map[string]string) string {
 	path := strings.TrimSpace(file.Path)
 	movePath := strings.TrimSpace(file.MovePath)
 	switch {
 	case path != "" && movePath != "":
-		return fmt.Sprintf("%s -> %s", fileChangeDisplayLabel(path, labels), fileChangeDisplayLabel(movePath, labels))
+		return markdownCodeSpan(fileChangeDisplayLabel(path, labels)) + " -> " + markdownCodeSpan(fileChangeDisplayLabel(movePath, labels))
 	case path != "":
-		return fileChangeDisplayLabel(path, labels)
+		return markdownCodeSpan(fileChangeDisplayLabel(path, labels))
 	case movePath != "":
-		return fileChangeDisplayLabel(movePath, labels)
+		return markdownCodeSpan(fileChangeDisplayLabel(movePath, labels))
 	default:
-		return "(unknown)"
+		return markdownCodeSpan("(unknown)")
 	}
 }
 
-func formatFileChangeCountsText(added, removed int) string {
-	return fmt.Sprintf("+%d -%d", added, removed)
+func markdownFencedCodeBlock(language, text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	fenceRun := maxBacktickRun(text) + 3
+	fence := strings.Repeat("`", fenceRun)
+	language = strings.TrimSpace(language)
+	if language != "" {
+		return fence + language + "\n" + text + "\n" + fence
+	}
+	return fence + "\n" + text + "\n" + fence
 }
