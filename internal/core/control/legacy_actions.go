@@ -9,8 +9,6 @@ func LegacyActionKey(text string) string {
 	switch strings.ToLower(trimmed) {
 	case "/newinstance", "newinstance", "new_instance":
 		return "newinstance"
-	case "resume_headless_thread":
-		return "resume_headless_thread"
 	default:
 		return trimmed
 	}
@@ -20,7 +18,7 @@ func LegacyActionKey(text string) string {
 // removed compat action.
 func LegacyActionCommand(text string) string {
 	switch LegacyActionKey(text) {
-	case "newinstance", "resume_headless_thread":
+	case "newinstance":
 		return "/newinstance"
 	default:
 		return strings.TrimSpace(text)

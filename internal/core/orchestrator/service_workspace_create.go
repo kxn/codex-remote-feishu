@@ -10,32 +10,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const workspaceCreatePathPickerConsumerKind = "workspace_create"
 const targetPickerWorkspaceCreatePathPickerConsumerKind = "target_picker_workspace_create"
 
-type workspaceCreatePathPickerConsumer struct{}
 type targetPickerWorkspaceCreatePathPickerConsumer struct{}
-
-func (workspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Service, surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
-	if s == nil || surface == nil {
-		return nil
-	}
-	workspaceKey, err := state.ResolveWorkspaceRootOnHost(result.SelectedPath)
-	if err != nil {
-		return notice(surface, "workspace_create_invalid", fmt.Sprintf("目录路径无效：%v", err))
-	}
-	if workspaceKey == "" {
-		return notice(surface, "workspace_create_invalid", "目录路径无效，请重新选择。")
-	}
-	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
-		return s.attachWorkspace(surface, workspaceKey)
-	}
-	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, false)
-}
-
-func (workspaceCreatePathPickerConsumer) PathPickerCancelled(_ *Service, surface *state.SurfaceConsoleRecord, _ control.PathPickerResult) []control.UIEvent {
-	return notice(surface, "workspace_create_cancelled", "已取消添加工作区。当前工作目标保持不变。")
-}
 
 func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Service, surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
 	if s == nil || surface == nil {
@@ -57,10 +34,6 @@ func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerConfirmed(s *Serv
 
 func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerCancelled(_ *Service, surface *state.SurfaceConsoleRecord, _ control.PathPickerResult) []control.UIEvent {
 	return notice(surface, "workspace_create_cancelled", "已取消添加工作区。当前工作目标保持不变。")
-}
-
-func (s *Service) openCreateWorkspacePicker(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	return s.openWorkspaceCreatePicker(surface, workspaceCreatePathPickerConsumerKind, "接入为工作区", "")
 }
 
 func (s *Service) openTargetPickerWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord) []control.UIEvent {

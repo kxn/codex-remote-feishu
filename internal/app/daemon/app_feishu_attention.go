@@ -105,7 +105,7 @@ func surfaceNeedsUserInput(surface *state.SurfaceConsoleRecord) bool {
 	if surface == nil {
 		return false
 	}
-	if surface.ActiveRequestCapture != nil || surface.ActiveCommandCapture != nil {
+	if surface.ActiveRequestCapture != nil {
 		return true
 	}
 	for _, request := range surface.PendingRequests {

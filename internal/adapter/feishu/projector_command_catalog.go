@@ -288,18 +288,6 @@ func commandCatalogButtonsWithDefault(buttons []control.CommandCatalogButton, da
 				continue
 			}
 			payload = cloneActionPayload(button.CallbackValue)
-		case control.CommandCatalogButtonStartCommandCapture:
-			commandID := strings.TrimSpace(button.CommandID)
-			if commandID == "" {
-				continue
-			}
-			payload = actionPayloadStartCommandCapture(commandID)
-		case control.CommandCatalogButtonCancelCommandCapture:
-			commandID := strings.TrimSpace(button.CommandID)
-			if commandID == "" {
-				continue
-			}
-			payload = actionPayloadCancelCommandCapture(commandID)
 		default:
 			continue
 		}

@@ -1149,26 +1149,6 @@ func TestShowAllWorkspacesUsesSamePagedWorkspacePrompt(t *testing.T) {
 	}
 }
 
-func TestCreateWorkspaceActionOpensDirectoryPicker(t *testing.T) {
-	now := time.Date(2026, 4, 14, 9, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCreateWorkspace,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-	})
-
-	if len(events) != 1 || events[0].FeishuPathPickerView == nil {
-		t.Fatalf("expected path picker event, got %#v", events)
-	}
-	view := events[0].FeishuPathPickerView
-	if view.Mode != control.PathPickerModeDirectory || view.Title != "选择要接入的目录" || view.ConfirmLabel != "接入为工作区" {
-		t.Fatalf("unexpected path picker view: %#v", view)
-	}
-}
-
 func TestSendFileActionOpensFilePickerInsideCurrentWorkspace(t *testing.T) {
 	now := time.Date(2026, 4, 14, 9, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

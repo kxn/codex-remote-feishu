@@ -596,42 +596,38 @@ func TestCardTemplateUsesSemanticColors(t *testing.T) {
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsPromptSelectionAction(t *testing.T) {
+func TestParseCardActionTriggerEventIgnoresRemovedLegacyKinds(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-1", "feishu:app-1:user:user-1")
 	userID := "user-1"
-	event := &larkcallback.CardActionTriggerEvent{
-		Event: &larkcallback.CardActionTriggerRequest{
-			Operator: &larkcallback.Operator{UserID: &userID},
-			Action: &larkcallback.CallBackAction{
-				Value: map[string]interface{}{
-					"kind":      "prompt_select",
-					"prompt_id": "prompt-1",
-					"option_id": "thread-1",
+	tests := []string{
+		"prompt_select",
+		"resume_headless_thread",
+		"start_command_capture",
+		"cancel_command_capture",
+	}
+	for _, kind := range tests {
+		event := &larkcallback.CardActionTriggerEvent{
+			Event: &larkcallback.CardActionTriggerRequest{
+				Operator: &larkcallback.Operator{UserID: &userID},
+				Action: &larkcallback.CallBackAction{
+					Value: map[string]interface{}{
+						"kind":       kind,
+						"prompt_id":  "prompt-1",
+						"option_id":  "thread-1",
+						"thread_id":  "thread-1",
+						"command_id": control.FeishuCommandModel,
+					},
+				},
+				Context: &larkcallback.Context{
+					OpenChatID:    "oc_1",
+					OpenMessageID: "om-card-1",
 				},
 			},
-			Context: &larkcallback.Context{
-				OpenChatID:    "oc_1",
-				OpenMessageID: "om-card-1",
-			},
-		},
-	}
-
-	action, ok := gateway.parseCardActionTriggerEvent(event)
-	if !ok {
-		t.Fatal("expected card callback to be parsed")
-	}
-	if action.Kind != control.ActionSelectPrompt {
-		t.Fatalf("unexpected action kind: %#v", action)
-	}
-	if action.GatewayID != "app-1" {
-		t.Fatalf("unexpected gateway id: %#v", action)
-	}
-	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
-		t.Fatalf("unexpected action routing: %#v", action)
-	}
-	if action.PromptID != "prompt-1" || action.OptionID != "thread-1" {
-		t.Fatalf("unexpected prompt selection payload: %#v", action)
+		}
+		if action, ok := gateway.parseCardActionTriggerEvent(event); ok {
+			t.Fatalf("%s: expected legacy kind to be ignored, got %#v", kind, action)
+		}
 	}
 }
 
@@ -894,44 +890,6 @@ func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 	}
 	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
 		t.Fatalf("unexpected action routing: %#v", action)
-	}
-}
-
-func TestParseCardActionTriggerEventBuildsCommandCaptureActions(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.recordSurfaceMessage("om-card-6", "feishu:app-1:user:user-1")
-	userID := "user-1"
-	tests := []struct {
-		name string
-		kind string
-		want control.ActionKind
-	}{
-		{name: "start", kind: "start_command_capture", want: control.ActionStartCommandCapture},
-		{name: "cancel", kind: "cancel_command_capture", want: control.ActionCancelCommandCapture},
-	}
-	for _, tc := range tests {
-		event := &larkcallback.CardActionTriggerEvent{
-			Event: &larkcallback.CardActionTriggerRequest{
-				Operator: &larkcallback.Operator{UserID: &userID},
-				Action: &larkcallback.CallBackAction{
-					Value: map[string]interface{}{
-						"kind":       tc.kind,
-						"command_id": control.FeishuCommandModel,
-					},
-				},
-				Context: &larkcallback.Context{
-					OpenChatID:    "oc_1",
-					OpenMessageID: "om-card-6",
-				},
-			},
-		}
-		action, ok := gateway.parseCardActionTriggerEvent(event)
-		if !ok {
-			t.Fatalf("%s: expected card callback to be parsed", tc.name)
-		}
-		if action.Kind != tc.want || action.CommandID != control.FeishuCommandModel {
-			t.Fatalf("%s: unexpected action %#v", tc.name, action)
-		}
 	}
 }
 
@@ -1575,38 +1533,6 @@ func TestActionPayloadSubmitCommandFormDefaultsFieldName(t *testing.T) {
 	}
 	if payload[cardActionPayloadKeyFieldName] != cardActionPayloadDefaultCommandFieldName {
 		t.Fatalf("expected default command field name, got %#v", payload)
-	}
-}
-
-func TestParseCardActionTriggerEventBuildsRemovedResumeHeadlessAction(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")
-	userID := "user-1"
-	event := &larkcallback.CardActionTriggerEvent{
-		Event: &larkcallback.CardActionTriggerRequest{
-			Operator: &larkcallback.Operator{UserID: &userID},
-			Action: &larkcallback.CallBackAction{
-				Value: map[string]interface{}{
-					"kind":      "resume_headless_thread",
-					"thread_id": "thread-1",
-				},
-			},
-			Context: &larkcallback.Context{
-				OpenChatID:    "oc_1",
-				OpenMessageID: "om-card-5",
-			},
-		},
-	}
-
-	action, ok := gateway.parseCardActionTriggerEvent(event)
-	if !ok {
-		t.Fatal("expected card callback to be parsed")
-	}
-	if action.Kind != control.ActionRemovedCommand || action.Text != "resume_headless_thread" {
-		t.Fatalf("unexpected removed-command action: %#v", action)
-	}
-	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
-		t.Fatalf("unexpected action routing: %#v", action)
 	}
 }
 

@@ -106,16 +106,6 @@ func TestRejectedInboundActionDetailUsesIntentLabelForWorkspaceThreadExpansion(t
 	}
 }
 
-func TestRejectedInboundActionDetailMapsLegacyResumeCardToRemovedCommand(t *testing.T) {
-	got := rejectedInboundActionDetail(control.Action{
-		Kind: control.ActionRemovedCommand,
-		Text: "resume_headless_thread",
-	})
-	if got != "命令“/newinstance”" {
-		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "命令“/newinstance”")
-	}
-}
-
 func TestRejectedInboundActionDetailShowsMessagePreview(t *testing.T) {
 	got := rejectedInboundActionDetail(control.Action{
 		Kind: control.ActionTextMessage,

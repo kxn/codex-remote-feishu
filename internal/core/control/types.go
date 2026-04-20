@@ -26,8 +26,6 @@ const (
 	ActionUpgradeCommand              ActionKind = "surface.command.upgrade"
 	ActionVSCodeMigrateCommand        ActionKind = "surface.command.vscode_migrate"
 	ActionUpgradeOwnerFlow            ActionKind = "surface.command.upgrade_owner_flow"
-	ActionStartCommandCapture         ActionKind = "surface.command.capture.start"
-	ActionCancelCommandCapture        ActionKind = "surface.command.capture.cancel"
 	ActionModelCommand                ActionKind = "surface.command.model"
 	ActionReasoningCommand            ActionKind = "surface.command.reasoning"
 	ActionAccessCommand               ActionKind = "surface.command.access"
@@ -41,10 +39,8 @@ const (
 	ActionFileMessage                 ActionKind = "surface.message.file"
 	ActionReactionCreated             ActionKind = "surface.message.reaction.created"
 	ActionMessageRecalled             ActionKind = "surface.message.recalled"
-	ActionSelectPrompt                ActionKind = "surface.selection.prompt"
 	ActionAttachInstance              ActionKind = "surface.button.attach_instance"
 	ActionAttachWorkspace             ActionKind = "surface.button.attach_workspace"
-	ActionCreateWorkspace             ActionKind = "surface.button.create_workspace"
 	ActionShowAllWorkspaces           ActionKind = "surface.button.show_all_workspaces"
 	ActionShowRecentWorkspaces        ActionKind = "surface.button.show_recent_workspaces"
 	ActionShowAllThreadWorkspaces     ActionKind = "surface.button.show_all_thread_workspaces"
@@ -387,11 +383,9 @@ type FeishuDirectRequestPrompt struct {
 type CommandCatalogButtonKind string
 
 const (
-	CommandCatalogButtonRunCommand           CommandCatalogButtonKind = "run_command"
-	CommandCatalogButtonCallbackAction       CommandCatalogButtonKind = "callback_action"
-	CommandCatalogButtonStartCommandCapture  CommandCatalogButtonKind = "start_command_capture"
-	CommandCatalogButtonCancelCommandCapture CommandCatalogButtonKind = "cancel_command_capture"
-	CommandCatalogButtonOpenURL              CommandCatalogButtonKind = "open_url"
+	CommandCatalogButtonRunCommand     CommandCatalogButtonKind = "run_command"
+	CommandCatalogButtonCallbackAction CommandCatalogButtonKind = "callback_action"
+	CommandCatalogButtonOpenURL        CommandCatalogButtonKind = "open_url"
 )
 
 type CommandCatalogFormFieldKind string

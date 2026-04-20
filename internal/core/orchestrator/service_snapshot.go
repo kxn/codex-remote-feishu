@@ -146,9 +146,6 @@ func (s *Service) snapshotGateSummary(surface *state.SurfaceConsoleRecord) contr
 	if surface == nil {
 		return control.GateSummary{}
 	}
-	if surface.ActiveCommandCapture != nil {
-		return control.GateSummary{Kind: "command_capture"}
-	}
 	if surface.ActiveRequestCapture != nil {
 		return control.GateSummary{Kind: "request_capture"}
 	}

@@ -38,7 +38,6 @@ const (
 	cardActionPayloadDefaultCommandFieldName  = "command_args"
 	cardActionKindAttachInstance              = "attach_instance"
 	cardActionKindAttachWorkspace             = "attach_workspace"
-	cardActionKindCreateWorkspace             = "create_workspace"
 	cardActionKindUseThread                   = "use_thread"
 	cardActionKindShowScopedThreads           = "show_scoped_threads"
 	cardActionKindShowThreads                 = "show_threads"
@@ -48,16 +47,12 @@ const (
 	cardActionKindShowWorkspaceThreads        = "show_workspace_threads"
 	cardActionKindShowAllWorkspaces           = "show_all_workspaces"
 	cardActionKindShowRecentWorkspaces        = "show_recent_workspaces"
-	cardActionKindResumeHeadlessThread        = "resume_headless_thread"
 	cardActionKindKickThreadConfirm           = "kick_thread_confirm"
 	cardActionKindKickThreadCancel            = "kick_thread_cancel"
-	cardActionKindPromptSelect                = "prompt_select"
 	cardActionKindRequestRespond              = "request_respond"
 	cardActionKindRunCommand                  = "run_command"
 	cardActionKindUpgradeOwnerFlow            = "upgrade_owner_flow"
 	cardActionKindVSCodeMigrateOwnerFlow      = "vscode_migrate_owner_flow"
-	cardActionKindStartCommandCapture         = "start_command_capture"
-	cardActionKindCancelCommandCapture        = "cancel_command_capture"
 	cardActionKindSubmitCommandForm           = "submit_command_form"
 	cardActionKindSubmitRequestForm           = "submit_request_form"
 	cardActionKindPathPickerEnter             = "path_picker_enter"
@@ -140,12 +135,6 @@ func actionPayloadAttachWorkspace(workspaceKey string) map[string]any {
 	}
 }
 
-func actionPayloadCreateWorkspace() map[string]any {
-	return map[string]any{
-		cardActionPayloadKeyKind: cardActionKindCreateWorkspace,
-	}
-}
-
 func actionPayloadUseThread(threadID string, allowCrossWorkspace bool) map[string]any {
 	return map[string]any{
 		cardActionPayloadKeyKind:                cardActionKindUseThread,
@@ -158,14 +147,6 @@ func actionPayloadKickThreadConfirm(threadID string) map[string]any {
 	return map[string]any{
 		cardActionPayloadKeyKind:     cardActionKindKickThreadConfirm,
 		cardActionPayloadKeyThreadID: strings.TrimSpace(threadID),
-	}
-}
-
-func actionPayloadPromptSelect(promptID, optionID string) map[string]any {
-	return map[string]any{
-		cardActionPayloadKeyKind:     cardActionKindPromptSelect,
-		cardActionPayloadKeyPromptID: strings.TrimSpace(promptID),
-		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
 	}
 }
 
@@ -189,20 +170,6 @@ func actionPayloadVSCodeMigrateOwnerFlow(flowID, optionID string) map[string]any
 		cardActionPayloadKeyKind:     cardActionKindVSCodeMigrateOwnerFlow,
 		cardActionPayloadKeyPickerID: strings.TrimSpace(flowID),
 		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
-	}
-}
-
-func actionPayloadStartCommandCapture(commandID string) map[string]any {
-	return map[string]any{
-		cardActionPayloadKeyKind:      cardActionKindStartCommandCapture,
-		cardActionPayloadKeyCommandID: strings.TrimSpace(commandID),
-	}
-}
-
-func actionPayloadCancelCommandCapture(commandID string) map[string]any {
-	return map[string]any{
-		cardActionPayloadKeyKind:      cardActionKindCancelCommandCapture,
-		cardActionPayloadKeyCommandID: strings.TrimSpace(commandID),
 	}
 }
 

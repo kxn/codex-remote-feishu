@@ -6,7 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestProjectWorkspaceSelectionViewAddsCreateWorkspaceEntry(t *testing.T) {
+func TestProjectWorkspaceSelectionViewDoesNotAddLegacyCreateWorkspaceEntry(t *testing.T) {
 	projector := NewProjector()
 	view := control.FeishuSelectionView{
 		PromptKind: control.SelectionPromptAttachWorkspace,
@@ -38,7 +38,6 @@ func TestProjectWorkspaceSelectionViewAddsCreateWorkspaceEntry(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	var found bool
 	for _, element := range ops[0].CardElements {
 		tag, _ := element["tag"].(string)
 		if tag != "button" && tag != "column_set" && tag != "action" {
@@ -48,14 +47,7 @@ func TestProjectWorkspaceSelectionViewAddsCreateWorkspaceEntry(t *testing.T) {
 			if cardButtonLabel(t, button) != "新建 · 添加工作区" {
 				continue
 			}
-			payload := cardButtonPayload(t, button)
-			if payload["kind"] != "create_workspace" {
-				t.Fatalf("unexpected create-workspace payload: %#v", payload)
-			}
-			found = true
+			t.Fatalf("expected projected workspace selection view to omit legacy create-workspace button, got %#v", button)
 		}
-	}
-	if !found {
-		t.Fatalf("expected projected workspace selection view to include create-workspace button, got %#v", ops[0].CardElements)
 	}
 }

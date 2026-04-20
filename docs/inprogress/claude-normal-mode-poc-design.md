@@ -229,7 +229,7 @@
   - `SelectedThreadID = ""`
   - `AttachedInstanceID = ""`
   - `PendingRequests = nil`
-  - `ActiveRequestCapture/ActiveCommandCapture = nil`
+  - `ActiveRequestCapture = nil`
   - `QueueItems` 清空
   - `RouteMode` 回到“仅保留 workspace、未选会话”的初始 normal 态
 - 若切到 `claude`：

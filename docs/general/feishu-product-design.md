@@ -1,7 +1,7 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-20`
+> Updated: `2026-04-21`
 > Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 command-page 入口、reply auto-steer、manual `/compact`、`/cron` 与共享过程卡的产品语义。
 
 ## 1. 文档定位
@@ -234,12 +234,6 @@ ACK 语义上，message recalled 现在同样会进入和普通文本共用的 p
 
 其中参数表单当前统一走 `submit_command_form` 回调，把卡片内输入的参数尾巴拼回 canonical slash command，再复用文本命令解析链路。
 
-旧的 `start_command_capture` / `cancel_command_capture` 只保留 `/model` 历史卡片兼容职责：
-
-- 旧“开始输入模型名”卡片点下去时，不再创建新的 capture 状态
-- 服务端会直接重新打开新的 `/model` 表单卡
-- 若 daemon 热更新前已经进入旧 capture 等待态，下一条文本会被直接转换成 `/model <输入>` 立即应用，避免用户卡死
-
 approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 - `accept`
@@ -340,7 +334,6 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 无论哪种 mode：
 
-- 旧 `prompt_select` 兼容动作统一回 `selection_expired`
 - 普通数字文本不会再被解释成实例或工作区选择
 
 ### 4.3 `use-thread(thread)`
@@ -390,8 +383,6 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - vscode mode detached 时：直接拒绝，并提示用户先 `/list`
 - vscode mode 已 attach instance 时：只允许当前 instance 已知 thread；跨 instance / persisted global thread 会直接拒绝，并提示先 `/list` 切实例
 - 当前没有合适在线实例但会话带有可恢复 `cwd`：只有 normal mode detached/global `/use` 仍会自动复用现有恢复链路，或在后台准备恢复
-
-如果用户点到旧卡片上的 legacy `prompt_select`，会统一收到 `selection_expired` 提示，要求重新发送 `/list`、`/use` 或 `/useall`。
 
 ### 4.4 `follow`
 
@@ -652,9 +643,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - `kick_thread_confirm`
 - `kick_thread_cancel`
 
-旧 `resume_headless_thread` 只保留为历史兼容入口，统一回迁移提示。
 旧 `/killinstance` 只保留为历史兼容入口，统一提示改用 `/detach`。
-旧 `prompt_select` 只保留为兼容入口，统一回 `selection_expired`。
 
 ### 7.1.1 Approval Request 卡片
 

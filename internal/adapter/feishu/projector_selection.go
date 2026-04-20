@@ -224,8 +224,6 @@ func selectionOptionButton(prompt control.FeishuDirectSelectionPrompt, option co
 	text := selectionOptionButtonText(prompt, option)
 	value := map[string]any{}
 	switch strings.TrimSpace(option.ActionKind) {
-	case cardActionKindCreateWorkspace:
-		value = actionPayloadCreateWorkspace()
 	case cardActionKindShowScopedThreads:
 		value = actionPayloadThreadNavigation(cardActionKindShowScopedThreads, prompt.ViewMode, prompt.Page)
 	case cardActionKindShowAllWorkspaces:
@@ -371,9 +369,6 @@ func selectionOptionButtonText(prompt control.FeishuDirectSelectionPrompt, optio
 	}
 	if prompt.Kind == control.SelectionPromptAttachWorkspace {
 		summary := firstNonEmpty(strings.TrimSpace(option.Label), text, "工作区")
-		if strings.TrimSpace(option.ActionKind) == cardActionKindCreateWorkspace {
-			return "新建 · " + summary
-		}
 		if strings.TrimSpace(option.ActionKind) == cardActionKindShowWorkspaceThreads {
 			switch {
 			case option.IsCurrent:

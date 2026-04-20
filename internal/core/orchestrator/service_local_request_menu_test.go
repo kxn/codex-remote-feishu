@@ -383,7 +383,4 @@ func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 	if manual.Form == nil || manual.Form.CommandText != "/model" {
 		t.Fatalf("expected manual model form, got %#v", manual)
 	}
-	if svc.root.Surfaces["surface-1"].ActiveCommandCapture != nil {
-		t.Fatalf("expected model catalog not to create command capture state")
-	}
 }

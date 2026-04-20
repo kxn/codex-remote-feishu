@@ -194,8 +194,6 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "设置下一条消息执行权限", "/access"
 	case control.ActionRespondRequest:
 		return "响应授权请求", ""
-	case control.ActionSelectPrompt:
-		return "选择提示卡动作", ""
 	case control.ActionAttachInstance:
 		return "接管实例", "/list"
 	case control.ActionUseThread:

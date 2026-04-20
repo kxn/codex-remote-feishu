@@ -66,16 +66,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			WorkspaceKey:     workspaceKey,
 			Inbound:          meta,
 		}, true
-	case cardActionKindCreateWorkspace:
-		return control.Action{
-			Kind:             control.ActionCreateWorkspace,
-			GatewayID:        g.config.GatewayID,
-			SurfaceSessionID: surfaceSessionID,
-			ChatID:           chatID,
-			ActorUserID:      operatorID,
-			MessageID:        messageID,
-			Inbound:          meta,
-		}, true
 	case cardActionKindUseThread:
 		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
 		if threadID == "" {
@@ -189,17 +179,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			Page:             intMapValue(value, cardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
-	case cardActionKindResumeHeadlessThread:
-		return control.Action{
-			Kind:             control.ActionRemovedCommand,
-			GatewayID:        g.config.GatewayID,
-			SurfaceSessionID: surfaceSessionID,
-			ChatID:           chatID,
-			ActorUserID:      operatorID,
-			MessageID:        messageID,
-			Text:             "resume_headless_thread",
-			Inbound:          meta,
-		}, true
 	case cardActionKindKickThreadConfirm:
 		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
 		if threadID == "" {
@@ -223,23 +202,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			Inbound:          meta,
-		}, true
-	case cardActionKindPromptSelect:
-		promptID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPromptID))
-		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
-		if promptID == "" || optionID == "" {
-			return control.Action{}, false
-		}
-		return control.Action{
-			Kind:             control.ActionSelectPrompt,
-			GatewayID:        g.config.GatewayID,
-			SurfaceSessionID: surfaceSessionID,
-			ChatID:           chatID,
-			ActorUserID:      operatorID,
-			MessageID:        messageID,
-			PromptID:         promptID,
-			OptionID:         optionID,
 			Inbound:          meta,
 		}, true
 	case cardActionKindRequestRespond:
@@ -321,36 +283,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			MessageID:        messageID,
 			PickerID:         flowID,
 			OptionID:         optionID,
-			Inbound:          meta,
-		}, true
-	case cardActionKindStartCommandCapture:
-		commandID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandID))
-		if commandID == "" {
-			return control.Action{}, false
-		}
-		return control.Action{
-			Kind:             control.ActionStartCommandCapture,
-			GatewayID:        g.config.GatewayID,
-			SurfaceSessionID: surfaceSessionID,
-			ChatID:           chatID,
-			ActorUserID:      operatorID,
-			MessageID:        messageID,
-			CommandID:        commandID,
-			Inbound:          meta,
-		}, true
-	case cardActionKindCancelCommandCapture:
-		commandID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandID))
-		if commandID == "" {
-			return control.Action{}, false
-		}
-		return control.Action{
-			Kind:             control.ActionCancelCommandCapture,
-			GatewayID:        g.config.GatewayID,
-			SurfaceSessionID: surfaceSessionID,
-			ChatID:           chatID,
-			ActorUserID:      operatorID,
-			MessageID:        messageID,
-			CommandID:        commandID,
 			Inbound:          meta,
 		}, true
 	case cardActionKindSubmitCommandForm:

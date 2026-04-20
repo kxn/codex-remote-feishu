@@ -9,41 +9,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestLegacyCapturedModelInputAppliesDirectly(t *testing.T) {
-	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	surface := svc.root.Surfaces["surface-1"]
-	surface.AttachedInstanceID = "inst-1"
-	surface.ActiveCommandCapture = &state.CommandCaptureRecord{
-		CommandID: control.FeishuCommandModel,
-		CreatedAt: now,
-		ExpiresAt: now.Add(10 * time.Minute),
-	}
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-1",
-		WorkspaceRoot: "/data/dl/droid",
-		WorkspaceKey:  "/data/dl/droid",
-		Online:        true,
-		Threads:       map[string]*state.ThreadRecord{},
-	})
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-1",
-		Text:             "gpt-5.4 high",
-	})
-	if len(events) != 1 || events[0].Notice == nil {
-		t.Fatalf("expected direct model apply notice, got %#v", events)
-	}
-	if surface.ActiveCommandCapture != nil {
-		t.Fatalf("expected legacy command capture to be cleared after text input")
-	}
-	if surface.PromptOverride.Model != "gpt-5.4" || surface.PromptOverride.ReasoningEffort != "high" {
-		t.Fatalf("expected captured text to apply model override, got %#v", surface.PromptOverride)
-	}
-}
-
 func TestConfirmKickThreadActionRequiresThreadID(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

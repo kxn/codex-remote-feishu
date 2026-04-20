@@ -10,11 +10,10 @@ import (
 )
 
 const (
-	defaultTargetPickerTTL           = 10 * time.Minute
-	targetPickerCreateWorkspaceValue = "__create_workspace__"
-	targetPickerNewThreadValue       = "new_thread"
-	targetPickerThreadPrefix         = "thread:"
-	targetPickerAutoSession          = "__auto__"
+	defaultTargetPickerTTL     = 10 * time.Minute
+	targetPickerNewThreadValue = "new_thread"
+	targetPickerThreadPrefix   = "thread:"
+	targetPickerAutoSession    = "__auto__"
 )
 
 func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, preferredWorkspaceKey, sourceMessageID string, inline bool) []control.UIEvent {

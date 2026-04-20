@@ -203,7 +203,6 @@ type SurfaceConsoleRecord struct {
 	PendingHeadless      *HeadlessLaunchRecord
 	PendingRequests      map[string]*RequestPromptRecord
 	ActiveRequestCapture *RequestCaptureRecord
-	ActiveCommandCapture *CommandCaptureRecord
 	ActiveExecProgress   *ExecCommandProgressRecord
 	RecentFinalCards     []*FinalCardRecord
 	LastThreadHistory    *agentproto.ThreadHistoryRecord
@@ -422,12 +421,6 @@ type RequestCaptureRecord struct {
 	Mode        string
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
-}
-
-type CommandCaptureRecord struct {
-	CommandID string
-	CreatedAt time.Time
-	ExpiresAt time.Time
 }
 
 type QueueItemRecord struct {

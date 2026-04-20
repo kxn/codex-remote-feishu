@@ -219,7 +219,6 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 	svc.pickers = newServicePickerRuntime(svc)
 	svc.catalog = newServiceCatalogRuntime(svc)
 	svc.progress = newServiceProgressRuntime(svc)
-	svc.RegisterPathPickerConsumer(workspaceCreatePathPickerConsumerKind, workspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(targetPickerWorkspaceCreatePathPickerConsumerKind, targetPickerWorkspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(targetPickerAddWorkspacePathPickerConsumerKind, targetPickerAddWorkspacePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(sendFilePathPickerConsumerKind, sendFilePathPickerConsumer{})
@@ -343,13 +342,6 @@ func (s *Service) SetPersistedThreadCatalog(catalog PersistedThreadCatalog) {
 func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	surface := s.ensureSurface(action)
 	s.pruneExpiredPathPicker(surface)
-	if surface.ActiveCommandCapture != nil {
-		switch action.Kind {
-		case control.ActionTextMessage, control.ActionStartCommandCapture, control.ActionCancelCommandCapture:
-		default:
-			clearSurfaceCommandCapture(surface)
-		}
-	}
 	if surface.Abandoning {
 		switch action.Kind {
 		case control.ActionStatus:
@@ -399,8 +391,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		events = s.attachInstance(surface, action.InstanceID)
 	case control.ActionAttachWorkspace:
 		events = s.attachWorkspace(surface, action.WorkspaceKey)
-	case control.ActionCreateWorkspace:
-		events = s.openCreateWorkspacePicker(surface)
 	case control.ActionTargetPickerConfirm:
 		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue, action.RequestAnswers)
 	case control.ActionShowCommandHelp:
@@ -481,10 +471,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 				OptionID:         action.OptionID,
 			},
 		}}
-	case control.ActionStartCommandCapture:
-		events = s.startCommandCapture(surface, action)
-	case control.ActionCancelCommandCapture:
-		events = s.cancelCommandCapture(surface, action)
 	case control.ActionModelCommand:
 		events = s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:
@@ -533,8 +519,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		events = s.handleReactionCreated(surface, action)
 	case control.ActionMessageRecalled:
 		events = s.handleMessageRecalled(surface, action.TargetMessageID)
-	case control.ActionSelectPrompt:
-		events = notice(surface, "selection_expired", "这个旧卡片已失效，请重新发送 /list、/use 或 /useall。")
 	case control.ActionStop:
 		events = s.stopSurface(surface)
 	case control.ActionStatus:
@@ -899,17 +883,6 @@ func (s *Service) Tick(now time.Time) []control.UIEvent {
 				Notice: &control.Notice{
 					Code: "request_capture_expired",
 					Text: "上一条确认反馈已过期，请重新点击卡片按钮后再发送处理意见。",
-				},
-			})
-		}
-		if commandCaptureExpired(now, surface.ActiveCommandCapture) {
-			clearSurfaceCommandCapture(surface)
-			events = append(events, control.UIEvent{
-				Kind:             control.UIEventNotice,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				Notice: &control.Notice{
-					Code: "command_capture_expired",
-					Text: "上一条命令输入已过期，请重新打开 `/model` 卡片后再提交。",
 				},
 			})
 		}
