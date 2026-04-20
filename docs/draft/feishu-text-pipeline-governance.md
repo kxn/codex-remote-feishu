@@ -48,11 +48,11 @@ final reply 额外多了一层：
 
 关键文件：
 
-- [app_ui.go](/data/dl/fschannel4/internal/app/daemon/app_ui.go)
-- [projector.go](/data/dl/fschannel4/internal/adapter/feishu/projector.go)
-- [markdown_preview_rewrite.go](/data/dl/fschannel4/internal/adapter/feishu/markdown_preview_rewrite.go)
-- [final_card_markdown.go](/data/dl/fschannel4/internal/adapter/feishu/final_card_markdown.go)
-- [card_renderer.go](/data/dl/fschannel4/internal/adapter/feishu/card_renderer.go)
+- [internal/app/daemon/app_ui.go](../../internal/app/daemon/app_ui.go)
+- [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
+- [internal/adapter/feishu/markdown_preview_rewrite.go](../../internal/adapter/feishu/markdown_preview_rewrite.go)
+- [internal/adapter/feishu/final_card_markdown.go](../../internal/adapter/feishu/final_card_markdown.go)
+- [internal/adapter/feishu/card_renderer.go](../../internal/adapter/feishu/card_renderer.go)
 
 ## 3. 文本生产点分类
 
@@ -133,7 +133,7 @@ final reply 额外多了一层：
 
 典型 helper：
 
-- [projector_inline_tags.go](/data/dl/fschannel4/internal/adapter/feishu/projector_inline_tags.go)
+- [internal/adapter/feishu/projector_inline_tags.go](../../internal/adapter/feishu/projector_inline_tags.go)
 
 它本质上不是纯 markdown，而是“Feishu markdown 方言”。
 
