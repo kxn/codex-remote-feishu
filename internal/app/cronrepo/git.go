@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/gitworkspace"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 type ErrorCode string
@@ -67,7 +68,7 @@ func ensureGitBinary() error {
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	gitworkspace.PrepareCommand(cmd)
 	cmd.Stdout = &stdout

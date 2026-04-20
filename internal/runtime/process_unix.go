@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 func processAlive(pid int) bool {
@@ -102,5 +104,12 @@ func processSignalDone(err error) bool {
 }
 
 func prepareDetachedProcess(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if cmd == nil {
+		return
+	}
+	execlaunch.Prepare(cmd)
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid = true
 }

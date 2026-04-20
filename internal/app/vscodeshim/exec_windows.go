@@ -4,11 +4,12 @@ package vscodeshim
 
 import (
 	"os"
-	"os/exec"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 func execBinary(binaryPath string, args []string, env []string) error {
-	cmd := exec.Command(binaryPath, args...)
+	cmd := execlaunch.Command(binaryPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

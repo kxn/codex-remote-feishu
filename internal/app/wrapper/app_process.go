@@ -12,11 +12,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
-type childLaunchOptions struct {
-	HideWindow     bool
-	CreateNoWindow bool
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -53,20 +48,6 @@ func startChild(cmd *exec.Cmd) (io.WriteCloser, io.ReadCloser, io.ReadCloser, er
 		return nil, nil, nil, err
 	}
 	return stdin, stdout, stderr, nil
-}
-
-func configureCodexChildProcess(cmd *exec.Cmd, cfg Config) {
-	applyChildLaunchOptions(cmd, codexChildLaunchOptions(cfg))
-}
-
-func codexChildLaunchOptions(cfg Config) childLaunchOptions {
-	if !cfg.Managed || !strings.EqualFold(strings.TrimSpace(cfg.Source), "headless") {
-		return childLaunchOptions{}
-	}
-	return childLaunchOptions{
-		HideWindow:     true,
-		CreateNoWindow: true,
-	}
 }
 
 func childEnvWithProxy(proxyEnv, args []string) []string {

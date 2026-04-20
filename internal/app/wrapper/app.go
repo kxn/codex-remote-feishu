@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -204,13 +205,12 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	defer childCancel()
 
 	childArgs, childEnv := a.buildCodexChildLaunch(a.config.Args)
-	cmd := exec.CommandContext(childCtx, a.config.CodexRealBinary, childArgs...)
+	cmd := execlaunch.CommandContext(childCtx, a.config.CodexRealBinary, childArgs...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Dir = a.config.WorkspaceRoot
 	cmd.Env = childEnv
-	configureCodexChildProcess(cmd, a.config)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
 	if err != nil {

@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 type GitClient interface {
@@ -108,7 +109,7 @@ func (g *gitCLI) GofmtList(ctx context.Context, files []string) ([]string, error
 		return nil, nil
 	}
 	args := append([]string{"-l"}, files...)
-	cmd := exec.CommandContext(ctx, "gofmt", args...)
+	cmd := execlaunch.CommandContext(ctx, "gofmt", args...)
 	cmd.Dir = g.rootDir
 	output, err := cmd.Output()
 	if err != nil {
@@ -118,7 +119,7 @@ func (g *gitCLI) GofmtList(ctx context.Context, files []string) ([]string, error
 }
 
 func (g *gitCLI) run(ctx context.Context, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.rootDir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

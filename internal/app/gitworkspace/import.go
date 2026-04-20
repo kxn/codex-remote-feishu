@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 type ImportErrorCode string
@@ -165,7 +167,7 @@ func Import(ctx context.Context, req ImportRequest) (ImportResult, error) {
 	}
 	args = append(args, "--", repoURL, destinationPath)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = parentDir
 	PrepareCommand(cmd)
 

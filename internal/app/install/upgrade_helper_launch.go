@@ -3,12 +3,12 @@ package install
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -112,7 +112,7 @@ func startSystemdUserTransientCommand(ctx context.Context, opts systemdUserTrans
 	args = append(args, filepath.Clean(opts.BinaryPath))
 	args = append(args, opts.Args...)
 
-	cmd := exec.CommandContext(ctx, "systemd-run", args...)
+	cmd := execlaunch.CommandContext(ctx, "systemd-run", args...)
 	output, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(output))
 	if err != nil {

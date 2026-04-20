@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 const fetchIssueQuery = `
@@ -186,7 +187,7 @@ func (g *ghCLI) Close(ctx context.Context, repo Repo, number int) error {
 }
 
 func (g *ghCLI) run(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd := execlaunch.CommandContext(ctx, "gh", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(output))

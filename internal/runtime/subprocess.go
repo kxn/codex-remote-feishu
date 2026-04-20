@@ -2,9 +2,10 @@ package relayruntime
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 type DetachedCommandOptions struct {
@@ -39,7 +40,7 @@ func StartDetachedCommand(opts DetachedCommandOptions) (int, error) {
 		return 0, os.ErrNotExist
 	}
 	binaryPath = filepath.Clean(binaryPath)
-	cmd := exec.Command(binaryPath, opts.Args...)
+	cmd := execlaunch.Command(binaryPath, opts.Args...)
 	cmd.Stdin = devNull
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

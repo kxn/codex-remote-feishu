@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess/cloudflaredembed"
 )
 
@@ -72,7 +73,7 @@ func NewTryCloudflareProvider(opts TryCloudflareOptions) *TryCloudflareProvider 
 	}
 	factory := opts.CommandFactory
 	if factory == nil {
-		factory = exec.CommandContext
+		factory = execlaunch.CommandContext
 	}
 	waitReadyFn := opts.WaitReady
 	if waitReadyFn == nil {
@@ -197,12 +198,11 @@ func (p *TryCloudflareProvider) startPublicBase(ctx context.Context, localListen
 		"--metrics", metricsAddr,
 	}
 	procCtx, procCancel := context.WithCancel(context.Background())
-	cmd := p.commandFactory(procCtx, binaryPath, args...)
+	cmd := execlaunch.Prepare(p.commandFactory(procCtx, binaryPath, args...))
 	cmd.Env = append(os.Environ(),
 		"HOME="+configDir,
 		"XDG_CONFIG_HOME="+configDir,
 	)
-	configureTryCloudflareLaunch(cmd)
 	var logWriter io.WriteCloser = ioDiscardCloser{}
 	if p.logPath != "" {
 		if err := os.MkdirAll(filepath.Dir(p.logPath), 0o755); err == nil {

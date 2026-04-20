@@ -336,6 +336,12 @@ When corresponding logic carriers changed:
   - `relay-wrapper` itself should run without proxy for local relay communication
   - when launching `codex.real`, restore captured proxy env for child process
 
+## External Command Launch Policy
+
+- Production Go code must not call `exec.Command` or `exec.CommandContext` directly.
+- Use `internal/execlaunch` for new external process creation so Windows no-console defaults stay centralized.
+- If a caller needs extra `SysProcAttr`, detached, or process-group behavior, layer it on top of `execlaunch.Prepare(cmd)` instead of replacing the shared defaults.
+
 ## Debugging / Ownership Guardrails
 
 - Stateful bugs are evidence-first: collect full-path runtime evidence before patching.

@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 const listClosedIssuesQuery = `
@@ -264,7 +265,7 @@ func (c *ghCLI) FetchIssueDetails(ctx context.Context, repo Repo, number int) (I
 type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd := execlaunch.CommandContext(ctx, "gh", args...)
 	payload, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("gh %v: %w\n%s", args, err, string(payload))

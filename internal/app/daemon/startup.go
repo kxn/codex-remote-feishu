@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 var errBrowserUnavailable = errors.New("browser opener unavailable")
@@ -222,7 +223,7 @@ func defaultBrowserOpener(url string, env map[string]string) error {
 	if len(command) == 0 {
 		return errBrowserUnavailable
 	}
-	cmd := exec.Command(command[0], append(command[1:], url)...)
+	cmd := execlaunch.Command(command[0], append(command[1:], url)...)
 	return cmd.Start()
 }
 

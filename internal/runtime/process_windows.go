@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"golang.org/x/sys/windows"
 )
 
@@ -133,10 +134,15 @@ func terminateProcess(pid int, grace time.Duration) error {
 }
 
 func prepareDetachedProcess(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS | windows.CREATE_NO_WINDOW,
-		HideWindow:    true,
+	if cmd == nil {
+		return
 	}
+	execlaunch.Prepare(cmd)
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.HideWindow = true
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS
 }
 
 func waitTimeoutMillis(grace time.Duration) uint32 {

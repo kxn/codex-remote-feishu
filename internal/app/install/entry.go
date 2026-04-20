@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 var executablePath = os.Executable
@@ -246,7 +247,7 @@ func validateSourceBinary(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "version")
+	cmd := execlaunch.CommandContext(ctx, path, "version")
 	output, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(output))
 	if err != nil {

@@ -3,12 +3,12 @@ package feishu
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 const maxEmbeddedWorktreePaths = 3
@@ -71,7 +71,7 @@ func inspectGitWorktreeSummary(cwd string) *gitWorktreeSummary {
 func runGitInspector(cwd string, args ...string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = cwd
 	output, err := cmd.CombinedOutput()
 	if err != nil {

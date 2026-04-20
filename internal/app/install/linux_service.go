@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
@@ -40,7 +40,7 @@ type systemdUserUnitState struct {
 
 func runSystemctlUser(ctx context.Context, args ...string) (string, error) {
 	commandArgs := append([]string{"--user"}, args...)
-	cmd := exec.CommandContext(ctx, "systemctl", commandArgs...)
+	cmd := execlaunch.CommandContext(ctx, "systemctl", commandArgs...)
 	output, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(output))
 	if err != nil {

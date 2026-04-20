@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
@@ -314,7 +315,7 @@ func lookupUserShellEnvValueReal(env []string, key string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexShellLookupTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, shellPath, shellLookupArgs(shellType, key)...)
+	cmd := execlaunch.CommandContext(ctx, shellPath, shellLookupArgs(shellType, key)...)
 	cmd.Env = ensureHomeEnv(append([]string{}, env...))
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {

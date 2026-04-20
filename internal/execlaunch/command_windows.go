@@ -1,6 +1,6 @@
 //go:build windows
 
-package externalaccess
+package execlaunch
 
 import (
 	"os/exec"
@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func configureTryCloudflareLaunch(cmd *exec.Cmd) {
+func preparePlatform(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
 	}
