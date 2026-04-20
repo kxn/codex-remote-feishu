@@ -79,6 +79,42 @@ func assertNoLegacyCardModelMarkersAny(t *testing.T, value any) {
 	}
 }
 
+func assertNoDuplicateNamedCardElements(t *testing.T, value any) {
+	t.Helper()
+	seen := map[string]string{}
+	assertNoDuplicateNamedCardElementsAny(t, value, seen)
+}
+
+func assertNoDuplicateNamedCardElementsAny(t *testing.T, value any, seen map[string]string) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		name, _ := typed["name"].(string)
+		tag, _ := typed["tag"].(string)
+		if name != "" {
+			current := tag
+			if current == "" {
+				current = "unknown"
+			}
+			if previous, ok := seen[name]; ok {
+				t.Fatalf("duplicate card element name %q: seen on %s and %s: %#v", name, previous, current, typed)
+			}
+			seen[name] = current
+		}
+		for _, child := range typed {
+			assertNoDuplicateNamedCardElementsAny(t, child, seen)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			assertNoDuplicateNamedCardElementsAny(t, child, seen)
+		}
+	case []any:
+		for _, child := range typed {
+			assertNoDuplicateNamedCardElementsAny(t, child, seen)
+		}
+	}
+}
+
 func cardButtonLabel(t *testing.T, button map[string]any) string {
 	t.Helper()
 	textValue, _ := button["text"].(map[string]any)

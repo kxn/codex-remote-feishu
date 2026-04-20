@@ -53,6 +53,7 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 		t.Fatalf("expected model card to keep section headings, got %#v", ops[0].CardElements)
 	}
 	renderedElements := renderedV2BodyElements(t, ops[0])
+	assertNoDuplicateNamedCardElements(t, renderedElements)
 	selectFormFound := false
 	textFormFound := false
 	relatedFound := false

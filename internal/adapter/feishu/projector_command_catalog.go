@@ -65,20 +65,40 @@ func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleI
 		cardActionPayloadKeyCommandLegacy: strings.TrimSpace(form.CommandText),
 		cardActionPayloadKeyFieldName:     strings.TrimSpace(field.Name),
 	}, daemonLifecycleID)
-	formName := strings.TrimSpace(form.CommandID)
-	if formName == "" {
-		formName = "command_form"
-	} else {
-		formName = "command_form_" + formName
+	formName := commandCatalogFormName(form)
+	submitButton := cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue)
+	if len(submitButton) != 0 {
+		submitButton["name"] = commandCatalogSubmitButtonName(formName)
 	}
 	return map[string]any{
 		"tag":  "form",
 		"name": formName,
 		"elements": []map[string]any{
 			commandCatalogFormFieldElement(field),
-			cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue),
+			submitButton,
 		},
 	}
+}
+
+func commandCatalogFormName(form control.CommandCatalogForm) string {
+	formName := strings.TrimSpace(form.CommandID)
+	if formName == "" {
+		formName = "command_form"
+	} else {
+		formName = "command_form_" + formName
+	}
+	if fieldName := strings.TrimSpace(form.Field.Name); fieldName != "" {
+		formName += "_" + fieldName
+	}
+	return formName
+}
+
+func commandCatalogSubmitButtonName(formName string) string {
+	formName = strings.TrimSpace(formName)
+	if formName == "" {
+		return "submit"
+	}
+	return "submit_" + formName
 }
 
 func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[string]any {

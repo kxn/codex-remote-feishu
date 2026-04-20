@@ -10,6 +10,8 @@ var commonFeishuModelValues = []string{
 	"gpt-5.2-codex",
 }
 
+const modelPresetCommandFieldName = "command_args_model_preset"
+
 func BuildFeishuCommandConfigCatalog(view FeishuCommandConfigView) FeishuDirectCommandCatalog {
 	switch strings.TrimSpace(view.CommandID) {
 	case FeishuCommandMode:
@@ -179,7 +181,7 @@ func modelPresetForm(view FeishuCommandConfigView) *CommandCatalogForm {
 		CommandText: "/model",
 		SubmitLabel: "应用",
 		Field: CommandCatalogFormField{
-			Name:         "command_args",
+			Name:         modelPresetCommandFieldName,
 			Kind:         CommandCatalogFormFieldSelectStatic,
 			Label:        "从下拉里选择常见模型。",
 			Placeholder:  "选择模型",
