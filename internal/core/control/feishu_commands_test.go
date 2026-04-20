@@ -159,8 +159,8 @@ func TestParseFeishuTextActionRecognizesVSCodeMigrateCommand(t *testing.T) {
 	if !ok {
 		t.Fatal("expected /vscode-migrate to be parsed")
 	}
-	if action.Kind != ActionVSCodeMigrate {
-		t.Fatalf("action kind = %q, want %q", action.Kind, ActionVSCodeMigrate)
+	if action.Kind != ActionVSCodeMigrateCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionVSCodeMigrateCommand)
 	}
 }
 

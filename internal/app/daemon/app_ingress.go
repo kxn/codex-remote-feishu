@@ -275,7 +275,11 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		now := time.Now().UTC()
 		a.invalidateVSCodeCompatibilityCacheLocked()
 		forceSyncPrompt := action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""
-		promptEvents, blocked := a.promptVSCodeCompatibilityAtLocked(action.SurfaceSessionID, now, forceSyncPrompt)
+		inlineSourceMessageID := ""
+		if forceSyncPrompt {
+			inlineSourceMessageID = action.MessageID
+		}
+		promptEvents, blocked := a.promptVSCodeCompatibilityAtLocked(action.SurfaceSessionID, now, forceSyncPrompt, inlineSourceMessageID)
 		if replace, rest := a.firstProjectableCardReplacementLocked(action, promptEvents); replace != nil {
 			inlineResult = replace
 			promptEvents = rest
@@ -388,6 +392,10 @@ func daemonCommandMatchesCommandCardResultReplacement(action control.Action, com
 		return command.Kind == control.DaemonCommandDebug
 	case control.ActionCronCommand:
 		return command.Kind == control.DaemonCommandCron
+	case control.ActionVSCodeMigrateCommand:
+		return command.Kind == control.DaemonCommandVSCodeMigrateCommand
+	case control.ActionVSCodeMigrate:
+		return command.Kind == control.DaemonCommandVSCodeMigrate
 	default:
 		return false
 	}
@@ -467,8 +475,6 @@ func daemonCommandMatchesBareContinuation(action control.Action, command control
 		return command.Kind == control.DaemonCommandDebug
 	case control.ActionCronCommand:
 		return command.Kind == control.DaemonCommandCron
-	case control.ActionVSCodeMigrate:
-		return command.Kind == control.DaemonCommandVSCodeMigrate
 	default:
 		return false
 	}
@@ -484,7 +490,6 @@ func (a *App) projectFirstCardAsReplacementLocked(action control.Action, event c
 	if strings.TrimSpace(event.SurfaceSessionID) == "" {
 		event.SurfaceSessionID = action.SurfaceSessionID
 	}
-	event = a.rewriteVSCodeGuidanceEventLocked(event, action.MessageID, true)
 	event.DaemonLifecycleID = a.daemonLifecycleID
 	ops := a.projector.Project(a.service.SurfaceChatID(event.SurfaceSessionID), event)
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard {

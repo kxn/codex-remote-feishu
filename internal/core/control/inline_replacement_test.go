@@ -306,6 +306,23 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "bare vscode migrate root page can replace stamped command card",
+			action: Action{
+				Kind:    ActionVSCodeMigrateCommand,
+				Text:    "/vscode-migrate",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "vscode migrate owner flow result can replace stamped command card",
+			action: Action{
+				Kind:    ActionVSCodeMigrate,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -366,15 +383,6 @@ func TestAllowsBareCommandContinuation(t *testing.T) {
 				Text: "/cron",
 			},
 			want: false,
-		},
-		{
-			name: "vscode migrate continues in place from stamped card callback",
-			action: Action{
-				Kind:    ActionVSCodeMigrate,
-				Text:    "/vscode-migrate",
-				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
-			},
-			want: true,
 		},
 	}
 

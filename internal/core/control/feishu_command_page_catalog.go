@@ -23,6 +23,10 @@ func BuildFeishuCommandPageCatalog(view FeishuCommandPageView) FeishuDirectComma
 	}
 	return FeishuDirectCommandCatalog{
 		Title:           title,
+		MessageID:       strings.TrimSpace(view.MessageID),
+		TrackingKey:     strings.TrimSpace(view.TrackingKey),
+		ThemeKey:        strings.TrimSpace(view.ThemeKey),
+		Patchable:       view.Patchable,
 		SummarySections: BuildFeishuCommandPageSummarySections(view),
 		Interactive:     view.Interactive,
 		DisplayStyle:    displayStyle,

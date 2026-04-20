@@ -12,7 +12,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const vscodeMigrateCommandText = "/vscode-migrate"
 const vscodeCompatibilityRetryBackoff = 30 * time.Second
 
 type vscodeCompatibilityIssue struct {
@@ -69,27 +68,6 @@ func vscodeHasMigrationTarget(detect vscodeDetectResponse) bool {
 	return strings.TrimSpace(detect.LatestBundleEntrypoint) != "" || strings.TrimSpace(detect.RecordedBundleEntrypoint) != ""
 }
 
-func vscodeMigrationCatalog(issue vscodeCompatibilityIssue) control.FeishuDirectCommandCatalog {
-	entry := control.CommandCatalogEntry{
-		Description: strings.TrimSpace(issue.ActionText),
-	}
-	interactive := strings.TrimSpace(issue.ButtonLabel) != ""
-	if interactive {
-		entry.Buttons = []control.CommandCatalogButton{{
-			Label:       issue.ButtonLabel,
-			CommandText: vscodeMigrateCommandText,
-		}}
-	}
-	return control.FeishuDirectCommandCatalog{
-		Title:           issue.Title,
-		SummarySections: commandCatalogSummarySections(issue.Summary),
-		Interactive:     interactive,
-		Sections: []control.CommandCatalogSection{{
-			Entries: []control.CommandCatalogEntry{entry},
-		}},
-	}
-}
-
 func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, error) {
 	detect, err := a.detectVSCodeCompatibility()
 	if err != nil {
@@ -98,24 +76,28 @@ func (a *App) currentVSCodeCompatibilityIssue() (*vscodeCompatibilityIssue, erro
 	return classifyVSCodeCompatibilityIssue(detect), nil
 }
 
+func (a *App) surfaceRunsVSCodeModeLocked(surfaceID string) bool {
+	snapshot := a.service.SurfaceSnapshot(strings.TrimSpace(surfaceID))
+	if snapshot == nil {
+		return false
+	}
+	return state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) == state.ProductModeVSCode
+}
+
 func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]control.UIEvent, bool) {
-	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC(), false)
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC(), false, "")
 }
 
 func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time) ([]control.UIEvent, bool) {
-	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, now, false)
+	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, now, false, "")
 }
 
-func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time, forceSync bool) ([]control.UIEvent, bool) {
+func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time, forceSync bool, inlineSourceMessageID string) ([]control.UIEvent, bool) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	a.syncVSCodeMigrationPromptStateLocked()
 	targets := a.detachedVSCodeCompatibilityTargetsLocked(surfaceFilter)
 	if len(targets) == 0 {
-		if surfaceFilter != "" {
-			delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, strings.TrimSpace(surfaceFilter))
-		}
 		return nil, false
 	}
 	issue, pending := a.cachedVSCodeCompatibilityIssueLocked(now)
@@ -126,23 +108,38 @@ func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.T
 		return nil, true
 	}
 	if issue == nil {
-		a.clearVSCodeMigrationPromptsLocked()
+		for _, target := range targets {
+			if flow := a.activeVSCodeMigrationFlowLocked(target.SurfaceSessionID); flow != nil {
+				a.refreshVSCodeMigrationFlowLocked(flow, "")
+			}
+		}
 		return nil, false
 	}
 
 	events := []control.UIEvent{}
 	for _, target := range targets {
-		if a.surfaceResumeRuntime.vscodeMigrationPrompts[target.SurfaceSessionID] == issue.Key {
+		inlineReplace := strings.TrimSpace(surfaceFilter) != "" &&
+			strings.TrimSpace(target.SurfaceSessionID) == strings.TrimSpace(surfaceFilter) &&
+			strings.TrimSpace(inlineSourceMessageID) != ""
+		flow := a.activeVSCodeMigrationFlowLocked(target.SurfaceSessionID)
+		if flow != nil && strings.TrimSpace(flow.IssueKey) == strings.TrimSpace(issue.Key) {
 			continue
 		}
-		a.surfaceResumeRuntime.vscodeMigrationPrompts[target.SurfaceSessionID] = issue.Key
-		catalog := vscodeMigrationCatalog(*issue)
-		events = append(events, control.UIEvent{
-			Kind:                       control.UIEventFeishuDirectCommandCatalog,
-			GatewayID:                  target.GatewayID,
-			SurfaceSessionID:           target.SurfaceSessionID,
-			FeishuDirectCommandCatalog: &catalog,
-		})
+		if flow == nil {
+			messageID := ""
+			if inlineReplace {
+				messageID = inlineSourceMessageID
+			}
+			flow = a.newVSCodeMigrationFlowLocked(target.SurfaceSessionID, a.service.SurfaceActorUserID(target.SurfaceSessionID), messageID, issue.Key)
+		} else {
+			if inlineReplace {
+				flow.MessageID = strings.TrimSpace(inlineSourceMessageID)
+			}
+			a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
+		}
+		event := vscodeMigrationPromptEvent(target.SurfaceSessionID, flow, inlineReplace, *issue)
+		event.GatewayID = target.GatewayID
+		events = append(events, event)
 	}
 	return events, true
 }
@@ -177,24 +174,6 @@ func (a *App) resolveVSCodeCompatibilityIssueSynchronouslyLocked(now time.Time) 
 	a.vscodeCompatibility.RefreshInFlight = false
 	a.vscodeCompatibility.NextRetryAt = time.Time{}
 	return issue, false
-}
-
-func (a *App) syncVSCodeMigrationPromptStateLocked() {
-	if a.surfaceResumeRuntime.vscodeMigrationPrompts == nil {
-		a.surfaceResumeRuntime.vscodeMigrationPrompts = map[string]string{}
-	}
-	for surfaceID := range a.surfaceResumeRuntime.vscodeMigrationPrompts {
-		snapshot := a.service.SurfaceSnapshot(surfaceID)
-		if snapshot == nil || state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) != state.ProductModeVSCode {
-			delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, surfaceID)
-		}
-	}
-}
-
-func (a *App) clearVSCodeMigrationPromptsLocked() {
-	for surfaceID := range a.surfaceResumeRuntime.vscodeMigrationPrompts {
-		delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, surfaceID)
-	}
 }
 
 func (a *App) detectVSCodeCompatibility() (vscodeDetectResponse, error) {
@@ -302,23 +281,107 @@ func (a *App) detachedVSCodeCompatibilityTargetsLocked(surfaceFilter string) []v
 	return targets
 }
 
+func (a *App) handleVSCodeMigrateCommandPage(command control.DaemonCommand) []control.UIEvent {
+	if !a.surfaceRunsVSCodeModeLocked(command.SurfaceSessionID) {
+		return []control.UIEvent{vscodeMigrationStandaloneEvent(
+			command.SurfaceSessionID,
+			command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != "",
+			"仅 VS Code 模式可用",
+			[]string{"`/vscode-migrate` 只在 VS Code 模式下提供。请先发送 `/mode vscode`，再检查或执行迁移。"},
+			"",
+			"error",
+			nil,
+		)}
+	}
+	inlineReplace := command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != ""
+	flow := a.newVSCodeMigrationFlowLocked(
+		command.SurfaceSessionID,
+		a.service.SurfaceActorUserID(command.SurfaceSessionID),
+		func() string {
+			if inlineReplace {
+				return command.SourceMessageID
+			}
+			return ""
+		}(),
+		"",
+	)
+	a.mu.Unlock()
+	issue, err := a.currentVSCodeCompatibilityIssue()
+	a.mu.Lock()
+	if err != nil {
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_check_failed",
+			Title: "VS Code 迁移检查失败",
+			Text:  fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err),
+		})}
+	}
+	if issue == nil {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_not_needed",
+			Title: "无需迁移",
+			Text:  "当前 VS Code 接入已经是最新状态，无需再次迁移。",
+		})}
+	}
+	a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
+	event := vscodeMigrationPromptEvent(command.SurfaceSessionID, flow, inlineReplace, *issue)
+	event.GatewayID = command.GatewayID
+	return []control.UIEvent{event}
+}
+
 func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []control.UIEvent {
+	flow, blocked := a.requireVSCodeMigrationFlowLocked(
+		command.SurfaceSessionID,
+		command.PickerID,
+		a.service.SurfaceActorUserID(command.SurfaceSessionID),
+	)
+	if blocked != nil {
+		return blocked
+	}
+	inlineReplace := command.FromCardAction && strings.TrimSpace(command.SourceMessageID) != ""
+	if inlineReplace {
+		flow.MessageID = strings.TrimSpace(command.SourceMessageID)
+	}
+	if strings.TrimSpace(command.OptionID) != "" && strings.TrimSpace(command.OptionID) != vscodeMigrationOwnerActionRun {
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_failed",
+			Title: "无法执行迁移",
+			Text:  "不支持的 VS Code 迁移动作，请重新发送 `/vscode-migrate`。",
+		})}
+	}
 	a.mu.Unlock()
 	detect, err := a.buildVSCodeDetectResponse()
 	a.mu.Lock()
 	if err != nil {
-		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_check_failed", "VS Code 迁移检查失败", fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err))
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_check_failed",
+			Title: "VS Code 迁移检查失败",
+			Text:  fmt.Sprintf("无法检查当前 VS Code 接入状态：%v", err),
+		})}
 	}
 	issue := classifyVSCodeCompatibilityIssue(detect)
 	if issue == nil {
-		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_not_needed", "无需迁移", "当前 VS Code 接入已经是最新状态，无需再次迁移。")
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_not_needed",
+			Title: "无需迁移",
+			Text:  "当前 VS Code 接入已经是最新状态，无需再次迁移。",
+		})}
 	}
+	a.refreshVSCodeMigrationFlowLocked(flow, issue.Key)
 	a.mu.Unlock()
 	err = a.applyVSCodeIntegration(vscodeApplyRequest{Mode: "managed_shim"})
 	a.mu.Lock()
 	if err != nil {
 		log.Printf("apply vscode migration failed: surface=%s err=%v", command.SurfaceSessionID, err)
-		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_failed", "迁移失败", fmt.Sprintf("迁移扩展入口失败：%v。请确认 VS Code 已关闭，并且这台机器上的 Codex 扩展已经安装后再重试。", err))
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_failed",
+			Title: "迁移失败",
+			Text:  fmt.Sprintf("迁移扩展入口失败：%v。请确认 VS Code 已关闭，并且这台机器上的 Codex 扩展已经安装后再重试。", err),
+		})}
 	}
 	a.invalidateVSCodeCompatibilityCacheLocked()
 
@@ -326,25 +389,27 @@ func (a *App) handleVSCodeMigrateCommand(command control.DaemonCommand) []contro
 	remaining, err := a.currentVSCodeCompatibilityIssue()
 	a.mu.Lock()
 	if err != nil {
-		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_applied_detect_failed", "迁移已执行", fmt.Sprintf("扩展入口已经更新，但后续状态检查失败：%v。请重新打开 VS Code 后再试。", err))
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_applied_detect_failed",
+			Title: "迁移已执行",
+			Text:  fmt.Sprintf("扩展入口已经更新，但后续状态检查失败：%v。请重新打开 VS Code 后再试。", err),
+		})}
 	}
 	if remaining != nil {
-		return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_incomplete", "迁移未完成", remaining.Summary)
+		a.refreshVSCodeMigrationFlowLocked(flow, "")
+		return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+			Code:  "vscode_migration_incomplete",
+			Title: "迁移未完成",
+			Text:  remaining.Summary,
+		})}
 	}
 
-	delete(a.surfaceResumeRuntime.vscodeMigrationPrompts, strings.TrimSpace(command.SurfaceSessionID))
+	a.refreshVSCodeMigrationFlowLocked(flow, "")
 	a.surfaceResumeRuntime.vscodeResumeNotices[strings.TrimSpace(command.SurfaceSessionID)] = true
-	return vscodeMigrationNotice(command.SurfaceSessionID, "vscode_migration_applied", issue.Title, issue.SuccessText)
-}
-
-func vscodeMigrationNotice(surfaceID, code, title, text string) []control.UIEvent {
-	return []control.UIEvent{{
-		Kind:             control.UIEventNotice,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		Notice: &control.Notice{
-			Code:  code,
-			Title: strings.TrimSpace(title),
-			Text:  strings.TrimSpace(text),
-		},
-	}}
+	return []control.UIEvent{vscodeMigrationNoticeEvent(command.SurfaceSessionID, flow, inlineReplace, &control.Notice{
+		Code:  "vscode_migration_applied",
+		Title: issue.Title,
+		Text:  issue.SuccessText,
+	})}
 }

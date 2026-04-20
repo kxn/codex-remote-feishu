@@ -27,6 +27,10 @@ func commandPageViewFromCatalog(commandID string, catalog *control.FeishuDirectC
 	return control.FeishuCommandPageView{
 		CommandID:       strings.TrimSpace(commandID),
 		Title:           strings.TrimSpace(catalog.Title),
+		MessageID:       strings.TrimSpace(catalog.MessageID),
+		TrackingKey:     strings.TrimSpace(catalog.TrackingKey),
+		ThemeKey:        strings.TrimSpace(catalog.ThemeKey),
+		Patchable:       catalog.Patchable,
 		Breadcrumbs:     append([]control.CommandCatalogBreadcrumb(nil), breadcrumbs...),
 		SummarySections: append([]control.FeishuCardTextSection(nil), catalog.SummarySections...),
 		Interactive:     catalog.Interactive,

@@ -55,6 +55,7 @@ const (
 	cardActionKindRequestRespond              = "request_respond"
 	cardActionKindRunCommand                  = "run_command"
 	cardActionKindUpgradeOwnerFlow            = "upgrade_owner_flow"
+	cardActionKindVSCodeMigrateOwnerFlow      = "vscode_migrate_owner_flow"
 	cardActionKindStartCommandCapture         = "start_command_capture"
 	cardActionKindCancelCommandCapture        = "cancel_command_capture"
 	cardActionKindSubmitCommandForm           = "submit_command_form"
@@ -178,6 +179,14 @@ func actionPayloadRunCommand(commandText string) map[string]any {
 func actionPayloadUpgradeOwnerFlow(flowID, optionID string) map[string]any {
 	return map[string]any{
 		cardActionPayloadKeyKind:     cardActionKindUpgradeOwnerFlow,
+		cardActionPayloadKeyPickerID: strings.TrimSpace(flowID),
+		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
+	}
+}
+
+func actionPayloadVSCodeMigrateOwnerFlow(flowID, optionID string) map[string]any {
+	return map[string]any{
+		cardActionPayloadKeyKind:     cardActionKindVSCodeMigrateOwnerFlow,
 		cardActionPayloadKeyPickerID: strings.TrimSpace(flowID),
 		cardActionPayloadKeyOptionID: strings.TrimSpace(optionID),
 	}

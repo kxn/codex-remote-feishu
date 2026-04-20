@@ -116,7 +116,8 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 		ActionStop,
 		ActionNewThread,
 		ActionFollowLocal,
-		ActionDetach:
+		ActionDetach,
+		ActionVSCodeMigrate:
 		return true
 	default:
 		return allowsCommandPageResultReplacement(action)
@@ -136,12 +137,7 @@ func AllowsBareCommandContinuation(action Action) bool {
 	if !isSingleTokenSlashCommand(action.Text) {
 		return false
 	}
-	switch action.Kind {
-	case ActionVSCodeMigrate:
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func allowsCommandPageResultReplacement(action Action) bool {
@@ -152,6 +148,8 @@ func allowsCommandPageResultReplacement(action Action) bool {
 		return !upgradeCommandRunsImmediately(action.Text)
 	case ActionDebugCommand:
 		return !debugCommandRunsImmediately(action.Text)
+	case ActionVSCodeMigrateCommand:
+		return isSingleTokenSlashCommand(action.Text)
 	default:
 		return false
 	}

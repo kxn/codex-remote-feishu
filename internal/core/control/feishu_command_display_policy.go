@@ -30,6 +30,8 @@ func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode 
 	switch strings.TrimSpace(projected.ID) {
 	case FeishuCommandUse, FeishuCommandUseAll:
 		return FeishuCommandDefinition{}, false
+	case FeishuCommandVSCodeMigrate:
+		return FeishuCommandDefinition{}, false
 	case FeishuCommandList:
 		projected.Title = "选择工作区/会话"
 		projected.Description = "打开统一的工作区/会话选择卡；可选择工作区、选择会话，也可添加工作区。"

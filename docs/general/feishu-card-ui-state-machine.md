@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-20`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；统一 command card 现在已扩展为 `Menu / Config / Page` 三类 read model，bare `/cron`、`/upgrade`、`/debug` 的根页、显式子页与非法参数反馈都收敛到同一套 command-page 结构，stamped current-card callback 也改走 command-page result replacement，bare continuation 当前只剩 `/vscode-migrate`；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，且同一 surface 后续异步到达的 VS Code guidance（兼容修复、open prompt、恢复成功/失败、未接管 `/list` 提示）也会继续 patch 回这张 guidance 卡；bare `/vscode-migrate` 的结果同样改成原卡收口，并继续承接后续 VS Code guidance；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示，同时 `file_change` 已并入这条过程卡：normal 显示文件行与 `+/-` 统计，verbose 再追加 diff code block；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1、显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续保留在 verbose 共享过程卡里；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（no-op / requested / accepted / failed 都封回当前菜单卡），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；统一 command card 现在已扩展为 `Menu / Config / Page` 三类 read model，bare `/cron`、`/upgrade`、`/debug` 与 `/vscode-migrate` 的根页、显式子页与非法参数反馈都收敛到同一套 command-page 结构，stamped current-card callback 也改走 command-page result replacement，bare continuation 当前已无活跃命中；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，且同一 surface 后续异步到达的 VS Code guidance（兼容修复、open prompt、恢复成功/失败、未接管 `/list` 提示）也会继续 patch 回这张 guidance 卡；`/vscode-migrate` root page 与 `vscode_migrate_owner_flow` 结果同样改成同一张 page-owner card 收口，并继续承接后续 VS Code guidance；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示，同时 `file_change` 已并入这条过程卡：normal 显示文件行与 `+/-` 统计，verbose 再追加 diff code block；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
 
 ## 1. 文档定位
 
@@ -55,8 +55,8 @@
   - 负责只在安全条件下把同上下文导航转成 `ReplaceCurrentCard`
   - 当前有四条 replace 路径：
     - inline navigation：当 action 命中 **inline-replace allow-list**（并非所有 `FeishuUIIntent`）、且 controller 产出的 `UIEvent` 显式标记 `InlineReplaceCurrentCard`
-    - stamped command result replacement：当 stamped 菜单命令或 stamped command-page callback 命中原卡结果/终态规则（当前 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread`、`/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`，以及 `/cron`、`/upgrade`、`/debug` 这三组命令里“不立即执行”的根页 / 子页 / 非法参数回显路径），daemon 会把 handler 返回的首个可投影结果卡直接作为 `ReplaceCurrentCard`
-    - bare command continuation：当 stamped callback 命中 bare `/vscode-migrate` 的 continuation 路径时，daemon 会直接把 follow-up 卡同位替到当前卡
+    - stamped command result replacement：当 stamped 菜单命令或 stamped command-page callback 命中原卡结果/终态规则（当前 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread`、`/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`，以及 `/cron`、`/upgrade`、`/debug`、`/vscode-migrate` 这四组命令里“不立即执行”的根页 / 子页 / 非法参数回显路径），daemon 会把 handler 返回的首个可投影结果卡直接作为 `ReplaceCurrentCard`
+    - bare command continuation：lifecycle helper 仍保留这条兼容判定链路，但当前 allow-list 已为空；`/vscode-migrate` 不再走这条路径，而是改走 command-page result replacement + owner-flow callback
     - command submission anchor：lifecycle helper 里仍保留这条兼容分支，但当前 stamped action 已没有命中 allow-list；也就是说当前 owner-card / menu-card 路径不再使用“命令已提交”锚点卡
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
@@ -108,7 +108,7 @@
 | stamped `/menu current_work -> /steerall` | `mixed` | 当前不再走提交态锚点；点击后会把当前菜单卡直接封成 steer-all owner/terminal card。no-op、requested、accepted、failed / disconnect restore 都继续回写同一张原卡，不再留下可重复点击的旧菜单 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/reasoning` `/access` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；其中 stamped `/mode vscode` 若切换后立刻命中 VS Code 兼容修复、open prompt 或恢复提示，daemon 会优先把首张可投影提示卡同位替回当前卡，并把该 surface 记录成可继续 patch 的 VS Code guidance card；后续异步 runtime 提示只要仍命中这块 card，就继续回写同一张卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
 | bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuCommandView.Page` 根页，不再顺手展示独立状态卡；`/cron status` / `/cron list` / `/cron edit`、`/upgrade track`、`/debug` 根页等只读子页也都继续复用同一套 command-page 结构、breadcrumbs 与返回按钮。若来自带 `daemon_lifecycle_id` 的当前 command-page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 command-page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade dev`、`/upgrade local`、`/debug admin`、`/debug upgrade`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 command page 上显示错误并保留表单默认值 |
-| stamped bare `/vscode-migrate` | `mixed` | 当前只由 VS Code 迁移/修复卡发出；若来自带 `daemon_lifecycle_id` 的当前迁移卡 callback，daemon 会沿 bare continuation 路径把迁移结果卡同位替回当前卡，不再额外 append 独立 catalog / notice；并且这张迁移卡会直接升级为当前 surface 的 VS Code guidance card，承接后续 `/list` / open VS Code / 恢复提示等异步 follow-up |
+| stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuCommandView.Page` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 command-page result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由 `run_command(/vscode-migrate)` 或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
@@ -297,10 +297,10 @@ MCP request 卡片当前新增的可视语义：
   - 当前事件流里至少存在一张可直接投影成卡片的结果事件；daemon 取第一张作为 `ReplaceCurrentCard`
   - 对 `/stop`、`/new`、`/follow`、`/detach`，replacement 落地后会额外抑制重复 notice append，避免又出现“原卡已终态、旁边再补一张同义终态 notice”
   - 对 `attach_instance`，若同一动作后续还带 `UIEventThreadSelectionChange`，daemon 会抑制这类重复 append，避免菜单卡已经收口后又补一张线程选择卡
-3. bare command continuation 路径
-  - callback payload 带有非空 `daemon_lifecycle_id`
-  - action 命中 bare `/vscode-migrate`
-  - daemon command 的首张 follow-up 卡可直接同位承接到当前卡
+3. bare command continuation 兼容路径
+  - lifecycle helper 当前仍保留这条判定分支
+  - 但当前 allow-list 已为空，不再有任何 stamped action 命中它
+  - `/vscode-migrate` 已迁回 command-page result replacement，不再通过 bare continuation 承接 follow-up
 4. command submission anchor 路径
   - callback payload 带有非空 `daemon_lifecycle_id`
   - lifecycle helper 里仍保留这条兼容分支
@@ -420,8 +420,8 @@ MCP request 卡片当前新增的可视语义：
   - `/compact`、`/steerall`、`/sendfile` 的 `current_work` 菜单入口不再复用锚点路径，而是直接把原菜单卡交给 owner/terminal card 流继续收口
 - stamped 参数卡与迁移卡的非 inline 命令当前额外分两类：
   - stamped `/mode vscode` 若切换后立刻命中 VS Code 兼容修复、open prompt 或恢复提示，daemon 会优先把首张可投影提示卡替回当前参数卡；并把这张卡登记为当前 surface 的 `vscode guidance card`，后续异步命中的兼容修复、open prompt、恢复成功/失败、`not_attached_vscode` `/list` 提示，都会继续以 `message.patch` 回到同一张卡；这条强制同步兼容性检测只用于 stamped callback，纯文本 `/mode vscode` 仍保持旧的异步提示语义
-  - bare `/vscode-migrate` 当前会沿 bare continuation 路径把迁移结果卡继续承接在当前迁移/修复卡上，不再额外 append 独立 command catalog / notice；若当前 surface 仍处于 vscode mode，这张卡也会继续承担 `vscode guidance card`，承接后续异步 guidance
-- bare `/upgrade`、bare `/debug`、bare `/cron` 当前已经退出 bare continuation 与提交态锚点；它们统一改成 `FeishuCommandView.Page` 根页/子页模型，stamped current-card callback 会直接把下一张 command page 同位替回当前卡，非法参数也继续留在当前页内报错。
+  - `/vscode-migrate` 当前也已并入同一套 `FeishuCommandView.Page` 根页 / 校验页模型；stamped current-card callback 会先把 root page 或错误页同位替回当前卡，真正执行迁移则改走 `vscode_migrate_owner_flow` callback。迁移结果与后续异步 guidance 继续 patch 在同一张 guidance card 上，不再经由 `run_command(/vscode-migrate)` 或 bare continuation
+- bare `/upgrade`、bare `/debug`、bare `/cron`、bare `/vscode-migrate` 当前已经退出 bare continuation 与提交态锚点；它们统一改成 `FeishuCommandView.Page` 根页/子页模型，stamped current-card callback 会直接把下一张 command page 同位替回当前卡，非法参数也继续留在当前页内报错。
 - `/upgrade latest` 当前不走 callback 同步 replace；但只要进入 daemon owner-card 流，同一张升级卡会继续通过 `message.patch` 在 `checking -> confirm -> running/cancelling -> restarting(sealed)` 之间推进，不再依赖“再次发送 `/upgrade latest`”。
 - turn-owned 的投递策略当前已经改成“高价值文本 reply、过程卡仍顶层 append”：
   - `当前计划`、request prompt、共享过程卡、图片输出、preview supplement、turn-owned notice 当前都固定顶层 append，不再继承 `SourceMessageID`
@@ -668,13 +668,13 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)
   - 锁定 `/status` 已退出菜单提交态锚点并直接改成同卡状态结果，同时纯文本 `/status` 继续 append-only；`/cron` / `/upgrade` 的 stamped current-card 路径当前已改成 command-page result replacement，不再命中 bare continuation 或提交态锚点
 - [internal/app/daemon/app_vscode_migration_test.go](../../internal/app/daemon/app_vscode_migration_test.go)
-  - 锁定 stamped `/mode vscode` 命中的兼容修复提示会继续替换当前卡，以及 stamped `/vscode-migrate` 的结果会同位收口到当前迁移卡；迁移卡后续命中的 `not_attached_vscode` `/list` guidance 也会继续 patch 回原卡
+  - 锁定 stamped `/mode vscode` 命中的兼容修复提示会继续替换当前卡，stamped `/vscode-migrate` root page 也会继续沿 command-page result replacement 打开当前卡；真正的 `vscode_migrate_owner_flow` callback 会把迁移结果同位收口到当前迁移卡，后续命中的 `not_attached_vscode` `/list` guidance 也会继续 patch 回原卡
 - [internal/app/daemon/app_vscode_migration_async_test.go](../../internal/app/daemon/app_vscode_migration_async_test.go)
   - 锁定后台异步送达的 VS Code 兼容修复卡，后续 `open VS Code` guidance 会复用同一张 tracked guidance card，而不是额外 append 第二张卡
 - [internal/app/daemon/surface_resume_state_test.go](../../internal/app/daemon/surface_resume_state_test.go)
   - 锁定 detached vscode surface 的 open prompt 在 exact reconnect 后，会继续 patch 回原 guidance card，而不是追加独立“恢复成功”卡
 - [internal/core/control/inline_replacement_test.go](../../internal/core/control/inline_replacement_test.go)
-  - 锁定 `AllowsCommandCardResultReplacement(...)` 已把 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread` 以及 `/cron` / `/upgrade` / `/debug` 的 command-page 路径纳入 stamped result replacement，同时 bare continuation 当前只剩 `/vscode-migrate`，stamped current-card 路径不再命中 submission-anchor
+  - 锁定 `AllowsCommandCardResultReplacement(...)` 已把 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread` 以及 `/cron` / `/upgrade` / `/debug` / `/vscode-migrate` 的 command-page 路径纳入 stamped result replacement；`AllowsBareCommandContinuation(...)` 当前已不再为任何命令开放 allow-list，stamped current-card 路径也不再命中 submission-anchor
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)

@@ -21,9 +21,14 @@ type surfaceResumeRecoveryState struct {
 	LastFailureCode string
 }
 
-type vscodeGuidanceCardState struct {
+type vscodeMigrationFlowRecord struct {
+	FlowID           string
 	SurfaceSessionID string
+	OwnerUserID      string
 	MessageID        string
+	IssueKey         string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 	ExpiresAt        time.Time
 }
 
@@ -37,9 +42,9 @@ type toolRuntimeState struct {
 type surfaceResumeRuntimeState struct {
 	store                  *surfaceResumeStore
 	recovery               map[string]*surfaceResumeRecoveryState
-	vscodeGuidanceCards    map[string]*vscodeGuidanceCardState
+	vscodeMigrationFlows   map[string]*vscodeMigrationFlowRecord
+	vscodeMigrationNextSeq int64
 	vscodeResumeNotices    map[string]bool
-	vscodeMigrationPrompts map[string]string
 	vscodeStartupCheckDue  bool
 	headlessRestore        map[string]*headlessRestoreRecoveryState
 	startupRefreshPending  map[string]bool
@@ -68,9 +73,8 @@ type upgradeRuntimeState struct {
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
 	return surfaceResumeRuntimeState{
 		recovery:               map[string]*surfaceResumeRecoveryState{},
-		vscodeGuidanceCards:    map[string]*vscodeGuidanceCardState{},
+		vscodeMigrationFlows:   map[string]*vscodeMigrationFlowRecord{},
 		vscodeResumeNotices:    map[string]bool{},
-		vscodeMigrationPrompts: map[string]string{},
 		headlessRestore:        map[string]*headlessRestoreRecoveryState{},
 		startupRefreshPending:  map[string]bool{},
 		workspaceContextRoots:  map[string]string{},

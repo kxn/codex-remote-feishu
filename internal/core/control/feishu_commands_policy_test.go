@@ -59,3 +59,50 @@ func TestHelpCatalogReflectsShippingUpgradePolicy(t *testing.T) {
 	}
 	t.Fatal("expected upgrade entry in help catalog")
 }
+
+func TestVSCodeMigrateDisplayRespectsProductMode(t *testing.T) {
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandVSCodeMigrate)
+	if !ok {
+		t.Fatal("expected vscode migrate definition")
+	}
+
+	if _, ok := FeishuCommandDefinitionForDisplay(def, "normal", false, ""); ok {
+		t.Fatalf("expected /vscode-migrate to stay hidden from normal help")
+	}
+	if _, ok := FeishuCommandDefinitionForDisplay(def, "normal", true, string(FeishuCommandMenuStageNormalWorking)); ok {
+		t.Fatalf("expected /vscode-migrate to stay hidden from normal menu")
+	}
+	if projected, ok := FeishuCommandDefinitionForDisplay(def, "vscode", false, ""); !ok {
+		t.Fatalf("expected /vscode-migrate to stay visible in vscode help")
+	} else if projected.CanonicalSlash != "/vscode-migrate" {
+		t.Fatalf("unexpected vscode migrate display projection: %#v", projected)
+	}
+
+	normalHelp := BuildFeishuCommandCatalogForDisplay("Slash 命令帮助", "", false, "normal", "")
+	if catalogContainsCommand(normalHelp, "/vscode-migrate") {
+		t.Fatalf("expected normal help catalog to hide /vscode-migrate: %#v", normalHelp)
+	}
+
+	vscodeHelp := BuildFeishuCommandCatalogForDisplay("Slash 命令帮助", "", false, "vscode", "")
+	if !catalogContainsCommand(vscodeHelp, "/vscode-migrate") {
+		t.Fatalf("expected vscode help catalog to include /vscode-migrate: %#v", vscodeHelp)
+	}
+
+	normalMenu := BuildFeishuCommandMenuGroupCatalog(FeishuCommandGroupMaintenance, "normal", string(FeishuCommandMenuStageNormalWorking))
+	if catalogContainsCommand(normalMenu, "/vscode-migrate") {
+		t.Fatalf("expected normal maintenance menu to hide /vscode-migrate: %#v", normalMenu)
+	}
+}
+
+func catalogContainsCommand(catalog FeishuDirectCommandCatalog, command string) bool {
+	for _, section := range catalog.Sections {
+		for _, entry := range section.Entries {
+			for _, current := range entry.Commands {
+				if current == command {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

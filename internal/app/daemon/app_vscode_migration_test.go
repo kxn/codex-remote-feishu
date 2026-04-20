@@ -99,8 +99,51 @@ func TestDaemonModeSwitchToVSCodePromptsMigrationForLegacySettings(t *testing.T)
 	if !strings.Contains(operationCardText(card), "旧版 settings.json 覆盖") {
 		t.Fatalf("expected migration reason in structured card text, got %#v", card)
 	}
-	if !operationHasCommandButton(card, "迁移并重新接入", vscodeMigrateCommandText) {
+	if !operationHasCallbackButton(card, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected migration card button, got %#v", card.CardElements)
+	}
+}
+
+func TestDaemonVSCodeMigrateCommandRejectsNormalMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	gateway := newLifecycleGateway()
+	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionVSCodeMigrateCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/vscode-migrate",
+	})
+
+	card := waitForLifecycleOperationTitle(t, gateway, "仅 VS Code 模式可用")
+	if !strings.Contains(operationCardText(card), "/mode vscode") {
+		t.Fatalf("expected normal-mode rejection to mention /mode vscode, got %#v", card.CardElements)
+	}
+	if operationHasCallbackButton(card, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
+		t.Fatalf("expected normal-mode rejection card to avoid migrate action, got %#v", card.CardElements)
+	}
+
+	app.mu.Lock()
+	flow := app.activeVSCodeMigrationFlowLocked("surface-1")
+	app.mu.Unlock()
+	if flow != nil {
+		t.Fatalf("expected normal-mode /vscode-migrate to avoid opening owner flow, got %#v", flow)
 	}
 }
 
@@ -144,7 +187,7 @@ func TestHandleGatewayActionReplacesModeCardWithVSCodeMigrationPrompt(t *testing
 	if result.ReplaceCurrentCard.CardTitle != "VS Code 接入需要迁移" {
 		t.Fatalf("expected migration prompt to stay on current card, got %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasCommandButton(*result.ReplaceCurrentCard, "迁移并重新接入", vscodeMigrateCommandText) {
+	if !operationHasCallbackButton(*result.ReplaceCurrentCard, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected in-place migration button, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 	if len(gateway.operations) != 0 {
@@ -206,12 +249,12 @@ func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testi
 	}
 
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入需要修复")
-	if !operationHasCommandButton(card, "重新接入扩展入口", vscodeMigrateCommandText) {
+	if !operationHasCallbackButton(card, "重新接入扩展入口", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected repair card button, got %#v", card.CardElements)
 	}
 }
 
-func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing.T) {
+func TestDaemonVSCodeMigrateCommandOpensOwnerFlowAndAppliesManagedShim(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
@@ -231,28 +274,44 @@ func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing
 	gateway := &recordingGateway{}
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 
+	app.service.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeVSCode, state.SurfaceVerbosityNormal)
 	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionStatus,
+		Kind:             control.ActionVSCodeMigrateCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
+		Text:             "/vscode-migrate",
 	})
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionModeCommand,
-		GatewayID:        "app-1",
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		Text:             "/mode vscode",
-	})
-	app.HandleAction(context.Background(), control.Action{
+
+	prompt := findOperationByTitle(gateway.operations, "VS Code 接入需要迁移")
+	if prompt == nil {
+		t.Fatalf("expected /vscode-migrate to open migration page, got %#v", gateway.operations)
+	}
+	if !operationHasCallbackButton(*prompt, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
+		t.Fatalf("expected /vscode-migrate page to expose owner-flow callback, got %#v", prompt.CardElements)
+	}
+	flowID := requiredCallbackPickerID(t, *prompt, "迁移并重新接入", vscodeMigrationOwnerPayloadKind)
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
 		Kind:             control.ActionVSCodeMigrate,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
+		MessageID:        prompt.MessageID,
+		PickerID:         flowID,
+		OptionID:         vscodeMigrationOwnerActionRun,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
 	})
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected migrate owner-flow callback to replace current card, got %#v", result)
+	}
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "请重新打开 VS Code 开始使用") {
+		t.Fatalf("expected owner-flow callback to show reopen guidance, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
 
 	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
 	if rec.Code != http.StatusOK {
@@ -270,17 +329,6 @@ func TestDaemonVSCodeMigrateCommandAppliesManagedShimAndPromptsReopen(t *testing
 	}
 	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypoint)); err != nil {
 		t.Fatalf("expected shim backup after migration: %v", err)
-	}
-
-	found := false
-	for _, operation := range gateway.operations {
-		if strings.Contains(operationCardText(operation), "请重新打开 VS Code 开始使用") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected reopen-vscode success notice, got %#v", gateway.operations)
 	}
 }
 
@@ -305,21 +353,39 @@ func TestHandleGatewayActionReplacesVSCodeMigrationCardWithResult(t *testing.T) 
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
+	prompt := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionModeCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-mode-vscode-1",
+		Text:             "/mode vscode",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if prompt == nil || prompt.ReplaceCurrentCard == nil {
+		t.Fatalf("expected stamped /mode vscode to replace current card with migration prompt, got %#v", prompt)
+	}
+	flowID := requiredCallbackPickerID(t, *prompt.ReplaceCurrentCard, "迁移并重新接入", vscodeMigrationOwnerPayloadKind)
+
 	result := app.HandleGatewayAction(context.Background(), control.Action{
 		Kind:             control.ActionVSCodeMigrate,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		MessageID:        "om-vscode-migrate-1",
-		Text:             "/vscode-migrate",
+		MessageID:        "om-mode-vscode-1",
+		PickerID:         flowID,
+		OptionID:         vscodeMigrationOwnerActionRun,
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
 	})
 
 	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected stamped /vscode-migrate to replace current card, got %#v", result)
+		t.Fatalf("expected stamped migrate callback to replace current card, got %#v", result)
 	}
 	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "请重新打开 VS Code 开始使用") {
 		t.Fatalf("expected in-place migrate result text, got %#v", result.ReplaceCurrentCard.CardElements)
@@ -347,8 +413,8 @@ func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 	app.service.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeVSCode, state.SurfaceVerbosityNormal)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:             control.ActionVSCodeMigrate,
+	prompt := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionVSCodeMigrateCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
@@ -359,9 +425,27 @@ func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
 	})
+	if prompt == nil || prompt.ReplaceCurrentCard == nil {
+		t.Fatalf("expected stamped /vscode-migrate to replace current card with migration prompt, got %#v", prompt)
+	}
+	flowID := requiredCallbackPickerID(t, *prompt.ReplaceCurrentCard, "重新接入扩展入口", vscodeMigrationOwnerPayloadKind)
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionVSCodeMigrate,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-vscode-migrate-1",
+		PickerID:         flowID,
+		OptionID:         vscodeMigrationOwnerActionRun,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
 
 	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected stamped /vscode-migrate to replace current card, got %#v", result)
+		t.Fatalf("expected stamped migrate callback to replace current card, got %#v", result)
 	}
 
 	app.handleUIEvents(context.Background(), []control.UIEvent{{
@@ -494,6 +578,15 @@ func operationHasCommandButton(operation feishu.Operation, label, commandText st
 	return false
 }
 
+func operationHasCallbackButton(operation feishu.Operation, label, kind, optionID string) bool {
+	for _, button := range operationCardButtons(operation) {
+		if buttonMatchesCallback(button, label, kind, optionID) {
+			return true
+		}
+	}
+	return false
+}
+
 func buttonMatchesCommand(button map[string]any, label, commandText string) bool {
 	textNode, _ := button["text"].(map[string]any)
 	content, _ := textNode["content"].(string)
@@ -503,4 +596,37 @@ func buttonMatchesCommand(button map[string]any, label, commandText string) bool
 	value := cardButtonPayload(button)
 	actualCommand, _ := value["command_text"].(string)
 	return actualCommand == commandText
+}
+
+func buttonMatchesCallback(button map[string]any, label, kind, optionID string) bool {
+	textNode, _ := button["text"].(map[string]any)
+	content, _ := textNode["content"].(string)
+	if content != label {
+		return false
+	}
+	value := cardButtonPayload(button)
+	actualKind, _ := value["kind"].(string)
+	actualOptionID, _ := value[vscodeMigrationOwnerPayloadRunKey].(string)
+	return actualKind == kind && actualOptionID == optionID
+}
+
+func requiredCallbackPickerID(t *testing.T, operation feishu.Operation, label, kind string) string {
+	t.Helper()
+	for _, button := range operationCardButtons(operation) {
+		textNode, _ := button["text"].(map[string]any)
+		content, _ := textNode["content"].(string)
+		if content != label {
+			continue
+		}
+		value := cardButtonPayload(button)
+		if actualKind, _ := value["kind"].(string); actualKind != kind {
+			continue
+		}
+		flowID, _ := value[vscodeMigrationOwnerPayloadFlowKey].(string)
+		if strings.TrimSpace(flowID) != "" {
+			return flowID
+		}
+	}
+	t.Fatalf("expected callback button %q kind=%q with picker_id in %#v", label, kind, operation.CardElements)
+	return ""
 }

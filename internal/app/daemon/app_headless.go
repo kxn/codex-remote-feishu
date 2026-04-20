@@ -36,6 +36,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []control
 		return a.handleUpgradeDaemonCommand(command)
 	case control.DaemonCommandUpgradeOwnerFlow:
 		return a.handleUpgradeOwnerFlowCommandLocked(command)
+	case control.DaemonCommandVSCodeMigrateCommand:
+		return a.handleVSCodeMigrateCommandPage(command)
 	case control.DaemonCommandVSCodeMigrate:
 		return a.handleVSCodeMigrateCommand(command)
 	case control.DaemonCommandThreadHistoryRead:

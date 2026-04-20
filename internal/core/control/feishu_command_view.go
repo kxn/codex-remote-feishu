@@ -30,6 +30,10 @@ type FeishuCommandConfigView struct {
 type FeishuCommandPageView struct {
 	CommandID       string
 	Title           string
+	MessageID       string
+	TrackingKey     string
+	ThemeKey        string
+	Patchable       bool
 	Breadcrumbs     []CommandCatalogBreadcrumb
 	SummarySections []FeishuCardTextSection
 	StatusKind      string

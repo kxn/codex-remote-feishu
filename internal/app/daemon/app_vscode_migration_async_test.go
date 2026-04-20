@@ -59,7 +59,7 @@ func TestDaemonTickRunsVSCodeCompatibilityDetectInBackgroundAndAvoidsDuplicateLa
 
 	close(release)
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入需要迁移")
-	if !operationHasCommandButton(card, "迁移并重新接入", vscodeMigrateCommandText) {
+	if !operationHasCallbackButton(card, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected migration button after async detect, got %#v", card.CardElements)
 	}
 }
@@ -109,7 +109,7 @@ func TestDaemonTickRetriesVSCodeCompatibilityDetectAfterBackoff(t *testing.T) {
 	app.onTick(context.Background(), base.Add(vscodeCompatibilityRetryBackoff+time.Second))
 	waitForDaemonCondition(t, 2*time.Second, func() bool { return detectCalls == 2 })
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入需要迁移")
-	if !operationHasCommandButton(card, "迁移并重新接入", vscodeMigrateCommandText) {
+	if !operationHasCallbackButton(card, "迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected migration button after retry succeeds, got %#v", card.CardElements)
 	}
 }

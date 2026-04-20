@@ -1311,7 +1311,27 @@ func TestShowAllThreadsAttachedVSCodeShowsCurrentInstanceAllSessions(t *testing.
 	}
 }
 
-func TestVSCodeMigrateActionDispatchesDaemonCommand(t *testing.T) {
+func TestVSCodeMigrateCommandActionDispatchesDaemonCommand(t *testing.T) {
+	now := time.Date(2026, 4, 7, 18, 17, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionVSCodeMigrateCommand,
+		Text:             "/vscode-migrate",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	if len(events) != 1 || events[0].DaemonCommand == nil {
+		t.Fatalf("expected one daemon command event, got %#v", events)
+	}
+	if events[0].DaemonCommand.Kind != control.DaemonCommandVSCodeMigrateCommand {
+		t.Fatalf("expected vscode migrate command daemon command, got %#v", events[0].DaemonCommand)
+	}
+}
+
+func TestVSCodeMigrateOwnerFlowActionDispatchesDaemonCommand(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 17, 30, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -1320,6 +1340,8 @@ func TestVSCodeMigrateActionDispatchesDaemonCommand(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
+		PickerID:         "flow-1",
+		OptionID:         "run",
 	})
 
 	if len(events) != 1 || events[0].DaemonCommand == nil {
