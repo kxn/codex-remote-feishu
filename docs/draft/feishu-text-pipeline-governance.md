@@ -207,6 +207,65 @@ final reply 额外多了一层：
 - 是仓库里唯一明确承认“输入本身就是 markdown”的专用链路
 - 但当前仍然是多次解析、多次字符串重写
 
+### 5.1 从实际调用链看，模式 2 / 3 / 4 不应继续被视为三条业务路径
+
+如果只看“当前代码里出现过哪些表现形态”，模式 2 / 3 / 4 可以分开讲。
+
+但如果从“后续业务应该选哪条固定路径”来看，这三种里至少有两种并不值得继续保留为业务可感知的独立选择。
+
+核心原因：
+
+- 它们最终都落在同一个 `cardDocument` / `rawCardDocument(...)` 容器里
+- 区别主要只是 adapter 在卡片内部用了：
+  - `plain_text` block
+  - 小块 markdown element
+  - 或整段 `CardBody`
+- 这更像是同一条 `system card lane` 内部的渲染粒度差异，不是三条平级的产品路径
+
+代码证据：
+
+- `appendCardTextSections(...)` 已经把大量 system card 文本收敛成：
+  - label 用少量 adapter-owned markdown
+  - 动态值主体进 `plain_text`
+- `projectExecCommandProgress(...)` 虽然会写 `Operation.CardBody`，但真正发送时使用的是：
+  - `rawCardDocument("工作中", "", cardThemeProgress, elements)`
+  - 也就是说它的真实出站路径是“卡片 elements”，不是“整段 body markdown”
+- `commandCatalogElements(...)`、`targetPickerElements(...)`、`pathPickerElements(...)`、`threadHistoryElements(...)` 等新一些的实现，已经不再依赖整段 raw markdown body，而是直接在同一个 card lane 里组合：
+  - section
+  - plain_text block
+  - select / form / button
+  - 少量标题 markdown
+
+因此，更准确的结论不是“系统卡片有 3 条长期并行路径”，而是：
+
+- 目前存在 3 种 system-card 表现变体
+- 但目标上它们应收敛为 1 条 system-card 业务路径
+- 其中 `raw markdown body` 与“逐行 markdown element 拼动态文本”都只是过渡形态，不应继续暴露给业务层自行选择
+
+### 5.2 当前更接近真实情况的路径划分
+
+如果按“真实业务应该如何选路”来重排，当前仓库的文本路径更适合收敛成下面 3 条：
+
+1. `direct text lane`
+   - 适用于普通 assistant 非 final 文本
+   - 直接发送文本消息，不进入卡片 markdown 语境
+2. `system structured card lane`
+   - 适用于所有 system / notice / picker / request / progress / catalog / snapshot / history 一类卡片
+   - 默认使用：
+     - `plain_text`
+     - `FeishuCardTextSection`
+     - block / select / form / button
+     - 少量 adapter-owned markdown 标题或状态标签
+3. `final markdown lane`
+   - 只服务 final answer
+   - 需要单独的 markdown 输入 contract 与单次 serializer
+
+换句话说，当前文档里列出的模式 2 / 3 / 4 更适合被理解成：
+
+- 同一条 `system structured card lane` 的不同成熟度阶段
+
+而不是让后续业务继续在三者之间自由选择。
+
 ## 6. 当前结构性问题
 
 ### 6.1 同一段文本会被多次重新当 markdown 解释
@@ -333,9 +392,19 @@ orchestrator / control / daemon 负责业务结构，不负责拼 Feishu markdow
 - 动态值主体改走 `plain_text` / structured sections
 - 逐步移除不必要的 `CardBody` raw markdown
 
+这一步做完以后，业务侧不应再直接决定：
+
+- 我这次要不要拼整段 body markdown
+- 我这次要不要改成逐行 markdown element
+- 我这次要不要自己混着来
+
+这些应该都变成 adapter 内部实现细节，而不是业务层 contract。
+
 ### 8.2 对 shared progress，维持“行级 element”方向，但补明确 contract
 
-shared progress 不一定要完全禁用 markdown，但要明确：
+shared progress 不一定要完全禁用 markdown，但它不应被定义成“第三条业务文本路径”。
+
+它更适合作为 `system structured card lane` 内部的一种 renderer：
 
 - 哪些 token 是系统拥有的
 - 哪些动态值必须先转 plain text 表示
@@ -360,6 +429,30 @@ shared progress 不一定要完全禁用 markdown，但要明确：
 - 只是某个中间 helper 改过一半的字符串
 
 这类字符串最容易让下一层继续误判语义。
+
+### 8.5 后续建议对业务层只暴露 3 种可选路径
+
+如果后续希望把“文本怎么生成”固定成少数可选项，建议业务层只允许选择：
+
+1. `SendText`
+   - 单纯文本消息
+2. `SystemCard`
+   - 结构化系统卡片
+3. `FinalCard`
+   - final answer 专用卡片
+
+不建议继续把这些作为业务层可选项暴露：
+
+- `raw markdown body`
+- `逐行 markdown element`
+- “先拼半成品 markdown，再交给下游继续改写”
+
+其中：
+
+- `raw markdown body`
+  - 应视为 legacy 兼容路径，目标是逐步清退
+- `逐行 markdown element`
+  - 应视为 `SystemCard` 的内部 renderer 之一，只由 adapter 决定是否使用
 
 ## 9. 分阶段推进建议
 
