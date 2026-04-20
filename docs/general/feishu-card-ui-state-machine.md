@@ -107,7 +107,7 @@
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/detach` | `mixed` | 当前不再走提交态锚点；点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并把重复 notice 留在原卡内收口，不再额外 append 终态 notice，也不再做 recall |
 | stamped `/menu current_work -> /steerall` | `mixed` | 当前不再走提交态锚点；点击后会把当前菜单卡直接封成 steer-all owner/terminal card。no-op、requested、accepted、failed / disconnect restore 都继续回写同一张原卡，不再留下可重复点击的旧菜单 |
 | bare `/mode` / `/autowhip` / `/reasoning` / `/access` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/reasoning` `/access` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；其中 stamped `/mode vscode` 若切换后立刻命中 VS Code 兼容修复、open prompt 或恢复提示，daemon 会优先把首张可投影提示卡同位替回当前卡，并把该 surface 记录成可继续 patch 的 VS Code guidance card；后续异步 runtime 提示只要仍命中这块 card，就继续回写同一张卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
-| bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuCommandView.Page` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前仅保留 `管理页外链`，`/upgrade track` 子页当前仅保留 track 切换按钮。若来自带 `daemon_lifecycle_id` 的当前 command-page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 command-page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade dev`、`/upgrade local`、`/debug admin`、`/debug upgrade`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 command page 上显示错误并保留表单默认值 |
+| bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuCommandView.Page` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前仅保留 `管理页外链`，`/upgrade track` 子页当前仅保留 track 切换按钮。若来自带 `daemon_lifecycle_id` 的当前 command-page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 command-page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade dev`、`/upgrade local`、`/debug admin`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 command page 上显示错误并保留表单默认值 |
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuCommandView.Page` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 command-page result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由 `run_command(/vscode-migrate)` 或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、`request_user_input` 的分题暂存、`mcp_server_elicitation` form 的局部草稿、“提交答案/提交并继续”触发的最终校验，以及 permissions / elicitation 的结构化回写属于产品状态机 |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
@@ -126,7 +126,7 @@
   - projector 直接以它为 owner 生成 `target_picker_*` callback payload
   - dropdown 刷新与 confirm 已不再经由 `FeishuDirectSelectionPrompt` 兜底
   - view 里的 `Page` / `StageLabel` / `Question` 当前已经成为 editing / processing / terminal 的稳定页头与分页合同；`Page` 负责把 editing 态切成 `mode` / `target` / `source` / `local_directory` / `git`，target picker projector 默认先渲染这组页头，再投影当前页面主体，不再以内联 summary block 作为首屏入口
-  - `/list` 当前固定从 `Page=mode` 进入；`/use` / `/useall` / workspace-scoped 入口则会预填后直接晚进入 `Page=target`，但阶段头仍保持整条向导里的概念路径，例如 `模式/目标`
+  - `/list` / `/use` / `/useall` / workspace-scoped 入口当前都固定从 `Page=mode` 进入；后几者会预填默认模式与工作区，但仍要求用户显式点模式按钮后才进入 `Page=target`，阶段头继续保持整条向导里的概念路径，例如 `模式/目标`
 - `control.FeishuDirectSelectionPrompt` 仍然存在，但已经不再是 workspace/thread selection 的唯一主载体：
   - vscode instance/thread selection 与其余 legacy selection path 现在跨边界携带的是 `control.FeishuSelectionView`
   - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `FeishuDirectSelectionPrompt`
@@ -174,7 +174,7 @@
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `view_mode`、`page` | normal mode 下重新打开 target picker；vscode / legacy selection path 下仍用于在当前 same-context thread 列表里切页 |
 | `show_all_workspaces` / `show_recent_workspaces` | `page` | normal mode 下重新打开 `/list` target picker；旧分页字段继续保留 transport 兼容 |
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | normal mode 下重新打开 `/useall` target picker；旧分页字段继续保留 transport 兼容 |
-| `show_workspace_threads` | `workspace_key`、`page`、`return_page` | normal mode 下以指定 workspace 重新打开 target picker，并直接晚进入 `目标` 页；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
+| `show_workspace_threads` | `workspace_key`、`page`、`return_page` | normal mode 下以指定 workspace 重新打开 target picker，并预填到 `模式` 页；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
 | `target_picker_select_mode` | `picker_id`、`target_value` | unified target picker 的模式按钮回调；gateway 直接从 payload 里的 `target_value` 取当前模式 |
 | `target_picker_select_source` | `picker_id`、`target_value` | unified target picker 的来源按钮回调；当前 projector 直接在 payload 里写 `local_directory` / `git_url`，gateway 仍兼容从 `form_value[field_name]` / `option` / `options` 回退取值 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | unified target picker 的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
@@ -371,7 +371,7 @@ MCP request 卡片当前新增的可视语义：
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 - unified target picker 当前额外有一条明确的 UI 语义：
-  - `/list` 首次打开固定落在 `模式` 页；`/use` / `/useall` / `show_workspace_threads` 会预填 `模式=进入已有工作区` 并直接晚进入 `目标` 页，但仍保留 `上一步 -> 模式`
+  - `/list` / `/use` / `/useall` / `show_workspace_threads` 首次打开都固定落在 `模式` 页；后几者会预填 `模式=进入已有工作区`，但仍要求用户显式点一次模式按钮后才进入 `目标` 页
   - 即使当前没有任何真实 workspace 候选，或 `新建工作区` 只剩一个可用来源，也不会自动跳过 `模式` / `来源`；卡片仍停在当前步骤，只把不可用项置灰并给出原因
   - editing / processing / terminal 页面当前统一先显示 step tag，再显示单一主问题；不再把旧的“当前工作区 / 当前会话 / 路径摘要”作为编辑页首屏
   - `目标` 页继续把 `工作区 + 会话` 保留在同一页；工作区 label 足够时只显示 label，只有 basename 冲突时才额外补路径 meta 做消歧

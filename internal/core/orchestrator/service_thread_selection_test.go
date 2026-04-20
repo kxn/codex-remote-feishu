@@ -168,7 +168,7 @@ func TestPresentThreadSelectionShowsPagedMostRecentThreads(t *testing.T) {
 	if len(view.SessionOptions) != 7 {
 		t.Fatalf("expected all recent threads plus new-thread option, got %#v", view.SessionOptions)
 	}
-	if view.SelectedSessionValue != "" || view.CanConfirm {
+	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected unbound /use to keep session empty until explicit selection, got %#v", view)
 	}
 }
@@ -210,8 +210,11 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 	if view.Source != control.TargetPickerRequestSourceUse || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected scoped /use to stay on current workspace, got %#v", view)
 	}
-	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != "" || view.CanConfirm {
-		t.Fatalf("expected current-workspace sessions in recency order with empty default selection, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
+		t.Fatalf("expected scoped /use to start on mode page, got %#v", view)
+	}
+	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != "" {
+		t.Fatalf("expected current-workspace sessions in recency order with empty default session, got %#v", view)
 	}
 }
 
@@ -243,6 +246,9 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	view := targetPickerFromEvent(t, events[0])
 	if view.Source != control.TargetPickerRequestSourceUseAll || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected attached /useall to keep current workspace selected, got %#v", view)
+	}
+	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
+		t.Fatalf("expected attached /useall to start on mode page, got %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 3 {
 		t.Fatalf("expected current workspace threads plus new-thread option, got %#v", view)
@@ -510,10 +516,13 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("unexpected workspace target picker: %#v", view)
 	}
+	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
+		t.Fatalf("expected workspace-scoped picker to start on mode page, got %#v", view)
+	}
 	if len(view.SessionOptions) != 4 {
 		t.Fatalf("expected workspace sessions plus new-thread option, got %#v", view.SessionOptions)
 	}
-	if view.SelectedSessionValue != "" || view.CanConfirm {
+	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected workspace target picker to keep session empty before user choice, got %#v", view)
 	}
 }

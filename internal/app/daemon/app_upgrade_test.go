@@ -103,39 +103,29 @@ func TestUpgradeTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	}
 }
 
-func TestDebugTrackCompatibilityAliasShowsGuidance(t *testing.T) {
+func TestDebugTrackAliasRejected(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionDebugCommand,
+	events := app.handleDebugDaemonCommand(control.DaemonCommand{
 		SurfaceSessionID: "feishu:chat:1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
 		Text:             "/debug track beta",
 	})
+	if len(events) != 1 || events[0].FeishuCommandView == nil || events[0].FeishuCommandView.Page == nil {
+		t.Fatalf("expected error command page, got %#v", events)
+	}
+	page := events[0].FeishuCommandView.Page
+	if page.StatusKind != "error" || !strings.Contains(page.StatusText, "不支持的 /debug 子命令") {
+		t.Fatalf("expected unsupported-subcommand error on debug page, got %#v", page)
+	}
 
 	updated, err := install.LoadState(statePath)
 	if err != nil {
 		t.Fatalf("LoadState updated: %v", err)
 	}
-	if updated.CurrentTrack != install.ReleaseTrackBeta {
-		t.Fatalf("current track = %q, want beta", updated.CurrentTrack)
+	if updated.CurrentTrack != install.ReleaseTrackProduction {
+		t.Fatalf("current track = %q, want production to remain unchanged", updated.CurrentTrack)
 	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, op := range gateway.snapshotOperations() {
-			if op.CardTitle != "Upgrade" {
-				continue
-			}
-			if strings.Contains(op.CardBody, "`/debug track` 仍可兼容") && strings.Contains(op.CardBody, "`/upgrade track beta`") {
-				return
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for compatibility guidance notice")
 }
 
 func TestTickDoesNotAutoCheckOrPromptUpgrade(t *testing.T) {
@@ -479,7 +469,7 @@ func TestBuildUpgradeRootPageOnlyExposesUpgradeMenus(t *testing.T) {
 func TestBuildUpgradeTrackPageOnlyExposesTrackSwitching(t *testing.T) {
 	catalog := control.BuildFeishuCommandPageCatalog(buildUpgradeTrackPageView(install.InstallState{
 		CurrentTrack: install.ReleaseTrackProduction,
-	}, false))
+	}))
 	assertCatalogUsesPlainTextContracts(t, &catalog)
 	if len(catalog.Sections) != 1 {
 		t.Fatalf("expected only the track switch section, got %#v", catalog.Sections)
@@ -501,6 +491,19 @@ func TestParseDebugCommandTextRecognizesAdmin(t *testing.T) {
 	}
 	if parsed.Mode != debugCommandAdmin {
 		t.Fatalf("mode = %q, want %q", parsed.Mode, debugCommandAdmin)
+	}
+}
+
+func TestParseDebugCommandTextRejectsLegacySubcommands(t *testing.T) {
+	tests := []string{
+		"/debug track",
+		"/debug track beta",
+		"/debug upgrade",
+	}
+	for _, input := range tests {
+		if _, err := parseDebugCommandText(input); err == nil {
+			t.Fatalf("expected %q to be rejected", input)
+		}
 	}
 }
 

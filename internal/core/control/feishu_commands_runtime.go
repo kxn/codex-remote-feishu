@@ -53,7 +53,7 @@ func runtimeUpgradeCommandDefinition(def FeishuCommandDefinition) FeishuCommandD
 
 func runtimeDebugCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
 	def.ArgumentFormNote = "例如 admin。"
-	def.Description = "查看调试状态，或生成临时管理页外链。历史兼容的 `/debug track` 请改用 `/upgrade track`。"
+	def.Description = "查看调试状态，或生成临时管理页外链。"
 	def.Examples = []string{"/debug", "/debug admin"}
 	return def
 }

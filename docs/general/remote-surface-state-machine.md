@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-20`
-> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 则继续并入共享过程卡：quiet 静默，normal/verbose 可见）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（editing 态改成显式 `Page` 向导流：`/list` 从 `模式` 页进入，`/use` / `/useall` / workspace-scoped 入口预填后直落 `目标` 页；`目标` 页保留工作区 + 会话同页，`来源 -> 目录/Git` 各页各答一个主问题；本地目录命中已知 workspace 时直接阻塞；`Git URL` 页继续在同页收集父目录、仓库地址、目录名与最终路径预览，并在 confirm 后进入同卡 processing / terminal 收口；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；`vscode mode` 下菜单进入的 `/list`、`/use`、`/useall` 现在也会把实例/线程结果、attach / use 终态继续收口在原菜单卡；stamped `/mode vscode` 若立刻命中兼容修复、open prompt 或恢复提示，以及 stamped/typed `/vscode-migrate` 打开的 root page 与 `vscode_migrate_owner_flow` 结果，也优先沿当前卡时间线承接；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖真正脱离当前 owner-card 上下文的 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
+> Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 则继续并入共享过程卡：quiet 静默，normal/verbose 可见）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/model` `/verbose` 的统一参数卡表单、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（editing 态改成显式 `Page` 向导流：`/list` / `/use` / `/useall` / workspace-scoped 入口现在都先落 `模式` 页，并预填 `模式=进入已有工作区`；点模式按钮后再进入 `目标` 或 `来源` 页；`目标` 页保留工作区 + 会话同页，`来源 -> 目录/Git` 各页各答一个主问题；本地目录命中已知 workspace 时直接阻塞；`Git URL` 页继续在同页收集父目录、仓库地址、目录名与最终路径预览，并在 confirm 后进入同卡 processing / terminal 收口；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；`vscode mode` 下菜单进入的 `/list`、`/use`、`/useall` 现在也会把实例/线程结果、attach / use 终态继续收口在原菜单卡；stamped `/mode vscode` 若立刻命中兼容修复、open prompt 或恢复提示，以及 stamped/typed `/vscode-migrate` 打开的 root page 与 `vscode_migrate_owner_flow` 结果，也优先沿当前卡时间线承接；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` 偏好的承载；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖真正脱离当前 owner-card 上下文的 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
 
 ## 1. 文档定位
 
@@ -127,7 +127,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 4. 若当前仍有 live remote work，则 `/mode` 直接拒绝，并明确提示用户 `/stop` 或 `/detach`。
 5. `Abandoning` 仍是更高优先级 gate；但 `PendingHeadless` 不再阻塞 `/mode`，用户可以直接切到 `vscode` 终止恢复流程。
 6. 当前 `/list` 已按 mode 分流：
-   1. normal mode 打开 unified target picker：`/list` 从 `模式` 页进入，`/use` / `/useall` / workspace-scoped 入口会预填后直落 `目标` 页，但仍属于同一张 owner card 的向导步骤。
+   1. normal mode 打开 unified target picker：`/list` / `/use` / `/useall` / workspace-scoped 入口都会先落 `模式` 页，并预填当前默认模式；用户显式点击模式按钮后再推进到 `目标` 或 `来源` 页。
    2. vscode mode 继续列在线 VS Code instance。
 7. `Verbosity` 当前也是 surface 级偏好：
    1. `/verbose quiet|normal|verbose` 直接改当前 surface。
@@ -135,7 +135,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. daemon 重启后，latent surface 会从 `surface resume state` 恢复之前的 `Verbosity`。
 8. `normal mode` 当前已经完成这一轮产品收窄：
    1. `/list` / `/use` / `/useall` / `show_workspace_threads` 都收敛到同一张 target picker owner card，但 editing 态现在按显式 `Page` 向导流驱动，不再把模式 / 目标 / 来源 / 目录 / Git 混在同一页。
-   2. `/list` 固定从 `模式` 页进入；`/use` / `/useall` / workspace-scoped 入口会预填 `模式=进入已有工作区`，直接晚进入 `目标` 页，但仍保留 `上一步 -> 模式`。
+   2. `/list` / `/use` / `/useall` / workspace-scoped 入口都会预填 `模式=进入已有工作区` 并先停在 `模式` 页；只有用户显式点击模式按钮后，才继续进入 `目标` 页或 `来源` 页。
    3. 当前没有已有 workspace，或 `新建工作区` 只剩一个可用来源时，都不会自动跳过 `模式` / `来源`；卡片仍停在当前步骤，只把不可用项置灰并给出原因。
    4. `目标` 页继续保留“工作区 + 会话”同页：
       1. 工作区候选只出现真实 workspace，不再混入动作型来源项。
@@ -336,7 +336,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 2. `/list` 的直接动作，以及 normal mode 下的 `show_*` 同上下文导航，现在都会产出 `UIEventFeishuTargetPicker`。
    1. unified target picker 改成显式 `Page` 向导模型；`source=list/use/useall/workspace` 不只影响默认值，也会决定首次落在哪一页。
    2. `/list` 固定打开 `Page=mode`。
-   3. `/use` / `/useall` / `show_workspace_threads` 会预填 `Mode=existing_workspace`，直接晚进入 `Page=target`；workspace-scoped 入口只预填 workspace，不锁死，且仍可 `上一步` 回到 `模式`。
+   3. `/use` / `/useall` / `show_workspace_threads` 会预填 `Mode=existing_workspace`，但首次仍停在 `Page=mode`；workspace-scoped 入口只预填 workspace，不锁死，且点击模式按钮后才进入 `Page=target`。
    4. 当前没有已有 workspace，或添加路径只剩一个可用来源时，都不会自动跳过 `模式` / `来源`；卡片仍展示当前步骤，只把不可用项置灰并给出原因。
 3. `目标` 页下，会话下拉始终基于当前选中的 workspace 动态重建。
    1. 先列该 workspace 下当前可接管或可恢复的 thread。

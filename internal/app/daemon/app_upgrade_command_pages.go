@@ -54,21 +54,13 @@ func buildUpgradeRootPageView(stateValue install.InstallState, formDefault, stat
 	}
 }
 
-func buildUpgradeTrackPageView(stateValue install.InstallState, legacyAlias bool) control.FeishuCommandPageView {
-	statusKind := ""
-	statusText := ""
-	if legacyAlias {
-		statusKind = "info"
-		statusText = "当前使用了兼容 alias；后续请改用 /upgrade track。"
-	}
+func buildUpgradeTrackPageView(stateValue install.InstallState) control.FeishuCommandPageView {
 	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
 	return control.FeishuCommandPageView{
 		CommandID:       control.FeishuCommandUpgrade,
 		Title:           "Upgrade Track",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandUpgrade, "Track"),
 		SummarySections: commandCatalogSummarySections(buildTrackSummaryLines(stateValue)...),
-		StatusKind:      statusKind,
-		StatusText:      statusText,
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{

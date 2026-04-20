@@ -166,7 +166,7 @@ Windows PowerShell:
 - `dev-latest` 由固定 GitHub prerelease + `dev-latest.json` manifest 提供，客户端按 manifest 解析当前平台资产并做 checksum 校验。
 - 当前 `dev-latest` workflow 产出的 binary 使用 `shipping` flavor；也就是说它是“最新 master 的公开测试构建”，不是源码仓库本地 `dev` flavor 的替代品。
 
-`/upgrade track`、帮助文案和卡片入口都会读取这套策略；旧 `/debug track` 仅作为兼容别名保留。`/upgrade dev` 则始终是显式命令入口，不跟随 track 按钮一起大面积曝光。
+`/upgrade track`、帮助文案和卡片入口都会读取这套策略。`/upgrade dev` 则始终是显式命令入口，不跟随 track 按钮一起大面积曝光。
 
 ## 4. 默认布局
 
@@ -294,7 +294,7 @@ loginctl enable-linger "$USER"
   - 用户发送 `/upgrade latest`
   - daemon 按当前 track 检查或继续升级到最新 release
   - 用户发送 `/upgrade track` 或 `/upgrade track <track>` 可查看/切换升级渠道
-  - track 可选范围由 build flavor 策略决定（旧 `/debug track` 仅保留兼容）
+  - track 可选范围由 build flavor 策略决定
   - daemon 不再后台自动检查 GitHub release，也不再主动弹出升级提示卡
 - 滚动开发构建升级
   - 用户发送 `/upgrade dev`

@@ -978,9 +978,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
 					"kind":    "submit_command_form",
-					"command": "/debug",
+					"command": "/upgrade",
 				},
-				InputValue: "track beta",
+				InputValue: "track production",
 			},
 			Context: &larkcallback.Context{
 				OpenChatID:    "oc_1",
@@ -993,7 +993,7 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 	if !ok {
 		t.Fatal("expected submit_command_form callback to be parsed")
 	}
-	if action.Kind != control.ActionDebugCommand || action.Text != "/debug track beta" {
+	if action.Kind != control.ActionUpgradeCommand || action.Text != "/upgrade track production" {
 		t.Fatalf("unexpected input fallback action: %#v", action)
 	}
 }

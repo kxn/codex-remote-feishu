@@ -27,24 +27,6 @@ func parseDebugCommandText(text string) (parsedDebugCommand, error) {
 			return parsedDebugCommand{}, fmt.Errorf("`/debug admin` 不接受额外参数。")
 		}
 		return parsedDebugCommand{Mode: debugCommandAdmin}, nil
-	case "upgrade":
-		if len(fields) != 2 {
-			return parsedDebugCommand{}, fmt.Errorf("`/debug upgrade` 不接受额外参数。")
-		}
-		return parsedDebugCommand{Mode: debugCommandUpgrade}, nil
-	case "track":
-		switch len(fields) {
-		case 2:
-			return parsedDebugCommand{Mode: debugCommandShowTrack}, nil
-		case 3:
-			track := install.ParseReleaseTrack(fields[2])
-			if track == "" {
-				return parsedDebugCommand{}, fmt.Errorf("track 只支持 alpha、beta、production。")
-			}
-			return parsedDebugCommand{Mode: debugCommandSetTrack, Track: track}, nil
-		default:
-			return parsedDebugCommand{}, fmt.Errorf("`/debug track` 只支持查看或设置 `alpha|beta|production`。")
-		}
 	default:
 		return parsedDebugCommand{}, fmt.Errorf("不支持的 /debug 子命令。")
 	}
@@ -353,22 +335,22 @@ func firstNonEmptyTrack(values ...install.ReleaseTrack) install.ReleaseTrack {
 	return ""
 }
 
-func trackSummaryEvents(surfaceID string, stateValue install.InstallState, legacyAlias bool) []control.UIEvent {
-	return commandPageEvents(surfaceID, buildUpgradeTrackPageView(stateValue, legacyAlias))
+func trackSummaryEvents(surfaceID string, stateValue install.InstallState) []control.UIEvent {
+	return commandPageEvents(surfaceID, buildUpgradeTrackPageView(stateValue))
 }
 
-func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, nextTrack install.ReleaseTrack, legacyAlias bool) []control.UIEvent {
+func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, nextTrack install.ReleaseTrack) []control.UIEvent {
 	if !install.CurrentBuildAllowsReleaseTrack(nextTrack) {
-		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unsupported", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), unsupportedTrackMessage(nextTrack), legacyAlias))}
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unsupported", unsupportedTrackMessage(nextTrack))}
 	}
 	if a.upgradeRuntime.checkInFlight {
-		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前正在检查升级，暂时不能切换 track。", legacyAlias))}
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", "当前正在检查升级，暂时不能切换 track。")}
 	}
 	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
-		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), "当前已有升级事务进行中，暂时不能切换 track。", legacyAlias))}
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", "当前已有升级事务进行中，暂时不能切换 track。")}
 	}
 	if stateValue.CurrentTrack == nextTrack {
-		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unchanged", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("当前 track 已经是 %s。", nextTrack), legacyAlias))}
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unchanged", fmt.Sprintf("当前 track 已经是 %s。", nextTrack))}
 	}
 	stateValue.CurrentTrack = nextTrack
 	stateValue.LastKnownLatestVersion = ""
@@ -378,16 +360,9 @@ func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, 
 	now := time.Now().UTC()
 	a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
-		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_write_failed", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("切换 track 失败：%v", err), legacyAlias))}
+		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_write_failed", fmt.Sprintf("切换 track 失败：%v", err))}
 	}
-	return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_updated", legacyTrackAliasMessage("/upgrade track "+string(nextTrack), fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /upgrade latest。", nextTrack), legacyAlias))}
-}
-
-func legacyTrackAliasMessage(replacement, body string, legacyAlias ...bool) string {
-	if len(legacyAlias) == 0 || !legacyAlias[0] {
-		return body
-	}
-	return fmt.Sprintf("`/debug track` 仍可兼容，后续请改用 `%s`。\n\n%s", replacement, body)
+	return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_updated", fmt.Sprintf("当前 track 已切到 %s。需要立即检查时，请发送 /upgrade latest。", nextTrack))}
 }
 
 func defaultUpgradeTrackForState(stateValue install.InstallState) install.ReleaseTrack {

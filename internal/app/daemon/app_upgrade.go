@@ -20,10 +20,7 @@ type debugCommandMode string
 
 const (
 	debugCommandShowStatus debugCommandMode = "status"
-	debugCommandShowTrack  debugCommandMode = "track_show"
-	debugCommandSetTrack   debugCommandMode = "track_set"
 	debugCommandAdmin      debugCommandMode = "admin"
-	debugCommandUpgrade    debugCommandMode = "upgrade"
 )
 
 type parsedDebugCommand struct {
@@ -69,25 +66,11 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []control.
 	if err != nil {
 		return debugUsageEvents(command.SurfaceSessionID, commandArgumentText(command.Text), err.Error())
 	}
-	if parsed.Mode == debugCommandAdmin {
-		return a.handleDebugAdminCommand(command)
-	}
-
-	stateValue, _, err := a.loadUpgradeStateLocked(true)
-	if err != nil {
-		return []control.UIEvent{debugNoticeEvent(command.SurfaceSessionID, "debug_state_load_failed", fmt.Sprintf("读取升级状态失败：%v", err))}
-	}
-
 	switch parsed.Mode {
 	case debugCommandShowStatus:
-		return commandPageEvents(command.SurfaceSessionID, buildDebugRootPageView(stateValue, a.upgradeRuntime.checkInFlight, "", "", ""))
-	case debugCommandShowTrack:
-		return trackSummaryEvents(command.SurfaceSessionID, stateValue, true)
-	case debugCommandSetTrack:
-		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track, true)
-	case debugCommandUpgrade:
-		command.Text = "/upgrade latest"
-		return a.handleUpgradeLatestCommand(command, stateValue)
+		return commandPageEvents(command.SurfaceSessionID, buildDebugRootPageView(install.InstallState{}, false, "", "", ""))
+	case debugCommandAdmin:
+		return a.handleDebugAdminCommand(command)
 	default:
 		return debugUsageEvents(command.SurfaceSessionID, commandArgumentText(command.Text), "不支持的 /debug 子命令。")
 	}
@@ -148,9 +131,9 @@ func (a *App) handleUpgradeDaemonCommand(command control.DaemonCommand) []contro
 	case upgradeCommandShowStatus:
 		return commandPageEvents(command.SurfaceSessionID, buildUpgradeRootPageView(stateValue, "", "", ""))
 	case upgradeCommandShowTrack:
-		return trackSummaryEvents(command.SurfaceSessionID, stateValue, false)
+		return trackSummaryEvents(command.SurfaceSessionID, stateValue)
 	case upgradeCommandSetTrack:
-		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track, false)
+		return a.setTrackEvents(command.SurfaceSessionID, stateValue, parsed.Track)
 	case upgradeCommandLatest:
 		return a.handleUpgradeLatestCommand(command, stateValue)
 	case upgradeCommandDev:

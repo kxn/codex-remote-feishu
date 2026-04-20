@@ -8,10 +8,11 @@ import (
 
 func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
 	switch source {
-	case control.TargetPickerRequestSourceList:
+	case control.TargetPickerRequestSourceList,
+		control.TargetPickerRequestSourceUse,
+		control.TargetPickerRequestSourceUseAll,
+		control.TargetPickerRequestSourceWorkspace:
 		return control.FeishuTargetPickerPageMode
-	case control.TargetPickerRequestSourceUse, control.TargetPickerRequestSourceUseAll, control.TargetPickerRequestSourceWorkspace:
-		return control.FeishuTargetPickerPageTarget
 	default:
 		if targetPickerSupportsAddWorkspace(source) {
 			return control.FeishuTargetPickerPageMode

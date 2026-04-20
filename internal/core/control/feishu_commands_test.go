@@ -7,15 +7,15 @@ import (
 )
 
 func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/debug upgrade")
+	action, ok := ParseFeishuTextAction("/debug")
 	if !ok {
-		t.Fatal("expected /debug upgrade to be parsed")
+		t.Fatal("expected /debug to be parsed")
 	}
 	if action.Kind != ActionDebugCommand {
 		t.Fatalf("action kind = %q, want %q", action.Kind, ActionDebugCommand)
 	}
-	if action.Text != "/debug upgrade" {
-		t.Fatalf("action text = %q, want %q", action.Text, "/debug upgrade")
+	if action.Text != "/debug" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/debug")
 	}
 }
 
@@ -51,19 +51,6 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 		if action.Text != input {
 			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
 		}
-	}
-}
-
-func TestParseFeishuTextActionRecognizesDebugTrackCompatibilityAlias(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/debug track beta")
-	if !ok {
-		t.Fatal("expected /debug track beta to be parsed")
-	}
-	if action.Kind != ActionDebugCommand {
-		t.Fatalf("action kind = %q, want %q", action.Kind, ActionDebugCommand)
-	}
-	if action.Text != "/debug track beta" {
-		t.Fatalf("action text = %q, want %q", action.Text, "/debug track beta")
 	}
 }
 

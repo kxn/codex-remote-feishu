@@ -1433,6 +1433,9 @@ func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || !testutil.SamePath(view.SelectedWorkspaceKey, "/data/dl/picdetect") {
 		t.Fatalf("unexpected persisted-only workspace target picker: %#v", view)
 	}
+	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
+		t.Fatalf("expected persisted-only workspace picker to start on mode page, got %#v", view)
+	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-picdetect")); !ok {
 		t.Fatalf("expected persisted-only thread option to remain recoverable, got %#v", view.SessionOptions)
 	}

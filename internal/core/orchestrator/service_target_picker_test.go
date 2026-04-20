@@ -498,7 +498,10 @@ func TestTargetPickerShowThreadsOnAttachedWorkspaceKeepsSessionEmptyWhenRouteUnb
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected current workspace to remain selected, got %#v", view)
 	}
-	if view.SelectedSessionValue != "" || view.CanConfirm {
+	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
+		t.Fatalf("expected /use picker to start on mode page, got %#v", view)
+	}
+	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected unbound route to keep session empty until explicit user choice, got %#v", view)
 	}
 }
