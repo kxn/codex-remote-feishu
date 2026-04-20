@@ -133,13 +133,11 @@ func (a *App) runSecondChanceFinalPatch(job secondChanceFinalPatchJob) {
 		TurnDiffSnapshot:     job.TurnDiffSnapshot,
 		FinalTurnSummary:     job.FinalTurnSummary,
 	})
-	if len(ops) != 1 {
+	primary := firstFinalSendCard(ops)
+	if primary == nil {
 		return
 	}
-	op := ops[0]
-	if op.Kind != feishu.OperationSendCard {
-		return
-	}
+	op := *primary
 	op.Kind = feishu.OperationUpdateCard
 	op.MessageID = anchor.MessageID
 	op.ReplyToMessageID = ""

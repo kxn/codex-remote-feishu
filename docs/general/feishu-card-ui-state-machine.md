@@ -451,7 +451,7 @@ MCP request 卡片当前新增的可视语义：
   - 若同步 `RewriteFinalBlock` 因超时或失败而退回原始正文 / fallback 预览，daemon 当前只会在这类失败路径下触发一次后台 second-chance preview：
     - 后台 preview timeout 会放宽到同步时限的两倍，并设有最小值
     - 只有后台结果相对首发 final block 真正产生改进时，才会继续发 `message.patch`
-    - 若 final reply 走了 split，后台 second-chance 只会重跑主卡对应的原始正文片段；patch 目标固定是主 final card，自身若会再次 split 则静默放弃
+    - 若 final reply 走了 split，后台 second-chance 会继续重跑主卡对应的原始正文片段；patch 目标固定是主 final card，即使改写后的全文重新投影后仍会 split，也只会抽取新的主卡内容回补这张主卡
     - 这意味着 overflow cards 继续保持 append-only，不会被后台 preview patch 追补，也不会在 patch 时重发
     - patch 目标固定是这张 final reply 自己，不会追加第二张 final card，也不会回填 preview supplement
     - 若 anchor 已因 detach、daemon lifecycle 变化或 turn identity 不匹配而失效，则静默放弃，不再尝试补丁

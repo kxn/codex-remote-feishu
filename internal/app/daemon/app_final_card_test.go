@@ -403,7 +403,7 @@ func TestDeliverUIEventSecondChanceFinalPatchUpdatesOnlyPrimarySplitCard(t *test
 	materializeAttachedSurfaceForFinalCardTest(app, "feishu:chat:1", "app-1", "chat-1", "ou_user", "inst-1", "/data/dl/droid")
 
 	longBody := "请查看 [设计文档](./docs/very/very/very/long/path/design.md)\n\n" +
-		strings.Repeat("这里是较长的补充说明，会强制 final reply 进入应用层 split。\n第二行继续保留一些上下文。\n\n", 500)
+		strings.Repeat("这里是较长的补充说明，会强制 final reply 进入应用层 split。\n第二行继续保留一些上下文。\n\n", 1500)
 	event := control.UIEvent{
 		Kind:             control.UIEventBlockCommitted,
 		SurfaceSessionID: "feishu:chat:1",
@@ -429,6 +429,18 @@ func TestDeliverUIEventSecondChanceFinalPatchUpdatesOnlyPrimarySplitCard(t *test
 		if op.Kind != feishu.OperationSendCard {
 			t.Fatalf("expected initial split send operations, got %#v", initialOps)
 		}
+	}
+	rewrittenBlock := *event.Block
+	rewrittenBlock.Text = previewer.secondTransform(event.Block.Text)
+	rewrittenOps := app.projector.Project("chat-1", control.UIEvent{
+		Kind:             control.UIEventBlockCommitted,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "feishu:chat:1",
+		SourceMessageID:  "msg-1",
+		Block:            &rewrittenBlock,
+	})
+	if len(rewrittenOps) < 2 {
+		t.Fatalf("expected rewritten final body to remain split for primary-only patch path, got %#v", rewrittenOps)
 	}
 	select {
 	case <-previewer.secondDone:
