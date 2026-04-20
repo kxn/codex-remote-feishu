@@ -36,19 +36,16 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 	if op.CardThemeKey != cardThemePlan {
 		t.Fatalf("expected plan card theme key %q, got %#v", cardThemePlan, op.CardThemeKey)
 	}
-	if op.CardBody != "先把协议和去重打通。" {
-		t.Fatalf("expected explanation in card body, got %#v", op)
+	if op.CardBody != "" {
+		t.Fatalf("expected plan update card body to stay empty, got %#v", op)
 	}
 	if len(op.CardElements) != 3 {
-		t.Fatalf("expected three step rows, got %#v", op.CardElements)
+		t.Fatalf("expected explanation block plus step section, got %#v", op.CardElements)
 	}
-	rendered := make([]string, 0, len(op.CardElements))
-	for _, element := range op.CardElements {
-		if content, _ := element["content"].(string); content != "" {
-			rendered = append(rendered, content)
-		}
+	joined := renderedV2CardText(t, op)
+	if !containsAll(joined, "先把协议和去重打通。", "**步骤**") {
+		t.Fatalf("expected explanation and step heading in rendered card, got %q", joined)
 	}
-	joined := strings.Join(rendered, "\n")
 	if !strings.Contains(joined, "☑ 接入结构化 plan") {
 		t.Fatalf("expected completed step row, got %q", joined)
 	}
@@ -74,10 +71,11 @@ func TestProjectPlanUpdateWithoutStepsShowsFallback(t *testing.T) {
 	if ops[0].CardBody != "" {
 		t.Fatalf("expected empty body without explanation, got %#v", ops[0])
 	}
-	if len(ops[0].CardElements) != 1 {
-		t.Fatalf("expected one fallback row, got %#v", ops[0].CardElements)
+	if len(ops[0].CardElements) != 2 {
+		t.Fatalf("expected step heading plus fallback block, got %#v", ops[0].CardElements)
 	}
-	if content, _ := ops[0].CardElements[0]["content"].(string); content != "○ 待补充步骤" {
-		t.Fatalf("unexpected fallback row: %#v", ops[0].CardElements)
+	joined := renderedV2CardText(t, ops[0])
+	if !containsAll(joined, "**步骤**", "○ 待补充步骤") {
+		t.Fatalf("unexpected fallback rendering: %q", joined)
 	}
 }

@@ -93,17 +93,18 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.Snapshot == nil {
 			return nil
 		}
-		body := p.formatSnapshot(*event.Snapshot)
+		elements := p.projectSnapshotElements(*event.Snapshot)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        "当前状态",
-			CardBody:         body,
+			CardBody:         "",
+			CardElements:     elements,
 			CardThemeKey:     cardThemeInfo,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             legacyCardDocument("当前状态", body, cardThemeInfo, nil),
+			card:             rawCardDocument("当前状态", "", cardThemeInfo, elements),
 		}}
 	case control.UIEventNotice:
 		if event.Notice == nil {
@@ -132,7 +133,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			return nil
 		}
 		title := "当前计划"
-		body := planUpdateBody(*event.PlanUpdate)
 		elements := planUpdateElements(*event.PlanUpdate)
 		return []Operation{{
 			Kind:             OperationSendCard,
@@ -140,11 +140,11 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        title,
-			CardBody:         body,
+			CardBody:         "",
 			CardThemeKey:     cardThemePlan,
 			CardElements:     elements,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, body, cardThemePlan, elements),
+			card:             rawCardDocument(title, "", cardThemePlan, elements),
 		}}
 	case control.UIEventFeishuDirectSelectionPrompt:
 		var prompt *control.FeishuDirectSelectionPrompt
@@ -421,27 +421,31 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 		if event.ThreadSelection == nil {
 			return nil
 		}
-		body, elements := projectThreadSelectionChangeCardContent(*event.ThreadSelection)
+		elements := projectThreadSelectionChangeCardContent(*event.ThreadSelection)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
 			CardTitle:        "系统提示",
-			CardBody:         body,
+			CardBody:         "",
 			CardElements:     elements,
 			CardThemeKey:     cardThemeInfo,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             legacyCardDocument("系统提示", body, cardThemeInfo, elements),
+			card:             rawCardDocument("系统提示", "", cardThemeInfo, elements),
 		}}
 	default:
 		return nil
 	}
 }
 
-func projectThreadSelectionChangeCardContent(selection control.ThreadSelectionChanged) (string, []map[string]any) {
+func projectThreadSelectionChangeCardContent(selection control.ThreadSelectionChanged) []map[string]any {
 	if strings.TrimSpace(selection.RouteMode) == "new_thread_ready" {
-		return "已准备新建会话。\n\n当前还没有实际会话 ID；下一条文本会作为首条消息创建新会话。", nil
+		block := cardPlainTextBlockElement("已准备新建会话。\n\n当前还没有实际会话 ID；下一条文本会作为首条消息创建新会话。")
+		if len(block) == 0 {
+			return nil
+		}
+		return []map[string]any{block}
 	}
 	lines := []string{fmt.Sprintf("当前输入目标已切换到：%s", selection.Title)}
 	if first := strings.TrimSpace(selection.FirstUserMessage); first != "" {
@@ -457,9 +461,9 @@ func projectThreadSelectionChangeCardContent(selection control.ThreadSelectionCh
 	}
 	block := cardPlainTextBlockElement(strings.Join(lines, "\n"))
 	if len(block) == 0 {
-		return "", nil
+		return nil
 	}
-	return "", []map[string]any{block}
+	return []map[string]any{block}
 }
 
 func (p *Projector) projectBlock(gatewayID, surfaceSessionID, chatID, sourceMessageID, sourceMessagePreview string, block render.Block, summary *control.FileChangeSummary, finalSummary *control.FinalTurnSummary) []Operation {

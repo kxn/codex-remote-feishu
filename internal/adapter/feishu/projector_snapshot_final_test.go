@@ -60,8 +60,9 @@ func TestProjectSnapshotShowsFollowWaitingAndAbandoning(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody, "正在断开，等待当前 turn 收尾", "跟随当前 VS Code（等待中）") {
-		t.Fatalf("expected snapshot body to show follow waiting and abandoning, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "正在断开，等待当前 turn 收尾", "跟随当前 VS Code（等待中）") {
+		t.Fatalf("expected snapshot rendering to show follow waiting and abandoning, got %q", rendered)
 	}
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected snapshot to use structured V2 send path, got %#v", ops[0])
@@ -94,11 +95,9 @@ func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody, "新建会话（等待首条消息）", "**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>") {
-		t.Fatalf("expected snapshot body to show new-thread-ready target, got %#v", ops[0].CardBody)
-	}
-	if strings.Contains(ops[0].CardBody, "**目标：**") {
-		t.Fatalf("snapshot body should not repeat target section, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "新建会话（等待首条消息）", "/data/dl/droid") {
+		t.Fatalf("expected snapshot rendering to show new-thread-ready target, got %q", rendered)
 	}
 }
 
@@ -138,11 +137,12 @@ func TestProjectSnapshotShowsGateAndRetainedOfflineAttachment(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**执行状态：** 实例离线，已保留接管关系；2 条排队消息会在恢复后继续",
-		"**输入门禁：** 有 2 个待处理请求；普通文本和图片会先被拦住",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"执行状态：实例离线，已保留接管关系；2 条排队消息会在恢复后继续",
+		"输入门禁：有 2 个待处理请求；普通文本和图片会先被拦住",
 	) {
-		t.Fatalf("expected snapshot body to show gate and retained offline attachment, got %#v", ops[0].CardBody)
+		t.Fatalf("expected snapshot rendering to show gate and retained offline attachment, got %q", rendered)
 	}
 }
 
@@ -867,19 +867,20 @@ func TestProjectSnapshotIncludesEffectivePromptConfig(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前模式：** <text_tag color='neutral'>vscode</text_tag>",
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
-		"**接管对象类型：** <text_tag color='neutral'>VS Code 实例</text_tag>",
-		"**下条飞书消息：** 模型 <text_tag color='neutral'>gpt-5.4</text_tag>，推理 <text_tag color='neutral'>medium</text_tag>，权限 <text_tag color='neutral'>confirm</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前模式：vscode",
+		"当前目录：/data/dl/droid",
+		"接管对象类型：VS Code 实例",
+		"下条飞书消息：模型 gpt-5.4，推理 medium，权限 confirm",
 	) {
-		t.Fatalf("unexpected snapshot body: %#v", ops[0])
+		t.Fatalf("unexpected snapshot rendering: %q", rendered)
 	}
-	if strings.Contains(ops[0].CardBody, "已知会话：") ||
-		strings.Contains(ops[0].CardBody, "在线实例：") ||
-		strings.Contains(ops[0].CardBody, "飞书临时覆盖") ||
-		strings.Contains(ops[0].CardBody, "底层真实配置") {
-		t.Fatalf("status card should not include list sections, got %#v", ops[0].CardBody)
+	if strings.Contains(rendered, "已知会话：") ||
+		strings.Contains(rendered, "在线实例：") ||
+		strings.Contains(rendered, "飞书临时覆盖") ||
+		strings.Contains(rendered, "底层真实配置") {
+		t.Fatalf("status card should not include list sections, got %q", rendered)
 	}
 }
 
@@ -894,12 +895,13 @@ func TestProjectSnapshotShowsNormalModeWhenDetached(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前模式：** <text_tag color='neutral'>normal</text_tag>",
-		"**接管对象类型：** 无",
-		"**已接管：** 无",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前模式：normal",
+		"接管对象类型：无",
+		"已接管：无",
 	) {
-		t.Fatalf("unexpected detached snapshot body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected detached snapshot rendering: %q", rendered)
 	}
 }
 
@@ -915,12 +917,13 @@ func TestProjectSnapshotShowsClaimedWorkspace(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
-		"**接管对象类型：** 无",
-		"**已接管：** 无",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前目录：/data/dl/droid",
+		"接管对象类型：无",
+		"已接管：无",
 	) {
-		t.Fatalf("unexpected snapshot body with workspace claim: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot rendering with workspace claim: %q", rendered)
 	}
 }
 
@@ -948,17 +951,18 @@ func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
-		"**接管对象类型：** <text_tag color='neutral'>工作区</text_tag>",
-		"**已接管：** droid",
-		"**当前输入目标：** 未绑定会话",
-		"**下条飞书消息：** 模型 <text_tag color='neutral'>gpt-5.4</text_tag>，推理 <text_tag color='neutral'>medium</text_tag>，权限 <text_tag color='neutral'>confirm</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前目录：/data/dl/droid",
+		"接管对象类型：工作区",
+		"已接管：droid",
+		"当前输入目标：未绑定会话",
+		"下条飞书消息：模型 gpt-5.4，推理 medium，权限 confirm",
 	) {
-		t.Fatalf("unexpected snapshot body with attached workspace: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot rendering with attached workspace: %q", rendered)
 	}
-	if strings.Contains(ops[0].CardBody, "**工作目录：**") {
-		t.Fatalf("snapshot body should hide duplicate prompt cwd, got %#v", ops[0].CardBody)
+	if strings.Contains(rendered, "工作目录：") {
+		t.Fatalf("snapshot rendering should hide duplicate prompt cwd, got %q", rendered)
 	}
 }
 
@@ -979,11 +983,12 @@ func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**autowhip：** 开启，连续 2 次，等待重试上游不稳定",
-		"计划于 <text_tag color='neutral'>2026-04-09 12:00:30 CST</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"autowhip：开启，连续 2 次，等待重试上游不稳定",
+		"计划于 2026-04-09 12:00:30 CST",
 	) {
-		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot rendering: %q", rendered)
 	}
 }
 
@@ -999,8 +1004,9 @@ func TestProjectSnapshotDisplaysBinaryIdentityLine(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "**当前二进制：** <text_tag color='neutral'>release/1.5 / v1.2.3 / abcdef1234</text_tag>") {
-		t.Fatalf("expected snapshot binary line, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "当前二进制：release/1.5 / v1.2.3 / abcdef1234") {
+		t.Fatalf("expected snapshot binary line, got %q", rendered)
 	}
 }
 
@@ -1026,8 +1032,9 @@ func TestProjectSnapshotDisplaysCurrentDirectoryWithGitBranch(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>master</text_tag>") {
-		t.Fatalf("expected current directory line, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "当前目录："+cwd+" · Git master") {
+		t.Fatalf("expected current directory line, got %q", rendered)
 	}
 }
 
@@ -1052,11 +1059,12 @@ func TestProjectSnapshotDisplaysGitBranchAndCleanWorktree(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>feature/status-git</text_tag>",
-		"**Git 工作区：** <text_tag color='neutral'>干净</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前目录："+cwd+" · Git feature/status-git",
+		"Git 工作区：干净",
 	) {
-		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot git rendering: %q", rendered)
 	}
 }
 
@@ -1086,11 +1094,12 @@ func TestProjectSnapshotDisplaysDirtyGitWorktreeSummary(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>"+cwd+"</text_tag> · Git <text_tag color='neutral'>master</text_tag>",
-		"**Git 工作区：** <text_tag color='neutral'>有改动</text_tag> <text_tag color='neutral'>3修改</text_tag> <text_tag color='neutral'>1未跟踪</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前目录："+cwd+" · Git master",
+		"Git 工作区：有改动 3修改 1未跟踪",
 	) {
-		t.Fatalf("unexpected snapshot git body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot git rendering: %q", rendered)
 	}
 }
 
@@ -1109,8 +1118,9 @@ func TestProjectSnapshotSkipsGitSummaryOutsideGitRepo(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if strings.Contains(ops[0].CardBody, "**Git 分支：**") || strings.Contains(ops[0].CardBody, "**Git 工作区：**") {
-		t.Fatalf("expected snapshot to skip git summary outside repo, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if strings.Contains(rendered, "Git 分支：") || strings.Contains(rendered, "Git 工作区：") {
+		t.Fatalf("expected snapshot to skip git summary outside repo, got %q", rendered)
 	}
 }
 
@@ -1142,8 +1152,9 @@ func TestProjectSnapshotDisplaysFullAccessWithCompactToken(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "权限 <text_tag color='neutral'>full</text_tag>") {
-		t.Fatalf("expected compact full access token in snapshot body, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "权限 full") {
+		t.Fatalf("expected compact full access token in snapshot rendering, got %q", rendered)
 	}
 }
 
@@ -1175,11 +1186,12 @@ func TestProjectSnapshotDisplaysSurfaceDefaultModel(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前目录：** <text_tag color='neutral'>/data/dl/droid</text_tag>",
-		"**下条飞书消息：** 模型 <text_tag color='neutral'>gpt-5.4</text_tag>，推理 <text_tag color='neutral'>xhigh</text_tag>，权限 <text_tag color='neutral'>full</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前目录：/data/dl/droid",
+		"下条飞书消息：模型 gpt-5.4，推理 xhigh，权限 full",
 	) {
-		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot rendering: %q", rendered)
 	}
 }
 
@@ -1199,8 +1211,9 @@ func TestProjectSnapshotDisplaysUnknownEffectivePromptValues(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "**下条飞书消息：** 模型 <text_tag color='neutral'>未知</text_tag>，推理 <text_tag color='neutral'>未知</text_tag>，权限 <text_tag color='neutral'>未知</text_tag>") {
-		t.Fatalf("expected unknown effective prompt values, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "下条飞书消息：模型 未知，推理 未知，权限 未知") {
+		t.Fatalf("expected unknown effective prompt values, got %q", rendered)
 	}
 }
 
@@ -1245,19 +1258,20 @@ func TestProjectSnapshotIncludesBackgroundRestoreAttachmentAndPendingLaunch(t *t
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**已接管：** droid",
-		"**实例 PID：** <text_tag color='neutral'>4321</text_tag>",
-		"后台恢复中：",
-		"**进程 PID：** <text_tag color='neutral'>5678</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"已接管：droid",
+		"实例 PID：4321",
+		"**后台恢复中**",
+		"进程 PID：5678",
 	) {
-		t.Fatalf("unexpected snapshot body: %#v", ops[0].CardBody)
+		t.Fatalf("unexpected snapshot rendering: %q", rendered)
 	}
-	if strings.Contains(ops[0].CardBody, "Headless") {
-		t.Fatalf("snapshot body should not expose headless label, got %#v", ops[0].CardBody)
+	if strings.Contains(rendered, "Headless") {
+		t.Fatalf("snapshot rendering should not expose headless label, got %q", rendered)
 	}
-	if strings.Contains(ops[0].CardBody, "在线实例：") {
-		t.Fatalf("status card should not include online instance list, got %#v", ops[0].CardBody)
+	if strings.Contains(rendered, "在线实例：") {
+		t.Fatalf("status card should not include online instance list, got %q", rendered)
 	}
 }
 
@@ -1290,14 +1304,12 @@ func TestProjectSnapshotTruncatesLongSelectedPreview(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前输入目标：** <text_tag color='neutral'>droid · 这是一个特别长特别长特别长的当前输入目标...</text_tag>",
-		"**最近回复：** <text_tag color='neutral'>这是一条特别长特别长特别长特别长的最近消息内容，...</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前输入目标：droid · 这是一个特别长特别长特别长的当前输入目标...",
+		"最近回复：这是一条特别长特别长特别长特别长的最近消息内容，...",
 	) {
-		t.Fatalf("expected snapshot body to compact long text, got %#v", ops[0].CardBody)
-	}
-	if strings.Contains(ops[0].CardBody, "**目标：**") {
-		t.Fatalf("snapshot body should not repeat target line, got %#v", ops[0].CardBody)
+		t.Fatalf("expected snapshot rendering to compact long text, got %q", rendered)
 	}
 }
 
@@ -1327,11 +1339,12 @@ func TestProjectSnapshotNeutralizesDynamicThreadText(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !containsAll(ops[0].CardBody,
-		"**当前输入目标：** <text_tag color='neutral'># 修复 `登录`</text_tag>",
-		"**最近回复：** <text_tag color='neutral'>[本地链接](docs/demo.md) - 列...</text_tag>",
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前输入目标：# 修复 `登录`",
+		"最近回复：[本地链接](docs/demo.md) - 列...",
 	) {
-		t.Fatalf("expected snapshot body to neutralize dynamic thread text, got %#v", ops[0].CardBody)
+		t.Fatalf("expected snapshot rendering to preserve dynamic thread text in plain_text, got %q", rendered)
 	}
 }
 
@@ -1364,8 +1377,9 @@ func TestProjectSnapshotNeutralizesPendingHeadlessThreadTitle(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if !strings.Contains(ops[0].CardBody, "- **目标会话：** <text_tag color='neutral'>- 待恢复 `会话`</text_tag>") {
-		t.Fatalf("expected pending headless title to be neutralized, got %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if !strings.Contains(rendered, "- 待恢复 `会话`") {
+		t.Fatalf("expected pending headless title to stay literal in plain_text, got %q", rendered)
 	}
 }
 
@@ -1408,10 +1422,11 @@ func TestProjectThreadSelectionChangeForNewThreadReadyAvoidsSwitchedWording(t *t
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if ops[0].CardBody != "已准备新建会话。\n\n当前还没有实际会话 ID；下一条文本会作为首条消息创建新会话。" {
-		t.Fatalf("unexpected new-thread-ready card body: %#v", ops[0].CardBody)
+	rendered := renderedV2CardText(t, ops[0])
+	if rendered != "已准备新建会话。\n\n当前还没有实际会话 ID；下一条文本会作为首条消息创建新会话。" {
+		t.Fatalf("unexpected new-thread-ready card rendering: %q", rendered)
 	}
-	if strings.Contains(ops[0].CardBody, "当前输入目标已切换到") {
-		t.Fatalf("new-thread-ready card should not look like a real thread switch: %#v", ops[0].CardBody)
+	if strings.Contains(rendered, "当前输入目标已切换到") {
+		t.Fatalf("new-thread-ready card should not look like a real thread switch: %q", rendered)
 	}
 }

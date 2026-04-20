@@ -15,119 +15,89 @@ const (
 	snapshotStatusPreviewLimit = 24
 )
 
-func formatSnapshot(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) string {
-	lines := []string{}
-	lines = append(lines, snapshotField("当前模式", formatNeutralTextTag(displaySnapshotMode(snapshot.ProductMode))))
+func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []map[string]any {
+	return appendCardTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
+}
+
+func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {
+	lines := []string{snapshotLine("当前模式", displaySnapshotMode(snapshot.ProductMode))}
 	if daemonBinary = strings.TrimSpace(daemonBinary); daemonBinary != "" {
-		lines = append(lines, snapshotField("当前二进制", formatNeutralTextTag(daemonBinary)))
+		lines = append(lines, snapshotLine("当前二进制", daemonBinary))
 	}
 	if currentDirectory = strings.TrimSpace(currentDirectory); currentDirectory != "" {
-		lines = append(lines, snapshotField("当前目录", currentDirectory))
+		lines = append(lines, snapshotLine("当前目录", currentDirectory))
 	}
 	if snapshot.Attachment.InstanceID == "" {
-		lines = append(lines, snapshotField("接管对象类型", "无"))
-		lines = append(lines, snapshotField("已接管", "无"))
+		lines = append(lines, snapshotLine("接管对象类型", "无"))
+		lines = append(lines, snapshotLine("已接管", "无"))
 	} else {
-		lines = append(lines, snapshotField("接管对象类型", formatNeutralTextTag(displayAttachmentObjectType(snapshot.Attachment.ObjectType))))
-		lines = append(lines, snapshotField("已接管", formatInstanceLabel(snapshot.Attachment.DisplayName, snapshot.Attachment.Source, snapshot.Attachment.Managed)))
+		lines = append(lines, snapshotLine("接管对象类型", displayAttachmentObjectType(snapshot.Attachment.ObjectType)))
+		lines = append(lines, snapshotLine("已接管", formatInstanceLabel(snapshot.Attachment.DisplayName, snapshot.Attachment.Source, snapshot.Attachment.Managed)))
 		if snapshot.Attachment.Abandoning {
-			lines = append(lines, snapshotField("状态", "正在断开，等待当前 turn 收尾"))
+			lines = append(lines, snapshotLine("状态", "正在断开，等待当前 turn 收尾"))
 		}
 		switch {
 		case snapshot.Attachment.SelectedThreadTitle != "":
-			lines = append(lines, snapshotField("当前输入目标", formatSnapshotDynamicValue(snapshot.Attachment.SelectedThreadTitle, snapshotStatusTitleLimit)))
+			lines = append(lines, snapshotLine("当前输入目标", compactSnapshotStatusText(snapshot.Attachment.SelectedThreadTitle, snapshotStatusTitleLimit)))
 		case snapshot.Attachment.SelectedThreadID != "":
-			lines = append(lines, snapshotField("当前输入目标", "未命名会话"))
+			lines = append(lines, snapshotLine("当前输入目标", "未命名会话"))
 		case snapshot.Attachment.RouteMode == "new_thread_ready":
-			lines = append(lines, snapshotField("当前输入目标", "新建会话（等待首条消息）"))
+			lines = append(lines, snapshotLine("当前输入目标", "新建会话（等待首条消息）"))
 		case snapshot.Attachment.RouteMode == "follow_local":
-			lines = append(lines, snapshotField("当前输入目标", "跟随当前 VS Code（等待中）"))
+			lines = append(lines, snapshotLine("当前输入目标", "跟随当前 VS Code（等待中）"))
 		default:
-			lines = append(lines, snapshotField("当前输入目标", "未绑定会话"))
+			lines = append(lines, snapshotLine("当前输入目标", "未绑定会话"))
 		}
 		if first := strings.TrimSpace(snapshot.Attachment.SelectedThreadFirstUserMessage); first != "" {
-			lines = append(lines, snapshotField("会话起点", formatSnapshotDynamicValue(first, snapshotStatusPreviewLimit)))
+			lines = append(lines, snapshotLine("会话起点", compactSnapshotStatusText(first, snapshotStatusPreviewLimit)))
 		}
 		if lastUser := strings.TrimSpace(snapshot.Attachment.SelectedThreadLastUserMessage); lastUser != "" {
-			lines = append(lines, snapshotField("最近用户", formatSnapshotDynamicValue(lastUser, snapshotStatusPreviewLimit)))
+			lines = append(lines, snapshotLine("最近用户", compactSnapshotStatusText(lastUser, snapshotStatusPreviewLimit)))
 		}
 		if lastAssistant := strings.TrimSpace(snapshot.Attachment.SelectedThreadLastAssistantMessage); lastAssistant != "" {
-			lines = append(lines, snapshotField("最近回复", formatSnapshotDynamicValue(lastAssistant, snapshotStatusPreviewLimit)))
+			lines = append(lines, snapshotLine("最近回复", compactSnapshotStatusText(lastAssistant, snapshotStatusPreviewLimit)))
 		} else if preview := strings.TrimSpace(snapshot.Attachment.SelectedThreadPreview); preview != "" {
-			lines = append(lines, snapshotField("最近回复", formatSnapshotDynamicValue(preview, snapshotStatusPreviewLimit)))
+			lines = append(lines, snapshotLine("最近回复", compactSnapshotStatusText(preview, snapshotStatusPreviewLimit)))
 		}
 		if age := strings.TrimSpace(snapshot.Attachment.SelectedThreadAgeText); age != "" && age != "时间未知" {
-			lines = append(lines, snapshotField("最近活跃", age))
+			lines = append(lines, snapshotLine("最近活跃", age))
 		}
 		if dispatch := snapshotDispatchText(snapshot.Dispatch); dispatch != "" {
-			lines = append(lines, snapshotField("执行状态", dispatch))
+			lines = append(lines, snapshotLine("执行状态", dispatch))
 		}
 		if gate := snapshotGateText(snapshot.Gate); gate != "" {
-			lines = append(lines, snapshotField("输入门禁", gate))
+			lines = append(lines, snapshotLine("输入门禁", gate))
 		}
 		if snapshot.Attachment.PID > 0 {
-			lines = append(lines, snapshotField("实例 PID", formatNeutralTextTag(fmt.Sprintf("%d", snapshot.Attachment.PID))))
+			lines = append(lines, snapshotLine("实例 PID", fmt.Sprintf("%d", snapshot.Attachment.PID)))
 		}
-		lines = append(lines, "")
-		lines = append(lines, snapshotField("下条飞书消息", formatSnapshotEffectivePrompt(snapshot.NextPrompt)))
+		lines = append(lines, snapshotLine("下条飞书消息", formatSnapshotEffectivePromptPlain(snapshot.NextPrompt)))
 		if snapshotShouldShowPromptCWD(snapshotCurrentDirectory(snapshot), snapshot.NextPrompt.CWD) {
-			lines = append(lines, snapshotField("工作目录", formatNeutralTextTag(snapshot.NextPrompt.CWD)))
+			lines = append(lines, snapshotLine("工作目录", strings.TrimSpace(snapshot.NextPrompt.CWD)))
 		}
 	}
-	lines = append(lines, formatSnapshotGitFields(worktree)...)
-	if autoContinue := snapshotAutoContinueText(snapshot.AutoContinue); autoContinue != "" {
-		lines = append(lines, snapshotField("autowhip", autoContinue))
+	lines = append(lines, formatSnapshotGitFieldsPlain(worktree)...)
+	if autoContinue := snapshotAutoContinueTextPlain(snapshot.AutoContinue); autoContinue != "" {
+		lines = append(lines, snapshotLine("autowhip", autoContinue))
 	}
-	if permissionGaps := formatSnapshotPermissionGaps(snapshot.PermissionGaps); len(permissionGaps) != 0 {
-		lines = append(lines, "")
-		lines = append(lines, "**已知缺权限：**")
-		lines = append(lines, permissionGaps...)
+
+	sections := []control.FeishuCardTextSection{{Lines: lines}}
+	if permissionGaps := formatSnapshotPermissionGapsPlain(snapshot.PermissionGaps); len(permissionGaps) != 0 {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "已知缺权限",
+			Lines: permissionGaps,
+		})
 	}
-	if snapshot.PendingHeadless.InstanceID != "" {
-		lines = append(lines, "")
-		lines = append(lines, "**后台恢复中：**")
-		if snapshot.PendingHeadless.ThreadTitle != "" {
-			lines = append(lines, fmt.Sprintf("- %s", snapshotField("目标会话", formatSnapshotDynamicValue(snapshot.PendingHeadless.ThreadTitle, snapshotStatusTitleLimit))))
-		}
-		if snapshot.PendingHeadless.ThreadCWD != "" {
-			lines = append(lines, fmt.Sprintf("- %s", snapshotField("启动目录", formatNeutralTextTag(snapshot.PendingHeadless.ThreadCWD))))
-		}
-		if snapshot.PendingHeadless.PID > 0 {
-			lines = append(lines, fmt.Sprintf("- %s", snapshotField("进程 PID", formatNeutralTextTag(fmt.Sprintf("%d", snapshot.PendingHeadless.PID)))))
-		}
-		if !snapshot.PendingHeadless.ExpiresAt.IsZero() {
-			lines = append(lines, fmt.Sprintf("- %s", snapshotField("启动超时", formatNeutralTextTag(snapshot.PendingHeadless.ExpiresAt.Format("2006-01-02 15:04:05 MST")))))
-		}
+	if headlessLines := pendingHeadlessSectionLines(snapshot.PendingHeadless); len(headlessLines) != 0 {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "后台恢复中",
+			Lines: headlessLines,
+		})
 	}
-	return strings.TrimSpace(strings.Join(lines, "\n"))
+	return sections
 }
 
-func formatSnapshotPermissionGaps(gaps []control.PermissionGapSummary) []string {
-	if len(gaps) == 0 {
-		return nil
-	}
-	lines := make([]string, 0, len(gaps)*2)
-	for _, gap := range gaps {
-		scope := strings.TrimSpace(gap.Scope)
-		if scope == "" {
-			continue
-		}
-		line := "- " + formatNeutralTextTag(scope)
-		if source := strings.TrimSpace(gap.SourceAPI); source != "" {
-			line += " · 来源 " + formatNeutralTextTag(source)
-		}
-		if !gap.LastSeenAt.IsZero() {
-			line += " · 最近命中 " + formatNeutralTextTag(gap.LastSeenAt.Format("2006-01-02 15:04:05 MST"))
-		}
-		lines = append(lines, line)
-		if url := strings.TrimSpace(gap.ApplyURL); url != "" {
-			lines = append(lines, "  申请链接: "+formatNeutralTextTag(url))
-		}
-	}
-	return lines
-}
-
-func (p *Projector) formatSnapshot(snapshot control.Snapshot) string {
+func (p *Projector) projectSnapshotElements(snapshot control.Snapshot) []map[string]any {
 	daemonBinary := ""
 	if p != nil {
 		daemonBinary = p.snapshotBinary
@@ -138,16 +108,16 @@ func (p *Projector) formatSnapshot(snapshot control.Snapshot) string {
 			worktree = p.readGitWorktree(cwd)
 		}
 	}
-	return formatSnapshot(snapshot, daemonBinary, formatSnapshotCurrentDirectory(snapshotCurrentDirectory(snapshot), gitBranchFromWorktree(worktree)), worktree)
+	return projectSnapshotElements(snapshot, daemonBinary, formatSnapshotCurrentDirectoryPlain(snapshotCurrentDirectory(snapshot), gitBranchFromWorktree(worktree)), worktree)
 }
 
-func formatSnapshotGitFields(worktree *gitWorktreeSummary) []string {
+func formatSnapshotGitFieldsPlain(worktree *gitWorktreeSummary) []string {
 	if worktree == nil {
 		return nil
 	}
 	lines := make([]string, 0, 1)
-	if status := formatSnapshotGitWorktreeStatus(worktree); status != "" {
-		lines = append(lines, snapshotField("Git 工作区", status))
+	if status := formatSnapshotGitWorktreeStatusPlain(worktree); status != "" {
+		lines = append(lines, snapshotLine("Git 工作区", status))
 	}
 	return lines
 }
@@ -160,23 +130,6 @@ func snapshotGitProbeCWD(snapshot control.Snapshot) string {
 		return cwd
 	}
 	return ""
-}
-
-func formatSnapshotGitWorktreeStatus(summary *gitWorktreeSummary) string {
-	if summary == nil {
-		return ""
-	}
-	if !summary.Dirty {
-		return formatNeutralTextTag("干净")
-	}
-	parts := []string{formatNeutralTextTag("有改动")}
-	if summary.ModifiedCount > 0 {
-		parts = append(parts, formatNeutralTextTag(fmt.Sprintf("%d修改", summary.ModifiedCount)))
-	}
-	if summary.UntrackedCount > 0 {
-		parts = append(parts, formatNeutralTextTag(fmt.Sprintf("%d未跟踪", summary.UntrackedCount)))
-	}
-	return strings.Join(parts, " ")
 }
 
 func snapshotCurrentDirectory(snapshot control.Snapshot) string {
@@ -194,23 +147,31 @@ func gitBranchFromWorktree(worktree *gitWorktreeSummary) string {
 	return strings.TrimSpace(worktree.Branch)
 }
 
-func formatSnapshotCurrentDirectory(path, gitBranch string) string {
+func formatSnapshotCurrentDirectoryPlain(path, gitBranch string) string {
 	path = strings.TrimSpace(path)
 	gitBranch = strings.TrimSpace(gitBranch)
 	switch {
 	case path != "" && gitBranch != "":
-		return formatNeutralTextTag(path) + " · Git " + formatNeutralTextTag(gitBranch)
+		return path + " · Git " + gitBranch
 	case path != "":
-		return formatNeutralTextTag(path)
+		return path
 	case gitBranch != "":
-		return "Git " + formatNeutralTextTag(gitBranch)
+		return "Git " + gitBranch
 	default:
 		return ""
 	}
 }
 
-func snapshotField(label, value string) string {
-	return fmt.Sprintf("**%s：** %s", label, value)
+func snapshotLine(label, value string) string {
+	label = strings.TrimSpace(label)
+	value = strings.TrimSpace(value)
+	if label == "" {
+		return value
+	}
+	if value == "" {
+		return label + "："
+	}
+	return label + "：" + value
 }
 
 func compactSnapshotStatusText(text string, limit int) string {
@@ -223,14 +184,6 @@ func compactSnapshotStatusText(text string, limit int) string {
 		return text
 	}
 	return string(runes[:limit]) + "..."
-}
-
-func formatSnapshotDynamicValue(text string, limit int) string {
-	text = compactSnapshotStatusText(text, limit)
-	if text == "" {
-		return ""
-	}
-	return formatNeutralTextTag(text)
 }
 
 func displaySnapshotMode(mode string) string {
@@ -256,11 +209,11 @@ func displaySnapshotAccessMode(value string) string {
 	return agentproto.DisplayAccessModeShort(value)
 }
 
-func formatSnapshotEffectivePrompt(summary control.PromptRouteSummary) string {
+func formatSnapshotEffectivePromptPlain(summary control.PromptRouteSummary) string {
 	return strings.Join([]string{
-		"模型 " + formatNeutralTextTag(displaySnapshotValue(summary.EffectiveModel)),
-		"推理 " + formatNeutralTextTag(displaySnapshotValue(summary.EffectiveReasoningEffort)),
-		"权限 " + formatNeutralTextTag(displaySnapshotAccessMode(summary.EffectiveAccessMode)),
+		"模型 " + displaySnapshotValue(summary.EffectiveModel),
+		"推理 " + displaySnapshotValue(summary.EffectiveReasoningEffort),
+		"权限 " + displaySnapshotAccessMode(summary.EffectiveAccessMode),
 	}, "，")
 }
 
@@ -290,7 +243,7 @@ func snapshotGateText(summary control.GateSummary) string {
 	}
 }
 
-func snapshotAutoContinueText(summary control.AutoContinueSummary) string {
+func snapshotAutoContinueTextPlain(summary control.AutoContinueSummary) string {
 	stateText := "关闭"
 	if summary.Enabled {
 		stateText = "开启"
@@ -310,7 +263,7 @@ func snapshotAutoContinueText(summary control.AutoContinueSummary) string {
 		parts = append(parts, label)
 	}
 	if !summary.PendingDueAt.IsZero() {
-		parts = append(parts, "计划于 "+formatNeutralTextTag(summary.PendingDueAt.Format("2006-01-02 15:04:05 MST")))
+		parts = append(parts, "计划于 "+summary.PendingDueAt.Format("2006-01-02 15:04:05 MST"))
 	}
 	return strings.Join(parts, "，")
 }
@@ -380,6 +333,65 @@ func formatInstanceLabel(displayName, source string, managed bool) string {
 		return label
 	}
 	return label
+}
+
+func formatSnapshotPermissionGapsPlain(gaps []control.PermissionGapSummary) []string {
+	if len(gaps) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(gaps)*2)
+	for _, gap := range gaps {
+		scope := strings.TrimSpace(gap.Scope)
+		if scope == "" {
+			continue
+		}
+		line := scope
+		if source := strings.TrimSpace(gap.SourceAPI); source != "" {
+			line += " · 来源 " + source
+		}
+		if !gap.LastSeenAt.IsZero() {
+			line += " · 最近命中 " + gap.LastSeenAt.Format("2006-01-02 15:04:05 MST")
+		}
+		lines = append(lines, line)
+		if url := strings.TrimSpace(gap.ApplyURL); url != "" {
+			lines = append(lines, "申请链接："+url)
+		}
+	}
+	return lines
+}
+
+func formatSnapshotGitWorktreeStatusPlain(summary *gitWorktreeSummary) string {
+	if summary == nil {
+		return ""
+	}
+	if !summary.Dirty {
+		return "干净"
+	}
+	parts := []string{"有改动"}
+	if summary.ModifiedCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d修改", summary.ModifiedCount))
+	}
+	if summary.UntrackedCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d未跟踪", summary.UntrackedCount))
+	}
+	return strings.Join(parts, " ")
+}
+
+func pendingHeadlessSectionLines(summary control.PendingHeadlessSummary) []string {
+	lines := []string{}
+	if title := strings.TrimSpace(summary.ThreadTitle); title != "" {
+		lines = append(lines, snapshotLine("目标会话", compactSnapshotStatusText(title, snapshotStatusTitleLimit)))
+	}
+	if cwd := strings.TrimSpace(summary.ThreadCWD); cwd != "" {
+		lines = append(lines, snapshotLine("启动目录", cwd))
+	}
+	if summary.PID > 0 {
+		lines = append(lines, snapshotLine("进程 PID", fmt.Sprintf("%d", summary.PID)))
+	}
+	if !summary.ExpiresAt.IsZero() {
+		lines = append(lines, snapshotLine("启动超时", summary.ExpiresAt.Format("2006-01-02 15:04:05 MST")))
+	}
+	return lines
 }
 
 func noticeThemeKey(notice control.Notice) string {

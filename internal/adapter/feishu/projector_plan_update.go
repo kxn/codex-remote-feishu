@@ -7,26 +7,34 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func planUpdateBody(update control.PlanUpdate) string {
-	return strings.TrimSpace(update.Explanation)
+func planUpdateSections(update control.PlanUpdate) []control.FeishuCardTextSection {
+	sections := make([]control.FeishuCardTextSection, 0, 2)
+	if explanation := strings.TrimSpace(update.Explanation); explanation != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Lines: splitCommandCatalogPlainTextLines(explanation),
+		})
+	}
+	capacity := len(update.Steps)
+	if capacity == 0 {
+		capacity = 1
+	}
+	stepLines := make([]string, 0, capacity)
+	if len(update.Steps) == 0 {
+		stepLines = append(stepLines, "○ 待补充步骤")
+	} else {
+		for _, step := range update.Steps {
+			stepLines = append(stepLines, planUpdateStatusLabel(step.Status)+" "+strings.TrimSpace(step.Step))
+		}
+	}
+	sections = append(sections, control.FeishuCardTextSection{
+		Label: "步骤",
+		Lines: stepLines,
+	})
+	return sections
 }
 
 func planUpdateElements(update control.PlanUpdate) []map[string]any {
-	elements := make([]map[string]any, 0, len(update.Steps))
-	if len(update.Steps) == 0 {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "○ 待补充步骤",
-		})
-		return elements
-	}
-	for _, step := range update.Steps {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": planUpdateStatusLabel(step.Status) + " " + strings.TrimSpace(step.Step),
-		})
-	}
-	return elements
+	return appendCardTextSections(nil, planUpdateSections(update))
 }
 
 func planUpdateStatusLabel(status agentproto.TurnPlanStepStatus) string {

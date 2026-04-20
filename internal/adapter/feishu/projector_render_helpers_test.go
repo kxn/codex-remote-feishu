@@ -175,6 +175,18 @@ func renderedV2BodyElements(t *testing.T, operation Operation) []map[string]any 
 	return elements
 }
 
+func renderedV2CardText(t *testing.T, operation Operation) string {
+	t.Helper()
+	elements := renderedV2BodyElements(t, operation)
+	parts := make([]string, 0, len(elements))
+	for _, element := range elements {
+		if content := cardTextContent(element); content != "" {
+			parts = append(parts, content)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
 func containsRenderedTag(elements []map[string]any, tag string) bool {
 	for _, element := range elements {
 		if element["tag"] == tag {
