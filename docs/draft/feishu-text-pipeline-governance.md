@@ -1,7 +1,7 @@
 # Feishu Text Pipeline Governance
 
 > Type: `draft`
-> Updated: `2026-04-20`
+> Updated: `2026-04-21`
 > Summary: 从整个 Feishu 文本链路出发，梳理文本的生产点、格式化点、承接点与当前多重 markdown 解释问题，并提出统一的治理边界与分阶段收敛方案。
 
 ## 1. 文档目的
@@ -52,7 +52,7 @@ final reply 额外多了一层：
 
 - [internal/app/daemon/app_ui.go](../../internal/app/daemon/app_ui.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-- [internal/adapter/feishu/markdown_preview_rewrite.go](../../internal/adapter/feishu/markdown_preview_rewrite.go)
+- [internal/adapter/feishu/preview/markdown_preview_rewrite.go](../../internal/adapter/feishu/preview/markdown_preview_rewrite.go)
 - [internal/adapter/feishu/final_card_markdown.go](../../internal/adapter/feishu/final_card_markdown.go)
 - [internal/adapter/feishu/card_renderer.go](../../internal/adapter/feishu/card_renderer.go)
 

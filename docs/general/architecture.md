@@ -195,6 +195,7 @@ Feishu 平台适配层，负责：
 - projector / preview runtime
   - projector 只消费 `UIEvent` 做文本/卡片投影
   - preview runtime 只负责 preview 生命周期、授权与渲染辅助，不再通过宽接口横穿 gateway/projector
+  - 当前 preview 具体实现已物理收口到 `internal/adapter/feishu/preview`，根包只保留稳定门面、兼容 alias 与 Feishu Drive bridge
 
 因此 `LiveGateway` 不再承担 projector 的伪 owner 角色；daemon 主流程会直接持有 projector，而 preview 侧也通过显式 runtime 边界接入 controller。
 

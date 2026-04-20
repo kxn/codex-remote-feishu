@@ -1,4 +1,4 @@
-package feishu
+package preview
 
 import (
 	"context"
