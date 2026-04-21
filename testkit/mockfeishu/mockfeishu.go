@@ -49,7 +49,7 @@ func (r *Recorder) Apply(events []control.UIEvent) {
 			if event.PendingInput.ThumbsDown {
 				r.ThumbsDownFor = append(r.ThumbsDownFor, event.PendingInput.SourceMessageID)
 			}
-		case control.UIEventFeishuDirectSelectionPrompt:
+		case control.UIEventFeishuSelectionView:
 			if event.FeishuSelectionView != nil {
 				if prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext); ok {
 					r.SelectionPrompts = append(r.SelectionPrompts, prompt)
