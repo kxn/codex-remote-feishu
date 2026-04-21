@@ -372,7 +372,7 @@ func TestHandleGatewayActionReplacesMenuCardForHelpHandoff(t *testing.T) {
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected inline replacement result, got %#v", result)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "Slash 命令帮助" {
+	if result.ReplaceCurrentCard.CardTitle != "命令帮助" {
 		t.Fatalf("unexpected help replacement title: %#v", result.ReplaceCurrentCard)
 	}
 	if len(gateway.operations) != 0 {

@@ -31,7 +31,7 @@ func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
 	if catalog.Interactive {
 		t.Fatalf("help catalog should be non-interactive: %#v", catalog)
 	}
-	if catalog.Title != "Slash 命令帮助" {
+	if catalog.Title != "命令帮助" {
 		t.Fatalf("unexpected help catalog title: %#v", catalog)
 	}
 }
@@ -53,7 +53,7 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 	}
 	var switchEntries []control.CommandCatalogEntry
 	for _, section := range catalog.Sections {
-		if section.Title == "切换目标" {
+		if section.Title == "工作会话" {
 			switchEntries = section.Entries
 			break
 		}
@@ -63,7 +63,7 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal help switch_target commands = %#v, want %#v", got, want)
 	}
-	if len(switchEntries) == 0 || switchEntries[0].Title != "选择工作区/会话" {
+	if len(switchEntries) == 0 || switchEntries[0].Title != "工作会话" {
 		t.Fatalf("expected unified normal switch target entry title, got %#v", switchEntries)
 	}
 }
@@ -86,7 +86,7 @@ func TestHelpActionVSCodeModeKeepsSeparateSwitchTargetCommands(t *testing.T) {
 	}
 	var switchEntries []control.CommandCatalogEntry
 	for _, section := range catalog.Sections {
-		if section.Title == "切换目标" {
+		if section.Title == "工作会话" {
 			switchEntries = section.Entries
 			break
 		}
@@ -161,7 +161,7 @@ func TestMenuActionDetachedHomepageShowsGroupNavigationOnly(t *testing.T) {
 		t.Fatalf("expected command catalog, got %#v", events)
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
-	if len(catalog.Sections) != 1 || catalog.Sections[0].Title != "全部分组" {
+	if len(catalog.Sections) != 1 || catalog.Sections[0].Title != "" {
 		t.Fatalf("unexpected detached home catalog: %#v", catalog)
 	}
 	if len(firstCommands(catalog.Sections[0].Entries)) != 0 {
@@ -189,7 +189,7 @@ func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal switch_target commands = %#v, want %#v", got, want)
 	}
-	if len(catalog.Sections[0].Entries) == 0 || catalog.Sections[0].Entries[0].Title != "选择工作区/会话" {
+	if len(catalog.Sections[0].Entries) == 0 || catalog.Sections[0].Entries[0].Title != "工作会话" {
 		t.Fatalf("expected unified normal switch target title, got %#v", catalog.Sections[0].Entries)
 	}
 }
@@ -232,7 +232,7 @@ func TestMenuActionNormalCurrentWorkGroupShowsNew(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/stop", "/compact", "/steerall", "/new", "/history", "/sendfile"}
+	want := []string{"/stop", "/compact", "/steerall", "/new", "/status"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", got, want)
 	}
@@ -254,13 +254,13 @@ func TestMenuActionVSCodeCurrentWorkGroupHidesNew(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/stop", "/compact", "/steerall", "/history", "/sendfile"}
+	want := []string{"/stop", "/compact", "/steerall", "/status"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("vscode current_work commands = %#v, want %#v", got, want)
 	}
 }
 
-func TestMenuActionMaintenanceGroupIncludesCron(t *testing.T) {
+func TestMenuActionMaintenanceGroupShowsSystemManagementCommands(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -274,7 +274,7 @@ func TestMenuActionMaintenanceGroupIncludesCron(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/status", "/mode", "/autowhip", "/help", "/cron", "/upgrade", "/debug"}
+	want := []string{"/mode", "/upgrade", "/debug", "/help"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("maintenance commands = %#v, want %#v", got, want)
 	}
@@ -329,7 +329,7 @@ func TestBareReasoningCommandBuildsParameterCard(t *testing.T) {
 	if catalog.Title != "推理强度" {
 		t.Fatalf("unexpected reasoning catalog title: %#v", catalog)
 	}
-	if len(catalog.Breadcrumbs) != 3 || catalog.Breadcrumbs[1].Label != "发送设置" {
+	if len(catalog.Breadcrumbs) != 3 || catalog.Breadcrumbs[1].Label != "参数设置" {
 		t.Fatalf("unexpected breadcrumbs: %#v", catalog.Breadcrumbs)
 	}
 	buttons := catalog.Sections[0].Entries[0].Buttons

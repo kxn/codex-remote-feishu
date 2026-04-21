@@ -22,7 +22,7 @@ func TestStaticCommandCatalogsUsePlainTextContracts(t *testing.T) {
 
 func TestDisplayCatalogBuilderUsesPlainTextContracts(t *testing.T) {
 	catalog := BuildFeishuCommandDisplayPageView(
-		"Slash 命令帮助",
+		"命令帮助",
 		"当前展示 canonical 命令。",
 		false,
 		"normal",

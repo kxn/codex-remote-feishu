@@ -9,7 +9,7 @@ func BuildFeishuCommandMenuHomePageView() FeishuCommandPageView {
 		Interactive:  true,
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
 		Sections: []CommandCatalogSection{{
-			Title:   "全部分组",
+			Title:   "",
 			Entries: buildFeishuCommandMenuGroupEntries(),
 		}},
 	}
@@ -28,8 +28,7 @@ func BuildFeishuCommandMenuPageView(view FeishuCommandMenuView, productMode, men
 }
 
 func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuCommandPageView {
-	group, ok := FeishuCommandGroupByID(groupID)
-	if !ok {
+	if _, ok := FeishuCommandGroupByID(groupID); !ok {
 		return BuildFeishuCommandMenuHomePageView()
 	}
 	entries := make([]CommandCatalogEntry, 0, 6)
@@ -47,7 +46,7 @@ func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string)
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:  FeishuCommandBreadcrumbs(groupID, ""),
 		Sections: []CommandCatalogSection{{
-			Title:   group.Title,
+			Title:   "",
 			Entries: entries,
 		}},
 		RelatedButtons: []CommandCatalogButton{{
@@ -91,8 +90,9 @@ func FeishuCommandBreadcrumbs(groupID, title string) []CommandCatalogBreadcrumb 
 
 func FeishuCommandBackButtons(groupID string) []CommandCatalogButton {
 	if group, ok := FeishuCommandGroupByID(groupID); ok {
+		_ = group
 		return []CommandCatalogButton{{
-			Label:       "返回" + group.Title,
+			Label:       "返回上一层",
 			Kind:        CommandCatalogButtonRunCommand,
 			CommandText: FeishuCommandMenuCommandText(groupID),
 		}}
@@ -112,7 +112,7 @@ func buildFeishuCommandMenuGroupEntries() []CommandCatalogEntry {
 	for _, group := range FeishuCommandGroups() {
 		entries = append(entries, CommandCatalogEntry{
 			Title:       strings.TrimSpace(group.Title),
-			Description: strings.TrimSpace(group.Description),
+			Description: "",
 			Buttons: []CommandCatalogButton{{
 				Label:       feishuSubmenuButtonLabel(group.Title),
 				Kind:        CommandCatalogButtonRunCommand,
@@ -179,7 +179,7 @@ func feishuCommandMenuButtonLabel(def FeishuCommandDefinition) string {
 func feishuSubmenuButtonLabel(label string) string {
 	label = strings.TrimSpace(label)
 	if label == "" {
-		return "打开子菜单"
+		return "进入"
 	}
-	return label + " ›"
+	return "进入"
 }

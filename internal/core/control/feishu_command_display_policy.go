@@ -32,9 +32,6 @@ func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode 
 		return FeishuCommandDefinition{}, false
 	case FeishuCommandVSCodeMigrate:
 		return FeishuCommandDefinition{}, false
-	case FeishuCommandList:
-		projected.Title = "选择工作区/会话"
-		projected.Description = "打开统一的工作区/会话选择卡；可选择工作区、选择会话，也可添加工作区。"
 	}
 	return projected, true
 }
@@ -42,9 +39,10 @@ func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode 
 func BuildFeishuCommandDisplayPageView(title, summary string, interactive bool, productMode, menuStage string) FeishuCommandPageView {
 	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))
 	for _, group := range feishuCommandGroups {
-		entries := make([]CommandCatalogEntry, 0, len(feishuCommandSpecs))
-		for _, spec := range feishuCommandSpecs {
-			def, ok := FeishuCommandDefinitionForDisplay(runtimeFeishuCommandDefinition(spec), productMode, interactive, menuStage)
+		defs := FeishuCommandDefinitionsForGroup(group.ID)
+		entries := make([]CommandCatalogEntry, 0, len(defs))
+		for _, def := range defs {
+			def, ok := FeishuCommandDefinitionForDisplay(def, productMode, interactive, menuStage)
 			if !ok || def.GroupID != group.ID {
 				continue
 			}

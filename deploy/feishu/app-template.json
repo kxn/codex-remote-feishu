@@ -11,12 +11,12 @@
       },
       {
         "key": "stop",
-        "name": "停止当前执行",
+        "name": "停止推理",
         "description": "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"
       },
       {
         "key": "steerall",
-        "name": "Steer All",
+        "name": "全部加速",
         "description": "把当前队列里可并入本轮执行的输入一次性并入当前 running turn。"
       },
       {
@@ -31,7 +31,7 @@
       },
       {
         "key": "model",
-        "name": "模型",
+        "name": "使用模型",
         "description": "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.4` 这类直达入口。"
       },
       {

@@ -4,7 +4,7 @@ func sendFileCommandSpec() feishuCommandSpec {
 	return feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandSendFile,
-			GroupID:          FeishuCommandGroupCurrentWork,
+			GroupID:          FeishuCommandGroupCommonTools,
 			Title:            "发送文件",
 			CanonicalSlash:   "/sendfile",
 			CanonicalMenuKey: "sendfile",

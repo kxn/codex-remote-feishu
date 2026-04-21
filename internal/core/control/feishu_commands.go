@@ -4,6 +4,7 @@ const (
 	FeishuCommandGroupCurrentWork  = "current_work"
 	FeishuCommandGroupSendSettings = "send_settings"
 	FeishuCommandGroupSwitchTarget = "switch_target"
+	FeishuCommandGroupCommonTools  = "common_tools"
 	FeishuCommandGroupMaintenance  = "maintenance"
 	FeishuCommandList              = "list"
 	FeishuCommandStatus            = "status"
@@ -105,23 +106,28 @@ type FeishuRecommendedMenu struct {
 var feishuCommandGroups = []FeishuCommandGroup{
 	{
 		ID:          FeishuCommandGroupCurrentWork,
-		Title:       "当前工作",
-		Description: "steady-state 主路径：停止当前执行，或在 normal 模式下准备新会话。",
+		Title:       "基本命令",
+		Description: "",
 	},
 	{
 		ID:          FeishuCommandGroupSendSettings,
-		Title:       "发送设置",
-		Description: "调整后续飞书消息的推理强度、模型、执行权限和 Plan mode。",
+		Title:       "参数设置",
+		Description: "",
 	},
 	{
 		ID:          FeishuCommandGroupSwitchTarget,
-		Title:       "切换目标",
-		Description: "查看列表、切换会话、切换工作目标，或解除当前接管。",
+		Title:       "工作会话",
+		Description: "",
+	},
+	{
+		ID:          FeishuCommandGroupCommonTools,
+		Title:       "常用工具",
+		Description: "",
 	},
 	{
 		ID:          FeishuCommandGroupMaintenance,
-		Title:       "低频与维护",
-		Description: "查看状态、切换模式、Cron、升级、autowhip、帮助和调试入口。",
+		Title:       "系统管理",
+		Description: "",
 	},
 }
 
@@ -130,7 +136,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandStop,
 			GroupID:          FeishuCommandGroupCurrentWork,
-			Title:            "停止当前执行",
+			Title:            "停止推理",
 			CanonicalSlash:   "/stop",
 			CanonicalMenuKey: "stop",
 			ArgumentKind:     FeishuCommandArgumentNone,
@@ -139,7 +145,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu:       true,
 			RecommendedMenu: &FeishuRecommendedMenu{
 				Key:         "stop",
-				Name:        "停止当前执行",
+				Name:        "停止推理",
 				Description: "中断当前执行，并丢弃飞书侧尚未发送的排队输入。",
 			},
 		},
@@ -154,7 +160,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandCompact,
 			GroupID:          FeishuCommandGroupCurrentWork,
-			Title:            "整理上下文",
+			Title:            "压缩上下文",
 			CanonicalSlash:   "/compact",
 			CanonicalMenuKey: "compact",
 			ArgumentKind:     FeishuCommandArgumentNone,
@@ -173,7 +179,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandSteerAll,
 			GroupID:          FeishuCommandGroupCurrentWork,
-			Title:            "Steer All",
+			Title:            "全部加速",
 			CanonicalSlash:   "/steerall",
 			CanonicalMenuKey: "steerall",
 			ArgumentKind:     FeishuCommandArgumentNone,
@@ -182,7 +188,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu:       true,
 			RecommendedMenu: &FeishuRecommendedMenu{
 				Key:         "steerall",
-				Name:        "Steer All",
+				Name:        "全部加速",
 				Description: "把当前队列里可并入本轮执行的输入一次性并入当前 running turn。",
 			},
 		},
@@ -222,7 +228,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandHistory,
-			GroupID:          FeishuCommandGroupCurrentWork,
+			GroupID:          FeishuCommandGroupCommonTools,
 			Title:            "查看会话历史",
 			CanonicalSlash:   "/history",
 			CanonicalMenuKey: "history",
@@ -294,7 +300,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandModel,
 			GroupID:          FeishuCommandGroupSendSettings,
-			Title:            "模型",
+			Title:            "使用模型",
 			CanonicalSlash:   "/model",
 			CanonicalMenuKey: "model",
 			ArgumentKind:     FeishuCommandArgumentText,
@@ -307,7 +313,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu:       true,
 			RecommendedMenu: &FeishuRecommendedMenu{
 				Key:         "model",
-				Name:        "模型",
+				Name:        "使用模型",
 				Description: "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.4` 这类直达入口。",
 			},
 		},
@@ -371,7 +377,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandPlan,
 			GroupID:          FeishuCommandGroupSendSettings,
-			Title:            "Plan mode",
+			Title:            "Plan 模式",
 			CanonicalSlash:   "/plan",
 			CanonicalMenuKey: "plan",
 			ArgumentKind:     FeishuCommandArgumentChoice,
@@ -388,8 +394,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu: true,
 			RecommendedMenu: &FeishuRecommendedMenu{
 				Key:         "plan",
-				Name:        "Plan mode",
-				Description: "打开 Plan mode 参数卡，切换后续新 turn 是否启用 Plan mode。",
+				Name:        "Plan 模式",
+				Description: "打开 Plan 模式参数卡，切换后续新 turn 是否启用 Plan 模式。",
 			},
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
@@ -407,7 +413,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandVerbose,
 			GroupID:          FeishuCommandGroupSendSettings,
-			Title:            "前端详细程度",
+			Title:            "提示详细程度",
 			CanonicalSlash:   "/verbose",
 			CanonicalMenuKey: "verbose",
 			ArgumentKind:     FeishuCommandArgumentChoice,
@@ -439,11 +445,11 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandList,
 			GroupID:          FeishuCommandGroupSwitchTarget,
-			Title:            "查看列表",
+			Title:            "工作会话",
 			CanonicalSlash:   "/list",
 			CanonicalMenuKey: "list",
 			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "默认列出最近 5 个可用工作区，并可卡片内展开全部；切到 `vscode` 模式后列出在线实例，并从 follow-first 路径接管。",
+			Description:      "打开工作区/会话目录；normal 模式走统一工作区/会话选择，vscode 模式列出可接管实例。",
 			ShowInHelp:       true,
 			ShowInMenu:       true,
 		},
@@ -546,7 +552,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandStatus,
-			GroupID:          FeishuCommandGroupMaintenance,
+			GroupID:          FeishuCommandGroupCurrentWork,
 			Title:            "当前状态",
 			CanonicalSlash:   "/status",
 			CanonicalMenuKey: "status",
@@ -596,8 +602,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandAutoContinue,
-			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "autowhip",
+			GroupID:          FeishuCommandGroupCommonTools,
+			Title:            "AutoWhip",
 			CanonicalSlash:   "/autowhip",
 			CanonicalMenuKey: "autowhip",
 			ArgumentKind:     FeishuCommandArgumentChoice,
@@ -632,7 +638,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandHelp,
 			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "Slash 帮助",
+			Title:            "命令帮助",
 			CanonicalSlash:   "/help",
 			CanonicalMenuKey: "help",
 			ArgumentKind:     FeishuCommandArgumentNone,
@@ -674,7 +680,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandCron,
-			GroupID:          FeishuCommandGroupMaintenance,
+			GroupID:          FeishuCommandGroupCommonTools,
 			Title:            "定时任务",
 			CanonicalSlash:   "/cron",
 			CanonicalMenuKey: "cron",
@@ -698,7 +704,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandUpgrade,
 			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "升级",
+			Title:            "升级系统",
 			CanonicalSlash:   "/upgrade",
 			CanonicalMenuKey: "upgrade",
 			ArgumentKind:     FeishuCommandArgumentChoice,

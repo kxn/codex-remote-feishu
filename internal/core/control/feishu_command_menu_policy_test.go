@@ -12,7 +12,7 @@ func TestFeishuMenuGroupClassificationMatchesTaskModel(t *testing.T) {
 	}{
 		{
 			groupID: FeishuCommandGroupCurrentWork,
-			want:    []string{FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandHistory, FeishuCommandSendFile},
+			want:    []string{FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandStatus},
 		},
 		{
 			groupID: FeishuCommandGroupSendSettings,
@@ -23,8 +23,12 @@ func TestFeishuMenuGroupClassificationMatchesTaskModel(t *testing.T) {
 			want:    []string{FeishuCommandList, FeishuCommandUse, FeishuCommandUseAll, FeishuCommandDetach, FeishuCommandFollow},
 		},
 		{
+			groupID: FeishuCommandGroupCommonTools,
+			want:    []string{FeishuCommandAutoContinue, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile},
+		},
+		{
 			groupID: FeishuCommandGroupMaintenance,
-			want:    []string{FeishuCommandStatus, FeishuCommandMode, FeishuCommandAutoContinue, FeishuCommandHelp, FeishuCommandCron, FeishuCommandUpgrade, FeishuCommandDebug},
+			want:    []string{FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp},
 		},
 	}
 

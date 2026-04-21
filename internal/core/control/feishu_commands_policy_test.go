@@ -45,7 +45,7 @@ func TestHelpCatalogReflectsShippingUpgradePolicy(t *testing.T) {
 	catalog := FeishuCommandHelpPageView()
 	for _, section := range catalog.Sections {
 		for _, entry := range section.Entries {
-			if entry.Title != "升级" {
+			if entry.Title != "升级系统" {
 				continue
 			}
 			if strings.Contains(strings.Join(entry.Examples, " "), "/upgrade local") {
@@ -78,12 +78,12 @@ func TestVSCodeMigrateDisplayRespectsProductMode(t *testing.T) {
 		t.Fatalf("unexpected vscode migrate display projection: %#v", projected)
 	}
 
-	normalHelp := BuildFeishuCommandDisplayPageView("Slash 命令帮助", "", false, "normal", "")
+	normalHelp := BuildFeishuCommandDisplayPageView("命令帮助", "", false, "normal", "")
 	if catalogContainsCommand(normalHelp, "/vscode-migrate") {
 		t.Fatalf("expected normal help catalog to hide /vscode-migrate: %#v", normalHelp)
 	}
 
-	vscodeHelp := BuildFeishuCommandDisplayPageView("Slash 命令帮助", "", false, "vscode", "")
+	vscodeHelp := BuildFeishuCommandDisplayPageView("命令帮助", "", false, "vscode", "")
 	if !catalogContainsCommand(vscodeHelp, "/vscode-migrate") {
 		t.Fatalf("expected vscode help catalog to include /vscode-migrate: %#v", vscodeHelp)
 	}

@@ -1116,7 +1116,7 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 	if catalog.Title != "命令菜单" || !catalog.Interactive {
 		t.Fatalf("unexpected menu catalog: %#v", catalog)
 	}
-	if len(catalog.Sections) != 1 || catalog.Sections[0].Title != "全部分组" {
+	if len(catalog.Sections) != 1 || catalog.Sections[0].Title != "" {
 		t.Fatalf("unexpected menu sections: %#v", catalog.Sections)
 	}
 	if got := firstCommandTexts(catalog.Sections[0].Entries); len(got) != 0 {
@@ -1132,7 +1132,7 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("expected normal current_work menu to project")
 	}
 	gotNormal := firstCommandTexts(normalCatalog.Sections[0].Entries)
-	wantNormal := []string{"/stop", "/compact", "/steerall", "/new", "/history", "/sendfile"}
+	wantNormal := []string{"/stop", "/compact", "/steerall", "/new", "/status"}
 	if fmt.Sprint(gotNormal) != fmt.Sprint(wantNormal) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", gotNormal, wantNormal)
 	}
@@ -1144,7 +1144,7 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("expected vscode current_work menu to project")
 	}
 	gotVSCode := firstCommandTexts(vscodeCatalog.Sections[0].Entries)
-	wantVSCode := []string{"/stop", "/compact", "/steerall", "/history", "/sendfile"}
+	wantVSCode := []string{"/stop", "/compact", "/steerall", "/status"}
 	if fmt.Sprint(gotVSCode) != fmt.Sprint(wantVSCode) {
 		t.Fatalf("vscode current_work commands = %#v, want %#v", gotVSCode, wantVSCode)
 	}
