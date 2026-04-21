@@ -658,8 +658,8 @@ func TestTargetPickerAddWorkspacePathPickerCancelRestoresTargetCard(t *testing.T
 	if surface.RouteMode != state.RouteModeUnbound || surface.PendingHeadless != nil {
 		t.Fatalf("expected cancel to keep current target unchanged, got %#v", surface)
 	}
-	if len(cancelEvents) != 1 || cancelEvents[0].FeishuTargetPickerView == nil || !cancelEvents[0].InlineReplaceCurrentCard {
-		t.Fatalf("expected cancel to restore target picker inline, got %#v", cancelEvents)
+	if len(cancelEvents) != 1 || cancelEvents[0].FeishuTargetPickerView == nil || cancelEvents[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected cancel to restore target picker via owner-card patch, got %#v", cancelEvents)
 	}
 	if got := cancelEvents[0].FeishuTargetPickerView; got.LocalDirectoryPath != "" || got.CanConfirm {
 		t.Fatalf("expected cancel to preserve empty local-directory selection, got %#v", got)
@@ -780,8 +780,8 @@ func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndBloc
 	if svc.activePathPicker(surface) != nil || svc.activeTargetPicker(surface) == nil {
 		t.Fatalf("expected path confirm to close only the path picker, got %#v", surface)
 	}
-	if len(confirmEvents) != 1 || confirmEvents[0].FeishuTargetPickerView == nil || !confirmEvents[0].InlineReplaceCurrentCard {
-		t.Fatalf("expected path confirm to restore target card inline, got %#v", confirmEvents)
+	if len(confirmEvents) != 1 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected path confirm to restore target card via owner-card patch, got %#v", confirmEvents)
 	}
 	got := confirmEvents[0].FeishuTargetPickerView
 	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) || got.CanConfirm {

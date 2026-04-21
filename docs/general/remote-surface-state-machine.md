@@ -366,7 +366,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    1. `已有工作区` 模式下，选既有会话时，复用现有 `/use` / `use_thread` / cross-workspace attach 语义；必要时仍会走 existing visible / reusable headless / create headless 的既有 resolver。
    2. `已有工作区` 模式下，选 `新建会话` 且目标 workspace 已 attach 或可直接 attach 时，会直接进入（或先 attach 再进入）`R5 NewThreadReady`。
    3. `已有工作区` 模式下，选 `新建会话` 且目标 workspace 只剩 recoverable-only 语义时，会启动 fresh managed headless，并把 `PrepareNewThread=true` 记入 `PendingHeadless`；实例连回后直接进入 `R5`，不再先停在 `R1`。
-   4. `添加工作区 / 本地目录` 下，`target_picker_open_path_picker` 会先打开目录 path picker，并在 confirm/cancel 后 inline 回到主卡；只有主卡已经回填出有效目录、且目标不是已知 workspace 时，`target_picker_confirm` 才会把该目录解析成 workspace，并按 `PrepareNewThread=true` 的语义进入 `R5` / fresh headless `R5` 路径；若命中已知 workspace，当前页会直接阻塞并禁用继续。
+   4. `添加工作区 / 本地目录` 下，`target_picker_open_path_picker` 会先打开目录 path picker；confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回同一张 owner card。只有主卡已经回填出有效目录、且目标不是已知 workspace 时，`target_picker_confirm` 才会把该目录解析成 workspace，并按 `PrepareNewThread=true` 的语义进入 `R5` / fresh headless `R5` 路径；若命中已知 workspace，当前页会直接阻塞并禁用继续。
    5. `添加工作区 / Git URL` 下，主卡会内联保存 `repo_url` / `directory_name` 草稿，并通过 `target_picker_open_path_picker` 选择父目录；`target_picker_confirm` 随后直接下发 daemon-side `workspace.git_import` 命令。
    6. Git import 的 path picker cancel 不会改 route，只会回到 target picker 主卡；clone 成功但 flow stale 时会回 stale notice 并保留本地目录；若后续 attach / prepare 失败，则会把同一张 owner card 封成 failed terminal，并明确目录已保留。
 6. `target_picker_confirm` 当前还有一条显式防呆。
@@ -811,7 +811,7 @@ R5 NewThreadReady
    1. 既有 thread：复用现有 resolver 顺序 `当前 attached instance 内可见 thread -> free existing visible instance -> reusable managed headless -> create managed headless`。
    2. 既有 thread 但需要跨 workspace / 跨实例：仍会先走 detach-like 清理，丢弃 staged/queued draft、清 request / capture / prompt override，再 attach 到新目标。
    3. `新建会话`：当前或可直接 attach 的 workspace 会进入 `R5`；recoverable-only workspace 则启动 fresh managed headless，并在实例连回后直接进入 `R5`。
-   4. `添加工作区 / 本地目录`：不会立即改 route，而是先打开目录 path picker 并 inline 回到主卡；只有主卡确认时才真正进入 `R5` / fresh managed headless `R5`，cancel 则保持当前 route 不变。
+   4. `添加工作区 / 本地目录`：不会立即改 route，而是先打开目录 path picker；confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回同一张 owner card。只有主卡确认时才真正进入 `R5` / fresh managed headless `R5`，cancel 则保持当前 route 不变。
    5. `添加工作区 / Git URL`：不会立即改 route，而是在同一张主卡上填写仓库地址/目录名、选择父目录，并由 daemon-side `workspace.git_import` 在持锁外执行 `git clone`；confirm 后 surface 进入 `G6 TargetPickerProcessing`，success / failure / cancel 都封回同卡 terminal，其中 success 最终进入 `R5`。
 8. attached `vscode /use` / `/useall` 当前有两条额外约束：
    1. 只展示当前 attached instance 的可见 thread，不再走 merged global thread view。
@@ -1212,7 +1212,7 @@ retained-offline overlay 额外规则：
 | `target_picker_select_source` | `ActionTargetPickerSelectSource` | unified target picker 的来源按钮回调；只刷新当前卡，不直接改 route；当前会在同卡内直接推进到 `目录` 或 `Git` 下一页 |
 | `target_picker_select_workspace` | `ActionTargetPickerSelectWorkspace` | unified target picker 的工作区下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_select_session` | `ActionTargetPickerSelectSession` | unified target picker 的会话下拉回调；只刷新当前卡，不直接改 route |
-| `target_picker_open_path_picker` | `ActionTargetPickerOpenPathPicker` | unified target picker 的子步骤导航回调；会打开本地目录或 Git 落地父目录 path picker，并把 Git 主卡草稿一起保存在 active target picker runtime 里；path picker confirm/cancel 返回时会直接 inline 换回原 target picker owner card |
+| `target_picker_open_path_picker` | `ActionTargetPickerOpenPathPicker` | unified target picker 的子步骤导航回调；会打开本地目录或 Git 落地父目录 path picker，并把 Git 主卡草稿一起保存在 active target picker runtime 里；path picker confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回原 target picker owner card |
 | `target_picker_cancel` | `ActionTargetPickerCancel` | unified target picker 的退出按钮；编辑态会把当前卡 inline replace 成 `已取消`，Git processing 态会 replace 成 `已取消导入` 并 best-effort 停止 clone / prepare；surface route 只保留取消后的安全状态 |
 | `target_picker_confirm` | `ActionTargetPickerConfirm` | unified target picker 的确认按钮；`已有工作区` 模式下真正执行 attach / switch / `新建会话`，`添加工作区` 模式下则消费主卡里已保存的目录/Git 草稿来执行接入或导入 |
 | `request_respond` | `ActionRespondRequest` | 承载 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation` 的按钮回传。通用 approval 会沿用归一化后的 `requestKind` 与 `availableDecisions`，包括 `cancel`；`request_user_input` 支持分题局部提交并在 pending request 上暂存答案，局部保存后会刷新当前 request 卡并递增 `request_revision`；`permissions_request_approval` 会按按钮回写 `{permissions, scope}`；`mcp_server_elicitation` 会按按钮回写 `{action, content, _meta}`，其中 form 模式的 direct-response 按钮也先写入局部草稿，再由显式提交触发 accept |

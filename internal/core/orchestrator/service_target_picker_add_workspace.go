@@ -212,7 +212,9 @@ func (s *Service) restoreTargetPickerAfterPathReturn(surface *state.SurfaceConso
 	if err != nil {
 		return notice(surface, "target_picker_unavailable", err.Error())
 	}
-	return []control.UIEvent{s.targetPickerViewEvent(surface, view, true)}
+	// Path picker confirm/cancel callbacks are acknowledged asynchronously, so
+	// this return step must patch the existing owner card by message id.
+	return []control.UIEvent{s.targetPickerViewEvent(surface, view, false)}
 }
 
 func (s *Service) buildTargetPickerLocalDirectoryState(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord) targetPickerLocalDirectoryState {
