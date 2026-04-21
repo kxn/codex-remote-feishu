@@ -223,6 +223,49 @@ func TestOpenPathPickerFileModeAllowsParentDirectoryEntry(t *testing.T) {
 	}
 }
 
+func TestPathPickerConfirmValidationFailureUsesCardPatchUpdate(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:            control.PathPickerModeFile,
+		RootPath:        root,
+		SourceMessageID: "om-path-picker-1",
+	})
+	view := singlePathPickerEvent(t, events)
+	if view.PickerID == "" {
+		t.Fatalf("expected active picker id, got %#v", view)
+	}
+	confirmEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if len(confirmEvents) != 1 || confirmEvents[0].FeishuPathPickerView == nil {
+		t.Fatalf("expected same-card validation refresh, got %#v", confirmEvents)
+	}
+	if confirmEvents[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected confirm validation failure to use message-id patch instead of inline replace, got %#v", confirmEvents[0])
+	}
+	updated := confirmEvents[0].FeishuPathPickerView
+	if updated.MessageID != "om-path-picker-1" {
+		t.Fatalf("expected confirm validation failure to patch source card, got %#v", updated)
+	}
+	if !strings.Contains(pathPickerNoticeText(updated), "当前还不能确认") {
+		t.Fatalf("expected validation hint on picker card, got %#v", updated)
+	}
+	if svc.activePathPicker(svc.root.Surfaces["surface-1"]) == nil {
+		t.Fatalf("expected picker to remain active after validation failure")
+	}
+}
+
 func TestOpenPathPickerFileModeCurrentDirectoryEntryIsNoOp(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

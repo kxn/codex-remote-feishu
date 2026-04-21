@@ -200,15 +200,15 @@ func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, p
 	}
 	selectedPath, err := confirmedPathPickerSelection(record)
 	if err != nil {
-		return s.pathPickerInlineNotice(surface, record, "path_picker_selection_missing", "当前还不能确认", err.Error())
+		return s.pathPickerNotice(surface, record, "path_picker_selection_missing", "当前还不能确认", err.Error(), false)
 	}
 	resolved, err := resolvePathPickerExistingTarget(record.RootPath, selectedPath)
 	if err != nil {
-		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目标条目无效", fmt.Sprintf("目标条目无效：%v", err))
+		return s.pathPickerNotice(surface, record, "path_picker_invalid_entry", "目标条目无效", fmt.Sprintf("目标条目无效：%v", err), false)
 	}
 	item, allowed := s.filterPathPickerResolvedEntry(surface, record, pathPickerEntryFilterItem(pathPickerEntryNameForPath(selectedPath), resolved), resolved.path)
 	if !allowed || item.Disabled {
-		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "这个条目当前不可用", pathPickerEntryUnavailableText(item))
+		return s.pathPickerNotice(surface, record, "path_picker_invalid_entry", "这个条目当前不可用", pathPickerEntryUnavailableText(item), false)
 	}
 	result := pathPickerResultFromRecord(record, selectedPath)
 	if consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind); ok {

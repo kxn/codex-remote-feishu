@@ -63,7 +63,7 @@ func pathPickerStatusNoticeSections(title, text string, sections []control.Feish
 	return cloneFeishuCardSections(result)
 }
 
-func (s *Service) pathPickerInlineNotice(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, code, title, text string) []control.UIEvent {
+func (s *Service) pathPickerNotice(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, code, title, text string, inline bool) []control.UIEvent {
 	if surface == nil || record == nil {
 		return notice(surface, code, text)
 	}
@@ -72,7 +72,11 @@ func (s *Service) pathPickerInlineNotice(surface *state.SurfaceConsoleRecord, re
 	if err != nil {
 		return notice(surface, code, text)
 	}
-	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
+	return []control.UIEvent{s.pathPickerViewEvent(surface, view, inline)}
+}
+
+func (s *Service) pathPickerInlineNotice(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, code, title, text string) []control.UIEvent {
+	return s.pathPickerNotice(surface, record, code, title, text, true)
 }
 
 func (s *Service) finishPathPickerWithStatus(

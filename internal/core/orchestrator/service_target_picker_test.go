@@ -121,6 +121,46 @@ func TestTargetPickerConfirmExistingThreadAttachesSelection(t *testing.T) {
 	}
 }
 
+func TestTargetPickerConfirmFromModePageUsesCardPatchUpdate(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 6, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	initial := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if initial.Page != control.FeishuTargetPickerPageMode {
+		t.Fatalf("expected target picker mode page, got %#v", initial)
+	}
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         initial.PickerID,
+	})
+	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected mode confirm to refresh picker, got %#v", events)
+	}
+	if events[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected mode confirm refresh to use message-id patch flow, got %#v", events[0])
+	}
+	if got := events[0].FeishuTargetPickerView; got.Page != control.FeishuTargetPickerPageTarget {
+		t.Fatalf("expected mode confirm to advance to target page, got %#v", got)
+	}
+}
+
 func TestTargetPickerConfirmNewThreadOnAttachedWorkspaceEntersReadyState(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -243,6 +283,56 @@ func TestTargetPickerConfirmRecoverableWorkspaceNewThreadStartsHeadless(t *testi
 	}
 	if got := connectEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
 		t.Fatalf("expected succeeded target picker card after headless connect, got %#v", got)
+	}
+}
+
+func TestTargetPickerConfirmSourceValidationUsesCardPatchUpdate(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 16, 0, 0, time.UTC)
+	svc := NewService(func() time.Time { return now }, Config{TurnHandoffWait: 800 * time.Millisecond, GitAvailable: false}, renderer.NewPlanner())
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	_ = openAddWorkspaceSourcePage(t, svc, view)
+	surface := svc.root.Surfaces["surface-1"]
+	record := svc.activeTargetPicker(surface)
+	if record == nil {
+		t.Fatalf("expected active target picker after entering source page")
+	}
+	record.Page = control.FeishuTargetPickerPageSource
+	record.SelectedSource = control.FeishuTargetPickerSourceGitURL
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         record.PickerID,
+	})
+	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+		t.Fatalf("expected source validation refresh, got %#v", events)
+	}
+	if events[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected source validation to use message-id patch flow, got %#v", events[0])
+	}
+	got := events[0].FeishuTargetPickerView
+	if got.Page != control.FeishuTargetPickerPageSource || got.CanConfirm {
+		t.Fatalf("expected source page to stay blocked, got %#v", got)
+	}
+	if len(got.Messages) == 0 {
+		t.Fatalf("expected source validation feedback on picker card, got %#v", got)
 	}
 }
 

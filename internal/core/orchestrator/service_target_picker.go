@@ -232,14 +232,14 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 			if err != nil {
 				return notice(surface, "target_picker_unavailable", err.Error())
 			}
-			return []control.UIEvent{s.targetPickerViewEvent(surface, view, true)}
+			return []control.UIEvent{s.targetPickerViewEvent(surface, view, false)}
 		}
 		record.Page = targetPickerAdvancePage(view.Page, view.SelectedMode, view.SelectedSource)
 		view, err = s.buildTargetPickerView(surface, record)
 		if err != nil {
 			return notice(surface, "target_picker_unavailable", err.Error())
 		}
-		return []control.UIEvent{s.targetPickerViewEvent(surface, view, true)}
+		return []control.UIEvent{s.targetPickerViewEvent(surface, view, false)}
 	}
 	if view.SelectedMode != requestedMode ||
 		view.SelectedSource != requestedSourceKind ||

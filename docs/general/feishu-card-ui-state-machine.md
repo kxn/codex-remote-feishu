@@ -407,8 +407,9 @@ MCP request 卡片当前新增的可视语义：
   - 若切到 `新建工作区`，卡片会先进入 `来源` 页；随后 `已有目录` 主卡展示目录字段 + `选择目录` 按钮 + `接入并继续` 主按钮，`从 Git URL` 主卡展示落地父目录字段、仓库地址/目录名表单；其中父目录行右侧内嵌 `选择目录`，底部动作区是带分隔线的横排 `取消 / 上一步 / 克隆并继续`
   - `新建工作区 -> 已有目录` 命中已知 workspace 时，当前页会直接显示阻塞消息并禁用 `接入并继续`，而不是把它偷偷改写成“复用后进入空的新会话”
   - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
+  - `target_picker_confirm` 即便在 mode/source 这类“理论上更像导航页”的防御分支里，也不会走同步 inline replace；统一改为异步 ack + `message.patch` 回同一张 owner card，避免回调线程与卡片承载错位时再冒出逃逸卡
   - 独立 path picker 卡现在也会在首次发送后把自身 `message_id` 记回 runtime；因此后续非 inline 的异步结果不再只能回退成外发 notice，而是可以显式 patch 当前这张 picker 卡
-  - path picker 当前不再把确认成功、取消成功，或大部分前台校验失败直接外发成独立结果卡；默认行为是保留 `允许范围 / 当前目录 / 当前选择` 业务区，并把“当前只可选择目录 / 文件”“条目不可用”“已确认路径”“已取消路径选择”等反馈放进 notice 区；sealed 后移除交互
+  - path picker 当前不再把确认成功、取消成功，或大部分前台校验失败直接外发成独立结果卡；默认行为是保留 `允许范围 / 当前目录 / 当前选择` 业务区，并把“当前只可选择目录 / 文件”“条目不可用”“已确认路径”“已取消路径选择”等反馈放进 notice 区；sealed 后移除交互。`path_picker_confirm` 的“当前还不能确认”等前台校验失败也统一走异步 patch 回原卡，不再尝试同步 inline replace
   - `/sendfile` 文件模式 picker 当前基于这条规则形成“菜单卡/独立 picker -> 前台启动 -> 后台发送”的单卡 handoff：打开 picker 时若来自 stamped 菜单卡，会先把当前菜单卡直接替换成文件选择器；若前置条件不满足（例如 VS Code 模式或尚未接管工作区），则当前菜单卡会直接封成不可交互的错误终态，而不是回退成额外 notice
   - `/sendfile` confirm 后会先做启动前校验，失败则把错误提示继续留在当前 picker 卡；启动成功则把当前卡封成 `已开始发送，可继续其他操作`，展示文件名/大小，超 `100 MB` 时再追加 `文件较大，请耐心等待`
   - `/sendfile` cancel 当前也会把当前 picker 卡封成 `已取消发送文件` 终态，而不是把旧卡留在原地再额外 append 一条取消 notice
