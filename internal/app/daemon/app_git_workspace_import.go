@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/gitworkspace"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
 )
 
 const gitWorkspaceImportCommandTimeout = 10 * time.Minute
@@ -41,7 +42,7 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 		return nil
 	}
 	if err != nil {
-		var importErr *gitworkspace.ImportError
+		var importErr *workspaceimport.ImportError
 		if errors.As(err, &importErr) {
 			log.Printf(
 				"git import failed: surface=%s picker=%s repo=%s parent=%s dest=%s code=%s err=%v stderr=%s",
@@ -94,22 +95,22 @@ func gitWorkspaceImportNotice(surfaceID, code, text string) []control.UIEvent {
 	}}
 }
 
-func gitWorkspaceImportErrorText(err *gitworkspace.ImportError) string {
+func gitWorkspaceImportErrorText(err *workspaceimport.ImportError) string {
 	if err == nil {
 		return "Git 仓库导入失败，请稍后重试。"
 	}
 	switch err.Code {
-	case gitworkspace.ImportErrorGitMissing:
+	case workspaceimport.ImportErrorGitMissing:
 		return "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。"
-	case gitworkspace.ImportErrorInvalidURL:
+	case workspaceimport.ImportErrorInvalidURL:
 		return "Git 仓库地址无效，请检查地址格式后重试。"
-	case gitworkspace.ImportErrorInvalidDirectoryName:
+	case workspaceimport.ImportErrorInvalidDirectoryName:
 		return "目标目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitworkspace.ImportErrorDestinationExists:
+	case workspaceimport.ImportErrorDestinationExists:
 		return "目标目录已经存在，请换一个父目录或目录名后重试。"
-	case gitworkspace.ImportErrorRefNotFound:
+	case workspaceimport.ImportErrorRefNotFound:
 		return "指定的分支或标签不存在，请检查后重试。"
-	case gitworkspace.ImportErrorAuthFailed:
+	case workspaceimport.ImportErrorAuthFailed:
 		return "无法访问这个仓库，请确认当前机器上的 Git 凭据或仓库权限后重试。"
 	default:
 		return "Git 仓库导入失败，请稍后重试。"

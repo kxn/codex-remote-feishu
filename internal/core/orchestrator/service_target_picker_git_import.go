@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/app/gitworkspace"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
 )
 
 const targetPickerGitImportOutputTailLines = 3
@@ -52,7 +52,7 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
 }
 
-func (s *Service) FailTargetPickerGitImport(surfaceSessionID, pickerID string, importErr *gitworkspace.ImportError) []control.UIEvent {
+func (s *Service) FailTargetPickerGitImport(surfaceSessionID, pickerID string, importErr *workspaceimport.ImportError) []control.UIEvent {
 	surface := s.root.Surfaces[surfaceSessionID]
 	if surface == nil {
 		return nil
@@ -148,7 +148,7 @@ func targetPickerGitImportSuccessStatus(workspaceKey string) feishuCardStatusPay
 	return feishuCardStatusPayload{Sections: sections}
 }
 
-func targetPickerGitImportCloneFailureStatus(importErr *gitworkspace.ImportError) feishuCardStatusPayload {
+func targetPickerGitImportCloneFailureStatus(importErr *workspaceimport.ImportError) feishuCardStatusPayload {
 	if importErr == nil {
 		return feishuCardStatusPayload{
 			Sections: []control.FeishuCardTextSection{{Label: "失败原因", Lines: []string{"Git 仓库导入失败，请稍后重试。"}}},
@@ -262,44 +262,44 @@ func truncateTargetPickerGitImportLine(line string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
-func targetPickerGitImportNextStep(importErr *gitworkspace.ImportError) string {
+func targetPickerGitImportNextStep(importErr *workspaceimport.ImportError) string {
 	if importErr == nil {
 		return "检查 Git URL、权限或网络后，再重新发起一次导入。"
 	}
 	switch importErr.Code {
-	case gitworkspace.ImportErrorGitMissing:
+	case workspaceimport.ImportErrorGitMissing:
 		return "先在当前机器安装 `git`，或改用“本地目录”接入已有目录。"
-	case gitworkspace.ImportErrorInvalidURL:
+	case workspaceimport.ImportErrorInvalidURL:
 		return "检查 Git URL 是否有效，再重新发起一次导入。"
-	case gitworkspace.ImportErrorInvalidDirectoryName:
+	case workspaceimport.ImportErrorInvalidDirectoryName:
 		return "把本地目录名改成不含路径分隔符的普通目录名后重试。"
-	case gitworkspace.ImportErrorDestinationExists:
+	case workspaceimport.ImportErrorDestinationExists:
 		return "更换落地目录或本地目录名后重试，避免覆盖已有目录。"
-	case gitworkspace.ImportErrorRefNotFound:
+	case workspaceimport.ImportErrorRefNotFound:
 		return "检查分支或标签名是否存在后再重试。"
-	case gitworkspace.ImportErrorAuthFailed:
+	case workspaceimport.ImportErrorAuthFailed:
 		return "检查仓库权限、Git 凭据或网络后，再重新发起一次导入。"
 	default:
 		return "检查 Git URL、目标目录、权限或网络后，再重新发起一次导入。"
 	}
 }
 
-func targetPickerGitImportErrorText(importErr *gitworkspace.ImportError) string {
+func targetPickerGitImportErrorText(importErr *workspaceimport.ImportError) string {
 	if importErr == nil {
 		return "Git 仓库导入失败，请稍后重试。"
 	}
 	switch importErr.Code {
-	case gitworkspace.ImportErrorGitMissing:
+	case workspaceimport.ImportErrorGitMissing:
 		return "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。"
-	case gitworkspace.ImportErrorInvalidURL:
+	case workspaceimport.ImportErrorInvalidURL:
 		return "Git 仓库地址无效，请检查地址格式后重试。"
-	case gitworkspace.ImportErrorInvalidDirectoryName:
+	case workspaceimport.ImportErrorInvalidDirectoryName:
 		return "目标目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitworkspace.ImportErrorDestinationExists:
+	case workspaceimport.ImportErrorDestinationExists:
 		return "目标目录已经存在，请换一个父目录或目录名后重试。"
-	case gitworkspace.ImportErrorRefNotFound:
+	case workspaceimport.ImportErrorRefNotFound:
 		return "指定的分支或标签不存在，请检查后重试。"
-	case gitworkspace.ImportErrorAuthFailed:
+	case workspaceimport.ImportErrorAuthFailed:
 		return "无法访问这个仓库，请确认当前机器上的 Git 凭据或仓库权限后重试。"
 	default:
 		return "Git 仓库导入失败，请稍后重试。"

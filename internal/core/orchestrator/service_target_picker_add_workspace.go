@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/app/gitworkspace"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
 )
 
 const (
@@ -332,7 +332,7 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 	if previewRepo == "" {
 		previewRepo = "preview"
 	}
-	preview, previewErr := gitworkspace.Preview(gitworkspace.ImportRequest{
+	preview, previewErr := workspaceimport.Preview(workspaceimport.ImportRequest{
 		RepoURL:       previewRepo,
 		ParentDir:     parentDir,
 		DirectoryName: directoryName,
@@ -342,7 +342,7 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 		gitState.CanConfirm = repoURL != ""
 		return gitState
 	}
-	var importErr *gitworkspace.ImportError
+	var importErr *workspaceimport.ImportError
 	if ok := errorAsImport(previewErr, &importErr); !ok || importErr == nil {
 		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
@@ -354,13 +354,13 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 		gitState.FinalPath = state.NormalizeWorkspaceKey(importErr.DestinationPath)
 	}
 	switch importErr.Code {
-	case gitworkspace.ImportErrorDestinationExists:
+	case workspaceimport.ImportErrorDestinationExists:
 		destinationPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, state.NormalizeWorkspaceKey(importErr.DestinationPath)))
 		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  fmt.Sprintf("目标目录已存在：%s。请更换落地目录或本地目录名。", destinationPath),
 		})
-	case gitworkspace.ImportErrorInvalidDirectoryName:
+	case workspaceimport.ImportErrorInvalidDirectoryName:
 		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  "本地目录名无效，请改成不含路径分隔符的普通目录名。",
@@ -374,7 +374,7 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 	return gitState
 }
 
-func errorAsImport(err error, target **gitworkspace.ImportError) bool {
+func errorAsImport(err error, target **workspaceimport.ImportError) bool {
 	if err == nil || target == nil {
 		return false
 	}

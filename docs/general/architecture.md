@@ -66,6 +66,7 @@ internal/
     render/
     renderer/
     state/
+    workspaceimport/
   debuglog/
   feishuapp/
   runtime/
@@ -154,6 +155,16 @@ testkit/
   - 负责 compact notice、exec/tool progress、turn artifact 与相关派生投影
 
 这几簇当前仍留在同包内，以减少过早拆包带来的导出污染；`Service` 自己则更接近组合根和跨簇编排点。
+
+### 4.4.1 `internal/core/workspaceimport`
+
+共享 Git workspace 导入前置校验与错误契约，负责：
+
+- 目录名推导与校验
+- parent directory / destination path 预检查
+- 导入失败错误码与错误载荷
+
+它的目标是让 `orchestrator` 只依赖 core 级共享契约，而不是直接反向依赖 `internal/app/gitworkspace`。
 
 ### 4.5 `internal/core/renderer`
 
