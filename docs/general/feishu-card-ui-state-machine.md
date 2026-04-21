@@ -403,7 +403,7 @@ MCP request 卡片当前新增的可视语义：
   - 如果只是当前 workspace 已选中，但 surface 处于 detached / unbound，session 会保持空值，等待用户显式选择
   - 但工作区一旦变化，session 下拉不会再 silently fallback 到新的真实 workspace 默认会话
   - 若切到真实 workspace，session 会被主动清空，confirm 按钮随之禁用，直到用户重新选定会话
-  - 若切到 `新建工作区`，卡片会先进入 `来源` 页；随后 `已有目录` 主卡展示目录字段 + `选择目录` 按钮 + `接入并继续` 主按钮，`从 Git URL` 主卡展示落地父目录字段、仓库地址/目录名表单、`选择目录` 按钮与 `克隆并继续` 主按钮
+  - 若切到 `新建工作区`，卡片会先进入 `来源` 页；随后 `已有目录` 主卡展示目录字段 + `选择目录` 按钮 + `接入并继续` 主按钮，`从 Git URL` 主卡展示落地父目录字段、仓库地址/目录名表单；其中父目录行右侧内嵌 `选择目录`，底部动作区是带分隔线的横排 `取消 / 上一步 / 克隆并继续`
   - `新建工作区 -> 已有目录` 命中已知 workspace 时，当前页会直接显示阻塞消息并禁用 `接入并继续`，而不是把它偷偷改写成“复用后进入空的新会话”
   - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
   - 独立 path picker 卡现在也会在首次发送后把自身 `message_id` 记回 runtime；因此后续非 inline 的异步结果不再只能回退成外发 notice，而是可以显式 patch 当前这张 picker 卡

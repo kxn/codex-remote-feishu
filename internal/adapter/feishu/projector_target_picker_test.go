@@ -380,6 +380,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 		SelectedSource:   control.FeishuTargetPickerSourceGitURL,
 		ShowModeSwitch:   true,
 		ShowSourceSelect: true,
+		CanGoBack:        true,
 		ConfirmLabel:     "克隆并继续",
 		CanConfirm:       true,
 		GitParentDir:     "/data/dl",
@@ -410,45 +411,55 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	if len(formElements) < 4 {
 		t.Fatalf("expected git form inputs and actions, got %#v", form)
 	}
-	if formElements[0]["tag"] != "button" || formElements[0]["name"] != "target_picker_open_path" {
-		t.Fatalf("expected git form to start with open-path button, got %#v", formElements)
+	if formElements[0]["tag"] != "column_set" {
+		t.Fatalf("expected git form to start with parent-dir row, got %#v", formElements)
+	}
+	rowColumns, _ := formElements[0]["columns"].([]map[string]any)
+	if len(rowColumns) != 2 {
+		t.Fatalf("expected parent-dir row to render two columns, got %#v", formElements[0])
+	}
+	leftElements, _ := rowColumns[0]["elements"].([]map[string]any)
+	if len(leftElements) != 1 || !strings.Contains(markdownContent(leftElements[0]), "**落地父目录**") {
+		t.Fatalf("expected parent-dir row to keep directory markdown on the left, got %#v", formElements[0])
+	}
+	rightElements, _ := rowColumns[1]["elements"].([]map[string]any)
+	if len(rightElements) != 1 || rightElements[0]["tag"] != "button" || rightElements[0]["name"] != "target_picker_open_path" {
+		t.Fatalf("expected parent-dir row to keep open-path button on the right, got %#v", formElements[0])
 	}
 	if formElements[1]["name"] != control.FeishuTargetPickerGitRepoURLFieldName || formElements[2]["name"] != control.FeishuTargetPickerGitDirectoryNameFieldName {
 		t.Fatalf("unexpected git form input names: %#v", formElements)
 	}
 	if len(formElements) != 5 {
-		t.Fatalf("expected git form to keep two inputs plus cancel/confirm buttons inside the same form, got %#v", formElements)
+		t.Fatalf("expected git form to keep parent-dir row, two inputs, divider and footer row, got %#v", formElements)
 	}
-	if formElements[3]["tag"] != "button" || formElements[3]["name"] != "target_picker_cancel" {
-		t.Fatalf("expected git form to keep cancel button inside form, got %#v", formElements)
+	if formElements[3]["tag"] != "hr" {
+		t.Fatalf("expected git form footer to be separated by divider, got %#v", formElements)
 	}
-	if formElements[4]["tag"] != "button" || formElements[4]["name"] != "target_picker_confirm" {
-		t.Fatalf("expected git form actions to stay flat inside form, got %#v", formElements)
+	if formElements[4]["tag"] != "column_set" {
+		t.Fatalf("expected git form footer actions to render as a horizontal button row, got %#v", formElements)
 	}
-	var sawParentDirNearForm bool
-	for i := 0; i < len(elements)-1; i++ {
-		if cardStringValue(elements[i]["tag"]) != "markdown" || cardStringValue(elements[i+1]["tag"]) != "form" {
-			continue
-		}
-		content := cardStringValue(elements[i]["content"])
-		if !strings.Contains(content, "**落地父目录**") {
-			continue
-		}
-		sawParentDirNearForm = true
-		break
+	footerButtons := cardElementButtons(t, formElements[4])
+	if len(footerButtons) != 3 {
+		t.Fatalf("expected cancel/back/confirm in git form footer row, got %#v", formElements[4])
 	}
-	if !sawParentDirNearForm {
-		t.Fatalf("expected open-path form to stay directly after parent-dir block, got %#v", elements)
+	if footerButtons[0]["name"] != "target_picker_cancel" || footerButtons[1]["name"] != "target_picker_back" || footerButtons[2]["name"] != "target_picker_confirm" {
+		t.Fatalf("expected git form footer to keep cancel/back/confirm order, got %#v", footerButtons)
+	}
+	if containsMarkdownWithPrefix(elements, "**最终路径**") {
+		t.Fatalf("did not expect git card to render final-path preview, got %#v", elements)
 	}
 
 	var sawOpenPath bool
 	var sawConfirm bool
+	var sawBack bool
 	for _, action := range cardActionsFromElements(formElements) {
 		switch cardValueMap(action)[cardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerOpenPathPicker:
 			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
 				sawOpenPath = true
 			}
+		case cardActionKindTargetPickerBack:
+			sawBack = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
 		}
@@ -460,7 +471,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 			break
 		}
 	}
-	if !sawOpenPath || !sawCancel || !sawConfirm {
+	if !sawOpenPath || !sawCancel || !sawBack || !sawConfirm {
 		t.Fatalf("expected git form to render open-path/cancel/confirm inside the same form, got %#v", elements)
 	}
 }
@@ -479,6 +490,7 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 			SelectedSource:   control.FeishuTargetPickerSourceGitURL,
 			ShowModeSwitch:   true,
 			ShowSourceSelect: true,
+			CanGoBack:        true,
 			ConfirmLabel:     "克隆并继续",
 			CanConfirm:       true,
 			GitParentDir:     "/data/dl",
@@ -511,22 +523,38 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 	}
 	formElements, _ := form["elements"].([]map[string]any)
 	if len(formElements) != 5 {
-		t.Fatalf("expected rendered git form to keep flat form structure, got %#v", form)
+		t.Fatalf("expected rendered git form to keep parent-dir row, inputs and footer row, got %#v", form)
 	}
-	if formElements[0]["tag"] != "button" || formElements[0]["name"] != "target_picker_open_path" {
-		t.Fatalf("expected rendered git form to keep open-path button first, got %#v", formElements)
+	if formElements[0]["tag"] != "column_set" {
+		t.Fatalf("expected rendered git form to start with parent-dir row, got %#v", formElements)
 	}
-	if formElements[4]["tag"] != "button" || formElements[4]["name"] != "target_picker_confirm" {
-		t.Fatalf("expected rendered git form to keep confirm button last, got %#v", formElements)
+	rowColumns, _ := formElements[0]["columns"].([]map[string]any)
+	if len(rowColumns) != 2 {
+		t.Fatalf("expected rendered parent-dir row to keep two columns, got %#v", formElements[0])
 	}
-	for _, index := range []int{0, 3, 4} {
-		if formElements[index]["form_action_type"] != "submit" {
-			t.Fatalf("expected rendered git form action %d to stay submit button, got %#v", index, formElements[index])
+	rowRightElements, _ := rowColumns[1]["elements"].([]map[string]any)
+	if len(rowRightElements) != 1 || rowRightElements[0]["tag"] != "button" || rowRightElements[0]["name"] != "target_picker_open_path" {
+		t.Fatalf("expected rendered open-path button on the right side of parent-dir row, got %#v", formElements[0])
+	}
+	if rowRightElements[0]["action_type"] != nil || rowRightElements[0]["form_action_type"] != "submit" {
+		t.Fatalf("expected rendered open-path button to stay form submit action, got %#v", rowRightElements[0])
+	}
+	if formElements[3]["tag"] != "hr" {
+		t.Fatalf("expected rendered git form to keep divider before footer buttons, got %#v", formElements)
+	}
+	if formElements[4]["tag"] != "column_set" {
+		t.Fatalf("expected rendered git form footer to stay horizontal, got %#v", formElements)
+	}
+	renderedFooterButtons := renderedColumnButtons(t, formElements[4])
+	if len(renderedFooterButtons) != 3 {
+		t.Fatalf("expected rendered git footer row to keep three buttons, got %#v", formElements[4])
+	}
+	for _, button := range renderedFooterButtons {
+		if button["action_type"] != nil || button["form_action_type"] != "submit" {
+			t.Fatalf("expected rendered git footer button to stay form submit action, got %#v", button)
 		}
 	}
-	for _, element := range formElements {
-		if element["tag"] == "column_set" {
-			t.Fatalf("did not expect column_set inside rendered git form, got %#v", formElements)
-		}
+	if containsMarkdownWithPrefix(rendered, "**最终路径**") {
+		t.Fatalf("did not expect rendered git form to include final-path preview, got %#v", rendered)
 	}
 }
