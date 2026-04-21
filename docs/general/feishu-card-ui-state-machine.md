@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-21`
-> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1，并让 target picker / path picker / history 三类前台卡都显式承载 `body / notice / sealed` contract：处理中和终态不再把整张卡覆写成一句状态，而是保留业务区上下文，把反馈收进 notice 区，sealed 后移除交互；显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续并入共享过程卡（quiet 静默，normal/verbose 可见）；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（requested 进度态继续占用原卡，completed / no-op / failed 才 seal 收口），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；统一 command card 现在已扩展为 `Menu / Config / Page` 三类 read model，其中 bare config cards 与 `FeishuCommandView.Page` / `FeishuDirectCommandCatalog` 都显式承载 `body / notice / sealed` contract：业务区保留当前值/目标值等上下文，notice 区承接状态反馈与重开提示，sealed 态移除交互按钮；bare `/cron`、`/upgrade`、`/debug` 与 `/vscode-migrate` 的根页、显式子页与非法参数反馈都收敛到同一套 command-page 结构，stamped current-card callback 也改走 command-page result replacement，bare continuation 当前已无活跃命中，legacy command catalog 经 `Page` 往返后也会保留原有 summary fallback 与默认 displayStyle 语义；request cards 当前统一改为 `FeishuRequestView` 穿过 `UIEvent` 边界，且 `request_user_input` / form 模式 `mcp_server_elicitation` 已收敛到“同一张卡内分步答题/填表”：卡面只显示当前题，`上一题 / 下一题`、`保存本题`、`提交答案 / 提交并继续` 都在同卡内推进，中间步骤只做 inline replace，不再每答一题 append 新 request 卡；legacy selection prompt 则收敛到 `FeishuSelectionView.Prompt`；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，且同一 surface 后续异步到达的 VS Code guidance（兼容修复、open prompt、恢复成功/失败、未接管 `/list` 提示）也会继续 patch 回这张 guidance 卡；`/vscode-migrate` root page 与 `vscode_migrate_owner_flow` 结果同样改成同一张 page-owner card 收口，并继续承接后续 VS Code guidance；`/upgrade latest` 的 checking / confirm / running / terminal owner card 现在也统一依赖 page `TrackingKey -> message_id` 回写，把后续 patch 收口到同一张升级卡；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示，同时 `file_change` 已并入这条过程卡：normal 显示文件行与 `+/-` 统计，verbose 再追加 diff code block；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
+> Summary: 当前实现已把 target picker 收敛到 owner-card runtime v2、`/history` 收敛到 owner-card runtime v1，并让 target picker / path picker / history 三类前台卡都显式承载 `body / notice / sealed` contract：处理中和终态不再把整张卡覆写成一句状态，而是保留业务区上下文，把反馈收进 notice 区，sealed 后移除交互；显式 `/compact` 收敛为前台 compact owner-card（文本入口 append 新卡，menu `current_work` 入口则直接把原菜单卡绑定成 compact owner card）、被动 compact 继续并入共享过程卡（quiet 静默，normal/verbose 可见）；同时 `current_work` 菜单里的 `/steerall` 已改成原卡收口（requested 进度态继续占用原卡，completed / no-op / failed 才 seal 收口），`/sendfile` 也已补齐“菜单卡替换为 picker -> cancel / 启动前失败 / 启动成功 / 不可用都继续在同卡收口”的边界；`maintenance` / `switch_target` 菜单里的 `/help`、`/status`、`/list`、`/use`、`/useall` 现在都会直接把首个真实结果卡替成当前菜单卡，`/stop`、`/new`、`/follow`、`/detach` 也已退出旧的 submission-anchor + recall 路径，改成用首个结果卡/终态卡直接 seal 原菜单卡；统一 command card 现在已扩展为 `Menu / Config / Page` 三类 read model，其中 bare config cards 与 `FeishuCommandView.Page` / `FeishuDirectCommandCatalog` 都显式承载 `body / notice / sealed` contract：业务区保留当前值/目标值等上下文，notice 区承接状态反馈与重开提示，sealed 态移除交互按钮；bare `/cron`、`/upgrade`、`/debug` 与 `/vscode-migrate` 的根页、显式子页与非法参数反馈都收敛到同一套 command-page 结构，stamped current-card callback 也改走 command-page result replacement，bare continuation 当前已无活跃命中，legacy command catalog 经 `Page` 往返后也会保留原有 summary fallback 与默认 displayStyle 语义；request cards 当前统一改为 `FeishuRequestView` 穿过 `UIEvent` 边界，且 `request_user_input` / form 模式 `mcp_server_elicitation` 已收敛到“同一张卡内分步答题/填表”：卡面只显示当前题，`上一题 / 下一题`、`保存本题`、`提交答案 / 提交并继续` 都在同卡内推进，中间步骤只做 inline replace，不再每答一题 append 新 request 卡；legacy selection prompt 则收敛到 `FeishuSelectionView.Prompt`；live thread-selection announce 当前已改走 `UIEventNotice + ThreadSelection metadata` 的 notice-family 语义，`UIEventThreadSelectionChange` 只保留兼容 fallback；bare config cards 里 `/mode`、`/autowhip`、`/reasoning`、`/access`、`/verbose` 已去掉多余的手动输入，`/model` 改成“常见模型 `select_static` 下拉 + 手动输入”；stamped `/mode vscode` 若立刻命中 VS Code 兼容修复、open prompt 或恢复提示，也会继续承接当前卡，且同一 surface 后续异步到达的 VS Code guidance（兼容修复、open prompt、恢复成功/失败、未接管 `/list` 提示）也会继续 patch 回这张 guidance 卡；`/vscode-migrate` root page 与 `vscode_migrate_owner_flow` 结果同样改成同一张 page-owner card 收口，并继续承接后续 VS Code guidance；`/upgrade latest` 的 checking / confirm / running / terminal owner card 现在也统一依赖 page `TrackingKey -> message_id` 回写，把后续 patch 收口到同一张升级卡；共享过程卡当前在 projector 层改成单卡滚动窗口，超长时丢弃最旧可见行并在顶部补“较早过程已省略”提示，同时 `file_change` 已并入这条过程卡：normal 显示文件行与 `+/-` 统计，verbose 再追加 diff code block；Feishu turn delivery 当前不再是 final-only reply：final reply、可见的 assistant 普通文本，以及 steer accept 后的 `用户补充` timeline text 都会 reply 到 turn anchor，而 request / plan / 共享过程卡 / 图片输出 / 补充预览 / notice 继续保持顶层 append-only。
 
 ## 1. 文档定位
 
@@ -312,7 +312,7 @@ MCP request 卡片当前新增的可视语义：
   - action 命中 daemon 侧“原卡结果 / 终态” allow-list（当前 `/list`、`/use`、`/useall`、`attach_instance`、`use_thread`、`/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`，以及 `/cron`、`/upgrade`、`/debug` 三组命令里不立即执行的根页 / 子页 / 非法参数回显）
   - 当前事件流里至少存在一张可直接投影成卡片的结果事件；daemon 取第一张作为 `ReplaceCurrentCard`
   - 对 `/stop`、`/new`、`/follow`、`/detach`，replacement 落地后会额外抑制重复 notice append，避免又出现“原卡已终态、旁边再补一张同义终态 notice”
-  - 对 `attach_instance`，若同一动作后续还带 `UIEventThreadSelectionChange`，daemon 会抑制这类重复 append，避免菜单卡已经收口后又补一张线程选择卡
+  - 对 `attach_instance`，若同一动作后续还带 thread-selection announce，daemon 会抑制这类重复 append；当前 live 路径使用 `UIEventNotice + ThreadSelection metadata`，legacy `UIEventThreadSelectionChange` 仍作为兼容 fallback 一并抑制，避免菜单卡已经收口后又补一张线程选择提示卡
 3. bare command continuation 兼容路径
   - lifecycle helper 当前仍保留这条判定分支
   - 但当前 allow-list 已为空，不再有任何 stamped action 命中它
@@ -512,6 +512,30 @@ MCP request 卡片当前新增的可视语义：
   - 可见性当前分两层：`file_change` / `mcp_tool_call` / `context_compaction` 在 normal / verbose 可见，quiet 静默；`exec_command` / `web_search` / `dynamic_tool_call` 以及 exploration / reasoning 仍只在 verbose 可见。normal 继续保留 plan、final reply，以及会影响当前状态的共享过程项；若 compact 完成发生在无 attached surface 时，replay 到 normal / verbose surface 会继续显示，quiet 仍保持静默
   - 一旦 assistant 正文开始输出，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
 - 若清掉底部 reasoning 状态后整张卡已无任何可见行，projector 不会再补 `message.delete` 撤回旧卡；这次清理只终止活跃 progress state，已经发出的旧卡保留为历史
+
+### 5.4 当前保留的独立例外
+
+当前仍有几类语义明确、但不应强行并回普通前台卡/notice 主路径的保留例外：
+
+1. 全局运行时 notice
+  - `surface_resume_*`
+  - `vscode_open_required`
+  - `attached_instance_transport_degraded`
+  - `daemon_shutting_down`
+  - `gateway_apply_failure`
+  - 这些提示继续走独立 runtime notice 车道，不伪装成某张前台业务卡的 notice 区
+2. freshness / ownership 拒绝
+  - `old_card`
+  - `owner_card_expired`
+  - `owner_card_unauthorized`
+  - `path_picker_expired`
+  - `path_picker_unauthorized`
+  - `history_expired`
+  - 这些提示的目的就是阻止旧卡或非 owner 点击继续改写当前前台状态，因此当前继续保留为显式独立拒绝提示
+3. legacy `FeishuSelectionView`
+  - normal mode 主 `/list` / `/use` / `/useall` 已迁到 target picker
+  - 但 VS Code instance/thread selection、attach / kick 等旧选择流当前仍通过 `FeishuSelectionView -> FeishuDirectSelectionPrompt` 路径承接
+  - 这条路径当前被视为 live 保留例外，而不是本轮前台卡 contract 迁移中的漏网主路径
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
 
 ## 6. 当前 freshness / old-card 语义

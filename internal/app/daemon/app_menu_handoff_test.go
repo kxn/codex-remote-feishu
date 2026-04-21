@@ -291,8 +291,9 @@ func TestHandleGatewayActionReplacesVSCodeThreadSelectionCardForUseResult(t *tes
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected /use result to replace current selection card, got %#v", result)
 	}
-	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "当前输入目标已切换到：droid · 会话1") {
-		t.Fatalf("expected thread-selection result text in replacement card, got %#v", result.ReplaceCurrentCard.CardElements)
+	cardText := operationCardText(*result.ReplaceCurrentCard)
+	if !strings.Contains(cardText, "当前输入目标") || !strings.Contains(cardText, "droid · 会话1") {
+		t.Fatalf("expected notice-family thread-selection result in replacement card, got %q / %#v", cardText, result.ReplaceCurrentCard.CardElements)
 	}
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)

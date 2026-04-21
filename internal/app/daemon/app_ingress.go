@@ -346,7 +346,7 @@ func filterNoticeUIEvents(events []control.UIEvent) []control.UIEvent {
 func filterThreadSelectionUIEvents(events []control.UIEvent) []control.UIEvent {
 	out := make([]control.UIEvent, 0, len(events))
 	for _, event := range events {
-		if event.Kind == control.UIEventThreadSelectionChange {
+		if event.ThreadSelection != nil || event.Kind == control.UIEventThreadSelectionChange {
 			continue
 		}
 		out = append(out, event)

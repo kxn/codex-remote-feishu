@@ -13,19 +13,68 @@ import (
 )
 
 func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMode, title, preview, firstUserMessage, lastUserMessage, lastAssistantMessage string) control.UIEvent {
+	selection := &control.ThreadSelectionChanged{
+		ThreadID:             threadID,
+		RouteMode:            routeMode,
+		Title:                title,
+		Preview:              preview,
+		FirstUserMessage:     firstUserMessage,
+		LastUserMessage:      lastUserMessage,
+		LastAssistantMessage: lastAssistantMessage,
+	}
 	return control.UIEvent{
-		Kind:             control.UIEventThreadSelectionChange,
+		Kind:             control.UIEventNotice,
 		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
-		ThreadSelection: &control.ThreadSelectionChanged{
-			ThreadID:             threadID,
-			RouteMode:            routeMode,
-			Title:                title,
-			Preview:              preview,
-			FirstUserMessage:     firstUserMessage,
-			LastUserMessage:      lastUserMessage,
-			LastAssistantMessage: lastAssistantMessage,
-		},
+		Notice:           threadSelectionNotice(*selection),
+		ThreadSelection:  selection,
+	}
+}
+
+func threadSelectionNotice(selection control.ThreadSelectionChanged) *control.Notice {
+	sections := make([]control.FeishuCardTextSection, 0, 4)
+	if strings.TrimSpace(selection.RouteMode) == string(state.RouteModeNewThreadReady) {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "当前状态",
+			Lines: []string{
+				"已准备新建会话。",
+				"当前还没有实际会话 ID；下一条文本会作为首条消息创建新会话。",
+			},
+		})
+	} else {
+		if title := strings.TrimSpace(selection.Title); title != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "当前输入目标",
+				Lines: []string{title},
+			})
+		}
+		if first := strings.TrimSpace(selection.FirstUserMessage); first != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "会话起点",
+				Lines: []string{first},
+			})
+		}
+		if lastUser := strings.TrimSpace(selection.LastUserMessage); lastUser != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "最近用户",
+				Lines: []string{lastUser},
+			})
+		}
+		if lastAssistant := strings.TrimSpace(selection.LastAssistantMessage); lastAssistant != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "最近回复",
+				Lines: []string{lastAssistant},
+			})
+		} else if preview := strings.TrimSpace(selection.Preview); preview != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "最近回复",
+				Lines: []string{preview},
+			})
+		}
+	}
+	return &control.Notice{
+		Code:     "thread_selection_changed",
+		Sections: sections,
 	}
 }
 

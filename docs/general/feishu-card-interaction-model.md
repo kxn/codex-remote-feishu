@@ -452,6 +452,53 @@
 - 当前台卡抓注意力时，它可以进入卡内 notice 区
 - 当前台卡不在时，它也可以作为后台 notice 独立出现
 
+## 6.4 当前保留的独立例外
+
+上面的模型描述的是主产品语义，但当前实现里仍明确保留几类独立例外。
+
+这些例外不应再被理解成“主路径还没收完”，而应视为刻意保留的兼容/安全边界：
+
+### A. 全局运行时 notice
+
+例如：
+
+- surface resume 失败
+- VS Code resume / open prompt
+- transport degraded
+- daemon shutting down
+- gateway apply failure
+
+这类提示本来就不属于当前某一张前台业务卡，因此继续作为后台独立 notice 是合理的。
+
+### B. 旧卡 / 非 owner / freshness 拒绝
+
+例如：
+
+- `old_card`
+- `owner_card_expired`
+- `owner_card_unauthorized`
+- `path_picker_expired`
+- `path_picker_unauthorized`
+- `history_expired`
+
+这类提示的产品目的不是“继续当前业务”，而是明确拒绝旧卡或非本人点击继续改写当前前台状态。
+
+因此，当前更合理的定义是：
+
+- 它们继续作为独立拒绝提示存在
+- 不强行并进当前活跃前台卡的 notice 区
+
+### C. legacy selection prompt
+
+normal mode 的主 `/list` / `/use` / `/useall` 已经迁到 target picker。
+
+但当前仍有少量 live 路径继续依赖 legacy selection prompt，例如：
+
+- VS Code instance / thread selection
+- attach / kick 等旧选择流
+
+这些路径当前可继续保留为独立前台卡家族里的兼容分支，而不是本轮必须彻底消灭的主路径问题。
+
 ## 7. 共享过程卡的严格规则
 
 共享过程卡的关键不是“上游发来了什么事件”，而是“最终有没有渲染出别的独立可见项”。
