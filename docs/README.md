@@ -167,6 +167,7 @@
 - [feishu-system-markdown-boundary-design.md](./draft/feishu-system-markdown-boundary-design.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
+- [plan-mode-feishu-support-design.md](./draft/plan-mode-feishu-support-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
