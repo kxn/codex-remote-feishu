@@ -73,6 +73,24 @@ func pathPickerNoticeText(view *control.FeishuPathPickerView) string {
 	return strings.Join(lines, "\n")
 }
 
+func pathPickerNoticeContainsPath(view *control.FeishuPathPickerView, want string) bool {
+	if view == nil {
+		return false
+	}
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return false
+	}
+	for _, section := range view.NoticeSections {
+		for _, line := range section.Lines {
+			if testutil.SamePath(line, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -710,7 +728,7 @@ func TestPathPickerConfirmHandsValidatedResultToConsumer(t *testing.T) {
 		PickerID:         view.PickerID,
 	})
 	confirmed := singlePathPickerEvent(t, confirmEvents)
-	if !confirmed.Sealed || !strings.Contains(pathPickerNoticeText(confirmed), filepath.Join(root, "file.txt")) {
+	if !confirmed.Sealed || !pathPickerNoticeContainsPath(confirmed, filepath.Join(root, "file.txt")) {
 		t.Fatalf("expected consumer confirm to seal same card with notice, got %#v", confirmed)
 	}
 	if len(consumer.confirmed) != 1 {
@@ -750,7 +768,7 @@ func TestPathPickerCancelHandsControlToConsumer(t *testing.T) {
 		PickerID:         view.PickerID,
 	})
 	cancelled := singlePathPickerEvent(t, cancelEvents)
-	if !cancelled.Sealed || !strings.Contains(pathPickerNoticeText(cancelled), root) {
+	if !cancelled.Sealed || !pathPickerNoticeContainsPath(cancelled, root) {
 		t.Fatalf("expected consumer cancel to seal same card with notice, got %#v", cancelled)
 	}
 	if len(consumer.cancelled) != 1 || !testutil.SamePath(consumer.cancelled[0].RootPath, root) {
