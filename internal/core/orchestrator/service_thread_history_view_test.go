@@ -40,6 +40,9 @@ func TestApplySurfaceActionHistoryStartsQueryForCurrentThread(t *testing.T) {
 	if events[0].Kind != control.UIEventFeishuThreadHistory || events[0].FeishuThreadHistoryView == nil || !events[0].FeishuThreadHistoryView.Loading {
 		t.Fatalf("expected loading history view, got %#v", events[0])
 	}
+	if len(events[0].FeishuThreadHistoryView.NoticeSections) != 1 {
+		t.Fatalf("expected loading history view to expose one notice section, got %#v", events[0].FeishuThreadHistoryView)
+	}
 	if events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandThreadHistoryRead || events[1].DaemonCommand.ThreadID != "thread-1" {
 		t.Fatalf("expected history daemon command, got %#v", events[1])
 	}

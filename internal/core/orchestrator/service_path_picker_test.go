@@ -55,6 +55,24 @@ func singlePathPickerEvent(t *testing.T, events []control.UIEvent) *control.Feis
 	return pathPickerViewFromEvent(t, events[0])
 }
 
+func pathPickerNoticeText(view *control.FeishuPathPickerView) string {
+	if view == nil {
+		return ""
+	}
+	lines := make([]string, 0, 8)
+	for _, section := range view.NoticeSections {
+		if label := strings.TrimSpace(section.Label); label != "" {
+			lines = append(lines, label)
+		}
+		for _, line := range section.Lines {
+			if trimmed := strings.TrimSpace(line); trimmed != "" {
+				lines = append(lines, trimmed)
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -100,8 +118,9 @@ func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *test
 		SurfaceSessionID: "surface-1",
 		PickerID:         view.PickerID,
 	})
-	if len(confirmEvents) != 1 || confirmEvents[0].Notice == nil || confirmEvents[0].Notice.Code != "path_picker_confirmed" {
-		t.Fatalf("expected confirmed notice, got %#v", confirmEvents)
+	confirmed := singlePathPickerEvent(t, confirmEvents)
+	if !confirmed.Sealed || !strings.Contains(pathPickerNoticeText(confirmed), "已确认路径") {
+		t.Fatalf("expected sealed same-card confirm state, got %#v", confirmed)
 	}
 	if svc.activePathPicker(svc.root.Surfaces["surface-1"]) != nil {
 		t.Fatalf("expected picker state to clear after confirm")
@@ -147,8 +166,9 @@ func TestOpenPathPickerFileModeSelectsFileAndRejectsDirectorySelection(t *testin
 		PickerID:         view.PickerID,
 		PickerEntry:      "subdir",
 	})
-	if len(rejectEvents) != 1 || rejectEvents[0].Notice == nil || rejectEvents[0].Notice.Code != "path_picker_not_file" {
-		t.Fatalf("expected file-type rejection notice, got %#v", rejectEvents)
+	rejected := singlePathPickerEvent(t, rejectEvents)
+	if rejected.Sealed || !strings.Contains(pathPickerNoticeText(rejected), "当前只可选择文件") {
+		t.Fatalf("expected inline same-card file-type rejection, got %#v", rejected)
 	}
 }
 
@@ -263,8 +283,9 @@ func TestOpenPathPickerEntryFilterHidesAndBlocksFilteredEntries(t *testing.T) {
 		PickerID:         view.PickerID,
 		PickerEntry:      "beta",
 	})
-	if len(blocked) != 1 || blocked[0].Notice == nil || blocked[0].Notice.Code != "path_picker_invalid_entry" {
-		t.Fatalf("expected filtered directory to be rejected, got %#v", blocked)
+	blockedView := singlePathPickerEvent(t, blocked)
+	if blockedView.Sealed || !strings.Contains(pathPickerNoticeText(blockedView), "filtered") {
+		t.Fatalf("expected filtered directory to stay on same card, got %#v", blockedView)
 	}
 }
 
@@ -372,8 +393,9 @@ func TestOpenPathPickerRejectsPathEscapesAndSymlinkEscapes(t *testing.T) {
 		PickerID:         view.PickerID,
 		PickerEntry:      "../outside.txt",
 	})
-	if len(outsideEvents) != 1 || outsideEvents[0].Notice == nil || outsideEvents[0].Notice.Code != "path_picker_invalid_entry" {
-		t.Fatalf("expected out-of-root rejection notice, got %#v", outsideEvents)
+	outsideRejected := singlePathPickerEvent(t, outsideEvents)
+	if outsideRejected.Sealed || !strings.Contains(pathPickerNoticeText(outsideRejected), "目标条目无效") {
+		t.Fatalf("expected out-of-root rejection to stay on same card, got %#v", outsideRejected)
 	}
 
 	escapeEvents := svc.ApplySurfaceAction(control.Action{
@@ -382,8 +404,9 @@ func TestOpenPathPickerRejectsPathEscapesAndSymlinkEscapes(t *testing.T) {
 		PickerID:         view.PickerID,
 		PickerEntry:      "escape.txt",
 	})
-	if len(escapeEvents) != 1 || escapeEvents[0].Notice == nil || escapeEvents[0].Notice.Code != "path_picker_invalid_entry" {
-		t.Fatalf("expected symlink escape rejection notice, got %#v", escapeEvents)
+	escapeRejected := singlePathPickerEvent(t, escapeEvents)
+	if escapeRejected.Sealed || !strings.Contains(pathPickerNoticeText(escapeRejected), "目标条目无效") {
+		t.Fatalf("expected symlink escape rejection to stay on same card, got %#v", escapeRejected)
 	}
 }
 
@@ -420,8 +443,9 @@ func TestOpenPathPickerDirectoryModeRejectsFileSelection(t *testing.T) {
 		PickerID:         view.PickerID,
 		PickerEntry:      "file.txt",
 	})
-	if len(rejectEvents) != 1 || rejectEvents[0].Notice == nil || rejectEvents[0].Notice.Code != "path_picker_not_directory" {
-		t.Fatalf("expected directory-type rejection notice, got %#v", rejectEvents)
+	rejected := singlePathPickerEvent(t, rejectEvents)
+	if rejected.Sealed || !strings.Contains(pathPickerNoticeText(rejected), "当前只可选择目录") {
+		t.Fatalf("expected directory-type rejection to stay on same card, got %#v", rejected)
 	}
 }
 
@@ -497,8 +521,9 @@ func TestPathPickerRejectsNonOwnerAndPreservesGate(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(ownerCancelEvents) != 1 || ownerCancelEvents[0].Notice == nil || ownerCancelEvents[0].Notice.Code != "path_picker_cancelled" {
-		t.Fatalf("expected owner cancel to still succeed after unauthorized attempt, got %#v", ownerCancelEvents)
+	cancelled := singlePathPickerEvent(t, ownerCancelEvents)
+	if !cancelled.Sealed || !strings.Contains(pathPickerNoticeText(cancelled), "已取消路径选择") {
+		t.Fatalf("expected owner cancel to seal same card after unauthorized attempt, got %#v", cancelled)
 	}
 }
 
@@ -613,8 +638,9 @@ func TestPathPickerBlocksRouteMutationUntilCancelled(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(cancelEvents) != 1 || cancelEvents[0].Notice == nil || cancelEvents[0].Notice.Code != "path_picker_cancelled" {
-		t.Fatalf("expected cancel notice, got %#v", cancelEvents)
+	cancelled := singlePathPickerEvent(t, cancelEvents)
+	if !cancelled.Sealed || !strings.Contains(pathPickerNoticeText(cancelled), "已取消路径选择") {
+		t.Fatalf("expected cancel to seal same card, got %#v", cancelled)
 	}
 
 	listEvents := svc.ApplySurfaceAction(control.Action{
@@ -683,8 +709,9 @@ func TestPathPickerConfirmHandsValidatedResultToConsumer(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(confirmEvents) != 1 || confirmEvents[0].Notice == nil || confirmEvents[0].Notice.Code != "consumer_confirmed" {
-		t.Fatalf("expected consumer confirm event, got %#v", confirmEvents)
+	confirmed := singlePathPickerEvent(t, confirmEvents)
+	if !confirmed.Sealed || !strings.Contains(pathPickerNoticeText(confirmed), filepath.Join(root, "file.txt")) {
+		t.Fatalf("expected consumer confirm to seal same card with notice, got %#v", confirmed)
 	}
 	if len(consumer.confirmed) != 1 {
 		t.Fatalf("expected one consumer confirm call, got %#v", consumer.confirmed)
@@ -722,8 +749,9 @@ func TestPathPickerCancelHandsControlToConsumer(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(cancelEvents) != 1 || cancelEvents[0].Notice == nil || cancelEvents[0].Notice.Code != "consumer_cancelled" {
-		t.Fatalf("expected consumer cancel event, got %#v", cancelEvents)
+	cancelled := singlePathPickerEvent(t, cancelEvents)
+	if !cancelled.Sealed || !strings.Contains(pathPickerNoticeText(cancelled), root) {
+		t.Fatalf("expected consumer cancel to seal same card with notice, got %#v", cancelled)
 	}
 	if len(consumer.cancelled) != 1 || !testutil.SamePath(consumer.cancelled[0].RootPath, root) {
 		t.Fatalf("unexpected consumer cancel result: %#v", consumer.cancelled)
@@ -748,7 +776,8 @@ func TestPathPickerWithoutConsumerStaysBusinessAgnostic(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(confirmEvents) != 1 || confirmEvents[0].Notice == nil || confirmEvents[0].Notice.Code != "path_picker_confirmed" {
-		t.Fatalf("expected generic confirm notice without business coupling, got %#v", confirmEvents)
+	confirmed := singlePathPickerEvent(t, confirmEvents)
+	if !confirmed.Sealed || !strings.Contains(pathPickerNoticeText(confirmed), "已确认路径") {
+		t.Fatalf("expected generic confirm to seal same card without business coupling, got %#v", confirmed)
 	}
 }

@@ -111,6 +111,7 @@ func (s *Service) sendFileCancelledTerminalEvents(surface *state.SurfaceConsoleR
 		Title:          "发送文件",
 		SelectedPath:   strings.TrimSpace(result.SelectedPath),
 		Terminal:       true,
+		Sealed:         true,
 		StatusTitle:    "已取消发送文件",
 		StatusSections: statusSections,
 	}
@@ -168,7 +169,7 @@ func (s *Service) HandleSendFilePreflightFailure(surfaceID, pickerID, text strin
 	if strings.TrimSpace(record.ConsumerKind) != sendFilePathPickerConsumerKind {
 		return notice(surface, "send_file_failed", strings.TrimSpace(text))
 	}
-	record.Hint = strings.TrimSpace(text)
+	setPathPickerStatus(record, "发送文件失败", text, nil, "")
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
 		return notice(surface, "send_file_failed", strings.TrimSpace(text))
@@ -195,6 +196,7 @@ func (s *Service) HandleSendFileStarted(surfaceID, pickerID, selectedPath string
 		Title:          strings.TrimSpace(firstNonEmpty(record.Title, "发送文件")),
 		SelectedPath:   strings.TrimSpace(selectedPath),
 		Terminal:       true,
+		Sealed:         true,
 		StatusTitle:    "已开始发送，可继续其他操作",
 		StatusSections: sendFileStartedStatusSections(selectedPath, sizeBytes),
 	}

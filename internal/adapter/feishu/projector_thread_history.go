@@ -53,24 +53,24 @@ func threadHistoryElements(view control.FeishuThreadHistoryView, daemonLifecycle
 			"content": summary,
 		})
 	}
-	if text := strings.TrimSpace(view.NoticeText); text != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(text),
-		})
-		return elements
+	hasBusinessContent := len(elements) != 0
+	switch {
+	case view.Loading:
+		// Keep summary visible and move the loading text into the notice lane.
+	case view.Detail != nil:
+		elements = append(elements, threadHistoryDetailElements(view, daemonLifecycleID)...)
+		hasBusinessContent = true
+	default:
+		elements = append(elements, threadHistoryListElements(view, daemonLifecycleID)...)
+		hasBusinessContent = true
 	}
-	if view.Loading {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(firstNonEmpty(strings.TrimSpace(view.LoadingText), "正在读取历史，请稍候...")),
-		})
-		return elements
+	if noticeSections := threadHistoryNoticeSections(view); len(noticeSections) != 0 {
+		if hasBusinessContent {
+			elements = append(elements, cardDividerElement())
+		}
+		elements = appendCardTextSections(elements, noticeSections)
 	}
-	if view.Detail != nil {
-		return append(elements, threadHistoryDetailElements(view, daemonLifecycleID)...)
-	}
-	return append(elements, threadHistoryListElements(view, daemonLifecycleID)...)
+	return elements
 }
 
 func threadHistorySummaryMarkdown(view control.FeishuThreadHistoryView) string {
@@ -239,4 +239,25 @@ func truncateThreadHistoryDetailText(text string, limit int) string {
 		return text
 	}
 	return string(runes[:limit-3]) + "..."
+}
+
+func threadHistoryNoticeSections(view control.FeishuThreadHistoryView) []control.FeishuCardTextSection {
+	if len(view.NoticeSections) != 0 {
+		return view.NoticeSections
+	}
+	sections := make([]control.FeishuCardTextSection, 0, 1)
+	if text := strings.TrimSpace(view.NoticeText); text != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "错误",
+			Lines: []string{text},
+		})
+	}
+	if view.Loading {
+		text := firstNonEmpty(strings.TrimSpace(view.LoadingText), "正在读取历史，请稍候...")
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "当前状态",
+			Lines: []string{text},
+		})
+	}
+	return sections
 }

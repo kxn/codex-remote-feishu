@@ -51,6 +51,7 @@ type FeishuThreadHistoryView struct {
 	LoadingText      string
 	NoticeCode       string
 	NoticeText       string
+	NoticeSections   []FeishuCardTextSection
 	Hint             string
 	CreatedAt        time.Time
 	ExpiresAt        time.Time

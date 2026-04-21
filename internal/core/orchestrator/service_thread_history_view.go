@@ -222,6 +222,7 @@ func (s *Service) buildThreadHistoryLoadingView(surface *state.SurfaceConsoleRec
 		ThreadLabel:    s.threadHistoryThreadLabel(inst, record.ThreadID),
 		Loading:        true,
 		LoadingText:    "正在读取当前会话历史，请稍候...",
+		NoticeSections: []control.FeishuCardTextSection{{Label: "当前状态", Lines: []string{"正在读取当前会话历史，请稍候..."}}},
 		CreatedAt:      flow.CreatedAt,
 		ExpiresAt:      flow.ExpiresAt,
 		SelectedTurnID: strings.TrimSpace(record.TurnID),
@@ -328,9 +329,25 @@ func (s *Service) buildThreadHistoryErrorView(surface *state.SurfaceConsoleRecor
 		SelectedTurnID: turnID,
 		NoticeCode:     strings.TrimSpace(code),
 		NoticeText:     strings.TrimSpace(text),
+		NoticeSections: threadHistoryNoticeSections(code, text),
 		CreatedAt:      createdAt,
 		ExpiresAt:      expiresAt,
 	}
+}
+
+func threadHistoryNoticeSections(code, text string) []control.FeishuCardTextSection {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	label := "说明"
+	if strings.TrimSpace(code) != "" {
+		label = "错误"
+	}
+	return []control.FeishuCardTextSection{{
+		Label: label,
+		Lines: []string{text},
+	}}
 }
 
 func (s *Service) threadHistoryThreadLabel(inst *state.InstanceRecord, threadID string) string {

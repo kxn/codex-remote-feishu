@@ -180,3 +180,43 @@ func TestThreadHistoryDetailElementsKeepFooterButtonsVisibleWithLargeContent(t *
 		t.Fatalf("expected footer navigation buttons to remain visible, got %#v / actions=%#v", elements, actions)
 	}
 }
+
+func TestThreadHistoryElementsKeepSummaryVisibleWhileLoading(t *testing.T) {
+	elements := threadHistoryElements(control.FeishuThreadHistoryView{
+		PickerID:    "history-loading",
+		ThreadID:    "thread-1",
+		ThreadLabel: "修复登录流程",
+		TurnCount:   3,
+		Loading:     true,
+	}, "life-1")
+
+	if len(elements) < 3 {
+		t.Fatalf("expected summary + divider + loading notice, got %#v", elements)
+	}
+	if !strings.Contains(markdownContent(elements[0]), "**当前会话**") {
+		t.Fatalf("expected loading card to keep summary first, got %#v", elements[0])
+	}
+	if plainTextContent(elements[len(elements)-1]) == "" || !strings.Contains(plainTextContent(elements[len(elements)-1]), "正在读取历史") {
+		t.Fatalf("expected loading text to move into notice area, got %#v", elements)
+	}
+}
+
+func TestThreadHistoryElementsKeepSummaryVisibleOnError(t *testing.T) {
+	elements := threadHistoryElements(control.FeishuThreadHistoryView{
+		PickerID:    "history-error",
+		ThreadID:    "thread-1",
+		ThreadLabel: "修复登录流程",
+		TurnCount:   3,
+		NoticeText:  "这张历史卡片已经失效，请重新发送 /history。",
+	}, "life-1")
+
+	if len(elements) < 3 {
+		t.Fatalf("expected summary + divider + error notice, got %#v", elements)
+	}
+	if !strings.Contains(markdownContent(elements[0]), "**当前会话**") {
+		t.Fatalf("expected error card to keep summary first, got %#v", elements[0])
+	}
+	if plainTextContent(elements[len(elements)-1]) == "" || !strings.Contains(plainTextContent(elements[len(elements)-1]), "重新发送 /history") {
+		t.Fatalf("expected error text to move into notice area, got %#v", elements)
+	}
+}

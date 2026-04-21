@@ -10,16 +10,7 @@ import (
 func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, 18)
 	if view.Stage != "" && view.Stage != control.FeishuTargetPickerStageEditing {
-		if view.Stage == control.FeishuTargetPickerStageProcessing {
-			if processing := targetPickerProcessingElements(view, daemonLifecycleID); len(processing) != 0 {
-				elements = append(elements, processing...)
-			}
-			return elements
-		}
-		if terminal := targetPickerTerminalElements(view); len(terminal) != 0 {
-			elements = append(elements, terminal...)
-		}
-		return elements
+		return targetPickerStageElements(view, daemonLifecycleID)
 	}
 	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.Question)...)
 	switch view.Page {
@@ -45,6 +36,10 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 			elements = append(elements, block)
 		}
 	}
+	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
+		elements = append(elements, cardDividerElement())
+		elements = appendCardTextSections(elements, noticeSections)
+	}
 	if targetPickerUsesInlineGitForm(view) {
 		return elements
 	}
@@ -52,30 +47,19 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 	return elements
 }
 
-func targetPickerTerminalElements(view control.FeishuTargetPickerView) []map[string]any {
-	elements := make([]map[string]any, 0, 6)
-	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.StatusTitle)...)
-	if len(view.StatusSections) != 0 {
-		elements = appendCardTextSections(elements, view.StatusSections)
-		if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
-			elements = append(elements, cardPlainTextBlockElement(footer))
+func targetPickerStageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	elements := make([]map[string]any, 0, 8)
+	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.Question)...)
+	if bodySections := targetPickerBodySectionsForView(view); len(bodySections) != 0 {
+		elements = appendCardTextSections(elements, bodySections)
+	}
+	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
+		if len(targetPickerBodySectionsForView(view)) != 0 {
+			elements = append(elements, cardDividerElement())
 		}
-		return elements
+		elements = appendCardTextSections(elements, noticeSections)
 	}
-	if text := strings.TrimSpace(view.StatusText); text != "" {
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
-			elements = append(elements, block)
-		}
-	}
-	if len(elements) == 0 {
-		return nil
-	}
-	return elements
-}
-
-func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	elements := targetPickerTerminalElements(view)
-	if !view.CanCancelProcessing {
+	if view.Stage != control.FeishuTargetPickerStageProcessing || view.Sealed || !view.CanCancelProcessing {
 		return elements
 	}
 	return appendCardFooterButtonGroup(elements, []map[string]any{
@@ -87,6 +71,38 @@ func targetPickerProcessingElements(view control.FeishuTargetPickerView, daemonL
 			"",
 		),
 	})
+}
+
+func targetPickerBodySectionsForView(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
+	if len(view.BodySections) != 0 {
+		return view.BodySections
+	}
+	return view.StatusSections
+}
+
+func targetPickerNoticeSections(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
+	if len(view.NoticeSections) != 0 {
+		return view.NoticeSections
+	}
+	sections := make([]control.FeishuCardTextSection, 0, len(view.StatusSections)+2)
+	if text := strings.TrimSpace(view.StatusText); text != "" {
+		label := strings.TrimSpace(view.StatusTitle)
+		if label == "" {
+			label = "说明"
+		}
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: label,
+			Lines: []string{text},
+		})
+	}
+	sections = append(sections, view.StatusSections...)
+	if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "下一步",
+			Lines: []string{footer},
+		})
+	}
+	return sections
 }
 
 func targetPickerTheme(view control.FeishuTargetPickerView) string {

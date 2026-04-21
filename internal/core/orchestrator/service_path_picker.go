@@ -103,16 +103,17 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 	}
 	resolved, err := resolvePathPickerEntry(record.RootPath, record.CurrentPath, entryName)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目标条目无效：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目标条目无效", fmt.Sprintf("目标条目无效：%v", err))
 	}
 	item, allowed := s.filterPathPickerResolvedEntry(surface, record, pathPickerEntryFilterItem(entryName, resolved), resolved.path)
 	if !allowed || item.Disabled {
-		return notice(surface, "path_picker_invalid_entry", pathPickerEntryUnavailableText(item))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "这个条目当前不可用", pathPickerEntryUnavailableText(item))
 	}
 	if resolved.kind != pathPickerModeDirectory {
-		return notice(surface, "path_picker_not_directory", "只能进入目录。")
+		return s.pathPickerInlineNotice(surface, record, "path_picker_not_directory", "只能进入目录", "只能进入目录。")
 	}
 	if samePath(record.CurrentPath, resolved.path) {
+		clearPathPickerStatus(record)
 		view, err := s.buildPathPickerView(surface, record)
 		if err != nil {
 			return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
@@ -121,6 +122,7 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 	}
 	record.CurrentPath = resolved.path
 	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+	clearPathPickerStatus(record)
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
 		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
@@ -134,25 +136,27 @@ func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, picker
 		return blocked
 	}
 	if samePath(record.CurrentPath, record.RootPath) {
+		clearPathPickerStatus(record)
 		view, err := s.buildPathPickerView(surface, record)
 		if err != nil {
-			return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
+			return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
 		}
 		return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 	}
 	parent := filepath.Dir(record.CurrentPath)
 	resolved, err := resolvePathPickerExistingTarget(record.RootPath, parent)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("无法返回上一级：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "无法返回上一级", fmt.Sprintf("无法返回上一级：%v", err))
 	}
 	if resolved.kind != pathPickerModeDirectory {
-		return notice(surface, "path_picker_invalid_entry", "上一级目录无效。")
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "上一级目录无效", "上一级目录无效。")
 	}
 	record.CurrentPath = resolved.path
 	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+	clearPathPickerStatus(record)
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
 	}
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 }
@@ -164,26 +168,27 @@ func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pi
 	}
 	resolved, err := resolvePathPickerEntry(record.RootPath, record.CurrentPath, entryName)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目标条目无效：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目标条目无效", fmt.Sprintf("目标条目无效：%v", err))
 	}
 	item, allowed := s.filterPathPickerResolvedEntry(surface, record, pathPickerEntryFilterItem(entryName, resolved), resolved.path)
 	if !allowed || item.Disabled {
-		return notice(surface, "path_picker_invalid_entry", pathPickerEntryUnavailableText(item))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "这个条目当前不可用", pathPickerEntryUnavailableText(item))
 	}
 	switch record.Mode {
 	case pathPickerModeFile:
 		if resolved.kind != pathPickerModeFile {
-			return notice(surface, "path_picker_not_file", "当前只可选择文件。")
+			return s.pathPickerInlineNotice(surface, record, "path_picker_not_file", "当前只可选择文件", "当前只可选择文件。")
 		}
 	case pathPickerModeDirectory:
 		if resolved.kind != pathPickerModeDirectory {
-			return notice(surface, "path_picker_not_directory", "当前只可选择目录。")
+			return s.pathPickerInlineNotice(surface, record, "path_picker_not_directory", "当前只可选择目录", "当前只可选择目录。")
 		}
 	}
 	record.SelectedPath = resolved.path
+	clearPathPickerStatus(record)
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
 	}
 	return []control.UIEvent{s.pathPickerViewEvent(surface, view, true)}
 }
@@ -195,15 +200,15 @@ func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, p
 	}
 	selectedPath, err := confirmedPathPickerSelection(record)
 	if err != nil {
-		return notice(surface, "path_picker_selection_missing", err.Error())
+		return s.pathPickerInlineNotice(surface, record, "path_picker_selection_missing", "当前还不能确认", err.Error())
 	}
 	resolved, err := resolvePathPickerExistingTarget(record.RootPath, selectedPath)
 	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目标条目无效：%v", err))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目标条目无效", fmt.Sprintf("目标条目无效：%v", err))
 	}
 	item, allowed := s.filterPathPickerResolvedEntry(surface, record, pathPickerEntryFilterItem(pathPickerEntryNameForPath(selectedPath), resolved), resolved.path)
 	if !allowed || item.Disabled {
-		return notice(surface, "path_picker_invalid_entry", pathPickerEntryUnavailableText(item))
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "这个条目当前不可用", pathPickerEntryUnavailableText(item))
 	}
 	result := pathPickerResultFromRecord(record, selectedPath)
 	if consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind); ok {
@@ -211,8 +216,7 @@ func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, p
 			return consumer.PathPickerConfirmed(s, surface, result)
 		}
 	}
-	s.clearSurfacePathPicker(surface)
-	return s.dispatchPathPickerConfirmed(surface, result)
+	return s.dispatchPathPickerConfirmed(surface, record, result)
 }
 
 func (s *Service) handlePathPickerCancel(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []control.UIEvent {
@@ -221,8 +225,7 @@ func (s *Service) handlePathPickerCancel(surface *state.SurfaceConsoleRecord, pi
 		return blocked
 	}
 	result := pathPickerResultFromRecord(record, currentSelectedPath(record))
-	s.clearSurfacePathPicker(surface)
-	return s.dispatchPathPickerCancelled(surface, result)
+	return s.dispatchPathPickerCancelled(surface, record, result)
 }
 
 func (s *Service) requireActivePathPicker(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activePathPickerRecord, []control.UIEvent) {
@@ -256,18 +259,20 @@ func (s *Service) buildPathPickerView(surface *state.SurfaceConsoleRecord, recor
 		return control.FeishuPathPickerView{}, fmt.Errorf("当前路径不是目录")
 	}
 	view := control.FeishuPathPickerView{
-		PickerID:     record.PickerID,
-		Mode:         control.PathPickerMode(record.Mode),
-		Title:        strings.TrimSpace(record.Title),
-		StageLabel:   strings.TrimSpace(record.StageLabel),
-		Question:     strings.TrimSpace(record.Question),
-		RootPath:     record.RootPath,
-		CurrentPath:  current.path,
-		SelectedPath: currentSelectedPath(record),
-		ConfirmLabel: strings.TrimSpace(firstNonEmpty(record.ConfirmLabel, "确认")),
-		CancelLabel:  strings.TrimSpace(firstNonEmpty(record.CancelLabel, "取消")),
-		CanGoUp:      !samePath(current.path, record.RootPath),
-		CanConfirm:   canConfirmPathPicker(record),
+		PickerID:       record.PickerID,
+		Mode:           control.PathPickerMode(record.Mode),
+		Title:          strings.TrimSpace(record.Title),
+		StageLabel:     strings.TrimSpace(record.StageLabel),
+		Question:       strings.TrimSpace(record.Question),
+		RootPath:       record.RootPath,
+		CurrentPath:    current.path,
+		SelectedPath:   currentSelectedPath(record),
+		BodySections:   pathPickerBodySections(record.RootPath, current.path, currentSelectedPath(record)),
+		NoticeSections: pathPickerStatusNoticeSections(record.StatusTitle, record.StatusText, record.StatusSections, record.StatusFooter),
+		ConfirmLabel:   strings.TrimSpace(firstNonEmpty(record.ConfirmLabel, "确认")),
+		CancelLabel:    strings.TrimSpace(firstNonEmpty(record.CancelLabel, "取消")),
+		CanGoUp:        !samePath(current.path, record.RootPath),
+		CanConfirm:     canConfirmPathPicker(record),
 	}
 	entries, err := s.buildPathPickerEntries(surface, record)
 	if err != nil {
@@ -472,30 +477,40 @@ func pathPickerResultFromRecord(record *activePathPickerRecord, selectedPath str
 	}
 }
 
-func (s *Service) dispatchPathPickerConfirmed(surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
+func (s *Service) dispatchPathPickerConfirmed(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, result control.PathPickerResult) []control.UIEvent {
 	consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind)
 	if ok {
 		if events := consumer.PathPickerConfirmed(s, surface, result); len(events) != 0 {
-			return events
+			filtered := pathPickerFilteredFollowupEvents(events)
+			if len(filtered) != 0 {
+				s.clearSurfacePathPicker(surface)
+				return events
+			}
+			return s.finishPathPickerWithStatus(surface, record, "已确认路径", firstNonEmpty(pathPickerFirstNoticeText(events), fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath)), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {
-		return notice(surface, "path_picker_consumer_missing", "当前路径选择结果缺少可用的业务处理器，请重新发起或联系维护者检查配置。")
+		return s.finishPathPickerWithStatus(surface, record, "当前路径处理器不可用", "当前路径选择结果缺少可用的业务处理器，请重新发起或联系维护者检查配置。", nil, "", false, nil)
 	}
-	return notice(surface, "path_picker_confirmed", fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath))
+	return s.finishPathPickerWithStatus(surface, record, "已确认路径", fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath), nil, "", false, nil)
 }
 
-func (s *Service) dispatchPathPickerCancelled(surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []control.UIEvent {
+func (s *Service) dispatchPathPickerCancelled(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, result control.PathPickerResult) []control.UIEvent {
 	consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind)
 	if ok {
 		if events := consumer.PathPickerCancelled(s, surface, result); len(events) != 0 {
-			return events
+			filtered := pathPickerFilteredFollowupEvents(events)
+			if len(filtered) != 0 {
+				s.clearSurfacePathPicker(surface)
+				return events
+			}
+			return s.finishPathPickerWithStatus(surface, record, "已取消路径选择", firstNonEmpty(pathPickerFirstNoticeText(events), "已取消路径选择。"), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {
-		return notice(surface, "path_picker_consumer_missing", "当前路径选择结果缺少可用的业务处理器，请重新发起或联系维护者检查配置。")
+		return s.finishPathPickerWithStatus(surface, record, "当前路径处理器不可用", "当前路径选择结果缺少可用的业务处理器，请重新发起或联系维护者检查配置。", nil, "", false, nil)
 	}
-	return notice(surface, "path_picker_cancelled", "已取消路径选择。")
+	return s.finishPathPickerWithStatus(surface, record, "已取消路径选择", "已取消路径选择。", nil, "", false, nil)
 }
 
 func (s *Service) lookupPathPickerConsumer(kind string) (PathPickerConsumer, bool) {

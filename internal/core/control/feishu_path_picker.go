@@ -66,6 +66,9 @@ type FeishuPathPickerView struct {
 	Title          string
 	StageLabel     string
 	Question       string
+	BodySections   []FeishuCardTextSection
+	NoticeSections []FeishuCardTextSection
+	Sealed         bool
 	RootPath       string
 	CurrentPath    string
 	SelectedPath   string

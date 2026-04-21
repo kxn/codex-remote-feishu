@@ -78,6 +78,9 @@ type FeishuTargetPickerView struct {
 	Page                   FeishuTargetPickerPage
 	StageLabel             string
 	Question               string
+	BodySections           []FeishuCardTextSection
+	NoticeSections         []FeishuCardTextSection
+	Sealed                 bool
 	StatusTitle            string
 	StatusText             string
 	StatusSections         []FeishuCardTextSection

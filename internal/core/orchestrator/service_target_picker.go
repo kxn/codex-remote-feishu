@@ -548,6 +548,20 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	if canCancelProcessing {
 		processingCancelLabel = "取消导入"
 	}
+	bodySections := targetPickerBodySections(
+		mode,
+		sourceKind,
+		selectedWorkspaceLabel,
+		selectedWorkspaceMeta,
+		selectedSessionLabel,
+		selectedSessionMeta,
+		localDirectoryPath,
+		record.GitRepoURL,
+		gitParentDir,
+		gitFinalPath,
+	)
+	noticeSections := targetPickerStatusNoticeSections(record)
+	sealed := targetPickerStageSealed(stage)
 	return control.FeishuTargetPickerView{
 		PickerID:               record.PickerID,
 		Title:                  targetPickerTitle(record.Source),
@@ -556,6 +570,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Page:                   page,
 		StageLabel:             targetPickerViewStageLabel(record, page, mode, sourceKind),
 		Question:               targetPickerViewQuestion(record, page),
+		BodySections:           bodySections,
+		NoticeSections:         noticeSections,
+		Sealed:                 sealed,
 		StatusTitle:            strings.TrimSpace(record.StatusTitle),
 		StatusText:             strings.TrimSpace(record.StatusText),
 		StatusSections:         cloneFeishuCardSections(record.StatusSections),

@@ -8,8 +8,8 @@ import (
 )
 
 func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
-	if view.Terminal {
-		return terminalPathPickerElements(view)
+	if view.Terminal || view.Sealed {
+		return sealedPathPickerElements(view)
 	}
 	switch view.Mode {
 	case control.PathPickerModeFile:
@@ -21,34 +21,23 @@ func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID str
 	}
 }
 
-func terminalPathPickerElements(view control.FeishuPathPickerView) []map[string]any {
-	elements := make([]map[string]any, 0, 3)
+func sealedPathPickerElements(view control.FeishuPathPickerView) []map[string]any {
+	elements := make([]map[string]any, 0, 6)
 	if title := strings.TrimSpace(view.StatusTitle); title != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": "**" + title + "**",
 		})
 	}
-	if len(view.StatusSections) != 0 {
-		elements = appendCardTextSections(elements, view.StatusSections)
-		if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
-			if block := cardPlainTextBlockElement(footer); len(block) != 0 {
-				elements = append(elements, block)
-			}
+	bodySections := pathPickerBodySectionsForView(view)
+	if len(bodySections) != 0 {
+		elements = appendCardTextSections(elements, bodySections)
+	}
+	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
+		if len(bodySections) != 0 {
+			elements = append(elements, cardDividerElement())
 		}
-		return elements
-	}
-	if text := strings.TrimSpace(view.StatusText); text != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": text,
-		})
-	}
-	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
-		})
+		elements = appendCardTextSections(elements, noticeSections)
 	}
 	return elements
 }
@@ -118,6 +107,10 @@ func fileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecyc
 			"content": renderSystemInlineTags(hint),
 		})
 	}
+	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
+		elements = append(elements, cardDividerElement())
+		elements = appendCardTextSections(elements, noticeSections)
+	}
 	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
@@ -170,6 +163,10 @@ func directoryModePathPickerElements(view control.FeishuPathPickerView, daemonLi
 			"content": renderSystemInlineTags(hint),
 		})
 	}
+	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
+		elements = append(elements, cardDividerElement())
+		elements = appendCardTextSections(elements, noticeSections)
+	}
 	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
@@ -220,6 +217,10 @@ func ownerSubpageDirectoryModePathPickerElements(view control.FeishuPathPickerVi
 			elements = append(elements, block)
 		}
 	}
+	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
+		elements = append(elements, cardDividerElement())
+		elements = appendCardTextSections(elements, noticeSections)
+	}
 	elements = appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "返回")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
 		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "使用这个目录")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
@@ -257,6 +258,57 @@ func pathPickerDirectoryOptions(view control.FeishuPathPickerView) pathPickerDir
 		InitialOption:       ".",
 		HasChildDirectories: len(childOptions) != 0,
 	}
+}
+
+func pathPickerBodySectionsForView(view control.FeishuPathPickerView) []control.FeishuCardTextSection {
+	if len(view.BodySections) != 0 {
+		return view.BodySections
+	}
+	sections := make([]control.FeishuCardTextSection, 0, 3)
+	if root := strings.TrimSpace(view.RootPath); root != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "允许范围",
+			Lines: []string{root},
+		})
+	}
+	if current := strings.TrimSpace(view.CurrentPath); current != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "当前目录",
+			Lines: []string{current},
+		})
+	}
+	if selected := strings.TrimSpace(view.SelectedPath); selected != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "当前选择",
+			Lines: []string{selected},
+		})
+	}
+	return sections
+}
+
+func pathPickerNoticeSectionsForView(view control.FeishuPathPickerView) []control.FeishuCardTextSection {
+	if len(view.NoticeSections) != 0 {
+		return view.NoticeSections
+	}
+	sections := make([]control.FeishuCardTextSection, 0, len(view.StatusSections)+2)
+	if text := strings.TrimSpace(view.StatusText); text != "" {
+		label := strings.TrimSpace(view.StatusTitle)
+		if label == "" {
+			label = "说明"
+		}
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: label,
+			Lines: []string{text},
+		})
+	}
+	sections = append(sections, view.StatusSections...)
+	if footer := strings.TrimSpace(view.StatusFooter); footer != "" {
+		sections = append(sections, control.FeishuCardTextSection{
+			Label: "下一步",
+			Lines: []string{footer},
+		})
+	}
+	return sections
 }
 
 func currentDirectoryPathPickerOption(currentPath string) map[string]any {
