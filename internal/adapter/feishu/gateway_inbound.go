@@ -53,6 +53,15 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 			commandAction.Inbound = action.Inbound
 			return commandAction, true, nil
 		}
+		if fallbackAction, ok := fallbackCompatTextAction(text); ok {
+			fallbackAction.GatewayID = g.config.GatewayID
+			fallbackAction.SurfaceSessionID = surfaceSessionID
+			fallbackAction.ChatID = chatID
+			fallbackAction.ActorUserID = action.ActorUserID
+			fallbackAction.MessageID = action.MessageID
+			fallbackAction.Inbound = action.Inbound
+			return fallbackAction, true, nil
+		}
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
 		inputs := append(g.quotedInputs(ctx, message), currentInputs...)
 		action.Kind = control.ActionTextMessage

@@ -51,6 +51,12 @@ func (s *Service) buildCommandHelpCatalog(surface *state.SurfaceConsoleRecord) c
 	)
 }
 
+func (s *Service) buildCommandHelpView(surface *state.SurfaceConsoleRecord) control.FeishuCommandView {
+	catalog := s.buildCommandHelpCatalog(surface)
+	page := control.FeishuCommandPageViewFromCatalog(control.FeishuCommandHelp, catalog, nil, nil)
+	return control.FeishuCommandView{Page: &page}
+}
+
 func (s *Service) buildCommandMenuGroupCatalog(surface *state.SurfaceConsoleRecord, stage commandMenuStage, groupID string) control.FeishuDirectCommandCatalog {
 	return control.BuildFeishuCommandMenuGroupCatalog(groupID, string(s.normalizeSurfaceProductMode(surface)), string(stage))
 }

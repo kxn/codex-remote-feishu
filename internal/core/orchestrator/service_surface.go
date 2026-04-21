@@ -1,8 +1,6 @@
 package orchestrator
 
 import (
-	"fmt"
-
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -147,8 +145,6 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 		control.ActionVSCodeMigrateCommand,
 		control.ActionVSCodeMigrate,
 		control.ActionDetach,
-		control.ActionKillInstance,
-		control.ActionRemovedCommand,
 		control.ActionReactionCreated,
 		control.ActionMessageRecalled:
 		return nil
@@ -212,17 +208,4 @@ func (s *Service) ensureThread(inst *state.InstanceRecord, threadID string) *sta
 	thread = &state.ThreadRecord{ThreadID: threadID}
 	inst.Threads[threadID] = thread
 	return thread
-}
-
-func (s *Service) handleRemovedCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
-	command := control.LegacyActionCommand(action.Text)
-	switch control.LegacyActionKey(action.Text) {
-	case "newinstance":
-		return notice(surface, "command_removed_newinstance", "`/newinstance` 已移除。请改用 `/use` 或 `/useall` 选择要恢复的会话；在默认 normal 模式下，系统会自动复用在线工作区，必要时在后台恢复。")
-	default:
-		if command == "" {
-			return notice(surface, "command_removed", "这个旧命令已移除。请发送 `/help` 查看当前可用命令。")
-		}
-		return notice(surface, "command_removed", fmt.Sprintf("旧命令 `%s` 已移除。请发送 `/help` 查看当前可用命令。", command))
-	}
 }

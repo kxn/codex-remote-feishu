@@ -119,21 +119,21 @@ func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionKillInstance,
+		Kind:             control.ActionDetach,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
 
-	if stoppedPID != 4321 {
-		t.Fatalf("expected managed headless pid to stop, got %d", stoppedPID)
+	if stoppedPID != 0 {
+		t.Fatalf("expected detach not to stop managed headless pid, got %d", stoppedPID)
 	}
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
-		t.Fatalf("expected surface to detach after kill, got %#v", snapshot)
+		t.Fatalf("expected surface to detach after detach, got %#v", snapshot)
 	}
-	if app.service.Instance("inst-headless-1") != nil {
-		t.Fatalf("expected managed headless instance to be removed after kill, got %#v", app.service.Instance("inst-headless-1"))
+	if app.service.Instance("inst-headless-1") == nil {
+		t.Fatalf("expected managed headless instance to remain after detach")
 	}
 }
 

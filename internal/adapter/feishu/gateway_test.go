@@ -316,10 +316,6 @@ func TestMenuActionKindKnownValues(t *testing.T) {
 		"stop":             control.ActionStop,
 		"new":              control.ActionNewThread,
 		"new_thread":       control.ActionNewThread,
-		"newinstance":      control.ActionRemovedCommand,
-		"new_instance":     control.ActionRemovedCommand,
-		"killinstance":     control.ActionDetach,
-		"kill_instance":    control.ActionDetach,
 		"threads":          control.ActionShowThreads,
 		"sessions":         control.ActionShowThreads,
 		"use":              control.ActionShowThreads,
@@ -462,14 +458,12 @@ func TestParseTextActionRecognizesModelAndReasoningCommands(t *testing.T) {
 
 func TestParseTextActionRecognizesSessionCommands(t *testing.T) {
 	tests := map[string]control.ActionKind{
-		"/threads":      control.ActionShowThreads,
-		"/use":          control.ActionShowThreads,
-		"/sessions":     control.ActionShowThreads,
-		"/useall":       control.ActionShowAllThreads,
-		"/sessionsall":  control.ActionShowAllThreads,
-		"/new":          control.ActionNewThread,
-		"/newinstance":  control.ActionRemovedCommand,
-		"/killinstance": control.ActionDetach,
+		"/threads":     control.ActionShowThreads,
+		"/use":         control.ActionShowThreads,
+		"/sessions":    control.ActionShowThreads,
+		"/useall":      control.ActionShowAllThreads,
+		"/sessionsall": control.ActionShowAllThreads,
+		"/new":         control.ActionNewThread,
 	}
 	for input, want := range tests {
 		action, handled := parseTextAction(input)
@@ -501,37 +495,45 @@ func TestParseTextActionRecognizesHelpAndMenuCommands(t *testing.T) {
 	}
 }
 
-func TestRemovedLegacyAndDetachCompatibilityCommands(t *testing.T) {
-	action, handled := parseTextAction("/newinstance")
-	if !handled {
-		t.Fatalf("expected /newinstance to be handled as removed command")
+func TestRemovedLegacyHeadlessCompatCommandsAreIgnored(t *testing.T) {
+	for _, input := range []string{"/newinstance", "/killinstance"} {
+		if action, handled := parseTextAction(input); handled {
+			t.Fatalf("expected %q to be ignored, got %#v", input, action)
+		}
 	}
-	if action.Kind != control.ActionRemovedCommand || action.Text != "/newinstance" {
-		t.Fatalf("unexpected removed command action: %#v", action)
+	for _, input := range []string{"new_instance", "kill_instance"} {
+		if action, ok := menuAction(input); ok {
+			t.Fatalf("expected %q to be ignored, got %#v", input, action)
+		}
+	}
+}
+
+func TestParseMessageEventLegacyHeadlessCompatFallsBackToHelp(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-2"})
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Sender: &larkim.EventSender{
+				SenderId: &larkim.UserId{OpenId: stringRef("ou_user")},
+			},
+			Message: &larkim.EventMessage{
+				MessageId:   stringRef("om-msg-compat"),
+				ChatId:      stringRef("oc_chat"),
+				ChatType:    stringRef("group"),
+				MessageType: stringRef("text"),
+				Content:     stringRef(`{"text":" /newinstance "}`),
+			},
+		},
 	}
 
-	menu, ok := menuAction("new_instance")
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
 	if !ok {
-		t.Fatalf("expected legacy new_instance menu to resolve to removed command")
+		t.Fatal("expected legacy compat command to be handled")
 	}
-	if menu.Kind != control.ActionRemovedCommand || menu.Text != "new_instance" {
-		t.Fatalf("unexpected removed menu action: %#v", menu)
-	}
-
-	kill, handled := parseTextAction("/killinstance")
-	if !handled {
-		t.Fatalf("expected /killinstance to be handled as detach command")
-	}
-	if kill.Kind != control.ActionDetach {
-		t.Fatalf("unexpected killinstance action: %#v", kill)
-	}
-
-	killMenu, ok := menuAction("kill_instance")
-	if !ok {
-		t.Fatalf("expected legacy kill_instance menu to resolve to detach")
-	}
-	if killMenu.Kind != control.ActionDetach {
-		t.Fatalf("unexpected kill menu action: %#v", killMenu)
+	if action.Kind != control.ActionShowCommandHelp || action.Text != "/help" {
+		t.Fatalf("unexpected fallback action: %#v", action)
 	}
 }
 

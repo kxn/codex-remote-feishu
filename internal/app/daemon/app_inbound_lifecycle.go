@@ -155,8 +155,6 @@ func explicitActionCommand(action control.Action) string {
 	switch action.Kind {
 	case control.ActionTextMessage, control.ActionImageMessage, control.ActionFileMessage, control.ActionReactionCreated, control.ActionMessageRecalled:
 		return ""
-	case control.ActionRemovedCommand:
-		return control.LegacyActionCommand(text)
 	}
 	return text
 }
@@ -174,10 +172,6 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "停止", "/stop"
 	case control.ActionNewThread:
 		return "新建会话", "/new"
-	case control.ActionKillInstance:
-		return "解除接管", "/detach"
-	case control.ActionRemovedCommand:
-		return "已移除命令", control.LegacyActionCommand(action.Text)
 	case control.ActionShowCommandHelp:
 		return "查看帮助", "/help"
 	case control.ActionDebugCommand:

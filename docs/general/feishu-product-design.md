@@ -89,7 +89,6 @@ alias 仍继续兼容，但不再作为主展示入口：
 - `/effort` -> `/reasoning`
 - 旧 `/autocontinue` -> `/autowhip`
 - `menu` -> `/menu`
-- 旧 `/newinstance`、`/killinstance` -> 显式迁移提示
 
 其中：
 
@@ -98,6 +97,7 @@ alias 仍继续兼容，但不再作为主展示入口：
 - bare `/reasoning`、`/access`、`/mode`、`/autowhip` 会返回当前状态 + 快捷按钮 + 单字段表单
 - bare `/model` 会返回当前状态 + 常见示例 + 手动输入表单
 - bare `/debug`、`/upgrade`、`/cron` 在参数不足时都会先打开统一 command page 根页，而不是顺手展开独立状态卡
+- 旧 `/newinstance`、`/killinstance` 当前都已不再解析；恢复/选择统一走 `/use` / `/useall`，取消恢复统一走 `/detach`
 - 真正的状态查看回到显式子页，例如 `/cron status`、`/cron list`、`/upgrade track`；`/debug` 根页只保留调试入口与升级相关跳转
 
 除了纯文本外，当前还支持两类更完整的入站整理：
@@ -643,7 +643,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - `kick_thread_confirm`
 - `kick_thread_cancel`
 
-旧 `/killinstance` 只保留为历史兼容入口，统一提示改用 `/detach`。
+旧 `/killinstance` 已不再解析；取消恢复统一走 `/detach`。
 
 ### 7.1.1 Approval Request 卡片
 

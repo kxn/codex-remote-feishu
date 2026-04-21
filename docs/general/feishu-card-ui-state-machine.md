@@ -121,7 +121,7 @@
   - 当前 `FeishuRequestView` 仍是 `FeishuDirectRequestPrompt` 的同形 alias，用来显式表达“request card 已由 Feishu UI boundary 拥有”
   - projector 直接把它当作 request-card owner payload 渲染，不再从 `UIEvent` 读取独立的 `FeishuDirectRequestPrompt` 字段
 - `control.FeishuDirectCommandCatalog` 仍保留为当前 card renderer 的过渡 DTO，但已经不再是 `/menu` 与 bare config cards 跨 `UIEvent` 边界的主载体：
-  - `/help`、静态帮助目录、daemon upgrade / vscode migration cards、legacy 测试样例仍可直接使用 `FeishuDirectCommandCatalog`
+  - `/help` 当前也会先落到 `FeishuCommandView.Page` 再投影；仍直接使用 `FeishuDirectCommandCatalog` 的主要只剩 daemon upgrade / vscode migration cards 与 legacy 测试样例
   - `/menu` 与 bare config cards 现在跨边界携带的是 `control.FeishuCommandView`
   - projector 在 adapter 层把它投影成当前卡片 renderer 仍可消费的 `FeishuDirectCommandCatalog`
   - `FeishuCommandView.Page` 与投影后的 `FeishuDirectCommandCatalog` 当前都显式带有 `BodySections / NoticeSections / Sealed`

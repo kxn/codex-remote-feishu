@@ -467,6 +467,16 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 			commandAction.Inbound = cloneInboundMeta(inbound)
 			return plannedInboundMessage{action: &commandAction}, true, nil
 		}
+		if fallbackAction, ok := fallbackCompatTextAction(text); ok {
+			fallbackAction.GatewayID = g.config.GatewayID
+			fallbackAction.SurfaceSessionID = surfaceSessionID
+			fallbackAction.ChatID = chatID
+			fallbackAction.ActorUserID = baseAction.ActorUserID
+			fallbackAction.MessageID = baseAction.MessageID
+			fallbackAction.TargetMessageID = baseAction.TargetMessageID
+			fallbackAction.Inbound = cloneInboundMeta(inbound)
+			return plannedInboundMessage{action: &fallbackAction}, true, nil
+		}
 		g.recordSurfaceMessage(messageID, surfaceSessionID)
 		return plannedInboundMessage{
 			queue: &queuedMessageWork{

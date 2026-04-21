@@ -444,7 +444,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/autowhip`、`/debug`、`/upgrade`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` 的兼容提示、消息撤回、reaction。
+1. 允许：`/status`、`/autowhip`、`/debug`、`/upgrade`、`/mode`、`/detach`、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
@@ -455,7 +455,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 4. `PendingHeadless` 当前有两类产品语义：
    1. `Purpose=thread_restore`：显式 `/use` 一个需要后台恢复的 thread，或 auto-restore。
    2. `Purpose=fresh_workspace`：normal `/list` 的“添加工作区”流程选了一个当前没有可复用实例的目录。
-5. 旧 `/newinstance`、旧 `/killinstance` 即使仍被用户触发，也只会返回迁移提示，不会改动当前 pending headless。
+5. 旧 `/newinstance`、旧 `/killinstance` 当前都不再进入 parser；若实例连上时读到历史兼容残留的 pending headless，只会自动结束并提示改用 `/use` / `/useall`。
 6. 后台 auto-restore 触发的 pending headless 也复用同一个 `G1` gate：
    1. 启动阶段默认静默，不额外发 “headless_starting”。
    2. 成功后只发一条恢复成功 notice。
@@ -830,7 +830,7 @@ R5 NewThreadReady
    3. follow-local 自动重绑定
    当前都会被冻结，避免 UI 宣布的新目标和下一条普通输入的实际落点不一致。
    4. 若是 active path picker runtime，当前还会额外把 `/list`、`/menu`、bare config cards、`/detach` 等 competing Feishu card flow 一并挡住，只保留 picker 自身回调与 `/status`。
-11. 旧 `/newinstance` 在所有 route state 下都只会回迁移提示，不会创建 headless，也不会改动当前 route。
+11. 若实例连上时发现历史兼容残留的 pending headless 且没有 preselected thread，只会自动 kill 该 headless、清 gate，并提示改用 `/use` / `/useall`。
 12. daemon 侧后台 auto-restore 使用的是 headless-only resolver：
    1. 当前可见 thread 若只存在于 VS Code instance，不会被自动 attach 到 VS Code。
    2. 它仍可复用该 thread 的 metadata / cwd。
@@ -954,10 +954,9 @@ G0 None
 G1 PendingHeadlessStarting
   -- instance connected 且 pending.ThreadID != "" 且非 auto-restore --> R2 AttachedPinned + G0 None
   -- instance connected 且 pending.ThreadID != "" 且 auto-restore --> R2 AttachedPinned + G0 None + 单条恢复成功 notice
-  -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + migration notice + G0 None
+  -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + generic notice + G0 None
   -- /mode vscode --> kill headless + clear persisted headless target + G0 None + R0 Detached(M1 VSCode)
   -- /detach --> kill headless + G0 None + R0 Detached
-  -- /newinstance / /killinstance --> migration notice，状态不变
   -- Tick timeout --> kill headless + clear pending + detach if needed
 ```
 
@@ -1144,11 +1143,9 @@ transport degraded retained attachment
 | 命令 | `R0 Detached` | `R1 AttachedUnbound` | `R2 AttachedPinned` | `R3 FollowWaiting` | `R4 FollowBound` | `R5 NewThreadReady` |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/list` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
-| `/newinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/new` | 拒绝 | `normal`: 允许；`vscode`: 拒绝 | `normal`: 允许；若存在 compact/steer/queued/dispatching/running 则拒绝；`vscode`: 拒绝 | 拒绝 | 拒绝 | 允许；若首条消息已 dispatching/running 则拒绝 |
 | `/compact` | 提示先 `/list` / `/use` 接管并绑定会话 | 提示先 `/use`，或直接发文本开启新会话 | 允许；仅对当前已绑定 thread 生效，若已有 compact/steer/queued/dispatching/running 则拒绝 | 提示先在 VS Code 里进入会话，或手动 `/use` | 允许；仅对当前跟随到的 thread 生效，若已有 compact/steer/queued/dispatching/running 则拒绝 | 提示先发送首条文本真正创建会话 |
 | `/history` | 提示先 `/list` 接管在线实例 | 提示先 `/use`，或直接发文本开启新会话 | 允许；读取当前选中 thread 的历史 | 提示先在 VS Code 里进入会话，或手动 `/use` | 允许；读取当前跟随 thread 的历史 | 提示先发送首条文本真正创建会话 |
-| `/killinstance` | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 | 兼容提示，不改状态 |
 | `/use` `/useall` | `normal`: 二者都打开 unified target picker；`/list` 是更偏向换工作区，`/use`/`/useall` 是更偏向选会话；`vscode`: 拒绝并提示先 `/list` | `normal`: 二者都打开 target picker，`/use` 默认当前 workspace，`/useall` 允许跨 workspace；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `normal`: 二者都打开 target picker，允许在 confirm 时切到其他 workspace 或 `新建会话`；但若存在 compact/steer/queued/dispatching/running，confirm 时拒绝 route exit；`vscode`: `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量 | `/use`=当前 instance 最近 5 个，`/useall`=当前 instance 全量；若存在 compact/steer/queued/dispatching/running，则拒绝切走当前 thread | 允许打开 target picker；若仅有 unsent draft，confirm 前会先丢弃；若首条已 dispatching/running，则 confirm 时拒绝 route exit |
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许；若存在 compact/steer/queued/dispatching/running 则拒绝 route change | 允许 | 允许；若存在 compact/steer/queued/dispatching/running，则保持当前 thread 不切换 | 拒绝并提示迁移 |
 | `/mode` | 允许 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 |
@@ -1171,7 +1168,7 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/debug`、`/upgrade`、`/mode`、`/detach`、旧 `/newinstance` / 旧 `/killinstance` 兼容提示、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` / `/upgrade dev` 允许继续弹候选升级卡 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/debug`、`/upgrade`、`/mode`、`/detach`、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` / `/upgrade dev` 允许继续弹候选升级卡 |
 | `G2 PendingRequest` | 普通文本、图片、文件、`/new`、`/compact` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。通用 approval 现在覆盖 approval、`approval_command`、`approval_file_change`、`approval_network`，并直接按归一化后的 `availableDecisions` 响应，当前包含 `accept`、`acceptForSession`、`decline`、`cancel`；`request_user_input` 现在支持“分题暂存”：按钮/表单先记录局部答案，待问题凑齐后提交；用户点击“提交答案”后若仍有未答题，会先进入确认态，再决定是否留空提交并清 gate。顶层 `tool/requestUserInput` 与 `item` alias 继续共用这套状态机。`permissions_request_approval` 现在会投影成权限授予卡，支持“允许本次 / 本会话允许 / 拒绝”；`mcp_server_elicitation` 现在会按 mode 投影成“继续/拒绝/取消”卡，或带 schema 派生字段的表单卡。表单型 elicitation 也会暂存局部答案，并在 `request_revision` 上做 same-daemon freshness 校验 |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、文件、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `G4 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片/文件、revoke/reaction；`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
@@ -1284,14 +1281,14 @@ retained-offline overlay 额外规则：
 10. **detach 期间最后一条 final / thread notice 会被完全吞掉**：已修复。当前会保留单条 thread 级 replay，并在后续 idle 的 `/attach` 或 `/use` 时一次性补发。
 11. **detached 状态下 `/use` 是死入口，只能先 attach instance**：已修复。现在 `/use` 会展示 global merged thread list，并按 resolver 自动 attach。
 12. **cross-instance `/use` 会绕过 detach 语义，保留旧 request/capture/override**：已修复。现在只有 normal-mode detached/global `/use` 还会做这类 resolver attach；切换前会先走 detach 风格清理与门禁。
-13. **旧 `/newinstance` 手工 headless 选择分支仍能把用户带进过时状态**：已修复。当前只保留 thread-first `/use` 的 preselected headless；旧命令不会再改动当前恢复态。
+13. **旧 `/newinstance` 手工 headless 选择分支仍能把用户带进过时状态**：已修复。当前 parser 已不再接收旧命令，只保留 thread-first `/use` 的 preselected headless；历史兼容残留只会在启动时被自动清掉。
 14. **same-instance `/use` / `/follow` / auto-follow 会在旧 request gate 还活着时静默改路由**：已修复。现在只要 request gate 仍在，所有会改路由的动作都会被冻结，包括 `follow_local` 下手动 force-pick 后再 `/follow` 的回切。
 15. **attached vscode `/use` 会误走全局 merged thread view，甚至跨 instance retarget**：已修复。现在 detached vscode 必须先 `/list`，attached vscode 只允许当前 instance 已知 thread，且 one-shot force-pick 仍保持 `follow_local`。
 16. **cross-instance attach 到复用/新建 headless 时会丢 thread replay**：已修复。当前 replay 会先按 `threadID` 全局迁移，再在目标 attach 上一次性补发。
 17. **transport degraded 后既误报“已中断当前执行”，又缺少 retained-offline 逃生口**：已修复。当前会保留可相关的 in-flight turn，不再伪造“已中断”；同时 `/status`、`/stop`、`/detach` 都已显式区分 retained-offline 与真正 detach。
 18. **queued 点赞升级成 steering 后 item 会脱离普通 queue，若 ack 失败则可能丢失**：已修复。当前已强制恢复原 queue 位置，并补失败 notice。
 19. **headless 自动恢复在首轮 refresh 前过早报失败，或恢复成功后重放旧 replay / 额外补 attached 噪音**：已修复。当前会先静默等待首轮 refresh，恢复成功只发单条成功 notice，且会清空旧 replay 而不是补发。
-20. **`PendingHeadless` 只能靠隐藏的 `/killinstance` 逃生**：已修复。当前 `/detach` 可以直接取消恢复流程并回到 `R0 Detached`；旧 `/killinstance` 只回迁移提示。
+20. **`PendingHeadless` 只能靠隐藏的 `/killinstance` 逃生**：已修复。当前 `/detach` 可以直接取消恢复流程并回到 `R0 Detached`；旧 `/killinstance` 也已不再解析。
 21. **显式切 mode 会保留旧 attachment / request gate / draft 残留，导致进入半切换状态**：已修复。当前 idle/detached 时 `/mode` 会先做 detach-like 清理；busy path 则明确拒绝并提示 `/stop` 或 `/detach`。
 22. **normal mode 仍然只按 instance/thread 仲裁，导致同 workspace 多 surface 并存**：已修复。当前 normal mode 的 attach/use/headless 恢复都会先经过 workspace claim；只有显式切到 `vscode` mode 才绕过这层仲裁。
 23. **normal mode 还能长期停留在 follow 路径，导致 workspace-first 叙事失真**：已修复。当前新 `/follow` 会直接回迁移提示；历史 normal follow route 也会在读取 surface 时落回 pinned/unbound。

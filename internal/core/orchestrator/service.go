@@ -380,10 +380,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 		events = s.openSendFilePicker(surface)
 	case control.ActionSteerAll:
 		events = s.handleSteerAllCommand(surface, action)
-	case control.ActionKillInstance:
-		events = s.killHeadlessInstance(surface)
-	case control.ActionRemovedCommand:
-		events = s.handleRemovedCommand(surface, action)
 	case control.ActionAttachInstance:
 		events = s.attachInstance(surface, action.InstanceID)
 	case control.ActionAttachWorkspace:
@@ -391,7 +387,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	case control.ActionTargetPickerConfirm:
 		events = s.handleTargetPickerConfirm(surface, action.PickerID, action.ActorUserID, action.WorkspaceKey, action.TargetPickerValue, action.RequestAnswers)
 	case control.ActionShowCommandHelp:
-		events = []control.UIEvent{s.feishuDirectCommandCatalogEvent(surface, "help", "", s.buildCommandHelpCatalog(surface))}
+		events = []control.UIEvent{s.commandViewEvent(surface, s.buildCommandHelpView(surface))}
 	case control.ActionShowHistory:
 		events = s.openThreadHistory(surface, action.MessageID, action.IsCardAction())
 	case control.ActionDebugCommand:

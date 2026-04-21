@@ -16,8 +16,6 @@ const (
 	ActionCompact                     ActionKind = "surface.menu.compact"
 	ActionSteerAll                    ActionKind = "surface.menu.steer_all"
 	ActionNewThread                   ActionKind = "surface.menu.new_thread"
-	ActionKillInstance                ActionKind = "surface.menu.kill_instance"
-	ActionRemovedCommand              ActionKind = "surface.command.removed"
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
 	ActionShowHistory                 ActionKind = "surface.command.history"
@@ -460,9 +458,8 @@ type CommandCatalogSection struct {
 	Entries []CommandCatalogEntry
 }
 
-// FeishuDirectCommandCatalog is a retained direct card DTO for static help and
-// daemon-owned command cards that are intentionally not routed through the
-// newer command view path.
+// FeishuDirectCommandCatalog is a retained renderer-facing card DTO for
+// daemon-owned command cards that still terminate in the catalog shape.
 type FeishuDirectCommandCatalog struct {
 	Title           string
 	Summary         string
@@ -633,7 +630,6 @@ const (
 
 const (
 	UIEventFeishuDirectSelectionPrompt = UIEventFeishuSelectionView
-	UIEventFeishuDirectCommandCatalog  = UIEventFeishuCommandView
 	UIEventFeishuDirectRequestPrompt   = UIEventFeishuRequestView
 )
 

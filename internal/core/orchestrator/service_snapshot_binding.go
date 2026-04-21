@@ -89,18 +89,6 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 	}}
 }
 
-func (s *Service) feishuDirectCommandCatalogEvent(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.FeishuDirectCommandCatalog) control.UIEvent {
-	page := control.FeishuCommandPageViewFromCatalog("", catalog, catalog.Breadcrumbs, catalog.RelatedButtons)
-	commandView := control.FeishuCommandView{Page: &page}
-	return control.UIEvent{
-		Kind:                 control.UIEventFeishuCommandView,
-		GatewayID:            surface.GatewayID,
-		SurfaceSessionID:     surface.SurfaceSessionID,
-		FeishuCommandView:    &commandView,
-		FeishuCommandContext: s.buildFeishuCommandContext(surface, view, menuStage, catalog),
-	}
-}
-
 func (s *Service) commandViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
 	catalog := s.commandCatalogFromView(surface, view)
 	return control.UIEvent{

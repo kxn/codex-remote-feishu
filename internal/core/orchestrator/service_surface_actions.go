@@ -636,60 +636,6 @@ func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecor
 	return s.maybeFinalizePendingTargetPicker(surface, events, fallback)
 }
 
-func (s *Service) killHeadlessInstance(surface *state.SurfaceConsoleRecord) []control.UIEvent {
-	if surface == nil {
-		return nil
-	}
-	if surface.PendingHeadless != nil {
-		return s.cancelPendingHeadlessLaunch(surface, &control.Notice{
-			Code:  "headless_cancelled",
-			Title: "取消恢复流程",
-			Text:  "已取消当前恢复流程。",
-		})
-	}
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		return notice(surface, "headless_not_found", "当前没有可结束的后台恢复流程。")
-	}
-	if !isHeadlessInstance(inst) {
-		return notice(surface, "headless_kill_forbidden", "当前接管的是 VS Code 实例，不需要结束后台恢复。")
-	}
-	instanceID := inst.InstanceID
-	threadID := surface.SelectedThreadID
-	threadTitle := displayThreadTitle(inst, inst.Threads[threadID], threadID)
-	threadCWD := ""
-	if thread := inst.Threads[threadID]; thread != nil {
-		threadCWD = thread.CWD
-	}
-	events := s.discardDrafts(surface)
-	surface.PendingHeadless = nil
-	events = append(events, s.finalizeDetachedSurface(surface)...)
-	events = append(events,
-		control.UIEvent{
-			Kind:             control.UIEventDaemonCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandKillHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       instanceID,
-				ThreadID:         threadID,
-				ThreadTitle:      threadTitle,
-				ThreadCWD:        threadCWD,
-			},
-		},
-		control.UIEvent{
-			Kind:             control.UIEventNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:  "headless_kill_requested",
-				Title: "结束后台恢复",
-				Text:  "已请求结束当前后台恢复，并断开当前接管。",
-			},
-		},
-	)
-	return events
-}
-
 func (s *Service) detach(surface *state.SurfaceConsoleRecord) []control.UIEvent {
 	if surface.PendingHeadless != nil {
 		return s.cancelPendingHeadlessLaunch(surface, &control.Notice{

@@ -148,18 +148,6 @@ func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceCons
 	return context
 }
 
-func (s *Service) buildFeishuCommandContext(surface *state.SurfaceConsoleRecord, view string, menuStage commandMenuStage, catalog control.FeishuDirectCommandCatalog) *control.FeishuUICommandContext {
-	return &control.FeishuUICommandContext{
-		DTOOwner:    control.FeishuUIDTOwnerCommand,
-		Surface:     s.buildFeishuUISurfaceContext(surface),
-		MenuStage:   string(menuStage),
-		MenuView:    strings.TrimSpace(view),
-		Title:       strings.TrimSpace(catalog.Title),
-		Summary:     strings.TrimSpace(catalog.Summary),
-		Breadcrumbs: append([]control.CommandCatalogBreadcrumb(nil), catalog.Breadcrumbs...),
-	}
-}
-
 func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView, catalog control.FeishuDirectCommandCatalog) *control.FeishuUICommandContext {
 	context := &control.FeishuUICommandContext{
 		DTOOwner:    control.FeishuUIDTOwnerCommand,

@@ -15,7 +15,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 type recordingGateway struct {
@@ -1748,38 +1747,6 @@ func TestDaemonAcceptedSteerRemovesQueueReactionAndAddsThumbsUp(t *testing.T) {
 				t.Fatalf("expected %s for %s, got %#v", label, messageID, ops)
 			}
 		}
-	}
-}
-
-func TestDaemonRemovedNewInstanceCommandShowsMigrationNotice(t *testing.T) {
-	gateway := &recordingGateway{}
-	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
-	started := false
-	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
-		started = true
-		return 0, nil
-	}
-
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionRemovedCommand,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		Text:             "/newinstance",
-	})
-
-	snapshot := app.service.SurfaceSnapshot("surface-1")
-	if started {
-		t.Fatal("expected removed command not to start headless")
-	}
-	if snapshot == nil || snapshot.PendingHeadless.InstanceID != "" {
-		t.Fatalf("expected no pending headless snapshot, got %#v", snapshot)
-	}
-	if len(gateway.operations) != 1 {
-		t.Fatalf("expected one migration notice operation, got %#v", gateway.operations)
-	}
-	if gateway.operations[0].Kind != feishu.OperationSendCard || !strings.Contains(gateway.operations[0].CardBody, "/use") {
-		t.Fatalf("expected migration notice card, got %#v", gateway.operations[0])
 	}
 }
 

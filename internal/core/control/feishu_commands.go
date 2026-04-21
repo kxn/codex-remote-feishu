@@ -213,12 +213,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 		textExact: []feishuCommandMatch{
 			{alias: "/new", action: Action{Kind: ActionNewThread}},
-			{alias: "/newinstance", action: Action{Kind: ActionRemovedCommand, Text: "/newinstance"}},
 		},
 		menuExact: []feishuCommandMatch{
 			{alias: "new", action: Action{Kind: ActionNewThread}},
 			{alias: "newthread", action: Action{Kind: ActionNewThread}},
-			{alias: "newinstance", action: Action{Kind: ActionRemovedCommand, Text: "new_instance"}},
 		},
 	},
 	{
@@ -521,12 +519,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 		textExact: []feishuCommandMatch{
 			{alias: "/detach", action: Action{Kind: ActionDetach}},
-			{alias: "/killinstance", action: Action{Kind: ActionDetach}},
 		},
 		menuExact: []feishuCommandMatch{
 			{alias: "detach", action: Action{Kind: ActionDetach}},
-			{alias: "killinstance", action: Action{Kind: ActionDetach}},
-			{alias: "kill_instance", action: Action{Kind: ActionDetach}},
 		},
 	},
 	{

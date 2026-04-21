@@ -200,21 +200,16 @@ func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
 	}
 }
 
-func TestParseFeishuLegacyKillInstanceCommandsAsDetach(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/killinstance")
-	if !ok {
-		t.Fatal("expected /killinstance to be parsed")
+func TestParseFeishuLegacyHeadlessCompatCommandsRejected(t *testing.T) {
+	for _, input := range []string{"/newinstance", "/killinstance"} {
+		if action, ok := ParseFeishuTextAction(input); ok {
+			t.Fatalf("expected %q to be rejected, got %#v", input, action)
+		}
 	}
-	if action.Kind != ActionDetach {
-		t.Fatalf("unexpected text action for /killinstance: %#v", action)
-	}
-
-	menu, ok := ParseFeishuMenuAction("kill_instance")
-	if !ok {
-		t.Fatal("expected kill_instance menu action to be parsed")
-	}
-	if menu.Kind != ActionDetach {
-		t.Fatalf("unexpected menu action for kill_instance: %#v", menu)
+	for _, input := range []string{"newinstance", "new_instance", "killinstance", "kill_instance"} {
+		if action, ok := ParseFeishuMenuAction(input); ok {
+			t.Fatalf("expected %q menu alias to be rejected, got %#v", input, action)
+		}
 	}
 }
 
