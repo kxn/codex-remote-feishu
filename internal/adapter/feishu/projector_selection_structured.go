@@ -21,7 +21,38 @@ func selectionViewStructuredProjection(
 			threadSelectionDropdownElements(*view.Thread, ctx, daemonLifecycleID),
 			true
 	default:
+		return selectionViewPromptProjection(view, ctx, daemonLifecycleID)
+	}
+}
+
+func selectionViewPromptProjection(
+	view control.FeishuSelectionView,
+	ctx *control.FeishuUISelectionContext,
+	daemonLifecycleID string,
+) (string, []map[string]any, bool) {
+	prompt, ok := FeishuDirectSelectionPromptFromView(view, ctx)
+	if !ok {
 		return "", nil, false
+	}
+	title := strings.TrimSpace(prompt.Title)
+	if title == "" {
+		title = selectionPromptDefaultTitle(prompt.Kind)
+	}
+	return title, selectionPromptElements(prompt, daemonLifecycleID), true
+}
+
+func selectionPromptDefaultTitle(kind control.SelectionPromptKind) string {
+	switch kind {
+	case control.SelectionPromptAttachInstance:
+		return "在线 VS Code 实例"
+	case control.SelectionPromptAttachWorkspace:
+		return "工作区列表"
+	case control.SelectionPromptUseThread:
+		return "会话列表"
+	case control.SelectionPromptKickThread:
+		return "强踢当前会话？"
+	default:
+		return "请选择"
 	}
 }
 

@@ -76,9 +76,9 @@
     [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
     负责把 `FeishuTargetPickerView` 投影成 unified target picker 卡片
     [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
-    负责 selection view 的 compat prompt 投影与 legacy selection helper
+    负责 selection view 的 compat prompt 投影 helper（供 structured projector 复用）
     [internal/adapter/feishu/projector_selection_structured.go](../../internal/adapter/feishu/projector_selection_structured.go)
-    负责 VS Code `/list` 按钮式 instance view 与 `/use` / `/useall` 下拉式 thread view 的直接结构化投影
+    负责 selection view 的统一投影入口：VS Code `/list` 按钮式 instance view 与 `/use` / `/useall` 下拉式 thread view 走直接结构化投影，其余 legacy selection path 走 compat prompt helper；`projector.go` 不再保留单独的 selection fallback 分支
     [internal/adapter/feishu/projector_command_view.go](../../internal/adapter/feishu/projector_command_view.go)
     负责把 `FeishuCommandView` 统一规范化成 `FeishuCommandPageView`
     [internal/adapter/feishu/projector_path_picker.go](../../internal/adapter/feishu/projector_path_picker.go)
@@ -134,7 +134,7 @@
   - `/list` / `/use` / `/useall` / workspace-scoped 入口当前都固定从 `Page=mode` 进入；后几者会预填默认模式与工作区，但仍要求用户显式点模式按钮后才进入 `Page=target`，阶段头继续保持整条向导里的概念路径，例如 `模式/目标`
 - `control.FeishuDirectSelectionPrompt` 仍然存在，但已经不再是 workspace/thread selection 的唯一主载体：
   - vscode instance/thread selection 与其余 legacy selection path 现在跨边界携带的是 `control.FeishuSelectionView`
-  - 其中 generic legacy prompt 当前会挂在 `FeishuSelectionView.Prompt`，并在 adapter 层再投影回 `FeishuDirectSelectionPrompt`
+  - generic legacy prompt 既可能显式挂在 `FeishuSelectionView.Prompt`，也可能由 `FeishuSelectionView` 的 workspace/thread 子视图在 adapter 层经 compat helper 归一投影成 `FeishuDirectSelectionPrompt`
   - VS Code `/list` 的 instance selection 与 `/use` / `/useall` 的 thread selection 当前已在 adapter 层直接生成 Feishu V2 卡片，不再依赖 prompt compat 投影
   - 其他 selection 场景，例如 kick-thread confirm，仍可直接使用 `FeishuDirectSelectionPrompt`
 - `control.FeishuPathPickerView` 当前已经是路径选择器跨 `UIEvent` 边界的主载体：
@@ -146,7 +146,7 @@
   - `UIEvent` 已经携带独立的 `FeishuSelectionContext` / `FeishuCommandContext` / `FeishuRequestContext`
   - Feishu UI controller 已通过这层 boundary 分流 pure navigation；后续继续扩 controller 时，默认仍应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
   - target picker cards 现在是 “read model -> `FeishuTargetPickerView` -> adapter projection -> Feishu V2 卡片” 三段；后续修改 normal `/list` / `/use` / `/useall` 的默认选择、页头单题文案、前置阻塞校验、confirm 按钮或 stale-selection 行为时，默认应落在 target picker read model / projection 层，而不是回到旧 selection query 函数里继续混改
-  - selection cards 现在主要服务于 VS Code / legacy selection path；其中 VS Code `/list` / `/use` / `/useall` 已是 “read model -> `FeishuSelectionView` -> adapter structured projection -> Feishu V2 卡片” 三段，其余 compat prompt 仍保留 “read model -> `FeishuSelectionView` -> adapter projection -> `FeishuDirectSelectionPrompt`” 四段；后续修改这些路径的交互与文案时，默认仍应落在 adapter structured projection / compat projection 或 selection view 结构层
+  - selection cards 现在主要服务于 VS Code / legacy selection path；其中 VS Code `/list` / `/use` / `/useall` 已是 “read model -> `FeishuSelectionView` -> adapter structured projection -> Feishu V2 卡片” 三段，其余 compat prompt 仍保留 “read model -> `FeishuSelectionView` -> adapter structured entrypoint -> compat helper -> `FeishuDirectSelectionPrompt`” 四段；后续修改这些路径的交互与文案时，默认仍应落在 adapter structured projection / compat projection 或 selection view 结构层
   - command/config cards 现在是 “read model -> `FeishuCommandView` -> normalized `FeishuCommandPageView` -> Feishu V2 卡片” 四段；后续修改 `/menu` 或 bare config cards 的 breadcrumbs、按钮布局、回退按钮、摘要文案时，默认也应落在 command view / page normalization / projector 层，而不是回到 orchestrator query 函数里继续混改
 - `ActionShow*` 与 bare config `Action*Command` 当前若仍存在，属于 gateway / parser 的 transport compatibility 层；live path 会先归并到 `FeishuUIIntent`，不再代表主产品 reducer owner。
 - 如果只是换卡片样式、按钮 payload、inline replace 策略，优先更新本文。
