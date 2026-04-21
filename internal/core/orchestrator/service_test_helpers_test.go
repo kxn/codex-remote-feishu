@@ -161,7 +161,18 @@ func commandCatalogSummaryText(catalog *control.FeishuDirectCommandCatalog) stri
 	if summary := strings.TrimSpace(catalog.Summary); summary != "" {
 		parts = append(parts, summary)
 	}
-	for _, section := range catalog.SummarySections {
+	sections := catalog.BodySections
+	if len(sections) == 0 {
+		sections = catalog.SummarySections
+	}
+	for _, section := range sections {
+		normalized := section.Normalized()
+		if normalized.Label != "" {
+			parts = append(parts, normalized.Label)
+		}
+		parts = append(parts, normalized.Lines...)
+	}
+	for _, section := range catalog.NoticeSections {
 		normalized := section.Normalized()
 		if normalized.Label != "" {
 			parts = append(parts, normalized.Label)

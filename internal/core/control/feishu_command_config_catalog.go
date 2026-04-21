@@ -139,6 +139,7 @@ func commandConfigCatalog(def FeishuCommandDefinition, summarySections []FeishuC
 	return FeishuDirectCommandCatalog{
 		Title:           def.Title,
 		SummarySections: append([]FeishuCardTextSection(nil), summarySections...),
+		BodySections:    append([]FeishuCardTextSection(nil), summarySections...),
 		Interactive:     true,
 		DisplayStyle:    CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:     FeishuCommandBreadcrumbs(def.GroupID, def.Title),
@@ -151,7 +152,9 @@ func sealedCommandCatalogForDefinition(def FeishuCommandDefinition, summarySecti
 	return FeishuDirectCommandCatalog{
 		Title:           def.Title,
 		SummarySections: append([]FeishuCardTextSection(nil), summarySections...),
+		BodySections:    append([]FeishuCardTextSection(nil), summarySections...),
 		Interactive:     false,
+		Sealed:          true,
 		DisplayStyle:    CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:     FeishuCommandBreadcrumbs(def.GroupID, def.Title),
 	}

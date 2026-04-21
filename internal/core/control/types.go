@@ -467,7 +467,10 @@ type FeishuDirectCommandCatalog struct {
 	ThemeKey        string
 	Patchable       bool
 	SummarySections []FeishuCardTextSection
+	BodySections    []FeishuCardTextSection
+	NoticeSections  []FeishuCardTextSection
 	Interactive     bool
+	Sealed          bool
 	DisplayStyle    CommandCatalogDisplayStyle
 	Breadcrumbs     []CommandCatalogBreadcrumb
 	Sections        []CommandCatalogSection

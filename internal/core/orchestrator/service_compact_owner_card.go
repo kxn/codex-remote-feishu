@@ -19,14 +19,18 @@ func compactOwnerFlowTrackingKey(flow *activeOwnerCardFlowRecord) string {
 }
 
 func compactOwnerCardEvent(surfaceID string, flow *activeOwnerCardFlowRecord, title, theme string, sections []control.FeishuCardTextSection) control.UIEvent {
+	bodySections, noticeSections := compactOwnerCardSplitSections(sections)
+	sealed := flow != nil && (flow.Phase == ownerCardFlowPhaseCompleted || flow.Phase == ownerCardFlowPhaseCancelled || flow.Phase == ownerCardFlowPhaseError)
 	view := control.FeishuCommandView{
 		Page: &control.FeishuCommandPageView{
-			Title:           strings.TrimSpace(title),
-			MessageID:       strings.TrimSpace(flow.MessageID),
-			TrackingKey:     compactOwnerFlowTrackingKey(flow),
-			ThemeKey:        strings.TrimSpace(theme),
-			Patchable:       true,
-			SummarySections: cloneFeishuCardSections(sections),
+			Title:          strings.TrimSpace(title),
+			MessageID:      strings.TrimSpace(flow.MessageID),
+			TrackingKey:    compactOwnerFlowTrackingKey(flow),
+			ThemeKey:       strings.TrimSpace(theme),
+			Patchable:      true,
+			BodySections:   bodySections,
+			NoticeSections: noticeSections,
+			Sealed:         sealed,
 		},
 	}
 	return control.UIEvent{
@@ -34,6 +38,26 @@ func compactOwnerCardEvent(surfaceID string, flow *activeOwnerCardFlowRecord, ti
 		SurfaceSessionID:  strings.TrimSpace(surfaceID),
 		FeishuCommandView: &view,
 	}
+}
+
+func compactOwnerCardSplitSections(sections []control.FeishuCardTextSection) ([]control.FeishuCardTextSection, []control.FeishuCardTextSection) {
+	if len(sections) == 0 {
+		return nil, nil
+	}
+	body := make([]control.FeishuCardTextSection, 0, 1)
+	notice := make([]control.FeishuCardTextSection, 0, len(sections))
+	for _, section := range sections {
+		normalized := section.Normalized()
+		if normalized.Label == "" && len(normalized.Lines) == 0 {
+			continue
+		}
+		if normalized.Label == "当前会话" && len(body) == 0 {
+			body = append(body, normalized)
+			continue
+		}
+		notice = append(notice, normalized)
+	}
+	return body, notice
 }
 
 func compactThreadLabel(threadID string, thread *state.ThreadRecord) string {

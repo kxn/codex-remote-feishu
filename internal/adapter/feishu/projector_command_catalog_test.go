@@ -160,3 +160,44 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 		t.Fatalf("expected V2 submit button, got %#v", formElements[1])
 	}
 }
+
+func TestProjectCommandCatalogRendersNoticeAreaBetweenBusinessAndFooter(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuDirectCommandCatalog{
+		Title: "上下文已压缩",
+		BodySections: []control.FeishuCardTextSection{{
+			Label: "当前会话",
+			Lines: []string{"修复登录流程 (thread-1)"},
+		}},
+		NoticeSections: []control.FeishuCardTextSection{{
+			Label: "结果",
+			Lines: []string{"当前会话的上下文已压缩完成。"},
+		}},
+		RelatedButtons: []control.CommandCatalogButton{{
+			Label:       "返回菜单",
+			CommandText: "/menu",
+		}},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if len(ops[0].CardElements) != 7 {
+		t.Fatalf("expected body + divider + notice + divider + footer, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "**当前会话**" {
+		t.Fatalf("expected business section label first, got %#v", ops[0].CardElements[0])
+	}
+	if ops[0].CardElements[2]["tag"] != "hr" {
+		t.Fatalf("expected divider before notice area, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[3]["content"] != "**结果**" {
+		t.Fatalf("expected notice label after divider, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[6]["tag"] != "button" {
+		t.Fatalf("expected footer button after second divider, got %#v", ops[0].CardElements)
+	}
+	renderedElements := renderedV2BodyElements(t, ops[0])
+	if renderedElements[2]["tag"] != "hr" || renderedElements[5]["tag"] != "hr" {
+		t.Fatalf("expected both dividers to survive V2 render, got %#v", renderedElements)
+	}
+}

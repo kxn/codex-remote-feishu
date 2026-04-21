@@ -36,9 +36,12 @@ type FeishuCommandPageView struct {
 	Patchable       bool
 	Breadcrumbs     []CommandCatalogBreadcrumb
 	SummarySections []FeishuCardTextSection
+	BodySections    []FeishuCardTextSection
+	NoticeSections  []FeishuCardTextSection
 	StatusKind      string
 	StatusText      string
 	Interactive     bool
+	Sealed          bool
 	DisplayStyle    CommandCatalogDisplayStyle
 	Sections        []CommandCatalogSection
 	RelatedButtons  []CommandCatalogButton

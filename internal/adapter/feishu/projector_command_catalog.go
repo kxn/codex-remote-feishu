@@ -11,18 +11,20 @@ func commandCatalogBody(catalog control.FeishuDirectCommandCatalog) string {
 }
 
 func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, len(catalog.Sections)*3+len(catalog.SummarySections)*2+2)
+	elements := make([]map[string]any, 0, len(catalog.Sections)*3+len(catalog.SummarySections)*2+len(catalog.NoticeSections)*2+3)
 	if breadcrumb := commandCatalogBreadcrumbMarkdown(catalog.Breadcrumbs); breadcrumb != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": breadcrumb,
 		})
 	}
-	if len(catalog.SummarySections) != 0 {
-		elements = appendCardTextSections(elements, catalog.SummarySections)
+	bodySections := commandCatalogBodySections(catalog)
+	if len(bodySections) != 0 {
+		elements = appendCardTextSections(elements, bodySections)
 	} else {
 		elements = appendCardTextSections(elements, commandCatalogSummaryFallbackSections(catalog.Summary))
 	}
+	hasBusinessContent := len(bodySections) != 0
 	for _, section := range catalog.Sections {
 		title := strings.TrimSpace(section.Title)
 		if title != "" {
@@ -50,11 +52,29 @@ func commandCatalogElements(catalog control.FeishuDirectCommandCatalog, daemonLi
 				elements = append(elements, commandCatalogFormElement(*entry.Form, daemonLifecycleID))
 			}
 		}
+		hasBusinessContent = true
+	}
+	if noticeSections := commandCatalogNoticeSections(catalog); len(noticeSections) != 0 {
+		if hasBusinessContent {
+			elements = append(elements, cardDividerElement())
+		}
+		elements = appendCardTextSections(elements, noticeSections)
 	}
 	if len(catalog.RelatedButtons) > 0 {
 		elements = appendCardFooterButtonGroup(elements, commandCatalogButtons(catalog.RelatedButtons, daemonLifecycleID))
 	}
 	return elements
+}
+
+func commandCatalogBodySections(catalog control.FeishuDirectCommandCatalog) []control.FeishuCardTextSection {
+	if len(catalog.BodySections) != 0 {
+		return catalog.BodySections
+	}
+	return catalog.SummarySections
+}
+
+func commandCatalogNoticeSections(catalog control.FeishuDirectCommandCatalog) []control.FeishuCardTextSection {
+	return catalog.NoticeSections
 }
 
 func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleID string) map[string]any {

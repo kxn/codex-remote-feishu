@@ -62,6 +62,12 @@ func assertCommandCatalogUsesPlainTextContracts(t *testing.T, catalog FeishuDire
 	for _, section := range catalog.SummarySections {
 		assertCardTextSectionUsesPlainText(t, section)
 	}
+	for _, section := range catalog.BodySections {
+		assertCardTextSectionUsesPlainText(t, section)
+	}
+	for _, section := range catalog.NoticeSections {
+		assertCardTextSectionUsesPlainText(t, section)
+	}
 	for _, section := range catalog.Sections {
 		for _, entry := range section.Entries {
 			assertCatalogTextAvoidsFeishuMarkdown(t, "entry title", entry.Title)

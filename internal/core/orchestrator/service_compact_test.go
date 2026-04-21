@@ -41,6 +41,15 @@ func TestCompactCommandDispatchesThreadCompactStart(t *testing.T) {
 	if catalog.Title != "正在压缩上下文" || catalog.ThemeKey != "progress" || !catalog.Patchable || catalog.TrackingKey == "" {
 		t.Fatalf("unexpected compact owner card: %#v", catalog)
 	}
+	if catalog.Sealed {
+		t.Fatalf("expected dispatching compact card to stay interactive lifecycle-wise, got %#v", catalog)
+	}
+	if len(catalog.BodySections) != 1 || catalog.BodySections[0].Label != "当前会话" {
+		t.Fatalf("expected compact card to keep current thread in body area, got %#v", catalog.BodySections)
+	}
+	if len(catalog.NoticeSections) != 1 || !strings.Contains(strings.Join(catalog.NoticeSections[0].Lines, "\n"), "正在向本地 Codex 发起上下文压缩请求。") {
+		t.Fatalf("expected compact card to put dispatch notice in notice area, got %#v", catalog.NoticeSections)
+	}
 	if command.Target.ThreadID != "thread-1" {
 		t.Fatalf("unexpected compact target: %#v", command.Target)
 	}
@@ -412,6 +421,15 @@ func TestCompactTurnLifecycleKeepsUpdatingSameOwnerCard(t *testing.T) {
 	if running.MessageID != "om-compact-1" || running.Title != "正在压缩上下文" || running.ThemeKey != "progress" {
 		t.Fatalf("unexpected running owner-card update: %#v", running)
 	}
+	if running.Sealed {
+		t.Fatalf("expected running compact card to remain unsealed, got %#v", running)
+	}
+	if len(running.BodySections) != 1 || running.BodySections[0].Label != "当前会话" {
+		t.Fatalf("expected running compact card to preserve business body, got %#v", running.BodySections)
+	}
+	if len(running.NoticeSections) != 1 {
+		t.Fatalf("expected running compact card to keep a single notice section, got %#v", running.NoticeSections)
+	}
 	if summary := commandCatalogSummaryText(running); !strings.Contains(summary, "正在压缩当前会话的上下文。") || strings.Contains(summary, "压缩期间普通输入会排队") {
 		t.Fatalf("expected running compact owner card to keep only the primary ongoing line, got %#v", running)
 	}
@@ -429,6 +447,15 @@ func TestCompactTurnLifecycleKeepsUpdatingSameOwnerCard(t *testing.T) {
 	completedCatalog := commandCatalogFromEvent(t, completedItem[0])
 	if completedCatalog.MessageID != "om-compact-1" || completedCatalog.Title != "上下文已压缩" || completedCatalog.ThemeKey != "success" {
 		t.Fatalf("unexpected completion owner-card update: %#v", completedCatalog)
+	}
+	if !completedCatalog.Sealed {
+		t.Fatalf("expected completion compact card to be sealed, got %#v", completedCatalog)
+	}
+	if len(completedCatalog.BodySections) != 1 || completedCatalog.BodySections[0].Label != "当前会话" {
+		t.Fatalf("expected completion compact card to preserve body state, got %#v", completedCatalog.BodySections)
+	}
+	if len(completedCatalog.NoticeSections) != 1 || !strings.Contains(strings.Join(completedCatalog.NoticeSections[0].Lines, "\n"), "当前会话的上下文已压缩完成。") {
+		t.Fatalf("expected completion compact card to expose terminal notice, got %#v", completedCatalog.NoticeSections)
 	}
 
 	completedTurn := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -479,6 +506,9 @@ func TestCompactTurnCompletedWithoutCompactionItemFallsBackToTerminalOwnerCard(t
 	completedCatalog := commandCatalogFromEvent(t, completedTurn[0])
 	if completedCatalog.MessageID != "om-compact-2" || completedCatalog.Title != "上下文已压缩" || completedCatalog.ThemeKey != "success" {
 		t.Fatalf("unexpected fallback terminal owner-card update: %#v", completedCatalog)
+	}
+	if !completedCatalog.Sealed {
+		t.Fatalf("expected fallback terminal compact card to be sealed, got %#v", completedCatalog)
 	}
 }
 
