@@ -63,7 +63,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 		t.Fatalf("expected V2 form submit button, got %#v", formElements[1])
 	}
 	value := cardButtonPayload(t, formElements[1])
-	if value["kind"] != "submit_command_form" || value["command"] != "/model" || value["field_name"] != "command_args" {
+	if value["kind"] != "submit_command_form" || value["command_text"] != "/model" || value["field_name"] != "command_args" {
 		t.Fatalf("unexpected submit payload: %#v", value)
 	}
 	if ops[0].CardElements[4]["tag"] != "hr" {
@@ -93,7 +93,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
 	}
 	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
-	if renderedSubmitValue["kind"] != "submit_command_form" || renderedSubmitValue["command"] != "/model" {
+	if renderedSubmitValue["kind"] != "submit_command_form" || renderedSubmitValue["command_text"] != "/model" {
 		t.Fatalf("unexpected rendered command form payload: %#v", renderedSubmitValue)
 	}
 	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[5])

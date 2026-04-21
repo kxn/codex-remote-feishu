@@ -78,10 +78,10 @@ func commandPageNoticeSections(view control.FeishuCommandPageView) []control.Fei
 func commandCatalogFormElement(form control.CommandCatalogForm, daemonLifecycleID string) map[string]any {
 	field := form.Field
 	submitValue := stampActionValue(map[string]any{
-		cardActionPayloadKeyKind:          cardActionKindSubmitCommandForm,
-		cardActionPayloadKeyCommandID:     strings.TrimSpace(form.CommandID),
-		cardActionPayloadKeyCommandLegacy: strings.TrimSpace(form.CommandText),
-		cardActionPayloadKeyFieldName:     strings.TrimSpace(field.Name),
+		cardActionPayloadKeyKind:        cardActionKindSubmitCommandForm,
+		cardActionPayloadKeyCommandID:   strings.TrimSpace(form.CommandID),
+		cardActionPayloadKeyCommandText: strings.TrimSpace(form.CommandText),
+		cardActionPayloadKeyFieldName:   strings.TrimSpace(field.Name),
 	}, daemonLifecycleID)
 	formName := commandCatalogFormName(form)
 	submitButton := cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue)

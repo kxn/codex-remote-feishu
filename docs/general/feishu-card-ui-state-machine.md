@@ -192,14 +192,14 @@
 | `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；命中当前 history owner-card flow 时同样先切 loading；gateway 继续兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `upgrade_owner_flow` | `picker_id`、`option_id` | `/upgrade latest` daemon owner-card 的显式动作；当前 `option_id` 只用 `confirm` / `cancel`，都要求命中当前 active flow id，旧卡或他人卡片不会继续改写升级状态；checking 首卡会先以 page `TrackingKey` append，待 gateway 分配 `message_id` 后再回写到 upgrade owner flow，后续 confirm / running / terminal 一律 patch 同一张卡 |
 | `plan_proposal` | `picker_id`、`option_id` | 提案计划卡的 owner-flow callback；`option_id` 当前只用 `execute` / `execute_new` / `cancel`。gateway 只负责按当前 active proposal id 解析回 `ActionPlanProposalDecision`；真正的 `PlanMode=off`、继续派发 follow-up turn，以及 seal 当前卡，仍由 orchestrator 决定 |
-| `run_command` | `command_text` 或 `command` | 把卡片按钮退化成文本命令解析 |
+| `run_command` | `command_text` | 把卡片按钮退化成文本命令解析 |
 | `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
 | `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
 | `path_picker_confirm` | `picker_id` | 用当前 active picker 的已校验结果触发 consumer handoff；若 picker 带有 `owner_flow_id` 且命中 target picker owner card，consumer 可直接回填并 patch 原 owner card；独立 `/sendfile` picker 则会在 confirm 后保留自身 lifecycle，启动前失败继续 patch 当前卡，启动成功把当前卡封成 terminal |
 | `path_picker_cancel` | `picker_id` | 结束当前 active picker，并把取消结果交给 consumer 或默认 notice；target picker 子步骤当前会直接恢复原 owner card，而不是额外发一张取消卡 |
 | `request_respond` | `request_id`、`request_type`、`request_option_id`、`request_answers`、`request_revision` | 响应 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation`。通用 approval 现在会保留归一化后的 `requestKind` 与 `availableDecisions`，包括 `cancel`；顶层 `tool/requestUserInput` 与 `item/tool/requestUserInput` 继续共用 `request_user_input` 提交流程；`permissions_request_approval` 通过按钮直接携带 scope 语义；`request_user_input` / form 模式 `mcp_server_elicitation` 还会用这条 payload 承载 `step_previous` / `step_next`、局部答案按钮直填、以及显式最终提交；`mcp_server_elicitation` 在 url 模式下继续直接承载 continue/decline/cancel |
-| `submit_command_form` | `command_text` 或 `command`、`field_name` | 从表单里取参数后重新走文本命令解析 |
+| `submit_command_form` | `command_text`、`field_name` | 从表单里取参数后重新走文本命令解析 |
 | `submit_request_form` | `request_id`、`request_type`、`request_option_id`、`request_revision`、`field_name(可选)` | 从表单里提取 `request_answers` 后回到 request 响应路径；当前用于顶层/`item` 两种 `request_user_input` 以及 form 模式 `mcp_server_elicitation`，分步卡片里默认携带 `request_option_id=step_save` 表示“保存当前题” |
 
 ### 4.3 当前表单提交规则
@@ -207,7 +207,7 @@
 `gateway_routing.go` 当前约定：
 
 - `submit_command_form`
-  - 先读 `value.command_text`，没有则读 `value.command`
+  - 只读取 `value.command_text`（legacy `value.command` 已下线）
   - 参数默认从 `form_value["command_args"]` 读取
   - 若 `value.field_name` 存在，则改为读取该字段
   - 命令表单当前同时兼容普通 `input` 与 `select_static`
@@ -232,6 +232,7 @@
     - `request_option_id=confirm_submit_with_unanswered`：确认留空提交
     - `request_option_id=cancel_submit_with_unanswered`：返回继续补答
   - 若表单没有字段值，再回退 `input_value`
+  - approval 旧写法 `approved=true/false` fallback 已下线；approval 决策必须走 `request_option_id`
 - `path_picker_enter` / `path_picker_select`
   - 旧按钮路径继续直接读取 `entry_name`
   - `select_static` 路径允许 payload 只带 `field_name`

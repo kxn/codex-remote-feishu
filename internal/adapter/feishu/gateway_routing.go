@@ -218,15 +218,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		requestAnswers := requestAnswersFromValue(value)
 		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID))
-		if optionID == "" && len(requestAnswers) == 0 {
-			if value[cardActionPayloadKeyApproved] != nil {
-				if boolMapValue(value, cardActionPayloadKeyApproved) {
-					optionID = "accept"
-				} else {
-					optionID = "decline"
-				}
-			}
-		}
 		return control.Action{
 			Kind:             control.ActionRespondRequest,
 			GatewayID:        g.config.GatewayID,
@@ -245,9 +236,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}, true
 	case cardActionKindRunCommand:
 		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
-		if commandText == "" {
-			commandText = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandLegacy))
-		}
 		action, ok := parseTextAction(commandText)
 		if !ok {
 			return control.Action{}, false
@@ -315,10 +303,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			Inbound:          meta,
 		}, true
 	case cardActionKindSubmitCommandForm:
-		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandLegacy))
-		if commandText == "" {
-			commandText = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
-		}
+		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
 		if commandText == "" {
 			return control.Action{}, false
 		}

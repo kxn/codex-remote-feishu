@@ -933,9 +933,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromFormValue(t
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":       "submit_command_form",
-					"command":    "/model",
-					"field_name": "command_args",
+					"kind":         "submit_command_form",
+					"command_text": "/model",
+					"field_name":   "command_args",
 				},
 				FormValue: map[string]interface{}{
 					"command_args": "gpt-5.4 high",
@@ -966,8 +966,8 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":    "submit_command_form",
-					"command": "/upgrade",
+					"kind":         "submit_command_form",
+					"command_text": "/upgrade",
 				},
 				InputValue: "track production",
 			},
@@ -996,9 +996,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":       "submit_command_form",
-					"command":    "/model",
-					"field_name": "command_args",
+					"kind":         "submit_command_form",
+					"command_text": "/model",
+					"field_name":   "command_args",
 				},
 				FormValue: map[string]interface{}{
 					"command_args": []interface{}{"gpt-5.4-mini"},
@@ -1029,9 +1029,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			name: "option",
 			action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":       "submit_command_form",
-					"command":    "/model",
-					"field_name": "command_args",
+					"kind":         "submit_command_form",
+					"command_text": "/model",
+					"field_name":   "command_args",
 				},
 				Option: "gpt-5.4-mini",
 			},
@@ -1040,9 +1040,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			name: "options",
 			action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":       "submit_command_form",
-					"command":    "/model",
-					"field_name": "command_args",
+					"kind":         "submit_command_form",
+					"command_text": "/model",
+					"field_name":   "command_args",
 				},
 				Options: []string{"gpt-5.4-mini"},
 			},
@@ -1662,7 +1662,7 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAction(t *testing.T) {
 	}
 }
 
-func TestParseCardActionTriggerEventFallsBackToApprovedBool(t *testing.T) {
+func TestParseCardActionTriggerEventIgnoresApprovedBoolFallback(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-3", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -1688,7 +1688,7 @@ func TestParseCardActionTriggerEventFallsBackToApprovedBool(t *testing.T) {
 	if !ok {
 		t.Fatal("expected legacy card callback to be parsed")
 	}
-	if action.Request == nil || action.Request.RequestOptionID != "decline" {
+	if action.Request == nil || action.Request.RequestOptionID != "" {
 		t.Fatalf("unexpected legacy request respond payload: %#v", action)
 	}
 }

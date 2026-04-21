@@ -21,9 +21,7 @@ const (
 	cardActionPayloadKeyRequestRevision       = "request_revision"
 	cardActionPayloadKeyCommandID             = "command_id"
 	cardActionPayloadKeyCommandText           = "command_text"
-	cardActionPayloadKeyCommandLegacy         = "command"
 	cardActionPayloadKeyFieldName             = "field_name"
-	cardActionPayloadKeyApproved              = "approved"
 	cardActionPayloadKeyPickerID              = "picker_id"
 	cardActionPayloadKeyEntryName             = "entry_name"
 	cardActionPayloadKeyTargetValue           = "target_value"
@@ -191,10 +189,10 @@ func actionPayloadSubmitCommandForm(commandID, commandText, fieldName string) ma
 		fieldName = cardActionPayloadDefaultCommandFieldName
 	}
 	return map[string]any{
-		cardActionPayloadKeyKind:          cardActionKindSubmitCommandForm,
-		cardActionPayloadKeyCommandID:     strings.TrimSpace(commandID),
-		cardActionPayloadKeyCommandLegacy: strings.TrimSpace(commandText),
-		cardActionPayloadKeyFieldName:     fieldName,
+		cardActionPayloadKeyKind:        cardActionKindSubmitCommandForm,
+		cardActionPayloadKeyCommandID:   strings.TrimSpace(commandID),
+		cardActionPayloadKeyCommandText: strings.TrimSpace(commandText),
+		cardActionPayloadKeyFieldName:   fieldName,
 	}
 }
 
