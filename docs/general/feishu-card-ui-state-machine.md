@@ -471,9 +471,9 @@ MCP request 卡片当前新增的可视语义：
   - 非 final 的 assistant 普通文本（当前只限 `render.BlockAssistantMarkdown` / `render.BlockAssistantCode`）现在也会沿用当前 turn reply anchor；是否真正可见仍由 surface verbosity 过滤决定，quiet 下不会因为 reply thread 改动而强行变可见
   - steer accept 成功后，orchestrator 现在会额外发一条 `UIEventTimelineText(type=steer_user_supplement)`；这条文本 reply 到当前 turn anchor，内容只镜像本次真正并入 turn 的用户补充，不复用 assistant block / notice 语义，也不重发图片或文件实体
   - `用户补充` 的图片计数当前只来自 steer 输入里的 `InputLocalImage` / `InputRemoteImage`；文件计数只来自结构化转发/引用文本中显式编码的 `file` 节点
-  - daemon 当前还会在 `[]UIEvent` 批处理入口派生 `UIEventTimelineText(type=attention_ping)`：
-    - 这条提醒不是新的 owner-card / request-card substrate，只是跟随原事件位置追加的一条轻量文本消息
-    - request prompt started 命中 `approval` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` 时，当前按 `surface + request_id + revision` 只提醒一次；inline rerender 不会单独派生提醒
+  - daemon 当前会先在 `[]UIEvent` 批处理入口选出 `attention_ping` 的 follow-up anchor，再只在对应原事件成功送达后追加 `UIEventTimelineText(type=attention_ping)`：
+    - 这条提醒不是新的 owner-card / request-card substrate，只是跟随原事件位置追加的一条轻量文本消息；若原事件未送达，或 `global runtime` notice 被节流 / suppress，则不会单独补发孤儿提醒
+    - request prompt started 命中 `approval` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` 时，当前按 `surface + request_id + revision` 只提醒一次；inline rerender 不会单独派生提醒；request dedupe 只在提醒真正送达后记账，因此原 request 卡投递失败后的同 revision 重试仍可补发提醒
     - turn 结束批次里，`turn_failed` 优先于 final；若同批既有 final 又有 `提案计划` 卡，只派生一条“本轮已结束且有提案待确认”的提醒
     - `attached_instance_transport_degraded`、`gateway_apply_failure`、`daemon_shutting_down` 这三类 `global runtime` notice 当前也会在原 notice 后面追加 attention ping，并继续复用同一套 family + dedupe key + throttle window
     - 若原事件是 reply-chain（例如 final reply），提醒也 reply 到同一 anchor；若原事件本来是顶层 append（例如 request prompt、plan proposal、global runtime notice），提醒也保持顶层 append
@@ -749,7 +749,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
   - 锁定 `global runtime` 提示维持独立 delivery lane，并按 family + dedupe key 做短窗节流 / pending queue 去重
 - [internal/app/daemon/app_attention_ping_test.go](../../internal/app/daemon/app_attention_ping_test.go)
-  - 锁定 request prompt / final reply / `turn_failed` / `提案计划` / targeted `global runtime` notice 的 attention ping 派生规则、reply/append 跟随原事件位置的语义，以及缺少 `ActorUserID` 时只保留原事件
+  - 锁定 request prompt / final reply / `turn_failed` / `提案计划` / targeted `global runtime` notice 的 attention ping 派生规则、reply/append 跟随原事件位置的语义、request anchor 失败后不会发孤儿提醒且重试仍可补发，以及 same-batch suppressed runtime notice 不会额外泄漏 ping
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
   - 锁定 `/list` 在 normal / vscode 两种模式下都改走菜单同卡 handoff，vscode `/list` / `/use` / `/useall` 的空态、attach 结果与 `use_thread` 结果都会继续收口在原菜单卡；同时 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口，`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)

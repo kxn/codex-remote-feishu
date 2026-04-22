@@ -21,8 +21,8 @@ func (a *App) handleUIEvents(ctx context.Context, events []control.UIEvent) {
 
 func (a *App) handleUIEventsLocked(ctx context.Context, events []control.UIEvent) {
 	_ = ctx
-	events = a.appendAttentionPingsLocked(events, time.Now())
-	for _, event := range events {
+	turnAttentionPings := a.planTurnAttentionPingsLocked(events)
+	for index, event := range events {
 		if event.DaemonCommand != nil {
 			a.mu.Unlock()
 			followup := a.handleDaemonCommand(*event.DaemonCommand)
@@ -121,10 +121,38 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []control.UIEvent
 			chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 			log.Printf("gateway apply failed: chat=%s event=%s err=%v", chatID, event.Kind, err)
 			a.queueGatewayFailureNotice(event, err)
-		} else if isGlobalRuntimeNotice {
-			a.recordGlobalRuntimeNoticeLocked(event, time.Now())
+			continue
+		}
+		deliveredAt := time.Now()
+		if isGlobalRuntimeNotice {
+			a.recordGlobalRuntimeNoticeLocked(event, deliveredAt)
+			if ping := a.globalRuntimeAttentionPingForEventLocked(event, deliveredAt, false); ping != nil {
+				a.deliverAttentionFollowupLocked(event, *ping)
+			}
+		}
+		if ping, requestKey := a.requestAttentionPingCandidateLocked(event, deliveredAt); ping != nil {
+			if a.deliverAttentionFollowupLocked(event, *ping) {
+				a.recordRequestAttentionPingLocked(requestKey, deliveredAt)
+			}
+		}
+		for _, ping := range turnAttentionPings[index] {
+			a.deliverAttentionFollowupLocked(event, ping)
 		}
 	}
+}
+
+func (a *App) deliverAttentionFollowupLocked(anchorEvent, followup control.UIEvent) bool {
+	if err := a.deliverUIEventLocked(context.Background(), followup); err != nil {
+		log.Printf(
+			"attention follow-up dropped after delivered anchor: surface=%s anchor=%s followup=%s err=%v",
+			followup.SurfaceSessionID,
+			anchorEvent.Kind,
+			followup.Kind,
+			err,
+		)
+		return false
+	}
+	return true
 }
 
 func (a *App) deliverUIEvent(event control.UIEvent) error {

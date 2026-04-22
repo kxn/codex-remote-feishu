@@ -19,69 +19,46 @@ type attentionTurnBatchCandidate struct {
 	hasPlanProposal bool
 }
 
-func (a *App) appendAttentionPingsLocked(events []control.UIEvent, now time.Time) []control.UIEvent {
+func (a *App) planTurnAttentionPingsLocked(events []control.UIEvent) map[int][]control.UIEvent {
 	if len(events) == 0 {
-		return events
+		return nil
 	}
-	if now.IsZero() {
-		now = time.Now()
-	}
-	insertions := map[int][]control.UIEvent{}
 	turns := map[string]*attentionTurnBatchCandidate{}
 	for index, event := range events {
-		if ping := a.requestAttentionPingLocked(event, now); ping != nil {
-			insertions[index] = append(insertions[index], *ping)
-		}
-		if ping := a.globalRuntimeAttentionPingLocked(event, now); ping != nil {
-			insertions[index] = append(insertions[index], *ping)
-		}
 		a.recordTurnAttentionCandidateLocked(turns, index, event)
 	}
+	followups := map[int][]control.UIEvent{}
 	for _, candidate := range turns {
 		if ping := a.turnAttentionPingLocked(candidate); ping != nil {
-			insertions[candidate.anchorIndex] = append(insertions[candidate.anchorIndex], *ping)
+			followups[candidate.anchorIndex] = append(followups[candidate.anchorIndex], *ping)
 		}
 	}
-	if len(insertions) == 0 {
-		return events
-	}
-	out := make([]control.UIEvent, 0, len(events)+len(insertions))
-	for index, event := range events {
-		out = append(out, event)
-		out = append(out, insertions[index]...)
-	}
-	return out
+	return followups
 }
 
-func (a *App) requestAttentionPingLocked(event control.UIEvent, now time.Time) *control.UIEvent {
+func (a *App) requestAttentionPingCandidateLocked(event control.UIEvent, now time.Time) (*control.UIEvent, string) {
 	if event.Kind != control.UIEventFeishuRequestView || event.FeishuRequestView == nil || event.InlineReplaceCurrentCard {
-		return nil
+		return nil, ""
 	}
 	request := event.FeishuRequestView
 	text, ok := attentionRequestPingText(request.RequestType)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	surfaceID := strings.TrimSpace(event.SurfaceSessionID)
 	requestID := strings.TrimSpace(request.RequestID)
 	if surfaceID == "" || requestID == "" {
-		return nil
+		return nil, ""
 	}
 	mentionUserID, ok := a.attentionPingMentionTarget(surfaceID)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	key := surfaceID + "::" + requestID + "::" + strconv.Itoa(request.RequestRevision)
 	if last := a.feishuRuntime.attentionRequests[key]; !last.IsZero() && now.Sub(last) < attentionRequestDedupTTL {
-		return nil
+		return nil, ""
 	}
-	a.feishuRuntime.attentionRequests[key] = now
-	a.pruneAttentionRequestsLocked(now.Add(-attentionRequestDedupTTL))
-	return a.newAttentionPingEvent(surfaceID, mentionUserID, a.attentionPingReplyTarget(event), text)
-}
-
-func (a *App) globalRuntimeAttentionPingLocked(event control.UIEvent, now time.Time) *control.UIEvent {
-	return a.globalRuntimeAttentionPingForEventLocked(event, now, true)
+	return a.newAttentionPingEvent(surfaceID, mentionUserID, a.attentionPingReplyTarget(event), text), key
 }
 
 func (a *App) globalRuntimeAttentionPingForEventLocked(event control.UIEvent, now time.Time, honorSuppression bool) *control.UIEvent {
@@ -101,6 +78,15 @@ func (a *App) globalRuntimeAttentionPingForEventLocked(event control.UIEvent, no
 		return nil
 	}
 	return a.newAttentionPingEvent(normalized.SurfaceSessionID, mentionUserID, a.attentionPingReplyTarget(normalized), text)
+}
+
+func (a *App) recordRequestAttentionPingLocked(key string, now time.Time) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	a.feishuRuntime.attentionRequests[key] = now
+	a.pruneAttentionRequestsLocked(now.Add(-attentionRequestDedupTTL))
 }
 
 func (a *App) recordTurnAttentionCandidateLocked(candidates map[string]*attentionTurnBatchCandidate, index int, event control.UIEvent) {
