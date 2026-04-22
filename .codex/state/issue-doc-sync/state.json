@@ -3144,6 +3144,286 @@
       "reason": "maintainability-only cleanup with no additional durable product behavior beyond what current canonical docs already cover",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/345",
       "recordedAt": "2026-04-21T19:08:03Z"
+    },
+    {
+      "number": 346,
+      "title": "在需要提醒的时候发送消息加上 at",
+      "updatedAt": "2026-04-22T15:07:34Z",
+      "closedAt": "2026-04-22T15:07:34Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/346",
+      "recordedAt": "2026-04-22T19:03:45Z"
+    },
+    {
+      "number": 347,
+      "title": "[Research] 跨层耦合连带破坏风险治理：从补丁修复转向通用机制",
+      "updatedAt": "2026-04-22T16:40:39Z",
+      "closedAt": "2026-04-22T16:40:35Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/347",
+      "recordedAt": "2026-04-22T19:04:21Z"
+    },
+    {
+      "number": 348,
+      "title": "远程预览对编程语言类型文件需要有语法颜色高亮",
+      "updatedAt": "2026-04-22T04:53:05Z",
+      "closedAt": "2026-04-22T04:52:41Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/348",
+      "recordedAt": "2026-04-22T19:02:24Z"
+    },
+    {
+      "number": 350,
+      "title": "菜单分组和文案",
+      "updatedAt": "2026-04-22T04:14:34Z",
+      "closedAt": "2026-04-22T04:14:31Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/350",
+      "recordedAt": "2026-04-22T19:02:19Z"
+    },
+    {
+      "number": 351,
+      "title": "将 normal mode  /list 对应的功能卡的切换已有工作区和新建工作区拆成不同的菜单入口",
+      "updatedAt": "2026-04-22T06:23:19Z",
+      "closedAt": "2026-04-22T06:23:19Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/351",
+      "recordedAt": "2026-04-22T19:02:34Z"
+    },
+    {
+      "number": 352,
+      "title": "[Research] 收口超大 Go package 与职责边界：orchestrator / daemon / feishu 拆分方案",
+      "updatedAt": "2026-04-22T14:58:21Z",
+      "closedAt": "2026-04-22T14:58:21Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/352",
+      "recordedAt": "2026-04-22T19:03:39Z"
+    },
+    {
+      "number": 354,
+      "title": "[Research] 一步到位替换层级菜单基座并删除旧 command-card 链路",
+      "updatedAt": "2026-04-22T03:31:44Z",
+      "closedAt": "2026-04-22T03:31:44Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/354",
+      "recordedAt": "2026-04-22T19:02:13Z"
+    },
+    {
+      "number": 355,
+      "title": "[Work] 建立通用 page-card family 与显式 menu-flow runtime，替换菜单/help/status/config/root pages",
+      "updatedAt": "2026-04-22T02:23:01Z",
+      "closedAt": "2026-04-22T02:23:01Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/355",
+      "recordedAt": "2026-04-22T19:01:57Z"
+    },
+    {
+      "number": 356,
+      "title": "[Work] 删除旧 command-card 链路与残留 tests/docs",
+      "updatedAt": "2026-04-22T03:31:38Z",
+      "closedAt": "2026-04-22T03:31:38Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/356",
+      "recordedAt": "2026-04-22T19:02:08Z"
+    },
+    {
+      "number": 357,
+      "title": "[Work] 迁移仍借旧基座的 owner/page cards 到新 page substrate",
+      "updatedAt": "2026-04-22T02:41:32Z",
+      "closedAt": "2026-04-22T02:41:28Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/357",
+      "recordedAt": "2026-04-22T19:02:02Z"
+    },
+    {
+      "number": 358,
+      "title": "[Workspace] normal mode 引入 /workspace 命令族并拆分三张独立工作会话卡",
+      "updatedAt": "2026-04-22T06:21:37Z",
+      "closedAt": "2026-04-22T06:21:37Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/358",
+      "recordedAt": "2026-04-22T19:02:29Z"
+    },
+    {
+      "number": 359,
+      "title": "[Work] 收口菜单来源前台 flow 的显式 handoff，删除长期半菜单半业务混合态",
+      "updatedAt": "2026-04-22T10:17:37Z",
+      "closedAt": "2026-04-22T10:17:37Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/359",
+      "recordedAt": "2026-04-22T19:02:40Z"
+    },
+    {
+      "number": 360,
+      "title": "[Track] 一次性收口 Feishu frontstage flow 基座，彻底消除菜单脆弱性并删除 mixed 旧链路",
+      "updatedAt": "2026-04-22T10:26:32Z",
+      "closedAt": "2026-04-22T10:26:32Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/360",
+      "recordedAt": "2026-04-22T19:03:01Z"
+    },
+    {
+      "number": 361,
+      "title": "[Work] 统一 bare slash 前台卡 contract：参数卡、工具页与 direct owner card",
+      "updatedAt": "2026-04-22T10:20:22Z",
+      "closedAt": "2026-04-22T10:20:22Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/361",
+      "recordedAt": "2026-04-22T19:02:45Z"
+    },
+    {
+      "number": 362,
+      "title": "[Work] 收口 owner 子流程 mixed：picker / history / request / approval",
+      "updatedAt": "2026-04-22T10:22:56Z",
+      "closedAt": "2026-04-22T10:22:56Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/362",
+      "recordedAt": "2026-04-22T19:02:51Z"
+    },
+    {
+      "number": 363,
+      "title": "[Work] 统一 frontstage/timeline delivery contract，并删除 legacy mixed 基座",
+      "updatedAt": "2026-04-22T10:24:01Z",
+      "closedAt": "2026-04-22T10:24:01Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/363",
+      "recordedAt": "2026-04-22T19:02:56Z"
+    },
+    {
+      "number": 364,
+      "title": "[Work] 从 internal/app/daemon 抽出 cron runtime 子域",
+      "updatedAt": "2026-04-22T13:04:54Z",
+      "closedAt": "2026-04-22T13:04:54Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/364",
+      "recordedAt": "2026-04-22T19:03:06Z"
+    },
+    {
+      "number": 365,
+      "title": "[Work] 从 internal/adapter/feishu 抽出 projector 子域",
+      "updatedAt": "2026-04-22T13:29:22Z",
+      "closedAt": "2026-04-22T13:29:22Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/365",
+      "recordedAt": "2026-04-22T19:03:12Z"
+    },
+    {
+      "number": 366,
+      "title": "[Work] 收口 Feishu gateway runtime / route resolution / inbound 边界",
+      "updatedAt": "2026-04-22T14:03:46Z",
+      "closedAt": "2026-04-22T14:03:46Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/366",
+      "recordedAt": "2026-04-22T19:03:17Z"
+    },
+    {
+      "number": 367,
+      "title": "[Work] 从 internal/app/daemon 抽出 upgrade / headless / tool runtime / surface resume 子域",
+      "updatedAt": "2026-04-22T14:33:47Z",
+      "closedAt": "2026-04-22T14:33:41Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/367",
+      "recordedAt": "2026-04-22T19:03:22Z"
+    },
+    {
+      "number": 368,
+      "title": "[Work] 为 orchestrator 建立 leaf contract / builder 抽取基线，再决定是否物理拆 cluster",
+      "updatedAt": "2026-04-22T14:51:20Z",
+      "closedAt": "2026-04-22T14:51:16Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/368",
+      "recordedAt": "2026-04-22T19:03:34Z"
+    },
+    {
+      "number": 370,
+      "title": "[Research] 收口前台 owner-card 生命周期契约：统一 request/page/target/path 的封卡与交互释放语义",
+      "updatedAt": "2026-04-22T14:43:10Z",
+      "closedAt": "2026-04-22T14:43:10Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/370",
+      "recordedAt": "2026-04-22T19:03:29Z"
+    },
+    {
+      "number": 371,
+      "title": "[Track] 稳定化跨层事件契约：eventcontract / target resolver / followup semantics 迁移",
+      "updatedAt": "2026-04-22T16:40:01Z",
+      "closedAt": "2026-04-22T16:40:01Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/371",
+      "recordedAt": "2026-04-22T19:04:16Z"
+    },
+    {
+      "number": 372,
+      "title": "[Work] 建立 internal/core/eventcontract 与 compat bridge 基线",
+      "updatedAt": "2026-04-22T15:34:02Z",
+      "closedAt": "2026-04-22T15:34:02Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/372",
+      "recordedAt": "2026-04-22T19:03:50Z"
+    },
+    {
+      "number": 373,
+      "title": "[Work] 迁移 consumer：projector / daemon ingress / testkit 到 eventcontract",
+      "updatedAt": "2026-04-22T15:47:51Z",
+      "closedAt": "2026-04-22T15:47:47Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/373",
+      "recordedAt": "2026-04-22T19:03:55Z"
+    },
+    {
+      "number": 374,
+      "title": "[Work] 收口 Feishu gateway target resolver 到统一 TargetRef contract",
+      "updatedAt": "2026-04-22T16:02:34Z",
+      "closedAt": "2026-04-22T16:02:30Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/374",
+      "recordedAt": "2026-04-22T19:04:00Z"
+    },
+    {
+      "number": 375,
+      "title": "[Work] 迁移 producer 并升级 followup policy 为显式语义",
+      "updatedAt": "2026-04-22T16:22:05Z",
+      "closedAt": "2026-04-22T16:22:01Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/375",
+      "recordedAt": "2026-04-22T19:04:05Z"
+    },
+    {
+      "number": 376,
+      "title": "[Work] 删除 legacy control.UIEvent live path 并补齐 matrix / guards",
+      "updatedAt": "2026-04-22T16:37:21Z",
+      "closedAt": "2026-04-22T16:37:21Z",
+      "decision": "skip",
+      "reason": "durable result already covered by existing docs and recent synced commits; no additional lifecycle doc delta needed",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/376",
+      "recordedAt": "2026-04-22T19:04:11Z"
     }
   ]
 }
