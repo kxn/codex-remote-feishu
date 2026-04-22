@@ -8,53 +8,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-type cronGatewayIdentity struct {
-	GatewayID string
-	AppID     string
-}
-
-type cronOwnerStatus string
-
-const (
-	cronOwnerStatusNone        cronOwnerStatus = "none"
-	cronOwnerStatusHealthy     cronOwnerStatus = "healthy"
-	cronOwnerStatusBootstrap   cronOwnerStatus = "bootstrap"
-	cronOwnerStatusUnavailable cronOwnerStatus = "unavailable"
-	cronOwnerStatusMismatch    cronOwnerStatus = "mismatch"
-	cronOwnerStatusUnresolved  cronOwnerStatus = "unresolved"
-)
-
-type cronOwnerBinding struct {
-	GatewayID string
-	AppID     string
-	BoundAt   time.Time
-}
-
-type cronOwnerResolution struct {
-	Status       cronOwnerStatus
-	State        *cronStateFile
-	ScopeKey     string
-	Label        string
-	Binding      cronBitableState
-	Gateway      cronGatewayIdentity
-	PersistOwner *cronOwnerBinding
-	CurrentOwner *cronOwnerBinding
-	Message      string
-}
-
-type cronOwnerView struct {
-	Status      cronOwnerStatus
-	StatusLabel string
-	Detail      string
-	NextAction  string
-	NeedsRepair bool
-}
-
-type cronOwnerResolveOptions struct {
-	AllowCreate        bool
-	CreateStateIfEmpty bool
-}
-
 func (a *App) defaultCronGatewayIdentityLookup(gatewayID string) (cronGatewayIdentity, bool, error) {
 	gatewayID = strings.TrimSpace(gatewayID)
 	if gatewayID == "" {
@@ -80,26 +33,6 @@ func (a *App) cronGatewayIdentity(gatewayID string) (cronGatewayIdentity, bool, 
 		lookup = a.defaultCronGatewayIdentityLookup
 	}
 	return lookup(strings.TrimSpace(gatewayID))
-}
-
-func cronOwnerBindingBackfill(current *cronOwnerBinding, identity cronGatewayIdentity) (*cronOwnerBinding, bool) {
-	if current == nil {
-		return nil, false
-	}
-	next := *current
-	changed := false
-	if strings.TrimSpace(next.AppID) == "" && strings.TrimSpace(identity.AppID) != "" {
-		next.AppID = strings.TrimSpace(identity.AppID)
-		changed = true
-	}
-	if next.BoundAt.IsZero() {
-		next.BoundAt = time.Now().UTC()
-		changed = true
-	}
-	if !changed {
-		return nil, false
-	}
-	return &next, true
 }
 
 func (a *App) migrateCronLegacyOwnerStateLocked(stateValue *cronStateFile) (bool, error) {
@@ -236,31 +169,6 @@ func (a *App) resolveCronBootstrapOwner(result cronOwnerResolution, command cont
 	return result, nil
 }
 
-func cronOwnerBindingFromState(stateValue *cronStateFile) *cronOwnerBinding {
-	if stateValue == nil {
-		return nil
-	}
-	gatewayID := strings.TrimSpace(stateValue.OwnerGatewayID)
-	appID := strings.TrimSpace(stateValue.OwnerAppID)
-	if gatewayID == "" && appID == "" {
-		return nil
-	}
-	return &cronOwnerBinding{
-		GatewayID: gatewayID,
-		AppID:     appID,
-		BoundAt:   stateValue.OwnerBoundAt.UTC(),
-	}
-}
-
-func applyCronOwnerBinding(stateValue *cronStateFile, owner *cronOwnerBinding) {
-	if stateValue == nil || owner == nil {
-		return
-	}
-	stateValue.OwnerGatewayID = strings.TrimSpace(owner.GatewayID)
-	stateValue.OwnerAppID = strings.TrimSpace(owner.AppID)
-	stateValue.OwnerBoundAt = owner.BoundAt.UTC()
-}
-
 func (a *App) inspectCronOwnerView(stateValue *cronStateFile) cronOwnerView {
 	resolution, err := a.resolveCronOwnerFromState(stateValue, control.DaemonCommand{}, cronOwnerResolveOptions{})
 	if err != nil {
@@ -304,39 +212,4 @@ func (a *App) inspectCronOwnerView(stateValue *cronStateFile) cronOwnerView {
 		view.NeedsRepair = true
 	}
 	return view
-}
-
-func cronOwnerActionError(action string, resolution cronOwnerResolution) error {
-	action = strings.TrimSpace(action)
-	if action == "" {
-		action = "执行 Cron 操作"
-	}
-	switch resolution.Status {
-	case cronOwnerStatusHealthy, cronOwnerStatusBootstrap:
-		return nil
-	case cronOwnerStatusNone:
-		return fmt.Errorf("尚未初始化 Cron 配置表，请先执行 `/cron repair`")
-	case cronOwnerStatusUnavailable:
-		return fmt.Errorf("%s失败：当前 Cron 绑定已失效，请先执行 `/cron repair`", action)
-	case cronOwnerStatusMismatch:
-		return fmt.Errorf("%s失败：当前 Cron 绑定与运行时配置不一致，请先执行 `/cron repair`", action)
-	case cronOwnerStatusUnresolved:
-		return fmt.Errorf("%s失败：当前 Cron 绑定待修复，请先执行 `/cron repair`", action)
-	default:
-		return fmt.Errorf("%s失败：Cron owner 状态无效", action)
-	}
-}
-
-func (r cronOwnerResolution) writebackTarget() cronWritebackTarget {
-	if strings.TrimSpace(r.Binding.AppToken) == "" {
-		return cronWritebackTarget{}
-	}
-	gatewayID := strings.TrimSpace(r.Gateway.GatewayID)
-	if gatewayID == "" && r.CurrentOwner != nil {
-		gatewayID = strings.TrimSpace(r.CurrentOwner.GatewayID)
-	}
-	return cronWritebackTarget{
-		GatewayID: gatewayID,
-		Bitable:   r.Binding,
-	}
 }

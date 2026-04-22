@@ -6,13 +6,9 @@ import (
 	"strings"
 	"time"
 
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
-
-type cronWritebackTarget struct {
-	GatewayID string
-	Bitable   cronBitableState
-}
 
 func isCronInstanceID(instanceID string) bool {
 	return strings.HasPrefix(strings.TrimSpace(instanceID), cronInstancePrefix)
@@ -188,45 +184,7 @@ func (a *App) handleCronDisconnectLocked(_ context.Context, instanceID string) b
 }
 
 func (a *App) ensureCronItemBufferLocked(run *cronRunState, itemID, itemKind string) *cronItemBuffer {
-	if run == nil {
-		return &cronItemBuffer{}
-	}
-	if run.Buffers == nil {
-		run.Buffers = map[string]*cronItemBuffer{}
-	}
-	key := cronItemBufferKey(itemID)
-	if existing := run.Buffers[key]; existing != nil {
-		if existing.ItemKind == "" {
-			existing.ItemKind = itemKind
-		}
-		return existing
-	}
-	buf := &cronItemBuffer{
-		ItemID:   strings.TrimSpace(itemID),
-		ItemKind: strings.TrimSpace(itemKind),
-	}
-	run.Buffers[key] = buf
-	return buf
-}
-
-func cronItemBufferKey(itemID string) string {
-	itemID = strings.TrimSpace(itemID)
-	if itemID == "" {
-		return "__default__"
-	}
-	return itemID
-}
-
-func cronJobActiveKey(jobRecordID, jobName string) string {
-	jobRecordID = strings.TrimSpace(jobRecordID)
-	if jobRecordID != "" {
-		return jobRecordID
-	}
-	jobName = strings.TrimSpace(jobName)
-	if jobName != "" {
-		return "name:" + jobName
-	}
-	return ""
+	return cronrt.EnsureItemBuffer(run, itemID, itemKind)
 }
 
 func (a *App) addCronActiveRunLocked(jobRecordID, jobName, instanceID string) {
@@ -307,7 +265,7 @@ func (a *App) completeCronRunLocked(instanceID, status, errorMessage string, now
 	}
 	a.removeCronActiveRunLocked(run.JobRecordID, run.JobName, instanceID)
 	writeTarget := run.WritebackTarget
-	if !writeTarget.valid() {
+	if !writeTarget.Valid() {
 		writeTarget = a.snapshotCronWritebackLocked()
 	}
 	completedRun := *run
@@ -318,7 +276,7 @@ func (a *App) completeCronRunLocked(instanceID, status, errorMessage string, now
 	if requestExit {
 		a.requestCronInstanceExitLocked(instanceID, run.PID, now)
 	}
-	if !writeTarget.valid() {
+	if !writeTarget.Valid() {
 		log.Printf("cron run completed without writeback target: instance=%s status=%s", instanceID, completedRun.Status)
 		go a.cleanupCronRunResources(completedRun)
 		return
@@ -340,10 +298,6 @@ func (a *App) snapshotCronWritebackLocked() cronWritebackTarget {
 		Bitable:   *a.cronRuntime.state.Bitable,
 	}
 	return target
-}
-
-func (t cronWritebackTarget) valid() bool {
-	return strings.TrimSpace(t.GatewayID) != "" && strings.TrimSpace(t.Bitable.AppToken) != "" && strings.TrimSpace(t.Bitable.Tables.Runs) != "" && strings.TrimSpace(t.Bitable.Tables.Tasks) != ""
 }
 
 func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time.Time) {

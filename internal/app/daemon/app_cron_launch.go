@@ -167,7 +167,7 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 }
 
 func (a *App) recordCronImmediateResultWithTargetLocked(target cronWritebackTarget, job cronJobState, triggeredAt time.Time, status, errorMessage string) {
-	if !target.valid() {
+	if !target.Valid() {
 		log.Printf("cron immediate result skipped: no writeback target job=%s status=%s", job.Name, status)
 		return
 	}

@@ -1,19 +1,19 @@
-package daemon
+package cronruntime
 
 import (
 	"fmt"
 	"strings"
 )
 
-func (r cronReloadResult) DetailedText() string {
+func (r ReloadResult) DetailedText() string {
 	lines := []string{r.CompactSummary()}
-	appendTaskSection := func(title string, items []cronReloadTaskItem, plannedLabel string) {
+	appendTaskSection := func(title string, items []ReloadTaskItem, plannedLabel string) {
 		if len(items) == 0 {
 			return
 		}
 		lines = append(lines, "", title)
 		for _, item := range items {
-			lines = append(lines, "- "+cronReloadTaskNoticeLine(item, plannedLabel, r.TimeZone))
+			lines = append(lines, "- "+ReloadTaskNoticeLine(item, plannedLabel, r.TimeZone))
 		}
 	}
 	appendTaskSection("已加载：", r.Loaded, "下次")
@@ -22,13 +22,13 @@ func (r cronReloadResult) DetailedText() string {
 	if len(r.Errors) > 0 {
 		lines = append(lines, "", "配置错误：")
 		for _, item := range r.Errors {
-			lines = append(lines, "- "+cronReloadErrorNoticeLine(item))
+			lines = append(lines, "- "+ReloadErrorNoticeLine(item))
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel, timeZone string) string {
+func ReloadTaskNoticeLine(item ReloadTaskItem, plannedLabel, timeZone string) string {
 	segments := []string{}
 	name := strings.TrimSpace(item.Name)
 	if name == "" {
@@ -36,18 +36,18 @@ func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel, timeZone st
 	}
 	if name != "" {
 		switch item.ChangeKind {
-		case cronReloadTaskChangeAdded:
+		case ReloadTaskChangeAdded:
 			name += "（新增）"
-		case cronReloadTaskChangeKept:
+		case ReloadTaskChangeKept:
 			name += "（保留）"
 		}
 		segments = append(segments, fmt.Sprintf("`%s`", name))
 	}
-	if schedule := cronReloadTaskScheduleText(item); schedule != "" {
+	if schedule := ReloadTaskScheduleText(item); schedule != "" {
 		segments = append(segments, schedule)
 	}
-	segments = append(segments, cronJobConcurrencyText(item.MaxConcurrency))
-	if next := cronReloadTaskNextRunText(item, plannedLabel, timeZone); next != "" {
+	segments = append(segments, JobConcurrencyText(item.MaxConcurrency))
+	if next := ReloadTaskNextRunText(item, plannedLabel, timeZone); next != "" {
 		segments = append(segments, next)
 	}
 	if reason := strings.TrimSpace(item.Reason); reason != "" {
@@ -56,38 +56,38 @@ func cronReloadTaskNoticeLine(item cronReloadTaskItem, plannedLabel, timeZone st
 	return strings.Join(segments, "｜")
 }
 
-func cronReloadTaskScheduleText(item cronReloadTaskItem) string {
+func ReloadTaskScheduleText(item ReloadTaskItem) string {
 	switch strings.TrimSpace(item.ScheduleType) {
-	case cronScheduleTypeDaily:
+	case ScheduleTypeDaily:
 		if item.DailyHour >= 0 && item.DailyHour <= 23 && item.DailyMinute >= 0 && item.DailyMinute <= 59 {
-			return fmt.Sprintf("%s｜%02d:%02d", cronScheduleTypeDaily, item.DailyHour, item.DailyMinute)
+			return fmt.Sprintf("%s｜%02d:%02d", ScheduleTypeDaily, item.DailyHour, item.DailyMinute)
 		}
-		return cronScheduleTypeDaily
-	case cronScheduleTypeInterval:
+		return ScheduleTypeDaily
+	case ScheduleTypeInterval:
 		if item.IntervalMinutes > 0 {
-			return fmt.Sprintf("%s｜每%d分钟", cronScheduleTypeInterval, item.IntervalMinutes)
+			return fmt.Sprintf("%s｜每%d分钟", ScheduleTypeInterval, item.IntervalMinutes)
 		}
-		return cronScheduleTypeInterval
+		return ScheduleTypeInterval
 	default:
 		return firstNonEmpty(strings.TrimSpace(item.ScheduleType), "调度方式未识别")
 	}
 }
 
-func cronReloadTaskNextRunText(item cronReloadTaskItem, label, timeZone string) string {
+func ReloadTaskNextRunText(item ReloadTaskItem, label, timeZone string) string {
 	if item.NextRunAt.IsZero() {
 		return ""
 	}
 	label = firstNonEmpty(strings.TrimSpace(label), "下次")
-	return fmt.Sprintf("%s %s", label, cronSchedulerTimeIn(item.NextRunAt, timeZone).Format("01-02 15:04"))
+	return fmt.Sprintf("%s %s", label, SchedulerTimeIn(item.NextRunAt, timeZone).Format("01-02 15:04"))
 }
 
-func cronReloadErrorNoticeLine(item cronReloadError) string {
+func ReloadErrorNoticeLine(item ReloadError) string {
 	parts := []string{}
 	name := strings.TrimSpace(item.TaskName)
 	if name != "" {
 		parts = append(parts, fmt.Sprintf("`%s`", name))
 	}
-	location := cronReloadTableLabel(item.TableName)
+	location := ReloadTableLabel(item.TableName)
 	if item.RowNumber > 0 {
 		location = fmt.Sprintf("%s 第 %d 行", firstNonEmpty(location, "任务配置表"), item.RowNumber)
 	}
@@ -106,7 +106,7 @@ func cronReloadErrorNoticeLine(item cronReloadError) string {
 	return strings.Join(parts, "｜")
 }
 
-func cronReloadTableLabel(name string) string {
+func ReloadTableLabel(name string) string {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "":

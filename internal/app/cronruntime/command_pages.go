@@ -1,4 +1,4 @@
-package daemon
+package cronruntime
 
 import (
 	"fmt"
@@ -7,10 +7,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool, formDefault, statusKind, statusText string) control.FeishuPageView {
-	primaryCommand := cronPrimaryMenuCommand(stateValue, ownerView)
-	canEdit := cronCanEdit(stateValue) && configReady
-	canReload := cronCanReload(stateValue, ownerView)
+func BuildRootPageView(stateValue *StateFile, ownerView OwnerView, extraSummary string, configReady bool, formDefault, statusKind, statusText string) control.FeishuPageView {
+	primaryCommand := PrimaryMenuCommand(stateValue, ownerView)
+	canEdit := CanEdit(stateValue) && configReady
+	canReload := CanReload(stateValue, ownerView)
 	var summarySections []control.FeishuCardTextSection
 	if line := strings.TrimSpace(extraSummary); line != "" {
 		summarySections = commandCatalogSummarySections(line)
@@ -27,9 +27,9 @@ func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 				Title: "查看与编辑",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("当前状态", "/cron status", cronPrimaryButtonStyle(primaryCommand, "/cron status"), false),
-						runCommandButton("当前任务", "/cron list", cronPrimaryButtonStyle(primaryCommand, "/cron list"), false),
-						runCommandButton("打开配置", "/cron edit", cronPrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
+						runCommandButton("当前状态", "/cron status", PrimaryButtonStyle(primaryCommand, "/cron status"), false),
+						runCommandButton("当前任务", "/cron list", PrimaryButtonStyle(primaryCommand, "/cron list"), false),
+						runCommandButton("打开配置", "/cron edit", PrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
 					},
 				}},
 			},
@@ -37,8 +37,8 @@ func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 				Title: "应用与维护",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("重新加载", "/cron reload", cronPrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
-						runCommandButton("修复配置", "/cron repair", cronPrimaryButtonStyle(primaryCommand, "/cron repair"), false),
+						runCommandButton("重新加载", "/cron reload", PrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						runCommandButton("修复配置", "/cron repair", PrimaryButtonStyle(primaryCommand, "/cron repair"), false),
 					},
 				}},
 			},
@@ -46,30 +46,28 @@ func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	}
 }
 
-func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuPageView {
+func BuildStatusPageView(stateValue *StateFile, ownerView OwnerView, extraSummary string, configReady bool) control.FeishuPageView {
 	summaryLines := []string{}
-	cronZone := cronConfiguredTimeZone(stateValue)
+	cronZone := ConfiguredTimeZone(stateValue)
 	sections := []control.CommandCatalogSection{}
-	if stateValue == nil || !cronStateHasBinding(stateValue) {
+	if stateValue == nil || !StateHasBinding(stateValue) {
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
-		summaryLines = append(summaryLines,
-			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
-		)
-		summaryLines = append(summaryLines, cronBindingSummaryLines(stateValue, configReady)...)
-		if line := cronLoadedJobCountLine(stateValue, ownerView); line != "" {
+		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
+		summaryLines = append(summaryLines, BindingSummaryLines(stateValue, configReady)...)
+		if line := LoadedJobCountLine(stateValue, ownerView); line != "" {
 			summaryLines = append(summaryLines, line)
 		}
 		if !stateValue.LastWorkspaceSyncAt.IsZero() {
-			summaryLines = append(summaryLines, fmt.Sprintf("最近工作区同步：%s", cronFormatDisplayTime(stateValue.LastWorkspaceSyncAt, cronZone)))
+			summaryLines = append(summaryLines, fmt.Sprintf("最近工作区同步：%s", FormatDisplayTime(stateValue.LastWorkspaceSyncAt, cronZone)))
 		}
 		if !stateValue.LastReloadAt.IsZero() {
-			summaryLines = append(summaryLines, fmt.Sprintf("最近 reload：%s", cronFormatDisplayTime(stateValue.LastReloadAt, cronZone)))
+			summaryLines = append(summaryLines, fmt.Sprintf("最近 reload：%s", FormatDisplayTime(stateValue.LastReloadAt, cronZone)))
 		}
 		if strings.TrimSpace(stateValue.LastReloadSummary) != "" {
 			summaryLines = append(summaryLines, "最近 reload 摘要："+strings.TrimSpace(stateValue.LastReloadSummary))
 		}
-		if section, ok := cronExternalLinkSection(stateValue, configReady); ok {
+		if section, ok := ExternalLinkSection(stateValue, configReady); ok {
 			sections = append(sections, section)
 		}
 	}
@@ -97,15 +95,15 @@ func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView,
 	})
 }
 
-func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) control.FeishuPageView {
+func BuildListPageView(stateValue *StateFile, ownerView OwnerView, extraSummary string) control.FeishuPageView {
 	summaryLines := []string{}
-	cronZone := cronConfiguredTimeZone(stateValue)
+	cronZone := ConfiguredTimeZone(stateValue)
 	sections := []control.CommandCatalogSection{}
 	interactive := false
 	switch {
-	case stateValue == nil || !cronStateHasBinding(stateValue):
+	case stateValue == nil || !StateHasBinding(stateValue):
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 /cron repair 后会创建配置表。")
-	case !cronOwnerAllowsLoadedJobs(ownerView.Status):
+	case !OwnerAllowsLoadedJobs(ownerView.Status):
 		summaryLines = append(summaryLines,
 			"当前 Cron 绑定需要先修复后才能确认有效任务。",
 			"执行 /cron repair 完成接管后，再执行 /cron reload 重新加载任务。",
@@ -117,7 +115,7 @@ func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 			fmt.Sprintf("当前已加载 %d 条任务。", len(stateValue.Jobs)),
 			"每条任务都会显示下一次执行时间；点击立即触发可手动执行一次，不影响原有下次调度时间。",
 		)
-		entries := cronLoadedJobEntries(stateValue.Jobs, cronZone)
+		entries := LoadedJobEntries(stateValue.Jobs, cronZone)
 		if len(entries) != 0 {
 			interactive = true
 			sections = append(sections, control.CommandCatalogSection{
@@ -141,19 +139,17 @@ func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	})
 }
 
-func buildCronEditPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuPageView {
+func BuildEditPageView(stateValue *StateFile, ownerView OwnerView, extraSummary string, configReady bool) control.FeishuPageView {
 	summaryLines := []string{}
 	sections := []control.CommandCatalogSection{}
-	if stateValue == nil || !cronStateHasBinding(stateValue) {
+	if stateValue == nil || !StateHasBinding(stateValue) {
 		summaryLines = append(summaryLines, "当前还没有可编辑的 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
-		summaryLines = append(summaryLines,
-			fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")),
-		)
-		summaryLines = append(summaryLines, cronConfigSummaryLine(stateValue, configReady))
+		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
+		summaryLines = append(summaryLines, ConfigSummaryLine(stateValue, configReady))
 		if configReady {
 			summaryLines = append(summaryLines, "编辑任务配置或工作区清单后，执行 /cron reload 生效。")
-			if button, ok := cronConfigLinkButton(stateValue, configReady); ok {
+			if button, ok := ConfigLinkButton(stateValue, configReady); ok {
 				sections = append(sections, control.CommandCatalogSection{
 					Title: "外部入口",
 					Entries: []control.CommandCatalogEntry{{

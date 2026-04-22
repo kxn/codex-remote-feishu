@@ -20,18 +20,6 @@ import (
 const cronBitablePermissionDocType = "bitable"
 const cronBitablePermissionPermEdit = "edit"
 
-type cronFieldSpec struct {
-	Name     string
-	Type     int
-	Property *larkbitable.AppTableFieldProperty
-}
-
-type cronWorkspaceRow struct {
-	Name   string
-	Key    string
-	Status string
-}
-
 func (a *App) repairCronBitableNow(command control.DaemonCommand) (string, error) {
 	resolution, err := a.resolveCronOwner(command, cronOwnerResolveOptions{AllowCreate: true, CreateStateIfEmpty: true})
 	if err != nil {
@@ -683,21 +671,6 @@ func cronUserPermissionPrincipal(actorUserID string) (string, string, bool) {
 	default:
 		return "userid", "user", true
 	}
-}
-
-func cloneCronState(stateValue *cronStateFile) *cronStateFile {
-	if stateValue == nil {
-		return nil
-	}
-	cloned := *stateValue
-	if stateValue.Bitable != nil {
-		copyBinding := *stateValue.Bitable
-		cloned.Bitable = &copyBinding
-	}
-	if stateValue.Jobs != nil {
-		cloned.Jobs = append([]cronJobState(nil), stateValue.Jobs...)
-	}
-	return &cloned
 }
 
 func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time) (cronJobState, bool, error) {
