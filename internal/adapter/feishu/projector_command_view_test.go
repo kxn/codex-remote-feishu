@@ -28,7 +28,7 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
-	if ops[0].CardTitle != "使用模型" {
+	if ops[0].CardTitle != "模型" {
 		t.Fatalf("unexpected card title: %#v", ops[0])
 	}
 	if len(ops[0].CardElements) < 6 {
@@ -37,7 +37,7 @@ func TestProjectCommandViewRendersModelCard(t *testing.T) {
 	if ops[0].CardBody != "" {
 		t.Fatalf("expected command view model card to avoid markdown body summary, got %#v", ops[0])
 	}
-	if ops[0].CardElements[0]["content"] != "菜单首页 / 参数设置 / 使用模型" {
+	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
 		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
 	}
 	if !containsMarkdownExact(ops[0].CardElements, "**当前模型**") || !containsCardTextExact(ops[0].CardElements, "gpt-5.4") {

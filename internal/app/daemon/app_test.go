@@ -425,7 +425,7 @@ func TestHandleGatewayActionReplacesBareModelCardForCardNavigation(t *testing.T)
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "使用模型" {
+	if result.ReplaceCurrentCard.CardTitle != "模型" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if !operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/menu send_settings") {
@@ -459,7 +459,7 @@ func TestHandleGatewayActionReplacesCardOwnedParameterApply(t *testing.T) {
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operation for card-owned parameter apply, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "AutoWhip" {
+	if result.ReplaceCurrentCard.CardTitle != "autowhip" {
 		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
 	}
 }
@@ -504,7 +504,7 @@ func TestHandleGatewayActionReplacesCardOwnedModelPresetApply(t *testing.T) {
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "使用模型" {
+	if result.ReplaceCurrentCard.CardTitle != "模型" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已更新飞书临时模型覆盖") {
@@ -560,7 +560,7 @@ func TestHandleGatewayActionKeepsTypedHelpAppendOnly(t *testing.T) {
 	if result != nil {
 		t.Fatalf("expected typed /help to stay append-only, got %#v", result)
 	}
-	if len(gateway.operations) != 1 || gateway.operations[0].CardTitle != "命令帮助" {
+	if len(gateway.operations) != 1 || gateway.operations[0].CardTitle != "Slash 命令帮助" {
 		t.Fatalf("expected appended help card, got %#v", gateway.operations)
 	}
 }

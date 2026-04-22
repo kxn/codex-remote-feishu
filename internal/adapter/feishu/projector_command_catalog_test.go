@@ -9,11 +9,11 @@ import (
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
-		Title:           "使用模型",
+		Title:           "模型",
 		SummarySections: summarySections("直接在卡片里输入模型名。"),
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:     []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "参数设置"}, {Label: "使用模型"}},
+		Breadcrumbs:     []control.CommandCatalogBreadcrumb{{Label: "菜单首页"}, {Label: "发送设置"}, {Label: "模型"}},
 		Sections: []control.CommandCatalogSection{{
 			Title: "手动输入",
 			Entries: []control.CommandCatalogEntry{{
@@ -31,7 +31,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 			}},
 		}},
 		RelatedButtons: []control.CommandCatalogButton{{
-			Label:       "返回上一层",
+			Label:       "返回发送设置",
 			CommandText: "/menu send_settings",
 		}},
 	}))
@@ -41,7 +41,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if len(ops[0].CardElements) != 6 {
 		t.Fatalf("expected breadcrumb + summary + section + form + divider + related action, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "菜单首页 / 参数设置 / 使用模型" {
+	if ops[0].CardElements[0]["content"] != "菜单首页 / 发送设置 / 模型" {
 		t.Fatalf("unexpected breadcrumb element: %#v", ops[0].CardElements[0])
 	}
 	if !containsCardTextExact(ops[0].CardElements, "直接在卡片里输入模型名。") {
@@ -105,7 +105,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
-		Title:       "使用模型",
+		Title:       "模型",
 		Interactive: true,
 		Sections: []control.CommandCatalogSection{{
 			Title: "常见模型",

@@ -1,9 +1,6 @@
 package control
 
-import (
-	"sort"
-	"strings"
-)
+import "strings"
 
 func FeishuCommandGroups() []FeishuCommandGroup {
 	groups := make([]FeishuCommandGroup, 0, len(feishuCommandGroups))
@@ -47,9 +44,6 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 		}
 		defs = append(defs, runtimeFeishuCommandDefinition(spec))
 	}
-	sort.SliceStable(defs, func(i, j int) bool {
-		return feishuCommandDisplayRank(groupID, defs[i].ID) < feishuCommandDisplayRank(groupID, defs[j].ID)
-	})
 	return defs
 }
 
@@ -92,7 +86,7 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 
 func FeishuCommandHelpPageView() FeishuCommandPageView {
 	return BuildFeishuCommandStaticPageView(
-		"命令帮助",
+		"Slash 命令帮助",
 		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
 		false,
 	)
@@ -139,32 +133,6 @@ func catalogButtonLabel(def FeishuCommandDefinition) string {
 	default:
 		return strings.TrimSpace(def.Title)
 	}
-}
-
-func feishuCommandDisplayRank(groupID, commandID string) int {
-	switch strings.TrimSpace(groupID) {
-	case FeishuCommandGroupCurrentWork:
-		return commandRank(commandID, FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandStatus)
-	case FeishuCommandGroupSendSettings:
-		return commandRank(commandID, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose)
-	case FeishuCommandGroupSwitchTarget:
-		return commandRank(commandID, FeishuCommandList, FeishuCommandUse, FeishuCommandUseAll, FeishuCommandDetach, FeishuCommandFollow)
-	case FeishuCommandGroupCommonTools:
-		return commandRank(commandID, FeishuCommandAutoContinue, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
-	case FeishuCommandGroupMaintenance:
-		return commandRank(commandID, FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
-	default:
-		return 1_000_000
-	}
-}
-
-func commandRank(commandID string, ordered ...string) int {
-	for index, id := range ordered {
-		if strings.TrimSpace(commandID) == strings.TrimSpace(id) {
-			return index
-		}
-	}
-	return len(ordered) + 1_000
 }
 
 func cloneFeishuCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
