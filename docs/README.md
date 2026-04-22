@@ -147,6 +147,7 @@
 
 ### 6.3 `inprogress`
 
+- [claude-feidex-reassessment.md](./inprogress/claude-feidex-reassessment.md)
 - [claude-provider-protocol-mapping.md](./inprogress/claude-provider-protocol-mapping.md)
 - [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
