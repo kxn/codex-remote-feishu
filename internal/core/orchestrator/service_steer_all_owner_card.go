@@ -27,9 +27,9 @@ func steerAllOwnerCardEvent(surfaceID, messageID, title, theme string, sealed bo
 		Sealed:         sealed,
 	})
 	return control.UIEvent{
-		Kind:            control.UIEventFeishuPageView,
+		Kind:             control.UIEventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:  &view,
+		FeishuPageView:   &view,
 	}
 }
 

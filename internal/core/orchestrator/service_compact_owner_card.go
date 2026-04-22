@@ -32,9 +32,9 @@ func compactOwnerCardEvent(surfaceID string, flow *activeOwnerCardFlowRecord, ti
 		Sealed:         sealed,
 	})
 	return control.UIEvent{
-		Kind:            control.UIEventFeishuPageView,
+		Kind:             control.UIEventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:  &view,
+		FeishuPageView:   &view,
 	}
 }
 

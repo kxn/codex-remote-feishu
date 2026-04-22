@@ -187,9 +187,9 @@ func upgradeOwnerCardEvent(surfaceID string, flow *upgradeOwnerCardFlowRecord, t
 		RelatedButtons: append([]control.CommandCatalogButton(nil), buttons...),
 	})
 	return control.UIEvent{
-		Kind:            control.UIEventFeishuPageView,
+		Kind:             control.UIEventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:  &view,
+		FeishuPageView:   &view,
 	}
 }
 
