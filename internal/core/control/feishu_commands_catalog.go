@@ -148,7 +148,20 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupSendSettings:
 		return commandRank(commandID, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose)
 	case FeishuCommandGroupSwitchTarget:
-		return commandRank(commandID, FeishuCommandList, FeishuCommandUse, FeishuCommandUseAll, FeishuCommandDetach, FeishuCommandFollow)
+		return commandRank(
+			commandID,
+			FeishuCommandWorkspace,
+			FeishuCommandWorkspaceList,
+			FeishuCommandWorkspaceNew,
+			FeishuCommandWorkspaceNewDir,
+			FeishuCommandWorkspaceNewGit,
+			FeishuCommandWorkspaceDetach,
+			FeishuCommandList,
+			FeishuCommandUse,
+			FeishuCommandUseAll,
+			FeishuCommandDetach,
+			FeishuCommandFollow,
+		)
 	case FeishuCommandGroupCommonTools:
 		return commandRank(commandID, FeishuCommandAutoContinue, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
 	case FeishuCommandGroupMaintenance:

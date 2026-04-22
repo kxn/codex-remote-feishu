@@ -264,7 +264,7 @@ func TestWorkspaceSelectionEventCarriesFeishuTargetPickerContext(t *testing.T) {
 	if events[0].FeishuTargetPickerContext.DTOOwner != control.FeishuUIDTOwnerTargetPicker {
 		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuTargetPickerContext)
 	}
-	if events[0].FeishuTargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].FeishuTargetPickerContext.Title != "选择工作区与会话" {
+	if events[0].FeishuTargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].FeishuTargetPickerContext.Title != "切换工作会话" {
 		t.Fatalf("unexpected target picker context: %#v", events[0].FeishuTargetPickerContext)
 	}
 	if events[0].FeishuTargetPickerContext.Surface.ProductMode != string(state.ProductModeNormal) || events[0].FeishuTargetPickerContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
@@ -778,8 +778,8 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected only free workspace to remain selectable, got %#v", view)
 	}
-	if _, ok := targetPickerModeOption(view, control.FeishuTargetPickerModeAddWorkspace); !ok || !view.ShowModeSwitch {
-		t.Fatalf("expected add-workspace mode switch to appear in list picker, got %#v", view)
+	if view.ShowModeSwitch {
+		t.Fatalf("expected list picker to stop exposing add-workspace mode switch, got %#v", view)
 	}
 	freeOption, ok := targetPickerWorkspaceOption(view, "/data/dl/web")
 	if !ok || strings.Contains(freeOption.MetaText, "当前被其他飞书会话接管") {
@@ -788,8 +788,8 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-2")); !ok {
 		t.Fatalf("expected free workspace session to stay selectable, got %#v", view.SessionOptions)
 	}
-	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok {
-		t.Fatalf("expected new-thread option for free workspace, got %#v", view.SessionOptions)
+	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); ok {
+		t.Fatalf("expected list picker not to expose new-thread option, got %#v", view.SessionOptions)
 	}
 }
 
@@ -863,8 +863,7 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 	if len(view.WorkspaceOptions) != 2 {
 		t.Fatalf("expected busy workspace to be omitted while attachable/current stay visible, got %#v", view.WorkspaceOptions)
 	}
-	webOption, ok := targetPickerWorkspaceOption(view, "/data/dl/web")
-	if !ok || !strings.Contains(webOption.MetaText, "有 VS Code 活动") {
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/web"); !ok {
 		t.Fatalf("expected recent attachable workspace to stay visible, got %#v", view.WorkspaceOptions)
 	}
 	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/droid"); !ok {
@@ -906,7 +905,7 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 2 {
@@ -971,8 +970,8 @@ func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 	if !testutil.SamePath(option.Value, "/data/dl/picdetect") || !option.RecoverableOnly {
 		t.Fatalf("expected persisted-only workspace to remain recoverable-only, got %#v", option)
 	}
-	if option.MetaText != "3分前 · 后台可恢复" {
-		t.Fatalf("expected recoverable workspace meta, got %#v", option.MetaText)
+	if option.MetaText != "" {
+		t.Fatalf("expected recoverable workspace meta to stay hidden, got %#v", option.MetaText)
 	}
 	if view.SelectedWorkspaceKey != "/data/dl/picdetect" {
 		t.Fatalf("expected recoverable workspace to be selected, got %#v", view)
@@ -1065,7 +1064,7 @@ func TestShowAllWorkspacesUsesSamePagedWorkspacePrompt(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 6 {
@@ -1337,8 +1336,8 @@ func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || !testutil.SamePath(view.SelectedWorkspaceKey, "/data/dl/picdetect") {
 		t.Fatalf("unexpected persisted-only workspace target picker: %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
-		t.Fatalf("expected persisted-only workspace picker to start on mode page, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected persisted-only workspace picker to start on direct target page, got %#v", view)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-picdetect")); !ok {
 		t.Fatalf("expected persisted-only thread option to remain recoverable, got %#v", view.SessionOptions)
@@ -1483,11 +1482,11 @@ func TestNormalModeListWithoutOnlineWorkspacesShowsCreateWorkspacePicker(t *test
 	if len(view.WorkspaceOptions) != 0 {
 		t.Fatalf("expected no existing workspace options when runtime is empty, got %#v", view.WorkspaceOptions)
 	}
-	if view.SelectedMode != control.FeishuTargetPickerModeAddWorkspace || view.SelectedSource != control.FeishuTargetPickerSourceLocalDirectory {
-		t.Fatalf("expected empty runtime to preselect add-workspace/local-directory flow, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected empty runtime to stay on blocked target page, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
-		t.Fatalf("expected empty runtime to stay on mode page instead of auto-jumping, got %#v", view)
+	if len(view.Messages) == 0 || !strings.Contains(view.Messages[0].Text, "当前还没有可切换的工作区") {
+		t.Fatalf("expected empty runtime to explain missing workspaces, got %#v", view.Messages)
 	}
 }
 
@@ -1803,8 +1802,11 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 		t.Fatalf("expected add-workspace picker instead of unavailable notice, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.SelectedMode != control.FeishuTargetPickerModeAddWorkspace || view.SelectedSource != control.FeishuTargetPickerSourceLocalDirectory {
-		t.Fatalf("expected claimed-only workspace case to fall back to add-workspace flow, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected claimed-only workspace case to stay on blocked target page, got %#v", view)
+	}
+	if len(view.Messages) == 0 || !strings.Contains(view.Messages[0].Text, "当前还没有可切换的工作区") {
+		t.Fatalf("expected claimed-only workspace case to explain missing workspaces, got %#v", view.Messages)
 	}
 }
 
@@ -1880,7 +1882,7 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 		t.Fatalf("expected one target picker for headless-only runtime, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "选择工作区与会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
 		t.Fatalf("unexpected target picker: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 1 {
@@ -1889,7 +1891,7 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/runtime/headless"); !ok {
 		t.Fatalf("expected only headless workspace in target picker, got %#v", view.WorkspaceOptions)
 	}
-	if len(view.SessionOptions) != 1 || view.SessionOptions[0].Value != targetPickerNewThreadValue {
-		t.Fatalf("expected headless-only workspace to offer direct new thread, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 0 {
+		t.Fatalf("expected headless-only workspace without sessions to stay empty, got %#v", view.SessionOptions)
 	}
 }

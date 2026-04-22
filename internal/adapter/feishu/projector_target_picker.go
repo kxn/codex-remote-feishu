@@ -241,13 +241,33 @@ func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemo
 		cardCallbackButtonElement("取消", "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID), false, ""),
 	}
 	if view.CanGoBack {
-		buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步")), "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID), daemonLifecycleID), false, ""))
+		if back := targetPickerBackButtonElement(view, daemonLifecycleID); len(back) != 0 {
+			buttons = append(buttons, back)
+		}
 	}
 	if view.Page == control.FeishuTargetPickerPageMode || view.Page == control.FeishuTargetPickerPageSource {
 		return buttons
 	}
 	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID), !view.CanConfirm, "fill"))
 	return buttons
+}
+
+func targetPickerBackButtonElement(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
+	label := strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步"))
+	if commandText := strings.TrimSpace(view.BackCommandText); commandText != "" {
+		action, ok := control.ParseFeishuTextAction(commandText)
+		if !ok {
+			return nil
+		}
+		return cardCallbackButtonElement(
+			label,
+			"default",
+			stampActionValue(actionPayloadPageAction(string(action.Kind), control.FeishuActionArgumentText(action.Text)), daemonLifecycleID),
+			false,
+			"",
+		)
+	}
+	return cardCallbackButtonElement(label, "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID), daemonLifecycleID), false, "")
 }
 
 func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {

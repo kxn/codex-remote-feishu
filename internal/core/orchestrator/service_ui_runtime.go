@@ -22,6 +22,7 @@ const (
 	ownerCardFlowKindTargetPicker  ownerCardFlowKind = "target_picker"
 	ownerCardFlowKindCompact       ownerCardFlowKind = "compact"
 	ownerCardFlowKindPlanProposal  ownerCardFlowKind = "plan_proposal"
+	ownerCardFlowKindWorkspacePage ownerCardFlowKind = "workspace_page"
 )
 
 type ownerCardFlowPhase string
@@ -61,6 +62,7 @@ type activeTargetPickerRecord struct {
 	PendingWorkspaceKey  string
 	PendingThreadID      string
 	Page                 control.FeishuTargetPickerPage
+	BackCommandText      string
 	SelectedMode         control.FeishuTargetPickerMode
 	SelectedSource       control.FeishuTargetPickerSourceKind
 	SelectedWorkspaceKey string
@@ -90,6 +92,15 @@ type activePlanProposalRecord struct {
 	PlanText   string
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
+}
+
+type activeWorkspacePageRecord struct {
+	FlowID      string
+	CommandID   string
+	OwnerUserID string
+	MessageID   string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
 }
 
 type activePathPickerRecord struct {
@@ -125,6 +136,7 @@ type surfaceUIRuntimeRecord struct {
 	ActiveThreadHistory *activeThreadHistoryRecord
 	ActivePathPicker    *activePathPickerRecord
 	ActivePlanProposal  *activePlanProposalRecord
+	ActiveWorkspacePage *activeWorkspacePageRecord
 }
 
 type SurfaceUIRuntimeSummary struct {
@@ -136,6 +148,7 @@ type SurfaceUIRuntimeSummary struct {
 	ActiveThreadHistoryID    string
 	ActivePathPickerID       string
 	ActivePlanProposalID     string
+	ActiveWorkspacePageID    string
 }
 
 func (s *Service) surfaceUIRuntimeState(surface *state.SurfaceConsoleRecord) *surfaceUIRuntimeRecord {
@@ -292,6 +305,33 @@ func (s *Service) clearSurfacePlanProposal(surface *state.SurfaceConsoleRecord) 
 	}
 }
 
+func (s *Service) activeWorkspacePage(surface *state.SurfaceConsoleRecord) *activeWorkspacePageRecord {
+	runtime := s.surfaceUIRuntimeState(surface)
+	if runtime == nil {
+		return nil
+	}
+	return runtime.ActiveWorkspacePage
+}
+
+func (s *Service) setActiveWorkspacePage(surface *state.SurfaceConsoleRecord, record *activeWorkspacePageRecord) {
+	runtime := s.ensureSurfaceUIRuntime(surface)
+	if runtime == nil {
+		return
+	}
+	runtime.ActiveWorkspacePage = record
+}
+
+func (s *Service) clearSurfaceWorkspacePage(surface *state.SurfaceConsoleRecord) {
+	runtime := s.surfaceUIRuntimeState(surface)
+	if runtime == nil {
+		return
+	}
+	runtime.ActiveWorkspacePage = nil
+	if runtime.ActiveOwnerCardFlow != nil && runtime.ActiveOwnerCardFlow.Kind == ownerCardFlowKindWorkspacePage {
+		runtime.ActiveOwnerCardFlow = nil
+	}
+}
+
 func (s *Service) SurfaceUIRuntimeSummary(surfaceID string) SurfaceUIRuntimeSummary {
 	runtime := s.surfaceUIRuntimeByID(surfaceID)
 	if runtime == nil {
@@ -315,6 +355,9 @@ func (s *Service) SurfaceUIRuntimeSummary(surfaceID string) SurfaceUIRuntimeSumm
 	}
 	if runtime.ActivePlanProposal != nil {
 		summary.ActivePlanProposalID = strings.TrimSpace(runtime.ActivePlanProposal.ProposalID)
+	}
+	if runtime.ActiveWorkspacePage != nil {
+		summary.ActiveWorkspacePageID = strings.TrimSpace(runtime.ActiveWorkspacePage.CommandID)
 	}
 	return summary
 }
@@ -387,4 +430,7 @@ func (s *Service) RecordOwnerCardFlowMessage(surfaceID, flowID, messageID string
 		return
 	}
 	flow.MessageID = strings.TrimSpace(messageID)
+	if page := s.activeWorkspacePage(surface); page != nil && strings.TrimSpace(page.FlowID) == strings.TrimSpace(flowID) {
+		page.MessageID = strings.TrimSpace(messageID)
+	}
 }

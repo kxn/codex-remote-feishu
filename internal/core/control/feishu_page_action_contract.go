@@ -59,6 +59,18 @@ func ActionKindForFeishuCommandID(commandID string) (ActionKind, bool) {
 		return ActionDebugCommand, true
 	case FeishuCommandVSCodeMigrate:
 		return ActionVSCodeMigrateCommand, true
+	case FeishuCommandWorkspace:
+		return ActionWorkspaceRoot, true
+	case FeishuCommandWorkspaceList:
+		return ActionWorkspaceList, true
+	case FeishuCommandWorkspaceNew:
+		return ActionWorkspaceNew, true
+	case FeishuCommandWorkspaceNewDir:
+		return ActionWorkspaceNewDir, true
+	case FeishuCommandWorkspaceNewGit:
+		return ActionWorkspaceNewGit, true
+	case FeishuCommandWorkspaceDetach:
+		return ActionWorkspaceDetach, true
 	case FeishuCommandList:
 		return ActionListInstances, true
 	case FeishuCommandUse:
@@ -104,6 +116,18 @@ func canonicalSlashForActionKind(kind ActionKind) string {
 		return "/debug"
 	case ActionVSCodeMigrateCommand:
 		return "/vscode-migrate"
+	case ActionWorkspaceRoot:
+		return "/workspace"
+	case ActionWorkspaceList:
+		return "/workspace list"
+	case ActionWorkspaceNew:
+		return "/workspace new"
+	case ActionWorkspaceNewDir:
+		return "/workspace new dir"
+	case ActionWorkspaceNewGit:
+		return "/workspace new git"
+	case ActionWorkspaceDetach:
+		return "/workspace detach"
 	case ActionListInstances:
 		return "/list"
 	case ActionShowThreads:

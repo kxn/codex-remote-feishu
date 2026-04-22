@@ -371,10 +371,13 @@ func (s *Service) ApplySurfaceAction(action control.Action) []control.UIEvent {
 	switch action.Kind {
 	case control.ActionListInstances:
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			events = s.openTargetPicker(surface, control.TargetPickerRequestSourceList, "", "", false)
+			events = s.openTargetPicker(surface, control.TargetPickerRequestSourceList, "", "", "", false)
 			break
 		}
 		events = s.presentInstanceSelection(surface)
+	case control.ActionWorkspaceDetach:
+		s.clearWorkspacePageRuntime(surface)
+		events = s.detach(surface)
 	case control.ActionNewThread:
 		events = s.prepareNewThread(surface)
 	case control.ActionCompact:

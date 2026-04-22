@@ -48,7 +48,7 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "选择工作区与会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 }

@@ -9,6 +9,8 @@ const (
 	TargetPickerRequestSourceUse       TargetPickerRequestSource = "use"
 	TargetPickerRequestSourceUseAll    TargetPickerRequestSource = "useall"
 	TargetPickerRequestSourceWorkspace TargetPickerRequestSource = "workspace"
+	TargetPickerRequestSourceDir       TargetPickerRequestSource = "workspace_new_dir"
+	TargetPickerRequestSourceGit       TargetPickerRequestSource = "workspace_new_git"
 )
 
 type FeishuTargetPickerSessionKind string
@@ -89,6 +91,7 @@ type FeishuTargetPickerView struct {
 	ProcessingCancelLabel  string
 	CanGoBack              bool
 	BackLabel              string
+	BackCommandText        string
 	SelectedMode           FeishuTargetPickerMode
 	SelectedSource         FeishuTargetPickerSourceKind
 	ShowModeSwitch         bool

@@ -771,7 +771,7 @@ func TestShowThreadsDetachedIncludesPersistedThreadsFromRecoverableWorkspaces(t 
 	if view.SelectedWorkspaceKey != "/data/dl/sqlite" {
 		t.Fatalf("expected newest persisted workspace first, got %#v", view)
 	}
-	if option, ok := targetPickerWorkspaceOption(view, "/data/dl/sqlite"); !ok || option.MetaText == "" {
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/sqlite"); !ok {
 		t.Fatalf("expected persisted workspace metadata to render in picker, got %#v", view.WorkspaceOptions)
 	}
 	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/older"); !ok {
@@ -881,7 +881,7 @@ func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *tes
 	}
 	view := targetPickerFromEvent(t, events[0])
 	option, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-1"))
-	if !ok || option.Label != "droid · 数据库里的新标题" || option.MetaText == "" {
+	if !ok || option.Label != "droid · 数据库里的新标题" || option.MetaText != "" {
 		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
 	}
 }
@@ -985,8 +985,8 @@ func TestShowThreadsAttachedNormalFiltersToCurrentWorkspace(t *testing.T) {
 	if view.SelectedWorkspaceKey != "/data/dl/droid" {
 		t.Fatalf("expected current workspace to remain selected, got %#v", view)
 	}
-	if len(view.SessionOptions) != 3 {
-		t.Fatalf("expected current workspace threads plus new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 2 {
+		t.Fatalf("expected current workspace threads only, got %#v", view.SessionOptions)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-3")); ok {
 		t.Fatalf("expected other-workspace thread to be filtered out, got %#v", view.SessionOptions)

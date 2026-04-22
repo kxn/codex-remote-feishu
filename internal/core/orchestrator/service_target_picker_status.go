@@ -8,98 +8,31 @@ import (
 
 func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
 	switch source {
-	case control.TargetPickerRequestSourceList,
-		control.TargetPickerRequestSourceUse,
-		control.TargetPickerRequestSourceUseAll,
-		control.TargetPickerRequestSourceWorkspace:
-		return control.FeishuTargetPickerPageMode
+	case control.TargetPickerRequestSourceDir:
+		return control.FeishuTargetPickerPageLocalDirectory
+	case control.TargetPickerRequestSourceGit:
+		return control.FeishuTargetPickerPageGit
 	default:
-		if targetPickerSupportsAddWorkspace(source) {
-			return control.FeishuTargetPickerPageMode
-		}
 		return control.FeishuTargetPickerPageTarget
 	}
 }
 
 func targetPickerNormalizePage(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource, mode control.FeishuTargetPickerMode, sourceKind control.FeishuTargetPickerSourceKind) control.FeishuTargetPickerPage {
-	addSupported := targetPickerSupportsAddWorkspace(source)
-	if page == "" {
-		page = targetPickerDefaultPage(source)
-	}
-	switch page {
-	case control.FeishuTargetPickerPageMode:
-		if addSupported {
-			return page
-		}
-		return control.FeishuTargetPickerPageTarget
-	case control.FeishuTargetPickerPageTarget:
-		if mode == control.FeishuTargetPickerModeAddWorkspace {
-			return targetPickerNormalizePage(control.FeishuTargetPickerPageSource, source, mode, sourceKind)
-		}
-		return page
-	case control.FeishuTargetPickerPageSource:
-		if !addSupported {
-			return control.FeishuTargetPickerPageTarget
-		}
-		if mode != control.FeishuTargetPickerModeAddWorkspace {
-			return control.FeishuTargetPickerPageTarget
-		}
-		return page
-	case control.FeishuTargetPickerPageLocalDirectory:
-		if mode != control.FeishuTargetPickerModeAddWorkspace {
-			return control.FeishuTargetPickerPageTarget
-		}
-		if sourceKind != control.FeishuTargetPickerSourceLocalDirectory {
-			return control.FeishuTargetPickerPageSource
-		}
-		return page
-	case control.FeishuTargetPickerPageGit:
-		if mode != control.FeishuTargetPickerModeAddWorkspace {
-			return control.FeishuTargetPickerPageTarget
-		}
-		if sourceKind != control.FeishuTargetPickerSourceGitURL {
-			return control.FeishuTargetPickerPageSource
-		}
-		return page
-	default:
-		if mode == control.FeishuTargetPickerModeAddWorkspace {
-			return control.FeishuTargetPickerPageSource
-		}
-		return control.FeishuTargetPickerPageTarget
-	}
+	_ = page
+	_ = mode
+	_ = sourceKind
+	return targetPickerDefaultPage(source)
 }
 
 func targetPickerAdvancePage(page control.FeishuTargetPickerPage, mode control.FeishuTargetPickerMode, sourceKind control.FeishuTargetPickerSourceKind) control.FeishuTargetPickerPage {
-	switch page {
-	case control.FeishuTargetPickerPageMode:
-		if mode == control.FeishuTargetPickerModeAddWorkspace {
-			return control.FeishuTargetPickerPageSource
-		}
-		return control.FeishuTargetPickerPageTarget
-	case control.FeishuTargetPickerPageSource:
-		if sourceKind == control.FeishuTargetPickerSourceGitURL {
-			return control.FeishuTargetPickerPageGit
-		}
-		return control.FeishuTargetPickerPageLocalDirectory
-	default:
-		return page
-	}
+	_ = mode
+	_ = sourceKind
+	return page
 }
 
 func targetPickerPreviousPage(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
-	switch page {
-	case control.FeishuTargetPickerPageTarget:
-		if targetPickerSupportsAddWorkspace(source) {
-			return control.FeishuTargetPickerPageMode
-		}
-		return control.FeishuTargetPickerPageTarget
-	case control.FeishuTargetPickerPageSource:
-		return control.FeishuTargetPickerPageMode
-	case control.FeishuTargetPickerPageLocalDirectory, control.FeishuTargetPickerPageGit:
-		return control.FeishuTargetPickerPageSource
-	default:
-		return page
-	}
+	_ = source
+	return page
 }
 
 func targetPickerCanGoBack(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource) bool {
@@ -133,24 +66,20 @@ func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.F
 		return "已取消"
 	default:
 		switch page {
-		case control.FeishuTargetPickerPageMode:
-			return "模式"
 		case control.FeishuTargetPickerPageTarget:
-			return "模式/目标"
-		case control.FeishuTargetPickerPageSource:
-			return "模式/来源"
+			return "切换"
 		case control.FeishuTargetPickerPageLocalDirectory:
-			return "模式/来源/目录"
+			return "目录"
 		case control.FeishuTargetPickerPageGit:
-			return "模式/来源/Git"
+			return "Git"
 		default:
-			if mode == control.FeishuTargetPickerModeAddWorkspace {
-				if source == control.FeishuTargetPickerSourceGitURL {
-					return "模式/来源/Git"
-				}
-				return "模式/来源"
+			if source == control.FeishuTargetPickerSourceGitURL {
+				return "Git"
 			}
-			return "模式/目标"
+			if mode == control.FeishuTargetPickerModeAddWorkspace {
+				return "目录"
+			}
+			return "切换"
 		}
 	}
 }
@@ -163,12 +92,8 @@ func targetPickerViewQuestion(record *activeTargetPickerRecord, page control.Fei
 		return strings.TrimSpace(record.StatusTitle)
 	}
 	switch page {
-	case control.FeishuTargetPickerPageMode:
-		return "这次要做什么？"
 	case control.FeishuTargetPickerPageTarget:
 		return "切到哪个工作区 / 会话？"
-	case control.FeishuTargetPickerPageSource:
-		return "新工作区从哪里来？"
 	case control.FeishuTargetPickerPageLocalDirectory:
 		return "要接入哪个本地目录？"
 	case control.FeishuTargetPickerPageGit:

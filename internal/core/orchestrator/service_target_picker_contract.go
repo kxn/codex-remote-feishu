@@ -12,19 +12,9 @@ func targetPickerBodySections(
 	workspaceLabel, workspaceMeta, sessionLabel, sessionMeta string,
 	localDirectoryPath, gitRepoURL, gitParentDir, gitFinalPath string,
 ) []control.FeishuCardTextSection {
+	_ = mode
+	_ = sourceKind
 	sections := make([]control.FeishuCardTextSection, 0, 6)
-	if modeLabel := targetPickerModeDisplayLabel(mode); modeLabel != "" {
-		sections = append(sections, control.FeishuCardTextSection{
-			Label: "模式",
-			Lines: []string{modeLabel},
-		})
-	}
-	if sourceLabel := targetPickerSourceDisplayLabel(sourceKind); sourceLabel != "" {
-		sections = append(sections, control.FeishuCardTextSection{
-			Label: "来源",
-			Lines: []string{sourceLabel},
-		})
-	}
 	if section, ok := targetPickerSummarySection("工作区", workspaceLabel, workspaceMeta); ok {
 		sections = append(sections, section)
 	}

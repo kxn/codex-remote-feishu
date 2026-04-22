@@ -65,7 +65,7 @@ func TestHandleGatewayActionReplacesTargetPickerWithCancelNotice(t *testing.T) {
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "选择当前工作目标" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if !strings.Contains(fmt.Sprint(result.ReplaceCurrentCard.CardElements), "已取消") {

@@ -37,7 +37,7 @@ func TestHandleGatewayActionPathPickerCancelTargetPickerPatchesOwnerCard(t *test
 	if op.Kind != feishu.OperationUpdateCard || op.MessageID != messageID {
 		t.Fatalf("expected owner-card update for cancel, got %#v", op)
 	}
-	if op.CardTitle != "选择工作区与会话" {
+	if op.CardTitle != "切换工作会话" {
 		t.Fatalf("expected cancel to return to target picker card, got %#v", op)
 	}
 	runtime := app.service.SurfaceUIRuntime("surface-1")
@@ -72,7 +72,7 @@ func TestHandleGatewayActionPathPickerConfirmTargetPickerPatchesOwnerCard(t *tes
 	if op.Kind != feishu.OperationUpdateCard || op.MessageID != messageID {
 		t.Fatalf("expected owner-card update for confirm, got %#v", op)
 	}
-	if op.CardTitle != "选择工作区与会话" {
+	if op.CardTitle != "切换工作会话" {
 		t.Fatalf("expected confirm to return to target picker card, got %#v", op)
 	}
 	runtime := app.service.SurfaceUIRuntime("surface-1")

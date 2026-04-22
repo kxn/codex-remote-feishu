@@ -6,6 +6,12 @@ const (
 	FeishuCommandGroupSwitchTarget = "switch_target"
 	FeishuCommandGroupCommonTools  = "common_tools"
 	FeishuCommandGroupMaintenance  = "maintenance"
+	FeishuCommandWorkspace         = "workspace"
+	FeishuCommandWorkspaceList     = "workspace_list"
+	FeishuCommandWorkspaceNew      = "workspace_new"
+	FeishuCommandWorkspaceNewDir   = "workspace_new_dir"
+	FeishuCommandWorkspaceNewGit   = "workspace_new_git"
+	FeishuCommandWorkspaceDetach   = "workspace_detach"
 	FeishuCommandList              = "list"
 	FeishuCommandStatus            = "status"
 	FeishuCommandUse               = "use"
@@ -439,6 +445,125 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		menuDynamic: []feishuCommandDynamicMenuMatch{
 			{prefix: "verbose_", kind: ActionVerboseCommand, build: buildMenuVerboseText},
 			{prefix: "verbose-", kind: ActionVerboseCommand, build: buildMenuVerboseText},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspace,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "工作会话",
+			CanonicalSlash:   "/workspace",
+			CanonicalMenuKey: "workspace",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "打开 normal 模式的工作会话主页，里面提供切换、从目录新建、从 GIT URL 新建、解除接管。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace", action: Action{Kind: ActionWorkspaceRoot}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace", action: Action{Kind: ActionWorkspaceRoot}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceList,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "切换工作会话",
+			CanonicalSlash:   "/workspace list",
+			CanonicalMenuKey: "workspace_list",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "打开已有工作区 / 会话切换卡；normal 模式下 `/list`、`/use`、`/useall` 都会汇合到这里。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace list", action: Action{Kind: ActionWorkspaceList}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_list", action: Action{Kind: ActionWorkspaceList}},
+			{alias: "workspacelist", action: Action{Kind: ActionWorkspaceList}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceNew,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "新建工作区",
+			CanonicalSlash:   "/workspace new",
+			CanonicalMenuKey: "workspace_new",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "打开新建工作区入口页，可继续选择从目录新建或从 GIT URL 新建。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace new", action: Action{Kind: ActionWorkspaceNew}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_new", action: Action{Kind: ActionWorkspaceNew}},
+			{alias: "workspacenew", action: Action{Kind: ActionWorkspaceNew}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceNewDir,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "从目录新建",
+			CanonicalSlash:   "/workspace new dir",
+			CanonicalMenuKey: "workspace_new_dir",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "直接打开从本地目录新建工作区卡片。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace new dir", action: Action{Kind: ActionWorkspaceNewDir}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_new_dir", action: Action{Kind: ActionWorkspaceNewDir}},
+			{alias: "workspacenewdir", action: Action{Kind: ActionWorkspaceNewDir}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceNewGit,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "从 GIT URL 新建",
+			CanonicalSlash:   "/workspace new git",
+			CanonicalMenuKey: "workspace_new_git",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "直接打开从 GIT URL 新建工作区卡片。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace new git", action: Action{Kind: ActionWorkspaceNewGit}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_new_git", action: Action{Kind: ActionWorkspaceNewGit}},
+			{alias: "workspacenewgit", action: Action{Kind: ActionWorkspaceNewGit}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceDetach,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "解除接管",
+			CanonicalSlash:   "/workspace detach",
+			CanonicalMenuKey: "workspace_detach",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "解除当前接管；normal 模式下 `/detach` 会汇合到这里。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace detach", action: Action{Kind: ActionWorkspaceDetach}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_detach", action: Action{Kind: ActionWorkspaceDetach}},
+			{alias: "workspacedetach", action: Action{Kind: ActionWorkspaceDetach}},
 		},
 	},
 	{

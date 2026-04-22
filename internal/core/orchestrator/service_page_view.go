@@ -32,9 +32,12 @@ func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, 
 }
 
 func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw string) control.UIEvent {
+	groupID := parseCommandMenuView(raw)
+	if groupID == control.FeishuCommandGroupSwitchTarget && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		return s.workspacePageEvent(surface, control.FeishuCommandWorkspace, true)
+	}
 	view := s.buildCommandMenuView(surface, raw)
 	page := control.FeishuPageViewFromCommandPageView(s.commandPageFromView(surface, view))
-	groupID := parseCommandMenuView(raw)
 	phase := menuFlowPhaseHome
 	if strings.TrimSpace(groupID) != "" {
 		phase = menuFlowPhaseGroup

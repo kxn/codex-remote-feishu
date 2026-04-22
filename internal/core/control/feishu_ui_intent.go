@@ -5,6 +5,11 @@ import "strings"
 type FeishuUIIntentKind string
 
 const (
+	FeishuUIIntentShowWorkspaceRoot           FeishuUIIntentKind = "show_workspace_root"
+	FeishuUIIntentShowWorkspaceList           FeishuUIIntentKind = "show_workspace_list"
+	FeishuUIIntentShowWorkspaceNew            FeishuUIIntentKind = "show_workspace_new"
+	FeishuUIIntentShowWorkspaceNewDir         FeishuUIIntentKind = "show_workspace_new_dir"
+	FeishuUIIntentShowWorkspaceNewGit         FeishuUIIntentKind = "show_workspace_new_git"
 	FeishuUIIntentShowCommandMenu             FeishuUIIntentKind = "show_command_menu"
 	FeishuUIIntentShowHistory                 FeishuUIIntentKind = "show_history"
 	FeishuUIIntentShowModeCatalog             FeishuUIIntentKind = "show_mode_catalog"
@@ -56,11 +61,26 @@ type FeishuUIIntent struct {
 	TurnID          string
 	SourceMessageID string
 	Inline          bool
+	ParentCommand   string
 	RequestAnswers  map[string][]string
 }
 
 func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 	switch action.Kind {
+	case ActionWorkspaceRoot:
+		if isBareInlineCommand(action.Text, "/workspace") || strings.TrimSpace(action.Text) == "" {
+			return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceRoot, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+		}
+	case ActionWorkspaceList:
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceList, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionWorkspaceNew:
+		if isBareInlineCommand(action.Text, "/workspace new") || strings.TrimSpace(action.Text) == "" {
+			return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNew, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+		}
+	case ActionWorkspaceNewDir:
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNewDir, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionWorkspaceNewGit:
+		return &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNewGit, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionShowCommandMenu:
 		return &FeishuUIIntent{Kind: FeishuUIIntentShowCommandMenu, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionShowHistory:

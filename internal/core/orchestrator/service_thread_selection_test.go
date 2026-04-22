@@ -122,8 +122,8 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if len(view.SessionOptions) != 2 {
-		t.Fatalf("expected one thread plus new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 1 {
+		t.Fatalf("expected one thread option, got %#v", view.SessionOptions)
 	}
 	option, ok := targetPickerSessionOption(view, targetPickerThreadValue("019d56f0-de5e-7943-bc9a-18c42ef11acb"))
 	if !ok || option.Label != "dl · 未命名会话" || strings.Contains(option.Label, "…") {
@@ -165,8 +165,8 @@ func TestPresentThreadSelectionShowsPagedMostRecentThreads(t *testing.T) {
 		t.Fatalf("expected target picker, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if len(view.SessionOptions) != 7 {
-		t.Fatalf("expected all recent threads plus new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 6 {
+		t.Fatalf("expected all recent threads, got %#v", view.SessionOptions)
 	}
 	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected unbound /use to keep session empty until explicit selection, got %#v", view)
@@ -210,10 +210,10 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 	if view.Source != control.TargetPickerRequestSourceUse || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected scoped /use to stay on current workspace, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
-		t.Fatalf("expected scoped /use to start on mode page, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected scoped /use to start on direct target page, got %#v", view)
 	}
-	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != "" {
+	if len(view.SessionOptions) != 6 || view.SelectedSessionValue != "" {
 		t.Fatalf("expected current-workspace sessions in recency order with empty default session, got %#v", view)
 	}
 }
@@ -247,11 +247,11 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceUseAll || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected attached /useall to keep current workspace selected, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
-		t.Fatalf("expected attached /useall to start on mode page, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected attached /useall to start on direct target page, got %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 3 {
-		t.Fatalf("expected current workspace threads plus new-thread option, got %#v", view)
+	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 2 {
+		t.Fatalf("expected current workspace threads, got %#v", view)
 	}
 }
 
@@ -577,11 +577,11 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("unexpected workspace target picker: %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageMode || !view.ShowModeSwitch || !view.CanConfirm || view.ConfirmLabel != "下一步" {
-		t.Fatalf("expected workspace-scoped picker to start on mode page, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+		t.Fatalf("expected workspace-scoped picker to start on direct target page, got %#v", view)
 	}
-	if len(view.SessionOptions) != 4 {
-		t.Fatalf("expected workspace sessions plus new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 3 {
+		t.Fatalf("expected workspace sessions only, got %#v", view.SessionOptions)
 	}
 	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected workspace target picker to keep session empty before user choice, got %#v", view)

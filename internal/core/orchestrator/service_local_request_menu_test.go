@@ -59,12 +59,12 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 		}
 	}
 	got := firstCommands(switchEntries)
-	want := []string{"/list", "/detach", "/follow"}
+	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace detach"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal help switch_target commands = %#v, want %#v", got, want)
 	}
 	if len(switchEntries) == 0 || switchEntries[0].Title != "工作会话" {
-		t.Fatalf("expected unified normal switch target entry title, got %#v", switchEntries)
+		t.Fatalf("expected workspace family help entries, got %#v", switchEntries)
 	}
 }
 
@@ -227,13 +227,13 @@ func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {
 		Text:             "/menu switch_target",
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
-	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/list", "/detach"}
+	got := firstButtonLabels(catalog.Sections[0].Entries)
+	want := []string{"切换", "从目录新建", "从 GIT URL 新建", "解除接管"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("normal switch_target commands = %#v, want %#v", got, want)
+		t.Fatalf("normal switch_target button labels = %#v, want %#v", got, want)
 	}
-	if len(catalog.Sections[0].Entries) == 0 || catalog.Sections[0].Entries[0].Title != "工作会话" {
-		t.Fatalf("expected unified normal switch target title, got %#v", catalog.Sections[0].Entries)
+	if catalog.CommandID != control.FeishuCommandWorkspace || len(catalog.RelatedButtons) != 1 || catalog.RelatedButtons[0].CommandText != "/menu" {
+		t.Fatalf("expected normal switch_target menu group to open workspace root page, got %#v", catalog)
 	}
 }
 

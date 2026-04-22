@@ -16,6 +16,12 @@ const (
 	ActionCompact                     ActionKind = "surface.menu.compact"
 	ActionSteerAll                    ActionKind = "surface.menu.steer_all"
 	ActionNewThread                   ActionKind = "surface.menu.new_thread"
+	ActionWorkspaceRoot               ActionKind = "surface.command.workspace"
+	ActionWorkspaceList               ActionKind = "surface.command.workspace.list"
+	ActionWorkspaceNew                ActionKind = "surface.command.workspace.new"
+	ActionWorkspaceNewDir             ActionKind = "surface.command.workspace.new_dir"
+	ActionWorkspaceNewGit             ActionKind = "surface.command.workspace.new_git"
+	ActionWorkspaceDetach             ActionKind = "surface.command.workspace.detach"
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
 	ActionShowHistory                 ActionKind = "surface.command.history"
@@ -115,6 +121,7 @@ type Action struct {
 	Request             *ActionRequestResponse
 	OwnerFlow           *ActionOwnerCardFlow
 	CommandID           string
+	ParentCommandText   string
 	InstanceID          string
 	WorkspaceKey        string
 	ThreadID            string

@@ -24,11 +24,20 @@ func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode 
 
 	projected := cloneFeishuCommandDefinition(def)
 	if normalizeFeishuCommandProductMode(productMode) != "normal" {
+		switch strings.TrimSpace(projected.ID) {
+		case FeishuCommandWorkspace,
+			FeishuCommandWorkspaceList,
+			FeishuCommandWorkspaceNew,
+			FeishuCommandWorkspaceNewDir,
+			FeishuCommandWorkspaceNewGit,
+			FeishuCommandWorkspaceDetach:
+			return FeishuCommandDefinition{}, false
+		}
 		return projected, true
 	}
 
 	switch strings.TrimSpace(projected.ID) {
-	case FeishuCommandUse, FeishuCommandUseAll:
+	case FeishuCommandList, FeishuCommandUse, FeishuCommandUseAll, FeishuCommandDetach, FeishuCommandFollow:
 		return FeishuCommandDefinition{}, false
 	case FeishuCommandVSCodeMigrate:
 		return FeishuCommandDefinition{}, false

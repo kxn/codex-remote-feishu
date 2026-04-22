@@ -32,6 +32,17 @@ func firstCommands(entries []control.CommandCatalogEntry) []string {
 	return commands
 }
 
+func firstButtonLabels(entries []control.CommandCatalogEntry) []string {
+	labels := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if len(entry.Buttons) == 0 {
+			continue
+		}
+		labels = append(labels, entry.Buttons[0].Label)
+	}
+	return labels
+}
+
 func eventSelectionPrompt(event control.UIEvent) (*control.FeishuDirectSelectionPrompt, bool) {
 	if event.FeishuSelectionView != nil {
 		prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)

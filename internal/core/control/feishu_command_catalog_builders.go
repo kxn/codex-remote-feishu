@@ -3,6 +3,10 @@ package control
 import "strings"
 
 func BuildFeishuCommandMenuHomePageView() FeishuPageView {
+	return BuildFeishuCommandMenuHomePageViewForProductMode("")
+}
+
+func BuildFeishuCommandMenuHomePageViewForProductMode(productMode string) FeishuPageView {
 	return FeishuPageView{
 		CommandID:    FeishuCommandMenu,
 		Title:        "命令菜单",
@@ -11,7 +15,7 @@ func BuildFeishuCommandMenuHomePageView() FeishuPageView {
 		Breadcrumbs:  FeishuCommandBreadcrumbs("", ""),
 		Sections: []CommandCatalogSection{{
 			Title:   "",
-			Entries: buildFeishuCommandMenuGroupEntries(),
+			Entries: buildFeishuCommandMenuGroupEntries(productMode),
 		}},
 	}
 }
@@ -19,18 +23,21 @@ func BuildFeishuCommandMenuHomePageView() FeishuPageView {
 func BuildFeishuCommandMenuPageView(view FeishuCatalogMenuView, productMode, menuStage string) FeishuPageView {
 	groupID := strings.TrimSpace(view.GroupID)
 	if groupID == "" {
-		return BuildFeishuCommandMenuHomePageView()
+		return BuildFeishuCommandMenuHomePageViewForProductMode(productMode)
 	}
 	stage := strings.TrimSpace(view.Stage)
 	if stage == "" {
 		stage = strings.TrimSpace(menuStage)
+	}
+	if normalizeFeishuCommandProductMode(productMode) == "normal" && groupID == FeishuCommandGroupSwitchTarget {
+		return BuildFeishuWorkspaceRootPageView(true)
 	}
 	return BuildFeishuCommandMenuGroupPageView(groupID, productMode, stage)
 }
 
 func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuPageView {
 	if _, ok := FeishuCommandGroupByID(groupID); !ok {
-		return BuildFeishuCommandMenuHomePageView()
+		return BuildFeishuCommandMenuHomePageViewForProductMode(productMode)
 	}
 	entries := make([]CommandCatalogEntry, 0, 6)
 	for _, def := range FeishuCommandDefinitionsForGroup(groupID) {
@@ -107,16 +114,20 @@ func FeishuCommandMenuCommandText(view string) string {
 	return "/menu " + strings.TrimSpace(view)
 }
 
-func buildFeishuCommandMenuGroupEntries() []CommandCatalogEntry {
+func buildFeishuCommandMenuGroupEntries(productMode string) []CommandCatalogEntry {
 	entries := make([]CommandCatalogEntry, 0, len(FeishuCommandGroups()))
 	for _, group := range FeishuCommandGroups() {
+		commandText := FeishuCommandMenuCommandText(group.ID)
+		if normalizeFeishuCommandProductMode(productMode) == "normal" && group.ID == FeishuCommandGroupSwitchTarget {
+			commandText = "/workspace"
+		}
 		entries = append(entries, CommandCatalogEntry{
 			Title:       strings.TrimSpace(group.Title),
 			Description: "",
 			Buttons: []CommandCatalogButton{{
 				Label:       feishuSubmenuButtonLabel(group.Title),
 				Kind:        CommandCatalogButtonAction,
-				CommandText: FeishuCommandMenuCommandText(group.ID),
+				CommandText: commandText,
 			}},
 		})
 	}

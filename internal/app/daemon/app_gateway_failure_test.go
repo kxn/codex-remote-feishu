@@ -36,34 +36,24 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	if !strings.Contains(gateway.operations[0].CardTitle, "链路错误") || gateway.operations[0].CardBody != "" || !strings.Contains(fmt.Sprint(gateway.operations[0].CardElements), "位置：gateway_apply") {
 		t.Fatalf("expected queued gateway failure notice first, got %#v", gateway.operations[0])
 	}
-	if gateway.operations[1].CardTitle != "选择工作区与会话" {
+	if gateway.operations[1].CardTitle != "切换工作会话" {
 		t.Fatalf("expected recovered response to be target picker card, got %#v", gateway.operations[1])
 	}
-	sawAddWorkspaceText := false
-	for _, element := range gateway.operations[1].CardElements {
-		content, _ := element["content"].(string)
-		sawAddWorkspaceText = sawAddWorkspaceText ||
-			strings.Contains(content, "模式") ||
-			strings.Contains(content, "这次要做什么")
+	if !strings.Contains(fmt.Sprint(gateway.operations[1].CardElements), "当前还没有可切换的工作区") {
+		t.Fatalf("expected recovered target picker to explain missing workspaces, got %#v", gateway.operations[1])
 	}
-	if !sawAddWorkspaceText {
-		t.Fatalf("expected recovered target picker to expose add-workspace flow, got %#v", gateway.operations[1])
-	}
-	sawExistingWorkspace := false
-	sawDisabledExistingWorkspace := false
-	sawAddWorkspace := false
+	sawConfirmSwitch := false
+	sawDisabledSwitch := false
 	for _, button := range operationCardButtons(gateway.operations[1]) {
 		textNode, _ := button["text"].(map[string]any)
 		label, _ := textNode["content"].(string)
 		switch label {
-		case "进入已有工作区":
-			sawExistingWorkspace = true
-			sawDisabledExistingWorkspace = button["disabled"] == true
-		case "新建工作区":
-			sawAddWorkspace = true
+		case "切换":
+			sawConfirmSwitch = true
+			sawDisabledSwitch = button["disabled"] == true
 		}
 	}
-	if !sawExistingWorkspace || !sawDisabledExistingWorkspace || !sawAddWorkspace {
-		t.Fatalf("expected recovered target picker to expose mode selection actions, got %#v", gateway.operations[1])
+	if !sawConfirmSwitch || !sawDisabledSwitch {
+		t.Fatalf("expected recovered target picker to expose disabled switch action, got %#v", gateway.operations[1])
 	}
 }
