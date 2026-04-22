@@ -334,6 +334,9 @@ MCP request 卡片当前新增的可视语义：
 3. `first_result_card` 路径
   - action contract 为 `CurrentCardMode=first_result_card`，或 `inline_view` 严格命中失败后回退
   - 当前事件流里至少存在一张可直接投影成卡片的结果事件；daemon 取第一张作为 `ReplaceCurrentCard`
+  - 首结果替换后的 followup 抑制当前已从旧的 notice/thread-selection 布尔位迁到显式 `FollowupPolicy`：
+    - action contract 提供 `DropClasses / KeepClasses`
+    - daemon 统一按 `eventcontract` handoff class 过滤 followup，而不是再按 payload/kind 做散落判断
   - `/stop`、`/new`、`/follow`、`/detach` 落地后会抑制重复终态 notice append
   - `attach_instance` 若后续带 thread-selection announce，daemon 也会抑制这类重复 append，避免菜单卡收口后又补一张同义结果卡
 4. active picker 阻断例外

@@ -11,7 +11,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
-	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -344,31 +343,8 @@ func removeUIEventAt(events []control.UIEvent, idx int) []control.UIEvent {
 	return append(out, events[idx+1:]...)
 }
 
-func filterNoticeUIEvents(events []control.UIEvent) []control.UIEvent {
-	return filterUIEventsByHandoffClasses(events, eventcontract.HandoffClassNotice, eventcontract.HandoffClassThreadSelection)
-}
-
-func filterUIEventsByHandoffClasses(events []control.UIEvent, blocked ...eventcontract.HandoffClass) []control.UIEvent {
-	out := make([]control.UIEvent, 0, len(events))
-	if len(blocked) == 0 {
-		return append(out, events...)
-	}
-	blockedSet := make(map[eventcontract.HandoffClass]struct{}, len(blocked))
-	for _, class := range blocked {
-		blockedSet[class] = struct{}{}
-	}
-	for _, event := range events {
-		contractEvent := eventcontractcompat.FromLegacyUIEvent(event)
-		if _, ok := blockedSet[contractEvent.Meta.Semantics.HandoffClass]; ok {
-			continue
-		}
-		out = append(out, event)
-	}
-	return out
-}
-
-func filterThreadSelectionUIEvents(events []control.UIEvent) []control.UIEvent {
-	return filterUIEventsByHandoffClasses(events, eventcontract.HandoffClassThreadSelection)
+func filterUIEventsByFollowupPolicy(events []control.UIEvent, policy control.FeishuFollowupPolicy) []control.UIEvent {
+	return eventcontractcompat.FilterLegacyUIEventsByFollowupPolicy(events, policy)
 }
 
 func (a *App) firstResultCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
@@ -392,11 +368,8 @@ func (a *App) firstResultCardActionResultLocked(action control.Action, contract 
 	if replace == nil {
 		return nil, events
 	}
-	if contract.DropNoticeEventsAfterResult {
-		appendEvents = filterNoticeUIEvents(appendEvents)
-	}
-	if contract.DropThreadSelectionAfterResult {
-		appendEvents = filterThreadSelectionUIEvents(appendEvents)
+	if !contract.FollowupPolicy.Empty() {
+		appendEvents = filterUIEventsByFollowupPolicy(appendEvents, contract.FollowupPolicy)
 	}
 	return replace, appendEvents
 }

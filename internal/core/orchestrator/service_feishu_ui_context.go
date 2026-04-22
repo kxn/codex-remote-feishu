@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -235,32 +236,45 @@ func (s *Service) feishuDirectSelectionPromptEventWithInline(surface *state.Surf
 		PromptKind: prompt.Kind,
 		Prompt:     &promptView,
 	}
-	return control.UIEvent{
-		Kind:                     control.UIEventFeishuSelectionView,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: inline,
-		FeishuSelectionView:      &view,
-		FeishuSelectionContext:   s.buildFeishuSelectionContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.SelectionPayload{
+			View:    view,
+			Context: s.buildFeishuSelectionContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		inline,
+		"",
+		"",
+	)
 }
 
 func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) control.UIEvent {
-	return control.UIEvent{
-		Kind:                     control.UIEventFeishuSelectionView,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: true,
-		FeishuSelectionView:      &view,
-		FeishuSelectionContext:   s.buildFeishuSelectionContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.SelectionPayload{
+			View:    view,
+			Context: s.buildFeishuSelectionContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		true,
+		"",
+		"",
+	)
 }
 
 func (s *Service) requestViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuRequestView) control.UIEvent {
-	return control.UIEvent{
-		Kind:                 control.UIEventFeishuRequestView,
-		SurfaceSessionID:     surface.SurfaceSessionID,
-		FeishuRequestView:    &view,
-		FeishuRequestContext: s.buildFeishuRequestContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.RequestPayload{
+			View:    view,
+			Context: s.buildFeishuRequestContextFromView(surface, view),
+		},
+		terminalDeliverySemantics(),
+		false,
+		"",
+		"",
+	)
 }
 
 func (s *Service) pathPickerViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuPathPickerView, inline bool) control.UIEvent {
@@ -269,14 +283,17 @@ func (s *Service) pathPickerViewEvent(surface *state.SurfaceConsoleRecord, view 
 			view.MessageID = messageID
 		}
 	}
-	return control.UIEvent{
-		Kind:                     control.UIEventFeishuPathPicker,
-		GatewayID:                surface.GatewayID,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: inline,
-		FeishuPathPickerView:     &view,
-		FeishuPathPickerContext:  s.buildFeishuPathPickerContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.PathPickerPayload{
+			View:    view,
+			Context: s.buildFeishuPathPickerContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		inline,
+		"",
+		"",
+	)
 }
 
 func (s *Service) pathPickerMessageID(surface *state.SurfaceConsoleRecord, pickerID string) string {
@@ -295,14 +312,17 @@ func (s *Service) targetPickerViewEvent(surface *state.SurfaceConsoleRecord, vie
 			view.MessageID = strings.TrimSpace(flow.MessageID)
 		}
 	}
-	return control.UIEvent{
-		Kind:                      control.UIEventFeishuTargetPicker,
-		GatewayID:                 surface.GatewayID,
-		SurfaceSessionID:          surface.SurfaceSessionID,
-		InlineReplaceCurrentCard:  inline,
-		FeishuTargetPickerView:    &view,
-		FeishuTargetPickerContext: s.buildFeishuTargetPickerContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.TargetPickerPayload{
+			View:    view,
+			Context: s.buildFeishuTargetPickerContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		inline,
+		"",
+		"",
+	)
 }
 
 func (s *Service) pathPickerOwnerCardMessageID(surface *state.SurfaceConsoleRecord, pickerID string) string {
@@ -324,13 +344,15 @@ func (s *Service) pathPickerOwnerCardMessageID(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView, inline bool, sourceMessageID string) control.UIEvent {
-	return control.UIEvent{
-		Kind:                       control.UIEventFeishuThreadHistory,
-		GatewayID:                  surface.GatewayID,
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		SourceMessageID:            sourceMessageID,
-		InlineReplaceCurrentCard:   inline,
-		FeishuThreadHistoryView:    &view,
-		FeishuThreadHistoryContext: s.buildFeishuThreadHistoryContextFromView(surface, view),
-	}
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.ThreadHistoryPayload{
+			View:    view,
+			Context: s.buildFeishuThreadHistoryContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		inline,
+		sourceMessageID,
+		"",
+	)
 }

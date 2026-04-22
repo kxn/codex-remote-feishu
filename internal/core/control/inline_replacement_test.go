@@ -546,3 +546,41 @@ func TestAllowsCommandSubmissionAnchorReplacement(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveFeishuFrontstageActionContractFollowupPolicy(t *testing.T) {
+	help := ResolveFeishuFrontstageActionContract(Action{Kind: ActionShowCommandHelp})
+	if help.FollowupPolicy.Empty() {
+		t.Fatalf("expected help action to define followup policy: %#v", help)
+	}
+	if !help.FollowupPolicy.ShouldDropHandoffClass(string(FeishuFollowupHandoffClassNotice)) {
+		t.Fatalf("expected help action to drop notice followups: %#v", help.FollowupPolicy)
+	}
+	if !help.FollowupPolicy.ShouldDropHandoffClass(string(FeishuFollowupHandoffClassThreadSelection)) {
+		t.Fatalf("expected help action to drop thread-selection followups: %#v", help.FollowupPolicy)
+	}
+
+	attach := ResolveFeishuFrontstageActionContract(Action{Kind: ActionAttachInstance})
+	if attach.FollowupPolicy.Empty() {
+		t.Fatalf("expected attach action to define followup policy: %#v", attach)
+	}
+	if attach.FollowupPolicy.ShouldDropHandoffClass(string(FeishuFollowupHandoffClassNotice)) {
+		t.Fatalf("expected attach action to keep generic notices: %#v", attach.FollowupPolicy)
+	}
+	if !attach.FollowupPolicy.ShouldDropHandoffClass(string(FeishuFollowupHandoffClassThreadSelection)) {
+		t.Fatalf("expected attach action to drop thread-selection followups: %#v", attach.FollowupPolicy)
+	}
+}
+
+func TestFeishuFollowupPolicyKeepClassOverridesDrop(t *testing.T) {
+	policy := FeishuFollowupPolicy{
+		DropClasses: []FeishuFollowupHandoffClass{
+			FeishuFollowupHandoffClassNotice,
+		},
+		KeepClasses: []FeishuFollowupHandoffClass{
+			FeishuFollowupHandoffClassNotice,
+		},
+	}.Normalized()
+	if policy.ShouldDropHandoffClass(string(FeishuFollowupHandoffClassNotice)) {
+		t.Fatalf("expected keep override to win over drop: %#v", policy)
+	}
+}

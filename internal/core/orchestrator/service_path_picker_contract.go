@@ -110,17 +110,7 @@ func (s *Service) finishPathPickerWithStatus(
 }
 
 func pathPickerFilteredFollowupEvents(events []control.UIEvent) []control.UIEvent {
-	if len(events) == 0 {
-		return nil
-	}
-	filtered := make([]control.UIEvent, 0, len(events))
-	for _, event := range events {
-		if event.Kind == control.UIEventNotice {
-			continue
-		}
-		filtered = append(filtered, event)
-	}
-	return filtered
+	return filterFollowupEventsByPolicy(events, dropNoticeFollowupPolicy)
 }
 
 func pathPickerFirstNoticeText(events []control.UIEvent) string {

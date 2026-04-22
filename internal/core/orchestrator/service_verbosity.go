@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -60,33 +62,16 @@ func (s *Service) allowSurfaceVisibleEvent(event control.UIEvent) bool {
 }
 
 func classifySurfaceVisibleEvent(event control.UIEvent) surfaceVisibilityClass {
-	switch event.Kind {
-	case control.UIEventPlanUpdated:
+	switch eventcontractcompat.FromLegacyUIEvent(event).Meta.Semantics.VisibilityClass {
+	case eventcontract.VisibilityClassPlan:
 		return surfaceVisibilityPlan
-	case control.UIEventExecCommandProgress:
+	case eventcontract.VisibilityClassProgressText:
 		return surfaceVisibilityProgressText
-	case control.UIEventBlockCommitted:
-		if event.Block != nil && event.Block.Final {
-			return surfaceVisibilityAlwaysVisible
-		}
-		return surfaceVisibilityProgressText
-	case control.UIEventTimelineText:
+	case eventcontract.VisibilityClassAlwaysVisible:
 		return surfaceVisibilityAlwaysVisible
-	case control.UIEventFeishuRequestView:
-		return surfaceVisibilityAlwaysVisible
-	case control.UIEventImageOutput:
-		return surfaceVisibilityAlwaysVisible
-	case control.UIEventNotice:
-		if event.Notice != nil && noticeIsAlwaysVisible(*event.Notice) {
-			return surfaceVisibilityAlwaysVisible
-		}
-		return surfaceVisibilityUINavigation
-	case control.UIEventSnapshot,
-		control.UIEventFeishuSelectionView,
-		control.UIEventFeishuPageView,
-		control.UIEventFeishuPathPicker,
-		control.UIEventFeishuTargetPicker,
-		control.UIEventPendingInput:
+	case eventcontract.VisibilityClassProcessDetail:
+		return surfaceVisibilityProcessDetail
+	case eventcontract.VisibilityClassUINavigation:
 		return surfaceVisibilityUINavigation
 	default:
 		return surfaceVisibilityUINavigation

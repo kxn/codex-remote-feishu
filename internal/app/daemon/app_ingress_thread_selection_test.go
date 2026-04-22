@@ -6,7 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestFilterThreadSelectionUIEventsDropsNoticeFamilyAnnouncements(t *testing.T) {
+func TestFilterUIEventsByFollowupPolicyDropsThreadSelectionOnly(t *testing.T) {
 	events := []control.UIEvent{
 		{
 			Kind: control.UIEventNotice,
@@ -25,7 +25,11 @@ func TestFilterThreadSelectionUIEventsDropsNoticeFamilyAnnouncements(t *testing.
 		},
 	}
 
-	filtered := filterThreadSelectionUIEvents(events)
+	filtered := filterUIEventsByFollowupPolicy(events, control.FeishuFollowupPolicy{
+		DropClasses: []control.FeishuFollowupHandoffClass{
+			control.FeishuFollowupHandoffClassThreadSelection,
+		},
+	})
 	if len(filtered) != 1 {
 		t.Fatalf("expected only non-thread-selection events to remain, got %#v", filtered)
 	}

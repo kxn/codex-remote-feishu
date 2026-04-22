@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -81,12 +82,15 @@ func (s *Service) threadSelectionEvents(surface *state.SurfaceConsoleRecord, thr
 }
 
 func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UIEvent {
-	return []control.UIEvent{{
-		Kind:             control.UIEventNotice,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Notice:           &control.Notice{Code: code, Text: text},
-	}}
+	notice := control.Notice{Code: code, Text: text}
+	return []control.UIEvent{legacyUIEventFromContract(
+		surface,
+		eventcontract.NoticePayload{Notice: notice},
+		noticeDeliverySemantics(notice, false),
+		false,
+		"",
+		"",
+	)}
 }
 
 func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -22,13 +23,18 @@ func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMo
 		LastUserMessage:      lastUserMessage,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-	return control.UIEvent{
-		Kind:             control.UIEventNotice,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Notice:           threadSelectionNotice(*selection),
-		ThreadSelection:  selection,
-	}
+	notice := threadSelectionNotice(*selection)
+	return legacyUIEventFromContract(
+		surface,
+		eventcontract.NoticePayload{
+			Notice:          *notice,
+			ThreadSelection: selection,
+		},
+		noticeDeliverySemantics(*notice, true),
+		false,
+		"",
+		"",
+	)
 }
 
 func threadSelectionNotice(selection control.ThreadSelectionChanged) *control.Notice {

@@ -192,19 +192,7 @@ func (s *Service) finishTargetPickerWithStageAndSections(
 }
 
 func targetPickerFilteredFollowupEvents(events []control.UIEvent) []control.UIEvent {
-	if len(events) == 0 {
-		return nil
-	}
-	filtered := make([]control.UIEvent, 0, len(events))
-	for _, event := range events {
-		switch event.Kind {
-		case control.UIEventNotice:
-			continue
-		default:
-			filtered = append(filtered, event)
-		}
-	}
-	return filtered
+	return filterFollowupEventsByPolicy(events, dropNoticeFollowupPolicy)
 }
 
 func targetPickerFirstNoticeText(events []control.UIEvent) string {
