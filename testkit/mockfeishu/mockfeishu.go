@@ -3,11 +3,13 @@ package mockfeishu
 import (
 	feishuadapter "github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
 
 type Recorder struct {
-	Events           []control.UIEvent
+	Events           []eventcontract.Event
 	Notices          []string
 	Blocks           []render.Block
 	TypingOnFor      []string
@@ -22,38 +24,33 @@ func NewRecorder() *Recorder {
 }
 
 func (r *Recorder) Apply(events []control.UIEvent) {
+	r.ApplyEvents(eventcontractcompat.FromLegacyUIEvents(events))
+}
+
+func (r *Recorder) ApplyEvents(events []eventcontract.Event) {
 	for _, event := range events {
 		r.Events = append(r.Events, event)
-		switch event.Kind {
-		case control.UIEventNotice:
-			if event.Notice != nil {
-				r.Notices = append(r.Notices, event.Notice.Text)
+		switch payload := event.Payload.(type) {
+		case eventcontract.NoticePayload:
+			r.Notices = append(r.Notices, payload.Notice.Text)
+		case eventcontract.BlockCommittedPayload:
+			r.Blocks = append(r.Blocks, payload.Block)
+		case eventcontract.PendingInputPayload:
+			if payload.State.TypingOn {
+				r.TypingOnFor = append(r.TypingOnFor, payload.State.SourceMessageID)
 			}
-		case control.UIEventBlockCommitted:
-			if event.Block != nil {
-				r.Blocks = append(r.Blocks, *event.Block)
+			if payload.State.TypingOff {
+				r.TypingOffFor = append(r.TypingOffFor, payload.State.SourceMessageID)
 			}
-		case control.UIEventPendingInput:
-			if event.PendingInput == nil {
-				continue
+			if payload.State.ThumbsUp {
+				r.ThumbsUpFor = append(r.ThumbsUpFor, payload.State.SourceMessageID)
 			}
-			if event.PendingInput.TypingOn {
-				r.TypingOnFor = append(r.TypingOnFor, event.PendingInput.SourceMessageID)
+			if payload.State.ThumbsDown {
+				r.ThumbsDownFor = append(r.ThumbsDownFor, payload.State.SourceMessageID)
 			}
-			if event.PendingInput.TypingOff {
-				r.TypingOffFor = append(r.TypingOffFor, event.PendingInput.SourceMessageID)
-			}
-			if event.PendingInput.ThumbsUp {
-				r.ThumbsUpFor = append(r.ThumbsUpFor, event.PendingInput.SourceMessageID)
-			}
-			if event.PendingInput.ThumbsDown {
-				r.ThumbsDownFor = append(r.ThumbsDownFor, event.PendingInput.SourceMessageID)
-			}
-		case control.UIEventFeishuSelectionView:
-			if event.FeishuSelectionView != nil {
-				if prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext); ok {
-					r.SelectionPrompts = append(r.SelectionPrompts, prompt)
-				}
+		case eventcontract.SelectionPayload:
+			if prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(payload.View, payload.Context); ok {
+				r.SelectionPrompts = append(r.SelectionPrompts, prompt)
 			}
 		}
 	}

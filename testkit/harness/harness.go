@@ -6,6 +6,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -83,12 +85,17 @@ func (h *Harness) LocalClient(raw []byte) error {
 }
 
 func (h *Harness) consumeUIEvents(events []control.UIEvent) error {
-	h.Feishu.Apply(events)
+	return h.consumeEvents(eventcontractcompat.FromLegacyUIEvents(events))
+}
+
+func (h *Harness) consumeEvents(events []eventcontract.Event) error {
+	h.Feishu.ApplyEvents(events)
 	for _, event := range events {
-		if event.Command == nil {
+		payload, ok := event.Payload.(eventcontract.AgentCommandPayload)
+		if !ok {
 			continue
 		}
-		nativeCommands, err := h.Translator.TranslateCommand(*event.Command)
+		nativeCommands, err := h.Translator.TranslateCommand(payload.Command)
 		if err != nil {
 			return err
 		}

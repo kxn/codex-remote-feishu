@@ -8,13 +8,10 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
-func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEvent) []Operation {
-	if event.ExecCommandProgress == nil {
-		return nil
-	}
-	progress := *event.ExecCommandProgress
+func (p *Projector) projectExecCommandProgress(chatID string, event eventcontract.Event, progress control.ExecCommandProgress) []Operation {
 	renderedLines := execCommandProgressRenderedLines(progress)
 	if len(renderedLines) == 0 {
 		return nil
@@ -26,8 +23,8 @@ func (p *Projector) projectExecCommandProgress(chatID string, event control.UIEv
 	lines := execProgressRenderedContent(window.Lines)
 	elements := execCommandProgressElements(lines)
 	op := Operation{
-		GatewayID:            event.GatewayID,
-		SurfaceSessionID:     event.SurfaceSessionID,
+		GatewayID:            event.GatewayID(),
+		SurfaceSessionID:     event.SurfaceSessionID(),
 		ChatID:               chatID,
 		CardTitle:            "工作中",
 		CardBody:             strings.Join(lines, "\n"),

@@ -11,6 +11,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -326,7 +328,7 @@ func (a *App) inlineViewCurrentCardActionResultLocked(action control.Action, eve
 		return nil, events
 	}
 	event.DaemonLifecycleID = a.daemonLifecycleID
-	ops := a.projector.Project(a.service.SurfaceChatID(event.SurfaceSessionID), event)
+	ops := a.projector.ProjectEvent(a.service.SurfaceChatID(event.SurfaceSessionID), eventcontractcompat.FromLegacyUIEvent(event))
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard {
 		return nil, events
 	}
@@ -343,9 +345,21 @@ func removeUIEventAt(events []control.UIEvent, idx int) []control.UIEvent {
 }
 
 func filterNoticeUIEvents(events []control.UIEvent) []control.UIEvent {
+	return filterUIEventsByHandoffClasses(events, eventcontract.HandoffClassNotice, eventcontract.HandoffClassThreadSelection)
+}
+
+func filterUIEventsByHandoffClasses(events []control.UIEvent, blocked ...eventcontract.HandoffClass) []control.UIEvent {
 	out := make([]control.UIEvent, 0, len(events))
+	if len(blocked) == 0 {
+		return append(out, events...)
+	}
+	blockedSet := make(map[eventcontract.HandoffClass]struct{}, len(blocked))
+	for _, class := range blocked {
+		blockedSet[class] = struct{}{}
+	}
 	for _, event := range events {
-		if event.Notice != nil {
+		contractEvent := eventcontractcompat.FromLegacyUIEvent(event)
+		if _, ok := blockedSet[contractEvent.Meta.Semantics.HandoffClass]; ok {
 			continue
 		}
 		out = append(out, event)
@@ -354,14 +368,7 @@ func filterNoticeUIEvents(events []control.UIEvent) []control.UIEvent {
 }
 
 func filterThreadSelectionUIEvents(events []control.UIEvent) []control.UIEvent {
-	out := make([]control.UIEvent, 0, len(events))
-	for _, event := range events {
-		if event.ThreadSelection != nil {
-			continue
-		}
-		out = append(out, event)
-	}
-	return out
+	return filterUIEventsByHandoffClasses(events, eventcontract.HandoffClassThreadSelection)
 }
 
 func (a *App) firstResultCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, events []control.UIEvent) (*feishu.ActionResult, []control.UIEvent) {
@@ -416,7 +423,7 @@ func (a *App) projectFirstCardAsReplacementLocked(action control.Action, event c
 		event.SurfaceSessionID = action.SurfaceSessionID
 	}
 	event.DaemonLifecycleID = a.daemonLifecycleID
-	ops := a.projector.Project(a.service.SurfaceChatID(event.SurfaceSessionID), event)
+	ops := a.projector.ProjectEvent(a.service.SurfaceChatID(event.SurfaceSessionID), eventcontractcompat.FromLegacyUIEvent(event))
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard {
 		return nil
 	}

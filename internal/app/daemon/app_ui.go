@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontractcompat"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
@@ -225,7 +226,7 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event control.U
 	if event.Snapshot != nil {
 		a.populateSnapshotFeishuPermissionGaps(event.Snapshot, event.SurfaceSessionID)
 	}
-	operations := a.projector.Project(chatID, event)
+	operations := a.projector.ProjectEvent(chatID, eventcontractcompat.FromLegacyUIEvent(event))
 	for i := range operations {
 		if operations[i].GatewayID == "" {
 			operations[i].GatewayID = gatewayID

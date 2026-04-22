@@ -5,22 +5,19 @@ import (
 
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
-func (p *Projector) projectThreadHistory(chatID string, event control.UIEvent) []Operation {
-	if event.FeishuThreadHistoryView == nil {
-		return nil
-	}
-	view := *event.FeishuThreadHistoryView
+func (p *Projector) projectThreadHistory(chatID string, event eventcontract.Event, view control.FeishuThreadHistoryView) []Operation {
 	title := strings.TrimSpace(view.Title)
 	if title == "" {
 		title = "历史记录"
 	}
-	elements := threadHistoryElements(view, event.DaemonLifecycleID)
+	elements := threadHistoryElements(view, event.Meta.DaemonLifecycleID)
 	operation := Operation{
 		Kind:             OperationSendCard,
-		GatewayID:        event.GatewayID,
-		SurfaceSessionID: event.SurfaceSessionID,
+		GatewayID:        event.GatewayID(),
+		SurfaceSessionID: event.SurfaceSessionID(),
 		ChatID:           chatID,
 		CardTitle:        title,
 		CardBody:         "",
