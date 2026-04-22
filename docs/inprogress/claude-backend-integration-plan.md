@@ -1,7 +1,7 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-04-22`
+> Updated: `2026-04-23`
 > Summary: 合并此前三份 Claude 设计文档，收敛成单一实施方案，明确基座改造、Claude 接入路径与 Codex 零回归约束。
 
 ## 1. 文档定位
@@ -494,6 +494,51 @@ Codex 与 Claude 至少分别维护：
 1. 未开启 Claude 时，当前行为与 master 保持一致。
 2. Claude 代码存在不代表 Claude 产品入口默认可见。
 
+### 6.9 基座九：UI/交互语义归一化与 projector 边界固化
+
+#### 要解决的问题
+
+Claude 接入的风险点不在 Feishu projector 本身，而在 provider 上游事件进入 canonical 语义层之前。
+
+如果直接沿用“上游拼 markdown、下游直接透传”的方式，会重新引入过去的混乱：
+
+1. backend 语义混入卡片渲染层
+2. 动态文本与 markdown 合成边界失真
+3. 不同 backend 的中间过程无法在同一 UI 语义下对齐
+
+`feidex` 的实现证明 Claude 可以跑通完整产品链路，但它在业务层 markdown 预组装较重；本仓库应保留当前“语义先行、projector 末端渲染”的边界，不回退到上游拼装 markdown 的路径。
+
+#### 设计要求
+
+1. 新增 Claude provider semantic mapper
+   - 把 Claude native item/tool/process event 先归一化为 canonical `eventcontract` payload，再进入 orchestrator/projector
+2. 复用现有 UI 语义载体，不新增 backend 专属卡片骨架
+   - `RequestPayload`
+   - `PagePayload`
+   - `SelectionPayload`
+   - `TimelineTextPayload`
+   - `ImageOutputPayload`
+   - `ExecCommandProgressPayload`
+3. 补齐中间过程语义模型
+   - 现有 `render.Block` 仅适合基础文本输出，不应承担 Claude 过程语义主承载
+   - 优先扩展 canonical 过程载体（含 `ExecCommandProgress` / timeline kind），不要把丰富过程信息塞回 markdown 文本
+4. 固化渲染职责
+   - 上游不得预拼 Feishu markdown 片段
+   - Feishu adapter/projector 继续负责 markdown/plain_text/card 的最终转换
+5. 补一层 backend-aware 可见性策略
+   - 明确 Claude 过程语义在 `quiet / normal / verbose` 下的展示策略
+   - 默认不破坏 Codex 当前可见性行为
+
+#### 非回归要求
+
+1. Codex 现有 structured text -> projector 渲染边界保持不变。
+2. 任何 Claude 接入改造都不能把动态外部文本回流到上游 markdown 拼接路径。
+3. 现有卡片 UI 状态机（replace/append、request 流程、final 流程）不因 provider 切换而改变语义。
+4. 需要新增契约测试覆盖：
+   - Claude 语义映射后仍满足 structured/plain_text 边界
+   - 同一 canonical payload 在 Codex/Claude 下投影行为一致（除明确声明的能力差异）
+   - normal 模式下不出现未经策略批准的过程噪音外溢
+
 ## 7. Claude 接入方案
 
 在第 6 节的基座完成后，Claude 接入应该被收敛成一个相对独立的 provider implementation，而不是全仓改造。
@@ -703,7 +748,7 @@ Claude runtime 分三块：
 
 因为这份方案把高成本变化前移成了“系统 seam 重切”，而不是“Claude 特殊分支堆满全仓”。
 
-一旦第 6 节的八项基座补齐：
+一旦第 6 节的九项基座补齐：
 
 1. 上层 canonical 产品骨架已经不需要再为 Claude 改形
 2. Codex 路径已经从“默认系统形状”降级为“一个 provider implementation”
