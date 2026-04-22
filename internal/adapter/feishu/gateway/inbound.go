@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"context"
@@ -14,22 +14,23 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
+func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return control.Action{}, false, nil
 	}
 	message := event.Event.Message
+	gatewayID := strings.TrimSpace(env.GatewayID)
 	chatID := stringPtr(message.ChatId)
 	chatType := stringPtr(message.ChatType)
 	senderUserID := userIDFromMessage(event.Event.Sender)
-	surfaceSessionID := surfaceIDForInbound(g.config.GatewayID, chatID, chatType, senderUserID)
+	surfaceSessionID := SurfaceIDForInbound(gatewayID, chatID, chatType, senderUserID)
 	action := control.Action{
-		GatewayID:        g.config.GatewayID,
+		GatewayID:        gatewayID,
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           chatID,
 		ActorUserID:      senderUserID,
 		MessageID:        stringPtr(message.MessageId),
-		Inbound:          inboundMetaFromMessageEvent(event),
+		Inbound:          InboundMetaFromMessageEvent(event),
 	}
 	replyTargetMessageID := referencedMessageID(message)
 	if replyTargetMessageID != "" {
@@ -38,14 +39,14 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 
 	switch strings.ToLower(stringPtr(message.MessageType)) {
 	case "text":
-		text, err := parseTextContent(stringPtr(message.Content))
+		text, err := ParseTextContent(stringPtr(message.Content))
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
 			return control.Action{}, false, err
 		}
-		commandAction, handled := parseTextAction(text)
+		commandAction, handled := env.ParseTextAction(text)
 		if handled {
-			commandAction.GatewayID = g.config.GatewayID
+			commandAction.GatewayID = gatewayID
 			commandAction.SurfaceSessionID = surfaceSessionID
 			commandAction.ChatID = chatID
 			commandAction.ActorUserID = action.ActorUserID
@@ -53,8 +54,8 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 			commandAction.Inbound = action.Inbound
 			return commandAction, true, nil
 		}
-		if fallbackAction, ok := fallbackCompatTextAction(text); ok {
-			fallbackAction.GatewayID = g.config.GatewayID
+		if fallbackAction, ok := env.FallbackCompatTextAction(text); ok {
+			fallbackAction.GatewayID = gatewayID
 			fallbackAction.SurfaceSessionID = surfaceSessionID
 			fallbackAction.ChatID = chatID
 			fallbackAction.ActorUserID = action.ActorUserID
@@ -63,79 +64,79 @@ func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2Mes
 			return fallbackAction, true, nil
 		}
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
-		inputs := append(g.quotedInputs(ctx, message), currentInputs...)
+		inputs := append(env.QuotedInputs(ctx, message), currentInputs...)
 		action.Kind = control.ActionTextMessage
 		action.Text = text
 		action.Inputs = inputs
 		action.SteerInputs = currentInputs
-		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "post":
-		inputs, text, err := g.parsePostInputs(ctx, action.MessageID, stringPtr(message.Content))
+		inputs, text, err := env.ParsePostInputs(ctx, action.MessageID, stringPtr(message.Content))
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_post_content", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_post_content", err)
 			return control.Action{}, false, err
 		}
 		if len(inputs) == 0 {
-			logInboundMessageIgnored(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "empty_post_inputs")
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "empty_post_inputs")
 			return control.Action{}, false, nil
 		}
 		action.Kind = control.ActionTextMessage
 		action.Text = text
-		action.Inputs = append(g.quotedInputs(ctx, message), inputs...)
+		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
 		action.SteerInputs = append([]agentproto.Input(nil), inputs...)
-		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "image":
-		imageKey, err := parseImageKey(stringPtr(message.Content))
+		imageKey, err := ParseImageKey(stringPtr(message.Content))
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_image_content", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_image_content", err)
 			return control.Action{}, false, err
 		}
-		path, mimeType, err := g.downloadImageFn(ctx, stringPtr(message.MessageId), imageKey)
+		path, mimeType, err := env.DownloadImage(ctx, stringPtr(message.MessageId), imageKey)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "download_image", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "download_image", err)
 			return control.Action{}, false, err
 		}
 		action.Kind = control.ActionImageMessage
 		action.LocalPath = path
 		action.MIMEType = mimeType
 		action.SteerInputs = []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
-		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "file":
-		fileKey, fileName, err := parseFileContent(stringPtr(message.Content))
+		fileKey, fileName, err := ParseFileContent(stringPtr(message.Content))
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_file_content", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_file_content", err)
 			return control.Action{}, false, err
 		}
-		path, err := g.downloadFileFn(ctx, stringPtr(message.MessageId), fileKey, fileName)
+		path, err := env.DownloadFile(ctx, stringPtr(message.MessageId), fileKey, fileName)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "download_file", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "download_file", err)
 			return control.Action{}, false, err
 		}
 		action.Kind = control.ActionFileMessage
 		action.LocalPath = path
 		action.FileName = fileName
-		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	case "merge_forward":
-		payload, err := g.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
+		summary, inputs, err := env.BuildMergeForwardStructuredInput(ctx, message)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "parse_merge_forward_content", err)
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_merge_forward_content", err)
 			return control.Action{}, false, err
 		}
-		if len(payload.Inputs) == 0 {
-			logInboundMessageIgnored(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "empty_merge_forward_content")
+		if len(inputs) == 0 {
+			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "empty_merge_forward_content")
 			return control.Action{}, false, nil
 		}
 		action.Kind = control.ActionTextMessage
-		action.Text = payload.Summary
-		action.Inputs = append(g.quotedInputs(ctx, message), payload.Inputs...)
-		g.recordSurfaceMessage(action.MessageID, surfaceSessionID)
+		action.Text = summary
+		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
+		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	default:
-		logInboundMessageIgnored(g.config.GatewayID, surfaceSessionID, action.Inbound, message, "unsupported_message_type")
+		logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "unsupported_message_type")
 		return control.Action{}, false, nil
 	}
 }
@@ -194,7 +195,7 @@ func inboundMessagePreview(message *larkim.EventMessage) string {
 	rawContent := strings.TrimSpace(stringPtr(message.Content))
 	switch messageType {
 	case "text":
-		text, err := parseTextContent(rawContent)
+		text, err := ParseTextContent(rawContent)
 		if err == nil {
 			return trimLogPreview(text)
 		}
@@ -238,7 +239,7 @@ func inboundMessagePreview(message *larkim.EventMessage) string {
 			}
 		}
 	case "merge_forward":
-		text, err := parseMergeForwardContent(rawContent)
+		text, err := ParseMergeForwardContent(rawContent)
 		if err == nil {
 			return trimLogPreview(text)
 		}
@@ -259,7 +260,7 @@ func trimLogPreview(text string) string {
 	return string(runes[:maxPreviewRunes]) + "..."
 }
 
-func (g *LiveGateway) parseMessageRecalledEvent(event *larkim.P2MessageRecalledV1) (control.Action, bool) {
+func ParseMessageRecalledEvent(env InboundEnv, event *larkim.P2MessageRecalledV1) (control.Action, bool) {
 	if event == nil || event.Event == nil || event.Event.MessageId == nil {
 		return control.Action{}, false
 	}
@@ -267,23 +268,24 @@ func (g *LiveGateway) parseMessageRecalledEvent(event *larkim.P2MessageRecalledV
 	if messageID == "" {
 		return control.Action{}, false
 	}
-	g.mu.Lock()
-	surfaceSessionID := g.messages[messageID]
-	g.mu.Unlock()
+	surfaceSessionID := ""
+	if env.LookupSurfaceMessage != nil {
+		surfaceSessionID = strings.TrimSpace(env.LookupSurfaceMessage(messageID))
+	}
 	if surfaceSessionID == "" {
 		return control.Action{}, false
 	}
 	return control.Action{
 		Kind:             control.ActionMessageRecalled,
-		GatewayID:        g.config.GatewayID,
+		GatewayID:        strings.TrimSpace(env.GatewayID),
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           strings.TrimSpace(stringPtr(event.Event.ChatId)),
 		TargetMessageID:  messageID,
-		Inbound:          inboundMetaFromMessageRecalledEvent(event),
+		Inbound:          InboundMetaFromMessageRecalledEvent(event),
 	}, true
 }
 
-func (g *LiveGateway) parseMessageReactionCreatedEvent(event *larkim.P2MessageReactionCreatedV1) (control.Action, bool) {
+func ParseMessageReactionCreatedEvent(env InboundEnv, event *larkim.P2MessageReactionCreatedV1) (control.Action, bool) {
 	if event == nil || event.Event == nil || event.Event.MessageId == nil || event.Event.ReactionType == nil {
 		return control.Action{}, false
 	}
@@ -299,43 +301,44 @@ func (g *LiveGateway) parseMessageReactionCreatedEvent(event *larkim.P2MessageRe
 	if actorUserID == "" {
 		return control.Action{}, false
 	}
-	g.mu.Lock()
-	surfaceSessionID := g.messages[messageID]
-	g.mu.Unlock()
+	surfaceSessionID := ""
+	if env.LookupSurfaceMessage != nil {
+		surfaceSessionID = strings.TrimSpace(env.LookupSurfaceMessage(messageID))
+	}
 	if surfaceSessionID == "" {
 		return control.Action{}, false
 	}
 	return control.Action{
 		Kind:             control.ActionReactionCreated,
-		GatewayID:        g.config.GatewayID,
+		GatewayID:        strings.TrimSpace(env.GatewayID),
 		SurfaceSessionID: surfaceSessionID,
 		ActorUserID:      actorUserID,
 		ReactionType:     reactionType,
 		TargetMessageID:  messageID,
-		Inbound:          inboundMetaFromMessageReactionCreatedEvent(event),
+		Inbound:          InboundMetaFromMessageReactionCreatedEvent(event),
 	}, true
 }
 
-func (g *LiveGateway) parseMenuEvent(event *larkapplication.P2BotMenuV6) (control.Action, bool) {
+func ParseMenuEvent(gatewayID string, event *larkapplication.P2BotMenuV6) (control.Action, bool) {
 	if event == nil || event.Event == nil || event.Event.EventKey == nil {
 		return control.Action{}, false
 	}
 	rawKey := *event.Event.EventKey
 	action, ok := menuAction(rawKey)
 	if !ok {
-		log.Printf("feishu bot menu ignored: raw_key=%q normalized=%q", rawKey, normalizeMenuEventKey(rawKey))
+		log.Printf("feishu bot menu ignored: raw_key=%q normalized=%q", rawKey, NormalizeMenuEventKey(rawKey))
 		return control.Action{}, false
 	}
-	log.Printf("feishu bot menu handled: raw_key=%q normalized=%q action=%s", rawKey, normalizeMenuEventKey(rawKey), action.Kind)
+	log.Printf("feishu bot menu handled: raw_key=%q normalized=%q action=%s", rawKey, NormalizeMenuEventKey(rawKey), action.Kind)
 	operatorID := operatorUserID(event.Event.Operator)
-	action.GatewayID = g.config.GatewayID
-	action.SurfaceSessionID = surfaceIDForInbound(g.config.GatewayID, "", "p2p", operatorID)
+	action.GatewayID = strings.TrimSpace(gatewayID)
+	action.SurfaceSessionID = SurfaceIDForInbound(gatewayID, "", "p2p", operatorID)
 	action.ActorUserID = operatorID
-	action.Inbound = inboundMetaFromMenuEvent(event)
+	action.Inbound = InboundMetaFromMenuEvent(event)
 	return action, true
 }
 
-func parseTextContent(rawContent string) (string, error) {
+func ParseTextContent(rawContent string) (string, error) {
 	var content feishuTextContent
 	if err := json.Unmarshal([]byte(rawContent), &content); err != nil {
 		return "", err
@@ -343,7 +346,7 @@ func parseTextContent(rawContent string) (string, error) {
 	return content.Text, nil
 }
 
-func parseImageKey(rawContent string) (string, error) {
+func ParseImageKey(rawContent string) (string, error) {
 	var content struct {
 		ImageKey string `json:"image_key"`
 	}
@@ -356,7 +359,7 @@ func parseImageKey(rawContent string) (string, error) {
 	return strings.TrimSpace(content.ImageKey), nil
 }
 
-func parseFileContent(rawContent string) (string, string, error) {
+func ParseFileContent(rawContent string) (string, string, error) {
 	var content struct {
 		FileKey  string `json:"file_key"`
 		FileName string `json:"file_name"`

@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"strings"
@@ -8,7 +8,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func (g *LiveGateway) parseTargetPickerCardAction(
+func parseTargetPickerCardAction(
+	env RoutingEnv,
 	value map[string]any,
 	event *larkcallback.CardActionTriggerEvent,
 	meta *control.ActionInboundMeta,
@@ -23,7 +24,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:              control.ActionTargetPickerSelectMode,
-			GatewayID:         g.config.GatewayID,
+			GatewayID:         strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID:  surfaceSessionID,
 			ChatID:            chatID,
 			ActorUserID:       operatorID,
@@ -46,7 +47,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:              control.ActionTargetPickerSelectSource,
-			GatewayID:         g.config.GatewayID,
+			GatewayID:         strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID:  surfaceSessionID,
 			ChatID:            chatID,
 			ActorUserID:       operatorID,
@@ -66,7 +67,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:             control.ActionTargetPickerSelectWorkspace,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -86,7 +87,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:              control.ActionTargetPickerSelectSession,
-			GatewayID:         g.config.GatewayID,
+			GatewayID:         strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID:  surfaceSessionID,
 			ChatID:            chatID,
 			ActorUserID:       operatorID,
@@ -103,7 +104,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:              control.ActionTargetPickerOpenPathPicker,
-			GatewayID:         g.config.GatewayID,
+			GatewayID:         strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID:  surfaceSessionID,
 			ChatID:            chatID,
 			ActorUserID:       operatorID,
@@ -120,7 +121,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:             control.ActionTargetPickerBack,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -136,7 +137,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:             control.ActionTargetPickerCancel,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -152,7 +153,7 @@ func (g *LiveGateway) parseTargetPickerCardAction(
 		}
 		return control.Action{
 			Kind:              control.ActionTargetPickerConfirm,
-			GatewayID:         g.config.GatewayID,
+			GatewayID:         strings.TrimSpace(env.GatewayID),
 			SurfaceSessionID:  surfaceSessionID,
 			ChatID:            chatID,
 			ActorUserID:       operatorID,

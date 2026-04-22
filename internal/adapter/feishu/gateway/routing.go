@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"fmt"
@@ -12,16 +12,17 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardActionTriggerEvent) (control.Action, bool) {
+func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionTriggerEvent) (control.Action, bool) {
 	if event == nil || event.Event == nil || event.Event.Action == nil {
 		return control.Action{}, false
 	}
-	meta := inboundMetaFromCardActionEvent(event)
+	meta := InboundMetaFromCardActionEvent(event)
 	value := event.Event.Action.Value
 	kind := actionPayloadKind(value)
 	if kind == "" {
 		return control.Action{}, false
 	}
+	gatewayID := strings.TrimSpace(env.GatewayID)
 
 	operatorID := operatorUserIDFromCard(event.Event.Operator)
 	chatID := ""
@@ -30,7 +31,10 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		chatID = strings.TrimSpace(event.Event.Context.OpenChatID)
 		messageID = strings.TrimSpace(event.Event.Context.OpenMessageID)
 	}
-	surfaceSessionID := g.surfaceForCardAction(messageID, chatID, operatorID)
+	surfaceSessionID := ""
+	if env.SurfaceForCardAction != nil {
+		surfaceSessionID = strings.TrimSpace(env.SurfaceForCardAction(messageID, chatID, operatorID))
+	}
 	if surfaceSessionID == "" {
 		return control.Action{}, false
 	}
@@ -43,7 +47,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionAttachInstance,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -58,7 +62,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionAttachWorkspace,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -80,7 +84,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:                control.ActionUseThread,
-			GatewayID:           g.config.GatewayID,
+			GatewayID:           gatewayID,
 			SurfaceSessionID:    surfaceSessionID,
 			ChatID:              chatID,
 			ActorUserID:         operatorID,
@@ -92,7 +96,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowScopedThreads:
 		return control.Action{
 			Kind:             control.ActionShowScopedThreads,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -104,7 +108,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowThreads:
 		return control.Action{
 			Kind:             control.ActionShowThreads,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -116,7 +120,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowAllThreads:
 		return control.Action{
 			Kind:             control.ActionShowAllThreads,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -128,7 +132,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowAllThreadWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowAllThreadWorkspaces,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -139,7 +143,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowRecentThreadWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowRecentThreadWorkspaces,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -154,7 +158,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionShowWorkspaceThreads,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -167,7 +171,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowAllWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowAllWorkspaces,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -178,7 +182,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindShowRecentWorkspaces:
 		return control.Action{
 			Kind:             control.ActionShowRecentWorkspaces,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -193,7 +197,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionConfirmKickThread,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -204,7 +208,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 	case cardActionKindKickThreadCancel:
 		return control.Action{
 			Kind:             control.ActionCancelKickThread,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -220,7 +224,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID))
 		return control.Action{
 			Kind:             control.ActionRespondRequest,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -242,7 +246,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionControlRequest,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -264,7 +268,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		actionArg := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionArg))
 		return control.Action{
 			Kind:             actionKind,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -280,7 +284,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionUpgradeOwnerFlow,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -299,7 +303,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionVSCodeMigrate,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -318,7 +322,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionPlanProposalDecision,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -346,7 +350,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             actionKind,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -371,7 +375,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionRespondRequest,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -400,7 +404,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             actionKind,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -423,7 +427,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             actionKind,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -439,7 +443,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		cardActionKindTargetPickerBack,
 		cardActionKindTargetPickerCancel,
 		cardActionKindTargetPickerConfirm:
-		return g.parseTargetPickerCardAction(value, event, meta, surfaceSessionID, chatID, operatorID, messageID)
+		return parseTargetPickerCardAction(env, value, event, meta, surfaceSessionID, chatID, operatorID, messageID)
 	case cardActionKindHistoryPage:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		if pickerID == "" {
@@ -447,7 +451,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionHistoryPage,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -477,7 +481,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 		}
 		return control.Action{
 			Kind:             control.ActionHistoryDetail,
-			GatewayID:        g.config.GatewayID,
+			GatewayID:        gatewayID,
 			SurfaceSessionID: surfaceSessionID,
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
@@ -659,24 +663,6 @@ func requestAnswersFromMap(values map[string]interface{}) map[string][]string {
 	return answers
 }
 
-func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string) string {
-	if messageID != "" {
-		g.mu.Lock()
-		surfaceSessionID := g.messages[messageID]
-		g.mu.Unlock()
-		if surfaceSessionID != "" {
-			return surfaceSessionID
-		}
-	}
-	if operatorID != "" {
-		return surfaceIDForInbound(g.config.GatewayID, "", "p2p", operatorID)
-	}
-	if chatID != "" {
-		return surfaceID(g.config.GatewayID, chatID, "")
-	}
-	return ""
-}
-
 func parseTextAction(text string) (control.Action, bool) {
 	return control.ParseFeishuTextAction(text)
 }
@@ -694,7 +680,7 @@ func menuAction(eventKey string) (control.Action, bool) {
 	return control.ParseFeishuMenuAction(eventKey)
 }
 
-func normalizeMenuEventKey(value string) string {
+func NormalizeMenuEventKey(value string) string {
 	return control.NormalizeFeishuMenuEventKey(value)
 }
 
@@ -723,7 +709,7 @@ func surfaceID(gatewayID, chatID, fallbackUserID string) string {
 	}.SurfaceID()
 }
 
-func surfaceIDForInbound(gatewayID, chatID, chatType, fallbackUserID string) string {
+func SurfaceIDForInbound(gatewayID, chatID, chatType, fallbackUserID string) string {
 	if strings.EqualFold(chatType, "p2p") && fallbackUserID != "" {
 		return surfaceID(gatewayID, "", fallbackUserID)
 	}

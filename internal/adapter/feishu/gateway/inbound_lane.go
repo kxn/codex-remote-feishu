@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"context"
@@ -21,13 +21,13 @@ type inboundWork interface {
 	surfaceSessionID() string
 	dedupeKey() string
 	description() string
-	run(context.Context, *LiveGateway, ActionHandler)
+	run(context.Context, InboundEnv, ActionDispatcher)
 }
 
-type surfaceInboundLane struct {
-	ctx     context.Context
-	gateway *LiveGateway
-	handler ActionHandler
+type SurfaceInboundLane struct {
+	ctx      context.Context
+	env      InboundEnv
+	dispatch ActionDispatcher
 
 	mu      sync.Mutex
 	queues  map[string][]inboundWork
@@ -35,7 +35,7 @@ type surfaceInboundLane struct {
 	dedupe  map[string]time.Time
 }
 
-type queuedMessageWork struct {
+type QueuedMessageWork struct {
 	gatewayID       string
 	surfaceID       string
 	chatID          string
@@ -56,23 +56,23 @@ type queuedActionWork struct {
 	action control.Action
 }
 
-type plannedInboundMessage struct {
-	action *control.Action
-	queue  *queuedMessageWork
+type PlannedInboundMessage struct {
+	Action *control.Action
+	Queue  *QueuedMessageWork
 }
 
-func newSurfaceInboundLane(ctx context.Context, gateway *LiveGateway, handler ActionHandler) *surfaceInboundLane {
-	return &surfaceInboundLane{
-		ctx:     ctx,
-		gateway: gateway,
-		handler: handler,
-		queues:  map[string][]inboundWork{},
-		running: map[string]bool{},
-		dedupe:  map[string]time.Time{},
+func NewSurfaceInboundLane(ctx context.Context, env InboundEnv, dispatch ActionDispatcher) *SurfaceInboundLane {
+	return &SurfaceInboundLane{
+		ctx:      ctx,
+		env:      env,
+		dispatch: dispatch,
+		queues:   map[string][]inboundWork{},
+		running:  map[string]bool{},
+		dedupe:   map[string]time.Time{},
 	}
 }
 
-func (l *surfaceInboundLane) enqueue(work inboundWork) bool {
+func (l *SurfaceInboundLane) enqueue(work inboundWork) bool {
 	if l == nil || work == nil {
 		return false
 	}
@@ -104,7 +104,7 @@ func (l *surfaceInboundLane) enqueue(work inboundWork) bool {
 	return true
 }
 
-func (l *surfaceInboundLane) markActionDuplicate(action control.Action) bool {
+func (l *SurfaceInboundLane) markActionDuplicate(action control.Action) bool {
 	if l == nil {
 		return false
 	}
@@ -127,7 +127,7 @@ func (l *surfaceInboundLane) markActionDuplicate(action control.Action) bool {
 	return l.dedupeKeyLocked(surfaceID, key, "action:"+string(action.Kind), now)
 }
 
-func (l *surfaceInboundLane) dedupeKeyLocked(surfaceID, key, description string, now time.Time) bool {
+func (l *SurfaceInboundLane) dedupeKeyLocked(surfaceID, key, description string, now time.Time) bool {
 	if expiresAt, ok := l.dedupe[key]; ok && expiresAt.After(now) {
 		log.Printf("feishu inbound duplicate suppressed: surface=%s key=%s work=%s", surfaceID, key, description)
 		return true
@@ -136,7 +136,7 @@ func (l *surfaceInboundLane) dedupeKeyLocked(surfaceID, key, description string,
 	return false
 }
 
-func (l *surfaceInboundLane) runSurface(surfaceID string) {
+func (l *SurfaceInboundLane) runSurface(surfaceID string) {
 	for {
 		if err := l.ctx.Err(); err != nil {
 			l.clearSurface(surfaceID)
@@ -152,7 +152,7 @@ func (l *surfaceInboundLane) runSurface(surfaceID string) {
 					log.Printf("feishu inbound worker panic: surface=%s work=%s panic=%v", surfaceID, work.description(), recovered)
 				}
 			}()
-			work.run(l.ctx, l.gateway, l.handler)
+			work.run(l.ctx, l.env, l.dispatch)
 		}()
 	}
 }
@@ -170,7 +170,7 @@ func dedupeKeyForAction(action control.Action) string {
 	return ""
 }
 
-func (l *surfaceInboundLane) dequeue(surfaceID string) inboundWork {
+func (l *SurfaceInboundLane) dequeue(surfaceID string) inboundWork {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -190,14 +190,14 @@ func (l *surfaceInboundLane) dequeue(surfaceID string) inboundWork {
 	return work
 }
 
-func (l *surfaceInboundLane) clearSurface(surfaceID string) {
+func (l *SurfaceInboundLane) clearSurface(surfaceID string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.queues, surfaceID)
 	delete(l.running, surfaceID)
 }
 
-func (l *surfaceInboundLane) pruneExpiredDedupeLocked(now time.Time) {
+func (l *SurfaceInboundLane) pruneExpiredDedupeLocked(now time.Time) {
 	for key, expiresAt := range l.dedupe {
 		if !expiresAt.After(now) {
 			delete(l.dedupe, key)
@@ -205,14 +205,14 @@ func (l *surfaceInboundLane) pruneExpiredDedupeLocked(now time.Time) {
 	}
 }
 
-func (w *queuedMessageWork) surfaceSessionID() string {
+func (w *QueuedMessageWork) surfaceSessionID() string {
 	if w == nil {
 		return ""
 	}
 	return strings.TrimSpace(w.surfaceID)
 }
 
-func (w *queuedMessageWork) dedupeKey() string {
+func (w *QueuedMessageWork) dedupeKey() string {
 	if w == nil || w.inbound == nil {
 		return ""
 	}
@@ -225,25 +225,27 @@ func (w *queuedMessageWork) dedupeKey() string {
 	return ""
 }
 
-func (w *queuedMessageWork) description() string {
+func (w *QueuedMessageWork) description() string {
 	if w == nil {
 		return "message"
 	}
 	return "message:" + strings.TrimSpace(w.messageType)
 }
 
-func (w *queuedMessageWork) run(ctx context.Context, gateway *LiveGateway, handler ActionHandler) {
-	if w == nil || gateway == nil || handler == nil {
+func (w *QueuedMessageWork) run(ctx context.Context, env InboundEnv, dispatch ActionDispatcher) {
+	if w == nil || dispatch == nil {
 		return
 	}
 	parseCtx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
 	defer cancel()
 
-	action, ok, err := w.parseAction(parseCtx, gateway)
+	action, ok, err := w.parseAction(parseCtx, env)
 	if err != nil {
 		msg := w.eventMessage()
 		logInboundMessageParseFailed(w.gatewayID, w.surfaceID, w.inbound, msg, "async_parse", err)
-		gateway.deliverAsyncInboundFailure(ctx, w.surfaceID, w.chatID, w.actorUserID, w.messageID, asyncInboundFailureNoticeBody(w.messageType))
+		if env.DeliverAsyncInboundFailure != nil {
+			env.DeliverAsyncInboundFailure(ctx, w.surfaceID, w.chatID, w.actorUserID, w.messageID, asyncInboundFailureNoticeBody(w.messageType))
+		}
 		return
 	}
 	if !ok {
@@ -251,11 +253,11 @@ func (w *queuedMessageWork) run(ctx context.Context, gateway *LiveGateway, handl
 		logInboundMessageIgnored(w.gatewayID, w.surfaceID, w.inbound, msg, "async_empty_or_unsupported")
 		return
 	}
-	handler(ctx, action)
+	_ = dispatch(ctx, action)
 }
 
-func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGateway) (control.Action, bool, error) {
-	if w == nil || gateway == nil {
+func (w *QueuedMessageWork) parseAction(ctx context.Context, env InboundEnv) (control.Action, bool, error) {
+	if w == nil {
 		return control.Action{}, false, nil
 	}
 	message := w.eventMessage()
@@ -277,11 +279,11 @@ func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGatewa
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: w.text}}
 		action.Kind = control.ActionTextMessage
 		action.Text = w.text
-		action.Inputs = append(gateway.quotedInputs(ctx, message), currentInputs...)
+		action.Inputs = append(env.QuotedInputs(ctx, message), currentInputs...)
 		action.SteerInputs = currentInputs
 		return action, true, nil
 	case "post":
-		inputs, text, err := gateway.parsePostInputs(ctx, w.messageID, w.content)
+		inputs, text, err := env.ParsePostInputs(ctx, w.messageID, w.content)
 		if err != nil {
 			return control.Action{}, false, err
 		}
@@ -290,11 +292,11 @@ func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGatewa
 		}
 		action.Kind = control.ActionTextMessage
 		action.Text = text
-		action.Inputs = append(gateway.quotedInputs(ctx, message), inputs...)
+		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
 		action.SteerInputs = append([]agentproto.Input(nil), inputs...)
 		return action, true, nil
 	case "image":
-		path, mimeType, err := gateway.downloadImageFn(ctx, w.messageID, w.imageKey)
+		path, mimeType, err := env.DownloadImage(ctx, w.messageID, w.imageKey)
 		if err != nil {
 			return control.Action{}, false, err
 		}
@@ -304,7 +306,7 @@ func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGatewa
 		action.SteerInputs = []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
 		return action, true, nil
 	case "file":
-		path, err := gateway.downloadFileFn(ctx, w.messageID, w.fileKey, w.fileName)
+		path, err := env.DownloadFile(ctx, w.messageID, w.fileKey, w.fileName)
 		if err != nil {
 			return control.Action{}, false, err
 		}
@@ -313,23 +315,23 @@ func (w *queuedMessageWork) parseAction(ctx context.Context, gateway *LiveGatewa
 		action.FileName = w.fileName
 		return action, true, nil
 	case "merge_forward":
-		payload, err := gateway.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
+		summary, inputs, err := env.BuildMergeForwardStructuredInput(ctx, message)
 		if err != nil {
 			return control.Action{}, false, err
 		}
-		if len(payload.Inputs) == 0 {
+		if len(inputs) == 0 {
 			return control.Action{}, false, nil
 		}
 		action.Kind = control.ActionTextMessage
-		action.Text = payload.Summary
-		action.Inputs = append(gateway.quotedInputs(ctx, message), payload.Inputs...)
+		action.Text = summary
+		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
 		return action, true, nil
 	default:
 		return control.Action{}, false, nil
 	}
 }
 
-func (w *queuedMessageWork) eventMessage() *larkim.EventMessage {
+func (w *QueuedMessageWork) eventMessage() *larkim.EventMessage {
 	if w == nil {
 		return nil
 	}
@@ -370,75 +372,88 @@ func (w *queuedActionWork) description() string {
 	return "action:" + string(w.action.Kind)
 }
 
-func (w *queuedActionWork) run(ctx context.Context, _ *LiveGateway, handler ActionHandler) {
-	if handler == nil {
+func (w *queuedActionWork) run(ctx context.Context, _ InboundEnv, dispatch ActionDispatcher) {
+	if dispatch == nil {
 		return
 	}
-	handler(ctx, cloneAction(w.action))
+	_ = dispatch(ctx, cloneAction(w.action))
 }
 
-func (g *LiveGateway) handleInboundMessageEvent(ctx context.Context, event *larkim.P2MessageReceiveV1, handler ActionHandler, lane *surfaceInboundLane) error {
-	plan, ok, err := g.planInboundMessageEvent(event)
+func (l *SurfaceInboundLane) EnqueueQueuedMessage(work *QueuedMessageWork) bool {
+	return l.enqueue(work)
+}
+
+func (l *SurfaceInboundLane) EnqueueAction(action control.Action) bool {
+	return l.enqueue(&queuedActionWork{action: cloneAction(action)})
+}
+
+func (l *SurfaceInboundLane) MarkActionDuplicate(action control.Action) bool {
+	return l.markActionDuplicate(action)
+}
+
+func HandleInboundMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1, lane *SurfaceInboundLane, dispatch ActionDispatcher) error {
+	plan, ok, err := PlanInboundMessageEvent(env, event)
 	if err != nil || !ok {
 		return err
 	}
-	if plan.action != nil {
-		if lane != nil && lane.markActionDuplicate(*plan.action) {
+	if plan.Action != nil {
+		if lane != nil && lane.markActionDuplicate(*plan.Action) {
 			return nil
 		}
-		return handleGatewayEventAction(ctx, *plan.action, handler)
+		return dispatch(ctx, *plan.Action)
 	}
-	if plan.queue == nil {
+	if plan.Queue == nil {
 		return nil
 	}
-	if lane != nil && lane.enqueue(plan.queue) {
+	if lane != nil && lane.enqueue(plan.Queue) {
 		return nil
 	}
-	action, ok, err := plan.queue.parseAction(ctx, g)
+	action, ok, err := plan.Queue.parseAction(ctx, env)
 	if err != nil || !ok {
 		return err
 	}
-	return handleGatewayEventAction(ctx, action, handler)
+	return dispatch(ctx, action)
 }
 
-func (g *LiveGateway) handleInboundMessageRecalledEvent(ctx context.Context, event *larkim.P2MessageRecalledV1, handler ActionHandler, lane *surfaceInboundLane) error {
-	action, ok := g.parseMessageRecalledEvent(event)
+func HandleInboundMessageRecalledEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageRecalledV1, lane *SurfaceInboundLane, dispatch ActionDispatcher) error {
+	action, ok := ParseMessageRecalledEvent(env, event)
 	if !ok {
 		return nil
 	}
 	if lane != nil && lane.enqueue(&queuedActionWork{action: cloneAction(action)}) {
 		return nil
 	}
-	return handleGatewayEventAction(ctx, action, handler)
+	return dispatch(ctx, action)
 }
 
-func (g *LiveGateway) handleInboundMessageReactionCreatedEvent(ctx context.Context, event *larkim.P2MessageReactionCreatedV1, handler ActionHandler, lane *surfaceInboundLane) error {
-	action, ok := g.parseMessageReactionCreatedEvent(event)
+func HandleInboundMessageReactionCreatedEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReactionCreatedV1, lane *SurfaceInboundLane, dispatch ActionDispatcher) error {
+	action, ok := ParseMessageReactionCreatedEvent(env, event)
 	if !ok {
 		return nil
 	}
 	if lane != nil && lane.enqueue(&queuedActionWork{action: cloneAction(action)}) {
 		return nil
 	}
-	return handleGatewayEventAction(ctx, action, handler)
+	return dispatch(ctx, action)
 }
 
-func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) (plannedInboundMessage, bool, error) {
+func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (PlannedInboundMessage, bool, error) {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
-		return plannedInboundMessage{}, false, nil
+		return PlannedInboundMessage{}, false, nil
 	}
 	message := event.Event.Message
 	chatID := stringPtr(message.ChatId)
 	chatType := stringPtr(message.ChatType)
 	senderUserID := userIDFromMessage(event.Event.Sender)
-	surfaceSessionID := surfaceIDForInbound(g.config.GatewayID, chatID, chatType, senderUserID)
-	inbound := inboundMetaFromMessageEvent(event)
+	gatewayID := strings.TrimSpace(env.GatewayID)
+	surfaceSessionID := SurfaceIDForInbound(gatewayID, chatID, chatType, senderUserID)
+	inbound := InboundMetaFromMessageEvent(event)
 	messageID := strings.TrimSpace(stringPtr(message.MessageId))
 	messageType := strings.ToLower(strings.TrimSpace(stringPtr(message.MessageType)))
 	content := stringPtr(message.Content)
 
 	baseAction := control.Action{
-		GatewayID:        g.config.GatewayID,
+		GatewayID:        gatewayID,
 		SurfaceSessionID: surfaceSessionID,
 		ChatID:           chatID,
 		ActorUserID:      senderUserID,
@@ -451,36 +466,36 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 
 	switch messageType {
 	case "text":
-		text, err := parseTextContent(content)
+		text, err := ParseTextContent(content)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
-			return plannedInboundMessage{}, false, err
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
+			return PlannedInboundMessage{}, false, err
 		}
-		commandAction, handled := parseTextAction(text)
+		commandAction, handled := env.ParseTextAction(text)
 		if handled {
-			commandAction.GatewayID = g.config.GatewayID
+			commandAction.GatewayID = gatewayID
 			commandAction.SurfaceSessionID = surfaceSessionID
 			commandAction.ChatID = chatID
 			commandAction.ActorUserID = baseAction.ActorUserID
 			commandAction.MessageID = baseAction.MessageID
 			commandAction.TargetMessageID = baseAction.TargetMessageID
 			commandAction.Inbound = cloneInboundMeta(inbound)
-			return plannedInboundMessage{action: &commandAction}, true, nil
+			return PlannedInboundMessage{Action: &commandAction}, true, nil
 		}
-		if fallbackAction, ok := fallbackCompatTextAction(text); ok {
-			fallbackAction.GatewayID = g.config.GatewayID
+		if fallbackAction, ok := env.FallbackCompatTextAction(text); ok {
+			fallbackAction.GatewayID = gatewayID
 			fallbackAction.SurfaceSessionID = surfaceSessionID
 			fallbackAction.ChatID = chatID
 			fallbackAction.ActorUserID = baseAction.ActorUserID
 			fallbackAction.MessageID = baseAction.MessageID
 			fallbackAction.TargetMessageID = baseAction.TargetMessageID
 			fallbackAction.Inbound = cloneInboundMeta(inbound)
-			return plannedInboundMessage{action: &fallbackAction}, true, nil
+			return PlannedInboundMessage{Action: &fallbackAction}, true, nil
 		}
-		g.recordSurfaceMessage(messageID, surfaceSessionID)
-		return plannedInboundMessage{
-			queue: &queuedMessageWork{
-				gatewayID:       g.config.GatewayID,
+		env.RecordSurfaceMessage(messageID, surfaceSessionID)
+		return PlannedInboundMessage{
+			Queue: &QueuedMessageWork{
+				gatewayID:       gatewayID,
 				surfaceID:       surfaceSessionID,
 				chatID:          chatID,
 				actorUserID:     senderUserID,
@@ -496,13 +511,13 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 	case "post":
 		var contentPreview feishuPostContent
 		if err := json.Unmarshal([]byte(content), &contentPreview); err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, inbound, message, "parse_post_content", err)
-			return plannedInboundMessage{}, false, err
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_post_content", err)
+			return PlannedInboundMessage{}, false, err
 		}
-		g.recordSurfaceMessage(messageID, surfaceSessionID)
-		return plannedInboundMessage{
-			queue: &queuedMessageWork{
-				gatewayID:       g.config.GatewayID,
+		env.RecordSurfaceMessage(messageID, surfaceSessionID)
+		return PlannedInboundMessage{
+			Queue: &QueuedMessageWork{
+				gatewayID:       gatewayID,
 				surfaceID:       surfaceSessionID,
 				chatID:          chatID,
 				actorUserID:     senderUserID,
@@ -515,15 +530,15 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 			},
 		}, true, nil
 	case "image":
-		imageKey, err := parseImageKey(content)
+		imageKey, err := ParseImageKey(content)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, inbound, message, "parse_image_content", err)
-			return plannedInboundMessage{}, false, err
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_image_content", err)
+			return PlannedInboundMessage{}, false, err
 		}
-		g.recordSurfaceMessage(messageID, surfaceSessionID)
-		return plannedInboundMessage{
-			queue: &queuedMessageWork{
-				gatewayID:       g.config.GatewayID,
+		env.RecordSurfaceMessage(messageID, surfaceSessionID)
+		return PlannedInboundMessage{
+			Queue: &QueuedMessageWork{
+				gatewayID:       gatewayID,
 				surfaceID:       surfaceSessionID,
 				chatID:          chatID,
 				actorUserID:     senderUserID,
@@ -537,15 +552,15 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 			},
 		}, true, nil
 	case "file":
-		fileKey, fileName, err := parseFileContent(content)
+		fileKey, fileName, err := ParseFileContent(content)
 		if err != nil {
-			logInboundMessageParseFailed(g.config.GatewayID, surfaceSessionID, inbound, message, "parse_file_content", err)
-			return plannedInboundMessage{}, false, err
+			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_file_content", err)
+			return PlannedInboundMessage{}, false, err
 		}
-		g.recordSurfaceMessage(messageID, surfaceSessionID)
-		return plannedInboundMessage{
-			queue: &queuedMessageWork{
-				gatewayID:       g.config.GatewayID,
+		env.RecordSurfaceMessage(messageID, surfaceSessionID)
+		return PlannedInboundMessage{
+			Queue: &QueuedMessageWork{
+				gatewayID:       gatewayID,
 				surfaceID:       surfaceSessionID,
 				chatID:          chatID,
 				actorUserID:     senderUserID,
@@ -560,10 +575,10 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 			},
 		}, true, nil
 	case "merge_forward":
-		g.recordSurfaceMessage(messageID, surfaceSessionID)
-		return plannedInboundMessage{
-			queue: &queuedMessageWork{
-				gatewayID:       g.config.GatewayID,
+		env.RecordSurfaceMessage(messageID, surfaceSessionID)
+		return PlannedInboundMessage{
+			Queue: &QueuedMessageWork{
+				gatewayID:       gatewayID,
 				surfaceID:       surfaceSessionID,
 				chatID:          chatID,
 				actorUserID:     senderUserID,
@@ -576,37 +591,8 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 			},
 		}, true, nil
 	default:
-		logInboundMessageIgnored(g.config.GatewayID, surfaceSessionID, inbound, message, "unsupported_message_type")
-		return plannedInboundMessage{}, false, nil
-	}
-}
-
-func (g *LiveGateway) deliverAsyncInboundFailure(ctx context.Context, surfaceID, chatID, actorUserID, replyToMessageID, body string) {
-	if g == nil || strings.TrimSpace(body) == "" {
-		return
-	}
-	receiveID, receiveIDType := ResolveReceiveTarget(chatID, actorUserID)
-	if receiveID == "" || receiveIDType == "" {
-		return
-	}
-	op := Operation{
-		Kind:             OperationSendCard,
-		GatewayID:        g.config.GatewayID,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		ReceiveID:        receiveID,
-		ReceiveIDType:    receiveIDType,
-		ChatID:           strings.TrimSpace(chatID),
-		ReplyToMessageID: strings.TrimSpace(replyToMessageID),
-		CardTitle:        "消息未处理",
-		CardBody:         body,
-		CardThemeKey:     cardThemeError,
-		cardEnvelope:     cardEnvelopeV2,
-		card:             legacyCardDocument("消息未处理", body, cardThemeError, nil),
-	}
-	applyCtx, cancel := newFeishuTimeoutContext(ctx, asyncInboundFailureNoticeTimeout)
-	defer cancel()
-	if err := g.Apply(applyCtx, []Operation{op}); err != nil {
-		log.Printf("feishu async inbound failure notice delivery failed: surface=%s reply_to=%s err=%v", surfaceID, replyToMessageID, err)
+		logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "unsupported_message_type")
+		return PlannedInboundMessage{}, false, nil
 	}
 }
 

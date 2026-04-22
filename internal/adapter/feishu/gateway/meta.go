@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"strconv"
@@ -13,7 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func inboundMetaFromMessageEvent(event *larkim.P2MessageReceiveV1) *control.ActionInboundMeta {
+func InboundMetaFromMessageEvent(event *larkim.P2MessageReceiveV1) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
 	}
@@ -25,7 +25,7 @@ func inboundMetaFromMessageEvent(event *larkim.P2MessageReceiveV1) *control.Acti
 	return meta
 }
 
-func inboundMetaFromMessageRecalledEvent(event *larkim.P2MessageRecalledV1) *control.ActionInboundMeta {
+func InboundMetaFromMessageRecalledEvent(event *larkim.P2MessageRecalledV1) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func inboundMetaFromMessageRecalledEvent(event *larkim.P2MessageRecalledV1) *con
 	return meta
 }
 
-func inboundMetaFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionCreatedV1) *control.ActionInboundMeta {
+func InboundMetaFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionCreatedV1) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
 	}
@@ -47,7 +47,7 @@ func inboundMetaFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionC
 	return meta
 }
 
-func inboundMetaFromMenuEvent(event *larkapplication.P2BotMenuV6) *control.ActionInboundMeta {
+func InboundMetaFromMenuEvent(event *larkapplication.P2BotMenuV6) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func inboundMetaFromMenuEvent(event *larkapplication.P2BotMenuV6) *control.Actio
 	return meta
 }
 
-func inboundMetaFromCardActionEvent(event *larkcallback.CardActionTriggerEvent) *control.ActionInboundMeta {
+func InboundMetaFromCardActionEvent(event *larkcallback.CardActionTriggerEvent) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
 	}

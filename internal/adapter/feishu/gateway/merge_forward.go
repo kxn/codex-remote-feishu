@@ -1,4 +1,4 @@
-package feishu
+package gateway
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func parseMergeForwardContent(rawContent string) (string, error) {
+func ParseMergeForwardContent(rawContent string) (string, error) {
 	rawContent = strings.TrimSpace(rawContent)
 	if rawContent == "" {
 		return "", fmt.Errorf("empty merge_forward content")
@@ -43,12 +43,9 @@ func parseMergeForwardContent(rawContent string) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-func gatewayMessageSpeakerLabel(message *gatewayMessage) string {
-	if message == nil {
-		return ""
-	}
-	senderID := strings.TrimSpace(message.SenderID)
-	senderType := strings.ToLower(strings.TrimSpace(message.SenderType))
+func GatewayMessageSpeakerLabel(senderID, senderType string) string {
+	senderID = strings.TrimSpace(senderID)
+	senderType = strings.ToLower(strings.TrimSpace(senderType))
 	switch senderType {
 	case "user":
 		if senderID == "" {
@@ -84,7 +81,7 @@ func gatewayMessageSpeakerLabel(message *gatewayMessage) string {
 	}
 }
 
-func mergeForwardTitle(rawContent string) string {
+func MergeForwardTitle(rawContent string) string {
 	rawContent = strings.TrimSpace(rawContent)
 	if rawContent == "" || strings.EqualFold(rawContent, "Merged and Forwarded Message") {
 		return ""
@@ -205,7 +202,7 @@ func firstJSONString(values map[string]any, keys ...string) string {
 	return ""
 }
 
-func parseFileName(rawContent string) string {
+func ParseFileName(rawContent string) string {
 	var payload struct {
 		FileName string `json:"file_name"`
 		Name     string `json:"name"`
