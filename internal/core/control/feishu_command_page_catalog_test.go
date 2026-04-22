@@ -53,3 +53,24 @@ func TestNormalizeFeishuPageViewPromotesNoticeAndSealedContract(t *testing.T) {
 		t.Fatalf("expected round-trip notice sections, got %#v", roundTrip.NoticeSections)
 	}
 }
+
+func TestNormalizeFeishuPageViewKeepsMenuHomeAtRoot(t *testing.T) {
+	view := NormalizeFeishuPageView(BuildFeishuCommandMenuHomePageView())
+	if len(view.Breadcrumbs) != 1 || view.Breadcrumbs[0].Label != "菜单首页" {
+		t.Fatalf("expected menu home breadcrumb to stay at root, got %#v", view.Breadcrumbs)
+	}
+	if len(view.RelatedButtons) != 0 {
+		t.Fatalf("expected menu home to avoid inferred back button, got %#v", view.RelatedButtons)
+	}
+	if len(view.Sections) != 1 || len(view.Sections[0].Entries) == 0 {
+		t.Fatalf("expected menu home entries, got %#v", view.Sections)
+	}
+	for _, entry := range view.Sections[0].Entries {
+		if entry.Title == "" || len(entry.Buttons) != 1 {
+			t.Fatalf("expected titled submenu entry with one button, got %#v", entry)
+		}
+		if entry.Buttons[0].Label != entry.Title {
+			t.Fatalf("expected submenu button label to match entry title, got %#v", entry)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -150,6 +151,37 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 	}
 	if formElements[1]["form_action_type"] != "submit" {
 		t.Fatalf("expected V2 submit button, got %#v", formElements[1])
+	}
+}
+
+func TestProjectMenuHomeRendersRootBreadcrumbAndNamedGroupButtons(t *testing.T) {
+	projector := NewProjector()
+	view := control.BuildFeishuCommandMenuHomePageView()
+	ops := projector.Project("chat-1", commandCatalogEvent(view))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	groups := control.FeishuCommandGroups()
+	if len(ops[0].CardElements) != 1+len(groups) {
+		t.Fatalf("expected root breadcrumb plus one button row per group, got %#v", ops[0].CardElements)
+	}
+	if ops[0].CardElements[0]["content"] != "菜单首页" {
+		t.Fatalf("expected root breadcrumb only, got %#v", ops[0].CardElements[0])
+	}
+	labels := make([]string, 0, len(groups))
+	for _, element := range ops[0].CardElements[1:] {
+		row := cardElementButtons(t, element)
+		if len(row) != 1 {
+			t.Fatalf("expected one compact button per row, got %#v", element)
+		}
+		labels = append(labels, cardButtonLabel(t, row[0]))
+	}
+	want := make([]string, 0, len(groups))
+	for _, group := range groups {
+		want = append(want, group.Title)
+	}
+	if !reflect.DeepEqual(labels, want) {
+		t.Fatalf("menu home button labels = %#v, want %#v", labels, want)
 	}
 }
 

@@ -28,6 +28,7 @@ type FeishuPageView struct {
 func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 	commandID := strings.TrimSpace(view.CommandID)
 	def, _ := FeishuCommandDefinitionByID(commandID)
+	allowCommandGroupFallback := commandID != FeishuCommandMenu
 	title := strings.TrimSpace(view.Title)
 	if title == "" {
 		title = strings.TrimSpace(def.Title)
@@ -37,7 +38,7 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 		displayStyle = CommandCatalogDisplayCompactButtons
 	}
 	breadcrumbs := cloneCommandBreadcrumbs(view.Breadcrumbs)
-	if len(breadcrumbs) == 0 && strings.TrimSpace(def.GroupID) != "" {
+	if allowCommandGroupFallback && len(breadcrumbs) == 0 && strings.TrimSpace(def.GroupID) != "" {
 		breadcrumbs = FeishuCommandBreadcrumbs(def.GroupID, title)
 	}
 	bodySections := BuildFeishuPageBodySections(view)
@@ -48,7 +49,7 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 	if view.Sealed {
 		interactive = false
 		relatedButtons = nil
-	} else if len(relatedButtons) == 0 && strings.TrimSpace(def.GroupID) != "" {
+	} else if allowCommandGroupFallback && len(relatedButtons) == 0 && strings.TrimSpace(def.GroupID) != "" {
 		relatedButtons = FeishuCommandBackButtons(def.GroupID)
 	}
 	return FeishuPageView{

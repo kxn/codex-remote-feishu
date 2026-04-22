@@ -8,6 +8,7 @@ func BuildFeishuCommandMenuHomePageView() FeishuPageView {
 		Title:        "命令菜单",
 		Interactive:  true,
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:  FeishuCommandBreadcrumbs("", ""),
 		Sections: []CommandCatalogSection{{
 			Title:   "",
 			Entries: buildFeishuCommandMenuGroupEntries(),
@@ -176,6 +177,9 @@ func feishuCommandMenuButtonLabel(def FeishuCommandDefinition) string {
 }
 
 func feishuSubmenuButtonLabel(label string) string {
-	_ = strings.TrimSpace(label)
-	return "进入"
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return "进入"
+	}
+	return label
 }
