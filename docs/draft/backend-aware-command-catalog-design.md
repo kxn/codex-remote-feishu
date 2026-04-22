@@ -19,7 +19,7 @@
 - `docs/general/feishu-menu-card-usage-guidelines.md`
 - `docs/general/feishu-card-interaction-model.md`
 - `docs/general/feishu-card-api-constraints.md`
-- `docs/inprogress/claude-normal-mode-poc-design.md`
+- `docs/inprogress/claude-backend-integration-plan.md`
 
 ## 2. 背景
 

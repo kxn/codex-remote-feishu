@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-22`
-> Summary: 新增飞书菜单卡使用规约文档，并将其纳入 general 索引。
+> Summary: 整合 Claude 相关设计为单一实施文档，并将旧文档移入 obsoleted 索引。
 
 ## 1. 适用范围
 
@@ -147,9 +147,7 @@
 
 ### 6.3 `inprogress`
 
-- [claude-feidex-reassessment.md](./inprogress/claude-feidex-reassessment.md)
-- [claude-provider-protocol-mapping.md](./inprogress/claude-provider-protocol-mapping.md)
-- [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
+- [claude-backend-integration-plan.md](./inprogress/claude-backend-integration-plan.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
 - [cross-layer-event-contract-redesign.md](./inprogress/cross-layer-event-contract-redesign.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
@@ -185,5 +183,8 @@
 ### 6.5 `obsoleted`
 
 - [app-server-redesign.md](./obsoleted/app-server-redesign.md)
+- [claude-feidex-reassessment.md](./obsoleted/claude-feidex-reassessment.md)
+- [claude-normal-mode-poc-design.md](./obsoleted/claude-normal-mode-poc-design.md)
+- [claude-provider-protocol-mapping.md](./obsoleted/claude-provider-protocol-mapping.md)
 - [feishu-headless-instance-design.md](./obsoleted/feishu-headless-instance-design.md)
 - [web-install-admin-ui-design.md](./obsoleted/web-install-admin-ui-design.md)
