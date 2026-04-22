@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func selectionViewStructuredProjection(
+func SelectionViewStructuredProjection(
 	view control.FeishuSelectionView,
 	ctx *control.FeishuUISelectionContext,
 	daemonLifecycleID string,

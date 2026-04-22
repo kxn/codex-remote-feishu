@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func projectNoticeContent(notice control.Notice) (string, []map[string]any) {
+func ProjectNoticeContent(notice control.Notice) (string, []map[string]any) {
 	if elements := projectNoticeElements(notice); len(elements) != 0 {
 		return "", elements
 	}

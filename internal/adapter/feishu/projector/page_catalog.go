@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"strings"
@@ -6,11 +6,11 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func pageBody(view control.FeishuPageView) string {
+func PageBody(view control.FeishuPageView) string {
 	return ""
 }
 
-func pageElements(view control.FeishuPageView, daemonLifecycleID string) []map[string]any {
+func PageElements(view control.FeishuPageView, daemonLifecycleID string) []map[string]any {
 	view = control.NormalizeFeishuPageView(view)
 	elements := make([]map[string]any, 0, len(view.Sections)*3+len(view.SummarySections)*2+len(view.NoticeSections)*2+3)
 	if breadcrumb := commandCatalogBreadcrumbMarkdown(view.Breadcrumbs); breadcrumb != "" {

@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
+func PathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	if view.Terminal || view.Sealed {
 		return sealedPathPickerElements(view)
 	}

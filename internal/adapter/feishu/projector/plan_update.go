@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"strings"
@@ -33,7 +33,7 @@ func planUpdateSections(update control.PlanUpdate) []control.FeishuCardTextSecti
 	return sections
 }
 
-func planUpdateElements(update control.PlanUpdate) []map[string]any {
+func PlanUpdateElements(update control.PlanUpdate) []map[string]any {
 	return appendCardTextSections(nil, planUpdateSections(update))
 }
 

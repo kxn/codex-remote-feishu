@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+func TargetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, 18)
 	if view.Stage != "" && view.Stage != control.FeishuTargetPickerStageEditing {
 		return targetPickerStageElements(view, daemonLifecycleID)
@@ -25,10 +25,10 @@ func targetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID
 	default:
 		elements = append(elements, targetPickerTargetPageElements(view, daemonLifecycleID)...)
 	}
-	if messages := targetPickerMessageElements(view.SourceMessages); len(messages) != 0 {
+	if messages := TargetPickerMessageElements(view.SourceMessages); len(messages) != 0 {
 		elements = append(elements, messages...)
 	}
-	if messages := targetPickerMessageElements(view.Messages); len(messages) != 0 {
+	if messages := TargetPickerMessageElements(view.Messages); len(messages) != 0 {
 		elements = append(elements, messages...)
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
@@ -105,7 +105,7 @@ func targetPickerNoticeSections(view control.FeishuTargetPickerView) []control.F
 	return sections
 }
 
-func targetPickerTheme(view control.FeishuTargetPickerView) string {
+func TargetPickerTheme(view control.FeishuTargetPickerView) string {
 	switch view.Stage {
 	case control.FeishuTargetPickerStageSucceeded, control.FeishuTargetPickerStageCancelled:
 		return cardThemeInfo
@@ -455,7 +455,7 @@ func targetPickerFieldMarkdown(label, value, placeholder string) string {
 	return fmt.Sprintf("**%s**\n%s", strings.TrimSpace(label), formatNeutralTextTag(value))
 }
 
-func targetPickerMessageElements(messages []control.FeishuTargetPickerMessage) []map[string]any {
+func TargetPickerMessageElements(messages []control.FeishuTargetPickerMessage) []map[string]any {
 	if len(messages) == 0 {
 		return nil
 	}

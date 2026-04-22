@@ -1,4 +1,4 @@
-package feishu
+package projector
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ func requestPromptSections(prompt control.FeishuRequestView) []control.FeishuCar
 	return sections
 }
 
-func requestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
+func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
 	elements := appendCardTextSections(nil, requestPromptSections(prompt))
 	switch normalizeRequestPromptType(prompt.RequestType) {
 	case "request_user_input":

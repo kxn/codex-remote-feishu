@@ -73,19 +73,20 @@
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
   - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
+  - 纯 projector builder / payload projection 现在已下沉到邻接子包 `internal/adapter/feishu/projector`；`internal/adapter/feishu/projector.go` 继续保留 `Projector` 入口、`Operation` 组装与少量兼容 wrapper
   - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / 被动 `context_compaction`），负责在首次发送时打开 `config.update_multi=true`，让后续同一窗口卡可被 `message.patch` 更新；首卡当前固定顶层 append，不继承 turn reply anchor。若当前窗口卡在 projector 层按“每行一个 element”的粒度已放不下，projector 会继续 patch 同一张卡：丢弃最旧可见行、把 `card_start_seq` 前移到当前窗口首行，并在顶部补一行“较早过程已省略，仅保留最近进度。”
   - 对 turn timeline 文本（final reply、非 final assistant 文本、`用户补充`、`attention_ping` 这类轻量 text event），负责根据 `ReplyToMessageID` 选择 reply 发送；reply 失败时 gateway 会回退到普通 text/card create。`attention_ping` 若携带显式 mention 目标，则 gateway 会改走结构化 `post` 文本，把单目标 `at` 与正文一起投递；上游不再直接拼裸 `@xxx`
   - 对显式 `/compact` 这种 direct-command owner card，当前通过 patchable `FeishuPageView` 发送首卡，并依赖 `TrackingKey -> message_id` 回写把 running / terminal 状态继续 patch 回同一张卡
   - 当前是 selection / target-picker / page cards 最终 projection 的 owner：
-    [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
+    [internal/adapter/feishu/projector/target_picker.go](../../internal/adapter/feishu/projector/target_picker.go)
     负责把 `FeishuTargetPickerView` 投影成当前 target picker 卡片
-    [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
+    [internal/adapter/feishu/projector/selection_view.go](../../internal/adapter/feishu/projector/selection_view.go)
     负责 selection view 的 compat prompt 投影 helper（供 structured projector 复用）
-    [internal/adapter/feishu/projector_selection_structured.go](../../internal/adapter/feishu/projector_selection_structured.go)
+    [internal/adapter/feishu/projector/selection_structured.go](../../internal/adapter/feishu/projector/selection_structured.go)
     负责 selection view 的统一投影入口：VS Code `/list` 按钮式 instance view 与 `/use` / `/useall` 下拉式 thread view 走直接结构化投影，其余 legacy selection path 走 compat prompt helper；`projector.go` 不再保留单独的 selection fallback 分支
-    [internal/adapter/feishu/projector_page_catalog.go](../../internal/adapter/feishu/projector_page_catalog.go)
+    [internal/adapter/feishu/projector/page_catalog.go](../../internal/adapter/feishu/projector/page_catalog.go)
     负责把 `FeishuPageView` 投影成页面卡，并为按钮/表单写入 `page_action` / `page_submit` payload
-    [internal/adapter/feishu/projector_path_picker.go](../../internal/adapter/feishu/projector_path_picker.go)
+    [internal/adapter/feishu/projector/path_picker.go](../../internal/adapter/feishu/projector/path_picker.go)
     负责把 `FeishuPathPickerView` 投影成当前复用路径选择器卡片
 - `orchestrator`
   - 负责 attach / use / follow / request gate / capture / new-thread 等产品状态
@@ -634,7 +635,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/card_action_payload.go](../../internal/adapter/feishu/card_action_payload.go)
 - [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-- [internal/adapter/feishu/projector_request.go](../../internal/adapter/feishu/projector_request.go)
+- [internal/adapter/feishu/projector/request.go](../../internal/adapter/feishu/projector/request.go)
 - [internal/core/orchestrator/service_ui_runtime.go](../../internal/core/orchestrator/service_ui_runtime.go)
 - [internal/core/orchestrator/service_target_picker_owner_card.go](../../internal/core/orchestrator/service_target_picker_owner_card.go)
 - [internal/core/orchestrator/service_feishu_ui_context.go](../../internal/core/orchestrator/service_feishu_ui_context.go)
@@ -645,9 +646,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_mcp_tool_call_progress.go](../../internal/core/orchestrator/service_mcp_tool_call_progress.go)
 - [internal/core/orchestrator/service_replay.go](../../internal/core/orchestrator/service_replay.go)
 - [internal/core/orchestrator/service_final_card.go](../../internal/core/orchestrator/service_final_card.go)
-- [internal/adapter/feishu/projector_target_picker.go](../../internal/adapter/feishu/projector_target_picker.go)
-- [internal/adapter/feishu/projector_selection_view.go](../../internal/adapter/feishu/projector_selection_view.go)
-- [internal/adapter/feishu/projector_path_picker.go](../../internal/adapter/feishu/projector_path_picker.go)
+- [internal/adapter/feishu/projector/target_picker.go](../../internal/adapter/feishu/projector/target_picker.go)
+- [internal/adapter/feishu/projector/selection_view.go](../../internal/adapter/feishu/projector/selection_view.go)
+- [internal/adapter/feishu/projector/path_picker.go](../../internal/adapter/feishu/projector/path_picker.go)
 - [internal/core/orchestrator/service_feishu_ui_controller.go](../../internal/core/orchestrator/service_feishu_ui_controller.go)
 - [internal/core/orchestrator/service_thread_history_view.go](../../internal/core/orchestrator/service_thread_history_view.go)
 - [internal/core/orchestrator/service_target_picker.go](../../internal/core/orchestrator/service_target_picker.go)
@@ -662,6 +663,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_thread_history.go](../../internal/app/daemon/app_thread_history.go)
 - [internal/app/daemon/app_inbound_lifecycle.go](../../internal/app/daemon/app_inbound_lifecycle.go)
 - [internal/adapter/feishu/projector_thread_history.go](../../internal/adapter/feishu/projector_thread_history.go)
+- [internal/adapter/feishu/projector/thread_history.go](../../internal/adapter/feishu/projector/thread_history.go)
 
 ### 7.2 当前关键测试基线
 
