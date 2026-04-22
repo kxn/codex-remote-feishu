@@ -150,6 +150,7 @@
 - [claude-provider-protocol-mapping.md](./inprogress/claude-provider-protocol-mapping.md)
 - [claude-normal-mode-poc-design.md](./inprogress/claude-normal-mode-poc-design.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
+- [cross-layer-event-contract-redesign.md](./inprogress/cross-layer-event-contract-redesign.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [thread-description-unification-plan.md](./inprogress/thread-description-unification-plan.md)
