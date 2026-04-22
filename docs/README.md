@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-19`
-> Summary: 新增 Feishu 卡片内容语境基线文档，并更新文档索引。
+> Updated: `2026-04-22`
+> Summary: 新增飞书菜单 / 业务卡前台流架构重构草案并更新文档索引。
 
 ## 1. 适用范围
 
@@ -159,6 +159,7 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
+- [feishu-menu-frontstage-architecture-redesign.md](./draft/feishu-menu-frontstage-architecture-redesign.md)
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-owner-card-bypass-prompt-audit-2026-04.md](./draft/feishu-owner-card-bypass-prompt-audit-2026-04.md)
 - [feishu-slash-menu-owner-card-audit-2026-04.md](./draft/feishu-slash-menu-owner-card-audit-2026-04.md)
