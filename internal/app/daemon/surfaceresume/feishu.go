@@ -1,4 +1,4 @@
-package daemon
+package surfaceresume
 
 import (
 	"strings"
@@ -8,21 +8,21 @@ import (
 )
 
 type feishuP2PSurfaceResumeCandidate struct {
-	entry SurfaceResumeEntry
+	entry Entry
 	ref   feishu.SurfaceRef
 }
 
-func canonicalizeSurfaceResumeEntries(entries map[string]SurfaceResumeEntry) (map[string]SurfaceResumeEntry, bool) {
+func CanonicalizeEntries(entries map[string]Entry) (map[string]Entry, bool) {
 	if len(entries) == 0 {
-		return map[string]SurfaceResumeEntry{}, false
+		return map[string]Entry{}, false
 	}
 
-	canonical := make(map[string]SurfaceResumeEntry, len(entries))
+	canonical := make(map[string]Entry, len(entries))
 	grouped := make(map[string][]feishuP2PSurfaceResumeCandidate)
 	changed := false
 
 	for key, entry := range entries {
-		normalized, ok := normalizeSurfaceResumeEntry(entry)
+		normalized, ok := NormalizeEntry(entry)
 		if !ok {
 			changed = true
 			continue
@@ -35,7 +35,7 @@ func canonicalizeSurfaceResumeEntries(entries map[string]SurfaceResumeEntry) (ma
 			continue
 		}
 		canonical[normalized.SurfaceSessionID] = normalized
-		if !sameSurfaceResumeEntryContent(normalized, entry) {
+		if !SameEntryContent(normalized, entry) {
 			changed = true
 		}
 	}
@@ -47,7 +47,7 @@ func canonicalizeSurfaceResumeEntries(entries map[string]SurfaceResumeEntry) (ma
 			changed = true
 			continue
 		}
-		if only := candidates[0].entry; merged.SurfaceSessionID != only.SurfaceSessionID || !sameSurfaceResumeEntryContent(merged, only) {
+		if only := candidates[0].entry; merged.SurfaceSessionID != only.SurfaceSessionID || !SameEntryContent(merged, only) {
 			changed = true
 		}
 	}
@@ -58,7 +58,7 @@ func canonicalizeSurfaceResumeEntries(entries map[string]SurfaceResumeEntry) (ma
 	return canonical, changed
 }
 
-func feishuP2PSurfaceResumeGroup(entry SurfaceResumeEntry) (string, feishuP2PSurfaceResumeCandidate, bool) {
+func feishuP2PSurfaceResumeGroup(entry Entry) (string, feishuP2PSurfaceResumeCandidate, bool) {
 	ref, ok := feishu.ParseSurfaceRef(entry.SurfaceSessionID)
 	if !ok || ref.ScopeKind != feishu.ScopeKindUser {
 		return "", feishuP2PSurfaceResumeCandidate{}, false
@@ -74,7 +74,7 @@ func feishuP2PSurfaceResumeGroup(entry SurfaceResumeEntry) (string, feishuP2PSur
 	return gatewayID + "|" + chatID, feishuP2PSurfaceResumeCandidate{entry: entry, ref: ref}, true
 }
 
-func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCandidate) SurfaceResumeEntry {
+func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCandidate) Entry {
 	bestIdentity := ""
 	gatewayID := ""
 	chatID := ""
@@ -124,7 +124,7 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 	merged.ResumeHeadless = bestResume.entry.ResumeHeadless
 	merged.UpdatedAt = latestAt
 
-	normalized, ok := normalizeSurfaceResumeEntry(merged)
+	normalized, ok := NormalizeEntry(merged)
 	if !ok {
 		return merged
 	}
@@ -168,7 +168,7 @@ func feishuSurfaceUserIDRank(value string) int {
 	}
 }
 
-func resumeStatePayloadScore(entry SurfaceResumeEntry) int {
+func resumeStatePayloadScore(entry Entry) int {
 	score := 0
 	if strings.TrimSpace(entry.ResumeThreadID) != "" {
 		score += 100
@@ -194,4 +194,13 @@ func resumeStatePayloadScore(entry SurfaceResumeEntry) int {
 		score++
 	}
 	return score
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -14,7 +14,7 @@ import (
 func TestUpgradeLatestUsesSameOwnerCardAcrossCheckingAndConfirm(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
@@ -54,7 +54,7 @@ func TestUpgradeLatestFromStampedCardUsesUpdateCard(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
@@ -96,7 +96,7 @@ func TestUpgradeLatestFromStampedCardUsesUpdateCard(t *testing.T) {
 func TestUpgradeOwnerCancelConfirmClearsPendingAndSealsSameCard(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 

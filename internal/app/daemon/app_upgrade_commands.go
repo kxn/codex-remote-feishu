@@ -268,7 +268,7 @@ func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, 
 	if !install.CurrentBuildAllowsReleaseTrack(nextTrack) {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_unsupported", unsupportedTrackMessage(nextTrack))}
 	}
-	if a.upgradeRuntime.checkInFlight {
+	if a.upgradeRuntime.CheckInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_busy", "当前正在检查升级，暂时不能切换 track。")}
 	}
 	if pendingUpgradeBusy(stateValue.PendingUpgrade) {
@@ -283,7 +283,7 @@ func (a *App) setTrackEvents(surfaceID string, stateValue install.InstallState, 
 		stateValue.PendingUpgrade = nil
 	}
 	now := time.Now().UTC()
-	a.upgradeRuntime.nextCheckAt = now.Add(a.upgradeRuntime.checkInterval)
+	a.upgradeRuntime.NextCheckAt = now.Add(a.upgradeRuntime.CheckInterval)
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		return []control.UIEvent{upgradeNoticeEvent(surfaceID, "upgrade_track_write_failed", fmt.Sprintf("切换 track 失败：%v", err))}
 	}

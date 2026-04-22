@@ -24,7 +24,7 @@ func TestDaemonIdleHeadlessCleanupStopsOutsideAppLockAndKeepsStoppingState(t *te
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
-	app.managedHeadlessRuntime.processes["inst-headless-2"] = &managedHeadlessProcess{
+	app.managedHeadlessRuntime.Processes["inst-headless-2"] = &managedHeadlessProcess{
 		InstanceID:       "inst-headless-2",
 		PID:              2468,
 		WorkspaceRoot:    "/data/dl/droid",
@@ -56,7 +56,7 @@ func TestDaemonIdleHeadlessCleanupStopsOutsideAppLockAndKeepsStoppingState(t *te
 
 	waitForTestSignal(t, stopStarted, "idle headless stop start")
 	unlock := lockAppForTest(t, app)
-	managed := app.managedHeadlessRuntime.processes["inst-headless-2"]
+	managed := app.managedHeadlessRuntime.Processes["inst-headless-2"]
 	if managed == nil {
 		t.Fatalf("expected managed headless to remain tracked while stop is in flight")
 	}
@@ -67,7 +67,7 @@ func TestDaemonIdleHeadlessCleanupStopsOutsideAppLockAndKeepsStoppingState(t *te
 		t.Fatalf("expected refresh tracking to be cleared while stopping, got %#v", managed)
 	}
 	app.syncManagedHeadlessLocked(base.Add(2 * time.Minute))
-	if managed := app.managedHeadlessRuntime.processes["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusStopping {
+	if managed := app.managedHeadlessRuntime.Processes["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusStopping {
 		t.Fatalf("sync must preserve stopping state, got %#v", managed)
 	}
 	summary, ok := app.adminManagedInstanceSummaryLocked("inst-headless-2")
@@ -88,7 +88,7 @@ func TestDaemonIdleHeadlessCleanupStopsOutsideAppLockAndKeepsStoppingState(t *te
 	if app.service.Instance("inst-headless-2") != nil {
 		t.Fatalf("expected service instance removed after idle stop settles")
 	}
-	if _, ok := app.managedHeadlessRuntime.processes["inst-headless-2"]; ok {
+	if _, ok := app.managedHeadlessRuntime.Processes["inst-headless-2"]; ok {
 		t.Fatalf("expected managed headless entry removed after idle stop settles")
 	}
 }
@@ -108,7 +108,7 @@ func TestDaemonIdleHeadlessCleanupRetriesImmediatelyAfterStopFailure(t *testing.
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
-	app.managedHeadlessRuntime.processes["inst-headless-2"] = &managedHeadlessProcess{
+	app.managedHeadlessRuntime.Processes["inst-headless-2"] = &managedHeadlessProcess{
 		InstanceID:    "inst-headless-2",
 		PID:           2468,
 		WorkspaceRoot: "/data/dl/droid",
@@ -131,7 +131,7 @@ func TestDaemonIdleHeadlessCleanupRetriesImmediatelyAfterStopFailure(t *testing.
 
 	app.mu.Lock()
 	app.reapIdleHeadless(base.Add(2 * time.Minute))
-	managed := app.managedHeadlessRuntime.processes["inst-headless-2"]
+	managed := app.managedHeadlessRuntime.Processes["inst-headless-2"]
 	if attempts != 1 {
 		t.Fatalf("attempts after first reap = %d, want 1", attempts)
 	}
@@ -153,7 +153,7 @@ func TestDaemonIdleHeadlessCleanupRetriesImmediatelyAfterStopFailure(t *testing.
 	if app.service.Instance("inst-headless-2") != nil {
 		t.Fatalf("expected service instance removed after retry succeeds")
 	}
-	if _, ok := app.managedHeadlessRuntime.processes["inst-headless-2"]; ok {
+	if _, ok := app.managedHeadlessRuntime.Processes["inst-headless-2"]; ok {
 		t.Fatalf("expected managed headless entry removed after retry succeeds")
 	}
 }

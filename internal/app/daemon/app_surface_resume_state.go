@@ -28,13 +28,10 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	store, err := loadSurfaceResumeStore(path)
 	if err != nil {
 		log.Printf("load surface resume state failed: path=%s err=%v", path, err)
-		store = &surfaceResumeStore{
-			path:    path,
-			entries: map[string]SurfaceResumeEntry{},
-		}
+		store = newSurfaceResumeStore(path)
 	}
-	if store != nil && store.dirty {
-		if err := store.save(); err != nil {
+	if store != nil && store.Dirty() {
+		if err := store.Save(); err != nil {
 			log.Printf("persist sanitized surface resume state failed: path=%s err=%v", path, err)
 		}
 	}

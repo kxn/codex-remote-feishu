@@ -21,42 +21,13 @@ const (
 	upgradeOwnerPayloadOptionKey = "option_id"
 )
 
-type upgradeOwnerCardFlowStage string
-
-const (
-	upgradeOwnerFlowStageChecking   upgradeOwnerCardFlowStage = "checking"
-	upgradeOwnerFlowStageConfirm    upgradeOwnerCardFlowStage = "confirm"
-	upgradeOwnerFlowStageRunning    upgradeOwnerCardFlowStage = "running"
-	upgradeOwnerFlowStageCancelling upgradeOwnerCardFlowStage = "cancelling"
-	upgradeOwnerFlowStageRestarting upgradeOwnerCardFlowStage = "restarting"
-	upgradeOwnerFlowStageCompleted  upgradeOwnerCardFlowStage = "completed"
-	upgradeOwnerFlowStageCancelled  upgradeOwnerCardFlowStage = "cancelled"
-	upgradeOwnerFlowStageFailed     upgradeOwnerCardFlowStage = "failed"
-)
-
-type upgradeOwnerCardFlowRecord struct {
-	FlowID           string
-	SurfaceSessionID string
-	OwnerUserID      string
-	MessageID        string
-	Stage            upgradeOwnerCardFlowStage
-	Source           install.UpgradeSource
-	Track            install.ReleaseTrack
-	CurrentVersion   string
-	TargetVersion    string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	ExpiresAt        time.Time
-	CancelRequested  bool
-}
-
 func (a *App) nextUpgradeOwnerFlowIDLocked() string {
-	a.upgradeRuntime.nextFlowSeq++
-	return fmt.Sprintf("upgrade-owner-%d", a.upgradeRuntime.nextFlowSeq)
+	a.upgradeRuntime.NextFlowSeq++
+	return fmt.Sprintf("upgrade-owner-%d", a.upgradeRuntime.NextFlowSeq)
 }
 
 func (a *App) activeUpgradeOwnerFlowLocked() *upgradeOwnerCardFlowRecord {
-	flow := a.upgradeRuntime.activeFlow
+	flow := a.upgradeRuntime.ActiveFlow
 	if flow == nil {
 		return nil
 	}
@@ -79,9 +50,9 @@ func (a *App) newUpgradeOwnerFlowLocked(surfaceID, ownerUserID, messageID string
 		UpdatedAt:        now,
 		ExpiresAt:        now.Add(upgradeOwnerFlowTTL),
 	}
-	a.upgradeRuntime.activeFlow = flow
-	a.upgradeRuntime.startCancel = nil
-	a.upgradeRuntime.startFlowID = ""
+	a.upgradeRuntime.ActiveFlow = flow
+	a.upgradeRuntime.StartCancel = nil
+	a.upgradeRuntime.StartFlowID = ""
 	return flow
 }
 
@@ -96,9 +67,9 @@ func (a *App) refreshUpgradeOwnerFlowLocked(flow *upgradeOwnerCardFlowRecord, st
 }
 
 func (a *App) clearUpgradeOwnerFlowLocked() {
-	a.upgradeRuntime.activeFlow = nil
-	a.upgradeRuntime.startCancel = nil
-	a.upgradeRuntime.startFlowID = ""
+	a.upgradeRuntime.ActiveFlow = nil
+	a.upgradeRuntime.StartCancel = nil
+	a.upgradeRuntime.StartFlowID = ""
 }
 
 func (a *App) recordUpgradeOwnerCardMessageLocked(trackingKey, messageID string) {
@@ -358,7 +329,7 @@ func (a *App) startUpgradeOwnerCheckLocked(command control.DaemonCommand) []cont
 	if err != nil {
 		return a.finishUpgradeOwnerFlowFailureLocked(command.SurfaceSessionID, flow.FlowID, fmt.Sprintf("读取升级状态失败：%v", err))
 	}
-	if a.upgradeRuntime.checkInFlight {
+	if a.upgradeRuntime.CheckInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_busy", "当前已经有一个升级检查在进行中，请稍后再试。")}
 	}
 	track := stateValue.CurrentTrack
@@ -367,7 +338,7 @@ func (a *App) startUpgradeOwnerCheckLocked(command control.DaemonCommand) []cont
 	}
 	flow.Track = track
 	flow.CurrentVersion = strings.TrimSpace(stateValue.CurrentVersion)
-	a.upgradeRuntime.checkInFlight = true
+	a.upgradeRuntime.CheckInFlight = true
 	go a.runUpgradeCheck(upgradeCheckRequest{
 		Track:            track,
 		Manual:           true,
@@ -408,10 +379,10 @@ func (a *App) confirmUpgradeOwnerFlowLocked(command control.DaemonCommand) []con
 	}
 	a.refreshUpgradeOwnerFlowLocked(flow, upgradeOwnerFlowStageRunning)
 	flow.TargetVersion = pendingTargetVersion(stateValue.PendingUpgrade)
-	a.upgradeRuntime.startInFlight = true
+	a.upgradeRuntime.StartInFlight = true
 	startCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	a.upgradeRuntime.startCancel = cancel
-	a.upgradeRuntime.startFlowID = flow.FlowID
+	a.upgradeRuntime.StartCancel = cancel
+	a.upgradeRuntime.StartFlowID = flow.FlowID
 	go a.runPendingUpgradeStart(upgradeStartRequest{
 		State:            stateValue,
 		GatewayID:        stateValue.PendingUpgrade.GatewayID,
@@ -450,9 +421,9 @@ func (a *App) cancelUpgradeOwnerFlowLocked(command control.DaemonCommand) []cont
 	case upgradeOwnerFlowStageRunning:
 		flow.CancelRequested = true
 		a.refreshUpgradeOwnerFlowLocked(flow, upgradeOwnerFlowStageCancelling)
-		if a.upgradeRuntime.startFlowID == flow.FlowID && a.upgradeRuntime.startCancel != nil {
-			cancel := a.upgradeRuntime.startCancel
-			a.upgradeRuntime.startCancel = nil
+		if a.upgradeRuntime.StartFlowID == flow.FlowID && a.upgradeRuntime.StartCancel != nil {
+			cancel := a.upgradeRuntime.StartCancel
+			a.upgradeRuntime.StartCancel = nil
 			cancel()
 		}
 		return []control.UIEvent{

@@ -44,11 +44,6 @@ type ExternalAccessRuntimeConfig struct {
 	CurrentBinary string
 }
 
-type ToolRuntimeConfig struct {
-	ListenAddr string
-	StateFile  string
-}
-
 type externalAccessSettingsView struct {
 	ListenHost                 string
 	ListenPort                 int
@@ -60,26 +55,6 @@ type externalAccessSettingsView struct {
 	TryCloudflareLaunchTimeout time.Duration
 	TryCloudflareMetricsPort   int
 	TryCloudflareLogPath       string
-}
-
-type managedHeadlessProcess struct {
-	InstanceID    string
-	PID           int
-	RequestedAt   time.Time
-	StartedAt     time.Time
-	IdleSince     time.Time
-	ThreadID      string
-	ThreadCWD     string
-	WorkspaceRoot string
-	DisplayName   string
-	Status        string
-	LastError     string
-	LastHelloAt   time.Time
-
-	RefreshCommandID       string
-	RefreshInFlight        bool
-	LastRefreshRequestedAt time.Time
-	LastRefreshCompletedAt time.Time
 }
 
 type pendingThreadHistoryRead struct {
@@ -219,8 +194,8 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		commandAnchorRecallDelay:    8 * time.Second,
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
-	app.upgradeRuntime.lookup = app.defaultReleaseLookup
-	app.upgradeRuntime.devManifest = app.defaultDevManifestLookup
+	app.upgradeRuntime.Lookup = app.defaultReleaseLookup
+	app.upgradeRuntime.DevManifest = app.defaultDevManifestLookup
 	app.cronRuntime.bitableFactory = app.defaultCronBitableFactory
 	app.cronRuntime.gatewayIdentityLookup = app.defaultCronGatewayIdentityLookup
 	app.feishuRuntime.setup = newLiveFeishuSetupClient()
@@ -374,8 +349,8 @@ func (a *App) Run(ctx context.Context) error {
 	apiListener := a.apiListener
 	pprofListener := a.pprofListener
 	pprofServer := a.pprofServer
-	toolListener := a.toolRuntime.listener
-	toolServer := a.toolRuntime.server
+	toolListener := a.toolRuntime.Listener
+	toolServer := a.toolRuntime.Server
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 4)

@@ -115,7 +115,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, err)
 	}
 
-	a.managedHeadlessRuntime.processes[command.InstanceID] = &managedHeadlessProcess{
+	a.managedHeadlessRuntime.Processes[command.InstanceID] = &managedHeadlessProcess{
 		InstanceID:    command.InstanceID,
 		PID:           pid,
 		RequestedAt:   now,
@@ -139,7 +139,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []control.UIEv
 
 func (a *App) killManagedHeadless(command control.DaemonCommand) []control.UIEvent {
 	pid := 0
-	if managed := a.managedHeadlessRuntime.processes[command.InstanceID]; managed != nil {
+	if managed := a.managedHeadlessRuntime.Processes[command.InstanceID]; managed != nil {
 		pid = managed.PID
 	}
 	if pid == 0 {
@@ -184,7 +184,7 @@ func (a *App) killManagedHeadless(command control.DaemonCommand) []control.UIEve
 			Retryable:        true,
 		}))
 	}
-	delete(a.managedHeadlessRuntime.processes, command.InstanceID)
+	delete(a.managedHeadlessRuntime.Processes, command.InstanceID)
 	a.service.RemoveInstance(command.InstanceID)
 	log.Printf("headless kill requested: surface=%s instance=%s pid=%d", command.SurfaceSessionID, command.InstanceID, pid)
 	return nil
@@ -195,14 +195,14 @@ func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
 		return
 	}
 	now := time.Now().UTC()
-	managed := a.managedHeadlessRuntime.processes[inst.InstanceID]
+	managed := a.managedHeadlessRuntime.Processes[inst.InstanceID]
 	if managed == nil {
 		managed = &managedHeadlessProcess{
 			InstanceID:  inst.InstanceID,
 			RequestedAt: now,
 			StartedAt:   now,
 		}
-		a.managedHeadlessRuntime.processes[inst.InstanceID] = managed
+		a.managedHeadlessRuntime.Processes[inst.InstanceID] = managed
 	}
 	if inst.PID > 0 {
 		managed.PID = inst.PID
@@ -248,7 +248,7 @@ func (a *App) shutdownManagedHeadless(skipStop map[string]struct{}) error {
 		}
 
 		a.mu.Lock()
-		delete(a.managedHeadlessRuntime.processes, target.InstanceID)
+		delete(a.managedHeadlessRuntime.Processes, target.InstanceID)
 		a.service.RemoveInstance(target.InstanceID)
 		a.mu.Unlock()
 	}
@@ -257,8 +257,8 @@ func (a *App) shutdownManagedHeadless(skipStop map[string]struct{}) error {
 }
 
 func (a *App) collectManagedHeadlessShutdownTargetsLocked() []managedHeadlessShutdownTarget {
-	targets := make([]managedHeadlessShutdownTarget, 0, len(a.managedHeadlessRuntime.processes))
-	seen := make(map[string]bool, len(a.managedHeadlessRuntime.processes))
+	targets := make([]managedHeadlessShutdownTarget, 0, len(a.managedHeadlessRuntime.Processes))
+	seen := make(map[string]bool, len(a.managedHeadlessRuntime.Processes))
 
 	appendTarget := func(instanceID string, pid int) {
 		instanceID = strings.TrimSpace(instanceID)
@@ -272,7 +272,7 @@ func (a *App) collectManagedHeadlessShutdownTargetsLocked() []managedHeadlessShu
 		})
 	}
 
-	for instanceID, managed := range a.managedHeadlessRuntime.processes {
+	for instanceID, managed := range a.managedHeadlessRuntime.Processes {
 		if managed == nil {
 			appendTarget(instanceID, 0)
 			continue

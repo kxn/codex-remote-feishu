@@ -1,4 +1,4 @@
-package daemon
+package surfaceresume
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func normalizeResumeThreadTitle(title, threadID, threadCWD, workspaceKey string) string {
+func NormalizeThreadTitle(title, threadID, threadCWD, workspaceKey string) string {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return ""
@@ -47,11 +47,11 @@ stripPrefix:
 	}
 }
 
-func storedResumeThreadTitle(snapshotTitle, threadID, threadCWD, workspaceKey, threadName string) string {
-	if raw := normalizeResumeThreadTitle(threadName, threadID, threadCWD, workspaceKey); raw != "" {
+func StoredThreadTitle(snapshotTitle, threadID, threadCWD, workspaceKey, threadName string) string {
+	if raw := NormalizeThreadTitle(threadName, threadID, threadCWD, workspaceKey); raw != "" {
 		return raw
 	}
-	if raw := normalizeResumeThreadTitle(snapshotTitle, threadID, threadCWD, workspaceKey); raw != "" {
+	if raw := NormalizeThreadTitle(snapshotTitle, threadID, threadCWD, workspaceKey); raw != "" {
 		return raw
 	}
 	return strings.TrimSpace(threadID)

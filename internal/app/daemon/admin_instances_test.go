@@ -165,7 +165,7 @@ func TestAdminInstancesSnapshotFiltersManagedHeadlessButKeepsVSCode(t *testing.T
 		Threads:       map[string]*state.ThreadRecord{},
 	})
 	now := time.Now().UTC()
-	app.managedHeadlessRuntime.processes["inst-headless-1"] = &managedHeadlessProcess{
+	app.managedHeadlessRuntime.Processes["inst-headless-1"] = &managedHeadlessProcess{
 		InstanceID:    "inst-headless-1",
 		PID:           4321,
 		RequestedAt:   now,

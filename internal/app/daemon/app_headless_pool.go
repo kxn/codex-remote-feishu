@@ -7,26 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
-
-const (
-	managedHeadlessStatusStarting = "starting"
-	managedHeadlessStatusStopping = "stopping"
-	managedHeadlessStatusBusy     = "busy"
-	managedHeadlessStatusIdle     = "idle"
-	managedHeadlessStatusOffline  = "offline"
-)
-
-type managedHeadlessPrewarmLaunch struct {
-	InstanceID string
-	Options    relayruntime.HeadlessLaunchOptions
-}
-
-func isManagedHeadlessInstance(inst *state.InstanceRecord) bool {
-	return inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed
-}
 
 func (a *App) syncManagedHeadlessLocked(now time.Time) {
 	if now.IsZero() {
@@ -39,9 +20,9 @@ func (a *App) syncManagedHeadlessLocked(now time.Time) {
 		}
 		attached[surface.AttachedInstanceID] = true
 	}
-	for instanceID, managed := range a.managedHeadlessRuntime.processes {
+	for instanceID, managed := range a.managedHeadlessRuntime.Processes {
 		if managed == nil {
-			delete(a.managedHeadlessRuntime.processes, instanceID)
+			delete(a.managedHeadlessRuntime.Processes, instanceID)
 			continue
 		}
 		inst := a.service.Instance(instanceID)
@@ -90,7 +71,7 @@ func (a *App) maybeRefreshIdleManagedHeadlessLocked(now time.Time) {
 	if a.headlessRuntime.IdleRefreshInterval <= 0 {
 		return
 	}
-	for instanceID, managed := range a.managedHeadlessRuntime.processes {
+	for instanceID, managed := range a.managedHeadlessRuntime.Processes {
 		if managed == nil {
 			continue
 		}
@@ -115,26 +96,8 @@ func (a *App) maybeRefreshIdleManagedHeadlessLocked(now time.Time) {
 	}
 }
 
-func managedHeadlessLastRefreshActivity(managed *managedHeadlessProcess) time.Time {
-	if managed == nil {
-		return time.Time{}
-	}
-	last := managed.LastRefreshCompletedAt
-	for _, candidate := range []time.Time{
-		managed.LastRefreshRequestedAt,
-		managed.LastHelloAt,
-		managed.StartedAt,
-		managed.RequestedAt,
-	} {
-		if candidate.After(last) {
-			last = candidate
-		}
-	}
-	return last
-}
-
 func (a *App) markManagedThreadsRefreshRequestedLocked(instanceID, commandID string, now time.Time) {
-	managed := a.managedHeadlessRuntime.processes[instanceID]
+	managed := a.managedHeadlessRuntime.Processes[instanceID]
 	if managed == nil {
 		return
 	}
@@ -154,7 +117,7 @@ func (a *App) sendManagedThreadsRefreshLocked(instanceID string, now time.Time, 
 	err := a.sendAgentCommand(instanceID, command)
 	a.mu.Lock()
 	if err != nil {
-		if managed := a.managedHeadlessRuntime.processes[instanceID]; managed != nil {
+		if managed := a.managedHeadlessRuntime.Processes[instanceID]; managed != nil {
 			managed.RefreshInFlight = false
 			managed.RefreshCommandID = ""
 			managed.LastError = fmt.Sprintf("后台 threads.refresh 发送失败：%v", err)
@@ -166,7 +129,7 @@ func (a *App) sendManagedThreadsRefreshLocked(instanceID string, now time.Time, 
 }
 
 func (a *App) noteManagedThreadsSnapshotLocked(instanceID string, now time.Time) {
-	managed := a.managedHeadlessRuntime.processes[instanceID]
+	managed := a.managedHeadlessRuntime.Processes[instanceID]
 	if managed == nil {
 		return
 	}
@@ -177,7 +140,7 @@ func (a *App) noteManagedThreadsSnapshotLocked(instanceID string, now time.Time)
 }
 
 func (a *App) noteManagedRefreshAckLocked(instanceID string, ack agentproto.CommandAck) bool {
-	managed := a.managedHeadlessRuntime.processes[instanceID]
+	managed := a.managedHeadlessRuntime.Processes[instanceID]
 	if managed == nil || strings.TrimSpace(managed.RefreshCommandID) == "" || managed.RefreshCommandID != strings.TrimSpace(ack.CommandID) {
 		return false
 	}
@@ -224,7 +187,7 @@ func (a *App) reserveMinIdleManagedHeadlessLocked(now time.Time) []managedHeadle
 
 func (a *App) countWarmManagedHeadlessLocked(now time.Time) int {
 	count := 0
-	for _, managed := range a.managedHeadlessRuntime.processes {
+	for _, managed := range a.managedHeadlessRuntime.Processes {
 		if managed == nil {
 			continue
 		}
@@ -255,7 +218,7 @@ func (a *App) reservePoolManagedHeadlessLaunchLocked(now time.Time, seq int) man
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless",
 	)
-	a.managedHeadlessRuntime.processes[instanceID] = &managedHeadlessProcess{
+	a.managedHeadlessRuntime.Processes[instanceID] = &managedHeadlessProcess{
 		InstanceID:    instanceID,
 		RequestedAt:   now,
 		StartedAt:     now,
@@ -275,10 +238,10 @@ func (a *App) startReservedPoolManagedHeadlessLocked(launch managedHeadlessPrewa
 	pid, err := a.startHeadless(launch.Options)
 	a.mu.Lock()
 	if err != nil {
-		delete(a.managedHeadlessRuntime.processes, launch.InstanceID)
+		delete(a.managedHeadlessRuntime.Processes, launch.InstanceID)
 		return err
 	}
-	managed := a.managedHeadlessRuntime.processes[launch.InstanceID]
+	managed := a.managedHeadlessRuntime.Processes[launch.InstanceID]
 	if managed == nil || a.shuttingDown {
 		a.mu.Unlock()
 		stopErr := a.stopProcess(pid, a.headlessRuntime.KillGrace)

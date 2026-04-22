@@ -20,7 +20,7 @@ import (
 func TestUpgradeLatestManualCheckPromptsIdleSurface(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
@@ -131,9 +131,9 @@ func TestDebugTrackAliasRejected(t *testing.T) {
 func TestTickDoesNotAutoCheckOrPromptUpgrade(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
-	app.upgradeRuntime.startupDelay = 0
-	app.upgradeRuntime.checkInterval = time.Hour
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.StartupDelay = 0
+	app.upgradeRuntime.CheckInterval = time.Hour
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
@@ -169,7 +169,7 @@ func TestTickDoesNotAutoCheckOrPromptUpgrade(t *testing.T) {
 func TestUpgradeLatestManualCheckPromptsDuringAutoRestorePendingHeadless(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
@@ -232,7 +232,7 @@ func TestUpgradeLatestClearsStalePendingCandidateMatchingLiveVersion(t *testing.
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)
 	app.serverIdentity.Version = "v1.1.0"
-	app.upgradeRuntime.lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
+	app.upgradeRuntime.Lookup = func(context.Context, install.ReleaseTrack) (install.ReleaseInfo, error) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 

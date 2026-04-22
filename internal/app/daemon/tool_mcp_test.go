@@ -148,11 +148,11 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.server.Handler, app.toolRuntime.bearerToken)
+	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken)
 
-	rec := performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
-		Token:           app.toolRuntime.bearerToken,
+		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body:            toolMCPCallRequestBody(t, 2, "tools/list", map[string]any{}),
@@ -182,9 +182,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		t.Fatalf("image-send description missing workspace context rule: %#v", seen[feishuSendIMImageToolName])
 	}
 
-	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
-		Token:           app.toolRuntime.bearerToken,
+		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body: toolMCPCallRequestBody(t, 3, "tools/call", map[string]any{
@@ -211,9 +211,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
-		Token:           app.toolRuntime.bearerToken,
+		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body: toolMCPCallRequestBody(t, 4, "tools/call", map[string]any{
@@ -241,9 +241,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	if err := os.WriteFile(imagePath, []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
-		Token:           app.toolRuntime.bearerToken,
+		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body: toolMCPCallRequestBody(t, 5, "tools/call", map[string]any{
@@ -277,10 +277,10 @@ func TestToolMCPBusinessErrorsStayInToolResult(t *testing.T) {
 		_ = app.Shutdown(context.Background())
 	}()
 
-	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.server.Handler, app.toolRuntime.bearerToken)
-	rec := performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken)
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
-		Token:           app.toolRuntime.bearerToken,
+		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body: toolMCPCallRequestBody(t, 2, "tools/call", map[string]any{

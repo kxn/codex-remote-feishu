@@ -155,7 +155,7 @@ func (a *App) clearListeners() {
 	a.relayListener = nil
 	a.apiListener = nil
 	a.pprofListener = nil
-	a.toolRuntime.listener = nil
+	a.toolRuntime.Listener = nil
 	a.externalAccessListener = nil
 }
 
@@ -339,8 +339,8 @@ func (a *App) stopIngressAndServers() {
 	if a.apiServer != nil {
 		_ = a.apiServer.Close()
 	}
-	if a.toolRuntime.server != nil {
-		_ = a.toolRuntime.server.Close()
+	if a.toolRuntime.Server != nil {
+		_ = a.toolRuntime.Server.Close()
 	}
 	if a.pprofServer != nil {
 		_ = a.pprofServer.Close()

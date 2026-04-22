@@ -110,7 +110,7 @@ func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
 		},
 	})
-	app.managedHeadlessRuntime.processes["inst-headless-1"] = &managedHeadlessProcess{InstanceID: "inst-headless-1", PID: 4321, StartedAt: time.Now()}
+	app.managedHeadlessRuntime.Processes["inst-headless-1"] = &managedHeadlessProcess{InstanceID: "inst-headless-1", PID: 4321, StartedAt: time.Now()}
 	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-headless-1"})
 
 	app.HandleAction(context.Background(), control.Action{
@@ -213,9 +213,9 @@ func TestDaemonIdleManagedHeadlessRefreshesOnInterval(t *testing.T) {
 		Kind: agentproto.EventThreadsSnapshot,
 	}})
 	base := time.Now().UTC()
-	app.managedHeadlessRuntime.processes["inst-headless-2"].LastRefreshCompletedAt = base
-	app.managedHeadlessRuntime.processes["inst-headless-2"].RefreshInFlight = false
-	app.managedHeadlessRuntime.processes["inst-headless-2"].RefreshCommandID = ""
+	app.managedHeadlessRuntime.Processes["inst-headless-2"].LastRefreshCompletedAt = base
+	app.managedHeadlessRuntime.Processes["inst-headless-2"].RefreshInFlight = false
+	app.managedHeadlessRuntime.Processes["inst-headless-2"].RefreshCommandID = ""
 
 	app.onTick(context.Background(), base.Add(2*time.Minute))
 	if len(commands) != 1 {
@@ -226,7 +226,7 @@ func TestDaemonIdleManagedHeadlessRefreshesOnInterval(t *testing.T) {
 	if len(commands) != 2 || commands[1].Kind != agentproto.CommandThreadsRefresh {
 		t.Fatalf("expected scheduled idle refresh after interval, got %#v", commands)
 	}
-	if managed := app.managedHeadlessRuntime.processes["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusIdle || !managed.RefreshInFlight {
+	if managed := app.managedHeadlessRuntime.Processes["inst-headless-2"]; managed == nil || managed.Status != managedHeadlessStatusIdle || !managed.RefreshInFlight {
 		t.Fatalf("expected idle managed headless to track in-flight refresh, got %#v", managed)
 	}
 }
@@ -253,7 +253,7 @@ func TestDaemonShutdownStopsManagedHeadlessAndRemovesRuntimeState(t *testing.T) 
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
-	app.managedHeadlessRuntime.processes["inst-headless-1"] = &managedHeadlessProcess{
+	app.managedHeadlessRuntime.Processes["inst-headless-1"] = &managedHeadlessProcess{
 		InstanceID:    "inst-headless-1",
 		PID:           4321,
 		WorkspaceRoot: "/data/dl/droid",
@@ -267,8 +267,8 @@ func TestDaemonShutdownStopsManagedHeadlessAndRemovesRuntimeState(t *testing.T) 
 	if len(stopped) != 1 || stopped[0] != 4321 {
 		t.Fatalf("expected managed headless pid 4321 to stop, got %#v", stopped)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 0 {
-		t.Fatalf("expected managed headless map cleared, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 0 {
+		t.Fatalf("expected managed headless map cleared, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 	if app.service.Instance("inst-headless-1") != nil {
 		t.Fatalf("expected managed headless instance removed from service, got %#v", app.service.Instance("inst-headless-1"))
@@ -292,7 +292,7 @@ func TestDaemonShutdownRequestsConnectedWrapperExitAndSkipsSecondKill(t *testing
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
-	app.managedHeadlessRuntime.processes["inst-headless-live"] = &managedHeadlessProcess{
+	app.managedHeadlessRuntime.Processes["inst-headless-live"] = &managedHeadlessProcess{
 		InstanceID: "inst-headless-live",
 		PID:        3456,
 		Status:     managedHeadlessStatusBusy,
@@ -328,8 +328,8 @@ func TestDaemonShutdownRequestsConnectedWrapperExitAndSkipsSecondKill(t *testing
 	if len(stopped) != 0 {
 		t.Fatalf("expected relay drain to avoid second stopProcess call, got %#v", stopped)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 0 {
-		t.Fatalf("expected managed headless map cleared, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 0 {
+		t.Fatalf("expected managed headless map cleared, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 	if app.service.Instance("inst-headless-live") != nil {
 		t.Fatalf("expected managed headless service state removed, got %#v", app.service.Instance("inst-headless-live"))
@@ -446,8 +446,8 @@ func TestDaemonShutdownContinuesManagedHeadlessCleanupAfterStopError(t *testing.
 	} {
 		app.service.UpsertInstance(inst)
 	}
-	app.managedHeadlessRuntime.processes["inst-headless-1"] = &managedHeadlessProcess{InstanceID: "inst-headless-1", PID: 1111}
-	app.managedHeadlessRuntime.processes["inst-headless-2"] = &managedHeadlessProcess{InstanceID: "inst-headless-2", PID: 2222}
+	app.managedHeadlessRuntime.Processes["inst-headless-1"] = &managedHeadlessProcess{InstanceID: "inst-headless-1", PID: 1111}
+	app.managedHeadlessRuntime.Processes["inst-headless-2"] = &managedHeadlessProcess{InstanceID: "inst-headless-2", PID: 2222}
 
 	err := app.Shutdown(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "inst-headless-1") {
@@ -456,8 +456,8 @@ func TestDaemonShutdownContinuesManagedHeadlessCleanupAfterStopError(t *testing.
 	if len(stopped) != 2 {
 		t.Fatalf("expected both managed headless processes to be attempted, got %#v", stopped)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 0 {
-		t.Fatalf("expected managed headless map cleared after cleanup, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 0 {
+		t.Fatalf("expected managed headless map cleared after cleanup, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 	if app.service.Instance("inst-headless-1") != nil || app.service.Instance("inst-headless-2") != nil {
 		t.Fatalf("expected managed headless service state removed after cleanup, got %#v %#v", app.service.Instance("inst-headless-1"), app.service.Instance("inst-headless-2"))
@@ -496,10 +496,10 @@ func TestDaemonPrewarmsManagedHeadlessToMinIdle(t *testing.T) {
 		!containsEnvEntry(launches[0].Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
 		t.Fatalf("expected managed headless prewarm env, got %#v", launches[0].Env)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 1 {
-		t.Fatalf("expected one managed headless record, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 1 {
+		t.Fatalf("expected one managed headless record, got %#v", app.managedHeadlessRuntime.Processes)
 	}
-	for _, managed := range app.managedHeadlessRuntime.processes {
+	for _, managed := range app.managedHeadlessRuntime.Processes {
 		if managed.Status != managedHeadlessStatusStarting || managed.WorkspaceRoot != stateDir || managed.DisplayName != "headless" {
 			t.Fatalf("unexpected prewarmed managed headless record: %#v", managed)
 		}
@@ -550,11 +550,11 @@ func TestDaemonPrewarmsReplacementWhenOfflineManagedHeadlessDoesNotCount(t *test
 	if len(launches) != 1 {
 		t.Fatalf("expected offline managed headless to trigger replacement prewarm, got %#v", launches)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 2 {
-		t.Fatalf("expected offline member to remain visible alongside replacement, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 2 {
+		t.Fatalf("expected offline member to remain visible alongside replacement, got %#v", app.managedHeadlessRuntime.Processes)
 	}
-	if app.managedHeadlessRuntime.processes["inst-headless-old"] == nil || app.managedHeadlessRuntime.processes["inst-headless-old"].Status != managedHeadlessStatusOffline {
-		t.Fatalf("expected original member to stay offline, got %#v", app.managedHeadlessRuntime.processes["inst-headless-old"])
+	if app.managedHeadlessRuntime.Processes["inst-headless-old"] == nil || app.managedHeadlessRuntime.Processes["inst-headless-old"].Status != managedHeadlessStatusOffline {
+		t.Fatalf("expected original member to stay offline, got %#v", app.managedHeadlessRuntime.Processes["inst-headless-old"])
 	}
 }
 
@@ -585,16 +585,16 @@ func TestDaemonPrewarmLaunchFailureRollsBackReservation(t *testing.T) {
 	if launches != 1 {
 		t.Fatalf("expected one failed prewarm launch, got %d", launches)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 0 {
-		t.Fatalf("expected failed prewarm reservation to be rolled back, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 0 {
+		t.Fatalf("expected failed prewarm reservation to be rolled back, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 
 	app.onTick(context.Background(), base.Add(time.Minute))
 	if launches != 2 {
 		t.Fatalf("expected second tick to retry prewarm launch, got %d launches", launches)
 	}
-	if len(app.managedHeadlessRuntime.processes) != 1 {
-		t.Fatalf("expected successful retry to leave one managed headless record, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 1 {
+		t.Fatalf("expected successful retry to leave one managed headless record, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 }
 
@@ -631,8 +631,8 @@ func TestDaemonPrewarmReservationBlocksDuplicateLaunchWhileStartInFlight(t *test
 	}()
 
 	<-startEntered
-	if len(app.managedHeadlessRuntime.processes) != 1 {
-		t.Fatalf("expected reserved prewarm slot while launch is in flight, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 1 {
+		t.Fatalf("expected reserved prewarm slot while launch is in flight, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 
 	app.onTick(context.Background(), base.Add(5*time.Second))
@@ -642,7 +642,7 @@ func TestDaemonPrewarmReservationBlocksDuplicateLaunchWhileStartInFlight(t *test
 
 	close(releaseStart)
 	<-firstTickDone
-	if len(app.managedHeadlessRuntime.processes) != 1 {
-		t.Fatalf("expected one managed headless record after launch settles, got %#v", app.managedHeadlessRuntime.processes)
+	if len(app.managedHeadlessRuntime.Processes) != 1 {
+		t.Fatalf("expected one managed headless record after launch settles, got %#v", app.managedHeadlessRuntime.Processes)
 	}
 }

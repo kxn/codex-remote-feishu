@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
@@ -24,17 +23,6 @@ const feishuSendIMImageToolName = "feishu_send_im_image"
 const feishuSurfaceResolverDescription = "Resolve the current Feishu remote surface context. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. If the file is missing, invalid, or you are not in normal remote workspace mode, do not guess."
 const feishuSendIMFileDescription = "Send a local file to the current Feishu remote surface as an IM file attachment. Use this when the artifact should be delivered as a downloadable file, or when inline image display is not appropriate. For screenshots and other user-facing images, prefer feishu_send_im_image so the image renders directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local file path and do not guess a surface, chat, or remote URL."
 const feishuSendIMImageDescription = "Send a local image to the current Feishu remote surface as an inline IM image message. Use this proactively when you created or saved a screenshot, visual diff, rendered preview, chart, mockup, or another image artifact that would directly help the current conversation. Prefer this tool over feishu_send_im_file for PNG, JPEG, GIF, WebP, or BMP images because the image will render directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local image path and do not guess a surface, chat, or remote URL."
-
-type toolServiceInfo struct {
-	URL         string    `json:"url"`
-	Protocol    string    `json:"protocol,omitempty"`
-	Transport   string    `json:"transport,omitempty"`
-	ManifestURL string    `json:"manifestUrl,omitempty"`
-	CallURL     string    `json:"callUrl,omitempty"`
-	Token       string    `json:"token"`
-	TokenType   string    `json:"tokenType"`
-	GeneratedAt time.Time `json:"generatedAt"`
-}
 
 type toolDefinition struct {
 	Name        string         `json:"name"`
@@ -136,7 +124,7 @@ func (a *App) requireToolAuth(next http.Handler) http.Handler {
 			})
 			return
 		}
-		expected := strings.TrimSpace(a.toolRuntime.bearerToken)
+		expected := strings.TrimSpace(a.toolRuntime.BearerToken)
 		if expected == "" {
 			writeToolError(w, http.StatusServiceUnavailable, toolError{
 				Code:    "tool_service_not_ready",

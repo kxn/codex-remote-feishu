@@ -96,7 +96,7 @@ func TestToolRuntimeRequiresBearerAndPublishesMCPState(t *testing.T) {
 		_ = app.Shutdown(context.Background())
 	}()
 
-	rec := performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method: http.MethodPost,
 		Body:   toolMCPInitializeRequestBody(),
 	})
@@ -104,9 +104,9 @@ func TestToolRuntimeRequiresBearerAndPublishesMCPState(t *testing.T) {
 		t.Fatalf("expected unauthorized without bearer, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	rec = performToolMCPRequest(t, app.toolRuntime.server.Handler, toolMCPRequestOptions{
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method: http.MethodPost,
-		Token:  app.toolRuntime.bearerToken,
+		Token:  app.toolRuntime.BearerToken,
 		Body:   toolMCPInitializeRequestBody(),
 	})
 	if rec.Code != http.StatusOK {
@@ -123,7 +123,7 @@ func TestToolRuntimeRequiresBearerAndPublishesMCPState(t *testing.T) {
 	if err := json.Unmarshal(infoRaw, &info); err != nil {
 		t.Fatalf("unmarshal tool service file: %v", err)
 	}
-	if info.Token != app.toolRuntime.bearerToken {
+	if info.Token != app.toolRuntime.BearerToken {
 		t.Fatalf("unexpected tool service file token: %#v", info)
 	}
 	if info.URL == "" || info.Protocol != "mcp" || info.Transport != "streamable_http" {

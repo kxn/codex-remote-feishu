@@ -1,4 +1,4 @@
-package daemon
+package surfaceresume
 
 import (
 	"encoding/json"
@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	surfaceResumeStateVersion = 1
-	surfaceResumeStateFile    = "surface-resume-state.json"
+	StateVersion  = 1
+	StateFileName = "surface-resume-state.json"
 )
 
-type SurfaceResumeEntry struct {
+type Entry struct {
 	SurfaceSessionID   string    `json:"surfaceSessionID"`
 	GatewayID          string    `json:"gatewayID,omitempty"`
 	ChatID             string    `json:"chatID,omitempty"`
@@ -34,30 +34,34 @@ type SurfaceResumeEntry struct {
 	UpdatedAt          time.Time `json:"updatedAt,omitempty"`
 }
 
-type surfaceResumeState struct {
-	Version int                           `json:"version"`
-	Entries map[string]SurfaceResumeEntry `json:"entries,omitempty"`
+type StateFile struct {
+	Version int              `json:"version"`
+	Entries map[string]Entry `json:"entries,omitempty"`
 }
 
-type surfaceResumeStore struct {
+type Store struct {
 	path    string
-	entries map[string]SurfaceResumeEntry
+	entries map[string]Entry
 	dirty   bool
 }
 
-func surfaceResumeStatePath(stateDir string) string {
+func NewStore(path string) *Store {
+	return &Store{
+		path:    strings.TrimSpace(path),
+		entries: map[string]Entry{},
+	}
+}
+
+func StatePath(stateDir string) string {
 	stateDir = strings.TrimSpace(stateDir)
 	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(stateDir, surfaceResumeStateFile)
+	return filepath.Join(stateDir, StateFileName)
 }
 
-func loadSurfaceResumeStore(path string) (*surfaceResumeStore, error) {
-	store := &surfaceResumeStore{
-		path:    strings.TrimSpace(path),
-		entries: map[string]SurfaceResumeEntry{},
-	}
+func LoadStore(path string) (*Store, error) {
+	store := NewStore(path)
 	if store.path == "" {
 		return store, nil
 	}
@@ -68,18 +72,18 @@ func loadSurfaceResumeStore(path string) (*surfaceResumeStore, error) {
 		}
 		return nil, err
 	}
-	var persisted surfaceResumeState
+	var persisted StateFile
 	if err := json.Unmarshal(raw, &persisted); err != nil {
 		return nil, err
 	}
 	if persisted.Version == 0 {
-		persisted.Version = surfaceResumeStateVersion
+		persisted.Version = StateVersion
 	}
-	if persisted.Version != surfaceResumeStateVersion {
+	if persisted.Version != StateVersion {
 		return nil, fmt.Errorf("unsupported surface resume state version: %d", persisted.Version)
 	}
 	for key, entry := range persisted.Entries {
-		normalized, ok := normalizeSurfaceResumeEntry(entry)
+		normalized, ok := NormalizeEntry(entry)
 		if !ok {
 			store.dirty = true
 			continue
@@ -89,68 +93,68 @@ func loadSurfaceResumeStore(path string) (*surfaceResumeStore, error) {
 		}
 		store.entries[key] = normalized
 	}
-	if canonical, changed := canonicalizeSurfaceResumeEntries(store.entries); changed {
+	if canonical, changed := CanonicalizeEntries(store.entries); changed {
 		store.entries = canonical
 		store.dirty = true
 	}
 	return store, nil
 }
 
-func (s *surfaceResumeStore) Entries() map[string]SurfaceResumeEntry {
+func (s *Store) Entries() map[string]Entry {
 	if s == nil || len(s.entries) == 0 {
-		return map[string]SurfaceResumeEntry{}
+		return map[string]Entry{}
 	}
-	values := make(map[string]SurfaceResumeEntry, len(s.entries))
+	values := make(map[string]Entry, len(s.entries))
 	for key, entry := range s.entries {
 		values[key] = entry
 	}
 	return values
 }
 
-func (s *surfaceResumeStore) Get(surfaceID string) (SurfaceResumeEntry, bool) {
+func (s *Store) Get(surfaceID string) (Entry, bool) {
 	if s == nil {
-		return SurfaceResumeEntry{}, false
+		return Entry{}, false
 	}
 	entry, ok := s.entries[strings.TrimSpace(surfaceID)]
 	if !ok {
-		return SurfaceResumeEntry{}, false
+		return Entry{}, false
 	}
 	return entry, true
 }
 
-func (s *surfaceResumeStore) Put(entry SurfaceResumeEntry) error {
+func (s *Store) Put(entry Entry) error {
 	if s == nil {
 		return nil
 	}
-	normalized, ok := normalizeSurfaceResumeEntry(entry)
+	normalized, ok := NormalizeEntry(entry)
 	if !ok {
 		return fmt.Errorf("surface resume entry requires surface id")
 	}
 	s.entries[normalized.SurfaceSessionID] = normalized
-	if canonical, changed := canonicalizeSurfaceResumeEntries(s.entries); changed {
+	if canonical, changed := CanonicalizeEntries(s.entries); changed {
 		s.entries = canonical
 		s.dirty = true
 	}
-	return s.save()
+	return s.Save()
 }
 
-func (s *surfaceResumeStore) Delete(surfaceID string) error {
+func (s *Store) Delete(surfaceID string) error {
 	if s == nil {
 		return nil
 	}
 	delete(s.entries, strings.TrimSpace(surfaceID))
-	return s.save()
+	return s.Save()
 }
 
-func (s *surfaceResumeStore) save() error {
+func (s *Store) Save() error {
 	if s == nil || s.path == "" {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
-	persisted := surfaceResumeState{
-		Version: surfaceResumeStateVersion,
+	persisted := StateFile{
+		Version: StateVersion,
 		Entries: s.Entries(),
 	}
 	raw, err := json.MarshalIndent(persisted, "", "  ")
@@ -182,7 +186,14 @@ func (s *surfaceResumeStore) save() error {
 	return nil
 }
 
-func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, bool) {
+func (s *Store) Dirty() bool {
+	if s == nil {
+		return false
+	}
+	return s.dirty
+}
+
+func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.SurfaceSessionID = strings.TrimSpace(entry.SurfaceSessionID)
 	entry.GatewayID = strings.TrimSpace(entry.GatewayID)
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
@@ -194,13 +205,13 @@ func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, 
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
 	entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(entry.ResumeThreadCWD)
 	entry.ResumeWorkspaceKey = state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey)
-	entry.ResumeThreadTitle = normalizeResumeThreadTitle(entry.ResumeThreadTitle, entry.ResumeThreadID, entry.ResumeThreadCWD, entry.ResumeWorkspaceKey)
+	entry.ResumeThreadTitle = NormalizeThreadTitle(entry.ResumeThreadTitle, entry.ResumeThreadID, entry.ResumeThreadCWD, entry.ResumeWorkspaceKey)
 	entry.ResumeRouteMode = strings.TrimSpace(entry.ResumeRouteMode)
 	if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) != state.ProductModeNormal {
 		entry.ResumeHeadless = false
 	}
 	if entry.SurfaceSessionID == "" {
-		return SurfaceResumeEntry{}, false
+		return Entry{}, false
 	}
 	if !entry.UpdatedAt.IsZero() {
 		entry.UpdatedAt = entry.UpdatedAt.UTC()
@@ -208,7 +219,7 @@ func normalizeSurfaceResumeEntry(entry SurfaceResumeEntry) (SurfaceResumeEntry, 
 	return entry, true
 }
 
-func sameSurfaceResumeEntryContent(left, right SurfaceResumeEntry) bool {
+func SameEntryContent(left, right Entry) bool {
 	return strings.TrimSpace(left.SurfaceSessionID) == strings.TrimSpace(right.SurfaceSessionID) &&
 		strings.TrimSpace(left.GatewayID) == strings.TrimSpace(right.GatewayID) &&
 		strings.TrimSpace(left.ChatID) == strings.TrimSpace(right.ChatID) &&

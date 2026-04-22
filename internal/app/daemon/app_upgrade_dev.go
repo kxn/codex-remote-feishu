@@ -11,8 +11,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-type devManifestLookupFunc func(context.Context) (install.DevManifest, install.DevManifestAsset, error)
-
 type devUpgradeCheckRequest struct {
 	Manual           bool
 	GatewayID        string
@@ -28,10 +26,10 @@ func (a *App) defaultDevManifestLookup(ctx context.Context) (install.DevManifest
 }
 
 func (a *App) handleUpgradeDevCommand(command control.DaemonCommand, stateValue install.InstallState) []control.UIEvent {
-	if a.upgradeRuntime.checkInFlight {
+	if a.upgradeRuntime.CheckInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_check_busy", "当前已经有一个升级检查在进行中，请稍后再试。")}
 	}
-	if a.upgradeRuntime.startInFlight {
+	if a.upgradeRuntime.StartInFlight {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_busy", "当前升级准备已经开始，服务会短暂重启，请稍后查看结果。")}
 	}
 	if clearStalePendingCandidateOnLiveVersion(&stateValue, a.currentBinaryVersion()) {
@@ -49,7 +47,7 @@ func (a *App) handleUpgradeDevCommand(command control.DaemonCommand, stateValue 
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_pending_other_source", "当前已有 release 升级候选，请先完成 `/upgrade latest`，或重新检查当前来源。")}
 	}
 
-	a.upgradeRuntime.checkInFlight = true
+	a.upgradeRuntime.CheckInFlight = true
 	go a.runDevUpgradeCheck(devUpgradeCheckRequest{
 		Manual:           true,
 		GatewayID:        command.GatewayID,
@@ -63,7 +61,7 @@ func (a *App) runDevUpgradeCheck(request devUpgradeCheckRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	lookup := a.upgradeRuntime.devManifest
+	lookup := a.upgradeRuntime.DevManifest
 	if lookup == nil {
 		lookup = a.defaultDevManifestLookup
 	}
@@ -73,8 +71,8 @@ func (a *App) runDevUpgradeCheck(request devUpgradeCheckRequest) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.upgradeRuntime.checkInFlight = false
-	a.upgradeRuntime.nextCheckAt = completedAt.Add(a.upgradeRuntime.checkInterval)
+	a.upgradeRuntime.CheckInFlight = false
+	a.upgradeRuntime.NextCheckAt = completedAt.Add(a.upgradeRuntime.CheckInterval)
 
 	events := a.applyDevUpgradeCheckResultLocked(request, manifest, asset, err, completedAt)
 	if len(events) > 0 {

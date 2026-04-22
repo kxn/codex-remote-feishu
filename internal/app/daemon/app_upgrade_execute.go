@@ -39,7 +39,7 @@ func (a *App) beginPendingUpgradeLocked(command control.DaemonCommand, stateValu
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		return []control.UIEvent{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_prepare_failed", fmt.Sprintf("写入升级事务失败：%v", err))}
 	}
-	a.upgradeRuntime.startInFlight = true
+	a.upgradeRuntime.StartInFlight = true
 	go a.runPendingUpgradeStart(upgradeStartRequest{
 		State:            stateValue,
 		GatewayID:        stateValue.PendingUpgrade.GatewayID,
@@ -75,7 +75,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 			VersionsRoot: stateValue.VersionsRoot,
 		})
 	case install.UpgradeSourceDev:
-		lookup := a.upgradeRuntime.devManifest
+		lookup := a.upgradeRuntime.DevManifest
 		if lookup == nil {
 			lookup = a.defaultDevManifestLookup
 		}
@@ -133,18 +133,18 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	a.mu.Lock()
 	logPath := a.upgradeHelperLogPathLocked()
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
-		a.upgradeRuntime.startInFlight = false
-		a.upgradeRuntime.startCancel = nil
-		a.upgradeRuntime.startFlowID = ""
+		a.upgradeRuntime.StartInFlight = false
+		a.upgradeRuntime.StartCancel = nil
+		a.upgradeRuntime.StartFlowID = ""
 		a.mu.Unlock()
 		a.finishUpgradeStartFailure(request, fmt.Errorf("写入 prepared journal 失败：%w", err))
 		return
 	}
 	helperPath, err := a.prepareUpgradeHelperShimLocked(stateValue)
 	if err != nil {
-		a.upgradeRuntime.startInFlight = false
-		a.upgradeRuntime.startCancel = nil
-		a.upgradeRuntime.startFlowID = ""
+		a.upgradeRuntime.StartInFlight = false
+		a.upgradeRuntime.StartCancel = nil
+		a.upgradeRuntime.StartFlowID = ""
 		a.mu.Unlock()
 		a.finishUpgradeStartFailure(request, fmt.Errorf("复制 upgrade helper 失败：%w", err))
 		return
@@ -169,8 +169,8 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	a.mu.Lock()
 	stateValue.PendingUpgrade.HelperUnitName = strings.TrimSpace(launchResult.UnitName)
 	_ = a.writeUpgradeStateLocked(stateValue)
-	a.upgradeRuntime.startCancel = nil
-	a.upgradeRuntime.startFlowID = ""
+	a.upgradeRuntime.StartCancel = nil
+	a.upgradeRuntime.StartFlowID = ""
 	a.mu.Unlock()
 
 	_ = targetBinary
@@ -179,9 +179,9 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.upgradeRuntime.startInFlight = false
-	a.upgradeRuntime.startCancel = nil
-	a.upgradeRuntime.startFlowID = ""
+	a.upgradeRuntime.StartInFlight = false
+	a.upgradeRuntime.StartCancel = nil
+	a.upgradeRuntime.StartFlowID = ""
 
 	stateValue, ok, loadErr := a.loadUpgradeStateLocked(true)
 	if loadErr == nil && ok && stateValue.PendingUpgrade != nil {
@@ -215,13 +215,13 @@ func (a *App) upgradeHelperLogPathLocked() string {
 }
 
 func (a *App) maybeFlushUpgradeResultLocked(now time.Time) []control.UIEvent {
-	if a.upgradeRuntime.resultScanEvery <= 0 {
+	if a.upgradeRuntime.ResultScanEvery <= 0 {
 		return nil
 	}
-	if !a.upgradeRuntime.nextResultScan.IsZero() && now.Before(a.upgradeRuntime.nextResultScan) {
+	if !a.upgradeRuntime.NextResultScan.IsZero() && now.Before(a.upgradeRuntime.NextResultScan) {
 		return nil
 	}
-	a.upgradeRuntime.nextResultScan = now.Add(a.upgradeRuntime.resultScanEvery)
+	a.upgradeRuntime.NextResultScan = now.Add(a.upgradeRuntime.ResultScanEvery)
 
 	stateValue, ok, err := a.loadUpgradeStateLocked(false)
 	if err != nil || !ok || stateValue.PendingUpgrade == nil {
