@@ -6,8 +6,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func commandPageEvent(surfaceID string, view control.FeishuCommandPageView) control.UIEvent {
-	page := control.FeishuPageViewFromCommandPageView(control.NormalizeFeishuCommandPageView(view))
+func commandPageEvent(surfaceID string, view control.FeishuPageView) control.UIEvent {
+	page := control.FeishuPageViewFromCommandPageView(control.NormalizeFeishuPageView(view))
 	return control.UIEvent{
 		Kind:             control.UIEventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
@@ -15,7 +15,7 @@ func commandPageEvent(surfaceID string, view control.FeishuCommandPageView) cont
 	}
 }
 
-func commandPageEvents(surfaceID string, view control.FeishuCommandPageView) []control.UIEvent {
+func commandPageEvents(surfaceID string, view control.FeishuPageView) []control.UIEvent {
 	return []control.UIEvent{commandPageEvent(surfaceID, view)}
 }
 

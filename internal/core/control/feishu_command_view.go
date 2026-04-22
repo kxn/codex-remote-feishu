@@ -1,20 +1,20 @@
 package control
 
-// FeishuCommandView is the UI-owned view payload for interactive command menu
+// FeishuCatalogView is the UI-owned view payload for interactive command menu
 // and config cards. It carries semantic state; the final Feishu card layout is
 // still projected separately during the transition.
-type FeishuCommandView struct {
-	Menu   *FeishuCommandMenuView
-	Config *FeishuCommandConfigView
-	Page   *FeishuCommandPageView
+type FeishuCatalogView struct {
+	Menu   *FeishuCatalogMenuView
+	Config *FeishuCatalogConfigView
+	Page   *FeishuPageView
 }
 
-type FeishuCommandMenuView struct {
+type FeishuCatalogMenuView struct {
 	Stage   string
 	GroupID string
 }
 
-type FeishuCommandConfigView struct {
+type FeishuCatalogConfigView struct {
 	CommandID          string
 	RequiresAttachment bool
 	CurrentValue       string
@@ -25,24 +25,4 @@ type FeishuCommandConfigView struct {
 	StatusKind         string
 	StatusText         string
 	Sealed             bool
-}
-
-type FeishuCommandPageView struct {
-	CommandID       string
-	Title           string
-	MessageID       string
-	TrackingKey     string
-	ThemeKey        string
-	Patchable       bool
-	Breadcrumbs     []CommandCatalogBreadcrumb
-	SummarySections []FeishuCardTextSection
-	BodySections    []FeishuCardTextSection
-	NoticeSections  []FeishuCardTextSection
-	StatusKind      string
-	StatusText      string
-	Interactive     bool
-	Sealed          bool
-	DisplayStyle    CommandCatalogDisplayStyle
-	Sections        []CommandCatalogSection
-	RelatedButtons  []CommandCatalogButton
 }

@@ -89,18 +89,6 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []control.UI
 	}}
 }
 
-func (s *Service) commandViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
-	page := s.commandPageFromView(surface, view)
-	return control.UIEvent{
-		Kind:                     control.UIEventFeishuCommandView,
-		GatewayID:                surface.GatewayID,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: true,
-		FeishuCommandView:        &view,
-		FeishuCommandContext:     s.buildFeishuCommandContextFromView(surface, view, page),
-	}
-}
-
 func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo) []control.UIEvent {
 	return s.handleProblem(instanceID, problem)
 }

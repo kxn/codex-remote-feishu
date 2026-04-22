@@ -319,27 +319,6 @@ func (a *App) recordUIEventDelivery(event control.UIEvent, operations []feishu.O
 			break
 		}
 	}
-	if event.FeishuCommandView != nil && event.FeishuCommandView.Page != nil && strings.TrimSpace(event.FeishuCommandView.Page.TrackingKey) != "" {
-		for _, operation := range operations {
-			if operation.Kind != feishu.OperationSendCard {
-				continue
-			}
-			if strings.TrimSpace(operation.MessageID) == "" {
-				continue
-			}
-			a.service.RecordOwnerCardFlowMessage(
-				event.SurfaceSessionID,
-				event.FeishuCommandView.Page.TrackingKey,
-				operation.MessageID,
-			)
-			a.recordUpgradeOwnerCardMessageLocked(
-				event.FeishuCommandView.Page.TrackingKey,
-				operation.MessageID,
-			)
-			a.recordVSCodeMigrationFlowMessageLocked(event.FeishuCommandView.Page.TrackingKey, operation.MessageID)
-			break
-		}
-	}
 	if event.FeishuPageView != nil && strings.TrimSpace(event.FeishuPageView.TrackingKey) != "" {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {

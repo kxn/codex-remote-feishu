@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-21`
+> Updated: `2026-04-22`
 > Summary: 同步当前 workspace-aware normal mode 与 vscode mode，并补齐新的飞书命令面：canonical slash/menu key、阶段感知 `/menu` 首页、manual `/compact` 的当前 thread 入口与 compact pending/running gating，以及显式 `/compact` 现在会在前台建立 compact owner-card flow（dispatching -> running -> completed/failed 同卡 patch；这条前台 compact 卡对 `quiet` / `normal` / `verbose` 都可见，而被动 compact completion 则继续并入共享过程卡：quiet 静默，normal/verbose 可见）、`/steerall` 的批量并入当前 running turn 入口、reply 当前 processing 的自动 steering、bare `/mode` `/autowhip` `/reasoning` `/access` `/plan` `/model` `/verbose` 的统一参数卡表单、surface 级 `PlanMode` 的持久化 / 入队冻结 / turn-start 落参，以及 `item/plan/delta` 在 turn 完成后追加的“提案计划”手动 handoff 卡（不进入 request gate，后续输入或路由切换会 seal，点击 `直接执行` / `清空上下文并执行` 会先把当前 surface 的 `PlanMode` 切回 `off` 再继续派发）、可复用 Feishu 路径选择器的 active picker gate / consumer handoff，以及 normal `/list` / `/use` / `/useall` 收敛后的 unified target picker（editing 态改成显式 `Page` 向导流：`/list` / `/use` / `/useall` / workspace-scoped 入口现在都先落 `模式` 页，并预填 `模式=进入已有工作区`；点模式按钮后再进入 `目标` 或 `来源` 页；`目标` 页保留工作区 + 会话同页，`来源 -> 目录/Git` 各页各答一个主问题；本地目录命中已知 workspace 时直接阻塞；`Git URL` 页继续在同页收集父目录、仓库地址与目录名，父目录行右侧提供 `选择目录`，底部动作统一收口成带分隔线的横排按钮，并在 confirm 后进入同卡 processing / terminal 收口；processing 期间普通输入会被 `target_picker` gate 显式阻断，仅保留 `/status` 与同卡取消；两条添加路径成功后都统一进入 `R5 NewThreadReady`，缺少 `git` 时保留来源可见但 `克隆并继续` 禁用）；`vscode mode` 下菜单进入的 `/list`、`/use`、`/useall` 现在也会把实例/线程结果、attach / use 终态继续收口在原菜单卡；stamped `/mode vscode` 若立刻命中 legacy `editor_settings` 且存在可接管入口，会先静默自动迁到 `managed_shim`，成功后直接继续原有 open prompt / 恢复提示链路；只有缺 target、自动迁移失败、或已有 managed shim 需要修复时，才继续把可见 guidance card 承接到当前卡。stamped/typed `/vscode-migrate` 打开的 root page 与 `vscode_migrate_owner_flow` 结果，也仍会沿当前卡时间线承接；同时补进 `/upgrade latest` 的 daemon owner-card gate：文本触发先 append patchable checking card，再同卡进入 confirm / running / cancelling / restarting(sealed)；running 期间普通输入与其它 competing action 会在 daemon `handleAction(...)` 顶层被显式阻断，只保留 `/status`、`/upgrade`、`/debug`、reaction/recall 与同卡 confirm/cancel；helper 重启完成后只补一条结果 notice，不再恢复旧卡 patch；同时补记 upstream authoritative `thread runtime status`（`notLoaded` / `idle` / `systemError` / `active(activeFlags)`）已进入 orchestrator thread 视图与 busy/kick 文案投影，但仍与 surface queue/request gate 分层，`notLoaded` 不会把仍可恢复的 thread 从 `/use` 候选里硬挡掉；并同步 instance 级 `ActiveTurnID/ActiveThreadID` 现在只跟踪可中断的主 turn、不会再被未绑定的 unknown/helper side-turn 覆盖或清空，`/stop` 也优先按当前 surface 的 `activeRemote` 绑定发 interrupt；同时补记 transport degraded / hard disconnect / remove instance 对 compact 与 steer overlay 的恢复清理语义、request/path-picker/target-picker/thread-history 的 service-owned runtime 持有边界，以及 `surface resume state` 作为唯一持久化恢复源对 headless 恢复元数据与 surface-level `verbosity` / `PlanMode` 偏好的承载；startup 不再导入旧 `headless-restore-hints.json`，且非 `normal` mode 的持久化 entry 会强制清掉 `ResumeHeadless`；`global runtime` 提示当前也已收口为独立顶层车道，统一覆盖真正脱离当前 owner-card 上下文的 resume failure/open prompt、transport degraded、daemon shutdown 与 gateway apply failure。
 
 ## 1. 文档定位
@@ -424,8 +424,8 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 2. 若这次同步判定发现 legacy `editor_settings` 且已存在可接管入口，daemon 会先同步静默自动迁到 `managed_shim`，不再先弹“确认迁移”主提示卡。
 3. 若自动迁移成功且不再残留兼容性问题，后续继续走原有 `open VS Code` / recover 流；若缺 target、自动迁移失败、迁移后状态仍异常，或本来就是 stale managed shim 修复，daemon 才会把首张可投影提示卡直接替换当前卡，而不是再走独立 runtime notice / catalog。
 4. 若 `/mode vscode` 是纯文本 slash 入口，仍保持原来的异步检测与提示语义，不把普通文本入口升级成 current-card replace。
-5. `/vscode-migrate` 当前会先进入 `ActionVSCodeMigrateCommand -> DaemonCommandVSCodeMigrateCommand`，打开同一套 VS Code 迁移 command page；若入口来自 stamped current-card callback，root page / 校验失败页会直接同位替回当前卡。
-6. 真正执行迁移的按钮当前不再发 `run_command(/vscode-migrate)`，而是显式发 `vscode_migrate_owner_flow -> ActionVSCodeMigrate`；迁移结果与后续 guidance 会继续 patch 在同一张 guidance card 上。
+5. `/vscode-migrate` 当前会先进入 `ActionVSCodeMigrateCommand -> DaemonCommandVSCodeMigrateCommand`，打开同一套 VS Code 迁移 page root；若入口来自 stamped current-card callback，root page / 校验失败页会直接同位替回当前卡。
+6. 真正执行迁移的按钮当前不再发旧的文本重解析回调，而是显式发 `vscode_migrate_owner_flow -> ActionVSCodeMigrate`；迁移结果与后续 guidance 会继续 patch 在同一张 guidance card 上。
 
 ### 4.2 thread claim 仍是全局的，但在 normal mode 下退回 workspace 内仲裁
 
@@ -679,7 +679,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 4. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
    1. `send settings`：`/reasoning`、`/model`、`/access`
    2. `maintenance`：`/mode`、`/autowhip`
-   3. 表单提交通过 card callback `submit_command_form` 拼回 canonical slash text，再复用文本命令解析链路。
+   3. 表单提交通过 card callback `page_submit` 直接回填结构化 `action_kind/field_name/action_arg_prefix`，再生成 canonical `Action.Text`。
 5. `maintenance` 分组里的 `/debug`、`/upgrade` 当前仍然是直接触发 daemon 动作的命令入口，不属于参数卡表单。
 7. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
 8. 同上下文菜单导航当前已经支持“替换当前卡片”而不是追加新卡，但只限窄范围：
@@ -895,7 +895,7 @@ E3 Running
 7. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
 8. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。
 9. 显式 `/compact` 还会在当前 surface 建立一条 compact owner-card flow：
-   1. 首卡由 orchestrator 直接 append 一张 patchable `FeishuCommandPageView`
+   1. 首卡由 orchestrator 直接 append 一张 patchable `FeishuPageView`
    2. 首次发送时靠 `TrackingKey` 回写 `message_id`
    3. 后续 running / terminal 都继续 patch 同一张卡
    4. 这条显式 owner-card 不受 verbosity 影响
@@ -1219,8 +1219,8 @@ retained-offline overlay 额外规则：
 | `submit_request_form` | `ActionRespondRequest` | 顶层/`item` 两种 `request_user_input` 与 form 模式 `mcp_server_elicitation` 的表单提交入口；按 `question.id -> answers[]` 回传。`request_user_input` 的表单“提交答案”会带 `request_option_id=submit`；`mcp_server_elicitation` 的表单“提交并继续”同样带 `request_option_id=submit`，由 orchestrator 决定是先保存草稿还是最终 accept |
 | `kick_thread_confirm` | `ActionConfirmKickThread` | 强踢前再次校验实时状态 |
 | `kick_thread_cancel` | `ActionCancelKickThread` | 仅回 notice |
-| `/vscode-migrate` | `ActionVSCodeMigrateCommand` | 打开 VS Code 迁移 command page root；仅在 vscode mode 的 slash help 中展示，normal mode 下不进入 help/menu，直接输入则返回“仅 VS Code 模式可用”页 |
-| `vscode_migrate_owner_flow` | `ActionVSCodeMigrate` | VS Code 迁移 command page 的 owner-flow callback；点击后走本机 managed-shim 迁移链路，并把结果继续收口在同一张 guidance card 上 |
+| `/vscode-migrate` | `ActionVSCodeMigrateCommand` | 打开 VS Code 迁移 page root；仅在 vscode mode 的 slash help 中展示，normal mode 下不进入 help/menu，直接输入则返回“仅 VS Code 模式可用”页 |
+| `vscode_migrate_owner_flow` | `ActionVSCodeMigrate` | VS Code 迁移 page 的 owner-flow callback；点击后走本机 managed-shim 迁移链路，并把结果继续收口在同一张 guidance card 上 |
 
 菜单与文本命令里新增：
 

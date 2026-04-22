@@ -8,7 +8,7 @@ import (
 func TestStaticCommandCatalogsUsePlainTextContracts(t *testing.T) {
 	cases := []struct {
 		name    string
-		catalog FeishuCommandPageView
+		catalog FeishuPageView
 	}{
 		{name: "help", catalog: FeishuCommandHelpPageView()},
 		{name: "menu", catalog: FeishuCommandMenuPageView()},
@@ -45,7 +45,7 @@ func TestCommandViewCatalogBuildersUsePlainTextContracts(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected builtin command definition")
 		}
-		catalog := BuildFeishuAttachmentRequiredPageView(def, FeishuCommandConfigView{
+		catalog := BuildFeishuAttachmentRequiredPageView(def, FeishuCatalogConfigView{
 			CommandID:          def.ID,
 			RequiresAttachment: true,
 		})
@@ -56,9 +56,9 @@ func TestCommandViewCatalogBuildersUsePlainTextContracts(t *testing.T) {
 	})
 }
 
-func assertCommandCatalogUsesPlainTextContracts(t *testing.T, catalog FeishuCommandPageView) {
+func assertCommandCatalogUsesPlainTextContracts(t *testing.T, catalog FeishuPageView) {
 	t.Helper()
-	normalizedPage := NormalizeFeishuCommandPageView(catalog)
+	normalizedPage := NormalizeFeishuPageView(catalog)
 	for _, section := range catalog.SummarySections {
 		assertCardTextSectionUsesPlainText(t, section)
 	}

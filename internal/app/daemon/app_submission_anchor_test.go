@@ -42,7 +42,7 @@ func TestHandleGatewayActionReplacesMenuCardWithStatusCard(t *testing.T) {
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if operationHasActionValue(*result.ReplaceCurrentCard, "run_command", "command_text", "/menu") {
+	if operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) {
 		t.Fatalf("did not expect status replacement to use submitted-anchor reopen menu affordance, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }

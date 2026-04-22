@@ -47,7 +47,7 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 	return defs
 }
 
-func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) FeishuCommandPageView {
+func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) FeishuPageView {
 	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))
 	for _, group := range feishuCommandGroups {
 		entries := make([]CommandCatalogEntry, 0, len(feishuCommandSpecs))
@@ -73,7 +73,7 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 			Entries: entries,
 		})
 	}
-	view := FeishuCommandPageView{
+	view := FeishuPageView{
 		Title:       title,
 		Interactive: interactive,
 		Sections:    sections,
@@ -81,10 +81,10 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 	if lines := splitFeishuCommandPageSummaryLines(summary); len(lines) != 0 {
 		view.SummarySections = []FeishuCardTextSection{{Lines: lines}}
 	}
-	return NormalizeFeishuCommandPageView(view)
+	return NormalizeFeishuPageView(view)
 }
 
-func FeishuCommandHelpPageView() FeishuCommandPageView {
+func FeishuCommandHelpPageView() FeishuPageView {
 	return BuildFeishuCommandStaticPageView(
 		"Slash 命令帮助",
 		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
@@ -92,7 +92,7 @@ func FeishuCommandHelpPageView() FeishuCommandPageView {
 	)
 }
 
-func FeishuCommandMenuPageView() FeishuCommandPageView {
+func FeishuCommandMenuPageView() FeishuPageView {
 	return BuildFeishuCommandStaticPageView(
 		"命令目录",
 		"这是同源的静态命令目录。真正的 `/menu` 首页会在 service 层按当前阶段动态重排。",

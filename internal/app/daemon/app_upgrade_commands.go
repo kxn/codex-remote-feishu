@@ -71,7 +71,7 @@ func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
 	}
 }
 
-func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuCommandPageView {
+func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuPageView {
 	targetVersion := ""
 	title := "发现可升级版本"
 	confirmCommand := "/upgrade latest"
@@ -105,7 +105,7 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuC
 			commandCatalogTextSection("下一步", "再次发送 /upgrade latest 继续升级流程。"),
 		}
 	}
-	return control.NormalizeFeishuCommandPageView(control.FeishuCommandPageView{
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandUpgrade,
 		Title:           title,
 		SummarySections: summarySections,

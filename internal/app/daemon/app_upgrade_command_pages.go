@@ -8,8 +8,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool, formDefault, statusKind, statusText string) control.FeishuCommandPageView {
-	return control.FeishuCommandPageView{
+func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool, formDefault, statusKind, statusText string) control.FeishuPageView {
+	return control.FeishuPageView{
 		CommandID:    control.FeishuCommandDebug,
 		StatusKind:   strings.TrimSpace(statusKind),
 		StatusText:   strings.TrimSpace(statusText),
@@ -28,7 +28,7 @@ func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool,
 	}
 }
 
-func buildUpgradeRootPageView(stateValue install.InstallState, formDefault, statusKind, statusText string) control.FeishuCommandPageView {
+func buildUpgradeRootPageView(stateValue install.InstallState, formDefault, statusKind, statusText string) control.FeishuPageView {
 	quickButtons := []control.CommandCatalogButton{
 		runCommandButton("查看 Track", "/upgrade track", "", false),
 		runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
@@ -37,7 +37,7 @@ func buildUpgradeRootPageView(stateValue install.InstallState, formDefault, stat
 	if install.CurrentBuildAllowsLocalUpgrade() {
 		quickButtons = append(quickButtons, runCommandButton("本地升级", "/upgrade local", "", false))
 	}
-	return control.FeishuCommandPageView{
+	return control.FeishuPageView{
 		CommandID:    control.FeishuCommandUpgrade,
 		StatusKind:   strings.TrimSpace(statusKind),
 		StatusText:   strings.TrimSpace(statusText),
@@ -54,9 +54,9 @@ func buildUpgradeRootPageView(stateValue install.InstallState, formDefault, stat
 	}
 }
 
-func buildUpgradeTrackPageView(stateValue install.InstallState) control.FeishuCommandPageView {
+func buildUpgradeTrackPageView(stateValue install.InstallState) control.FeishuPageView {
 	currentTrack := strings.TrimSpace(string(stateValue.CurrentTrack))
-	return control.FeishuCommandPageView{
+	return control.FeishuPageView{
 		CommandID:       control.FeishuCommandUpgrade,
 		Title:           "Upgrade Track",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandUpgrade, "Track"),

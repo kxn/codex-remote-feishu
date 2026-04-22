@@ -2,100 +2,17 @@ package control
 
 import "strings"
 
-func NormalizeFeishuCommandPageView(view FeishuCommandPageView) FeishuCommandPageView {
-	def, _ := FeishuCommandDefinitionByID(strings.TrimSpace(view.CommandID))
-	title := strings.TrimSpace(view.Title)
-	if title == "" {
-		title = strings.TrimSpace(def.Title)
-	}
-	displayStyle := view.DisplayStyle
-	if displayStyle == "" {
-		displayStyle = CommandCatalogDisplayCompactButtons
-	}
-	breadcrumbs := cloneCommandBreadcrumbs(view.Breadcrumbs)
-	if len(breadcrumbs) == 0 && strings.TrimSpace(def.GroupID) != "" {
-		breadcrumbs = FeishuCommandBreadcrumbs(def.GroupID, title)
-	}
-	bodySections := BuildFeishuCommandPageBodySections(view)
-	noticeSections := BuildFeishuCommandPageNoticeSections(view)
-	sections := cloneCommandCatalogSections(view.Sections)
-	relatedButtons := cloneCommandCatalogButtons(view.RelatedButtons)
-	interactive := view.Interactive
-	if view.Sealed {
-		interactive = false
-		relatedButtons = nil
-	}
-	if len(relatedButtons) == 0 && strings.TrimSpace(def.GroupID) != "" && !view.Sealed {
-		relatedButtons = FeishuCommandBackButtons(def.GroupID)
-	}
-	return FeishuCommandPageView{
-		CommandID:       strings.TrimSpace(view.CommandID),
-		Title:           title,
-		MessageID:       strings.TrimSpace(view.MessageID),
-		TrackingKey:     strings.TrimSpace(view.TrackingKey),
-		ThemeKey:        strings.TrimSpace(view.ThemeKey),
-		Patchable:       view.Patchable,
-		Breadcrumbs:     breadcrumbs,
-		SummarySections: cloneNormalizedFeishuCardSections(bodySections),
-		BodySections:    bodySections,
-		NoticeSections:  noticeSections,
-		Interactive:     interactive,
-		Sealed:          view.Sealed,
-		DisplayStyle:    displayStyle,
-		Sections:        sections,
-		RelatedButtons:  relatedButtons,
-	}
-}
-
-func FeishuCommandPageViewFromView(view FeishuCommandView, productMode, menuStage string) (FeishuCommandPageView, bool) {
+func FeishuPageViewFromView(view FeishuCatalogView, productMode, menuStage string) (FeishuPageView, bool) {
 	switch {
 	case view.Menu != nil:
 		return BuildFeishuCommandMenuPageView(*view.Menu, productMode, menuStage), true
 	case view.Config != nil:
 		return BuildFeishuCommandConfigPageView(*view.Config), true
 	case view.Page != nil:
-		return NormalizeFeishuCommandPageView(*view.Page), true
+		return NormalizeFeishuPageView(*view.Page), true
 	default:
-		return FeishuCommandPageView{}, false
+		return FeishuPageView{}, false
 	}
-}
-
-func BuildFeishuCommandPageSummarySections(view FeishuCommandPageView) []FeishuCardTextSection {
-	return BuildFeishuCommandPageBodySections(view)
-}
-
-func BuildFeishuCommandPageBodySections(view FeishuCommandPageView) []FeishuCardTextSection {
-	return cloneNormalizedFeishuCardSections(firstNonEmptyFeishuCardSections(view.BodySections, view.SummarySections))
-}
-
-func BuildFeishuCommandPageNoticeSections(view FeishuCommandPageView) []FeishuCardTextSection {
-	sections := make([]FeishuCardTextSection, 0, len(view.NoticeSections)+1)
-	if feedback, ok := commandPageFeedbackSection(view); ok {
-		sections = append(sections, feedback)
-	}
-	sections = append(sections, cloneNormalizedFeishuCardSections(view.NoticeSections)...)
-	if len(sections) == 0 {
-		return nil
-	}
-	return sections
-}
-
-func commandPageFeedbackSection(view FeishuCommandPageView) (FeishuCardTextSection, bool) {
-	text := normalizeCommandFeedbackText(view.StatusText)
-	if text == "" {
-		return FeishuCardTextSection{}, false
-	}
-	label := "状态"
-	switch strings.TrimSpace(view.StatusKind) {
-	case "error":
-		label = "错误"
-	case "info":
-		label = "说明"
-	}
-	return FeishuCardTextSection{
-		Label: label,
-		Lines: []string{text},
-	}, true
 }
 
 func FeishuCommandBreadcrumbsForCommand(commandID string, extraLabels ...string) []CommandCatalogBreadcrumb {
@@ -125,7 +42,7 @@ func FeishuCommandBackToRootButtons(commandID string) []CommandCatalogButton {
 	}
 	return []CommandCatalogButton{{
 		Label:       "返回" + strings.TrimSpace(def.Title),
-		Kind:        CommandCatalogButtonRunCommand,
+		Kind:        CommandCatalogButtonAction,
 		CommandText: command,
 	}}
 }

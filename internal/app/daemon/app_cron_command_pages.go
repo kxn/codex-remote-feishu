@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool, formDefault, statusKind, statusText string) control.FeishuCommandPageView {
+func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool, formDefault, statusKind, statusText string) control.FeishuPageView {
 	primaryCommand := cronPrimaryMenuCommand(stateValue, ownerView)
 	canEdit := cronCanEdit(stateValue) && configReady
 	canReload := cronCanReload(stateValue, ownerView)
@@ -15,7 +15,7 @@ func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	if line := strings.TrimSpace(extraSummary); line != "" {
 		summarySections = commandCatalogSummarySections(line)
 	}
-	return control.FeishuCommandPageView{
+	return control.FeishuPageView{
 		CommandID:       control.FeishuCommandCron,
 		SummarySections: summarySections,
 		StatusKind:      strings.TrimSpace(statusKind),
@@ -46,7 +46,7 @@ func buildCronRootPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	}
 }
 
-func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuCommandPageView {
+func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuPageView {
 	summaryLines := []string{}
 	cronZone := cronConfiguredTimeZone(stateValue)
 	sections := []control.CommandCatalogSection{}
@@ -85,7 +85,7 @@ func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView,
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
-	return control.NormalizeFeishuCommandPageView(control.FeishuCommandPageView{
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 状态",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "当前状态"),
@@ -97,7 +97,7 @@ func buildCronStatusPageView(stateValue *cronStateFile, ownerView cronOwnerView,
 	})
 }
 
-func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) control.FeishuCommandPageView {
+func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string) control.FeishuPageView {
 	summaryLines := []string{}
 	cronZone := cronConfiguredTimeZone(stateValue)
 	sections := []control.CommandCatalogSection{}
@@ -129,7 +129,7 @@ func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
-	return control.NormalizeFeishuCommandPageView(control.FeishuCommandPageView{
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 任务",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "当前任务"),
@@ -141,7 +141,7 @@ func buildCronListPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	})
 }
 
-func buildCronEditPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuCommandPageView {
+func buildCronEditPageView(stateValue *cronStateFile, ownerView cronOwnerView, extraSummary string, configReady bool) control.FeishuPageView {
 	summaryLines := []string{}
 	sections := []control.CommandCatalogSection{}
 	if stateValue == nil || !cronStateHasBinding(stateValue) {
@@ -174,7 +174,7 @@ func buildCronEditPageView(stateValue *cronStateFile, ownerView cronOwnerView, e
 	if strings.TrimSpace(extraSummary) != "" {
 		summaryLines = append(summaryLines, strings.TrimSpace(extraSummary))
 	}
-	return control.NormalizeFeishuCommandPageView(control.FeishuCommandPageView{
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 配置",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "打开配置"),

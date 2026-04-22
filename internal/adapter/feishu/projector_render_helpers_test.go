@@ -19,12 +19,11 @@ func selectionPromptEvent(prompt control.FeishuDirectSelectionPrompt) control.UI
 	}
 }
 
-func commandCatalogEvent(catalog control.FeishuCommandPageView) control.UIEvent {
-	page := control.NormalizeFeishuCommandPageView(catalog)
-	view := control.FeishuCommandView{Page: &page}
+func commandCatalogEvent(catalog control.FeishuPageView) control.UIEvent {
+	page := control.NormalizeFeishuPageView(catalog)
 	return control.UIEvent{
-		Kind:              control.UIEventFeishuCommandView,
-		FeishuCommandView: &view,
+		Kind:           control.UIEventFeishuPageView,
+		FeishuPageView: &page,
 	}
 }
 
@@ -203,6 +202,46 @@ func cardButtonPayload(t *testing.T, button map[string]any) map[string]any {
 		t.Fatalf("expected callback value payload, got %#v", button)
 	}
 	return value
+}
+
+func assertPageActionPayloadMatchesCommand(t *testing.T, value map[string]any, commandText string) {
+	t.Helper()
+	action, ok := control.ParseFeishuTextAction(commandText)
+	if !ok {
+		t.Fatalf("expected parseable command text %q", commandText)
+	}
+	if value["kind"] != "page_action" {
+		t.Fatalf("expected page_action payload, got %#v", value)
+	}
+	if value["action_kind"] != string(action.Kind) {
+		t.Fatalf("unexpected action kind payload: %#v", value)
+	}
+	wantArg := control.FeishuActionArgumentText(action.Text)
+	gotArg := strings.TrimSpace(stringAnyValue(value["action_arg"]))
+	if gotArg != wantArg {
+		t.Fatalf("unexpected action arg payload: got %q want %q in %#v", gotArg, wantArg, value)
+	}
+}
+
+func assertPageSubmitPayload(t *testing.T, value map[string]any, actionKind control.ActionKind, actionArgPrefix, fieldName string) {
+	t.Helper()
+	if value["kind"] != "page_submit" {
+		t.Fatalf("expected page_submit payload, got %#v", value)
+	}
+	if value["action_kind"] != string(actionKind) {
+		t.Fatalf("unexpected page_submit action kind: %#v", value)
+	}
+	if got := strings.TrimSpace(stringAnyValue(value["action_arg_prefix"])); got != strings.TrimSpace(actionArgPrefix) {
+		t.Fatalf("unexpected page_submit action_arg_prefix: got %q want %q in %#v", got, actionArgPrefix, value)
+	}
+	if got := strings.TrimSpace(stringAnyValue(value["field_name"])); got != strings.TrimSpace(fieldName) {
+		t.Fatalf("unexpected page_submit field_name: got %q want %q in %#v", got, fieldName, value)
+	}
+}
+
+func stringAnyValue(value any) string {
+	text, _ := value.(string)
+	return text
 }
 
 func renderedV2BodyElements(t *testing.T, operation Operation) []map[string]any {

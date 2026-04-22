@@ -234,19 +234,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			},
 			Inbound: meta,
 		}, true
-	case cardActionKindRunCommand:
-		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
-		action, ok := parseTextAction(commandText)
-		if !ok {
-			return control.Action{}, false
-		}
-		action.GatewayID = g.config.GatewayID
-		action.SurfaceSessionID = surfaceSessionID
-		action.ChatID = chatID
-		action.ActorUserID = operatorID
-		action.MessageID = messageID
-		action.Inbound = meta
-		return action, true
 	case cardActionKindPageAction:
 		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
 		if actionKind == "" {
@@ -318,30 +305,6 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 			OptionID:         optionID,
 			Inbound:          meta,
 		}, true
-	case cardActionKindSubmitCommandForm:
-		commandText := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCommandText))
-		if commandText == "" {
-			return control.Action{}, false
-		}
-		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
-		if fieldName == "" {
-			fieldName = cardActionPayloadDefaultCommandFieldName
-		}
-		args := commandFormArgumentValue(event.Event.Action, fieldName)
-		if args != "" {
-			commandText += " " + args
-		}
-		action, ok := parseTextAction(commandText)
-		if !ok {
-			return control.Action{}, false
-		}
-		action.GatewayID = g.config.GatewayID
-		action.SurfaceSessionID = surfaceSessionID
-		action.ChatID = chatID
-		action.ActorUserID = operatorID
-		action.MessageID = messageID
-		action.Inbound = meta
-		return action, true
 	case cardActionKindPageSubmit:
 		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
 		if actionKind == "" {

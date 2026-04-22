@@ -9,7 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
+func TestHelpActionBuildsPageCatalogEvent(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -22,10 +22,10 @@ func TestHelpActionBuildsCommandCatalogEvent(t *testing.T) {
 	})
 
 	if len(events) != 1 {
-		t.Fatalf("expected command catalog event, got %#v", events)
+		t.Fatalf("expected page catalog event, got %#v", events)
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
-	if events[0].Kind != control.UIEventFeishuCommandView && events[0].Kind != control.UIEventFeishuPageView {
+	if events[0].Kind != control.UIEventFeishuPageView {
 		t.Fatalf("unexpected event kind: %#v", events[0])
 	}
 	if catalog.Interactive {

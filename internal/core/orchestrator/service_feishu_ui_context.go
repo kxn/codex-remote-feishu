@@ -165,38 +165,6 @@ func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceCons
 	return context
 }
 
-func (s *Service) buildFeishuCommandContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView, page control.FeishuCommandPageView) *control.FeishuUICommandContext {
-	context := &control.FeishuUICommandContext{
-		DTOOwner:    control.FeishuUIDTOwnerCommand,
-		Surface:     s.buildFeishuUISurfaceContext(surface),
-		Title:       strings.TrimSpace(page.Title),
-		Breadcrumbs: append([]control.CommandCatalogBreadcrumb(nil), page.Breadcrumbs...),
-	}
-	switch {
-	case view.Menu != nil:
-		context.ViewKind = "menu"
-		context.MenuStage = strings.TrimSpace(firstNonEmpty(view.Menu.Stage, func() string {
-			if surface == nil {
-				return ""
-			}
-			return string(s.commandMenuStage(surface))
-		}()))
-		context.MenuView = strings.TrimSpace(view.Menu.GroupID)
-	case view.Config != nil:
-		commandID := strings.TrimSpace(view.Config.CommandID)
-		context.ViewKind = "config"
-		context.MenuView = commandID
-		context.CommandID = commandID
-		context.NeedsTarget = view.Config.RequiresAttachment
-	case view.Page != nil:
-		commandID := strings.TrimSpace(page.CommandID)
-		context.ViewKind = "page"
-		context.MenuView = commandID
-		context.CommandID = commandID
-	}
-	return context
-}
-
 func (s *Service) buildFeishuRequestContextFromView(surface *state.SurfaceConsoleRecord, prompt control.FeishuRequestView) *control.FeishuUIRequestContext {
 	return &control.FeishuUIRequestContext{
 		DTOOwner:    control.FeishuUIDTOwnerRequest,

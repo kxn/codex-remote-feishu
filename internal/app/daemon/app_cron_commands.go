@@ -217,7 +217,7 @@ func (a *App) prepareCronCatalog(command control.DaemonCommand, mode cronCommand
 	if err != nil {
 		return nil, err
 	}
-	var view control.FeishuCommandPageView
+	var view control.FeishuPageView
 	switch mode {
 	case cronCommandMenu:
 		view = buildCronRootPageView(stateValue, ownerView, extraSummary, configReady, "", "", "")

@@ -33,7 +33,7 @@ func (s *Service) commandMenuStage(surface *state.SurfaceConsoleRecord) commandM
 	return commandMenuStageNormalWorking
 }
 
-func (s *Service) buildCommandHelpView(surface *state.SurfaceConsoleRecord) control.FeishuCommandView {
+func (s *Service) buildCommandHelpView(surface *state.SurfaceConsoleRecord) control.FeishuCatalogView {
 	page := control.BuildFeishuCommandDisplayPageView(
 		"Slash 命令帮助",
 		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
@@ -42,13 +42,13 @@ func (s *Service) buildCommandHelpView(surface *state.SurfaceConsoleRecord) cont
 		"",
 	)
 	page.CommandID = control.FeishuCommandHelp
-	return control.FeishuCommandView{Page: &page}
+	return control.FeishuCatalogView{Page: &page}
 }
 
 func choiceCommandButton(label, commandText string, disabled bool, style string) control.CommandCatalogButton {
 	return control.CommandCatalogButton{
 		Label:       label,
-		Kind:        control.CommandCatalogButtonRunCommand,
+		Kind:        control.CommandCatalogButtonAction,
 		CommandText: commandText,
 		Style:       style,
 		Disabled:    disabled,
@@ -81,7 +81,7 @@ func choiceButtonsFromOptions(options []control.FeishuCommandOption, currentOver
 		}
 		buttons = append(buttons, control.CommandCatalogButton{
 			Label:       label,
-			Kind:        control.CommandCatalogButtonRunCommand,
+			Kind:        control.CommandCatalogButtonAction,
 			CommandText: option.CommandText,
 			Style:       style,
 			Disabled:    disabled,

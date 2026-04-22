@@ -8,7 +8,7 @@ import (
 
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "模型",
 		SummarySections: summarySections("直接在卡片里输入模型名。"),
 		Interactive:     true,
@@ -63,17 +63,13 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 		t.Fatalf("expected V2 form submit button, got %#v", formElements[1])
 	}
 	value := cardButtonPayload(t, formElements[1])
-	if value["kind"] != "submit_command_form" || value["command_text"] != "/model" || value["field_name"] != "command_args" {
-		t.Fatalf("unexpected submit payload: %#v", value)
-	}
+	assertPageSubmitPayload(t, value, control.ActionModelCommand, "", "command_args")
 	if ops[0].CardElements[4]["tag"] != "hr" {
 		t.Fatalf("expected divider before related action row, got %#v", ops[0].CardElements)
 	}
 	relatedRow := cardElementButtons(t, ops[0].CardElements[5])
 	relatedValue := cardButtonPayload(t, relatedRow[0])
-	if relatedValue["kind"] != "run_command" || relatedValue["command_text"] != "/menu send_settings" {
-		t.Fatalf("unexpected related button payload: %#v", relatedValue)
-	}
+	assertPageActionPayloadMatchesCommand(t, relatedValue, "/menu send_settings")
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected command catalog with form to use V2 in #120, got %#v", ops[0])
 	}
@@ -93,18 +89,14 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
 	}
 	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
-	if renderedSubmitValue["kind"] != "submit_command_form" || renderedSubmitValue["command_text"] != "/model" {
-		t.Fatalf("unexpected rendered command form payload: %#v", renderedSubmitValue)
-	}
+	assertPageSubmitPayload(t, renderedSubmitValue, control.ActionModelCommand, "", "command_args")
 	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[5])
-	if renderedRelatedValue["kind"] != "run_command" || renderedRelatedValue["command_text"] != "/menu send_settings" {
-		t.Fatalf("unexpected rendered related button payload: %#v", renderedRelatedValue)
-	}
+	assertPageActionPayloadMatchesCommand(t, renderedRelatedValue, "/menu send_settings")
 }
 
 func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:       "模型",
 		Interactive: true,
 		Sections: []control.CommandCatalogSection{{
@@ -163,7 +155,7 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 
 func TestProjectCommandCatalogRendersNoticeAreaBetweenBusinessAndFooter(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title: "上下文已压缩",
 		BodySections: []control.FeishuCardTextSection{{
 			Label: "当前会话",

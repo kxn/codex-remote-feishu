@@ -23,7 +23,7 @@ func TestParseFeishuMenuActionRecognizesCompactCommand(t *testing.T) {
 }
 
 func TestFeishuCommandCatalogsIncludeCompact(t *testing.T) {
-	for _, catalog := range []FeishuCommandPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
+	for _, catalog := range []FeishuPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
 		found := false
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {

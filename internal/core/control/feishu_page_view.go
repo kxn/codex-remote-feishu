@@ -26,12 +26,20 @@ type FeishuPageView struct {
 }
 
 func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
+	commandID := strings.TrimSpace(view.CommandID)
+	def, _ := FeishuCommandDefinitionByID(commandID)
 	title := strings.TrimSpace(view.Title)
+	if title == "" {
+		title = strings.TrimSpace(def.Title)
+	}
 	displayStyle := view.DisplayStyle
 	if displayStyle == "" {
 		displayStyle = CommandCatalogDisplayCompactButtons
 	}
 	breadcrumbs := cloneCommandBreadcrumbs(view.Breadcrumbs)
+	if len(breadcrumbs) == 0 && strings.TrimSpace(def.GroupID) != "" {
+		breadcrumbs = FeishuCommandBreadcrumbs(def.GroupID, title)
+	}
 	bodySections := BuildFeishuPageBodySections(view)
 	noticeSections := BuildFeishuPageNoticeSections(view)
 	sections := cloneCommandCatalogSections(view.Sections)
@@ -40,10 +48,12 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 	if view.Sealed {
 		interactive = false
 		relatedButtons = nil
+	} else if len(relatedButtons) == 0 && strings.TrimSpace(def.GroupID) != "" {
+		relatedButtons = FeishuCommandBackButtons(def.GroupID)
 	}
 	return FeishuPageView{
 		PageID:          strings.TrimSpace(view.PageID),
-		CommandID:       strings.TrimSpace(view.CommandID),
+		CommandID:       commandID,
 		Title:           title,
 		MessageID:       strings.TrimSpace(view.MessageID),
 		TrackingKey:     strings.TrimSpace(view.TrackingKey),
@@ -53,8 +63,8 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 		SummarySections: cloneNormalizedFeishuCardSections(bodySections),
 		BodySections:    bodySections,
 		NoticeSections:  noticeSections,
-		StatusKind:      strings.TrimSpace(view.StatusKind),
-		StatusText:      normalizeCommandFeedbackText(view.StatusText),
+		StatusKind:      "",
+		StatusText:      "",
 		Interactive:     interactive,
 		Sealed:          view.Sealed,
 		DisplayStyle:    displayStyle,
@@ -97,7 +107,7 @@ func pageFeedbackSection(statusKind, statusText string) (FeishuCardTextSection, 
 	}, true
 }
 
-func FeishuPageViewFromCommandPageView(view FeishuCommandPageView) FeishuPageView {
+func FeishuPageViewFromCommandPageView(view FeishuPageView) FeishuPageView {
 	return NormalizeFeishuPageView(FeishuPageView{
 		PageID:          strings.TrimSpace(view.CommandID),
 		CommandID:       strings.TrimSpace(view.CommandID),

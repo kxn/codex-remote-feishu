@@ -26,7 +26,7 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 	}
 }
 
-func (s *Service) pageEventFromCommandView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
+func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) control.UIEvent {
 	page := s.commandPageFromView(surface, view)
 	return s.pageEvent(surface, control.FeishuPageViewFromCommandPageView(page))
 }
@@ -43,13 +43,13 @@ func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw string)
 	return s.pageEvent(surface, page)
 }
 
-func (s *Service) configPageEventFromCommandView(surface *state.SurfaceConsoleRecord, view control.FeishuCommandView) control.UIEvent {
+func (s *Service) configPageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) control.UIEvent {
 	page := control.FeishuPageViewFromCommandPageView(s.commandPageFromView(surface, view))
 	if surface != nil && surface.MenuFlow != nil && !surface.MenuFlow.EnteredBusiness {
 		s.markMenuFlowConfigPhase(surface)
 		page.RelatedButtons = []control.CommandCatalogButton{{
 			Label:       "返回菜单",
-			Kind:        control.CommandCatalogButtonRunCommand,
+			Kind:        control.CommandCatalogButtonAction,
 			CommandText: s.menuFlowBackCommand(surface),
 		}}
 	} else {

@@ -372,7 +372,7 @@ type RequestPromptQuestion struct {
 type CommandCatalogButtonKind string
 
 const (
-	CommandCatalogButtonRunCommand     CommandCatalogButtonKind = "run_command"
+	CommandCatalogButtonAction         CommandCatalogButtonKind = "action"
 	CommandCatalogButtonCallbackAction CommandCatalogButtonKind = "callback_action"
 	CommandCatalogButtonOpenURL        CommandCatalogButtonKind = "open_url"
 )
@@ -574,7 +574,6 @@ type UIEventKind string
 const (
 	UIEventSnapshot            UIEventKind = "snapshot.updated"
 	UIEventFeishuSelectionView UIEventKind = "selection.prompt"
-	UIEventFeishuCommandView   UIEventKind = "command.catalog"
 	UIEventFeishuPageView      UIEventKind = "page.view"
 	UIEventFeishuRequestView   UIEventKind = "request.prompt"
 	UIEventFeishuPathPicker    UIEventKind = "path.picker"
@@ -639,8 +638,6 @@ type UIEvent struct {
 	Snapshot                   *Snapshot
 	FeishuSelectionView        *FeishuSelectionView
 	FeishuSelectionContext     *FeishuUISelectionContext
-	FeishuCommandView          *FeishuCommandView
-	FeishuCommandContext       *FeishuUICommandContext
 	FeishuPageView             *FeishuPageView
 	FeishuPageContext          *FeishuUIPageContext
 	FeishuRequestView          *FeishuRequestView

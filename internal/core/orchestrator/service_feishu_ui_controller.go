@@ -17,19 +17,19 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentShowModeCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildModeCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildModeCommandView(surface))}
 	case control.FeishuUIIntentShowAutoContinueCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildAutoContinueCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildAutoContinueCommandView(surface))}
 	case control.FeishuUIIntentShowReasoningCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildReasoningCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildReasoningCommandView(surface))}
 	case control.FeishuUIIntentShowAccessCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildAccessCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildAccessCommandView(surface))}
 	case control.FeishuUIIntentShowPlanCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildPlanCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildPlanCommandView(surface))}
 	case control.FeishuUIIntentShowModelCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildModelCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildModelCommandView(surface))}
 	case control.FeishuUIIntentShowVerboseCatalog:
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildVerboseCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildVerboseCommandView(surface))}
 	case control.FeishuUIIntentShowList:
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
 			return s.openTargetPicker(surface, control.TargetPickerRequestSourceList, "", intent.SourceMessageID, true)

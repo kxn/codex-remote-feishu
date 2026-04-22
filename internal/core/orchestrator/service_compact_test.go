@@ -512,7 +512,7 @@ func TestCompactTurnCompletedWithoutCompactionItemFallsBackToTerminalOwnerCard(t
 	}
 }
 
-func requireCompactStartEvents(t *testing.T, events []control.UIEvent) (*control.FeishuCommandPageView, *agentproto.Command) {
+func requireCompactStartEvents(t *testing.T, events []control.UIEvent) (*control.FeishuPageView, *agentproto.Command) {
 	t.Helper()
 	if len(events) != 2 {
 		t.Fatalf("expected compact owner card plus agent command, got %#v", events)

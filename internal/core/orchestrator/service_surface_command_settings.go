@@ -67,7 +67,7 @@ func actionCommandArgumentText(action control.Action) string {
 	return strings.TrimSpace(text[idx+1:])
 }
 
-func (s *Service) buildCommandConfigViewForAction(surface *state.SurfaceConsoleRecord, action control.Action, cardState control.FeishuCommandConfigView) control.FeishuCommandView {
+func (s *Service) buildCommandConfigViewForAction(surface *state.SurfaceConsoleRecord, action control.Action, cardState control.FeishuCatalogConfigView) control.FeishuCatalogView {
 	switch action.Kind {
 	case control.ActionModeCommand:
 		return s.buildModeCommandViewState(surface, cardState)
@@ -84,13 +84,13 @@ func (s *Service) buildCommandConfigViewForAction(surface *state.SurfaceConsoleR
 	case control.ActionVerboseCommand:
 		return s.buildVerboseCommandViewState(surface, cardState)
 	default:
-		return control.FeishuCommandView{}
+		return control.FeishuCatalogView{}
 	}
 }
 
-func (s *Service) inlineCommandCardEvents(surface *state.SurfaceConsoleRecord, action control.Action, cardState control.FeishuCommandConfigView, extra ...control.UIEvent) []control.UIEvent {
+func (s *Service) inlineCommandCardEvents(surface *state.SurfaceConsoleRecord, action control.Action, cardState control.FeishuCatalogConfigView, extra ...control.UIEvent) []control.UIEvent {
 	view := s.buildCommandConfigViewForAction(surface, action, cardState)
-	events := []control.UIEvent{s.configPageEventFromCommandView(surface, view)}
+	events := []control.UIEvent{s.configPageEventFromCatalogView(surface, view)}
 	return append(events, extra...)
 }
 
@@ -98,10 +98,10 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	current := s.normalizeSurfaceProductMode(surface)
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildModeCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildModeCommandView(surface))}
 	}
 	if len(parts) != 2 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：/mode 查看当前状态；/mode normal；/mode vscode。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -109,7 +109,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	target, ok := parseProductMode(parts[1])
 	if !ok {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：/mode 查看当前状态；/mode normal；/mode vscode。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -117,7 +117,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	if target == current {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "info",
 				StatusText: fmt.Sprintf("当前已处于 %s 模式。", target),
@@ -128,7 +128,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
 				StatusText: "当前仍有执行中的 turn、派发中的请求或排队消息，暂时不能切换模式。请等待完成、/stop，或先 /detach。",
 			})
@@ -156,7 +156,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	surface.ProductMode = target
 	if commandCardOwnsInlineResult(action) {
 		statusText := fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", target)
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: statusText,
@@ -168,10 +168,10 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildAutoContinueCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildAutoContinueCommandView(surface))}
 	}
 	if len(parts) != 2 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/autowhip` 查看当前状态；`/autowhip on`；`/autowhip off`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -182,7 +182,7 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 	case "on", "enable", "enabled", "true":
 		if surface.AutoContinue.Enabled {
 			if commandCardOwnsInlineResult(action) {
-				return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+				return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 					Sealed:     true,
 					StatusKind: "info",
 					StatusText: "当前飞书会话的 autowhip 已开启。",
@@ -193,7 +193,7 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 		clearAutoContinueRuntime(surface)
 		surface.AutoContinue.Enabled = true
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: "已开启当前飞书会话的 autowhip。服务重启后不会恢复之前的 autowhip 状态。",
@@ -203,7 +203,7 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 	case "off", "disable", "disabled", "false":
 		clearAutoContinueRuntime(surface)
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: "已关闭当前飞书会话的 autowhip。",
@@ -211,7 +211,7 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 		}
 		return notice(surface, "auto_continue_disabled", "已关闭当前飞书会话的 autowhip。")
 	default:
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/autowhip` 查看当前状态；`/autowhip on`；`/autowhip off`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -222,10 +222,10 @@ func (s *Service) handleAutoContinueCommand(surface *state.SurfaceConsoleRecord,
 func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildVerboseCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildVerboseCommandView(surface))}
 	}
 	if len(parts) != 2 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -233,7 +233,7 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 	}
 	target, ok := parseSurfaceVerbosity(parts[1])
 	if !ok {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -242,7 +242,7 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 	current := state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	if target == current {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "info",
 				StatusText: fmt.Sprintf("当前飞书前端详细程度已经是 %s。", target),
@@ -252,7 +252,7 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 	}
 	surface.Verbosity = target
 	if commandCardOwnsInlineResult(action) {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: fmt.Sprintf("已将当前飞书会话的前端详细程度切换为 %s。", target),
@@ -264,10 +264,10 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildPlanCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildPlanCommandView(surface))}
 	}
 	if len(parts) != 2 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -275,7 +275,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	target, ok := parsePlanMode(parts[1])
 	if !ok {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -285,7 +285,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	if target == current {
 		text := fmt.Sprintf("当前 Plan mode 已经是 %s。", target)
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "info",
 				StatusText: text,
@@ -299,7 +299,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 		text += " 当前已在执行或排队的消息不受影响。"
 	}
 	if commandCardOwnsInlineResult(action) {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: text,
@@ -311,12 +311,12 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildModelCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildModelCommandView(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
 				StatusText: s.notAttachedText(surface),
 			})
@@ -328,7 +328,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		surface.PromptOverride.ReasoningEffort = ""
 		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
@@ -337,7 +337,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		return notice(surface, "surface_override_cleared", "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。")
 	}
 	if len(parts) > 3 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/model` 查看当前配置；`/model <模型>`；`/model <模型> <推理强度>`；`/model clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -347,7 +347,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 	override.Model = parts[1]
 	if len(parts) == 3 {
 		if !looksLikeReasoningEffort(parts[2]) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind:       "error",
 				StatusText:       "推理强度建议使用 `low`、`medium`、`high` 或 `xhigh`。",
 				FormDefaultValue: actionCommandArgumentText(action),
@@ -359,7 +359,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {
 		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: "已更新飞书临时模型覆盖。",
@@ -371,12 +371,12 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildReasoningCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildReasoningCommandView(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
 				StatusText: s.notAttachedText(surface),
 			})
@@ -387,7 +387,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		surface.PromptOverride.ReasoningEffort = ""
 		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: "已清除飞书临时推理强度覆盖。",
@@ -396,7 +396,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		return notice(surface, "surface_override_reasoning_cleared", "已清除飞书临时推理强度覆盖。")
 	}
 	if len(parts) != 2 || !looksLikeReasoningEffort(parts[1]) {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -406,7 +406,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {
 		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: "已更新飞书临时推理强度覆盖。",
@@ -418,12 +418,12 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, action control.Action) []control.UIEvent {
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
-		return []control.UIEvent{s.configPageEventFromCommandView(surface, s.buildAccessCommandView(surface))}
+		return []control.UIEvent{s.configPageEventFromCatalogView(surface, s.buildAccessCommandView(surface))}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
 				StatusText: s.notAttachedText(surface),
 			})
@@ -431,7 +431,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
 	if len(parts) != 2 {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "用法：`/access` 查看当前配置；`/access full`；`/access confirm`；`/access clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -443,7 +443,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 		summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 		if commandCardOwnsInlineResult(action) {
 			_ = summary
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: "已恢复飞书默认执行权限。",
@@ -453,7 +453,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	}
 	mode := agentproto.NormalizeAccessMode(parts[1])
 	if mode == "" {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
 			StatusText:       "执行权限建议使用 `full` 或 `confirm`。",
 			FormDefaultValue: actionCommandArgumentText(action),
@@ -464,7 +464,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {
 		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCommandConfigView{
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: "已更新飞书执行权限模式。",

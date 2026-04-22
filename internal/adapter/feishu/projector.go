@@ -166,39 +166,6 @@ func (p *Projector) Project(chatID string, event control.UIEvent) []Operation {
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeInfo, elements),
 		}}
-	case control.UIEventFeishuCommandView:
-		if event.FeishuCommandView == nil {
-			return nil
-		}
-		pageView, ok := commandPageViewFromView(*event.FeishuCommandView, event.FeishuCommandContext)
-		if !ok {
-			return nil
-		}
-		title := strings.TrimSpace(pageView.Title)
-		if title == "" {
-			title = "命令菜单"
-		}
-		body := commandPageBody(pageView)
-		elements := commandPageElements(pageView, event.DaemonLifecycleID)
-		theme := firstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			MessageID:        strings.TrimSpace(pageView.MessageID),
-			CardTitle:        title,
-			CardBody:         body,
-			CardThemeKey:     theme,
-			CardElements:     elements,
-			CardUpdateMulti:  pageView.Patchable,
-		}
-		if operation.MessageID != "" {
-			operation.Kind = OperationUpdateCard
-		}
-		operation.cardEnvelope = cardEnvelopeV2
-		operation.card = rawCardDocument(title, body, theme, elements)
-		return []Operation{operation}
 	case control.UIEventFeishuPageView:
 		if event.FeishuPageView == nil {
 			return nil

@@ -94,7 +94,7 @@ func TestVSCodeMigrateDisplayRespectsProductMode(t *testing.T) {
 	}
 }
 
-func catalogContainsCommand(catalog FeishuCommandPageView, command string) bool {
+func catalogContainsCommand(catalog FeishuPageView, command string) bool {
 	for _, section := range catalog.Sections {
 		for _, entry := range section.Entries {
 			for _, current := range entry.Commands {

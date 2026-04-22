@@ -83,7 +83,6 @@ func classifySurfaceVisibleEvent(event control.UIEvent) surfaceVisibilityClass {
 		return surfaceVisibilityUINavigation
 	case control.UIEventSnapshot,
 		control.UIEventFeishuSelectionView,
-		control.UIEventFeishuCommandView,
 		control.UIEventFeishuPageView,
 		control.UIEventFeishuPathPicker,
 		control.UIEventFeishuTargetPicker,

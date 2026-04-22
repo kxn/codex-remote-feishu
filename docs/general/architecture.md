@@ -1,7 +1,7 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-04-21`
+> Updated: `2026-04-22`
 > Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 daemon 作为组合根的 runtime owner 收口、Feishu adapter 的 controller/gateway/projector/preview 边界、Feishu ordinary inbound 的 early ACK + gateway-local FIFO lane、orchestrator service-owned UI/runtime cluster、`control.Action` 的 request / owner-flow family 收口、`UIEvent` 的 view-kind 命名、daemon 本地 Feishu tool listener 的 MCP-native streamable HTTP 协议面、current-surface 显式图片/文件投递 contract，以及 editor 侧共享 VS Code bundle entrypoint 探测边界。
 
 ## 1. 当前状态
@@ -102,7 +102,7 @@ testkit/
 - upgrade / VS Code migrate owner-card follow-up 当前优先走 `ActionOwnerCardFlow`
 - `UIEvent` 的 Feishu 读模型事件当前统一用 view-kind 命名：
   - `UIEventFeishuSelectionView`
-  - `UIEventFeishuCommandView`
+  - `UIEventFeishuPageView`
   - `UIEventFeishuRequestView`
 - `UIEventFeishuDirect*` 常量名仅保留兼容 alias，不再代表当前主 owner 语义
 

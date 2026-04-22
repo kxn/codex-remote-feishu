@@ -885,7 +885,7 @@ func TestProjectVSCodeAllSelectionPromptUsesNumberedMetaRows(t *testing.T) {
 
 func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "Slash 命令帮助",
 		SummarySections: summarySections("当前支持的 slash command 如下。"),
 		Sections: []control.CommandCatalogSection{{
@@ -923,7 +923,7 @@ func TestProjectCommandHelpCatalogAsCard(t *testing.T) {
 
 func TestProjectCommandHelpCatalogPreservesAmpersandsInPlainText(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "命令帮助",
 		SummarySections: summarySections("常用联调命令。"),
 		Sections: []control.CommandCatalogSection{{
@@ -996,7 +996,7 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 
 func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "命令菜单",
 		SummarySections: summarySections("固定动作可直接点击。"),
 		Interactive:     true,
@@ -1029,9 +1029,7 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 		t.Fatalf("unexpected button label: %#v", actionRow[0])
 	}
 	value := cardButtonPayload(t, actionRow[0])
-	if value["kind"] != "run_command" || value["command_text"] != "/list" {
-		t.Fatalf("unexpected run command payload: %#v", value)
-	}
+	assertPageActionPayloadMatchesCommand(t, value, "/list")
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected button-only command catalog to use structured V2 send path, got %#v", ops[0])
 	}
@@ -1041,14 +1039,12 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 		t.Fatalf("expected rendered V2 command catalog to avoid legacy action rows, got %#v", renderedElements)
 	}
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[3])
-	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/list" {
-		t.Fatalf("unexpected rendered V2 command button payload: %#v", renderedValue)
-	}
+	assertPageActionPayloadMatchesCommand(t, renderedValue, "/list")
 }
 
 func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "推理强度",
 		SummarySections: summarySections("当前：`high`；飞书覆盖：`high`。"),
 		Interactive:     true,
@@ -1107,8 +1103,8 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 }
 
 func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
-	catalog, ok := control.FeishuCommandPageViewFromView(control.FeishuCommandView{
-		Menu: &control.FeishuCommandMenuView{Stage: "detached"},
+	catalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+		Menu: &control.FeishuCatalogMenuView{Stage: "detached"},
 	}, "", "detached")
 	if !ok {
 		t.Fatalf("expected menu view to project into command page")
@@ -1125,8 +1121,8 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 }
 
 func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
-	normalCatalog, ok := control.FeishuCommandPageViewFromView(control.FeishuCommandView{
-		Menu: &control.FeishuCommandMenuView{Stage: "normal_working", GroupID: "current_work"},
+	normalCatalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+		Menu: &control.FeishuCatalogMenuView{Stage: "normal_working", GroupID: "current_work"},
 	}, "", "")
 	if !ok {
 		t.Fatalf("expected normal current_work menu to project")
@@ -1137,8 +1133,8 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", gotNormal, wantNormal)
 	}
 
-	vscodeCatalog, ok := control.FeishuCommandPageViewFromView(control.FeishuCommandView{
-		Menu: &control.FeishuCommandMenuView{Stage: "vscode_working", GroupID: "current_work"},
+	vscodeCatalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+		Menu: &control.FeishuCatalogMenuView{Stage: "vscode_working", GroupID: "current_work"},
 	}, "", "")
 	if !ok {
 		t.Fatalf("expected vscode current_work menu to project")
@@ -1163,7 +1159,7 @@ func firstCommandTexts(entries []control.CommandCatalogEntry) []string {
 
 func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
-	event := commandCatalogEvent(control.FeishuCommandPageView{
+	event := commandCatalogEvent(control.FeishuPageView{
 		Interactive: true,
 		Sections: []control.CommandCatalogSection{{
 			Entries: []control.CommandCatalogEntry{{
@@ -1187,11 +1183,12 @@ func TestProjectCommandFormStampsDaemonLifecycleID(t *testing.T) {
 	if value["daemon_lifecycle_id"] != "life-1" {
 		t.Fatalf("expected form action to carry daemon lifecycle id, got %#v", value)
 	}
+	assertPageSubmitPayload(t, value, control.ActionReasoningCommand, "", "command_args")
 }
 
 func TestProjectInteractiveCommandCatalogStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
-	event := commandCatalogEvent(control.FeishuCommandPageView{
+	event := commandCatalogEvent(control.FeishuPageView{
 		Interactive: true,
 		Sections: []control.CommandCatalogSection{{
 			Entries: []control.CommandCatalogEntry{{
@@ -1213,7 +1210,7 @@ func TestProjectInteractiveCommandCatalogStampsDaemonLifecycleID(t *testing.T) {
 
 func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuCommandPageView{
+	ops := projector.Project("chat-1", commandCatalogEvent(control.FeishuPageView{
 		Title:           "发送设置",
 		SummarySections: summarySections("请选择操作。"),
 		Interactive:     true,
@@ -1237,9 +1234,7 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 		t.Fatalf("expected divider before related button, got %#v", renderedElements)
 	}
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[2])
-	if renderedValue["kind"] != "run_command" || renderedValue["command_text"] != "/menu" {
-		t.Fatalf("unexpected related button callback payload: %#v", renderedValue)
-	}
+	assertPageActionPayloadMatchesCommand(t, renderedValue, "/menu")
 }
 
 func TestProjectRequestPromptAsCard(t *testing.T) {

@@ -892,7 +892,7 @@ func TestParseCardActionTriggerEventBuildsThreadWorkspaceNavigationActions(t *te
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsPageAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-5", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -901,8 +901,8 @@ func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "run_command",
-					"command_text": "/help",
+					"kind":        "page_action",
+					"action_kind": string(control.ActionShowCommandHelp),
 				},
 			},
 			Context: &larkcallback.Context{
@@ -914,7 +914,7 @@ func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 
 	action, ok := gateway.parseCardActionTriggerEvent(event)
 	if !ok {
-		t.Fatal("expected run_command callback to be parsed")
+		t.Fatal("expected page_action callback to be parsed")
 	}
 	if action.Kind != control.ActionShowCommandHelp {
 		t.Fatalf("unexpected action kind: %#v", action)
@@ -924,7 +924,7 @@ func TestParseCardActionTriggerEventBuildsRunCommandAction(t *testing.T) {
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromFormValue(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsPageSubmitActionFromFormValue(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-form-1", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -933,9 +933,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromFormValue(t
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_command_form",
-					"command_text": "/model",
-					"field_name":   "command_args",
+					"kind":        "page_submit",
+					"action_kind": string(control.ActionModelCommand),
+					"field_name":  "command_args",
 				},
 				FormValue: map[string]interface{}{
 					"command_args": "gpt-5.4 high",
@@ -950,14 +950,14 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromFormValue(t
 
 	action, ok := gateway.parseCardActionTriggerEvent(event)
 	if !ok {
-		t.Fatal("expected submit_command_form callback to be parsed")
+		t.Fatal("expected page_submit callback to be parsed")
 	}
 	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4 high" {
 		t.Fatalf("unexpected form submit action: %#v", action)
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueFallback(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsPageSubmitActionFromInputValueFallback(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-form-2", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -966,10 +966,11 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_command_form",
-					"command_text": "/upgrade",
+					"kind":              "page_submit",
+					"action_kind":       string(control.ActionUpgradeCommand),
+					"action_arg_prefix": "track",
 				},
-				InputValue: "track production",
+				InputValue: "production",
 			},
 			Context: &larkcallback.Context{
 				OpenChatID:    "oc_1",
@@ -980,14 +981,14 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromInputValueF
 
 	action, ok := gateway.parseCardActionTriggerEvent(event)
 	if !ok {
-		t.Fatal("expected submit_command_form callback to be parsed")
+		t.Fatal("expected page_submit callback to be parsed")
 	}
 	if action.Kind != control.ActionUpgradeCommand || action.Text != "/upgrade track production" {
 		t.Fatalf("unexpected input fallback action: %#v", action)
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStaticFormValue(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticFormValue(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-form-3", "feishu:app-1:user:user-1")
 	userID := "user-1"
@@ -996,9 +997,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_command_form",
-					"command_text": "/model",
-					"field_name":   "command_args",
+					"kind":        "page_submit",
+					"action_kind": string(control.ActionModelCommand),
+					"field_name":  "command_args",
 				},
 				FormValue: map[string]interface{}{
 					"command_args": []interface{}{"gpt-5.4-mini"},
@@ -1013,14 +1014,14 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 
 	action, ok := gateway.parseCardActionTriggerEvent(event)
 	if !ok {
-		t.Fatal("expected submit_command_form callback to be parsed")
+		t.Fatal("expected page_submit callback to be parsed")
 	}
 	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4-mini" {
 		t.Fatalf("unexpected select_static form submit action: %#v", action)
 	}
 }
 
-func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStaticOptionFallback(t *testing.T) {
+func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticOptionFallback(t *testing.T) {
 	tests := []struct {
 		name   string
 		action *larkcallback.CallBackAction
@@ -1029,9 +1030,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			name: "option",
 			action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_command_form",
-					"command_text": "/model",
-					"field_name":   "command_args",
+					"kind":        "page_submit",
+					"action_kind": string(control.ActionModelCommand),
+					"field_name":  "command_args",
 				},
 				Option: "gpt-5.4-mini",
 			},
@@ -1040,9 +1041,9 @@ func TestParseCardActionTriggerEventBuildsSubmitCommandFormActionFromSelectStati
 			name: "options",
 			action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":         "submit_command_form",
-					"command_text": "/model",
-					"field_name":   "command_args",
+					"kind":        "page_submit",
+					"action_kind": string(control.ActionModelCommand),
+					"field_name":  "command_args",
 				},
 				Options: []string{"gpt-5.4-mini"},
 			},
@@ -1557,9 +1558,9 @@ func TestHandleCardActionTriggerWaitsForParameterApplyReplacement(t *testing.T) 
 	}
 }
 
-func TestActionPayloadSubmitCommandFormDefaultsFieldName(t *testing.T) {
-	payload := actionPayloadSubmitCommandForm(control.FeishuCommandModel, "/model", "")
-	if payload[cardActionPayloadKeyKind] != cardActionKindSubmitCommandForm {
+func TestActionPayloadPageSubmitDefaultsFieldName(t *testing.T) {
+	payload := actionPayloadPageSubmit(string(control.ActionModelCommand), "", "")
+	if payload[cardActionPayloadKeyKind] != cardActionKindPageSubmit {
 		t.Fatalf("unexpected payload kind: %#v", payload)
 	}
 	if payload[cardActionPayloadKeyFieldName] != cardActionPayloadDefaultCommandFieldName {

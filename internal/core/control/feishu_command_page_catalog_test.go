@@ -2,8 +2,8 @@ package control
 
 import "testing"
 
-func TestNormalizeFeishuCommandPageViewPromotesNoticeAndSealedContract(t *testing.T) {
-	view := FeishuCommandPageView{
+func TestNormalizeFeishuPageViewPromotesNoticeAndSealedContract(t *testing.T) {
+	view := FeishuPageView{
 		CommandID: "compact",
 		Title:     "上下文已压缩",
 		SummarySections: []FeishuCardTextSection{{
@@ -23,7 +23,7 @@ func TestNormalizeFeishuCommandPageViewPromotesNoticeAndSealedContract(t *testin
 		}},
 	}
 
-	catalog := NormalizeFeishuCommandPageView(view)
+	catalog := NormalizeFeishuPageView(view)
 	if !catalog.Sealed {
 		t.Fatalf("expected sealed page catalog, got %#v", catalog)
 	}
@@ -42,7 +42,7 @@ func TestNormalizeFeishuCommandPageViewPromotesNoticeAndSealedContract(t *testin
 	if catalog.NoticeSections[0].Label != "说明" || catalog.NoticeSections[1].Lines[0] != "当前会话的上下文已压缩完成。" {
 		t.Fatalf("unexpected notice sections: %#v", catalog.NoticeSections)
 	}
-	roundTrip := NormalizeFeishuCommandPageView(catalog)
+	roundTrip := NormalizeFeishuPageView(catalog)
 	if !roundTrip.Sealed || roundTrip.Interactive {
 		t.Fatalf("expected sealed round-trip view, got %#v", roundTrip)
 	}

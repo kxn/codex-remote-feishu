@@ -140,23 +140,10 @@ func singleRequestPromptEvent(t *testing.T, events []control.UIEvent) *control.F
 	return requestPromptFromEvent(t, events[0])
 }
 
-func eventCommandCatalog(event control.UIEvent) (*control.FeishuCommandPageView, bool) {
-	if event.FeishuCommandView != nil {
-		productMode := ""
-		menuStage := ""
-		if event.FeishuCommandContext != nil {
-			productMode = event.FeishuCommandContext.Surface.ProductMode
-			menuStage = event.FeishuCommandContext.MenuStage
-		}
-		catalog, ok := control.FeishuCommandPageViewFromView(*event.FeishuCommandView, productMode, menuStage)
-		if !ok {
-			return nil, false
-		}
-		return &catalog, true
-	}
+func eventCommandCatalog(event control.UIEvent) (*control.FeishuPageView, bool) {
 	if event.FeishuPageView != nil {
 		page := control.NormalizeFeishuPageView(*event.FeishuPageView)
-		catalog := control.NormalizeFeishuCommandPageView(control.FeishuCommandPageView{
+		catalog := control.NormalizeFeishuPageView(control.FeishuPageView{
 			CommandID:       page.CommandID,
 			Title:           page.Title,
 			MessageID:       page.MessageID,
@@ -180,22 +167,22 @@ func eventCommandCatalog(event control.UIEvent) (*control.FeishuCommandPageView,
 	return nil, false
 }
 
-func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.FeishuCommandPageView {
+func commandCatalogFromEvent(t *testing.T, event control.UIEvent) *control.FeishuPageView {
 	t.Helper()
 	catalog, ok := eventCommandCatalog(event)
 	if !ok {
-		t.Fatalf("expected command catalog or command view, got %#v", event)
+		t.Fatalf("expected page catalog event, got %#v", event)
 	}
 	return catalog
 }
 
-func commandCatalogSummaryText(catalog *control.FeishuCommandPageView) string {
+func commandCatalogSummaryText(catalog *control.FeishuPageView) string {
 	if catalog == nil {
 		return ""
 	}
-	normalizedPage := control.NormalizeFeishuCommandPageView(*catalog)
+	normalizedPage := control.NormalizeFeishuPageView(*catalog)
 	parts := []string{}
-	sections := control.BuildFeishuCommandPageBodySections(normalizedPage)
+	sections := control.BuildFeishuPageBodySections(normalizedPage)
 	for _, section := range sections {
 		normalized := section.Normalized()
 		if normalized.Label != "" {
@@ -203,7 +190,7 @@ func commandCatalogSummaryText(catalog *control.FeishuCommandPageView) string {
 		}
 		parts = append(parts, normalized.Lines...)
 	}
-	for _, section := range control.BuildFeishuCommandPageNoticeSections(normalizedPage) {
+	for _, section := range control.BuildFeishuPageNoticeSections(normalizedPage) {
 		normalized := section.Normalized()
 		if normalized.Label != "" {
 			parts = append(parts, normalized.Label)

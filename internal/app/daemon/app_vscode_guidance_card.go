@@ -200,9 +200,9 @@ func isVSCodeMigrationFlowNotice(notice *control.Notice) bool {
 	}
 }
 
-func buildVSCodeMigrationPageView(flow *vscodeMigrationFlowRecord, inlineReplace bool, title string, summary []string, statusText, theme string, buttons []control.CommandCatalogButton) control.FeishuCommandPageView {
+func buildVSCodeMigrationPageView(flow *vscodeMigrationFlowRecord, inlineReplace bool, title string, summary []string, statusText, theme string, buttons []control.CommandCatalogButton) control.FeishuPageView {
 	interactive := len(buttons) > 0
-	view := control.FeishuCommandPageView{
+	view := control.FeishuPageView{
 		CommandID:      control.FeishuCommandVSCodeMigrate,
 		Title:          strings.TrimSpace(title),
 		ThemeKey:       strings.TrimSpace(theme),

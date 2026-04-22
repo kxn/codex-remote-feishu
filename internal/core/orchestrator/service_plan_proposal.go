@@ -100,7 +100,7 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 			Lines: splitPlanProposalLines(proposal.PlanText),
 		}.Normalized())
 	}
-	view := control.FeishuCommandPageView{
+	view := control.FeishuPageView{
 		CommandID:      control.FeishuCommandPlan,
 		Title:          "提案计划",
 		MessageID:      planProposalMessageID(flow, inlineMessageID),

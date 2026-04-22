@@ -601,8 +601,8 @@ func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
 		GatewayID:        "gateway-2",
 		SurfaceSessionID: "surface-2",
 	})
-	if len(events) != 1 || (events[0].Kind != control.UIEventFeishuCommandView && events[0].Kind != control.UIEventFeishuPageView) {
-		t.Fatalf("events = %#v, want one direct catalog card", events)
+	if len(events) != 1 || events[0].Kind != control.UIEventFeishuPageView {
+		t.Fatalf("events = %#v, want one direct page card", events)
 	}
 	if !app.cronRuntime.syncInFlight {
 		t.Fatalf("view-only /cron should not clear or claim the mutating sync gate")

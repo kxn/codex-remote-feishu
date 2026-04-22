@@ -5,11 +5,11 @@ import "strings"
 // BuildFeishuCommandConfigSummarySections converts command-config runtime view
 // state into adapter-owned summary sections, so dynamic values no longer need
 // to pass through markdown summary strings.
-func BuildFeishuCommandConfigSummarySections(def FeishuCommandDefinition, view FeishuCommandConfigView) []FeishuCardTextSection {
+func BuildFeishuCommandConfigSummarySections(def FeishuCommandDefinition, view FeishuCatalogConfigView) []FeishuCardTextSection {
 	return BuildFeishuCommandConfigBodySections(def, view)
 }
 
-func BuildFeishuCommandConfigBodySections(_ FeishuCommandDefinition, view FeishuCommandConfigView) []FeishuCardTextSection {
+func BuildFeishuCommandConfigBodySections(_ FeishuCommandDefinition, view FeishuCatalogConfigView) []FeishuCardTextSection {
 	base := commandConfigBaseSummarySections(view)
 	sections := make([]FeishuCardTextSection, 0, len(base))
 	for _, section := range base {
@@ -22,7 +22,7 @@ func BuildFeishuCommandConfigBodySections(_ FeishuCommandDefinition, view Feishu
 	return sections
 }
 
-func BuildFeishuCommandConfigNoticeSections(def FeishuCommandDefinition, view FeishuCommandConfigView) []FeishuCardTextSection {
+func BuildFeishuCommandConfigNoticeSections(def FeishuCommandDefinition, view FeishuCatalogConfigView) []FeishuCardTextSection {
 	sections := make([]FeishuCardTextSection, 0, 2)
 	if feedback, ok := commandConfigFeedbackSection(view); ok {
 		sections = append(sections, feedback)
@@ -41,7 +41,7 @@ func BuildFeishuCommandConfigNoticeSections(def FeishuCommandDefinition, view Fe
 	return sections
 }
 
-func commandConfigBaseSummarySections(view FeishuCommandConfigView) []FeishuCardTextSection {
+func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCardTextSection {
 	if view.RequiresAttachment {
 		return []FeishuCardTextSection{{
 			Lines: []string{"还没接管目标。先开始或继续工作，再回来调整这个参数。"},
@@ -87,7 +87,7 @@ func commandConfigBaseSummarySections(view FeishuCommandConfigView) []FeishuCard
 	}
 }
 
-func commandConfigFeedbackSection(view FeishuCommandConfigView) (FeishuCardTextSection, bool) {
+func commandConfigFeedbackSection(view FeishuCatalogConfigView) (FeishuCardTextSection, bool) {
 	text := normalizeCommandFeedbackText(view.StatusText)
 	if text == "" {
 		return FeishuCardTextSection{}, false

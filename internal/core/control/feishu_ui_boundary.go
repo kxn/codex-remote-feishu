@@ -8,7 +8,6 @@ type FeishuUIDTOwner string
 const (
 	FeishuUIDTOwnerDirectDTO     FeishuUIDTOwner = "feishu_direct_dto"
 	FeishuUIDTOwnerSelection     FeishuUIDTOwner = "feishu_selection_view"
-	FeishuUIDTOwnerCommand       FeishuUIDTOwner = "feishu_command_view"
 	FeishuUIDTOwnerPage          FeishuUIDTOwner = "feishu_page_view"
 	FeishuUIDTOwnerRequest       FeishuUIDTOwner = "feishu_request_view"
 	FeishuUIDTOwnerPathPicker    FeishuUIDTOwner = "feishu_path_picker_view"
@@ -68,21 +67,6 @@ type FeishuUISelectionContext struct {
 	ContextTitle string
 	ContextText  string
 	ContextKey   string
-}
-
-// FeishuUICommandContext describes the stable query/policy inputs that back a
-// command catalog while some command cards still remain Feishu-facing DTOs.
-type FeishuUICommandContext struct {
-	DTOOwner    FeishuUIDTOwner
-	Surface     FeishuUISurfaceContext
-	ViewKind    string
-	MenuStage   string
-	MenuView    string
-	CommandID   string
-	NeedsTarget bool
-	Title       string
-	Summary     string
-	Breadcrumbs []CommandCatalogBreadcrumb
 }
 
 // FeishuUIPageContext describes the stable query/policy inputs for the

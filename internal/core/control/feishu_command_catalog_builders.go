@@ -2,8 +2,8 @@ package control
 
 import "strings"
 
-func BuildFeishuCommandMenuHomePageView() FeishuCommandPageView {
-	return FeishuCommandPageView{
+func BuildFeishuCommandMenuHomePageView() FeishuPageView {
+	return FeishuPageView{
 		CommandID:    FeishuCommandMenu,
 		Title:        "命令菜单",
 		Interactive:  true,
@@ -15,7 +15,7 @@ func BuildFeishuCommandMenuHomePageView() FeishuCommandPageView {
 	}
 }
 
-func BuildFeishuCommandMenuPageView(view FeishuCommandMenuView, productMode, menuStage string) FeishuCommandPageView {
+func BuildFeishuCommandMenuPageView(view FeishuCatalogMenuView, productMode, menuStage string) FeishuPageView {
 	groupID := strings.TrimSpace(view.GroupID)
 	if groupID == "" {
 		return BuildFeishuCommandMenuHomePageView()
@@ -27,7 +27,7 @@ func BuildFeishuCommandMenuPageView(view FeishuCommandMenuView, productMode, men
 	return BuildFeishuCommandMenuGroupPageView(groupID, productMode, stage)
 }
 
-func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuCommandPageView {
+func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuPageView {
 	group, ok := FeishuCommandGroupByID(groupID)
 	if !ok {
 		return BuildFeishuCommandMenuHomePageView()
@@ -40,7 +40,7 @@ func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string)
 		}
 		entries = append(entries, buildFeishuCommandMenuEntry(def))
 	}
-	return FeishuCommandPageView{
+	return FeishuPageView{
 		CommandID:    FeishuCommandMenu,
 		Title:        "命令菜单",
 		Interactive:  true,
@@ -52,16 +52,16 @@ func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string)
 		}},
 		RelatedButtons: []CommandCatalogButton{{
 			Label:       "返回上一层",
-			Kind:        CommandCatalogButtonRunCommand,
+			Kind:        CommandCatalogButtonAction,
 			CommandText: FeishuCommandMenuCommandText(""),
 		}},
 	}
 }
 
-func BuildFeishuAttachmentRequiredPageView(def FeishuCommandDefinition, view FeishuCommandConfigView) FeishuCommandPageView {
+func BuildFeishuAttachmentRequiredPageView(def FeishuCommandDefinition, view FeishuCatalogConfigView) FeishuPageView {
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
-	return NormalizeFeishuCommandPageView(FeishuCommandPageView{
+	return NormalizeFeishuPageView(FeishuPageView{
 		CommandID:       strings.TrimSpace(def.ID),
 		Title:           strings.TrimSpace(def.Title),
 		SummarySections: append([]FeishuCardTextSection(nil), bodySections...),
@@ -93,7 +93,7 @@ func FeishuCommandBackButtons(groupID string) []CommandCatalogButton {
 	if group, ok := FeishuCommandGroupByID(groupID); ok {
 		return []CommandCatalogButton{{
 			Label:       "返回" + group.Title,
-			Kind:        CommandCatalogButtonRunCommand,
+			Kind:        CommandCatalogButtonAction,
 			CommandText: FeishuCommandMenuCommandText(groupID),
 		}}
 	}
@@ -115,7 +115,7 @@ func buildFeishuCommandMenuGroupEntries() []CommandCatalogEntry {
 			Description: strings.TrimSpace(group.Description),
 			Buttons: []CommandCatalogButton{{
 				Label:       feishuSubmenuButtonLabel(group.Title),
-				Kind:        CommandCatalogButtonRunCommand,
+				Kind:        CommandCatalogButtonAction,
 				CommandText: FeishuCommandMenuCommandText(group.ID),
 			}},
 		})
@@ -156,7 +156,7 @@ func buildFeishuCommandCatalogEntry(def FeishuCommandDefinition, buttonLabel str
 	if buttonLabel = strings.TrimSpace(buttonLabel); buttonLabel != "" && command != "" {
 		entry.Buttons = append(entry.Buttons, CommandCatalogButton{
 			Label:       buttonLabel,
-			Kind:        CommandCatalogButtonRunCommand,
+			Kind:        CommandCatalogButtonAction,
 			CommandText: command,
 		})
 	}

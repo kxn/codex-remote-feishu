@@ -127,7 +127,7 @@ func TestTurnCompletedPresentsPlanProposalCard(t *testing.T) {
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
 
-	var page *control.FeishuCommandPageView
+	var page *control.FeishuPageView
 	for _, event := range events {
 		catalog, ok := eventCommandCatalog(event)
 		if !ok {

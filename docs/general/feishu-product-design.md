@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-21`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 command-page 入口、reply auto-steer、manual `/compact`、`/cron` 与共享过程卡的产品语义。
+> Updated: `2026-04-22`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`/cron` 与共享过程卡的产品语义。
 
 ## 1. 文档定位
 
@@ -96,7 +96,7 @@ alias 仍继续兼容，但不再作为主展示入口：
 - `/menu` 和参数卡当前采用紧凑按钮优先布局，尽量让主操作一屏可见；`/help` 保持文本帮助取向
 - bare `/reasoning`、`/access`、`/mode`、`/autowhip` 会返回当前状态 + 快捷按钮 + 单字段表单
 - bare `/model` 会返回当前状态 + 常见示例 + 手动输入表单
-- bare `/debug`、`/upgrade`、`/cron` 在参数不足时都会先打开统一 command page 根页，而不是顺手展开独立状态卡
+- bare `/debug`、`/upgrade`、`/cron` 在参数不足时都会先打开统一 page 根页，而不是顺手展开独立状态卡
 - 旧 `/newinstance`、`/killinstance` 当前都已不再解析；恢复/选择统一走 `/use` / `/useall`，取消恢复统一走 `/detach`
 - 真正的状态查看回到显式子页，例如 `/cron status`、`/cron list`、`/upgrade track`；`/debug` 根页只保留调试入口与升级相关跳转
 
@@ -232,7 +232,7 @@ ACK 语义上，message recalled 现在同样会进入和普通文本共用的 p
 - selection picker / prompt 选择
 - approval request 确认
 
-其中参数表单当前统一走 `submit_command_form` 回调，把卡片内输入的参数尾巴拼回 canonical slash command，再复用文本命令解析链路。
+其中参数表单当前统一走 `page_submit` 回调，直接把结构化 `action_kind + field_name + action_arg_prefix` 回填成 canonical `Action.Text`，不再退化回旧的文本重解析链路。
 
 selection 相关当前分两条主路径：
 

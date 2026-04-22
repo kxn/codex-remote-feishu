@@ -16,7 +16,7 @@ func upgradeUsageEvents(surfaceID, formDefault, message string) []control.UIEven
 func runCommandButton(label, commandText, style string, disabled bool) control.CommandCatalogButton {
 	return control.CommandCatalogButton{
 		Label:       label,
-		Kind:        control.CommandCatalogButtonRunCommand,
+		Kind:        control.CommandCatalogButtonAction,
 		CommandText: commandText,
 		Style:       style,
 		Disabled:    disabled,

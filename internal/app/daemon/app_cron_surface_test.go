@@ -330,12 +330,12 @@ func TestParseCronCommandTextSupportsRunSubcommand(t *testing.T) {
 	}
 }
 
-func collectCronCatalogButtons(catalog *control.FeishuCommandPageView) map[string]control.CommandCatalogButton {
+func collectCronCatalogButtons(catalog *control.FeishuPageView) map[string]control.CommandCatalogButton {
 	values := map[string]control.CommandCatalogButton{}
 	if catalog == nil {
 		return values
 	}
-	for _, section := range control.NormalizeFeishuCommandPageView(*catalog).Sections {
+	for _, section := range control.NormalizeFeishuPageView(*catalog).Sections {
 		for _, entry := range section.Entries {
 			for _, button := range entry.Buttons {
 				values[button.CommandText] = button
@@ -345,12 +345,12 @@ func collectCronCatalogButtons(catalog *control.FeishuCommandPageView) map[strin
 	return values
 }
 
-func catalogCommands(catalog *control.FeishuCommandPageView) []string {
+func catalogCommands(catalog *control.FeishuPageView) []string {
 	values := []string{}
 	if catalog == nil {
 		return values
 	}
-	for _, section := range control.NormalizeFeishuCommandPageView(*catalog).Sections {
+	for _, section := range control.NormalizeFeishuPageView(*catalog).Sections {
 		for _, entry := range section.Entries {
 			values = append(values, entry.Commands...)
 		}

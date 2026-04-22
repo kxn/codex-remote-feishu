@@ -1,7 +1,7 @@
 # Plan Mode 飞书支持设计草案
 
 > Type: `draft`
-> Updated: `2026-04-21`
+> Updated: `2026-04-22`
 > Summary: 为 `#214` 收敛最终实现口径：飞书侧以 `Plan mode on/off` 暴露真实 upstream Plan mode，补齐状态、队列冻结、协议落点、提案计划卡与执行 handoff。
 
 ## 1. 文档目标
@@ -266,7 +266,7 @@ translator 规则固定为：
 `/plan` config card 继续走现有：
 
 1. `FeishuCommandDefinition`
-2. `FeishuCommandConfigView`
+2. `FeishuCatalogConfigView`
 3. `BuildFeishuCommandConfigPageView(...)`
 4. `handlePlanCommand(...)`
 

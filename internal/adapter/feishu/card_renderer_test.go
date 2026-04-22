@@ -1,6 +1,10 @@
 package feishu
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+)
 
 func TestRenderOperationCardLegacyEnvelopeFromOperationFields(t *testing.T) {
 	payload := renderOperationCard(Operation{
@@ -80,8 +84,8 @@ func TestRenderOperationCardV2EnvelopeFromOperationFieldsPreservesNativeV2Intera
 		CardThemeKey: cardThemeApproval,
 		CardElements: []map[string]any{
 			cardCallbackButtonElement("查看实例", "primary", map[string]any{
-				"kind":         "run_command",
-				"command_text": "/list",
+				"kind":        "page_action",
+				"action_kind": string(control.ActionListInstances),
 			}, false, ""),
 			map[string]any{
 				"tag":  "form",
@@ -117,9 +121,7 @@ func TestRenderOperationCardV2EnvelopeFromOperationFieldsPreservesNativeV2Intera
 		t.Fatalf("expected native v2 button behaviors callback, got %#v", elements[0])
 	}
 	value, _ := behaviors[0]["value"].(map[string]any)
-	if value["kind"] != "run_command" || value["command_text"] != "/list" {
-		t.Fatalf("unexpected native v2 button payload: %#v", value)
-	}
+	assertPageActionPayloadMatchesCommand(t, value, "/list")
 	formElements, _ := elements[1]["elements"].([]map[string]any)
 	if len(formElements) != 2 {
 		t.Fatalf("expected native v2 form to keep input and submit button, got %#v", elements[1])
@@ -173,8 +175,8 @@ func TestRenderOperationCardV2DoesNotTranslateLegacyActionRow(t *testing.T) {
 					"content": "查看实例",
 				},
 				"value": map[string]any{
-					"kind":         "run_command",
-					"command_text": "/list",
+					"kind":        "page_action",
+					"action_kind": string(control.ActionListInstances),
 				},
 			}},
 		}},
