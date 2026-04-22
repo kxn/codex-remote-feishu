@@ -22,6 +22,10 @@
 
 两者合起来，才是这条交互链路当前的双 guardrail。
 
+菜单卡的工程使用规约另见：
+
+- [feishu-menu-card-usage-guidelines.md](./feishu-menu-card-usage-guidelines.md)
+
 ## 2. 双 Guardrail 规则
 
 ### 2.1 什么时候只回看本文

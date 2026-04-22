@@ -207,6 +207,29 @@ Baseline requirements:
 - if a design may exceed limits, specify fallback up front: truncate, summarize, paginate, split card, or spill to text/file/link
 - when relying on a numeric Feishu platform limit in code or product design, re-check the latest official docs and sync `docs/general/feishu-card-api-constraints.md` if the baseline changed
 
+## Feishu Menu Card Baseline
+
+For any design or implementation that touches Feishu command menu cards, launcher-to-business handoff, or menu callback replace/append behavior, consult:
+
+- `docs/general/feishu-menu-card-usage-guidelines.md`
+- `docs/general/feishu-card-ui-state-machine.md`
+
+Trigger area:
+
+- `internal/core/control/feishu_ui_lifecycle.go`
+- `internal/core/orchestrator/service_page_view.go`
+- `internal/core/orchestrator/service_feishu_ui_context.go`
+- `internal/core/orchestrator/service_workspace_page.go`
+- `internal/app/daemon/app_ingress.go`
+- menu-related Feishu callback/view docs under `docs/general/`
+
+Baseline requirements:
+
+- menu actions must be classified through unified frontstage contract (`keep` / `enter_owner` / `enter_terminal`)
+- menu card must stay launcher-only; business execution state belongs to owner cards
+- do not reintroduce submission-anchor fallback, bare command continuation fallback, or legacy menu substrate
+- any new menu item must include contract mapping, handoff behavior, and regression tests for menu handoff + inline replacement
+
 ## Feishu Card Content Context Baseline
 
 For any design or implementation that touches Feishu card text contracts, markdown/plain_text split, or card text render helpers, consult:

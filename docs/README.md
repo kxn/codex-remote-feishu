@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-22`
-> Summary: 新增飞书菜单 / 业务卡前台流架构重构草案并更新文档索引。
+> Summary: 新增飞书菜单卡使用规约文档，并将其纳入 general 索引。
 
 ## 1. 适用范围
 
@@ -117,6 +117,7 @@
 - [feishu-business-card-interaction-principles.md](./general/feishu-business-card-interaction-principles.md)
 - [feishu-card-api-constraints.md](./general/feishu-card-api-constraints.md)
 - [feishu-card-interaction-model.md](./general/feishu-card-interaction-model.md)
+- [feishu-menu-card-usage-guidelines.md](./general/feishu-menu-card-usage-guidelines.md)
 - [feishu-card-content-context-guidelines.md](./general/feishu-card-content-context-guidelines.md)
 - [feishu-product-design.md](./general/feishu-product-design.md)
 - [feishu-im-message-research.md](./general/feishu-im-message-research.md)
