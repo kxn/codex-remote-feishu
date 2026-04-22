@@ -159,6 +159,7 @@
 ### 6.4 `draft`
 
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
+- [backend-aware-command-catalog-design.md](./draft/backend-aware-command-catalog-design.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
 - [feishu-menu-frontstage-architecture-redesign.md](./draft/feishu-menu-frontstage-architecture-redesign.md)
