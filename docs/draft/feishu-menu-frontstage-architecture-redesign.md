@@ -466,6 +466,15 @@ transport 层只负责：
 - owner 只做业务
 - handoff 明确发生
 
+本轮按当前产品需求重新复核后的结论也很明确：
+
+- 现有已确认需求里，没有任何一条强制要求长期保留“半菜单半业务”
+- `help`、`status` 这类是 terminal，不是混合态例外
+- `path picker`、`history`、`request_user_input` 这类是 owner 内部子步骤，不是菜单继续承接业务
+- normal mode 的 workspace / thread 入口也可以通过显式 handoff 表达，不需要菜单卡与业务 owner 长期共存
+
+针对这条收口工作的执行跟踪，见 GitHub issue `#359`。
+
 ### 10.2 不要让返回目标由文案或命令文本编码
 
 当前很多脆弱点，本质上是把“返回到哪里”编码进按钮命令文本。

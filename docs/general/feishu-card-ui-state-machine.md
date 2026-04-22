@@ -117,6 +117,12 @@
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
 | `/new` | `product-owned` | 是否进入 `new_thread_ready`、何时消耗第一条消息、request gate 是否阻断都属于 core 状态机 |
 
+注：
+
+- 上表中的 `mixed` 只描述当前实现里 ownership / callback / reducer 的分层现状，不代表产品要求长期保留“半菜单半业务”形态。
+- 当前产品复核结论是：现有已确认需求中，没有任何路径强制要求菜单卡与业务 owner 长期共存；后续如继续收口，应优先改成显式 `launcher -> owner/terminal` handoff，再删除对应 mixed 链路。
+- 这条收口工作的后续执行跟踪见 GitHub issue `#359`。
+
 补充规则：
 
 - request cards 现在跨 `UIEvent` 边界携带的是 `control.FeishuRequestView`
