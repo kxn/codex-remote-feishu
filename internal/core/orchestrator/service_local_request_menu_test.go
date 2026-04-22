@@ -164,6 +164,52 @@ func TestMenuActionDetachedHomepageShowsGroupNavigationOnly(t *testing.T) {
 	if len(firstCommands(catalog.Sections[0].Entries)) != 0 {
 		t.Fatalf("expected home catalog to be pure group navigation, got %#v", catalog.Sections[0].Entries)
 	}
+	if len(catalog.Breadcrumbs) != 1 || catalog.Breadcrumbs[0].Label != "菜单首页" {
+		t.Fatalf("expected detached home to stay at root breadcrumb, got %#v", catalog.Breadcrumbs)
+	}
+	if len(catalog.RelatedButtons) != 0 {
+		t.Fatalf("expected detached home to avoid back buttons, got %#v", catalog.RelatedButtons)
+	}
+}
+
+func TestMenuActionBareMenuResetsSubmenuChromeBackToRoot(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	submenu := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		Text:             "/menu maintenance",
+	})
+	submenuCatalog := commandCatalogFromEvent(t, submenu[0])
+	if len(submenuCatalog.Breadcrumbs) != 2 || submenuCatalog.Breadcrumbs[1].Label != "系统管理" {
+		t.Fatalf("expected submenu breadcrumbs before reset, got %#v", submenuCatalog.Breadcrumbs)
+	}
+	if len(submenuCatalog.RelatedButtons) != 1 || submenuCatalog.RelatedButtons[0].CommandText != "/menu" {
+		t.Fatalf("expected submenu back button before reset, got %#v", submenuCatalog.RelatedButtons)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		Text:             "/menu",
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected root command catalog, got %#v", events)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
+	if len(catalog.Breadcrumbs) != 1 || catalog.Breadcrumbs[0].Label != "菜单首页" {
+		t.Fatalf("expected bare /menu to reset breadcrumb to root, got %#v", catalog.Breadcrumbs)
+	}
+	if len(catalog.RelatedButtons) != 0 {
+		t.Fatalf("expected bare /menu to clear submenu back buttons, got %#v", catalog.RelatedButtons)
+	}
 }
 
 func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {

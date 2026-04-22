@@ -272,6 +272,70 @@ func TestHandleGatewayActionReplacesMenuCardForCardNavigation(t *testing.T) {
 	}
 }
 
+func TestHandleGatewayActionReplacesMenuCardForRootNavigation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 22, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	submenu := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/menu maintenance",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if submenu == nil || submenu.ReplaceCurrentCard == nil {
+		t.Fatalf("expected submenu replacement result, got %#v", submenu)
+	}
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/menu",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected inline replacement result, got %#v", result)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "命令菜单" {
+		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
+	}
+	if len(result.ReplaceCurrentCard.CardElements) == 0 || result.ReplaceCurrentCard.CardElements[0]["content"] != "菜单首页" {
+		t.Fatalf("expected bare /menu replacement card to render root breadcrumb, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	for _, button := range operationCardButtons(*result.ReplaceCurrentCard) {
+		value := cardButtonPayload(button)
+		if len(value) == 0 || value["kind"] != "page_action" {
+			continue
+		}
+		if value["action_kind"] == string(control.ActionShowCommandMenu) && value["action_arg"] == nil {
+			t.Fatalf("expected root menu card to avoid back-to-root button payloads, got %#v", result.ReplaceCurrentCard.CardElements)
+		}
+		if value["action_kind"] == string(control.ActionShowCommandMenu) {
+			actionArg, _ := value["action_arg"].(string)
+			if strings.TrimSpace(actionArg) == "" {
+				t.Fatalf("expected root menu card to avoid empty menu-navigation payloads, got %#v", result.ReplaceCurrentCard.CardElements)
+			}
+		}
+	}
+}
+
 func TestHandleGatewayActionRejectsOldNavigationCardAndShowsExpiredNotice(t *testing.T) {
 	gateway := &recordingGateway{}
 	startedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
