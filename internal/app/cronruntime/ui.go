@@ -143,11 +143,16 @@ func UsageEvents(surfaceID, formDefault, message string) []eventcontract.Event {
 			BuildRootPageView(nil, OwnerView{}, "", false, formDefault, "error", message),
 		),
 	)
-	return []eventcontract.Event{{
-		Kind:             eventcontract.KindPage,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		PageView:         &page,
-	}}
+	return []eventcontract.Event{
+		eventcontract.NewEventFromPayload(
+			eventcontract.PagePayload{View: page},
+			eventcontract.EventMeta{
+				Target: eventcontract.TargetRef{
+					SurfaceSessionID: strings.TrimSpace(surfaceID),
+				},
+			},
+		),
+	}
 }
 
 func BindingSummaryLines(stateValue *StateFile, configReady bool) []string {

@@ -8,7 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func legacyUIEventFromContract(
+func surfaceEventFromPayload(
 	surface *state.SurfaceConsoleRecord,
 	payload eventcontract.Payload,
 	semantics eventcontract.DeliverySemantics,
@@ -20,17 +20,16 @@ func legacyUIEventFromContract(
 		GatewayID:        strings.TrimSpace(firstNonEmpty(surfaceGatewayID(surface))),
 		SurfaceSessionID: strings.TrimSpace(firstNonEmpty(surfaceSessionID(surface))),
 	}
-	event := eventcontract.Event{
-		Meta: eventcontract.EventMeta{
+	return eventcontract.NewEventFromPayload(
+		payload,
+		eventcontract.EventMeta{
 			Target:               target,
 			SourceMessageID:      strings.TrimSpace(sourceMessageID),
 			SourceMessagePreview: strings.TrimSpace(sourceMessagePreview),
 			InlineReplaceMode:    inlineReplaceMode(inlineReplaceCurrentCard),
 			Semantics:            semantics,
 		},
-		Payload: payload,
-	}
-	return event.Normalized()
+	)
 }
 
 func inlineReplaceMode(inline bool) eventcontract.InlineReplaceMode {

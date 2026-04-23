@@ -83,7 +83,7 @@ func (s *Service) threadSelectionEvents(surface *state.SurfaceConsoleRecord, thr
 
 func notice(surface *state.SurfaceConsoleRecord, code, text string) []eventcontract.Event {
 	notice := control.Notice{Code: code, Text: text}
-	return []eventcontract.Event{legacyUIEventFromContract(
+	return []eventcontract.Event{surfaceEventFromPayload(
 		surface,
 		eventcontract.NoticePayload{Notice: notice},
 		noticeDeliverySemantics(notice, false),

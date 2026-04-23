@@ -414,12 +414,17 @@ func (a *App) promptPendingUpgradeOnSurfaceLocked(surfaceID string, stateValue i
 	}
 	page := buildUpgradePromptPageView(stateValue)
 	pageView := control.FeishuPageViewFromCommandPageView(page)
-	return []eventcontract.Event{{
-		Kind:             eventcontract.KindPage,
-		GatewayID:        surface.GatewayID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		PageView:         &pageView,
-	}}
+	return []eventcontract.Event{
+		eventcontract.NewEventFromPayload(
+			eventcontract.PagePayload{View: pageView},
+			eventcontract.EventMeta{
+				Target: eventcontract.TargetRef{
+					GatewayID:        strings.TrimSpace(surface.GatewayID),
+					SurfaceSessionID: strings.TrimSpace(surface.SurfaceSessionID),
+				},
+			},
+		),
+	}
 }
 
 func (a *App) loadUpgradeStateLocked(create bool) (install.InstallState, bool, error) {

@@ -158,11 +158,7 @@ func upgradeOwnerCardEvent(surfaceID string, flow *upgradeOwnerCardFlowRecord, t
 		Sealed:         sealed,
 		RelatedButtons: append([]control.CommandCatalogButton(nil), buttons...),
 	})
-	return eventcontract.Event{
-		Kind:             eventcontract.KindPage,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		PageView:         &view,
-	}
+	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: view}, false)
 }
 
 func upgradeOwnerContextSections(currentVersion, targetVersion, track string) []control.FeishuCardTextSection {

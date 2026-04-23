@@ -17,14 +17,17 @@ const (
 )
 
 func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.FeishuPageView) eventcontract.Event {
-	return eventcontract.Event{
-		Kind:                     eventcontract.KindPage,
-		GatewayID:                surface.GatewayID,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: true,
-		PageView:                 &view,
-		PageContext:              s.buildFeishuPageContextFromView(surface, view),
-	}
+	return surfaceEventFromPayload(
+		surface,
+		eventcontract.PagePayload{
+			View:    view,
+			Context: s.buildFeishuPageContextFromView(surface, view),
+		},
+		navigationDeliverySemantics(),
+		true,
+		"",
+		"",
+	)
 }
 
 func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) eventcontract.Event {

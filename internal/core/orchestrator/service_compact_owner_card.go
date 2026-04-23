@@ -32,11 +32,14 @@ func compactOwnerCardEvent(surfaceID string, flow *activeOwnerCardFlowRecord, ti
 		NoticeSections: noticeSections,
 		Sealed:         sealed,
 	})
-	return eventcontract.Event{
-		Kind:             eventcontract.KindPage,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		PageView:         &view,
-	}
+	return eventcontract.NewEventFromPayload(
+		eventcontract.PagePayload{View: view},
+		eventcontract.EventMeta{
+			Target: eventcontract.TargetRef{
+				SurfaceSessionID: strings.TrimSpace(surfaceID),
+			},
+		},
+	)
 }
 
 func compactOwnerCardSplitSections(sections []control.FeishuCardTextSection) ([]control.FeishuCardTextSection, []control.FeishuCardTextSection) {

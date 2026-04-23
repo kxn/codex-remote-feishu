@@ -24,7 +24,7 @@ func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMo
 		LastAssistantMessage: lastAssistantMessage,
 	}
 	notice := threadSelectionNotice(*selection)
-	return legacyUIEventFromContract(
+	return surfaceEventFromPayload(
 		surface,
 		eventcontract.NoticePayload{
 			Notice:          *notice,

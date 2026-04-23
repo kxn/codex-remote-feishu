@@ -70,13 +70,14 @@ func sendFileInlineTerminalEvent(surface *state.SurfaceConsoleRecord, messageID,
 		Interactive:     false,
 		SummarySections: sendFileReplacementSummarySections(lines...),
 	})
-	return eventcontract.Event{
-		Kind:                     eventcontract.KindPage,
-		GatewayID:                surface.GatewayID,
-		SurfaceSessionID:         surface.SurfaceSessionID,
-		InlineReplaceCurrentCard: true,
-		PageView:                 &view,
-	}
+	return surfaceEventFromPayload(
+		surface,
+		eventcontract.PagePayload{View: view},
+		eventcontract.DeliverySemantics{},
+		true,
+		"",
+		"",
+	)
 }
 
 func sendFileUnavailableEvents(surface *state.SurfaceConsoleRecord, code, sourceMessageID, text string, inline bool) []eventcontract.Event {

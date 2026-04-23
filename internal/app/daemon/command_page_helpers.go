@@ -9,11 +9,7 @@ import (
 
 func commandPageEvent(surfaceID string, view control.FeishuPageView) eventcontract.Event {
 	page := control.FeishuPageViewFromCommandPageView(control.NormalizeFeishuPageView(view))
-	return eventcontract.Event{
-		Kind:             eventcontract.KindPage,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		PageView:         &page,
-	}
+	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: page}, false)
 }
 
 func commandPageEvents(surfaceID string, view control.FeishuPageView) []eventcontract.Event {
@@ -30,4 +26,20 @@ func commandArgumentText(text string) string {
 		return ""
 	}
 	return strings.TrimSpace(text[idx+1:])
+}
+
+func surfacePagePayloadEvent(surfaceID string, payload eventcontract.PagePayload, inlineReplace bool) eventcontract.Event {
+	inlineReplaceMode := eventcontract.InlineReplaceNone
+	if inlineReplace {
+		inlineReplaceMode = eventcontract.InlineReplaceCurrentCard
+	}
+	return eventcontract.NewEventFromPayload(
+		payload,
+		eventcontract.EventMeta{
+			Target: eventcontract.TargetRef{
+				SurfaceSessionID: strings.TrimSpace(surfaceID),
+			},
+			InlineReplaceMode: inlineReplaceMode,
+		},
+	)
 }

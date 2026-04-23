@@ -27,11 +27,14 @@ func steerAllOwnerCardEvent(surfaceID, messageID, title, theme string, sealed bo
 		NoticeSections: noticeSections,
 		Sealed:         sealed,
 	})
-	return eventcontract.Event{
-		Kind:             eventcontract.KindPage,
-		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		PageView:         &view,
-	}
+	return eventcontract.NewEventFromPayload(
+		eventcontract.PagePayload{View: view},
+		eventcontract.EventMeta{
+			Target: eventcontract.TargetRef{
+				SurfaceSessionID: strings.TrimSpace(surfaceID),
+			},
+		},
+	)
 }
 
 func steerAllNoopOwnerCardEvent(surfaceID, messageID string) eventcontract.Event {
