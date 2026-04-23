@@ -92,8 +92,8 @@ func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 		GatewayID:            g.config.GatewayID,
 		LookupSurfaceMessage: g.lookupSurfaceMessage,
 		ParseTextAction:      parseTextAction,
-		QuotedInputs:             g.quotedInputs,
-		ParsePostInputs:          g.parsePostInputs,
+		QuotedInputs:         g.quotedInputs,
+		ParsePostInputs:      g.parsePostInputs,
 		BuildMergeForwardStructuredInput: func(ctx context.Context, message *larkim.EventMessage) (string, []agentproto.Input, error) {
 			payload, err := g.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
 			if err != nil {
