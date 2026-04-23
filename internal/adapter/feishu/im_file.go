@@ -10,6 +10,8 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 )
 
 type IMFileSender interface {
@@ -79,7 +81,7 @@ func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IM
 			Err:  fmt.Errorf("send file failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID),
 		}
 	}
-	receiveID, receiveIDType := ResolveReceiveTarget(req.ChatID, req.ActorUserID)
+	receiveID, receiveIDType := gatewaypkg.ResolveReceiveTarget(req.ChatID, req.ActorUserID)
 	if receiveID == "" || receiveIDType == "" {
 		return result, &IMFileSendError{
 			Code: IMFileSendErrorMissingReceiveTarget,

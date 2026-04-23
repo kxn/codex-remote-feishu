@@ -4,10 +4,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func (s *Service) handleFileChangeProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -18,7 +16,7 @@ func (s *Service) handleFileChangeProgressStarted(instanceID string, event agent
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	progress.Status = execprogress.NormalizeStatus(event.Status, false)
-	if !upsertFileChangeProgressEntries(progress, event, false) {
+	if !execprogress.UpsertFileChangeProgressEntries(progress, event, false) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -32,16 +30,8 @@ func (s *Service) handleFileChangeProgressCompleted(instanceID string, event age
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	progress.Status = execprogress.NormalizeStatus(event.Status, true)
-	if !upsertFileChangeProgressEntries(progress, event, true) {
+	if !execprogress.UpsertFileChangeProgressEntries(progress, event, true) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
-}
-
-func cloneExecCommandProgressFileChange(record *state.ExecCommandProgressFileChangeRecord) *control.ExecCommandProgressFileChange {
-	return execprogress.CloneFileChange(record)
-}
-
-func upsertFileChangeProgressEntries(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) bool {
-	return execprogress.UpsertFileChangeProgressEntries(progress, event, final)
 }

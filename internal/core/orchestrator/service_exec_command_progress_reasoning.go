@@ -28,7 +28,7 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 	if strings.TrimSpace(event.ItemID) != "" {
 		progress.ItemID = strings.TrimSpace(event.ItemID)
 	}
-	if !upsertExecCommandProgressReasoning(progress, event, s.now()) {
+	if !execprogress.UpsertReasoning(progress, event, s.now()) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -37,24 +37,8 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 func (s *Service) clearExecCommandProgressReasoning(instanceID, threadID, turnID string) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, threadID, turnID)
 	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
-	if !clearExecCommandProgressReasoningRecord(progress) {
+	if !execprogress.ClearReasoningRecord(progress) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
-}
-
-func upsertExecCommandProgressReasoning(progress *state.ExecCommandProgressRecord, event agentproto.Event, now time.Time) bool {
-	return execprogress.UpsertReasoning(progress, event, now)
-}
-
-func clearExecCommandProgressReasoningRecord(progress *state.ExecCommandProgressRecord) bool {
-	return execprogress.ClearReasoningRecord(progress)
-}
-
-func execCommandProgressHasVisibleReasoning(progress *state.ExecCommandProgressRecord) bool {
-	return execprogress.HasVisibleReasoning(progress)
-}
-
-func formatExecCommandProgressReasoningText(text string, step int) string {
-	return execprogress.FormatReasoningText(text, step)
 }

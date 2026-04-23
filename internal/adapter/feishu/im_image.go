@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 )
 
 type IMImageSender interface {
@@ -75,7 +77,7 @@ func (g *LiveGateway) SendIMImage(ctx context.Context, req IMImageSendRequest) (
 			Err:  fmt.Errorf("send image failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID),
 		}
 	}
-	receiveID, receiveIDType := ResolveReceiveTarget(req.ChatID, req.ActorUserID)
+	receiveID, receiveIDType := gatewaypkg.ResolveReceiveTarget(req.ChatID, req.ActorUserID)
 	if receiveID == "" || receiveIDType == "" {
 		return result, &IMImageSendError{
 			Code: IMImageSendErrorMissingReceiveTarget,

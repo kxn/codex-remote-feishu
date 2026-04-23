@@ -69,14 +69,14 @@ func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string)
 	if surfaceID := g.lookupSurfaceMessage(messageID); surfaceID != "" {
 		return surfaceID
 	}
-	return surfaceIDForInbound(g.config.GatewayID, chatID, "", operatorID)
+	return gatewaypkg.SurfaceIDForInbound(g.config.GatewayID, chatID, "", operatorID)
 }
 
 func (g *LiveGateway) deliverAsyncInboundFailure(ctx context.Context, surfaceID, chatID, actorUserID, replyToMessageID, body string) {
 	if g == nil || strings.TrimSpace(body) == "" {
 		return
 	}
-	receiveID, receiveIDType := ResolveReceiveTarget(chatID, actorUserID)
+	receiveID, receiveIDType := gatewaypkg.ResolveReceiveTarget(chatID, actorUserID)
 	if receiveID == "" || receiveIDType == "" {
 		return
 	}

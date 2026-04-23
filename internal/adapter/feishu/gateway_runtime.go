@@ -149,7 +149,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		}
 		receiveID, receiveIDType := operation.ReceiveID, operation.ReceiveIDType
 		if receiveID == "" || receiveIDType == "" {
-			receiveID, receiveIDType = ResolveReceiveTarget(operation.ChatID, "")
+			receiveID, receiveIDType = gatewaypkg.ResolveReceiveTarget(operation.ChatID, "")
 		}
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send text failed: missing receive target")
@@ -191,7 +191,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		}
 		receiveID, receiveIDType := operation.ReceiveID, operation.ReceiveIDType
 		if receiveID == "" || receiveIDType == "" {
-			receiveID, receiveIDType = ResolveReceiveTarget(operation.ChatID, "")
+			receiveID, receiveIDType = gatewaypkg.ResolveReceiveTarget(operation.ChatID, "")
 		}
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send card failed: missing receive target")
@@ -253,7 +253,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 	case OperationSendImage:
 		receiveID, receiveIDType := operation.ReceiveID, operation.ReceiveIDType
 		if receiveID == "" || receiveIDType == "" {
-			receiveID, receiveIDType = ResolveReceiveTarget(operation.ChatID, "")
+			receiveID, receiveIDType = gatewaypkg.ResolveReceiveTarget(operation.ChatID, "")
 		}
 		if receiveID == "" || receiveIDType == "" {
 			return fmt.Errorf("send image failed: missing receive target")

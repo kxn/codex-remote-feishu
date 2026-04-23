@@ -145,7 +145,7 @@ func (b *mergeForwardBuilder) buildRootBundleFromGatewayMessage(ctx context.Cont
 	root := &forwardedChatNode{
 		Kind:     "bundle",
 		BundleID: b.nextBundleID(),
-		Title:    mergeForwardTitle(message.Content),
+		Title:    gatewaypkg.MergeForwardTitle(message.Content),
 	}
 	if len(message.Children) == 0 {
 		items, err := b.buildNodesFromRawContent(strings.TrimSpace(message.Content))
@@ -261,7 +261,7 @@ func (b *mergeForwardBuilder) buildNodeFromGatewayMessage(ctx context.Context, m
 			ImageRefs:   []string{ref},
 		}, nil
 	case "file":
-		name := strings.TrimSpace(parseFileName(message.Content))
+		name := strings.TrimSpace(gatewaypkg.ParseFileName(message.Content))
 		displayText := "[文件]"
 		if name != "" {
 			displayText = name
@@ -490,7 +490,7 @@ func unavailableForwardedChatNode(message *gatewayMessage, err error) forwardedC
 		case "image":
 			displayText = "[图片不可用]"
 		case "file":
-			displayText = firstNonEmpty(strings.TrimSpace(parseFileName(message.Content)), "[文件不可用]")
+			displayText = firstNonEmpty(strings.TrimSpace(gatewaypkg.ParseFileName(message.Content)), "[文件不可用]")
 		case "merge_forward":
 			displayText = "[转发聊天记录不可用]"
 		case "post":
@@ -527,7 +527,7 @@ func forwardedChatSenderFromGatewayMessage(message *gatewayMessage) *forwardedCh
 	sender := &forwardedChatSender{
 		ID:    strings.TrimSpace(message.SenderID),
 		Type:  strings.ToLower(strings.TrimSpace(message.SenderType)),
-		Label: gatewayMessageSpeakerLabel(message),
+		Label: gatewaypkg.GatewayMessageSpeakerLabel(message.SenderID, message.SenderType),
 	}
 	if sender.ID == "" && sender.Type == "" && sender.Label == "" {
 		return nil

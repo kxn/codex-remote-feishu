@@ -49,25 +49,6 @@ func linesFromMessageIDs(payload map[string]any) []string {
 	return []string{fmt.Sprintf("包含 %d 条转发消息", len(items))}
 }
 
-func mergeForwardTitle(rawContent string) string {
-	return gatewaypkg.MergeForwardTitle(rawContent)
-}
-
-func parseFileName(rawContent string) string {
-	return gatewaypkg.ParseFileName(rawContent)
-}
-
-func gatewayMessageSpeakerLabel(message *gatewayMessage) string {
-	if message == nil {
-		return ""
-	}
-	return gatewaypkg.GatewayMessageSpeakerLabel(message.SenderID, message.SenderType)
-}
-
-func surfaceIDForInbound(gatewayID, chatID, chatType, fallbackUserID string) string {
-	return gatewaypkg.SurfaceIDForInbound(gatewayID, chatID, chatType, fallbackUserID)
-}
-
 func ResolveReceiveTarget(chatID, actorUserID string) (string, string) {
 	return gatewaypkg.ResolveReceiveTarget(chatID, actorUserID)
 }

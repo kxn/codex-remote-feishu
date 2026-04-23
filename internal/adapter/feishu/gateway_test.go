@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -340,14 +341,14 @@ func TestResolveReceiveTarget(t *testing.T) {
 }
 
 func TestSurfaceIDForInboundUsesUserScopeForP2P(t *testing.T) {
-	got := surfaceIDForInbound("app-1", "oc_xxx", "p2p", "user-1")
+	got := gatewaypkg.SurfaceIDForInbound("app-1", "oc_xxx", "p2p", "user-1")
 	if got != "feishu:app-1:user:user-1" {
 		t.Fatalf("unexpected p2p surface id: %q", got)
 	}
 }
 
 func TestSurfaceIDForInboundUsesChatScopeForGroup(t *testing.T) {
-	got := surfaceIDForInbound("app-1", "oc_xxx", "group", "user-1")
+	got := gatewaypkg.SurfaceIDForInbound("app-1", "oc_xxx", "group", "user-1")
 	if got != "feishu:app-1:chat:oc_xxx" {
 		t.Fatalf("unexpected group surface id: %q", got)
 	}

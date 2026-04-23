@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -913,7 +914,7 @@ func TestCommandExecutionExplorationProgressRecognizesQuotedRgRegexSearch(t *tes
 }
 
 func TestParseCommandExecutionExplorationActionHandlesBashLCQuotedRgGlob(t *testing.T) {
-	action, ok := parseCommandExecutionExplorationAction(`/bin/bash -lc "rg -n \"func execCommandMetadata|dynamicToolProgressArguments|dynamicToolProgressSummaryFromMetadata|metadataString\" internal/core/orchestrator -g '"'!**/*_test.go'"'"`)
+	action, ok := execprogress.ParseCommandExecutionExplorationAction(`/bin/bash -lc "rg -n \"func execCommandMetadata|dynamicToolProgressArguments|dynamicToolProgressSummaryFromMetadata|metadataString\" internal/core/orchestrator -g '"'!**/*_test.go'"'"`)
 	if !ok {
 		t.Fatal("expected quoted rg command to parse as exploration search")
 	}
@@ -946,7 +947,7 @@ func TestParseCommandExecutionExplorationActionRecognizesListCommands(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			action, ok := parseCommandExecutionExplorationAction(tt.command)
+			action, ok := execprogress.ParseCommandExecutionExplorationAction(tt.command)
 			if !ok {
 				t.Fatalf("expected %q to parse as list action", tt.command)
 			}
@@ -958,7 +959,7 @@ func TestParseCommandExecutionExplorationActionRecognizesListCommands(t *testing
 }
 
 func TestParseCommandExecutionExplorationActionRejectsPipelineSearch(t *testing.T) {
-	if action, ok := parseCommandExecutionExplorationAction(`bash -lc 'journalctl --user -u codex-remote.service -n 400 --no-pager | rg -n "rg |command_execution|tool_call|exec|progress"'`); ok {
+	if action, ok := execprogress.ParseCommandExecutionExplorationAction(`bash -lc 'journalctl --user -u codex-remote.service -n 400 --no-pager | rg -n "rg |command_execution|tool_call|exec|progress"'`); ok {
 		t.Fatalf("expected piped command not to parse as exploration search, got %#v", action)
 	}
 }

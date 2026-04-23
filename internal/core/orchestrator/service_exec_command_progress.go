@@ -52,7 +52,7 @@ func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsol
 		return nil
 	}
 	progress := surface.ActiveExecProgress
-	if strings.TrimSpace(progress.MessageID) == "" || !execCommandProgressHasVisibleReasoning(progress) {
+	if strings.TrimSpace(progress.MessageID) == "" || !execprogress.HasVisibleReasoning(progress) {
 		return nil
 	}
 	record := progress.Reasoning
@@ -70,7 +70,7 @@ func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsol
 	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  record.ItemID,
 		Kind:    "reasoning_summary",
-		Summary: formatExecCommandProgressReasoningText(record.Text, record.AnimationStep),
+		Summary: execprogress.FormatReasoningText(record.Text, record.AnimationStep),
 		Status:  "running",
 	})
 	return s.emitExecCommandProgress(surface, progress, progress.ThreadID, progress.TurnID, false)
@@ -118,9 +118,9 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 	}
 	progress.Status = execprogress.NormalizeStatus(event.Status, false)
 	explorationChanged := false
-	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, false); ok {
+	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, false); ok {
 		explorationChanged = changed
-		progress.ItemID = execProgressExplorationBlockID
+		progress.ItemID = execprogress.ExplorationBlockID
 	} else {
 		execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 			ItemID:  progress.ItemID,
@@ -173,8 +173,8 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		progress.CWD = cwd
 	}
 	progress.Status = execprogress.NormalizeStatus(event.Status, true)
-	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, true); ok {
-		progress.ItemID = execProgressExplorationBlockID
+	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, true); ok {
+		progress.ItemID = execprogress.ExplorationBlockID
 		if changed && s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 			return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 		}
@@ -220,8 +220,8 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if changed, ok := upsertExplorationProgressForDynamicTool(progress, event, false); ok {
-		progress.ItemID = execProgressExplorationBlockID
+	if changed, ok := execprogress.UpsertExplorationProgressForDynamicTool(progress, event, false); ok {
+		progress.ItemID = execprogress.ExplorationBlockID
 		if !changed {
 			return nil
 		}
@@ -245,8 +245,8 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 	if progress == nil {
 		return nil
 	}
-	if changed, ok := upsertExplorationProgressForDynamicTool(progress, event, true); ok {
-		progress.ItemID = execProgressExplorationBlockID
+	if changed, ok := execprogress.UpsertExplorationProgressForDynamicTool(progress, event, true); ok {
+		progress.ItemID = execprogress.ExplorationBlockID
 		if !changed {
 			return nil
 		}
@@ -273,7 +273,7 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
 	_ = turnStatus
 	_ = finalText
-	if !clearExecCommandProgressReasoningRecord(progress) {
+	if !execprogress.ClearReasoningRecord(progress) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
