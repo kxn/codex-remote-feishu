@@ -54,15 +54,6 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			commandAction.Inbound = action.Inbound
 			return commandAction, true, nil
 		}
-		if fallbackAction, ok := env.FallbackCompatTextAction(text); ok {
-			fallbackAction.GatewayID = gatewayID
-			fallbackAction.SurfaceSessionID = surfaceSessionID
-			fallbackAction.ChatID = chatID
-			fallbackAction.ActorUserID = action.ActorUserID
-			fallbackAction.MessageID = action.MessageID
-			fallbackAction.Inbound = action.Inbound
-			return fallbackAction, true, nil
-		}
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
 		inputs := append(env.QuotedInputs(ctx, message), currentInputs...)
 		action.Kind = control.ActionTextMessage

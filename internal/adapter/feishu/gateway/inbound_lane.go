@@ -482,16 +482,6 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			commandAction.Inbound = cloneInboundMeta(inbound)
 			return PlannedInboundMessage{Action: &commandAction}, true, nil
 		}
-		if fallbackAction, ok := env.FallbackCompatTextAction(text); ok {
-			fallbackAction.GatewayID = gatewayID
-			fallbackAction.SurfaceSessionID = surfaceSessionID
-			fallbackAction.ChatID = chatID
-			fallbackAction.ActorUserID = baseAction.ActorUserID
-			fallbackAction.MessageID = baseAction.MessageID
-			fallbackAction.TargetMessageID = baseAction.TargetMessageID
-			fallbackAction.Inbound = cloneInboundMeta(inbound)
-			return PlannedInboundMessage{Action: &fallbackAction}, true, nil
-		}
 		env.RecordSurfaceMessage(messageID, surfaceSessionID)
 		return PlannedInboundMessage{
 			Queue: &QueuedMessageWork{

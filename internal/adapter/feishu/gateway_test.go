@@ -508,7 +508,7 @@ func TestRemovedLegacyHeadlessCompatCommandsAreIgnored(t *testing.T) {
 	}
 }
 
-func TestParseMessageEventLegacyHeadlessCompatFallsBackToHelp(t *testing.T) {
+func TestParseMessageEventRemovedLegacyHeadlessCompatBecomesPlainTextMessage(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-2"})
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
@@ -532,8 +532,8 @@ func TestParseMessageEventLegacyHeadlessCompatFallsBackToHelp(t *testing.T) {
 	if !ok {
 		t.Fatal("expected legacy compat command to be handled")
 	}
-	if action.Kind != control.ActionShowCommandHelp || action.Text != "/help" {
-		t.Fatalf("unexpected fallback action: %#v", action)
+	if action.Kind != control.ActionTextMessage || strings.TrimSpace(action.Text) != "/newinstance" {
+		t.Fatalf("expected removed compat command to flow through plain text path, got %#v", action)
 	}
 }
 

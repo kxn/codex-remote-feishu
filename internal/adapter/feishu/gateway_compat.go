@@ -89,10 +89,9 @@ func (g *LiveGateway) routingEnv() gatewaypkg.RoutingEnv {
 
 func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 	return gatewaypkg.InboundEnv{
-		GatewayID:                g.config.GatewayID,
-		LookupSurfaceMessage:     g.lookupSurfaceMessage,
-		ParseTextAction:          parseTextAction,
-		FallbackCompatTextAction: fallbackCompatTextAction,
+		GatewayID:            g.config.GatewayID,
+		LookupSurfaceMessage: g.lookupSurfaceMessage,
+		ParseTextAction:      parseTextAction,
 		QuotedInputs:             g.quotedInputs,
 		ParsePostInputs:          g.parsePostInputs,
 		BuildMergeForwardStructuredInput: func(ctx context.Context, message *larkim.EventMessage) (string, []agentproto.Input, error) {
@@ -228,15 +227,6 @@ func surfaceLaneInner(lane *surfaceInboundLane) *gatewaypkg.SurfaceInboundLane {
 
 func parseTextAction(text string) (control.Action, bool) {
 	return control.ParseFeishuTextAction(text)
-}
-
-func fallbackCompatTextAction(text string) (control.Action, bool) {
-	switch strings.ToLower(strings.TrimSpace(text)) {
-	case "/newinstance", "/killinstance":
-		return control.Action{Kind: control.ActionShowCommandHelp, Text: "/help"}, true
-	default:
-		return control.Action{}, false
-	}
 }
 
 func menuAction(eventKey string) (control.Action, bool) {
