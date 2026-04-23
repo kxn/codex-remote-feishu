@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"strings"
+
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -11,9 +13,6 @@ func applyThreadRuntimeStatus(thread *state.ThreadRecord, runtime *agentproto.Th
 	}
 	thread.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(runtime)
 	thread.Loaded = runtime.IsLoaded()
-	if legacy := runtime.LegacyState(); legacy != "" {
-		thread.State = legacy
-	}
 }
 
 func markThreadNotLoaded(thread *state.ThreadRecord) {
@@ -40,4 +39,16 @@ func threadWaitingOnUserInput(thread *state.ThreadRecord) bool {
 
 func threadRuntimeActive(thread *state.ThreadRecord) bool {
 	return thread != nil && thread.RuntimeStatus != nil && thread.RuntimeStatus.Type == agentproto.ThreadRuntimeStatusTypeActive
+}
+
+func threadLegacyState(thread *state.ThreadRecord) string {
+	if thread == nil {
+		return ""
+	}
+	if thread.RuntimeStatus != nil {
+		if legacy := strings.TrimSpace(thread.RuntimeStatus.LegacyState()); legacy != "" {
+			return legacy
+		}
+	}
+	return strings.TrimSpace(thread.State)
 }

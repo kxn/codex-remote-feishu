@@ -180,11 +180,10 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		if strings.TrimSpace(view.Thread.CWD) != "" {
 			thread.CWD = strings.TrimSpace(view.Thread.CWD)
 		}
-		if strings.TrimSpace(view.Thread.State) != "" {
-			thread.State = strings.TrimSpace(view.Thread.State)
-		}
 		if view.Thread.RuntimeStatus != nil {
 			thread.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(view.Thread.RuntimeStatus)
+		} else if strings.TrimSpace(view.Thread.State) != "" {
+			thread.State = strings.TrimSpace(view.Thread.State)
 		}
 		if strings.TrimSpace(view.Thread.ExplicitModel) != "" {
 			thread.ExplicitModel = strings.TrimSpace(view.Thread.ExplicitModel)

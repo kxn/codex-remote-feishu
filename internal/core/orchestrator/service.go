@@ -662,7 +662,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 			current.Loaded = thread.Loaded
 			current.Archived = thread.Archived
-			if thread.State != "" {
+			if thread.RuntimeStatus == nil && thread.State != "" {
 				current.State = thread.State
 			}
 			if thread.RuntimeStatus != nil {

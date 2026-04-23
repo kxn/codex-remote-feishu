@@ -95,7 +95,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 				DisplayTitle:       displayThreadTitle(inst, thread, thread.ThreadID),
 				Preview:            thread.Preview,
 				CWD:                thread.CWD,
-				State:              thread.State,
+				State:              threadLegacyState(thread),
 				RuntimeStatus:      threadRuntimeStatusType(thread),
 				Model:              thread.ExplicitModel,
 				ReasoningEffort:    thread.ExplicitReasoningEffort,

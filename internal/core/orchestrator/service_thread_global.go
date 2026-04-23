@@ -290,8 +290,8 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if strings.TrimSpace(merged.CWD) == "" {
 		merged.CWD = strings.TrimSpace(secondary.CWD)
 	}
-	if strings.TrimSpace(merged.State) == "" {
-		merged.State = strings.TrimSpace(secondary.State)
+	if strings.TrimSpace(merged.State) == "" && merged.RuntimeStatus == nil {
+		merged.State = threadLegacyState(secondary)
 	}
 	if strings.TrimSpace(merged.ExplicitModel) == "" {
 		merged.ExplicitModel = strings.TrimSpace(secondary.ExplicitModel)
