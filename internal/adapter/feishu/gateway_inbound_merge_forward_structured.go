@@ -8,6 +8,7 @@ import (
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
@@ -202,7 +203,7 @@ func (b *mergeForwardBuilder) buildNodeFromGatewayMessage(ctx context.Context, m
 	sender := forwardedChatSenderFromGatewayMessage(message)
 	switch strings.ToLower(strings.TrimSpace(message.MessageType)) {
 	case "text":
-		text, err := parseTextContent(message.Content)
+		text, err := gatewaypkg.ParseTextContent(message.Content)
 		if err != nil {
 			return forwardedChatNode{}, err
 		}
@@ -228,7 +229,7 @@ func (b *mergeForwardBuilder) buildNodeFromGatewayMessage(ctx context.Context, m
 			ImageRefs:   imageRefs,
 		}, nil
 	case "image":
-		imageKey, err := parseImageKey(message.Content)
+		imageKey, err := gatewaypkg.ParseImageKey(message.Content)
 		if err != nil {
 			return forwardedChatNode{
 				Kind:        "message",

@@ -12,6 +12,7 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -21,26 +22,26 @@ const (
 )
 
 func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
-	inboundLane := newSurfaceInboundLane(ctx, g, handler)
+	inboundLane := gatewaypkg.NewSurfaceInboundLane(ctx, g.inboundEnv(), gatewayDispatcher(handler))
 	dispatch := dispatcher.NewEventDispatcher("", "")
 	dispatch.OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
-		return g.handleInboundMessageEvent(ctx, event, handler, inboundLane)
+		return gatewaypkg.HandleInboundMessageEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
 	dispatch.OnP2MessageRecalledV1(func(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
-		return g.handleInboundMessageRecalledEvent(ctx, event, handler, inboundLane)
+		return gatewaypkg.HandleInboundMessageRecalledEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
 	dispatch.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
-		return g.handleInboundMessageReactionCreatedEvent(ctx, event, handler, inboundLane)
+		return gatewaypkg.HandleInboundMessageReactionCreatedEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
-		action, ok := g.parseCardActionTriggerEvent(event)
+		action, ok := gatewaypkg.ParseCardActionTriggerEvent(g.routingEnv(), event)
 		if ok {
 			return handleCardActionTrigger(ctx, action, handler)
 		}
 		return &larkcallback.CardActionTriggerResponse{}, nil
 	})
 	dispatch.OnP2BotMenuV6(func(ctx context.Context, event *larkapplication.P2BotMenuV6) error {
-		action, ok := g.parseMenuEvent(event)
+		action, ok := gatewaypkg.ParseMenuEvent(g.config.GatewayID, event)
 		if !ok {
 			return nil
 		}

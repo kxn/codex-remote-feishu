@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode"
 
+	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
@@ -111,7 +112,7 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		if title == "" {
 			title = "系统提示"
 		}
-		body, elements := projectNoticeContent(payload.Notice)
+		body, elements := projectorpkg.ProjectNoticeContent(payload.Notice)
 		theme := noticeThemeKey(payload.Notice)
 		return []Operation{{
 			Kind:             OperationSendCard,
@@ -127,7 +128,7 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		}}
 	case eventcontract.PlanUpdatePayload:
 		title := "当前计划"
-		elements := planUpdateElements(payload.PlanUpdate)
+		elements := projectorpkg.PlanUpdateElements(payload.PlanUpdate)
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
@@ -141,7 +142,7 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 			card:             rawCardDocument(title, "", cardThemePlan, elements),
 		}}
 	case eventcontract.SelectionPayload:
-		title, elements, ok := selectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		if !ok {
 			return nil
 		}
@@ -163,8 +164,8 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		if title == "" {
 			title = "页面"
 		}
-		body := pageBody(pageView)
-		elements := pageElements(pageView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		body := projectorpkg.PageBody(pageView)
+		elements := projectorpkg.PageElements(pageView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		theme := firstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
 		operation := Operation{
 			Kind:             OperationSendCard,
@@ -189,7 +190,7 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		if title == "" {
 			title = "需要确认"
 		}
-		elements := requestPromptElements(payload.View, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.RequestPromptElements(payload.View, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		return []Operation{{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
@@ -223,7 +224,7 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		if title == "" {
 			title = "选择路径"
 		}
-		elements := pathPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.PathPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
@@ -249,8 +250,8 @@ func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Ope
 		if title == "" {
 			title = "选择工作区与会话"
 		}
-		elements := targetPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
-		theme := targetPickerTheme(view)
+		elements := projectorpkg.TargetPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		theme := projectorpkg.TargetPickerTheme(view)
 		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,

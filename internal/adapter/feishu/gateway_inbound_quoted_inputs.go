@@ -13,6 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
@@ -41,7 +42,7 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 	}
 	switch strings.ToLower(strings.TrimSpace(referenced.MessageType)) {
 	case "text":
-		text, err := parseTextContent(referenced.Content)
+		text, err := gatewaypkg.ParseTextContent(referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote text parse ignored: message=%s err=%v", referenced.MessageID, err)
 			return nil
@@ -67,7 +68,7 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 		}
 		return quoted
 	case "image":
-		imageKey, err := parseImageKey(referenced.Content)
+		imageKey, err := gatewaypkg.ParseImageKey(referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote image parse ignored: message=%s err=%v", referenced.MessageID, err)
 			return nil
