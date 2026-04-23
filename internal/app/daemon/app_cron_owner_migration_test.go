@@ -11,6 +11,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -20,12 +21,12 @@ func TestLoadCronStateLockedHardMigratesLegacyGatewayOwner(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 
-	rawState := cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	rawState := cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
 	}
@@ -54,7 +55,7 @@ func TestLoadCronStateLockedHardMigratesLegacyGatewayOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read persisted state: %v", err)
 	}
-	var persisted cronStateFile
+	var persisted cronrt.StateFile
 	if err := json.Unmarshal(persistedRaw, &persisted); err != nil {
 		t.Fatalf("unmarshal persisted state: %v", err)
 	}
@@ -67,17 +68,17 @@ func TestInspectCronOwnerViewTreatsLegacyGatewayStateAsHealthy(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 
-	view := app.inspectCronOwnerView(&cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	view := app.inspectCronOwnerView(&cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
 	})
-	if view.Status != cronOwnerStatusHealthy {
-		t.Fatalf("owner view status = %q, want %q", view.Status, cronOwnerStatusHealthy)
+	if view.Status != cronrt.OwnerStatusHealthy {
+		t.Fatalf("owner view status = %q, want %q", view.Status, cronrt.OwnerStatusHealthy)
 	}
 	if view.NeedsRepair {
 		t.Fatalf("owner view unexpectedly needs repair: %#v", view)
@@ -98,14 +99,14 @@ func TestReloadCronJobsNowHardMigratesLegacyGatewayWithoutLegacyNotice(t *testin
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Workspaces: "tbl-workspaces",
 			},

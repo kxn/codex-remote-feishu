@@ -17,7 +17,7 @@ func (a *App) cronStatePath() string {
 	return filepath.Join(".", "cron-state.json")
 }
 
-func (a *App) loadCronStateLocked(create bool) (*cronStateFile, error) {
+func (a *App) loadCronStateLocked(create bool) (*cronrt.StateFile, error) {
 	if a.cronRuntime.loaded {
 		if err := a.normalizeLoadedCronStateLocked(); err != nil {
 			return nil, err
@@ -74,7 +74,7 @@ func (a *App) loadCronStateLocked(create bool) (*cronStateFile, error) {
 	case err != nil:
 		return nil, err
 	}
-	var stateValue cronStateFile
+	var stateValue cronrt.StateFile
 	if err := json.Unmarshal(raw, &stateValue); err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (a *App) normalizeLoadedCronStateLocked() error {
 	return a.writeCronStateLocked()
 }
 
-func (a *App) newCronStateLocked() (*cronStateFile, error) {
+func (a *App) newCronStateLocked() (*cronrt.StateFile, error) {
 	scopeKey, label, err := a.cronInstanceMetadataLocked()
 	if err != nil {
 		return nil, err
@@ -114,9 +114,9 @@ func (a *App) writeCronStateLocked() error {
 		return nil
 	}
 	updatedAt := time.Now().UTC()
-	a.cronRuntime.state.SchemaVersion = cronStateSchemaVersion
+	a.cronRuntime.state.SchemaVersion = cronrt.StateSchemaVersion
 	a.cronRuntime.state.UpdatedAt = updatedAt
-	snapshot := cloneCronState(a.cronRuntime.state)
+	snapshot := cronrt.CloneState(a.cronRuntime.state)
 	if snapshot == nil {
 		return nil
 	}
@@ -136,7 +136,7 @@ func (a *App) cronInstanceMetadataLocked() (string, string, error) {
 	}
 	instanceID := strings.TrimSpace(stateValue.InstanceID)
 	if instanceID == "" {
-		instanceID = fallbackCronInstanceID(stateValue.ConfigPath, stateValue.StatePath)
+		instanceID = cronrt.FallbackInstanceID(stateValue.ConfigPath, stateValue.StatePath)
 	}
 	return instanceID, instanceID, nil
 }

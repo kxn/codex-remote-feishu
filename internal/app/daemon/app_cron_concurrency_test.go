@@ -6,6 +6,7 @@ import (
 
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
@@ -16,19 +17,19 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-task-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 5,
 			WorkspaceKey:    workspace,
 			Prompt:          "check CI",
@@ -44,7 +45,7 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 			StateDir: app.headlessRuntime.Paths.StateDir,
 		},
 	})
-	app.cronRuntime.runs["inst-running"] = &cronRunState{
+	app.cronRuntime.runs["inst-running"] = &cronrt.RunState{
 		InstanceID:     "inst-running",
 		JobRecordID:    "rec-task-1",
 		JobName:        "Nightly",
@@ -52,7 +53,7 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 		TriggeredAt:    time.Now().Add(-2 * time.Minute),
 		TimeoutMinutes: 15,
 	}
-	app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
+	app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
 
 	var launches int
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
@@ -70,7 +71,7 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 	if len(app.cronRuntime.runs) != 2 {
 		t.Fatalf("cronRuns = %#v, want two active runs", app.cronRuntime.runs)
 	}
-	active := app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")]
+	active := app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")]
 	if len(active) != 2 {
 		t.Fatalf("active cron runs = %#v, want two instances", active)
 	}
@@ -78,7 +79,7 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 
 func TestCronJobFromRecordParsesAndNormalizesConcurrency(t *testing.T) {
 	now := time.Now()
-	workspaces := map[string]cronWorkspaceRow{
+	workspaces := map[string]cronrt.WorkspaceRow{
 		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
 	}
 	cases := []struct {
@@ -95,13 +96,13 @@ func TestCronJobFromRecordParsesAndNormalizesConcurrency(t *testing.T) {
 			record := &larkbitable.AppTableRecord{
 				RecordId: stringPtr("rec-task-1"),
 				Fields: map[string]any{
-					"任务名":                    "Nightly",
-					"启用":                     true,
-					"调度类型":                   cronScheduleTypeInterval,
-					"间隔":                     "15分钟",
-					"工作区":                    []any{"rec-workspace-1"},
-					"提示词":                    "check CI",
-					cronTaskConcurrencyField: tc.value,
+					"任务名":                       "Nightly",
+					"启用":                        true,
+					"调度类型":                      cronrt.ScheduleTypeInterval,
+					"间隔":                        "15分钟",
+					"工作区":                       []any{"rec-workspace-1"},
+					"提示词":                       "check CI",
+					cronrt.TaskConcurrencyField: tc.value,
 				},
 			}
 			job, skip, err := cronJobFromRecord(record, workspaces, now)

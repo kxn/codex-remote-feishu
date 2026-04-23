@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 )
 
 func (a *App) maybeScheduleCronJobsLocked(now time.Time) {
@@ -25,23 +27,23 @@ func (a *App) maybeScheduleCronJobsLocked(now time.Time) {
 		return
 	}
 
-	cronZone := cronConfiguredTimeZone(stateValue)
-	now = cronSchedulerTimeIn(now, cronZone)
+	cronZone := cronrt.ConfiguredTimeZone(stateValue)
+	now = cronrt.SchedulerTimeIn(now, cronZone)
 	dirty := false
 	launches := []cronLaunchRequest{}
 	for idx := range stateValue.Jobs {
 		job := &stateValue.Jobs[idx]
 		if job.NextRunAt.IsZero() {
-			job.NextRunAt = cronNextRunAtIn(*job, now, cronZone)
+			job.NextRunAt = cronrt.NextRunAtIn(*job, now, cronZone)
 			dirty = true
 		}
 		if job.NextRunAt.IsZero() || job.NextRunAt.After(now) {
 			continue
 		}
 		currentDueAt := job.NextRunAt
-		nextRunAt := cronAdvanceRunAtIn(*job, currentDueAt, now, cronZone)
+		nextRunAt := cronrt.AdvanceRunAtIn(*job, currentDueAt, now, cronZone)
 		activeCount := a.cronActiveRunCountLocked(job.RecordID, job.Name)
-		maxConcurrency := cronDefaultMaxConcurrency(job.MaxConcurrency)
+		maxConcurrency := cronrt.DefaultMaxConcurrency(job.MaxConcurrency)
 		if activeCount >= maxConcurrency {
 			a.recordCronImmediateResultLocked(*job, now, "skipped", fmt.Sprintf("当前运行中实例数已达到并发上限（%d），本轮跳过。", maxConcurrency))
 			job.NextRunAt = nextRunAt
@@ -73,20 +75,20 @@ func (a *App) maybeTimeoutCronRunsLocked(now time.Time) {
 		if timeoutAt.IsZero() {
 			continue
 		}
-		timeout := time.Duration(cronDefaultTimeoutMinutes(run.TimeoutMinutes)) * time.Minute
+		timeout := time.Duration(cronrt.DefaultTimeoutMinutes(run.TimeoutMinutes)) * time.Minute
 		if timeout <= 0 || now.Before(timeoutAt.Add(timeout)) {
 			continue
 		}
-		a.completeCronRunLocked(instanceID, "timeout", fmt.Sprintf("任务超过 %d 分钟未完成，已按超时结束。", cronDefaultTimeoutMinutes(run.TimeoutMinutes)), now, true)
+		a.completeCronRunLocked(instanceID, "timeout", fmt.Sprintf("任务超过 %d 分钟未完成，已按超时结束。", cronrt.DefaultTimeoutMinutes(run.TimeoutMinutes)), now, true)
 	}
 }
 
-func (a *App) recordCronImmediateResultLocked(job cronJobState, triggeredAt time.Time, status, errorMessage string) {
+func (a *App) recordCronImmediateResultLocked(job cronrt.JobState, triggeredAt time.Time, status, errorMessage string) {
 	a.recordCronImmediateResultWithTargetLocked(a.snapshotCronWritebackLocked(), job, triggeredAt, status, errorMessage)
 }
 
 func (a *App) reapCronExitTargetsLocked(now time.Time) {
-	targets := make([]cronExitTarget, 0)
+	targets := make([]cronrt.ExitTarget, 0)
 	for instanceID, target := range a.cronRuntime.exitTargets {
 		if target == nil {
 			delete(a.cronRuntime.exitTargets, instanceID)
@@ -108,7 +110,7 @@ func (a *App) reapCronExitTargetsLocked(now time.Time) {
 	}
 
 	type cronForcedStopResult struct {
-		Target cronExitTarget
+		Target cronrt.ExitTarget
 		Err    error
 	}
 	results := make([]cronForcedStopResult, 0, len(targets))

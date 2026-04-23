@@ -11,7 +11,7 @@ import (
 )
 
 func isCronInstanceID(instanceID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(instanceID), cronInstancePrefix)
+	return strings.HasPrefix(strings.TrimSpace(instanceID), cronrt.InstancePrefix)
 }
 
 func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) bool {
@@ -110,7 +110,7 @@ func (a *App) handleCronEventsLocked(_ context.Context, instanceID string, event
 					if text == "" {
 						text = buffered
 					}
-					delete(run.Buffers, cronItemBufferKey(event.ItemID))
+					delete(run.Buffers, cronrt.ItemBufferKey(event.ItemID))
 				}
 				if text != "" {
 					run.FinalMessage = text
@@ -183,12 +183,12 @@ func (a *App) handleCronDisconnectLocked(_ context.Context, instanceID string) b
 	return true
 }
 
-func (a *App) ensureCronItemBufferLocked(run *cronRunState, itemID, itemKind string) *cronItemBuffer {
+func (a *App) ensureCronItemBufferLocked(run *cronrt.RunState, itemID, itemKind string) *cronrt.ItemBuffer {
 	return cronrt.EnsureItemBuffer(run, itemID, itemKind)
 }
 
 func (a *App) addCronActiveRunLocked(jobRecordID, jobName, instanceID string) {
-	activeKey := cronJobActiveKey(jobRecordID, jobName)
+	activeKey := cronrt.JobActiveKey(jobRecordID, jobName)
 	instanceID = strings.TrimSpace(instanceID)
 	if activeKey == "" || instanceID == "" {
 		return
@@ -202,7 +202,7 @@ func (a *App) addCronActiveRunLocked(jobRecordID, jobName, instanceID string) {
 }
 
 func (a *App) removeCronActiveRunLocked(jobRecordID, jobName, instanceID string) {
-	activeKey := cronJobActiveKey(jobRecordID, jobName)
+	activeKey := cronrt.JobActiveKey(jobRecordID, jobName)
 	instanceID = strings.TrimSpace(instanceID)
 	if activeKey == "" || instanceID == "" {
 		return
@@ -219,7 +219,7 @@ func (a *App) removeCronActiveRunLocked(jobRecordID, jobName, instanceID string)
 }
 
 func (a *App) cronActiveRunCountLocked(jobRecordID, jobName string) int {
-	activeKey := cronJobActiveKey(jobRecordID, jobName)
+	activeKey := cronrt.JobActiveKey(jobRecordID, jobName)
 	if activeKey == "" {
 		return 0
 	}
@@ -285,15 +285,15 @@ func (a *App) completeCronRunLocked(instanceID, status, errorMessage string, now
 	go a.cleanupCronRunResources(completedRun)
 }
 
-func (a *App) snapshotCronWritebackLocked() cronWritebackTarget {
-	if !cronStateHasBinding(a.cronRuntime.state) || a.cronRuntime.state == nil || a.cronRuntime.state.Bitable == nil {
-		return cronWritebackTarget{}
+func (a *App) snapshotCronWritebackLocked() cronrt.WritebackTarget {
+	if !cronrt.StateHasBinding(a.cronRuntime.state) || a.cronRuntime.state == nil || a.cronRuntime.state.Bitable == nil {
+		return cronrt.WritebackTarget{}
 	}
 	if strings.TrimSpace(a.cronRuntime.state.OwnerGatewayID) == "" {
 		_, _ = a.migrateCronLegacyOwnerStateLocked(a.cronRuntime.state)
 	}
 	gatewayID := strings.TrimSpace(a.cronRuntime.state.OwnerGatewayID)
-	target := cronWritebackTarget{
+	target := cronrt.WritebackTarget{
 		GatewayID: gatewayID,
 		Bitable:   *a.cronRuntime.state.Bitable,
 	}
@@ -310,7 +310,7 @@ func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time
 			pid = snap.PID
 		}
 	}
-	deadline := now.Add(cronExitGrace)
+	deadline := now.Add(cronrt.ExitGrace)
 	command := agentproto.Command{
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandProcessExit,
@@ -325,7 +325,7 @@ func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time
 	if pid > 0 {
 		target := a.cronRuntime.exitTargets[instanceID]
 		if target == nil {
-			target = &cronExitTarget{InstanceID: instanceID}
+			target = &cronrt.ExitTarget{InstanceID: instanceID}
 			a.cronRuntime.exitTargets[instanceID] = target
 		}
 		target.PID = pid
@@ -333,29 +333,29 @@ func (a *App) requestCronInstanceExitLocked(instanceID string, pid int, now time
 	}
 }
 
-func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunState) {
+func (a *App) writeCronRunResultAsync(target cronrt.WritebackTarget, run cronrt.RunState) {
 	api, err := a.cronBitableAPI(target.GatewayID)
 	if err != nil {
 		log.Printf("cron writeback failed: instance=%s err=%v", run.InstanceID, err)
 		return
 	}
 
-	statusText := cronStatusText(run.Status)
-	summary := cronRunSummary(firstNonEmpty(run.FinalMessage, run.ErrorMessage, statusText))
+	statusText := cronrt.StatusText(run.Status)
+	summary := cronrt.RunSummary(firstNonEmpty(run.FinalMessage, run.ErrorMessage, statusText))
 	taskName := firstNonEmpty(strings.TrimSpace(run.JobName), strings.TrimSpace(run.JobRecordID), strings.TrimSpace(run.InstanceID))
 	runFields := map[string]any{
 		"任务名":   taskName,
-		"触发时间":  cronMilliseconds(run.TriggeredAt),
-		"开始时间":  cronMilliseconds(run.StartedAt),
-		"结束时间":  cronMilliseconds(run.CompletedAt),
+		"触发时间":  cronrt.Milliseconds(run.TriggeredAt),
+		"开始时间":  cronrt.Milliseconds(run.StartedAt),
+		"结束时间":  cronrt.Milliseconds(run.CompletedAt),
 		"状态":    statusText,
-		"耗时（秒）": cronElapsedSeconds(run.StartedAt, run.CompletedAt),
+		"耗时（秒）": cronrt.ElapsedSeconds(run.StartedAt, run.CompletedAt),
 		"工作区":   firstNonEmpty(strings.TrimSpace(run.SourceLabel), strings.TrimSpace(run.WorkspaceKey)),
 		"结果摘要":  summary,
 		"最终回复":  strings.TrimSpace(run.FinalMessage),
 		"错误信息":  strings.TrimSpace(run.ErrorMessage),
 	}
-	runsCtx, cancelRuns := context.WithTimeout(context.Background(), cronWritebackRunsTTL)
+	runsCtx, cancelRuns := context.WithTimeout(context.Background(), cronrt.WritebackRunsTTL)
 	if _, err := api.CreateRecord(runsCtx, target.Bitable.AppToken, target.Bitable.Tables.Runs, runFields); err != nil {
 		log.Printf("cron run history write failed: instance=%s job=%s err=%v", run.InstanceID, taskName, err)
 	}
@@ -368,12 +368,12 @@ func (a *App) writeCronRunResultAsync(target cronWritebackTarget, run cronRunSta
 		recentTime = run.TriggeredAt
 	}
 	taskFields := map[string]any{
-		"最近运行时间": cronMilliseconds(recentTime),
+		"最近运行时间": cronrt.Milliseconds(recentTime),
 		"最近状态":   statusText,
 		"最近结果摘要": summary,
 		"最近错误":   strings.TrimSpace(run.ErrorMessage),
 	}
-	taskCtx, cancelTask := context.WithTimeout(context.Background(), cronWritebackTasksTTL)
+	taskCtx, cancelTask := context.WithTimeout(context.Background(), cronrt.WritebackTasksTTL)
 	if _, err := api.UpdateRecord(taskCtx, target.Bitable.AppToken, target.Bitable.Tables.Tasks, run.JobRecordID, taskFields); err != nil {
 		log.Printf("cron task status write failed: instance=%s job=%s record=%s err=%v", run.InstanceID, taskName, run.JobRecordID, err)
 	}

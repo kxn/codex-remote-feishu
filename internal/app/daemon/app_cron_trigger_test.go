@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -17,21 +18,21 @@ func TestTriggerCronJobLaunchesImmediatelyWithoutChangingNextRun(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-task-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 15,
 			WorkspaceKey:    workspace,
 			Prompt:          "check CI",
@@ -76,21 +77,21 @@ func TestTriggerCronJobRespectsConcurrencyLimit(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-task-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 15,
 			MaxConcurrency:  1,
 			WorkspaceKey:    workspace,
@@ -99,12 +100,12 @@ func TestTriggerCronJobRespectsConcurrencyLimit(t *testing.T) {
 			NextRunAt:       time.Now().Add(15 * time.Minute),
 		}},
 	}
-	app.cronRuntime.runs["inst-running"] = &cronRunState{
+	app.cronRuntime.runs["inst-running"] = &cronrt.RunState{
 		InstanceID:  "inst-running",
 		JobRecordID: "rec-task-1",
 		JobName:     "Nightly",
 	}
-	app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
+	app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
 	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
 		t.Fatalf("triggerCronJob must not launch when concurrency is exhausted")
 		return 0, nil

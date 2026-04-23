@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 func TestCronForcedStopRunsOutsideAppLockAndTracksInFlightState(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	now := time.Now().UTC()
-	app.cronRuntime.exitTargets["inst-cron-1"] = &cronExitTarget{
+	app.cronRuntime.exitTargets["inst-cron-1"] = &cronrt.ExitTarget{
 		InstanceID: "inst-cron-1",
 		PID:        4321,
 		Deadline:   now.Add(-time.Second),
@@ -61,7 +62,7 @@ func TestCronForcedStopRunsOutsideAppLockAndTracksInFlightState(t *testing.T) {
 func TestCronForcedStopFailureClearsInFlightAndRetries(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	now := time.Now().UTC()
-	app.cronRuntime.exitTargets["inst-cron-1"] = &cronExitTarget{
+	app.cronRuntime.exitTargets["inst-cron-1"] = &cronrt.ExitTarget{
 		InstanceID: "inst-cron-1",
 		PID:        4321,
 		Deadline:   now.Add(-time.Second),

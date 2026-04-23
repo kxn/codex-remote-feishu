@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -18,27 +19,27 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Runs:       "tbl-runs",
 				Workspaces: "tbl-workspaces",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 15,
 			WorkspaceKey:    "/tmp/project",
 			NextRunAt:       time.Now().Add(15 * time.Minute),
@@ -81,28 +82,28 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
 			TimeZone: "Asia/Shanghai",
-			Tables:   cronTableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs", Workspaces: "tbl-workspaces"},
+			Tables:   cronrt.TableIDs{Tasks: "tbl-tasks", Runs: "tbl-runs", Workspaces: "tbl-workspaces"},
 		},
 		LastWorkspaceSyncAt: time.Date(2026, 4, 17, 1, 2, 3, 0, time.UTC),
 		LastReloadAt:        time.Date(2026, 4, 17, 2, 3, 4, 0, time.UTC),
 		LastReloadSummary:   "已加载 2 条任务",
-		Jobs: []cronJobState{
+		Jobs: []cronrt.JobState{
 			{
 				RecordID:        "rec-1",
 				Name:            "Nightly",
-				ScheduleType:    cronScheduleTypeInterval,
+				ScheduleType:    cronrt.ScheduleTypeInterval,
 				IntervalMinutes: 15,
 				WorkspaceKey:    "/tmp/project",
 				NextRunAt:       time.Date(2026, 4, 18, 3, 0, 0, 0, time.UTC),
@@ -110,10 +111,10 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 			{
 				RecordID:           "rec-2",
 				Name:               "Git Sync",
-				ScheduleType:       cronScheduleTypeDaily,
+				ScheduleType:       cronrt.ScheduleTypeDaily,
 				DailyHour:          9,
 				DailyMinute:        30,
-				SourceType:         cronJobSourceGitRepo,
+				SourceType:         cronrt.JobSourceGitRepo,
 				GitRepoSourceInput: "https://github.com/kxn/codex-remote-feishu#ref=master",
 				GitRepoURL:         "https://github.com/kxn/codex-remote-feishu",
 				GitRef:             "master",
@@ -228,18 +229,18 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Runs:       "tbl-runs",
 				Workspaces: "tbl-workspaces",
@@ -310,7 +311,7 @@ func TestCronCatalogHidesConfigEntryWhenWorkspaceSyncFails(t *testing.T) {
 }
 
 func TestCronBitableTableURLOverridesPreviousTableContext(t *testing.T) {
-	got := cronBitableTableURL(
+	got := cronrt.BitableTableURL(
 		"https://example.feishu.cn/base/app-cron?table=tbl-old&view=vew-old&record=rec-1&search=nightly",
 		"tbl-runs",
 	)
@@ -321,11 +322,11 @@ func TestCronBitableTableURLOverridesPreviousTableContext(t *testing.T) {
 }
 
 func TestParseCronCommandTextSupportsRunSubcommand(t *testing.T) {
-	parsed, err := parseCronCommandText("/cron run rec-task-1")
+	parsed, err := cronrt.ParseCommandText("/cron run rec-task-1")
 	if err != nil {
 		t.Fatalf("parseCronCommandText() error = %v, want nil", err)
 	}
-	if parsed.Mode != cronCommandRun || parsed.JobRecordID != "rec-task-1" {
+	if parsed.Mode != cronrt.CommandModeRun || parsed.JobRecordID != "rec-task-1" {
 		t.Fatalf("parsed = %#v, want run/rec-task-1", parsed)
 	}
 }

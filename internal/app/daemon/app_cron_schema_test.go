@@ -8,6 +8,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -20,13 +21,13 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable:          &cronBitableState{},
-		Jobs:             []cronJobState{},
+		Bitable:          &cronrt.BitableState{},
+		Jobs:             []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
@@ -84,10 +85,10 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 	api := newFlakyCronBootstrapBitableAPI()
 	api.failCreateField = false
-	api.tables["tbl-workspaces"] = &larkbitable.AppTable{TableId: stringPtr("tbl-workspaces"), Name: stringPtr(cronWorkspacesTableName)}
-	api.tables["tbl-tasks"] = &larkbitable.AppTable{TableId: stringPtr("tbl-tasks"), Name: stringPtr(cronTasksTableName)}
-	api.tables["tbl-runs"] = &larkbitable.AppTable{TableId: stringPtr("tbl-runs"), Name: stringPtr(cronRunsTableName)}
-	api.tables["tbl-meta"] = &larkbitable.AppTable{TableId: stringPtr("tbl-meta"), Name: stringPtr(cronMetaTableName)}
+	api.tables["tbl-workspaces"] = &larkbitable.AppTable{TableId: stringPtr("tbl-workspaces"), Name: stringPtr(cronrt.WorkspacesTableName)}
+	api.tables["tbl-tasks"] = &larkbitable.AppTable{TableId: stringPtr("tbl-tasks"), Name: stringPtr(cronrt.TasksTableName)}
+	api.tables["tbl-runs"] = &larkbitable.AppTable{TableId: stringPtr("tbl-runs"), Name: stringPtr(cronrt.RunsTableName)}
+	api.tables["tbl-meta"] = &larkbitable.AppTable{TableId: stringPtr("tbl-meta"), Name: stringPtr(cronrt.MetaTableName)}
 	api.fieldsByTable["tbl-workspaces"] = []*larkbitable.AppTableField{{
 		FieldId:   stringPtr("fld-workspaces-primary"),
 		FieldName: stringPtr("工作区名称"),
@@ -114,21 +115,21 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Workspaces: "tbl-workspaces",
 				Tasks:      "tbl-tasks",
 				Runs:       "tbl-runs",
 				Meta:       "tbl-meta",
 			},
 		},
-		Jobs: []cronJobState{},
+		Jobs: []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
@@ -168,10 +169,10 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 	api := newFlakyCronBootstrapBitableAPI()
 	api.failCreateField = false
-	api.tables["tbl-workspaces"] = &larkbitable.AppTable{TableId: stringPtr("tbl-workspaces"), Name: stringPtr(cronWorkspacesTableName)}
-	api.tables["tbl-tasks"] = &larkbitable.AppTable{TableId: stringPtr("tbl-tasks"), Name: stringPtr(cronTasksTableName)}
-	api.tables["tbl-runs"] = &larkbitable.AppTable{TableId: stringPtr("tbl-runs"), Name: stringPtr(cronRunsTableName)}
-	api.tables["tbl-meta"] = &larkbitable.AppTable{TableId: stringPtr("tbl-meta"), Name: stringPtr(cronMetaTableName)}
+	api.tables["tbl-workspaces"] = &larkbitable.AppTable{TableId: stringPtr("tbl-workspaces"), Name: stringPtr(cronrt.WorkspacesTableName)}
+	api.tables["tbl-tasks"] = &larkbitable.AppTable{TableId: stringPtr("tbl-tasks"), Name: stringPtr(cronrt.TasksTableName)}
+	api.tables["tbl-runs"] = &larkbitable.AppTable{TableId: stringPtr("tbl-runs"), Name: stringPtr(cronrt.RunsTableName)}
+	api.tables["tbl-meta"] = &larkbitable.AppTable{TableId: stringPtr("tbl-meta"), Name: stringPtr(cronrt.MetaTableName)}
 	api.fieldsByTable["tbl-workspaces"] = []*larkbitable.AppTableField{{
 		FieldId:   stringPtr("fld-workspaces-primary"),
 		FieldName: stringPtr("工作区名称"),
@@ -180,7 +181,7 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 	}}
 	api.fieldsByTable["tbl-tasks"] = []*larkbitable.AppTableField{
 		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
-		{FieldId: stringPtr("fld-tasks-git"), FieldName: stringPtr(cronTaskGitRepoInputField), Type: intPtr(15), IsPrimary: boolPtr(false)},
+		{FieldId: stringPtr("fld-tasks-git"), FieldName: stringPtr(cronrt.TaskGitRepoInputField), Type: intPtr(15), IsPrimary: boolPtr(false)},
 	}
 	api.fieldsByTable["tbl-runs"] = []*larkbitable.AppTableField{
 		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
@@ -193,21 +194,21 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Workspaces: "tbl-workspaces",
 				Tasks:      "tbl-tasks",
 				Runs:       "tbl-runs",
 				Meta:       "tbl-meta",
 			},
 		},
-		Jobs: []cronJobState{},
+		Jobs: []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
@@ -219,7 +220,7 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 	defer api.mu.Unlock()
 	found := false
 	for _, field := range api.fieldsByTable["tbl-tasks"] {
-		if field == nil || stringValue(field.FieldName) != cronTaskGitRepoInputField {
+		if field == nil || stringValue(field.FieldName) != cronrt.TaskGitRepoInputField {
 			continue
 		}
 		found = true
@@ -228,6 +229,6 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("missing field %s in task table", cronTaskGitRepoInputField)
+		t.Fatalf("missing field %s in task table", cronrt.TaskGitRepoInputField)
 	}
 }

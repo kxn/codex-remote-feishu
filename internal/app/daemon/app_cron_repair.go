@@ -6,36 +6,37 @@ import (
 	"strings"
 	"time"
 
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func (a *App) repairCronBitableForResolution(command control.DaemonCommand, resolution cronOwnerResolution) (string, error) {
+func (a *App) repairCronBitableForResolution(command control.DaemonCommand, resolution cronrt.OwnerResolution) (string, error) {
 	if cronOwnerNeedsRepairTakeover(resolution.Status) {
 		return a.repairCronBitableTakeoverNow(command, resolution)
 	}
-	if err := cronOwnerActionError("修复 Cron 配置表", resolution); err != nil {
+	if err := cronrt.OwnerActionError("修复 Cron 配置表", resolution); err != nil {
 		return "", err
 	}
 	return a.repairCronBitableWithBinding(command, resolution, resolution.Binding, resolution.PersistOwner, false)
 }
 
-func cronOwnerNeedsRepairTakeover(status cronOwnerStatus) bool {
+func cronOwnerNeedsRepairTakeover(status cronrt.OwnerStatus) bool {
 	switch status {
-	case cronOwnerStatusUnavailable, cronOwnerStatusMismatch, cronOwnerStatusUnresolved:
+	case cronrt.OwnerStatusUnavailable, cronrt.OwnerStatusMismatch, cronrt.OwnerStatusUnresolved:
 		return true
 	default:
 		return false
 	}
 }
 
-func (a *App) repairCronBitableTakeoverNow(command control.DaemonCommand, current cronOwnerResolution) (string, error) {
+func (a *App) repairCronBitableTakeoverNow(command control.DaemonCommand, current cronrt.OwnerResolution) (string, error) {
 	a.mu.Lock()
 	activeRuns := len(a.cronRuntime.runs)
 	a.mu.Unlock()
 	if activeRuns > 0 {
 		return "", fmt.Errorf("当前还有 %d 个运行中的 Cron 任务，暂时不能接管 Cron 配置", activeRuns)
 	}
-	target, err := a.resolveCronBootstrapOwner(cronOwnerResolution{
+	target, err := a.resolveCronBootstrapOwner(cronrt.OwnerResolution{
 		State:    current.State,
 		ScopeKey: current.ScopeKey,
 		Label:    current.Label,
@@ -43,10 +44,10 @@ func (a *App) repairCronBitableTakeoverNow(command control.DaemonCommand, curren
 	if err != nil {
 		return "", err
 	}
-	if target.Status != cronOwnerStatusBootstrap {
-		return "", cronOwnerActionError("接管 Cron 配置", target)
+	if target.Status != cronrt.OwnerStatusBootstrap {
+		return "", cronrt.OwnerActionError("接管 Cron 配置", target)
 	}
-	summary, err := a.repairCronBitableWithBinding(command, target, cronBitableState{}, target.PersistOwner, true)
+	summary, err := a.repairCronBitableWithBinding(command, target, cronrt.BitableState{}, target.PersistOwner, true)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +57,7 @@ func (a *App) repairCronBitableTakeoverNow(command control.DaemonCommand, curren
 	return summary, nil
 }
 
-func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolution cronOwnerResolution, previous cronBitableState, persistOwner *cronOwnerBinding, takeover bool) (string, error) {
+func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolution cronrt.OwnerResolution, previous cronrt.BitableState, persistOwner *cronrt.OwnerBinding, takeover bool) (string, error) {
 	api, err := a.cronBitableAPI(resolution.Gateway.GatewayID)
 	if err != nil {
 		return "", err
@@ -64,26 +65,26 @@ func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolu
 	a.mu.Lock()
 	workspaces := a.cronWorkspaceRowsLocked()
 	a.mu.Unlock()
-	persistProgress := func(next cronBitableState) error {
+	persistProgress := func(next cronrt.BitableState) error {
 		progressOwner := persistOwner
-		if !takeover && resolution.Status != cronOwnerStatusBootstrap {
+		if !takeover && resolution.Status != cronrt.OwnerStatusBootstrap {
 			progressOwner = nil
 		}
 		return a.persistCronBitableBindingProgress(resolution.ScopeKey, resolution.Label, next, progressOwner)
 	}
-	bootstrapCtx, cancelBootstrap := context.WithTimeout(context.Background(), cronBitableBootstrapTTL)
+	bootstrapCtx, cancelBootstrap := context.WithTimeout(context.Background(), cronrt.BitableBootstrapTTL)
 	defer cancelBootstrap()
 	updatedBinding, err := a.ensureCronBitableRemote(bootstrapCtx, api, previous, resolution.ScopeKey, resolution.Label, persistOwner, persistProgress)
 	if err != nil {
 		return "", err
 	}
-	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronBitableWorkspaceTTL)
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronrt.BitableWorkspaceTTL)
 	defer cancelWorkspace()
 	if _, err := a.syncCronWorkspaceTable(workspaceCtx, api, updatedBinding, workspaces); err != nil {
 		return "", err
 	}
 	var permissionWarning string
-	permissionCtx, cancelPermission := context.WithTimeout(context.Background(), cronBitablePermissionTTL)
+	permissionCtx, cancelPermission := context.WithTimeout(context.Background(), cronrt.BitablePermissionTTL)
 	defer cancelPermission()
 	if err := a.ensureCronUserPermission(permissionCtx, api, updatedBinding.AppToken, a.service.SurfaceActorUserID(command.SurfaceSessionID)); err != nil {
 		permissionWarning = "已跳过当前 surface 用户的编辑权限补齐：" + err.Error()
@@ -101,10 +102,10 @@ func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolu
 	stateValue.Bitable = &updatedBinding
 	stateValue.LastWorkspaceSyncAt = now
 	if persistOwner != nil {
-		applyCronOwnerBinding(stateValue, persistOwner)
+		cronrt.ApplyOwnerBinding(stateValue, persistOwner)
 	}
 	if takeover {
-		stateValue.Jobs = []cronJobState{}
+		stateValue.Jobs = []cronrt.JobState{}
 		stateValue.LastReloadAt = time.Time{}
 		stateValue.LastReloadSummary = ""
 		a.cronRuntime.nextScheduleScan = time.Time{}

@@ -9,31 +9,32 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 )
 
 type cronLaunchRequest struct {
-	Job             cronJobState
+	Job             cronrt.JobState
 	TriggeredAt     time.Time
 	InstanceID      string
 	DisplayName     string
-	WritebackTarget cronWritebackTarget
+	WritebackTarget cronrt.WritebackTarget
 	Runtime         HeadlessRuntimeConfig
 	RepoManager     *cronrepo.Manager
 }
 
 type cronPreparedRun struct {
-	Run cronRunState
+	Run cronrt.RunState
 	Env []string
 }
 
-func (a *App) newCronLaunchRequestLocked(job cronJobState, now time.Time) cronLaunchRequest {
+func (a *App) newCronLaunchRequestLocked(job cronrt.JobState, now time.Time) cronLaunchRequest {
 	runtimeSnapshot := a.headlessRuntime
 	runtimeSnapshot.BaseEnv = append([]string(nil), a.headlessRuntime.BaseEnv...)
 	runtimeSnapshot.LaunchArgs = append([]string(nil), a.headlessRuntime.LaunchArgs...)
 	return cronLaunchRequest{
-		Job:             cronNormalizeJobState(job),
+		Job:             cronrt.NormalizeJobState(job),
 		TriggeredAt:     now,
-		InstanceID:      cronInstanceIDForRun(job.RecordID, now),
+		InstanceID:      cronrt.InstanceIDForRun(job.RecordID, now),
 		DisplayName:     firstNonEmpty(strings.TrimSpace(job.Name), "cron"),
 		WritebackTarget: a.snapshotCronWritebackLocked(),
 		Runtime:         runtimeSnapshot,
@@ -99,16 +100,16 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 	if strings.TrimSpace(cfg.BinaryPath) == "" {
 		return cronPreparedRun{}, fmt.Errorf("headless binary 未配置，无法执行 Cron 任务")
 	}
-	job := cronNormalizeJobState(request.Job)
+	job := cronrt.NormalizeJobState(request.Job)
 
 	runDirectory := ""
 	runRoot := ""
-	sourceLabel := cronJobDisplaySource(job)
+	sourceLabel := cronrt.JobDisplaySource(job)
 	gitSourceKey := ""
 	gitRepoURL := ""
 	gitRef := ""
 	switch job.SourceType {
-	case cronJobSourceGitRepo:
+	case cronrt.JobSourceGitRepo:
 		spec := cronrepo.SourceSpec{
 			RawInput: job.GitRepoSourceInput,
 			RepoURL:  job.GitRepoURL,
@@ -141,7 +142,7 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 		"CODEX_REMOTE_INSTANCE_DISPLAY_NAME=cron:"+request.DisplayName,
 	)
 	return cronPreparedRun{
-		Run: cronRunState{
+		Run: cronrt.RunState{
 			RunID:           request.InstanceID,
 			InstanceID:      request.InstanceID,
 			GatewayID:       strings.TrimSpace(request.WritebackTarget.GatewayID),
@@ -157,35 +158,35 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 			GitRepoURL:      gitRepoURL,
 			GitRef:          gitRef,
 			Prompt:          strings.TrimSpace(job.Prompt),
-			TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
+			TimeoutMinutes:  cronrt.DefaultTimeoutMinutes(job.TimeoutMinutes),
 			TriggeredAt:     request.TriggeredAt,
 			Status:          "starting",
-			Buffers:         map[string]*cronItemBuffer{},
+			Buffers:         map[string]*cronrt.ItemBuffer{},
 		},
 		Env: env,
 	}, nil
 }
 
-func (a *App) recordCronImmediateResultWithTargetLocked(target cronWritebackTarget, job cronJobState, triggeredAt time.Time, status, errorMessage string) {
+func (a *App) recordCronImmediateResultWithTargetLocked(target cronrt.WritebackTarget, job cronrt.JobState, triggeredAt time.Time, status, errorMessage string) {
 	if !target.Valid() {
 		log.Printf("cron immediate result skipped: no writeback target job=%s status=%s", job.Name, status)
 		return
 	}
-	job = cronNormalizeJobState(job)
-	run := cronRunState{
-		RunID:           cronInstanceIDForRun(job.RecordID, triggeredAt),
-		InstanceID:      cronInstanceIDForRun(job.RecordID, triggeredAt),
+	job = cronrt.NormalizeJobState(job)
+	run := cronrt.RunState{
+		RunID:           cronrt.InstanceIDForRun(job.RecordID, triggeredAt),
+		InstanceID:      cronrt.InstanceIDForRun(job.RecordID, triggeredAt),
 		GatewayID:       target.GatewayID,
 		WritebackTarget: target,
 		JobRecordID:     strings.TrimSpace(job.RecordID),
 		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
 		SourceType:      job.SourceType,
-		SourceLabel:     cronJobDisplaySource(job),
+		SourceLabel:     cronrt.JobDisplaySource(job),
 		WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),
 		GitRepoURL:      strings.TrimSpace(job.GitRepoURL),
 		GitRef:          strings.TrimSpace(job.GitRef),
 		Prompt:          strings.TrimSpace(job.Prompt),
-		TimeoutMinutes:  cronDefaultTimeoutMinutes(job.TimeoutMinutes),
+		TimeoutMinutes:  cronrt.DefaultTimeoutMinutes(job.TimeoutMinutes),
 		TriggeredAt:     triggeredAt,
 		CompletedAt:     triggeredAt,
 		Status:          strings.TrimSpace(status),
@@ -194,14 +195,14 @@ func (a *App) recordCronImmediateResultWithTargetLocked(target cronWritebackTarg
 	go a.writeCronRunResultAsync(target, run)
 }
 
-func (a *App) cleanupCronRunResources(run cronRunState) {
-	run = cronRunState{
+func (a *App) cleanupCronRunResources(run cronrt.RunState) {
+	run = cronrt.RunState{
 		SourceType:   run.SourceType,
 		RunRoot:      strings.TrimSpace(run.RunRoot),
 		RunDirectory: strings.TrimSpace(run.RunDirectory),
 		GitSourceKey: strings.TrimSpace(run.GitSourceKey),
 	}
-	if run.SourceType != cronJobSourceGitRepo || run.RunRoot == "" || run.GitSourceKey == "" {
+	if run.SourceType != cronrt.JobSourceGitRepo || run.RunRoot == "" || run.GitSourceKey == "" {
 		return
 	}
 	manager := a.cronRuntime.repoManager

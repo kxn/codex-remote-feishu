@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -101,8 +102,8 @@ func TestHandleCronHelloReleasesAppLockDuringPromptSend(t *testing.T) {
 	sender := &reentrantAppLockRelaySender{app: app}
 	app.sendAgentCommand = sender.send
 
-	instanceID := cronInstancePrefix + "job-1"
-	app.cronRuntime.runs[instanceID] = &cronRunState{
+	instanceID := cronrt.InstancePrefix + "job-1"
+	app.cronRuntime.runs[instanceID] = &cronrt.RunState{
 		InstanceID:   instanceID,
 		WorkspaceKey: "/tmp/workspace",
 		Prompt:       "say hello",

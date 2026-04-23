@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -19,28 +20,28 @@ func TestCronRepairTakesOverBindingWhenOwnerUnavailable(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-2", "app-2")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-old",
 			AppURL:   "https://example.feishu.cn/base/app-old",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks-old",
 				Workspaces: "tbl-workspaces-old",
 				Runs:       "tbl-runs-old",
 				Meta:       "tbl-meta-old",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-stale",
 			Name:            "Stale",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 15,
 			WorkspaceKey:    "/tmp/project",
 			NextRunAt:       time.Now().Add(15 * time.Minute),

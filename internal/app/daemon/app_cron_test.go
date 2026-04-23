@@ -15,6 +15,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -64,12 +65,12 @@ func setCronGatewayLookup(app *App, values ...string) {
 		}
 		identities[gatewayID] = appID
 	}
-	app.cronRuntime.gatewayIdentityLookup = func(gatewayID string) (cronGatewayIdentity, bool, error) {
+	app.cronRuntime.gatewayIdentityLookup = func(gatewayID string) (cronrt.GatewayIdentity, bool, error) {
 		appID, ok := identities[strings.TrimSpace(gatewayID)]
 		if !ok {
-			return cronGatewayIdentity{}, false, nil
+			return cronrt.GatewayIdentity{}, false, nil
 		}
-		return cronGatewayIdentity{GatewayID: strings.TrimSpace(gatewayID), AppID: appID}, true, nil
+		return cronrt.GatewayIdentity{GatewayID: strings.TrimSpace(gatewayID), AppID: appID}, true, nil
 	}
 }
 
@@ -302,19 +303,19 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-task-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 5,
 			WorkspaceKey:    workspace,
 			Prompt:          "check CI",
@@ -356,13 +357,13 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	if len(app.cronRuntime.runs) != 1 {
 		t.Fatalf("cronRuns = %#v, want one active run", app.cronRuntime.runs)
 	}
-	active := app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")]
+	active := app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")]
 	if len(active) != 1 {
 		t.Fatalf("active cron runs = %#v, want one instance", active)
 	}
 	for instanceID := range active {
-		if !strings.HasPrefix(instanceID, cronInstancePrefix) {
-			t.Fatalf("active cron instance id = %q, want prefix %q", instanceID, cronInstancePrefix)
+		if !strings.HasPrefix(instanceID, cronrt.InstancePrefix) {
+			t.Fatalf("active cron instance id = %q, want prefix %q", instanceID, cronrt.InstancePrefix)
 		}
 	}
 	if app.cronRuntime.state.Jobs[0].NextRunAt.IsZero() || !app.cronRuntime.state.Jobs[0].NextRunAt.After(time.Now()) {
@@ -377,11 +378,11 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
@@ -389,8 +390,8 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
-	instanceID := cronInstanceIDForRun("rec-task-1", time.Now())
-	app.cronRuntime.runs[instanceID] = &cronRunState{
+	instanceID := cronrt.InstanceIDForRun("rec-task-1", time.Now())
+	app.cronRuntime.runs[instanceID] = &cronrt.RunState{
 		RunID:          instanceID,
 		InstanceID:     instanceID,
 		JobRecordID:    "rec-task-1",
@@ -401,7 +402,7 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 		TriggeredAt:    time.Now().UTC(),
 		PID:            4321,
 	}
-	app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{instanceID: {}}
+	app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{instanceID: {}}
 
 	var commands []agentproto.Command
 	app.sendAgentCommand = func(target string, command agentproto.Command) error {
@@ -470,19 +471,19 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:        "rec-task-1",
 			Name:            "Nightly",
-			ScheduleType:    cronScheduleTypeInterval,
+			ScheduleType:    cronrt.ScheduleTypeInterval,
 			IntervalMinutes: 5,
 			WorkspaceKey:    workspace,
 			Prompt:          "check CI",
@@ -491,7 +492,7 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 		}},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-	app.cronRuntime.runs["inst-running"] = &cronRunState{
+	app.cronRuntime.runs["inst-running"] = &cronrt.RunState{
 		InstanceID:     "inst-running",
 		JobRecordID:    "rec-task-1",
 		JobName:        "Nightly",
@@ -499,7 +500,7 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 		TriggeredAt:    time.Now().Add(-2 * time.Minute),
 		TimeoutMinutes: 15,
 	}
-	app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
+	app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{"inst-running": {}}
 	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
 		t.Fatalf("scheduler must not launch another hidden run while previous run is active")
 		return 0, nil
@@ -527,19 +528,19 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
-	instanceID := cronInstanceIDForRun("rec-task-1", time.Now().Add(-time.Hour))
-	app.cronRuntime.runs[instanceID] = &cronRunState{
+	instanceID := cronrt.InstanceIDForRun("rec-task-1", time.Now().Add(-time.Hour))
+	app.cronRuntime.runs[instanceID] = &cronrt.RunState{
 		InstanceID:     instanceID,
 		JobRecordID:    "rec-task-1",
 		JobName:        "Nightly",
@@ -549,7 +550,7 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 		TimeoutMinutes: 30,
 		PID:            9876,
 	}
-	app.cronRuntime.jobActiveRuns[cronJobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{instanceID: {}}
+	app.cronRuntime.jobActiveRuns[cronrt.JobActiveKey("rec-task-1", "Nightly")] = map[string]struct{}{instanceID: {}}
 	var commands []agentproto.Command
 	app.sendAgentCommand = func(target string, command agentproto.Command) error {
 		if target != instanceID {
@@ -583,15 +584,15 @@ func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.syncInFlight = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			AppURL:   "https://example.feishu.cn/base/app-cron",
 		},
@@ -633,7 +634,7 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 				Fields: map[string]any{
 					"任务名":    "Nightly",
 					"启用":     true,
-					"调度类型":   cronScheduleTypeInterval,
+					"调度类型":   cronrt.ScheduleTypeInterval,
 					"间隔":     "15分钟",
 					"工作区":    []any{"rec-workspace-1"},
 					"提示词":    "check CI",
@@ -647,17 +648,17 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Workspaces: "tbl-workspaces",
 			},
@@ -690,14 +691,14 @@ func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
 			"tbl-tasks": {{
 				RecordId: stringPtr("rec-task-git"),
 				Fields: map[string]any{
-					"任务名":                     "Git Nightly",
-					"启用":                      true,
-					cronTaskSourceTypeField:   cronTaskSourceGitRepoText,
-					cronTaskGitRepoInputField: repoURL + "#ref=" + ref,
-					"调度类型":                    cronScheduleTypeInterval,
-					"间隔":                      "15分钟",
-					"提示词":                     "check repo",
-					"超时（分钟）":                  "20",
+					"任务名":                        "Git Nightly",
+					"启用":                         true,
+					cronrt.TaskSourceTypeField:   cronrt.TaskSourceGitRepoText,
+					cronrt.TaskGitRepoInputField: repoURL + "#ref=" + ref,
+					"调度类型":                       cronrt.ScheduleTypeInterval,
+					"间隔":                         "15分钟",
+					"提示词":                        "check repo",
+					"超时（分钟）":                     "20",
 				},
 			}},
 		},
@@ -706,17 +707,17 @@ func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Workspaces: "tbl-workspaces",
 			},
@@ -736,8 +737,8 @@ func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
 		t.Fatalf("jobs = %#v, want one git job", app.cronRuntime.state.Jobs)
 	}
 	job := app.cronRuntime.state.Jobs[0]
-	if job.SourceType != cronJobSourceGitRepo {
-		t.Fatalf("source type = %q, want %q", job.SourceType, cronJobSourceGitRepo)
+	if job.SourceType != cronrt.JobSourceGitRepo {
+		t.Fatalf("source type = %q, want %q", job.SourceType, cronrt.JobSourceGitRepo)
 	}
 	if job.GitRepoSourceInput != repoURL+"#ref="+ref || job.GitRepoURL != repoURL || job.GitRef != ref {
 		t.Fatalf("unexpected git source fields: %#v", job)
@@ -760,22 +761,22 @@ func TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel(t *testing.T
 		},
 	})
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks",
 				Runs:  "tbl-runs",
 			},
 		},
-		Jobs: []cronJobState{{
+		Jobs: []cronrt.JobState{{
 			RecordID:           "rec-task-git",
 			Name:               "Git Nightly",
-			ScheduleType:       cronScheduleTypeInterval,
+			ScheduleType:       cronrt.ScheduleTypeInterval,
 			IntervalMinutes:    5,
-			SourceType:         cronJobSourceGitRepo,
+			SourceType:         cronrt.JobSourceGitRepo,
 			GitRepoSourceInput: repoURL + "#ref=" + ref,
 			GitRepoURL:         repoURL,
 			GitRef:             ref,
@@ -802,7 +803,7 @@ func TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel(t *testing.T
 	app.mu.Lock()
 	app.maybeScheduleCronJobsLocked(time.Now())
 	var instanceID string
-	var runCopy cronRunState
+	var runCopy cronrt.RunState
 	for id, run := range app.cronRuntime.runs {
 		instanceID = id
 		runCopy = *run
@@ -821,7 +822,7 @@ func TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel(t *testing.T
 	if _, err := os.Stat(filepath.Join(capturedWorkDir, "README.md")); err != nil {
 		t.Fatalf("materialized worktree missing repo file: %v", err)
 	}
-	if runCopy.SourceType != cronJobSourceGitRepo || runCopy.SourceLabel == "" || runCopy.RunRoot == "" || runCopy.GitSourceKey == "" {
+	if runCopy.SourceType != cronrt.JobSourceGitRepo || runCopy.SourceLabel == "" || runCopy.RunRoot == "" || runCopy.GitSourceKey == "" {
 		t.Fatalf("unexpected run state: %#v", runCopy)
 	}
 
@@ -874,7 +875,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":    "Keep",
 						"启用":     true,
-						"调度类型":   cronScheduleTypeInterval,
+						"调度类型":   cronrt.ScheduleTypeInterval,
 						"间隔":     "15分钟",
 						"工作区":    []any{"rec-workspace-1"},
 						"提示词":    "keep running",
@@ -886,7 +887,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Add",
 						"启用":   true,
-						"调度类型": cronScheduleTypeDaily,
+						"调度类型": cronrt.ScheduleTypeDaily,
 						"调度时间": "09:30",
 						"工作区":  []any{"rec-workspace-1"},
 						"提示词":  "daily check",
@@ -897,7 +898,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Disable",
 						"启用":   false,
-						"调度类型": cronScheduleTypeInterval,
+						"调度类型": cronrt.ScheduleTypeInterval,
 						"间隔":   "30分钟",
 						"工作区":  []any{"rec-workspace-1"},
 						"提示词":  "disabled for now",
@@ -908,7 +909,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Broken",
 						"启用":   true,
-						"调度类型": cronScheduleTypeInterval,
+						"调度类型": cronrt.ScheduleTypeInterval,
 						"间隔":   "15分钟",
 						"工作区":  []any{"rec-workspace-1"},
 					},
@@ -920,26 +921,26 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Workspaces: "tbl-workspaces",
 			},
 		},
-		Jobs: []cronJobState{
-			{RecordID: "rec-keep", Name: "Keep", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
-			{RecordID: "rec-disable", Name: "Disable", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 30, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(30 * time.Minute)},
-			{RecordID: "rec-delete", Name: "Delete", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 10, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(10 * time.Minute)},
-			{RecordID: "rec-error", Name: "Broken", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+		Jobs: []cronrt.JobState{
+			{RecordID: "rec-keep", Name: "Keep", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+			{RecordID: "rec-disable", Name: "Disable", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 30, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(30 * time.Minute)},
+			{RecordID: "rec-delete", Name: "Delete", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 10, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(10 * time.Minute)},
+			{RecordID: "rec-error", Name: "Broken", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
 		},
 	}
 	app.cronRuntime.bitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
@@ -956,10 +957,10 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 	if len(result.Loaded) != 2 {
 		t.Fatalf("loaded = %#v, want 2", result.Loaded)
 	}
-	if result.Loaded[0].RecordID != "rec-keep" || result.Loaded[0].ChangeKind != cronReloadTaskChangeKept {
+	if result.Loaded[0].RecordID != "rec-keep" || result.Loaded[0].ChangeKind != cronrt.ReloadTaskChangeKept {
 		t.Fatalf("expected kept loaded item first, got %#v", result.Loaded[0])
 	}
-	if result.Loaded[1].RecordID != "rec-add" || result.Loaded[1].ChangeKind != cronReloadTaskChangeAdded {
+	if result.Loaded[1].RecordID != "rec-add" || result.Loaded[1].ChangeKind != cronrt.ReloadTaskChangeAdded {
 		t.Fatalf("expected added loaded item second, got %#v", result.Loaded[1])
 	}
 	if len(result.Disabled) != 1 || result.Disabled[0].RecordID != "rec-disable" {
@@ -968,7 +969,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 	if len(result.Errors) != 1 {
 		t.Fatalf("errors = %#v, want 1", result.Errors)
 	}
-	if result.Errors[0].RecordID != "rec-error" || result.Errors[0].FieldName != "提示词" || result.Errors[0].TableName != cronTasksTableName || result.Errors[0].RowNumber != 4 {
+	if result.Errors[0].RecordID != "rec-error" || result.Errors[0].FieldName != "提示词" || result.Errors[0].TableName != cronrt.TasksTableName || result.Errors[0].RowNumber != 4 {
 		t.Fatalf("unexpected structured error: %#v", result.Errors[0])
 	}
 	if len(result.Stopped) != 3 {
@@ -1008,7 +1009,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Keep",
 						"启用":   true,
-						"调度类型": cronScheduleTypeInterval,
+						"调度类型": cronrt.ScheduleTypeInterval,
 						"间隔":   "15分钟",
 						"工作区":  []any{"rec-workspace-1"},
 						"提示词":  "keep running",
@@ -1019,7 +1020,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Disable",
 						"启用":   false,
-						"调度类型": cronScheduleTypeDaily,
+						"调度类型": cronrt.ScheduleTypeDaily,
 						"调度时间": "09:30",
 						"工作区":  []any{"rec-workspace-1"},
 						"提示词":  "disabled for now",
@@ -1030,7 +1031,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 					Fields: map[string]any{
 						"任务名":  "Broken",
 						"启用":   true,
-						"调度类型": cronScheduleTypeInterval,
+						"调度类型": cronrt.ScheduleTypeInterval,
 						"间隔":   "15分钟",
 						"工作区":  []any{"rec-workspace-1"},
 					},
@@ -1042,26 +1043,26 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks:      "tbl-tasks",
 				Workspaces: "tbl-workspaces",
 			},
 		},
-		Jobs: []cronJobState{
-			{RecordID: "rec-keep", Name: "Keep", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
-			{RecordID: "rec-disable", Name: "Disable", ScheduleType: cronScheduleTypeDaily, DailyHour: 9, DailyMinute: 30, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(24 * time.Hour)},
-			{RecordID: "rec-delete", Name: "Delete", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 10, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(10 * time.Minute)},
-			{RecordID: "rec-error", Name: "Broken", ScheduleType: cronScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+		Jobs: []cronrt.JobState{
+			{RecordID: "rec-keep", Name: "Keep", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
+			{RecordID: "rec-disable", Name: "Disable", ScheduleType: cronrt.ScheduleTypeDaily, DailyHour: 9, DailyMinute: 30, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(24 * time.Hour)},
+			{RecordID: "rec-delete", Name: "Delete", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 10, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(10 * time.Minute)},
+			{RecordID: "rec-error", Name: "Broken", ScheduleType: cronrt.ScheduleTypeInterval, IntervalMinutes: 15, WorkspaceKey: "/tmp/project", NextRunAt: time.Now().Add(15 * time.Minute)},
 		},
 	}
 	app.cronRuntime.bitableFactory = func(gatewayID string) (feishu.BitableAPI, error) {
@@ -1107,13 +1108,13 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 	setCronGatewayLookup(app, "gateway-1", "app-1", "gateway-2", "app-2")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
+	app.cronRuntime.state = &cronrt.StateFile{
 		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
-			Tables: cronTableIDs{
+			Tables: cronrt.TableIDs{
 				Tasks: "tbl-tasks-1",
 				Runs:  "tbl-runs-1",
 			},
@@ -1130,15 +1131,15 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 		}
 	}
 	instanceID := "inst-cron-frozen-target"
-	app.cronRuntime.runs[instanceID] = &cronRunState{
+	app.cronRuntime.runs[instanceID] = &cronrt.RunState{
 		RunID:      instanceID,
 		InstanceID: instanceID,
 		GatewayID:  "gateway-1",
-		WritebackTarget: cronWritebackTarget{
+		WritebackTarget: cronrt.WritebackTarget{
 			GatewayID: "gateway-1",
-			Bitable: cronBitableState{
+			Bitable: cronrt.BitableState{
 				AppToken: "app-1",
-				Tables: cronTableIDs{
+				Tables: cronrt.TableIDs{
 					Tasks: "tbl-tasks-1",
 					Runs:  "tbl-runs-1",
 				},
@@ -1156,9 +1157,9 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 	app.cronRuntime.state.OwnerGatewayID = "gateway-2"
 	app.cronRuntime.state.OwnerAppID = "app-2"
 	app.cronRuntime.state.GatewayID = "gateway-2"
-	app.cronRuntime.state.Bitable = &cronBitableState{
+	app.cronRuntime.state.Bitable = &cronrt.BitableState{
 		AppToken: "app-2",
-		Tables: cronTableIDs{
+		Tables: cronrt.TableIDs{
 			Tasks: "tbl-tasks-2",
 			Runs:  "tbl-runs-2",
 		},
@@ -1184,7 +1185,7 @@ func TestCronJobFromRecordParsesLinkedWorkspaceValues(t *testing.T) {
 		Fields: map[string]any{
 			"任务名":  "Nightly",
 			"启用":   true,
-			"调度类型": cronScheduleTypeInterval,
+			"调度类型": cronrt.ScheduleTypeInterval,
 			"间隔":   "15分钟",
 			"工作区": []any{
 				map[string]any{
@@ -1195,7 +1196,7 @@ func TestCronJobFromRecordParsesLinkedWorkspaceValues(t *testing.T) {
 			"超时（分钟）": "20",
 		},
 	}
-	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+	job, skip, err := cronJobFromRecord(record, map[string]cronrt.WorkspaceRow{
 		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
 	}, now)
 	if err != nil {
@@ -1219,13 +1220,13 @@ func TestCronJobFromRecordParsesDailyClockField(t *testing.T) {
 		Fields: map[string]any{
 			"任务名":  "Morning",
 			"启用":   true,
-			"调度类型": cronScheduleTypeDaily,
+			"调度类型": cronrt.ScheduleTypeDaily,
 			"调度时间": "09:30",
 			"工作区":  []any{"rec-workspace-1"},
 			"提示词":  "daily check",
 		},
 	}
-	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+	job, skip, err := cronJobFromRecord(record, map[string]cronrt.WorkspaceRow{
 		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
 	}, now)
 	if err != nil {
@@ -1246,14 +1247,14 @@ func TestCronJobFromRecordSupportsLegacyDailyHourMinuteFields(t *testing.T) {
 		Fields: map[string]any{
 			"任务名":  "Legacy Daily",
 			"启用":   true,
-			"调度类型": cronScheduleTypeDaily,
+			"调度类型": cronrt.ScheduleTypeDaily,
 			"每天-时": 7,
 			"每天-分": 5,
 			"工作区":  []any{"rec-workspace-1"},
 			"提示词":  "daily check",
 		},
 	}
-	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+	job, skip, err := cronJobFromRecord(record, map[string]cronrt.WorkspaceRow{
 		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
 	}, now)
 	if err != nil {
@@ -1274,13 +1275,13 @@ func TestCronJobFromRecordSupportsLegacySelectEnabledValue(t *testing.T) {
 		Fields: map[string]any{
 			"任务名":  "Legacy",
 			"启用":   "启用",
-			"调度类型": cronScheduleTypeInterval,
+			"调度类型": cronrt.ScheduleTypeInterval,
 			"间隔":   "10分钟",
 			"工作区":  []any{"rec-workspace-1"},
 			"提示词":  "check CI",
 		},
 	}
-	job, skip, err := cronJobFromRecord(record, map[string]cronWorkspaceRow{
+	job, skip, err := cronJobFromRecord(record, map[string]cronrt.WorkspaceRow{
 		"rec-workspace-1": {Key: "/tmp/project", Name: "project", Status: "可用"},
 	}, now)
 	if err != nil {
@@ -1629,13 +1630,13 @@ func TestEnsureCronBitablePersistsProgressAndReusesRemoteObjectsAfterTimeout(t *
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable:          &cronBitableState{},
-		Jobs:             []cronJobState{},
+		Bitable:          &cronrt.BitableState{},
+		Jobs:             []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
@@ -1692,15 +1693,15 @@ func TestEnsureCronBitableRecoversLegacyPartialStateWithFreshTasksTable(t *testi
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable: &cronBitableState{
+		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
-		Jobs: []cronJobState{},
+		Jobs: []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 
@@ -1732,13 +1733,13 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
-	app.cronRuntime.state = &cronStateFile{
-		SchemaVersion:    cronStateSchemaVersion,
+	app.cronRuntime.state = &cronrt.StateFile{
+		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
 		GatewayID:        "gateway-1",
-		Bitable:          &cronBitableState{},
-		Jobs:             []cronJobState{},
+		Bitable:          &cronrt.BitableState{},
+		Jobs:             []cronrt.JobState{},
 	}
 	app.cronRuntime.bitableFactory = func(string) (feishu.BitableAPI, error) { return api, nil }
 

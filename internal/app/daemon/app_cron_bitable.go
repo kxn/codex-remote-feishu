@@ -13,6 +13,7 @@ import (
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -21,14 +22,14 @@ const cronBitablePermissionDocType = "bitable"
 const cronBitablePermissionPermEdit = "edit"
 
 func (a *App) repairCronBitableNow(command control.DaemonCommand) (string, error) {
-	resolution, err := a.resolveCronOwner(command, cronOwnerResolveOptions{AllowCreate: true, CreateStateIfEmpty: true})
+	resolution, err := a.resolveCronOwner(command, cronrt.OwnerResolveOptions{AllowCreate: true, CreateStateIfEmpty: true})
 	if err != nil {
 		return "", err
 	}
 	return a.repairCronBitableForResolution(command, resolution)
 }
 
-func (a *App) persistCronBitableBindingProgress(scopeKey, label string, binding cronBitableState, owner *cronOwnerBinding) error {
+func (a *App) persistCronBitableBindingProgress(scopeKey, label string, binding cronrt.BitableState, owner *cronrt.OwnerBinding) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -43,68 +44,68 @@ func (a *App) persistCronBitableBindingProgress(scopeKey, label string, binding 
 		stateValue.InstanceLabel = label
 	}
 	if owner != nil {
-		applyCronOwnerBinding(stateValue, owner)
+		cronrt.ApplyOwnerBinding(stateValue, owner)
 	}
 	stateValue.Bitable = &binding
 	return a.writeCronStateLocked()
 }
 
-func (a *App) reloadCronJobsResultNow(command control.DaemonCommand) (cronReloadResult, error) {
-	resolution, err := a.resolveCronOwner(command, cronOwnerResolveOptions{CreateStateIfEmpty: true})
+func (a *App) reloadCronJobsResultNow(command control.DaemonCommand) (cronrt.ReloadResult, error) {
+	resolution, err := a.resolveCronOwner(command, cronrt.OwnerResolveOptions{CreateStateIfEmpty: true})
 	if err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
-	if err := cronOwnerActionError("重新加载 Cron 配置", resolution); err != nil {
-		return cronReloadResult{}, err
+	if err := cronrt.OwnerActionError("重新加载 Cron 配置", resolution); err != nil {
+		return cronrt.ReloadResult{}, err
 	}
 	if resolution.State == nil || resolution.State.Bitable == nil {
-		return cronReloadResult{}, fmt.Errorf("Cron 多维表格还没有初始化完成")
+		return cronrt.ReloadResult{}, fmt.Errorf("Cron 多维表格还没有初始化完成")
 	}
 	api, err := a.cronBitableAPI(resolution.Gateway.GatewayID)
 	if err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
-	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronReloadWorkspaceTTL)
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), cronrt.ReloadWorkspaceTTL)
 	defer cancelWorkspace()
 	workspacesByRecord, err := a.loadCronWorkspaceIndex(workspaceCtx, api, resolution.State.Bitable)
 	if err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
-	tasksCtx, cancelTasks := context.WithTimeout(context.Background(), cronReloadTasksTTL)
+	tasksCtx, cancelTasks := context.WithTimeout(context.Background(), cronrt.ReloadTasksTTL)
 	defer cancelTasks()
 	// Fetch all fields so reload stays compatible while task-table schema evolves.
 	records, err := api.ListRecords(tasksCtx, resolution.State.Bitable.AppToken, resolution.State.Bitable.Tables.Tasks, nil)
 	if err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
 
-	cronZone := cronConfiguredTimeZone(resolution.State)
-	now := cronSchedulerTimeIn(time.Now().UTC(), cronZone)
+	cronZone := cronrt.ConfiguredTimeZone(resolution.State)
+	now := cronrt.SchedulerTimeIn(time.Now().UTC(), cronZone)
 	a.mu.Lock()
 	stateValue, err := a.loadCronStateLocked(true)
 	if err != nil {
 		a.mu.Unlock()
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
-	previousJobs := append([]cronJobState(nil), stateValue.Jobs...)
+	previousJobs := append([]cronrt.JobState(nil), stateValue.Jobs...)
 	a.mu.Unlock()
 
-	result := cronBuildReloadResult(records, workspacesByRecord, now, previousJobs, cronZone)
+	result := cronrt.BuildReloadResult(records, workspacesByRecord, now, previousJobs, cronZone)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	stateValue, err = a.loadCronStateLocked(true)
 	if err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
 	stateValue.Jobs = result.Jobs
 	if resolution.PersistOwner != nil {
-		applyCronOwnerBinding(stateValue, resolution.PersistOwner)
+		cronrt.ApplyOwnerBinding(stateValue, resolution.PersistOwner)
 	}
 	stateValue.LastReloadAt = now
 	stateValue.LastReloadSummary = result.CompactSummary()
 	a.cronRuntime.nextScheduleScan = time.Time{}
 	if err := a.writeCronStateLocked(); err != nil {
-		return cronReloadResult{}, err
+		return cronrt.ReloadResult{}, err
 	}
 	return result, nil
 }
@@ -117,29 +118,29 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 	return result.CompactSummary(), nil
 }
 
-func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI, previous cronBitableState, scopeKey, label string, owner *cronOwnerBinding, persist func(cronBitableState) error) (cronBitableState, error) {
+func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI, previous cronrt.BitableState, scopeKey, label string, owner *cronrt.OwnerBinding, persist func(cronrt.BitableState) error) (cronrt.BitableState, error) {
 	binding := previous
-	desiredTimeZone := firstNonEmpty(cronNormalizeTimeZone(binding.TimeZone), cronSystemTimeZone())
+	desiredTimeZone := firstNonEmpty(cronrt.NormalizeTimeZone(binding.TimeZone), cronrt.SystemTimeZone())
 	var app *larkbitable.App
 	var err error
 	if strings.TrimSpace(binding.AppToken) != "" {
 		app, err = api.GetApp(ctx, binding.AppToken)
 		if err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	} else {
-		app, err = api.CreateApp(ctx, cronAppTitle(label), desiredTimeZone)
+		app, err = api.CreateApp(ctx, cronrt.AppTitle(label), desiredTimeZone)
 		if err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
 	if app == nil || strings.TrimSpace(stringValue(app.AppToken)) == "" {
-		return cronBitableState{}, fmt.Errorf("缺少 Cron 多维表格 app token")
+		return cronrt.BitableState{}, fmt.Errorf("缺少 Cron 多维表格 app token")
 	}
 	binding.AppToken = stringValue(app.AppToken)
 	binding.AppURL = firstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(stringValue(app.Url)))
 	binding.TimeZone = firstNonEmpty(
-		cronNormalizeTimeZone(stringValue(app.TimeZone)),
+		cronrt.NormalizeTimeZone(stringValue(app.TimeZone)),
 		desiredTimeZone,
 	)
 	binding.DefaultTable = firstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
@@ -148,64 +149,64 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 	}
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
 
 	tables, err := api.ListTables(ctx, binding.AppToken)
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	byID, byName := cronIndexTables(tables)
-	binding.Tables.Tasks, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Tasks, cronTasksTableName, "任务名", "")
+	binding.Tables.Tasks, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Tasks, cronrt.TasksTableName, "任务名", "")
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
-	delete(byName, cronTasksTableName)
-	binding.Tables.Workspaces, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Workspaces, cronWorkspacesTableName, "工作区名称", "")
+	delete(byName, cronrt.TasksTableName)
+	binding.Tables.Workspaces, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Workspaces, cronrt.WorkspacesTableName, "工作区名称", "")
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
-	binding.Tables.Runs, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Runs, cronRunsTableName, "任务名", "")
+	binding.Tables.Runs, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Runs, cronrt.RunsTableName, "任务名", "")
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
-	binding.Tables.Meta, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Meta, cronMetaTableName, "名称", "")
+	binding.Tables.Meta, err = a.ensureCronNamedTable(ctx, api, binding.AppToken, byID, byName, binding.Tables.Meta, cronrt.MetaTableName, "名称", "")
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
 	if err := a.ensureCronTableSchemas(ctx, api, binding, scopeKey, label, owner); err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	metaRecordID, err := a.ensureCronMetaRecord(ctx, api, binding, scopeKey, label, owner)
 	if err != nil {
-		return cronBitableState{}, err
+		return cronrt.BitableState{}, err
 	}
 	binding.MetaRecordID = metaRecordID
 	binding.LastVerified = time.Now().UTC()
 	if persist != nil {
 		if err := persist(binding); err != nil {
-			return cronBitableState{}, err
+			return cronrt.BitableState{}, err
 		}
 	}
 	return binding, nil
@@ -281,20 +282,20 @@ func (a *App) ensureCronPrimaryFieldName(ctx context.Context, api feishu.Bitable
 	return nil
 }
 
-func (a *App) ensureCronTableSchemas(ctx context.Context, api feishu.BitableAPI, binding cronBitableState, scopeKey, label string, owner *cronOwnerBinding) error {
-	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Workspaces, []cronFieldSpec{
+func (a *App) ensureCronTableSchemas(ctx context.Context, api feishu.BitableAPI, binding cronrt.BitableState, scopeKey, label string, owner *cronrt.OwnerBinding) error {
+	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Workspaces, []cronrt.FieldSpec{
 		{Name: "工作区键", Type: 1},
 		{Name: "当前状态", Type: 1},
 	}); err != nil {
 		return err
 	}
-	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Tasks, cronTaskFieldSpecs(binding.Tables.Workspaces)); err != nil {
+	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Tasks, cronrt.TaskFieldSpecs(binding.Tables.Workspaces)); err != nil {
 		return err
 	}
-	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Runs, []cronFieldSpec{
-		{Name: "触发时间", Type: 5, Property: cronDateTimeFieldProperty()},
-		{Name: "开始时间", Type: 5, Property: cronDateTimeFieldProperty()},
-		{Name: "结束时间", Type: 5, Property: cronDateTimeFieldProperty()},
+	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Runs, []cronrt.FieldSpec{
+		{Name: "触发时间", Type: 5, Property: cronrt.DateTimeFieldProperty()},
+		{Name: "开始时间", Type: 5, Property: cronrt.DateTimeFieldProperty()},
+		{Name: "结束时间", Type: 5, Property: cronrt.DateTimeFieldProperty()},
 		{Name: "状态", Type: 1},
 		{Name: "耗时（秒）", Type: 2},
 		{Name: "工作区", Type: 1},
@@ -304,14 +305,14 @@ func (a *App) ensureCronTableSchemas(ctx context.Context, api feishu.BitableAPI,
 	}); err != nil {
 		return err
 	}
-	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Meta, []cronFieldSpec{
+	if err := a.ensureCronFields(ctx, api, binding.AppToken, binding.Tables.Meta, []cronrt.FieldSpec{
 		{Name: "schema_version", Type: 2},
 		{Name: "instance_scope_key", Type: 1},
 		{Name: "instance_label", Type: 1},
-		{Name: "created_at", Type: 5, Property: cronDateTimeFieldProperty()},
+		{Name: "created_at", Type: 5, Property: cronrt.DateTimeFieldProperty()},
 		{Name: "owner_gateway_id", Type: 1},
 		{Name: "owner_app_id", Type: 1},
-		{Name: "owner_bound_at", Type: 5, Property: cronDateTimeFieldProperty()},
+		{Name: "owner_bound_at", Type: 5, Property: cronrt.DateTimeFieldProperty()},
 	}); err != nil {
 		return err
 	}
@@ -321,7 +322,7 @@ func (a *App) ensureCronTableSchemas(ctx context.Context, api feishu.BitableAPI,
 	return nil
 }
 
-func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appToken, tableID string, specs []cronFieldSpec) error {
+func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appToken, tableID string, specs []cronrt.FieldSpec) error {
 	fields, err := api.ListFields(ctx, appToken, tableID)
 	if err != nil {
 		return err
@@ -365,14 +366,14 @@ func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appTo
 	return nil
 }
 
-func cronFieldNeedsSchemaUpdate(spec cronFieldSpec, field *larkbitable.AppTableField) bool {
+func cronFieldNeedsSchemaUpdate(spec cronrt.FieldSpec, field *larkbitable.AppTableField) bool {
 	if field == nil {
 		return false
 	}
 	if field.Type == nil {
 		return true
 	}
-	if !cronFieldTypeMatches(spec, *field.Type) {
+	if !cronrt.FieldTypeMatches(spec, *field.Type) {
 		return true
 	}
 	if spec.Type == 18 && !cronFieldLinkTableMatches(spec, field) {
@@ -381,7 +382,7 @@ func cronFieldNeedsSchemaUpdate(spec cronFieldSpec, field *larkbitable.AppTableF
 	return cronFieldNeedsPropertyUpdate(spec, field)
 }
 
-func cronFieldLinkTableMatches(spec cronFieldSpec, field *larkbitable.AppTableField) bool {
+func cronFieldLinkTableMatches(spec cronrt.FieldSpec, field *larkbitable.AppTableField) bool {
 	if spec.Type != 18 {
 		return true
 	}
@@ -394,7 +395,7 @@ func cronFieldLinkTableMatches(spec cronFieldSpec, field *larkbitable.AppTableFi
 	return strings.TrimSpace(stringValue(field.Property.TableId)) == strings.TrimSpace(stringValue(spec.Property.TableId))
 }
 
-func cronFieldNeedsPropertyUpdate(spec cronFieldSpec, field *larkbitable.AppTableField) bool {
+func cronFieldNeedsPropertyUpdate(spec cronrt.FieldSpec, field *larkbitable.AppTableField) bool {
 	if field == nil {
 		return false
 	}
@@ -413,22 +414,22 @@ func cronFieldDateFormatter(property *larkbitable.AppTableFieldProperty) *string
 	return property.DateFormatter
 }
 
-func (a *App) ensureCronMetaRecord(ctx context.Context, api feishu.BitableAPI, binding cronBitableState, scopeKey, label string, owner *cronOwnerBinding) (string, error) {
+func (a *App) ensureCronMetaRecord(ctx context.Context, api feishu.BitableAPI, binding cronrt.BitableState, scopeKey, label string, owner *cronrt.OwnerBinding) (string, error) {
 	records, err := api.ListRecords(ctx, binding.AppToken, binding.Tables.Meta, []string{"名称", "schema_version", "instance_scope_key", "instance_label", "created_at", "owner_gateway_id", "owner_app_id", "owner_bound_at"})
 	if err != nil {
 		return "", err
 	}
 	fields := map[string]any{
 		"名称":                 "当前实例",
-		"schema_version":     cronStateSchemaVersion,
+		"schema_version":     cronrt.StateSchemaVersion,
 		"instance_scope_key": scopeKey,
 		"instance_label":     label,
-		"created_at":         cronMilliseconds(binding.CreatedAt),
+		"created_at":         cronrt.Milliseconds(binding.CreatedAt),
 	}
 	if owner != nil {
 		fields["owner_gateway_id"] = strings.TrimSpace(owner.GatewayID)
 		fields["owner_app_id"] = strings.TrimSpace(owner.AppID)
-		fields["owner_bound_at"] = cronMilliseconds(owner.BoundAt)
+		fields["owner_bound_at"] = cronrt.Milliseconds(owner.BoundAt)
 	}
 	for _, record := range records {
 		if record == nil {
@@ -465,7 +466,7 @@ func (a *App) ensureCronUserPermission(ctx context.Context, api feishu.BitableAP
 		return err
 	}
 	member, exists := existing[key]
-	if exists && cronPermissionSatisfies(member.Perm, cronBitablePermissionPermEdit) {
+	if exists && cronrt.PermissionSatisfies(member.Perm, cronBitablePermissionPermEdit) {
 		return nil
 	}
 	if exists {
@@ -474,7 +475,7 @@ func (a *App) ensureCronUserPermission(ctx context.Context, api feishu.BitableAP
 	return api.GrantPermission(ctx, appToken, cronBitablePermissionDocType, memberType, strings.TrimSpace(actorUserID), principalType, cronBitablePermissionPermEdit)
 }
 
-func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI, binding cronBitableState, rows []cronWorkspaceRow) (map[string]string, error) {
+func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI, binding cronrt.BitableState, rows []cronrt.WorkspaceRow) (map[string]string, error) {
 	records, err := api.ListRecords(ctx, binding.AppToken, binding.Tables.Workspaces, []string{"工作区名称", "工作区键", "当前状态"})
 	if err != nil {
 		return nil, err
@@ -494,7 +495,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		existing[key] = record
 	}
 	result := map[string]string{}
-	desired := map[string]cronWorkspaceRow{}
+	desired := map[string]cronrt.WorkspaceRow{}
 	pendingCreateKeys := make([]string, 0, len(rows))
 	pendingCreates := make([]map[string]any, 0, len(rows))
 	pendingUpdates := make([]feishu.BitableRecordUpdate, 0, len(rows))
@@ -565,12 +566,12 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 	return result, nil
 }
 
-func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI, binding *cronBitableState) (map[string]cronWorkspaceRow, error) {
+func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI, binding *cronrt.BitableState) (map[string]cronrt.WorkspaceRow, error) {
 	records, err := api.ListRecords(ctx, binding.AppToken, binding.Tables.Workspaces, []string{"工作区名称", "工作区键", "当前状态"})
 	if err != nil {
 		return nil, err
 	}
-	values := map[string]cronWorkspaceRow{}
+	values := map[string]cronrt.WorkspaceRow{}
 	for _, record := range records {
 		if record == nil {
 			continue
@@ -579,7 +580,7 @@ func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI,
 		if recordID == "" {
 			continue
 		}
-		values[recordID] = cronWorkspaceRow{
+		values[recordID] = cronrt.WorkspaceRow{
 			Name:   cronValueString(record.Fields["工作区名称"]),
 			Key:    cronValueString(record.Fields["工作区键"]),
 			Status: cronValueString(record.Fields["当前状态"]),
@@ -588,7 +589,7 @@ func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI,
 	return values, nil
 }
 
-func (a *App) cronWorkspaceRowsLocked() []cronWorkspaceRow {
+func (a *App) cronWorkspaceRowsLocked() []cronrt.WorkspaceRow {
 	recency := a.service.RecentPersistedWorkspaces(500)
 	liveNames := map[string]string{}
 	for _, inst := range a.service.Instances() {
@@ -614,13 +615,13 @@ func (a *App) cronWorkspaceRowsLocked() []cronWorkspaceRow {
 		}
 		return keys[i] < keys[j]
 	})
-	values := make([]cronWorkspaceRow, 0, len(keys))
+	values := make([]cronrt.WorkspaceRow, 0, len(keys))
 	for _, key := range keys {
 		key = state.ResolveWorkspaceKey(key)
 		if key == "" {
 			continue
 		}
-		values = append(values, cronWorkspaceRow{
+		values = append(values, cronrt.WorkspaceRow{
 			Name:   firstNonEmpty(liveNames[key], cronWorkspaceDisplayName(key)),
 			Key:    key,
 			Status: "可用",
@@ -673,10 +674,10 @@ func cronUserPermissionPrincipal(actorUserID string) (string, string, bool) {
 	}
 }
 
-func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronWorkspaceRow, now time.Time) (cronJobState, bool, error) {
-	job, disabled, reloadErr := cronJobFromReloadRecord(record, workspacesByRecord, now, cronSystemTimeZone(), "", 0)
+func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord map[string]cronrt.WorkspaceRow, now time.Time) (cronrt.JobState, bool, error) {
+	job, disabled, reloadErr := cronrt.JobFromReloadRecord(record, workspacesByRecord, now, cronrt.SystemTimeZone(), "", 0)
 	if reloadErr != nil {
-		return cronJobState{}, false, reloadErr
+		return cronrt.JobState{}, false, reloadErr
 	}
 	return job, disabled, nil
 }

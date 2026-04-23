@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
+	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 )
 
@@ -51,12 +52,12 @@ type cronRuntimeState struct {
 	stateIOMu             sync.Mutex
 	loaded                bool
 	syncInFlight          bool
-	state                 *cronStateFile
-	runs                  map[string]*cronRunState
+	state                 *cronrt.StateFile
+	runs                  map[string]*cronrt.RunState
 	jobActiveRuns         map[string]map[string]struct{}
-	exitTargets           map[string]*cronExitTarget
+	exitTargets           map[string]*cronrt.ExitTarget
 	bitableFactory        func(string) (feishu.BitableAPI, error)
-	gatewayIdentityLookup func(string) (cronGatewayIdentity, bool, error)
+	gatewayIdentityLookup func(string) (cronrt.GatewayIdentity, bool, error)
 	nextScheduleScan      time.Time
 	repoManager           *cronrepo.Manager
 }
@@ -88,9 +89,9 @@ func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
 
 func newCronRuntimeState() cronRuntimeState {
 	return cronRuntimeState{
-		runs:          map[string]*cronRunState{},
+		runs:          map[string]*cronrt.RunState{},
 		jobActiveRuns: map[string]map[string]struct{}{},
-		exitTargets:   map[string]*cronExitTarget{},
+		exitTargets:   map[string]*cronrt.ExitTarget{},
 	}
 }
 
