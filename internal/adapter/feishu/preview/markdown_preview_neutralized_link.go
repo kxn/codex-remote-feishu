@@ -14,12 +14,17 @@ type neutralizedLocalMarkdownRewrite struct {
 	changed bool
 }
 
-func parseNeutralizedLocalMarkdownLinkPrefix(prefix string) (head, label string, ok bool) {
+func parseNeutralizedLocalMarkdownLinkPrefix(prefix string) (head, label string, ok bool, preserve bool) {
 	prefixEnd := len(prefix)
 	for start := 0; start < prefixEnd; {
 		end, _, display, matched := parseStandalonePreviewReferenceAt(prefix, start)
 		if matched && end == prefixEnd {
-			return prefix[:start], display, true
+			head = prefix[:start]
+			label = display
+			if neutralizedLocalMarkdownLinkPrefixNeedsPreserve(head) {
+				return "", "", false, true
+			}
+			return head, label, true, false
 		}
 		_, size := utf8.DecodeRuneInString(prefix[start:])
 		start += size
@@ -36,9 +41,65 @@ func parseNeutralizedLocalMarkdownLinkPrefix(prefix string) (head, label string,
 	}
 	label = strings.TrimSpace(prefix[labelStart:])
 	if label == "" || strings.ContainsAny(label, "`[]()") || strings.ContainsRune(label, '\n') {
-		return "", "", false
+		return "", "", false, false
 	}
-	return prefix[:labelStart], label, true
+	head = prefix[:labelStart]
+	if neutralizedLocalMarkdownLinkPrefixNeedsPreserve(head) {
+		return "", "", false, true
+	}
+	return head, label, true, false
+}
+
+func neutralizedLocalMarkdownLinkPrefixNeedsPreserve(head string) bool {
+	token := neutralizedLocalMarkdownLinkPrefixTailToken(head)
+	return looksLikeNeutralizedURLSchemeTail(token)
+}
+
+func neutralizedLocalMarkdownLinkPrefixTailToken(head string) string {
+	head = strings.TrimRightFunc(head, unicode.IsSpace)
+	if head == "" {
+		return ""
+	}
+	start := len(head)
+	for start > 0 {
+		r, size := utf8.DecodeLastRuneInString(head[:start])
+		if unicode.IsSpace(r) || strings.ContainsRune("([{\"'<,.;!?，。；！？、（【《“‘", r) {
+			break
+		}
+		start -= size
+	}
+	return head[start:]
+}
+
+func looksLikeNeutralizedURLSchemeTail(token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+
+	base := ""
+	switch {
+	case strings.HasSuffix(token, "://"):
+		base = token[:len(token)-3]
+	case strings.HasSuffix(token, ":/"):
+		base = token[:len(token)-2]
+	case strings.HasSuffix(token, ":"):
+		base = token[:len(token)-1]
+	default:
+		return false
+	}
+	if len(base) < 2 {
+		return false
+	}
+	for i, r := range base {
+		switch {
+		case i == 0 && ('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z'):
+		case i > 0 && ('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '+' || r == '-' || r == '.'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (p *DriveMarkdownPreviewer) tryRewriteNeutralizedLocalMarkdownLink(
@@ -70,7 +131,14 @@ func (p *DriveMarkdownPreviewer) tryRewriteNeutralizedLocalMarkdownLink(
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
 	rawTarget = rawTarget[trimStart:trimEnd]
-	head, label, ok := parseNeutralizedLocalMarkdownLinkPrefix(text[last : index-2])
+	head, label, ok, preserve := parseNeutralizedLocalMarkdownLinkPrefix(text[last : index-2])
+	if preserve {
+		return neutralizedLocalMarkdownRewrite{
+			text:    text[last : close+run+1],
+			end:     close + run + 1,
+			changed: false,
+		}, true
+	}
 	if !ok {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}

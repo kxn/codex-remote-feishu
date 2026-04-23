@@ -72,3 +72,34 @@ func TestDriveMarkdownPreviewerRehydratesNeutralizedSimpleLabelLink(t *testing.T
 		t.Fatalf("expected one materialized preview link, got %#v", api.uploadFileCalls)
 	}
 }
+
+func TestDriveMarkdownPreviewerPreservesNeutralizedLinkAfterURLSchemeTail(t *testing.T) {
+	root := t.TempDir()
+	absPath := writePreviewFile(t, filepath.Join(root, "docs", "guide.md"), "# guide\n")
+	api := newFakePreviewAPI()
+	previewer := NewDriveMarkdownPreviewer(api, MarkdownPreviewConfig{
+		ProcessCWD: root,
+	})
+
+	raw := "坏例子 http:// Guide (`" + absPath + "`)，这里不该被猜成链接。"
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  raw,
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if result.Block.Text != raw {
+		t.Fatalf("unexpected rewritten text: %q", result.Block.Text)
+	}
+	if len(api.uploadFileCalls) != 0 {
+		t.Fatalf("expected ambiguous neutralized form to stay untouched, got %#v", api.uploadFileCalls)
+	}
+}
