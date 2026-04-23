@@ -107,19 +107,19 @@ type FeishuUIPathPickerContext struct {
 // FeishuUITargetPickerContext describes the stable query/policy inputs backing
 // the unified workspace/session target picker card.
 type FeishuUITargetPickerContext struct {
-	DTOOwner             FeishuUIDTOwner
-	Surface              FeishuUISurfaceContext
-	PickerID             string
-	Source               TargetPickerRequestSource
-	Title                string
-	Page                 FeishuTargetPickerPage
+	DTOOwner                 FeishuUIDTOwner
+	Surface                  FeishuUISurfaceContext
+	PickerID                 string
+	Source                   TargetPickerRequestSource
+	Title                    string
+	Page                     FeishuTargetPickerPage
 	WorkspaceSelectionLocked bool
 	LockedWorkspaceKey       string
 	AllowNewThread           bool
-	SelectedMode         FeishuTargetPickerMode
-	SelectedSource       FeishuTargetPickerSourceKind
-	SelectedWorkspaceKey string
-	SelectedSessionValue string
+	SelectedMode             FeishuTargetPickerMode
+	SelectedSource           FeishuTargetPickerSourceKind
+	SelectedWorkspaceKey     string
+	SelectedSessionValue     string
 }
 
 // FeishuUIThreadHistoryContext describes the stable query/policy inputs
