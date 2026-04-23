@@ -45,8 +45,8 @@ func firstButtonLabels(entries []control.CommandCatalogEntry) []string {
 }
 
 func eventSelectionPrompt(event eventcontract.Event) (*control.FeishuDirectSelectionPrompt, bool) {
-	if event.FeishuSelectionView != nil {
-		prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.FeishuSelectionView, event.FeishuSelectionContext)
+	if event.SelectionView != nil {
+		prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.SelectionView, event.SelectionContext)
 		if !ok {
 			return nil, false
 		}
@@ -66,18 +66,18 @@ func selectionPromptFromEvent(t *testing.T, event eventcontract.Event) *control.
 
 func targetPickerFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuTargetPickerView {
 	t.Helper()
-	if event.FeishuTargetPickerView == nil {
+	if event.TargetPickerView == nil {
 		t.Fatalf("expected target picker view, got %#v", event)
 	}
-	return event.FeishuTargetPickerView
+	return event.TargetPickerView
 }
 
 func selectionViewFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuSelectionView {
 	t.Helper()
-	if event.FeishuSelectionView == nil {
+	if event.SelectionView == nil {
 		t.Fatalf("expected selection view, got %#v", event)
 	}
-	return event.FeishuSelectionView
+	return event.SelectionView
 }
 
 func singleTargetPickerEvent(t *testing.T, events []eventcontract.Event) *control.FeishuTargetPickerView {
@@ -138,10 +138,10 @@ func targetPickerSourceOption(view *control.FeishuTargetPickerView, value contro
 
 func requestPromptFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuRequestView {
 	t.Helper()
-	if event.FeishuRequestView == nil {
+	if event.RequestView == nil {
 		t.Fatalf("expected request prompt event, got %#v", event)
 	}
-	return event.FeishuRequestView
+	return event.RequestView
 }
 
 func singleRequestPromptEvent(t *testing.T, events []eventcontract.Event) *control.FeishuRequestView {
@@ -153,8 +153,8 @@ func singleRequestPromptEvent(t *testing.T, events []eventcontract.Event) *contr
 }
 
 func eventCommandCatalog(event eventcontract.Event) (*control.FeishuPageView, bool) {
-	if event.FeishuPageView != nil {
-		page := control.NormalizeFeishuPageView(*event.FeishuPageView)
+	if event.PageView != nil {
+		page := control.NormalizeFeishuPageView(*event.PageView)
 		catalog := control.NormalizeFeishuPageView(control.FeishuPageView{
 			CommandID:                     page.CommandID,
 			Title:                         page.Title,

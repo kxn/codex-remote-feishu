@@ -48,10 +48,10 @@ func TestCompleteTargetPickerGitImportEntersNewThreadReadyAndClearsPicker(t *tes
 	if picker := svc.activeTargetPicker(surface); picker != nil {
 		t.Fatalf("expected successful git import completion to clear target picker, got %#v", picker)
 	}
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected same-card success after git import completion, got %#v", events)
 	}
-	got := events[0].FeishuTargetPickerView
+	got := events[0].TargetPickerView
 	if got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
 		t.Fatalf("expected succeeded git-import terminal card, got %#v", got)
 	}
@@ -116,10 +116,10 @@ func TestCompleteTargetPickerGitImportAttachFailureMentionsDirectoryPreserved(t 
 
 	events := svc.CompleteTargetPickerGitImport("surface-1", "picker-1", workspaceRoot)
 
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected failed same-card result on attach failure, got %#v", events)
 	}
-	got := events[0].FeishuTargetPickerView
+	got := events[0].TargetPickerView
 	if got.Stage != control.FeishuTargetPickerStageFailed || got.StatusTitle != "导入失败" {
 		t.Fatalf("expected failed git-import terminal card, got %#v", got)
 	}
@@ -160,10 +160,10 @@ func TestCompleteTargetPickerGitImportStartsFreshWorkspacePreparationOnSameCard(
 	if surface.PendingHeadless == nil || !surface.PendingHeadless.PrepareNewThread || !testutil.SamePath(surface.PendingHeadless.ThreadCWD, workspaceRoot) {
 		t.Fatalf("expected git import completion to continue into fresh-workspace preparation, got %#v", surface.PendingHeadless)
 	}
-	if len(events) != 2 || events[0].FeishuTargetPickerView == nil || events[1].DaemonCommand == nil {
+	if len(events) != 2 || events[0].TargetPickerView == nil || events[1].DaemonCommand == nil {
 		t.Fatalf("expected processing card plus headless start command, got %#v", events)
 	}
-	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在接入工作区" {
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在接入工作区" {
 		t.Fatalf("expected processing same-card transition after clone, got %#v", got)
 	} else if got.StatusFooter != "" {
 		t.Fatalf("expected git-import processing card to drop trailing footer, got %#v", got)

@@ -38,10 +38,10 @@ func (a *App) planTurnAttentionPingsLocked(events []eventcontract.Event) map[int
 }
 
 func (a *App) requestAttentionPingCandidateLocked(event eventcontract.Event, now time.Time) (*eventcontract.Event, string) {
-	if event.Kind != eventcontract.EventFeishuRequestView || event.FeishuRequestView == nil || event.InlineReplaceCurrentCard {
+	if event.Kind != eventcontract.EventFeishuRequestView || event.RequestView == nil || event.InlineReplaceCurrentCard {
 		return nil, ""
 	}
-	request := event.FeishuRequestView
+	request := event.RequestView
 	text, ok := attentionRequestPingText(request.RequestType)
 	if !ok {
 		return nil, ""
@@ -232,7 +232,7 @@ func isTurnFailureAttentionEvent(event eventcontract.Event) bool {
 
 func isPlanProposalAttentionEvent(event eventcontract.Event) bool {
 	return event.Kind == eventcontract.EventFeishuPageView &&
-		event.FeishuPageView != nil &&
-		strings.TrimSpace(event.FeishuPageView.CommandID) == control.FeishuCommandPlan &&
-		strings.TrimSpace(event.FeishuPageView.Title) == "提案计划"
+		event.PageView != nil &&
+		strings.TrimSpace(event.PageView.CommandID) == control.FeishuCommandPlan &&
+		strings.TrimSpace(event.PageView.Title) == "提案计划"
 }

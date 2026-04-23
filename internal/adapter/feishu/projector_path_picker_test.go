@@ -13,7 +13,7 @@ func TestProjectPathPickerStampsDaemonLifecycleID(t *testing.T) {
 		Kind:              eventcontract.EventFeishuPathPicker,
 		SurfaceSessionID:  "surface-1",
 		DaemonLifecycleID: "life-1",
-		FeishuPathPickerView: &control.FeishuPathPickerView{
+		PathPickerView: &control.FeishuPathPickerView{
 			PickerID:     "picker-1",
 			Mode:         control.PathPickerModeFile,
 			Title:        "选择文件",
@@ -51,7 +51,7 @@ func TestProjectPathPickerUsesUpdateCardWhenMessageIDPresent(t *testing.T) {
 		Kind:              eventcontract.EventFeishuPathPicker,
 		SurfaceSessionID:  "surface-1",
 		DaemonLifecycleID: "life-1",
-		FeishuPathPickerView: &control.FeishuPathPickerView{
+		PathPickerView: &control.FeishuPathPickerView{
 			PickerID:     "picker-1",
 			MessageID:    "om-card-1",
 			Mode:         control.PathPickerModeDirectory,

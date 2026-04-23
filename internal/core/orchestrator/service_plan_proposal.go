@@ -133,7 +133,7 @@ func planProposalEvent(surface *state.SurfaceConsoleRecord, flow *activeOwnerCar
 		GatewayID:                surface.GatewayID,
 		SurfaceSessionID:         surface.SurfaceSessionID,
 		InlineReplaceCurrentCard: inlineReplace,
-		FeishuPageView:           &view,
+		PageView:                 &view,
 	}
 }
 

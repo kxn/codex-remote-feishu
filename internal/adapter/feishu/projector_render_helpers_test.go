@@ -15,16 +15,16 @@ func selectionPromptEvent(prompt control.FeishuDirectSelectionPrompt) eventcontr
 	promptView := prompt
 	view.Prompt = &promptView
 	return eventcontract.Event{
-		Kind:                eventcontract.EventFeishuSelectionView,
-		FeishuSelectionView: &view,
+		Kind:          eventcontract.EventFeishuSelectionView,
+		SelectionView: &view,
 	}
 }
 
 func commandCatalogEvent(catalog control.FeishuPageView) eventcontract.Event {
 	page := control.NormalizeFeishuPageView(catalog)
 	return eventcontract.Event{
-		Kind:           eventcontract.EventFeishuPageView,
-		FeishuPageView: &page,
+		Kind:     eventcontract.EventFeishuPageView,
+		PageView: &page,
 	}
 }
 
@@ -45,8 +45,8 @@ func summarySections(summary string) []control.FeishuCardTextSection {
 
 func requestPromptEvent(prompt control.FeishuRequestView) eventcontract.Event {
 	return eventcontract.Event{
-		Kind:              eventcontract.EventFeishuRequestView,
-		FeishuRequestView: &prompt,
+		Kind:        eventcontract.EventFeishuRequestView,
+		RequestView: &prompt,
 	}
 }
 

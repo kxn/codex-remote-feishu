@@ -28,7 +28,7 @@ func TestHandleGatewayActionBlocksMenuWhilePathPickerActive(t *testing.T) {
 		Mode:     control.PathPickerModeDirectory,
 		RootPath: root,
 	})
-	if len(events) != 1 || events[0].FeishuPathPickerView == nil {
+	if len(events) != 1 || events[0].PathPickerView == nil {
 		t.Fatalf("expected active picker open event, got %#v", events)
 	}
 	before := len(gateway.operations)

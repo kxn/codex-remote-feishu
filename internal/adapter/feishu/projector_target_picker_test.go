@@ -14,7 +14,7 @@ func TestProjectTargetPickerStampsDaemonLifecycleID(t *testing.T) {
 		Kind:              eventcontract.EventFeishuTargetPicker,
 		SurfaceSessionID:  "surface-1",
 		DaemonLifecycleID: "life-1",
-		FeishuTargetPickerView: &control.FeishuTargetPickerView{
+		TargetPickerView: &control.FeishuTargetPickerView{
 			PickerID:             "picker-1",
 			Title:                "选择工作区与会话",
 			WorkspacePlaceholder: "选择工作区",
@@ -54,7 +54,7 @@ func TestProjectTargetPickerUsesUpdateCardWhenMessageIDPresent(t *testing.T) {
 		Kind:              eventcontract.EventFeishuTargetPicker,
 		SurfaceSessionID:  "surface-1",
 		DaemonLifecycleID: "life-1",
-		FeishuTargetPickerView: &control.FeishuTargetPickerView{
+		TargetPickerView: &control.FeishuTargetPickerView{
 			PickerID:    "picker-1",
 			MessageID:   "om-card-1",
 			Title:       "选择工作区与会话",
@@ -483,7 +483,7 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 		Kind:              eventcontract.EventFeishuTargetPicker,
 		SurfaceSessionID:  "surface-1",
 		DaemonLifecycleID: "life-5",
-		FeishuTargetPickerView: &control.FeishuTargetPickerView{
+		TargetPickerView: &control.FeishuTargetPickerView{
 			PickerID:         "picker-1",
 			Title:            "选择工作区与会话",
 			Page:             control.FeishuTargetPickerPageGit,

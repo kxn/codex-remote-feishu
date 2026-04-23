@@ -12,7 +12,7 @@ func commandPageEvent(surfaceID string, view control.FeishuPageView) eventcontra
 	return eventcontract.Event{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &page,
+		PageView:         &page,
 	}
 }
 

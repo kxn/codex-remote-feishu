@@ -70,10 +70,10 @@ func TestHandleGitWorkspaceImportCommandLockedCompletesTargetPickerRoute(t *test
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	if len(events) == 0 || events[0].FeishuTargetPickerView == nil {
+	if len(events) == 0 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected target picker event, got %#v", events)
 	}
-	pickerID := events[0].FeishuTargetPickerView.PickerID
+	pickerID := events[0].TargetPickerView.PickerID
 
 	app.mu.Lock()
 	commandEvents := app.handleGitWorkspaceImportCommandLocked(control.DaemonCommand{
@@ -101,10 +101,10 @@ func TestHandleGitWorkspaceImportCommandLockedCompletesTargetPickerRoute(t *test
 	if runtime := app.service.SurfaceUIRuntime("surface-1"); runtime.ActiveTargetPickerID != "" {
 		t.Fatalf("expected successful git import to clear active target picker, got %#v", runtime)
 	}
-	if len(commandEvents) != 1 || commandEvents[0].FeishuTargetPickerView == nil {
+	if len(commandEvents) != 1 || commandEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected same-card success after git import success, got %#v", commandEvents)
 	}
-	if got := commandEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+	if got := commandEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
 		t.Fatalf("expected succeeded git-import terminal card, got %#v", got)
 	}
 }

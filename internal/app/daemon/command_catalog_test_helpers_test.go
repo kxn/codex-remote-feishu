@@ -35,8 +35,8 @@ func catalogSummaryText(catalog *control.FeishuPageView) string {
 
 func catalogFromUIEvent(t *testing.T, event eventcontract.Event) *control.FeishuPageView {
 	t.Helper()
-	if event.FeishuPageView != nil {
-		page := control.NormalizeFeishuPageView(*event.FeishuPageView)
+	if event.PageView != nil {
+		page := control.NormalizeFeishuPageView(*event.PageView)
 		catalog := control.NormalizeFeishuPageView(control.FeishuPageView{
 			CommandID:       page.CommandID,
 			Title:           page.Title,

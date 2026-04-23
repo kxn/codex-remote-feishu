@@ -40,46 +40,33 @@ type Event struct {
 	SourceMessagePreview     string
 	InlineReplaceCurrentCard bool
 	Snapshot                 *control.Snapshot
-	// Legacy field names retained for in-repo migration; prefer SelectionView.
-	FeishuSelectionView        *control.FeishuSelectionView
-	FeishuSelectionContext     *control.FeishuUISelectionContext
-	FeishuPageView             *control.FeishuPageView
-	FeishuPageContext          *control.FeishuUIPageContext
-	FeishuRequestView          *control.FeishuRequestView
-	FeishuRequestContext       *control.FeishuUIRequestContext
-	FeishuPathPickerView       *control.FeishuPathPickerView
-	FeishuPathPickerContext    *control.FeishuUIPathPickerContext
-	FeishuTargetPickerView     *control.FeishuTargetPickerView
-	FeishuTargetPickerContext  *control.FeishuUITargetPickerContext
-	FeishuThreadHistoryView    *control.FeishuThreadHistoryView
-	FeishuThreadHistoryContext *control.FeishuUIThreadHistoryContext
-	SelectionView              *control.FeishuSelectionView
-	SelectionContext           *control.FeishuUISelectionContext
-	PageView                   *control.FeishuPageView
-	PageContext                *control.FeishuUIPageContext
-	RequestView                *control.FeishuRequestView
-	RequestContext             *control.FeishuUIRequestContext
-	PathPickerView             *control.FeishuPathPickerView
-	PathPickerContext          *control.FeishuUIPathPickerContext
-	TargetPickerView           *control.FeishuTargetPickerView
-	TargetPickerContext        *control.FeishuUITargetPickerContext
-	ThreadHistoryView          *control.FeishuThreadHistoryView
-	ThreadHistoryContext       *control.FeishuUIThreadHistoryContext
-	PendingInput               *control.PendingInputState
-	Notice                     *control.Notice
-	PlanUpdate                 *control.PlanUpdate
-	ThreadSelection            *control.ThreadSelectionChanged
-	Block                      *render.Block
-	TimelineText               *control.TimelineText
-	ImageOutput                *control.ImageOutput
-	ExecCommandProgress        *control.ExecCommandProgress
-	FileChangeSummary          *control.FileChangeSummary
-	TurnDiffSnapshot           *control.TurnDiffSnapshot
-	FinalTurnSummary           *control.FinalTurnSummary
-	Command                    *agentproto.Command
-	DaemonCommand              *control.DaemonCommand
-	Meta                       EventMeta
-	Payload                    Payload
+	SelectionView            *control.FeishuSelectionView
+	SelectionContext         *control.FeishuUISelectionContext
+	PageView                 *control.FeishuPageView
+	PageContext              *control.FeishuUIPageContext
+	RequestView              *control.FeishuRequestView
+	RequestContext           *control.FeishuUIRequestContext
+	PathPickerView           *control.FeishuPathPickerView
+	PathPickerContext        *control.FeishuUIPathPickerContext
+	TargetPickerView         *control.FeishuTargetPickerView
+	TargetPickerContext      *control.FeishuUITargetPickerContext
+	ThreadHistoryView        *control.FeishuThreadHistoryView
+	ThreadHistoryContext     *control.FeishuUIThreadHistoryContext
+	PendingInput             *control.PendingInputState
+	Notice                   *control.Notice
+	PlanUpdate               *control.PlanUpdate
+	ThreadSelection          *control.ThreadSelectionChanged
+	Block                    *render.Block
+	TimelineText             *control.TimelineText
+	ImageOutput              *control.ImageOutput
+	ExecCommandProgress      *control.ExecCommandProgress
+	FileChangeSummary        *control.FileChangeSummary
+	TurnDiffSnapshot         *control.TurnDiffSnapshot
+	FinalTurnSummary         *control.FinalTurnSummary
+	Command                  *agentproto.Command
+	DaemonCommand            *control.DaemonCommand
+	Meta                     EventMeta
+	Payload                  Payload
 }
 
 func (event Event) Normalized() Event {
@@ -127,82 +114,8 @@ func (event Event) Normalized() Event {
 		event.InlineReplaceCurrentCard = event.Meta.InlineReplaceMode == InlineReplaceCurrentCard
 	}
 
-	// Normalize both legacy and new field names to a single in-memory source.
-	if event.SelectionView == nil {
-		event.SelectionView = event.FeishuSelectionView
-	}
-	if event.SelectionContext == nil {
-		event.SelectionContext = event.FeishuSelectionContext
-	}
-	if event.PageView == nil {
-		event.PageView = event.FeishuPageView
-	}
-	if event.PageContext == nil {
-		event.PageContext = event.FeishuPageContext
-	}
-	if event.RequestView == nil {
-		event.RequestView = event.FeishuRequestView
-	}
-	if event.RequestContext == nil {
-		event.RequestContext = event.FeishuRequestContext
-	}
-	if event.PathPickerView == nil {
-		event.PathPickerView = event.FeishuPathPickerView
-	}
-	if event.PathPickerContext == nil {
-		event.PathPickerContext = event.FeishuPathPickerContext
-	}
-	if event.TargetPickerView == nil {
-		event.TargetPickerView = event.FeishuTargetPickerView
-	}
-	if event.TargetPickerContext == nil {
-		event.TargetPickerContext = event.FeishuTargetPickerContext
-	}
-	if event.ThreadHistoryView == nil {
-		event.ThreadHistoryView = event.FeishuThreadHistoryView
-	}
-	if event.ThreadHistoryContext == nil {
-		event.ThreadHistoryContext = event.FeishuThreadHistoryContext
-	}
-	if event.FeishuSelectionView == nil {
-		event.FeishuSelectionView = event.SelectionView
-	}
-	if event.FeishuSelectionContext == nil {
-		event.FeishuSelectionContext = event.SelectionContext
-	}
-	if event.FeishuPageView == nil {
-		event.FeishuPageView = event.PageView
-	}
-	if event.FeishuPageContext == nil {
-		event.FeishuPageContext = event.PageContext
-	}
-	if event.FeishuRequestView == nil {
-		event.FeishuRequestView = event.RequestView
-	}
-	if event.FeishuRequestContext == nil {
-		event.FeishuRequestContext = event.RequestContext
-	}
-	if event.FeishuPathPickerView == nil {
-		event.FeishuPathPickerView = event.PathPickerView
-	}
-	if event.FeishuPathPickerContext == nil {
-		event.FeishuPathPickerContext = event.PathPickerContext
-	}
-	if event.FeishuTargetPickerView == nil {
-		event.FeishuTargetPickerView = event.TargetPickerView
-	}
-	if event.FeishuTargetPickerContext == nil {
-		event.FeishuTargetPickerContext = event.TargetPickerContext
-	}
-	if event.FeishuThreadHistoryView == nil {
-		event.FeishuThreadHistoryView = event.ThreadHistoryView
-	}
-	if event.FeishuThreadHistoryContext == nil {
-		event.FeishuThreadHistoryContext = event.ThreadHistoryContext
-	}
-
-	// When callers provide payload-first events, hydrate flat fields so legacy
-	// predicates and tests observe the same data on the Event root.
+	// When callers provide payload-first events, hydrate flat fields so current
+	// in-repo callers can still read event data from the Event root.
 	switch payload := event.Payload.(type) {
 	case SnapshotPayload:
 		if event.Snapshot == nil {
@@ -314,42 +227,6 @@ func (event Event) Normalized() Event {
 			command := payload.Command
 			event.DaemonCommand = &command
 		}
-	}
-	if event.FeishuSelectionView == nil {
-		event.FeishuSelectionView = event.SelectionView
-	}
-	if event.FeishuSelectionContext == nil {
-		event.FeishuSelectionContext = event.SelectionContext
-	}
-	if event.FeishuPageView == nil {
-		event.FeishuPageView = event.PageView
-	}
-	if event.FeishuPageContext == nil {
-		event.FeishuPageContext = event.PageContext
-	}
-	if event.FeishuRequestView == nil {
-		event.FeishuRequestView = event.RequestView
-	}
-	if event.FeishuRequestContext == nil {
-		event.FeishuRequestContext = event.RequestContext
-	}
-	if event.FeishuPathPickerView == nil {
-		event.FeishuPathPickerView = event.PathPickerView
-	}
-	if event.FeishuPathPickerContext == nil {
-		event.FeishuPathPickerContext = event.PathPickerContext
-	}
-	if event.FeishuTargetPickerView == nil {
-		event.FeishuTargetPickerView = event.TargetPickerView
-	}
-	if event.FeishuTargetPickerContext == nil {
-		event.FeishuTargetPickerContext = event.TargetPickerContext
-	}
-	if event.FeishuThreadHistoryView == nil {
-		event.FeishuThreadHistoryView = event.ThreadHistoryView
-	}
-	if event.FeishuThreadHistoryContext == nil {
-		event.FeishuThreadHistoryContext = event.ThreadHistoryContext
 	}
 
 	event.Kind = event.CanonicalKind()

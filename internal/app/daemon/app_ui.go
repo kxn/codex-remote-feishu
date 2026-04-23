@@ -284,7 +284,7 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 			break
 		}
 	}
-	if event.FeishuThreadHistoryView != nil {
+	if event.ThreadHistoryView != nil {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {
 				continue
@@ -294,13 +294,13 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 			}
 			a.service.RecordThreadHistoryMessage(
 				event.SurfaceSessionID,
-				event.FeishuThreadHistoryView.PickerID,
+				event.ThreadHistoryView.PickerID,
 				operation.MessageID,
 			)
 			break
 		}
 	}
-	if event.FeishuTargetPickerView != nil {
+	if event.TargetPickerView != nil {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {
 				continue
@@ -310,13 +310,13 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 			}
 			a.service.RecordTargetPickerMessage(
 				event.SurfaceSessionID,
-				event.FeishuTargetPickerView.PickerID,
+				event.TargetPickerView.PickerID,
 				operation.MessageID,
 			)
 			break
 		}
 	}
-	if event.FeishuPathPickerView != nil {
+	if event.PathPickerView != nil {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {
 				continue
@@ -326,13 +326,13 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 			}
 			a.service.RecordPathPickerMessage(
 				event.SurfaceSessionID,
-				event.FeishuPathPickerView.PickerID,
+				event.PathPickerView.PickerID,
 				operation.MessageID,
 			)
 			break
 		}
 	}
-	if event.FeishuPageView != nil && strings.TrimSpace(event.FeishuPageView.TrackingKey) != "" {
+	if event.PageView != nil && strings.TrimSpace(event.PageView.TrackingKey) != "" {
 		for _, operation := range operations {
 			if operation.Kind != feishu.OperationSendCard {
 				continue
@@ -342,14 +342,14 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 			}
 			a.service.RecordOwnerCardFlowMessage(
 				event.SurfaceSessionID,
-				event.FeishuPageView.TrackingKey,
+				event.PageView.TrackingKey,
 				operation.MessageID,
 			)
 			a.recordUpgradeOwnerCardMessageLocked(
-				event.FeishuPageView.TrackingKey,
+				event.PageView.TrackingKey,
 				operation.MessageID,
 			)
-			a.recordVSCodeMigrationFlowMessageLocked(event.FeishuPageView.TrackingKey, operation.MessageID)
+			a.recordVSCodeMigrationFlowMessageLocked(event.PageView.TrackingKey, operation.MessageID)
 			break
 		}
 	}

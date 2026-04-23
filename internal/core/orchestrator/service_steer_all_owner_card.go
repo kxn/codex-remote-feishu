@@ -30,7 +30,7 @@ func steerAllOwnerCardEvent(surfaceID, messageID, title, theme string, sealed bo
 	return eventcontract.Event{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &view,
+		PageView:         &view,
 	}
 }
 

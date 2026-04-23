@@ -35,10 +35,10 @@ func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 		},
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
-		Kind:                eventcontract.EventFeishuSelectionView,
-		DaemonLifecycleID:   "life-1",
-		FeishuSelectionView: &view,
-		FeishuSelectionContext: &control.FeishuUISelectionContext{
+		Kind:              eventcontract.EventFeishuSelectionView,
+		DaemonLifecycleID: "life-1",
+		SelectionView:     &view,
+		SelectionContext: &control.FeishuUISelectionContext{
 			DTOOwner:     control.FeishuUIDTOwnerSelection,
 			PromptKind:   control.SelectionPromptAttachInstance,
 			Title:        "在线 VS Code 实例",
@@ -103,10 +103,10 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 		},
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
-		Kind:                eventcontract.EventFeishuSelectionView,
-		DaemonLifecycleID:   "life-2",
-		FeishuSelectionView: &view,
-		FeishuSelectionContext: &control.FeishuUISelectionContext{
+		Kind:              eventcontract.EventFeishuSelectionView,
+		DaemonLifecycleID: "life-2",
+		SelectionView:     &view,
+		SelectionContext: &control.FeishuUISelectionContext{
 			DTOOwner:     control.FeishuUIDTOwnerSelection,
 			PromptKind:   control.SelectionPromptUseThread,
 			Title:        "最近会话",

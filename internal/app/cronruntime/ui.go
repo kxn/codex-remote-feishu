@@ -146,7 +146,7 @@ func UsageEvents(surfaceID, formDefault, message string) []eventcontract.Event {
 	return []eventcontract.Event{{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &page,
+		PageView:         &page,
 	}}
 }
 

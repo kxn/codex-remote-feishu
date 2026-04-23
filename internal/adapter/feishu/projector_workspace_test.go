@@ -27,9 +27,9 @@ func TestProjectWorkspaceSelectionViewDoesNotAddLegacyCreateWorkspaceEntry(t *te
 		},
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
-		Kind:                eventcontract.EventFeishuSelectionView,
-		FeishuSelectionView: &view,
-		FeishuSelectionContext: &control.FeishuUISelectionContext{
+		Kind:          eventcontract.EventFeishuSelectionView,
+		SelectionView: &view,
+		SelectionContext: &control.FeishuUISelectionContext{
 			DTOOwner:   control.FeishuUIDTOwnerSelection,
 			PromptKind: control.SelectionPromptAttachWorkspace,
 			Layout:     "grouped_attach_workspace",

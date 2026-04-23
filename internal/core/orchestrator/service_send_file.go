@@ -75,7 +75,7 @@ func sendFileInlineTerminalEvent(surface *state.SurfaceConsoleRecord, messageID,
 		GatewayID:                surface.GatewayID,
 		SurfaceSessionID:         surface.SurfaceSessionID,
 		InlineReplaceCurrentCard: true,
-		FeishuPageView:           &view,
+		PageView:                 &view,
 	}
 }
 

@@ -256,20 +256,20 @@ func TestWorkspaceSelectionEventCarriesFeishuTargetPickerContext(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected target picker event, got %#v", events)
 	}
-	if events[0].FeishuTargetPickerContext == nil {
+	if events[0].TargetPickerContext == nil {
 		t.Fatalf("expected feishu target picker context, got %#v", events[0])
 	}
-	if events[0].FeishuTargetPickerContext.DTOOwner != control.FeishuUIDTOwnerTargetPicker {
-		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuTargetPickerContext)
+	if events[0].TargetPickerContext.DTOOwner != control.FeishuUIDTOwnerTargetPicker {
+		t.Fatalf("unexpected dto owner: %#v", events[0].TargetPickerContext)
 	}
-	if events[0].FeishuTargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].FeishuTargetPickerContext.Title != "切换工作会话" {
-		t.Fatalf("unexpected target picker context: %#v", events[0].FeishuTargetPickerContext)
+	if events[0].TargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].TargetPickerContext.Title != "切换工作会话" {
+		t.Fatalf("unexpected target picker context: %#v", events[0].TargetPickerContext)
 	}
-	if events[0].FeishuTargetPickerContext.Surface.ProductMode != string(state.ProductModeNormal) || events[0].FeishuTargetPickerContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
-		t.Fatalf("unexpected surface context: %#v", events[0].FeishuTargetPickerContext.Surface)
+	if events[0].TargetPickerContext.Surface.ProductMode != string(state.ProductModeNormal) || events[0].TargetPickerContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
+		t.Fatalf("unexpected surface context: %#v", events[0].TargetPickerContext.Surface)
 	}
 }
 
@@ -294,11 +294,11 @@ func TestApplyFeishuUIIntentBuildsModeCatalog(t *testing.T) {
 	if catalog.Title != "切换模式" {
 		t.Fatalf("unexpected mode catalog: %#v", catalog)
 	}
-	if events[0].FeishuPageView == nil || events[0].FeishuPageView.CommandID != control.FeishuCommandMode {
-		t.Fatalf("expected feishu page view for mode catalog, got %#v", events[0].FeishuPageView)
+	if events[0].PageView == nil || events[0].PageView.CommandID != control.FeishuCommandMode {
+		t.Fatalf("expected feishu page view for mode catalog, got %#v", events[0].PageView)
 	}
-	if events[0].FeishuPageContext == nil || events[0].FeishuPageContext.DTOOwner != control.FeishuUIDTOwnerPage || events[0].FeishuPageContext.CommandID != control.FeishuCommandMode {
-		t.Fatalf("expected feishu page context for mode catalog, got %#v", events[0].FeishuPageContext)
+	if events[0].PageContext == nil || events[0].PageContext.DTOOwner != control.FeishuUIDTOwnerPage || events[0].PageContext.CommandID != control.FeishuCommandMode {
+		t.Fatalf("expected feishu page context for mode catalog, got %#v", events[0].PageContext)
 	}
 }
 
@@ -323,8 +323,8 @@ func TestApplyFeishuUIIntentBuildsVerboseCatalog(t *testing.T) {
 	if catalog.Title != "提示详细程度" {
 		t.Fatalf("unexpected verbose catalog: %#v", catalog)
 	}
-	if events[0].FeishuPageView == nil || events[0].FeishuPageView.CommandID != control.FeishuCommandVerbose {
-		t.Fatalf("expected feishu page view for verbose catalog, got %#v", events[0].FeishuPageView)
+	if events[0].PageView == nil || events[0].PageView.CommandID != control.FeishuCommandVerbose {
+		t.Fatalf("expected feishu page view for verbose catalog, got %#v", events[0].PageView)
 	}
 	if summary := commandCatalogSummaryText(catalog); !strings.Contains(summary, string(state.SurfaceVerbosityNormal)) {
 		t.Fatalf("expected default verbosity in summary, got %q", summary)
@@ -1102,10 +1102,10 @@ func TestSendFileActionOpensFilePickerInsideCurrentWorkspace(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].FeishuPathPickerView == nil {
+	if len(events) != 1 || events[0].PathPickerView == nil {
 		t.Fatalf("expected file picker event, got %#v", events)
 	}
-	view := events[0].FeishuPathPickerView
+	view := events[0].PathPickerView
 	if view.Mode != control.PathPickerModeFile || view.Title != "选择要发送的文件" || !testutil.SamePath(view.RootPath, workspaceRoot) {
 		t.Fatalf("unexpected send-file picker view: %#v", view)
 	}
@@ -1158,7 +1158,7 @@ func TestSendFilePickerConfirmDispatchesDaemonCommand(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	})
-	view := openEvents[0].FeishuPathPickerView
+	view := openEvents[0].PathPickerView
 	selectEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionPathPickerSelect,
 		SurfaceSessionID: "surface-1",
@@ -1166,7 +1166,7 @@ func TestSendFilePickerConfirmDispatchesDaemonCommand(t *testing.T) {
 		PickerID:         view.PickerID,
 		PickerEntry:      "report.txt",
 	})
-	if len(selectEvents) != 1 || selectEvents[0].FeishuPathPickerView == nil || !selectEvents[0].FeishuPathPickerView.CanConfirm {
+	if len(selectEvents) != 1 || selectEvents[0].PathPickerView == nil || !selectEvents[0].PathPickerView.CanConfirm {
 		t.Fatalf("expected selectable file picker state, got %#v", selectEvents)
 	}
 	confirmEvents := svc.ApplySurfaceAction(control.Action{
@@ -1473,7 +1473,7 @@ func TestNormalModeListWithoutOnlineWorkspacesShowsCreateWorkspacePicker(t *test
 		ActorUserID:      "user-1",
 	})
 
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
@@ -1799,7 +1799,7 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 		ActorUserID:      "user-2",
 	})
 
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected add-workspace picker instead of unavailable notice, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])

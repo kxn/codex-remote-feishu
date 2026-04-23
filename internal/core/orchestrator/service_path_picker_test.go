@@ -42,10 +42,10 @@ func (f *fakePathPickerEntryFilter) PathPickerFilterEntry(_ *Service, _ *state.S
 
 func pathPickerViewFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuPathPickerView {
 	t.Helper()
-	if event.Kind != eventcontract.EventFeishuPathPicker || event.FeishuPathPickerView == nil {
+	if event.Kind != eventcontract.EventFeishuPathPicker || event.PathPickerView == nil {
 		t.Fatalf("expected path picker event, got %#v", event)
 	}
-	return event.FeishuPathPickerView
+	return event.PathPickerView
 }
 
 func singlePathPickerEvent(t *testing.T, events []eventcontract.Event) *control.FeishuPathPickerView {
@@ -249,13 +249,13 @@ func TestPathPickerConfirmValidationFailureUsesCardPatchUpdate(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(confirmEvents) != 1 || confirmEvents[0].FeishuPathPickerView == nil {
+	if len(confirmEvents) != 1 || confirmEvents[0].PathPickerView == nil {
 		t.Fatalf("expected same-card validation refresh, got %#v", confirmEvents)
 	}
 	if confirmEvents[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected confirm validation failure to use message-id patch instead of inline replace, got %#v", confirmEvents[0])
 	}
-	updated := confirmEvents[0].FeishuPathPickerView
+	updated := confirmEvents[0].PathPickerView
 	if updated.MessageID != "om-path-picker-1" {
 		t.Fatalf("expected confirm validation failure to patch source card, got %#v", updated)
 	}
@@ -647,7 +647,7 @@ func TestPathPickerExpiredGateAutoClearsOnRouteAction(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ActorUserID:      "user-1",
 	})
-	if len(listEvents) != 1 || listEvents[0].FeishuTargetPickerView == nil {
+	if len(listEvents) != 1 || listEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected /list to proceed after picker expiry, got %#v", listEvents)
 	}
 	if svc.activePathPicker(svc.root.Surfaces["surface-1"]) != nil {
@@ -710,7 +710,7 @@ func TestPathPickerBlocksRouteMutationUntilCancelled(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ActorUserID:      "user-1",
 	})
-	if len(listEvents) != 1 || listEvents[0].FeishuTargetPickerView == nil {
+	if len(listEvents) != 1 || listEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected /list to work again after cancel, got %#v", listEvents)
 	}
 }

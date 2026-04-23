@@ -386,10 +386,10 @@ func TestHandleGatewayActionRejectsOldPathPickerCardAndPreservesActivePicker(t *
 		Mode:     control.PathPickerModeDirectory,
 		RootPath: root,
 	})
-	if len(events) != 1 || events[0].FeishuPathPickerView == nil {
+	if len(events) != 1 || events[0].PathPickerView == nil {
 		t.Fatalf("expected active picker open event, got %#v", events)
 	}
-	pickerID := events[0].FeishuPathPickerView.PickerID
+	pickerID := events[0].PathPickerView.PickerID
 	before := len(gateway.operations)
 
 	result := app.HandleGatewayAction(context.Background(), control.Action{

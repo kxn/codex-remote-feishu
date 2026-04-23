@@ -113,10 +113,10 @@ func TestTargetPickerConfirmExistingThreadAttachesSelection(t *testing.T) {
 	if picker := svc.activeTargetPicker(surface); picker != nil {
 		t.Fatalf("expected successful confirm to clear active picker")
 	}
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected same-card success state after picker confirm, got %#v", events)
 	}
-	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已切换会话" {
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已切换会话" {
 		t.Fatalf("expected succeeded target picker card, got %#v", got)
 	}
 }
@@ -150,13 +150,13 @@ func TestTargetPickerConfirmValidationUsesCardPatchUpdate(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         initial.PickerID,
 	})
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected mode confirm to refresh picker, got %#v", events)
 	}
 	if events[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected validation refresh to use message-id patch flow, got %#v", events[0])
 	}
-	got := events[0].FeishuTargetPickerView
+	got := events[0].TargetPickerView
 	if got.Page != control.FeishuTargetPickerPageTarget || got.CanConfirm {
 		t.Fatalf("expected target page to stay blocked, got %#v", got)
 	}
@@ -192,13 +192,13 @@ func TestTargetPickerConfirmGitValidationUsesCardPatchUpdate(t *testing.T) {
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected git validation refresh, got %#v", events)
 	}
 	if events[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected git validation to use message-id patch flow, got %#v", events[0])
 	}
-	got := events[0].FeishuTargetPickerView
+	got := events[0].TargetPickerView
 	if got.Page != control.FeishuTargetPickerPageGit || got.CanConfirm {
 		t.Fatalf("expected git page to stay blocked, got %#v", got)
 	}
@@ -232,10 +232,10 @@ func TestTargetPickerPendingNewThreadFailureFinishesSameCardAndClearsRuntime(t *
 		ActorUserID:      "user-1",
 		PickerID:         view.PickerID,
 	})
-	if len(events) == 0 || events[0].FeishuTargetPickerView == nil {
+	if len(events) == 0 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected processing target picker card before headless failure, got %#v", events)
 	}
-	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.MessageID != "om-card-1" {
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.MessageID != "om-card-1" {
 		t.Fatalf("expected processing stage to target same owner card, got %#v", got)
 	}
 
@@ -245,10 +245,10 @@ func TestTargetPickerPendingNewThreadFailureFinishesSameCardAndClearsRuntime(t *
 	}
 
 	failureEvents := svc.HandleHeadlessLaunchFailed("surface-1", pending.InstanceID, errors.New("dial failed"))
-	if len(failureEvents) != 1 || failureEvents[0].FeishuTargetPickerView == nil {
+	if len(failureEvents) != 1 || failureEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected single failed target picker card after headless failure, got %#v", failureEvents)
 	}
-	got := failureEvents[0].FeishuTargetPickerView
+	got := failureEvents[0].TargetPickerView
 	if got.Stage != control.FeishuTargetPickerStageFailed || got.StatusTitle != "切换失败" {
 		t.Fatalf("expected failed terminal target picker card, got %#v", got)
 	}
@@ -307,10 +307,10 @@ func TestTargetPickerConfirmRejectsStaleSessionFallback(t *testing.T) {
 	if svc.activeTargetPicker(surface) == nil {
 		t.Fatalf("expected stale confirm to keep active picker for retry")
 	}
-	if len(events) != 1 || events[0].FeishuTargetPickerView == nil {
+	if len(events) != 1 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected refreshed picker after stale confirm, got %#v", events)
 	}
-	got := events[0].FeishuTargetPickerView
+	got := events[0].TargetPickerView
 	if got.SelectedSessionValue != "" || got.CanConfirm {
 		t.Fatalf("expected refreshed picker to clear stale session selection, got %#v", got)
 	}
@@ -573,10 +573,10 @@ func TestTargetPickerAddWorkspacePathPickerCancelRestoresTargetCard(t *testing.T
 	if surface.RouteMode != state.RouteModeUnbound || surface.PendingHeadless != nil {
 		t.Fatalf("expected cancel to keep current target unchanged, got %#v", surface)
 	}
-	if len(cancelEvents) != 1 || cancelEvents[0].FeishuTargetPickerView == nil || cancelEvents[0].InlineReplaceCurrentCard {
+	if len(cancelEvents) != 1 || cancelEvents[0].TargetPickerView == nil || cancelEvents[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected cancel to restore target picker via owner-card patch, got %#v", cancelEvents)
 	}
-	if got := cancelEvents[0].FeishuTargetPickerView; got.LocalDirectoryPath != "" || got.CanConfirm {
+	if got := cancelEvents[0].TargetPickerView; got.LocalDirectoryPath != "" || got.CanConfirm {
 		t.Fatalf("expected cancel to preserve empty local-directory selection, got %#v", got)
 	}
 }
@@ -635,10 +635,10 @@ func TestTargetPickerCancelClearsActivePickerAndKeepsSurfaceRoute(t *testing.T) 
 	if surface.RouteMode != beforeRouteMode || surface.ClaimedWorkspaceKey != beforeWorkspace || surface.AttachedInstanceID != beforeAttachedInstance || surface.SelectedThreadID != beforeSelectedThread {
 		t.Fatalf("expected cancel to keep surface route unchanged, got %#v", surface)
 	}
-	if len(cancelEvents) != 1 || !cancelEvents[0].InlineReplaceCurrentCard || cancelEvents[0].FeishuTargetPickerView == nil {
+	if len(cancelEvents) != 1 || !cancelEvents[0].InlineReplaceCurrentCard || cancelEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected cancel to seal the current owner card inline, got %#v", cancelEvents)
 	}
-	if got := cancelEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消" {
+	if got := cancelEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消" {
 		t.Fatalf("expected cancelled target picker terminal card, got %#v", got)
 	}
 }
@@ -695,10 +695,10 @@ func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndBloc
 	if svc.activePathPicker(surface) != nil || svc.activeTargetPicker(surface) == nil {
 		t.Fatalf("expected path confirm to close only the path picker, got %#v", surface)
 	}
-	if len(confirmEvents) != 1 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[0].InlineReplaceCurrentCard {
+	if len(confirmEvents) != 1 || confirmEvents[0].TargetPickerView == nil || confirmEvents[0].InlineReplaceCurrentCard {
 		t.Fatalf("expected path confirm to restore target card via owner-card patch, got %#v", confirmEvents)
 	}
-	got := confirmEvents[0].FeishuTargetPickerView
+	got := confirmEvents[0].TargetPickerView
 	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) || got.CanConfirm {
 		t.Fatalf("expected known workspace path to backfill but stay blocked, got %#v", got)
 	}
@@ -792,10 +792,10 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryStartsHeadlessForUnknownWo
 	if surface.PendingHeadless == nil || !surface.PendingHeadless.PrepareNewThread || !testutil.SamePath(surface.PendingHeadless.ThreadCWD, workspaceRoot) {
 		t.Fatalf("expected unknown local directory to start headless workspace preparation, got %#v", surface.PendingHeadless)
 	}
-	if len(confirmEvents) == 0 || confirmEvents[0].FeishuTargetPickerView == nil {
+	if len(confirmEvents) == 0 || confirmEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected processing card before headless completion, got %#v", confirmEvents)
 	}
-	if got := confirmEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在接入工作区" {
+	if got := confirmEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在接入工作区" {
 		t.Fatalf("expected processing target picker card for unknown local directory, got %#v", got)
 	}
 	var sawStart bool
@@ -823,10 +823,10 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryStartsHeadlessForUnknownWo
 	if surface.RouteMode != state.RouteModeNewThreadReady || !testutil.SamePath(surface.PreparedThreadCWD, workspaceRoot) {
 		t.Fatalf("expected connected local-directory workspace to enter new-thread-ready, got %#v", surface)
 	}
-	if len(connectEvents) != 1 || connectEvents[0].FeishuTargetPickerView == nil {
+	if len(connectEvents) != 1 || connectEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected same-card success after local-directory headless connect, got %#v", connectEvents)
 	}
-	if got := connectEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+	if got := connectEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
 		t.Fatalf("expected succeeded target picker card after local-directory headless connect, got %#v", got)
 	}
 }
@@ -886,13 +886,13 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryBlocksSymlinkedKnownWorksp
 	if surface.RouteMode != state.RouteModeUnbound || surface.PendingHeadless != nil {
 		t.Fatalf("expected symlinked known workspace to stay blocked without route mutation, got %#v", surface)
 	}
-	if len(confirmEvents) != 1 || confirmEvents[0].FeishuTargetPickerView == nil {
+	if len(confirmEvents) != 1 || confirmEvents[0].TargetPickerView == nil {
 		t.Fatalf("expected same-card blocked state after symlinked workspace confirm, got %#v", confirmEvents)
 	}
-	if got := confirmEvents[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageEditing || got.CanConfirm {
+	if got := confirmEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageEditing || got.CanConfirm {
 		t.Fatalf("expected symlinked known workspace to remain editing and blocked, got %#v", got)
 	}
-	if got := confirmEvents[0].FeishuTargetPickerView; len(got.Messages) == 0 || !strings.Contains(got.Messages[0].Text, "已有工作区") {
+	if got := confirmEvents[0].TargetPickerView; len(got.Messages) == 0 || !strings.Contains(got.Messages[0].Text, "已有工作区") {
 		t.Fatalf("expected blocked symlinked workspace to explain reason, got %#v", got)
 	}
 }
@@ -1058,10 +1058,10 @@ func TestTargetPickerGitImportFlowBackfillsMainCardAndDispatchesDaemonCommand(t 
 		ActorUserID:      "user-1",
 		PickerID:         backfilled.PickerID,
 	})
-	if len(confirmEvents) != 2 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[1].DaemonCommand == nil {
+	if len(confirmEvents) != 2 || confirmEvents[0].TargetPickerView == nil || confirmEvents[1].DaemonCommand == nil {
 		t.Fatalf("expected processing card plus daemon command, got %#v", confirmEvents)
 	}
-	processing := confirmEvents[0].FeishuTargetPickerView
+	processing := confirmEvents[0].TargetPickerView
 	if processing.Stage != control.FeishuTargetPickerStageProcessing || processing.StatusTitle != "正在导入 Git 工作区" {
 		t.Fatalf("expected git import processing card, got %#v", processing)
 	}
@@ -1121,7 +1121,7 @@ func TestTargetPickerGitImportProcessingBlocksOrdinaryInputButAllowsStatus(t *te
 		ActorUserID:      "user-1",
 		PickerID:         backfilled.PickerID,
 	})
-	if len(confirmEvents) == 0 || confirmEvents[0].FeishuTargetPickerView == nil || confirmEvents[0].FeishuTargetPickerView.Stage != control.FeishuTargetPickerStageProcessing {
+	if len(confirmEvents) == 0 || confirmEvents[0].TargetPickerView == nil || confirmEvents[0].TargetPickerView.Stage != control.FeishuTargetPickerStageProcessing {
 		t.Fatalf("expected git import processing state before blocking checks, got %#v", confirmEvents)
 	}
 
@@ -1177,10 +1177,10 @@ func TestTargetPickerCancelGitImportProcessingSealsCardAndDispatchesCancel(t *te
 		ActorUserID:      "user-1",
 		PickerID:         record.PickerID,
 	})
-	if len(events) != 2 || events[0].FeishuTargetPickerView == nil || events[1].DaemonCommand == nil {
+	if len(events) != 2 || events[0].TargetPickerView == nil || events[1].DaemonCommand == nil {
 		t.Fatalf("expected cancelled same-card result plus daemon cancel, got %#v", events)
 	}
-	if got := events[0].FeishuTargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消导入" || got.MessageID != "om-card-1" {
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消导入" || got.MessageID != "om-card-1" {
 		t.Fatalf("expected cancelled git-import terminal card on original owner card, got %#v", got)
 	}
 	if got := events[1].DaemonCommand; got.Kind != control.DaemonCommandGitWorkspaceImportCancel || got.PickerID != record.PickerID {

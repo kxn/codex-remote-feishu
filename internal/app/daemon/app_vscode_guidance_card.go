@@ -263,7 +263,7 @@ func vscodeMigrationPageEvent(surfaceID string, flow *vscodeMigrationFlowRecord,
 	return eventcontract.Event{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &view,
+		PageView:         &view,
 	}
 }
 

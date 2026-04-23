@@ -418,7 +418,7 @@ func (a *App) promptPendingUpgradeOnSurfaceLocked(surfaceID string, stateValue i
 		Kind:             eventcontract.EventFeishuPageView,
 		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
-		FeishuPageView:   &pageView,
+		PageView:         &pageView,
 	}}
 }
 

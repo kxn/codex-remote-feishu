@@ -35,7 +35,7 @@ func compactOwnerCardEvent(surfaceID string, flow *activeOwnerCardFlowRecord, ti
 	return eventcontract.Event{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &view,
+		PageView:         &view,
 	}
 }
 

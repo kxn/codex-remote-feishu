@@ -18,7 +18,7 @@ func TestHandleUIEventsAddsAttentionPingForRequestOncePerRevision(t *testing.T) 
 	requestEvent := eventcontract.Event{
 		Kind:             eventcontract.EventFeishuRequestView,
 		SurfaceSessionID: "surface-1",
-		FeishuRequestView: &control.FeishuRequestView{
+		RequestView: &control.FeishuRequestView{
 			RequestID:       "req-1",
 			RequestType:     "approval",
 			RequestRevision: 1,
@@ -62,7 +62,7 @@ func TestHandleUIEventsRetriesRequestAttentionPingAfterAnchorDeliveryFailure(t *
 	requestEvent := eventcontract.Event{
 		Kind:             eventcontract.EventFeishuRequestView,
 		SurfaceSessionID: "surface-1",
-		FeishuRequestView: &control.FeishuRequestView{
+		RequestView: &control.FeishuRequestView{
 			RequestID:       "req-1",
 			RequestType:     "approval",
 			RequestRevision: 1,
@@ -122,7 +122,7 @@ func TestHandleUIEventsMergesFinalAndPlanProposalIntoOneAttentionPing(t *testing
 		{
 			Kind:             eventcontract.EventFeishuPageView,
 			SurfaceSessionID: "surface-1",
-			FeishuPageView: &control.FeishuPageView{
+			PageView: &control.FeishuPageView{
 				CommandID: control.FeishuCommandPlan,
 				Title:     "提案计划",
 				Sections: []control.CommandCatalogSection{{
@@ -267,7 +267,7 @@ func TestHandleUIEventsSkipsAttentionPingWithoutActorIdentity(t *testing.T) {
 	app.handleUIEvents(context.Background(), []eventcontract.Event{{
 		Kind:             eventcontract.EventFeishuRequestView,
 		SurfaceSessionID: "surface-1",
-		FeishuRequestView: &control.FeishuRequestView{
+		RequestView: &control.FeishuRequestView{
 			RequestID:       "req-1",
 			RequestType:     "approval",
 			RequestRevision: 1,

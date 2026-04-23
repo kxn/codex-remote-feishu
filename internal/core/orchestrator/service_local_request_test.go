@@ -586,17 +586,17 @@ func TestApprovalRequestPromptUsesAttachedSurfaceForLocalTurn(t *testing.T) {
 	if len(record.Options) != 3 {
 		t.Fatalf("expected request options in state, got %#v", record)
 	}
-	if events[0].FeishuRequestContext == nil {
+	if events[0].RequestContext == nil {
 		t.Fatalf("expected feishu request context, got %#v", events[0])
 	}
-	if events[0].FeishuRequestContext.DTOOwner != control.FeishuUIDTOwnerRequest {
-		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuRequestContext)
+	if events[0].RequestContext.DTOOwner != control.FeishuUIDTOwnerRequest {
+		t.Fatalf("unexpected dto owner: %#v", events[0].RequestContext)
 	}
-	if events[0].FeishuRequestContext.RequestID != "req-1" || events[0].FeishuRequestContext.RequestType != "approval" {
-		t.Fatalf("unexpected request context payload: %#v", events[0].FeishuRequestContext)
+	if events[0].RequestContext.RequestID != "req-1" || events[0].RequestContext.RequestType != "approval" {
+		t.Fatalf("unexpected request context payload: %#v", events[0].RequestContext)
 	}
-	if !events[0].FeishuRequestContext.Surface.RouteMutationBlocked || events[0].FeishuRequestContext.Surface.RouteMutationBlockedBy != "pending_request" {
-		t.Fatalf("expected pending request to block route mutation, got %#v", events[0].FeishuRequestContext.Surface)
+	if !events[0].RequestContext.Surface.RouteMutationBlocked || events[0].RequestContext.Surface.RouteMutationBlockedBy != "pending_request" {
+		t.Fatalf("expected pending request to block route mutation, got %#v", events[0].RequestContext.Surface)
 	}
 }
 

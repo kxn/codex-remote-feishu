@@ -26,17 +26,17 @@ func (event Event) CanonicalKind() Kind {
 		return KindNotice
 	case event.PendingInput != nil:
 		return KindPendingInput
-	case event.ThreadHistoryView != nil || event.FeishuThreadHistoryView != nil:
+	case event.ThreadHistoryView != nil:
 		return KindThreadHistory
-	case event.TargetPickerView != nil || event.FeishuTargetPickerView != nil:
+	case event.TargetPickerView != nil:
 		return KindTargetPicker
-	case event.PathPickerView != nil || event.FeishuPathPickerView != nil:
+	case event.PathPickerView != nil:
 		return KindPathPicker
-	case event.RequestView != nil || event.FeishuRequestView != nil:
+	case event.RequestView != nil:
 		return KindRequest
-	case event.PageView != nil || event.FeishuPageView != nil:
+	case event.PageView != nil:
 		return KindPage
-	case event.SelectionView != nil || event.FeishuSelectionView != nil:
+	case event.SelectionView != nil:
 		return KindSelection
 	case event.Snapshot != nil:
 		return KindSnapshot
@@ -72,53 +72,17 @@ func (event Event) CanonicalPayload() Payload {
 		return event.Payload
 	}
 	selectionView := event.SelectionView
-	if selectionView == nil {
-		selectionView = event.FeishuSelectionView
-	}
 	selectionContext := event.SelectionContext
-	if selectionContext == nil {
-		selectionContext = event.FeishuSelectionContext
-	}
 	pageView := event.PageView
-	if pageView == nil {
-		pageView = event.FeishuPageView
-	}
 	pageContext := event.PageContext
-	if pageContext == nil {
-		pageContext = event.FeishuPageContext
-	}
 	requestView := event.RequestView
-	if requestView == nil {
-		requestView = event.FeishuRequestView
-	}
 	requestContext := event.RequestContext
-	if requestContext == nil {
-		requestContext = event.FeishuRequestContext
-	}
 	pathPickerView := event.PathPickerView
-	if pathPickerView == nil {
-		pathPickerView = event.FeishuPathPickerView
-	}
 	pathPickerContext := event.PathPickerContext
-	if pathPickerContext == nil {
-		pathPickerContext = event.FeishuPathPickerContext
-	}
 	targetPickerView := event.TargetPickerView
-	if targetPickerView == nil {
-		targetPickerView = event.FeishuTargetPickerView
-	}
 	targetPickerContext := event.TargetPickerContext
-	if targetPickerContext == nil {
-		targetPickerContext = event.FeishuTargetPickerContext
-	}
 	threadHistoryView := event.ThreadHistoryView
-	if threadHistoryView == nil {
-		threadHistoryView = event.FeishuThreadHistoryView
-	}
 	threadHistoryContext := event.ThreadHistoryContext
-	if threadHistoryContext == nil {
-		threadHistoryContext = event.FeishuThreadHistoryContext
-	}
 	switch event.CanonicalKind() {
 	case KindSnapshot:
 		if event.Snapshot != nil {

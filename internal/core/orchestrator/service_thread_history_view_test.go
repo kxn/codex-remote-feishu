@@ -38,11 +38,11 @@ func TestApplySurfaceActionHistoryStartsQueryForCurrentThread(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("expected loading view + daemon command, got %#v", events)
 	}
-	if events[0].Kind != eventcontract.EventFeishuThreadHistory || events[0].FeishuThreadHistoryView == nil || !events[0].FeishuThreadHistoryView.Loading {
+	if events[0].Kind != eventcontract.EventFeishuThreadHistory || events[0].ThreadHistoryView == nil || !events[0].ThreadHistoryView.Loading {
 		t.Fatalf("expected loading history view, got %#v", events[0])
 	}
-	if len(events[0].FeishuThreadHistoryView.NoticeSections) != 1 {
-		t.Fatalf("expected loading history view to expose one notice section, got %#v", events[0].FeishuThreadHistoryView)
+	if len(events[0].ThreadHistoryView.NoticeSections) != 1 {
+		t.Fatalf("expected loading history view to expose one notice section, got %#v", events[0].ThreadHistoryView)
 	}
 	if events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandThreadHistoryRead || events[1].DaemonCommand.ThreadID != "thread-1" {
 		t.Fatalf("expected history daemon command, got %#v", events[1])
@@ -111,10 +111,10 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsNewestFirstList(t *testing.T) {
 	})
 
 	events := svc.HandleSurfaceThreadHistoryLoaded("surface-1")
-	if len(events) != 1 || events[0].FeishuThreadHistoryView == nil {
+	if len(events) != 1 || events[0].ThreadHistoryView == nil {
 		t.Fatalf("expected one resolved history view, got %#v", events)
 	}
-	view := events[0].FeishuThreadHistoryView
+	view := events[0].ThreadHistoryView
 	if view.Loading || view.Detail != nil || view.TurnCount != 3 {
 		t.Fatalf("unexpected history list view: %#v", view)
 	}
@@ -189,10 +189,10 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsDetailNavigation(t *testing.T) {
 	})
 
 	events := svc.HandleSurfaceThreadHistoryLoaded("surface-1")
-	if len(events) != 1 || events[0].FeishuThreadHistoryView == nil || events[0].FeishuThreadHistoryView.Detail == nil {
+	if len(events) != 1 || events[0].ThreadHistoryView == nil || events[0].ThreadHistoryView.Detail == nil {
 		t.Fatalf("expected one detail history view, got %#v", events)
 	}
-	detail := events[0].FeishuThreadHistoryView.Detail
+	detail := events[0].ThreadHistoryView.Detail
 	if detail.TurnID != "turn-2" || detail.Ordinal != 2 {
 		t.Fatalf("unexpected detail view: %#v", detail)
 	}

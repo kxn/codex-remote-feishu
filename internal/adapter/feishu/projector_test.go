@@ -447,9 +447,9 @@ func TestProjectUseAllSelectionViewGroupsByWorkspace(t *testing.T) {
 		},
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
-		Kind:                eventcontract.EventFeishuSelectionView,
-		FeishuSelectionView: &view,
-		FeishuSelectionContext: &control.FeishuUISelectionContext{
+		Kind:          eventcontract.EventFeishuSelectionView,
+		SelectionView: &view,
+		SelectionContext: &control.FeishuUISelectionContext{
 			DTOOwner:   control.FeishuUIDTOwnerSelection,
 			PromptKind: control.SelectionPromptUseThread,
 			Layout:     "workspace_grouped_useall",

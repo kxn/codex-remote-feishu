@@ -22,8 +22,8 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 		GatewayID:                surface.GatewayID,
 		SurfaceSessionID:         surface.SurfaceSessionID,
 		InlineReplaceCurrentCard: true,
-		FeishuPageView:           &view,
-		FeishuPageContext:        s.buildFeishuPageContextFromView(surface, view),
+		PageView:                 &view,
+		PageContext:              s.buildFeishuPageContextFromView(surface, view),
 	}
 }
 

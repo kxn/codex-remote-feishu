@@ -124,23 +124,23 @@ func TestMenuActionBuildsInteractiveCommandCatalogEvent(t *testing.T) {
 	if catalog.Title != "命令菜单" {
 		t.Fatalf("unexpected menu catalog title: %#v", catalog)
 	}
-	if events[0].FeishuPageContext == nil {
+	if events[0].PageContext == nil {
 		t.Fatalf("expected feishu page context, got %#v", events[0])
 	}
-	if events[0].FeishuPageView == nil {
-		t.Fatalf("expected feishu page view menu payload, got %#v", events[0].FeishuPageView)
+	if events[0].PageView == nil {
+		t.Fatalf("expected feishu page view menu payload, got %#v", events[0].PageView)
 	}
-	if events[0].FeishuPageContext.DTOOwner != control.FeishuUIDTOwnerPage {
-		t.Fatalf("unexpected dto owner: %#v", events[0].FeishuPageContext)
+	if events[0].PageContext.DTOOwner != control.FeishuUIDTOwnerPage {
+		t.Fatalf("unexpected dto owner: %#v", events[0].PageContext)
 	}
-	if events[0].FeishuPageContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
-		t.Fatalf("unexpected callback payload owner: %#v", events[0].FeishuPageContext)
+	if events[0].PageContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
+		t.Fatalf("unexpected callback payload owner: %#v", events[0].PageContext)
 	}
-	if events[0].FeishuPageContext.Surface.InlineReplaceFreshness != "daemon_lifecycle" || !events[0].FeishuPageContext.Surface.InlineReplaceRequiresFreshness {
-		t.Fatalf("unexpected inline replace context: %#v", events[0].FeishuPageContext.Surface)
+	if events[0].PageContext.Surface.InlineReplaceFreshness != "daemon_lifecycle" || !events[0].PageContext.Surface.InlineReplaceRequiresFreshness {
+		t.Fatalf("unexpected inline replace context: %#v", events[0].PageContext.Surface)
 	}
-	if events[0].FeishuPageContext.Surface.InlineReplaceViewSession != "surface_state_rederived" || events[0].FeishuPageContext.Surface.InlineReplaceRequiresViewState {
-		t.Fatalf("unexpected inline replace view/session context: %#v", events[0].FeishuPageContext.Surface)
+	if events[0].PageContext.Surface.InlineReplaceViewSession != "surface_state_rederived" || events[0].PageContext.Surface.InlineReplaceRequiresViewState {
+		t.Fatalf("unexpected inline replace view/session context: %#v", events[0].PageContext.Surface)
 	}
 }
 

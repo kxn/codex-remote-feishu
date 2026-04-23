@@ -161,7 +161,7 @@ func upgradeOwnerCardEvent(surfaceID string, flow *upgradeOwnerCardFlowRecord, t
 	return eventcontract.Event{
 		Kind:             eventcontract.EventFeishuPageView,
 		SurfaceSessionID: strings.TrimSpace(surfaceID),
-		FeishuPageView:   &view,
+		PageView:         &view,
 	}
 }
 

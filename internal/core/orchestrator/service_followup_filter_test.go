@@ -25,8 +25,8 @@ func TestFilterFollowupEventsByPolicy(t *testing.T) {
 			},
 		},
 		{
-			Kind:                eventcontract.EventFeishuSelectionView,
-			FeishuSelectionView: &control.FeishuSelectionView{},
+			Kind:          eventcontract.EventFeishuSelectionView,
+			SelectionView: &control.FeishuSelectionView{},
 		},
 	}
 	filtered := filterFollowupEventsByPolicy(events, control.FeishuFollowupPolicy{
@@ -52,7 +52,7 @@ func TestPathPickerFilteredFollowupEventsDropsNoticeClasses(t *testing.T) {
 		},
 		{
 			Kind: eventcontract.EventFeishuPathPicker,
-			FeishuPathPickerView: &control.FeishuPathPickerView{
+			PathPickerView: &control.FeishuPathPickerView{
 				PickerID: "picker-1",
 			},
 		},
