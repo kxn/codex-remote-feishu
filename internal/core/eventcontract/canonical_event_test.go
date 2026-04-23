@@ -65,7 +65,7 @@ func TestCanonicalSemanticsNoticeThreadSelection(t *testing.T) {
 
 func TestCanonicalSemanticsForBlockCommitted(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		block render.Block
 		want  DeliverySemantics
 	}{
