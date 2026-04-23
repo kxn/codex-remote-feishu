@@ -15,7 +15,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 )
 
-const defaultPreviewGrantTTL = 30 * time.Minute
+const defaultPreviewGrantTTL = 24 * time.Hour
 
 type previewGrantRecord struct {
 	ExternalURL string

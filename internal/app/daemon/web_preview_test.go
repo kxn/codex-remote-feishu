@@ -76,6 +76,53 @@ func TestIssuePreviewScopePrefixReusesGrantWithinSameMessageTTL(t *testing.T) {
 	}
 }
 
+func TestIssuePreviewScopePrefixUsesPreviewGrantDefaultTTL(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	now := time.Date(2026, 4, 23, 12, 0, 0, 0, time.UTC)
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			DefaultLinkTTL:    10 * time.Minute,
+			DefaultSessionTTL: 10 * time.Minute,
+			ProviderKind:      "disabled",
+		},
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Now:               func() time.Time { return now },
+		DefaultLinkTTL:    10 * time.Minute,
+		DefaultSessionTTL: 10 * time.Minute,
+		IdleTTL:           5 * time.Minute,
+	})
+	defer app.Shutdown(nil)
+
+	_, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
+		ScopePublicID: "scope-1",
+		GrantKey:      "message-1",
+	})
+	if err != nil {
+		t.Fatalf("issuePreviewScopePrefix: %v", err)
+	}
+
+	snapshot := app.externalAccess.Snapshot()
+	if snapshot.GrantCount != 1 || len(snapshot.ActiveGrants) != 1 {
+		t.Fatalf("expected one active preview grant, got %#v", snapshot)
+	}
+	grant := snapshot.ActiveGrants[0]
+	if got := grant.ExpiresAt.Sub(grant.IssuedAt); got != defaultPreviewGrantTTL {
+		t.Fatalf("grant ttl = %s, want %s", got, defaultPreviewGrantTTL)
+	}
+	if grant.SessionTTL != defaultPreviewGrantTTL {
+		t.Fatalf("session ttl = %s, want %s", grant.SessionTTL, defaultPreviewGrantTTL)
+	}
+}
+
 func TestPreviewGrantKeyFallsBackWhenOnlyThreadIDIsPresent(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 
@@ -196,7 +243,7 @@ func TestIssuePreviewScopePrefixKeepsLaterMessageAliveAfterEarlierGrantExpires(t
 	if err != nil {
 		t.Fatalf("second issuePreviewScopePrefix: %v", err)
 	}
-	now = now.Add(26 * time.Minute)
+	now = now.Add(defaultPreviewGrantTTL - 4*time.Minute)
 
 	client := &http.Client{
 		Transport: &http.Transport{Proxy: nil},
