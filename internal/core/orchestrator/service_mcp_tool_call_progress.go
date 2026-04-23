@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -93,7 +94,7 @@ func (s *Service) handleMCPToolCallItemProgress(instanceID string, event agentpr
 	}
 	s.progress.mcpToolCallProgress[key] = record
 	progress.ItemID = strings.TrimSpace(event.ItemID)
-	upsertExecCommandProgressEntry(progress, mcpToolCallProgressEntry(*record))
+	execprogress.UpsertEntry(progress, mcpToolCallProgressEntry(*record))
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
@@ -102,7 +103,7 @@ func (s *Service) ensureProgressForMCPToolCall(surface *state.SurfaceConsoleReco
 		return s.activeOrEnsureExecCommandProgress(surface, instanceID, threadID, turnID)
 	}
 	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
-	if progress == nil || !progressHasEntry(progress, itemID, "mcp_tool_call") {
+	if progress == nil || !execprogress.HasEntry(progress, itemID, "mcp_tool_call") {
 		return nil
 	}
 	return progress

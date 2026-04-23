@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"testing"
 
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -37,7 +38,7 @@ func TestExecCommandProgressSnapshotBuildsSingleTimelineAcrossExplorationAndEntr
 		},
 	}
 
-	snapshot := ExecCommandProgressSnapshot(progress)
+	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {
 		t.Fatal("expected snapshot")
 	}
@@ -73,7 +74,7 @@ func TestExecCommandProgressSnapshotFallsBackToCommandsOnlyWhenNoStructuredTimel
 		},
 	}
 
-	snapshot := ExecCommandProgressSnapshot(progress)
+	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {
 		t.Fatal("expected snapshot")
 	}

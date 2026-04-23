@@ -4,42 +4,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
-	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
-
-func ExecCommandProgressSnapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandProgress {
-	return execprogress.Snapshot(progress)
-}
-
-func execCommandMetadata(event agentproto.Event) (string, string) {
-	return execprogress.CommandMetadata(event)
-}
-
-func appendExecCommandHistory(commands []string, command string) []string {
-	return execprogress.AppendCommandHistory(commands, command)
-}
-
-func progressHasEntry(progress *state.ExecCommandProgressRecord, itemID, kind string) bool {
-	return execprogress.HasEntry(progress, itemID, kind)
-}
-
-func upsertExecCommandProgressEntry(progress *state.ExecCommandProgressRecord, entry state.ExecCommandProgressEntryRecord) {
-	execprogress.UpsertEntry(progress, entry)
-}
-
-func webSearchProgressEntry(metadata map[string]any, final bool) state.ExecCommandProgressEntryRecord {
-	return execprogress.WebSearchEntry(metadata, final)
-}
-
-func upsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, event agentproto.Event) (state.ExecCommandProgressEntryRecord, string, bool) {
-	return execprogress.UpsertDynamicToolProgressEntry(progress, event)
-}
-
-func normalizeExecCommandProgressStatus(status string, final bool) string {
-	return execprogress.NormalizeStatus(status, final)
-}
 
 func (s *Service) ensureExecCommandProgress(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID string) *state.ExecCommandProgressRecord {
 	if surface.ActiveExecProgress != nil {

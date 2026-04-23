@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -66,7 +67,7 @@ func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsol
 	}
 	record.AnimationStep = (record.AnimationStep + 1) % 3
 	record.LastAnimatedAt = now
-	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  record.ItemID,
 		Kind:    "reasoning_summary",
 		Summary: formatExecCommandProgressReasoningText(record.Text, record.AnimationStep),
@@ -103,7 +104,7 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 		return nil
 	}
-	command, cwd := execCommandMetadata(event)
+	command, cwd := execprogress.CommandMetadata(event)
 	if command == "" {
 		return nil
 	}
@@ -111,17 +112,17 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 	prevItemID := strings.TrimSpace(progress.ItemID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	progress.Command = command
-	progress.Commands = appendExecCommandHistory(progress.Commands, command)
+	progress.Commands = execprogress.AppendCommandHistory(progress.Commands, command)
 	if strings.TrimSpace(cwd) != "" {
 		progress.CWD = cwd
 	}
-	progress.Status = normalizeExecCommandProgressStatus(event.Status, false)
+	progress.Status = execprogress.NormalizeStatus(event.Status, false)
 	explorationChanged := false
 	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, false); ok {
 		explorationChanged = changed
 		progress.ItemID = execProgressExplorationBlockID
 	} else {
-		upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+		execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 			ItemID:  progress.ItemID,
 			Kind:    "command_execution",
 			Label:   "执行",
@@ -143,9 +144,9 @@ func (s *Service) handleWebSearchProgressStarted(instanceID string, event agentp
 	progress := s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	prevItemID := strings.TrimSpace(progress.ItemID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
-	entry := webSearchProgressEntry(event.Metadata, false)
+	entry := execprogress.WebSearchEntry(event.Metadata, false)
 	entry.ItemID = progress.ItemID
-	upsertExecCommandProgressEntry(progress, entry)
+	execprogress.UpsertEntry(progress, entry)
 	if prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
 		return nil
 	}
@@ -161,7 +162,7 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 	if progress == nil {
 		return nil
 	}
-	command, cwd := execCommandMetadata(event)
+	command, cwd := execprogress.CommandMetadata(event)
 	if strings.TrimSpace(event.ItemID) != "" {
 		progress.ItemID = strings.TrimSpace(event.ItemID)
 	}
@@ -171,7 +172,7 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 	if strings.TrimSpace(cwd) != "" {
 		progress.CWD = cwd
 	}
-	progress.Status = normalizeExecCommandProgressStatus(event.Status, true)
+	progress.Status = execprogress.NormalizeStatus(event.Status, true)
 	if changed, ok := upsertExplorationProgressForCommandExecution(progress, event, true); ok {
 		progress.ItemID = execProgressExplorationBlockID
 		if changed && s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
@@ -179,10 +180,10 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		}
 		return nil
 	}
-	if !progressHasEntry(progress, event.ItemID, "command_execution") {
+	if !execprogress.HasEntry(progress, event.ItemID, "command_execution") {
 		return nil
 	}
-	upsertExecCommandProgressEntry(progress, state.ExecCommandProgressEntryRecord{
+	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  strings.TrimSpace(event.ItemID),
 		Kind:    "command_execution",
 		Label:   "执行",
@@ -198,15 +199,15 @@ func (s *Service) handleWebSearchProgressCompleted(instanceID string, event agen
 		return nil
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if progress == nil || !progressHasEntry(progress, event.ItemID, "web_search") {
+	if progress == nil || !execprogress.HasEntry(progress, event.ItemID, "web_search") {
 		return nil
 	}
 	if strings.TrimSpace(event.ItemID) != "" {
 		progress.ItemID = strings.TrimSpace(event.ItemID)
 	}
-	entry := webSearchProgressEntry(event.Metadata, true)
+	entry := execprogress.WebSearchEntry(event.Metadata, true)
 	entry.ItemID = progress.ItemID
-	upsertExecCommandProgressEntry(progress, entry)
+	execprogress.UpsertEntry(progress, entry)
 	if !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 		return nil
 	}
@@ -226,12 +227,12 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
-	entry, groupKey, changed := upsertDynamicToolProgressEntry(progress, event)
+	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
 	if !changed {
 		return nil
 	}
 	progress.ItemID = groupKey
-	upsertExecCommandProgressEntry(progress, entry)
+	execprogress.UpsertEntry(progress, entry)
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
@@ -251,12 +252,12 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
-	entry, groupKey, changed := upsertDynamicToolProgressEntry(progress, event)
+	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
 	if groupKey == "" || !changed {
 		return nil
 	}
 	progress.ItemID = groupKey
-	upsertExecCommandProgressEntry(progress, entry)
+	execprogress.UpsertEntry(progress, entry)
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
@@ -310,7 +311,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	progress.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	progress.LastEmittedAt = s.now()
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
-	snapshot := ExecCommandProgressSnapshot(progress)
+	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {
 		return nil
 	}

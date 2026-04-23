@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -72,6 +73,6 @@ func (r *serviceProgressRuntime) renderCompactNotice(instanceID string, event ag
 	}
 	progress := r.service.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	progress.ItemID = firstNonEmpty(strings.TrimSpace(event.ItemID), progress.ItemID)
-	upsertExecCommandProgressEntry(progress, compactCompletionProgressEntryRecord(event.ItemID))
+	execprogress.UpsertEntry(progress, compactCompletionProgressEntryRecord(event.ItemID))
 	return r.service.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
