@@ -8,23 +8,24 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 )
 
-var newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) feishu.PreviewDriveAdminService {
+var newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) previewpkg.PreviewDriveAdminService {
 	var api = feishu.NewLarkDrivePreviewAPI(cfg.GatewayID, nil)
 	if strings.TrimSpace(cfg.AppID) != "" && strings.TrimSpace(cfg.AppSecret) != "" {
 		api = feishu.NewLarkDrivePreviewAPI(cfg.GatewayID, feishu.NewLarkClient(cfg.AppID, cfg.AppSecret))
 	}
-	return feishu.NewDriveMarkdownPreviewer(api, feishu.MarkdownPreviewConfig{
+	return previewpkg.NewDriveMarkdownPreviewer(api, previewpkg.MarkdownPreviewConfig{
 		StatePath: cfg.PreviewStatePath,
 		GatewayID: cfg.GatewayID,
 	})
 }
 
 type previewDriveStatusResponse struct {
-	GatewayID string                     `json:"gatewayId"`
-	Name      string                     `json:"name,omitempty"`
-	Summary   feishu.PreviewDriveSummary `json:"summary"`
+	GatewayID string                         `json:"gatewayId"`
+	Name      string                         `json:"name,omitempty"`
+	Summary   previewpkg.PreviewDriveSummary `json:"summary"`
 }
 
 type previewDriveCleanupRequest struct {
@@ -32,10 +33,10 @@ type previewDriveCleanupRequest struct {
 }
 
 type previewDriveCleanupResponse struct {
-	GatewayID      string                           `json:"gatewayId"`
-	Name           string                           `json:"name,omitempty"`
-	OlderThanHours int                              `json:"olderThanHours"`
-	Result         feishu.PreviewDriveCleanupResult `json:"result"`
+	GatewayID      string                               `json:"gatewayId"`
+	Name           string                               `json:"name,omitempty"`
+	OlderThanHours int                                  `json:"olderThanHours"`
+	Result         previewpkg.PreviewDriveCleanupResult `json:"result"`
 }
 
 func (a *App) handlePreviewDriveStatus(w http.ResponseWriter, r *http.Request) {

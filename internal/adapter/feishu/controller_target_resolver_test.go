@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
@@ -205,7 +206,7 @@ func TestMultiGatewayControllerSendIMImageReturnsTypedErrorWhenTargetIsAmbiguous
 func TestMultiGatewayControllerRewriteFinalBlockFallsBackToSurfaceGateway(t *testing.T) {
 	controller, _, previewers := startGatewayControllerForTest(t, []string{"app-1", "app-2"}, true)
 
-	result, err := controller.RewriteFinalBlock(context.Background(), FinalBlockPreviewRequest{
+	result, err := controller.RewriteFinalBlock(context.Background(), previewpkg.FinalBlockPreviewRequest{
 		SurfaceSessionID: "feishu:app-2:user:user-1",
 		Block: render.Block{
 			Kind:  render.BlockAssistantMarkdown,

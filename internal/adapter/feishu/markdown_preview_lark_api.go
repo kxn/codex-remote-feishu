@@ -8,6 +8,8 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
+
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 )
 
 type larkDrivePreviewAPI struct {
@@ -15,7 +17,7 @@ type larkDrivePreviewAPI struct {
 	broker *FeishuCallBroker
 }
 
-func NewLarkDrivePreviewAPI(gatewayID string, client *lark.Client) previewDriveAPI {
+func NewLarkDrivePreviewAPI(gatewayID string, client *lark.Client) previewpkg.DriveAPI {
 	if client == nil {
 		return nil
 	}
@@ -25,7 +27,7 @@ func NewLarkDrivePreviewAPI(gatewayID string, client *lark.Client) previewDriveA
 	}
 }
 
-func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToken string) (previewRemoteNode, error) {
+func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToken string) (previewpkg.RemoteNode, error) {
 	resp, err := DoSDK(ctx, a.broker, CallSpec{
 		API:      "drive.v1.file.create_folder",
 		Class:    CallClassDrive,
@@ -48,10 +50,10 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		return resp, nil
 	})
 	if err != nil {
-		return previewRemoteNode{}, err
+		return previewpkg.RemoteNode{}, err
 	}
 	if !resp.Success() {
-		return previewRemoteNode{}, &driveAPIError{
+		return previewpkg.RemoteNode{}, &driveAPIError{
 			API:       "drive.v1.file.create_folder",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -60,12 +62,12 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		}
 	}
 	if resp.Data == nil {
-		return previewRemoteNode{}, fmt.Errorf("missing create folder response data")
+		return previewpkg.RemoteNode{}, fmt.Errorf("missing create folder response data")
 	}
-	return previewRemoteNode{
+	return previewpkg.RemoteNode{
 		Token: stringValue(resp.Data.Token),
 		URL:   stringValue(resp.Data.Url),
-		Type:  previewFolderType,
+		Type:  previewpkg.FolderType,
 		Name:  name,
 	}, nil
 }
@@ -158,7 +160,7 @@ func (a *larkDrivePreviewAPI) QueryMetaURL(ctx context.Context, token, docType s
 	return stringValue(resp.Data.Metas[0].Url), nil
 }
 
-func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docType string, principal previewPrincipal) error {
+func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docType string, principal previewpkg.Principal) error {
 	resp, err := DoSDK(ctx, a.broker, CallSpec{
 		API:      "drive.v1.permission_member.create",
 		Class:    CallClassDrive,
@@ -175,7 +177,7 @@ func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docTyp
 			BaseMember(larkdrive.NewBaseMemberBuilder().
 				MemberType(principal.MemberType).
 				MemberId(principal.MemberID).
-				Perm(previewPermissionView).
+				Perm(previewpkg.PermissionView).
 				Type(principal.Type).
 				Build()).
 			Build())
@@ -234,8 +236,8 @@ func (a *larkDrivePreviewAPI) DeleteFile(ctx context.Context, token, docType str
 	return nil
 }
 
-func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string) ([]previewRemoteNode, error) {
-	values := []previewRemoteNode{}
+func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string) ([]previewpkg.RemoteNode, error) {
+	values := []previewpkg.RemoteNode{}
 	pageToken := ""
 	for {
 		req := larkdrive.NewListFileReqBuilder().
@@ -277,7 +279,7 @@ func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string)
 				if file == nil {
 					continue
 				}
-				values = append(values, previewRemoteNode{
+				values = append(values, previewpkg.RemoteNode{
 					Token:        stringValue(file.Token),
 					URL:          stringValue(file.Url),
 					Type:         strings.TrimSpace(stringValue(file.Type)),

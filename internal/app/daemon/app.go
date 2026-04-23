@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
@@ -75,7 +76,7 @@ type App struct {
 	service             *orchestrator.Service
 	projector           *feishu.Projector
 	gateway             feishu.Gateway
-	finalBlockPreviewer feishu.FinalBlockPreviewService
+	finalBlockPreviewer previewpkg.FinalBlockPreviewService
 	relay               *relayws.Server
 	serverIdentity      agentproto.ServerIdentity
 	debugRelayFlow      bool
@@ -271,9 +272,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.syncSurfaceResumeStateLocked(nil)
 }
 
-func (a *App) SetFinalBlockPreviewer(previewer feishu.FinalBlockPreviewService) {
+func (a *App) SetFinalBlockPreviewer(previewer previewpkg.FinalBlockPreviewService) {
 	a.finalBlockPreviewer = previewer
-	if configurable, ok := previewer.(feishu.WebPreviewConfigurable); ok {
+	if configurable, ok := previewer.(previewpkg.WebPreviewConfigurable); ok {
 		configurable.SetWebPreviewPublisher(daemonWebPreviewPublisher{app: a})
 	}
 }

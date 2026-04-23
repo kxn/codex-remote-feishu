@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 )
@@ -26,7 +26,7 @@ type daemonWebPreviewPublisher struct {
 	app *App
 }
 
-func (p daemonWebPreviewPublisher) IssueScopePrefix(ctx context.Context, req feishu.WebPreviewGrantRequest) (string, error) {
+func (p daemonWebPreviewPublisher) IssueScopePrefix(ctx context.Context, req previewpkg.WebPreviewGrantRequest) (string, error) {
 	if p.app == nil {
 		return "", fmt.Errorf("preview publisher app is not configured")
 	}
@@ -53,13 +53,13 @@ func (a *App) servePreviewRoute(w http.ResponseWriter, r *http.Request, download
 	}
 	scopePublicID := strings.TrimSpace(r.PathValue("scope"))
 	previewID := strings.TrimSpace(r.PathValue("preview"))
-	routeService, ok := a.finalBlockPreviewer.(feishu.WebPreviewRouteService)
+	routeService, ok := a.finalBlockPreviewer.(previewpkg.WebPreviewRouteService)
 	if !ok || !routeService.ServeWebPreview(w, r, scopePublicID, previewID, download) {
 		http.NotFound(w, r)
 	}
 }
 
-func (a *App) issuePreviewScopePrefix(ctx context.Context, req feishu.WebPreviewGrantRequest) (string, error) {
+func (a *App) issuePreviewScopePrefix(ctx context.Context, req previewpkg.WebPreviewGrantRequest) (string, error) {
 	scopePublicID := strings.TrimSpace(req.ScopePublicID)
 	if scopePublicID == "" {
 		return "", fmt.Errorf("preview scope id is required")

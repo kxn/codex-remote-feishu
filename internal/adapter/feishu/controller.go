@@ -8,6 +8,8 @@ import (
 	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 )
 
 type GatewayAdminController interface {
@@ -73,7 +75,7 @@ type MultiGatewayController struct {
 	started             bool
 	startCtx            context.Context
 	actionHandler       ActionHandler
-	webPreviewPublisher WebPreviewPublisher
+	webPreviewPublisher previewpkg.WebPreviewPublisher
 
 	newGateway   func(GatewayAppConfig) gatewayRuntime
 	newPreviewer func(gatewayRuntime, GatewayAppConfig) gatewayPreviewRuntime
@@ -97,13 +99,13 @@ func NewMultiGatewayController() *MultiGatewayController {
 		if strings.TrimSpace(cfg.PreviewCacheDir) == "" {
 			return noopGatewayPreviewer{}
 		}
-		var api previewDriveAPI
+		var api previewpkg.DriveAPI
 		if runtime != nil && runtime.Client() != nil {
 			api = NewLarkDrivePreviewAPI(cfg.GatewayID, runtime.Client())
 		}
-		return NewDriveMarkdownPreviewer(
+		return previewpkg.NewDriveMarkdownPreviewer(
 			api,
-			MarkdownPreviewConfig{
+			previewpkg.MarkdownPreviewConfig{
 				StatePath: cfg.PreviewStatePath,
 				CacheDir:  cfg.PreviewCacheDir,
 				GatewayID: cfg.GatewayID,
@@ -116,7 +118,7 @@ func NewMultiGatewayController() *MultiGatewayController {
 func normalizeGatewayAppConfig(cfg GatewayAppConfig) GatewayAppConfig {
 	cfg.GatewayID = normalizeGatewayID(cfg.GatewayID)
 	if strings.TrimSpace(cfg.PreviewRootFolderName) == "" {
-		cfg.PreviewRootFolderName = defaultPreviewRootFolderName
+		cfg.PreviewRootFolderName = previewpkg.DefaultRootFolderName
 	}
 	if strings.TrimSpace(cfg.PreviewStatePath) == "" {
 		cfg.PreviewStatePath = filepath.Join(".", "feishu-preview-"+cfg.GatewayID+".json")

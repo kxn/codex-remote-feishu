@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
@@ -20,14 +20,14 @@ type fakePreviewRouteService struct {
 	scope     string
 	preview   string
 	download  bool
-	publisher feishu.WebPreviewPublisher
+	publisher previewpkg.WebPreviewPublisher
 }
 
-func (f *fakePreviewRouteService) RewriteFinalBlock(_ context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
-	return feishu.FinalBlockPreviewResult{Block: req.Block}, nil
+func (f *fakePreviewRouteService) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
+	return previewpkg.FinalBlockPreviewResult{Block: req.Block}, nil
 }
 
-func (f *fakePreviewRouteService) SetWebPreviewPublisher(publisher feishu.WebPreviewPublisher) {
+func (f *fakePreviewRouteService) SetWebPreviewPublisher(publisher previewpkg.WebPreviewPublisher) {
 	f.publisher = publisher
 }
 
@@ -59,7 +59,7 @@ func TestIssuePreviewScopePrefixReusesGrantWithinSameMessageTTL(t *testing.T) {
 	})
 	defer app.Shutdown(nil)
 
-	req := feishu.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
+	req := previewpkg.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
 	first, err := app.issuePreviewScopePrefix(context.Background(), req)
 	if err != nil {
 		t.Fatalf("first issuePreviewScopePrefix: %v", err)
@@ -133,14 +133,14 @@ func TestIssuePreviewScopePrefixUsesDifferentGrantForDifferentMessages(t *testin
 	})
 	defer app.Shutdown(nil)
 
-	first, err := app.issuePreviewScopePrefix(context.Background(), feishu.WebPreviewGrantRequest{
+	first, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
 		ScopePublicID: "scope-1",
 		GrantKey:      "message-1",
 	})
 	if err != nil {
 		t.Fatalf("first issuePreviewScopePrefix: %v", err)
 	}
-	second, err := app.issuePreviewScopePrefix(context.Background(), feishu.WebPreviewGrantRequest{
+	second, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
 		ScopePublicID: "scope-1",
 		GrantKey:      "message-2",
 	})
@@ -181,7 +181,7 @@ func TestIssuePreviewScopePrefixKeepsLaterMessageAliveAfterEarlierGrantExpires(t
 	})
 	defer app.Shutdown(nil)
 
-	first, err := app.issuePreviewScopePrefix(context.Background(), feishu.WebPreviewGrantRequest{
+	first, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
 		ScopePublicID: "scope-1",
 		GrantKey:      "message-1",
 	})
@@ -189,7 +189,7 @@ func TestIssuePreviewScopePrefixKeepsLaterMessageAliveAfterEarlierGrantExpires(t
 		t.Fatalf("first issuePreviewScopePrefix: %v", err)
 	}
 	now = now.Add(5 * time.Minute)
-	second, err := app.issuePreviewScopePrefix(context.Background(), feishu.WebPreviewGrantRequest{
+	second, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
 		ScopePublicID: "scope-1",
 		GrantKey:      "message-2",
 	})
@@ -250,7 +250,7 @@ func TestIssuePreviewScopePrefixReissuesGrantAfterExternalAccessIdleShutdown(t *
 	})
 	defer app.Shutdown(nil)
 
-	reqGrant := feishu.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
+	reqGrant := previewpkg.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
 	first, err := app.issuePreviewScopePrefix(context.Background(), reqGrant)
 	if err != nil {
 		t.Fatalf("first issuePreviewScopePrefix: %v", err)
@@ -330,7 +330,7 @@ func TestIssuePreviewScopePrefixReissuesGrantAfterIdleDeactivateAndReusesWarmPro
 	})
 	defer app.Shutdown(nil)
 
-	reqGrant := feishu.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
+	reqGrant := previewpkg.WebPreviewGrantRequest{ScopePublicID: "scope-1", GrantKey: "message-1"}
 	first, err := app.issuePreviewScopePrefix(context.Background(), reqGrant)
 	if err != nil {
 		t.Fatalf("first issuePreviewScopePrefix: %v", err)
@@ -429,6 +429,6 @@ func TestPreviewScopeRootDelegatesToFinalPreviewer(t *testing.T) {
 	}
 }
 
-var _ feishu.FinalBlockPreviewService = (*fakePreviewRouteService)(nil)
-var _ feishu.WebPreviewConfigurable = (*fakePreviewRouteService)(nil)
-var _ feishu.WebPreviewRouteService = (*fakePreviewRouteService)(nil)
+var _ previewpkg.FinalBlockPreviewService = (*fakePreviewRouteService)(nil)
+var _ previewpkg.WebPreviewConfigurable = (*fakePreviewRouteService)(nil)
+var _ previewpkg.WebPreviewRouteService = (*fakePreviewRouteService)(nil)

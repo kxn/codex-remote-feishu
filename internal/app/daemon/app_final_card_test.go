@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -81,7 +82,7 @@ type secondChancePreviewer struct {
 	secondDone      chan struct{}
 }
 
-func (s *secondChancePreviewer) RewriteFinalBlock(ctx context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
+func (s *secondChancePreviewer) RewriteFinalBlock(ctx context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
 	s.mu.Lock()
 	s.calls++
 	call := s.calls
@@ -95,7 +96,7 @@ func (s *secondChancePreviewer) RewriteFinalBlock(ctx context.Context, req feish
 
 	if call == 1 {
 		<-ctx.Done()
-		return feishu.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
+		return previewpkg.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
 	}
 	if secondStart != nil {
 		select {
@@ -110,7 +111,7 @@ func (s *secondChancePreviewer) RewriteFinalBlock(ctx context.Context, req feish
 			if secondDone != nil {
 				close(secondDone)
 			}
-			return feishu.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
+			return previewpkg.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
 		}
 	}
 	block := req.Block
@@ -122,7 +123,7 @@ func (s *secondChancePreviewer) RewriteFinalBlock(ctx context.Context, req feish
 	if secondDone != nil {
 		close(secondDone)
 	}
-	return feishu.FinalBlockPreviewResult{Block: block}, secondErr
+	return previewpkg.FinalBlockPreviewResult{Block: block}, secondErr
 }
 
 func materializeAttachedSurfaceForFinalCardTest(app *App, surfaceID, gatewayID, chatID, actorUserID, instanceID, workspaceKey string) {

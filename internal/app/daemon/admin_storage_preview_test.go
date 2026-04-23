@@ -9,26 +9,27 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 type fakePreviewDriveAdmin struct {
-	summary       feishu.PreviewDriveSummary
-	cleanupResult feishu.PreviewDriveCleanupResult
+	summary       previewpkg.PreviewDriveSummary
+	cleanupResult previewpkg.PreviewDriveCleanupResult
 	summaryErr    error
 	cleanupErr    error
 	summaryCtx    context.Context
 	cleanupCutoff time.Time
 }
 
-func (f *fakePreviewDriveAdmin) Summary(ctx context.Context) (feishu.PreviewDriveSummary, error) {
+func (f *fakePreviewDriveAdmin) Summary(ctx context.Context) (previewpkg.PreviewDriveSummary, error) {
 	f.summaryCtx = ctx
 	return f.summary, f.summaryErr
 }
 
-func (f *fakePreviewDriveAdmin) CleanupBefore(_ context.Context, cutoff time.Time) (feishu.PreviewDriveCleanupResult, error) {
+func (f *fakePreviewDriveAdmin) CleanupBefore(_ context.Context, cutoff time.Time) (previewpkg.PreviewDriveCleanupResult, error) {
 	f.cleanupCutoff = cutoff
 	return f.cleanupResult, f.cleanupErr
 }
@@ -44,7 +45,7 @@ func TestPreviewDriveStatusAndCleanupRoutes(t *testing.T) {
 	app, stateDir := newPreviewDriveAdminTestApp(t, cfg)
 
 	fake := &fakePreviewDriveAdmin{
-		summary: feishu.PreviewDriveSummary{
+		summary: previewpkg.PreviewDriveSummary{
 			StatePath:            filepath.Join(stateDir, "feishu-md-preview-main.json"),
 			RootToken:            "fld-root",
 			RootURL:              "https://preview/root",
@@ -53,11 +54,11 @@ func TestPreviewDriveStatusAndCleanupRoutes(t *testing.T) {
 			EstimatedBytes:       1234,
 			UnknownSizeFileCount: 1,
 		},
-		cleanupResult: feishu.PreviewDriveCleanupResult{
+		cleanupResult: previewpkg.PreviewDriveCleanupResult{
 			DeletedFileCount:            1,
 			DeletedEstimatedBytes:       120,
 			SkippedUnknownLastUsedCount: 1,
-			Summary: feishu.PreviewDriveSummary{
+			Summary: previewpkg.PreviewDriveSummary{
 				FileCount:            1,
 				ScopeCount:           1,
 				EstimatedBytes:       1114,
@@ -70,7 +71,7 @@ func TestPreviewDriveStatusAndCleanupRoutes(t *testing.T) {
 	defer func() { newPreviewDriveAdminService = originalFactory }()
 
 	var capturedCfg feishu.GatewayAppConfig
-	newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) feishu.PreviewDriveAdminService {
+	newPreviewDriveAdminService = func(cfg feishu.GatewayAppConfig) previewpkg.PreviewDriveAdminService {
 		capturedCfg = cfg
 		return fake
 	}

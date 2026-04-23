@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
@@ -25,10 +26,10 @@ type secondChanceFinalPatchJob struct {
 	FileChangeSummary    *control.FileChangeSummary
 	TurnDiffSnapshot     *control.TurnDiffSnapshot
 	FinalTurnSummary     *control.FinalTurnSummary
-	PreviewRequest       feishu.FinalBlockPreviewRequest
+	PreviewRequest       previewpkg.FinalBlockPreviewRequest
 }
 
-func (a *App) maybeScheduleSecondChanceFinalPatchLocked(gatewayID, chatID string, event eventcontract.Event, operations []feishu.Operation, previewReq feishu.FinalBlockPreviewRequest, rewriteErr error) {
+func (a *App) maybeScheduleSecondChanceFinalPatchLocked(gatewayID, chatID string, event eventcontract.Event, operations []feishu.Operation, previewReq previewpkg.FinalBlockPreviewRequest, rewriteErr error) {
 	if a == nil || a.finalBlockPreviewer == nil || rewriteErr == nil || a.shuttingDown {
 		return
 	}

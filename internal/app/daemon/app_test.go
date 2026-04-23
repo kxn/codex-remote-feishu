@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -58,27 +59,27 @@ func (g *flakyGateway) Apply(_ context.Context, operations []feishu.Operation) e
 }
 
 type stubMarkdownPreviewer struct {
-	requests []feishu.FinalBlockPreviewRequest
+	requests []previewpkg.FinalBlockPreviewRequest
 	text     string
 	err      error
 }
 
-func (s *stubMarkdownPreviewer) RewriteFinalBlock(_ context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
+func (s *stubMarkdownPreviewer) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
 	s.requests = append(s.requests, req)
 	block := req.Block
 	if s.text != "" {
 		block.Text = s.text
 	}
-	return feishu.FinalBlockPreviewResult{Block: block}, s.err
+	return previewpkg.FinalBlockPreviewResult{Block: block}, s.err
 }
 
 type timeoutMarkdownPreviewer struct {
 	mu       sync.Mutex
-	requests []feishu.FinalBlockPreviewRequest
+	requests []previewpkg.FinalBlockPreviewRequest
 	ctxErr   error
 }
 
-func (s *timeoutMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
+func (s *timeoutMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
 	s.mu.Lock()
 	s.requests = append(s.requests, req)
 	s.mu.Unlock()
@@ -86,13 +87,13 @@ func (s *timeoutMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req fe
 	s.mu.Lock()
 	s.ctxErr = ctx.Err()
 	s.mu.Unlock()
-	return feishu.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
+	return previewpkg.FinalBlockPreviewResult{Block: req.Block}, ctx.Err()
 }
 
-func (s *timeoutMarkdownPreviewer) snapshot() ([]feishu.FinalBlockPreviewRequest, error) {
+func (s *timeoutMarkdownPreviewer) snapshot() ([]previewpkg.FinalBlockPreviewRequest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]feishu.FinalBlockPreviewRequest(nil), s.requests...), s.ctxErr
+	return append([]previewpkg.FinalBlockPreviewRequest(nil), s.requests...), s.ctxErr
 }
 
 type lifecycleGateway struct {

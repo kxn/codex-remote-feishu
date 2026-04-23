@@ -10,6 +10,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
@@ -158,7 +159,7 @@ func TestMultiGatewayControllerRoutesPreviewByGatewayID(t *testing.T) {
 	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
 	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
 
-	result, err := controller.RewriteFinalBlock(context.Background(), FinalBlockPreviewRequest{
+	result, err := controller.RewriteFinalBlock(context.Background(), previewpkg.FinalBlockPreviewRequest{
 		GatewayID: "app-2",
 		Block: render.Block{
 			Kind:  render.BlockAssistantMarkdown,
@@ -505,14 +506,14 @@ type fakePreviewer struct {
 	maintenanceStopped chan struct{}
 }
 
-func (f *fakePreviewer) RewriteFinalBlock(_ context.Context, req FinalBlockPreviewRequest) (FinalBlockPreviewResult, error) {
+func (f *fakePreviewer) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
 	f.calls++
 	block := req.Block
 	block.Text = f.gatewayID + ":" + block.Text
-	return FinalBlockPreviewResult{Block: block}, nil
+	return previewpkg.FinalBlockPreviewResult{Block: block}, nil
 }
 
-func (f *fakePreviewer) SetWebPreviewPublisher(WebPreviewPublisher) {}
+func (f *fakePreviewer) SetWebPreviewPublisher(previewpkg.WebPreviewPublisher) {}
 
 func (f *fakePreviewer) ServeWebPreview(http.ResponseWriter, *http.Request, string, string, bool) bool {
 	return false

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -181,13 +182,13 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 	}
 	log.Printf("ui event: surface=%s chat=%s actor=%s kind=%s", event.SurfaceSessionID, chatID, actorUserID, event.Kind)
 	var (
-		previewReq feishu.FinalBlockPreviewRequest
+		previewReq previewpkg.FinalBlockPreviewRequest
 		previewErr error
 		didPreview bool
 	)
 	if a.finalBlockPreviewer != nil && event.Kind == eventcontract.KindBlockCommitted && event.Block != nil {
 		previewCtx, previewCancel := a.newTimeoutContext(ctx, a.finalPreviewTimeout)
-		previewReq = feishu.FinalBlockPreviewRequest{
+		previewReq = previewpkg.FinalBlockPreviewRequest{
 			GatewayID:        gatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
@@ -198,7 +199,7 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 			Block:            *event.Block,
 		}
 		var (
-			previewResult feishu.FinalBlockPreviewResult
+			previewResult previewpkg.FinalBlockPreviewResult
 			err           error
 		)
 		didPreview = true

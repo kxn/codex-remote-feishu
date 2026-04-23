@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -55,7 +56,7 @@ func RunMain(ctx context.Context, version, branch string) error {
 		}
 	}
 	var gateway feishu.Gateway = controller
-	var finalBlockPreviewer feishu.FinalBlockPreviewService = controller
+	var finalBlockPreviewer previewpkg.FinalBlockPreviewService = controller
 	lock, err := relayruntime.AcquireLock(ctx, paths.DaemonLockFile, false)
 	if err != nil {
 		return fmt.Errorf("acquire service runtime lock: %w", err)

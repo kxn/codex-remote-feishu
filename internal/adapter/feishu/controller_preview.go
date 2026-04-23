@@ -4,32 +4,33 @@ import (
 	"context"
 	"net/http"
 
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
 type gatewayPreviewRuntime interface {
-	FinalBlockPreviewService
-	FinalBlockPreviewMaintenanceService
-	WebPreviewConfigurable
-	WebPreviewRouteService
+	previewpkg.FinalBlockPreviewService
+	previewpkg.FinalBlockPreviewMaintenanceService
+	previewpkg.WebPreviewConfigurable
+	previewpkg.WebPreviewRouteService
 }
 
 type noopGatewayPreviewer struct{}
 
-func (noopGatewayPreviewer) RewriteFinalBlock(_ context.Context, req FinalBlockPreviewRequest) (FinalBlockPreviewResult, error) {
-	return FinalBlockPreviewResult{Block: req.Block}, nil
+func (noopGatewayPreviewer) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
+	return previewpkg.FinalBlockPreviewResult{Block: req.Block}, nil
 }
 
 func (noopGatewayPreviewer) RunBackgroundMaintenance(context.Context) {}
 
-func (noopGatewayPreviewer) SetWebPreviewPublisher(WebPreviewPublisher) {}
+func (noopGatewayPreviewer) SetWebPreviewPublisher(previewpkg.WebPreviewPublisher) {}
 
 func (noopGatewayPreviewer) ServeWebPreview(http.ResponseWriter, *http.Request, string, string, bool) bool {
 	return false
 }
 
-func (c *MultiGatewayController) RewriteFinalBlock(ctx context.Context, req FinalBlockPreviewRequest) (result FinalBlockPreviewResult, err error) {
-	result = FinalBlockPreviewResult{Block: req.Block}
+func (c *MultiGatewayController) RewriteFinalBlock(ctx context.Context, req previewpkg.FinalBlockPreviewRequest) (result previewpkg.FinalBlockPreviewResult, err error) {
+	result = previewpkg.FinalBlockPreviewResult{Block: req.Block}
 	resolution := c.resolveGatewayTarget(eventcontract.TargetRef{
 		GatewayID:        req.GatewayID,
 		SurfaceSessionID: req.SurfaceSessionID,
@@ -43,7 +44,7 @@ func (c *MultiGatewayController) RewriteFinalBlock(ctx context.Context, req Fina
 	return resolution.Worker.previewer.RewriteFinalBlock(ctx, req)
 }
 
-func (c *MultiGatewayController) SetWebPreviewPublisher(publisher WebPreviewPublisher) {
+func (c *MultiGatewayController) SetWebPreviewPublisher(publisher previewpkg.WebPreviewPublisher) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.webPreviewPublisher = publisher

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -19,7 +20,7 @@ type reentrantAppLockPreviewer struct {
 	app *App
 
 	mu       sync.Mutex
-	requests []feishu.FinalBlockPreviewRequest
+	requests []previewpkg.FinalBlockPreviewRequest
 }
 
 type reentrantAppLockGateway struct {
@@ -30,7 +31,7 @@ type reentrantAppLockGateway struct {
 	err        error
 }
 
-func (s *reentrantAppLockPreviewer) RewriteFinalBlock(_ context.Context, req feishu.FinalBlockPreviewRequest) (feishu.FinalBlockPreviewResult, error) {
+func (s *reentrantAppLockPreviewer) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
 	s.mu.Lock()
 	s.requests = append(s.requests, req)
 	s.mu.Unlock()
@@ -44,16 +45,16 @@ func (s *reentrantAppLockPreviewer) RewriteFinalBlock(_ context.Context, req fei
 
 	select {
 	case <-locked:
-		return feishu.FinalBlockPreviewResult{Block: req.Block}, nil
+		return previewpkg.FinalBlockPreviewResult{Block: req.Block}, nil
 	case <-time.After(250 * time.Millisecond):
-		return feishu.FinalBlockPreviewResult{Block: req.Block}, errors.New("previewer could not reacquire app lock")
+		return previewpkg.FinalBlockPreviewResult{Block: req.Block}, errors.New("previewer could not reacquire app lock")
 	}
 }
 
-func (s *reentrantAppLockPreviewer) snapshot() []feishu.FinalBlockPreviewRequest {
+func (s *reentrantAppLockPreviewer) snapshot() []previewpkg.FinalBlockPreviewRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]feishu.FinalBlockPreviewRequest(nil), s.requests...)
+	return append([]previewpkg.FinalBlockPreviewRequest(nil), s.requests...)
 }
 
 func (g *reentrantAppLockGateway) Start(context.Context, feishu.ActionHandler) error { return nil }
