@@ -76,6 +76,195 @@ func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	}
 }
 
+func TestTargetPickerLockedWorkspaceRejectsWorkspaceSwitch(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-droid",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-droid": {ThreadID: "thread-droid", Name: "修复登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.openLockedWorkspaceTargetPicker(surface, "/data/dl/web", true))
+	if !view.WorkspaceSelectionLocked || !testutil.SamePath(view.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected locked target picker to stay on web workspace, got %#v", view)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerSelectWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	if len(events) != 1 || !events[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected locked workspace refresh inline, got %#v", events)
+	}
+	got := targetPickerFromEvent(t, events[0])
+	if !got.WorkspaceSelectionLocked || got.ShowWorkspaceSelect || !testutil.SamePath(got.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected locked picker to keep current workspace, got %#v", got)
+	}
+	if _, ok := targetPickerSessionOption(got, targetPickerThreadValue("thread-web")); !ok {
+		t.Fatalf("expected locked picker to keep web sessions, got %#v", got.SessionOptions)
+	}
+	if _, ok := targetPickerSessionOption(got, targetPickerThreadValue("thread-droid")); ok {
+		t.Fatalf("expected locked picker to omit foreign workspace sessions, got %#v", got.SessionOptions)
+	}
+	var sawWarning bool
+	for _, message := range got.Messages {
+		if strings.Contains(message.Text, "当前工作区已锁定") {
+			sawWarning = true
+			break
+		}
+	}
+	if !sawWarning {
+		t.Fatalf("expected locked picker warning after stale workspace switch, got %#v", got.Messages)
+	}
+}
+
+func TestTargetPickerLockedWorkspaceConfirmRejectsStaleWorkspacePayload(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 3, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-droid",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-droid": {ThreadID: "thread-droid", Name: "修复登录", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.openLockedWorkspaceTargetPicker(surface, "/data/dl/web", true))
+	selectEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerSelectSession,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          view.PickerID,
+		TargetPickerValue: targetPickerThreadValue("thread-web"),
+	})
+	selected := targetPickerFromEvent(t, selectEvents[0])
+	if selected.SelectedSessionValue != targetPickerThreadValue("thread-web") {
+		t.Fatalf("expected session selection to stick before confirm, got %#v", selected)
+	}
+
+	confirmEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerConfirm,
+		SurfaceSessionID:  "surface-1",
+		ChatID:            "chat-1",
+		ActorUserID:       "user-1",
+		PickerID:          view.PickerID,
+		WorkspaceKey:      "/data/dl/droid",
+		TargetPickerValue: targetPickerThreadValue("thread-web"),
+	})
+	if len(confirmEvents) != 1 || confirmEvents[0].TargetPickerView == nil {
+		t.Fatalf("expected stale confirm to refresh target picker, got %#v", confirmEvents)
+	}
+	if confirmEvents[0].InlineReplaceCurrentCard {
+		t.Fatalf("expected stale confirm warning to use patch flow, got %#v", confirmEvents[0])
+	}
+	got := targetPickerFromEvent(t, confirmEvents[0])
+	if !got.WorkspaceSelectionLocked || !testutil.SamePath(got.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected stale confirm to keep locked workspace, got %#v", got)
+	}
+	if got.SelectedSessionValue != targetPickerThreadValue("thread-web") {
+		t.Fatalf("expected stale confirm to keep selected session, got %#v", got)
+	}
+	var sawWarning bool
+	for _, message := range got.Messages {
+		if strings.Contains(message.Text, "当前工作区已锁定") {
+			sawWarning = true
+			break
+		}
+	}
+	if !sawWarning {
+		t.Fatalf("expected stale confirm warning, got %#v", got.Messages)
+	}
+	if svc.root.Surfaces["surface-1"].SelectedThreadID != "" {
+		t.Fatalf("expected stale confirm not to switch threads, got %#v", svc.root.Surfaces["surface-1"])
+	}
+	if svc.activeTargetPicker(svc.root.Surfaces["surface-1"]) == nil {
+		t.Fatalf("expected target picker runtime to stay active after stale confirm")
+	}
+}
+
+func TestTargetPickerLockedWorkspaceAutoSelectsNewThreadWhenOnlyOption(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 4, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ClaimedWorkspaceKey = "/data/dl/web"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	view := singleTargetPickerEvent(t, svc.openLockedWorkspaceTargetPicker(surface, "/data/dl/web", true))
+	if !view.WorkspaceSelectionLocked || view.ShowWorkspaceSelect || !view.AllowNewThread {
+		t.Fatalf("expected locked target picker with new-thread fallback, got %#v", view)
+	}
+	if view.SelectedSessionValue != targetPickerNewThreadValue || view.ConfirmLabel != "新建会话" || !view.CanConfirm {
+		t.Fatalf("expected new-thread fallback to become primary action, got %#v", view)
+	}
+	if len(view.SessionOptions) != 1 {
+		t.Fatalf("expected only new-thread option in locked workspace, got %#v", view.SessionOptions)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected locked picker to expose new-thread option only, got %#v", view.SessionOptions)
+	}
+	var sawInfo bool
+	for _, message := range view.Messages {
+		if strings.Contains(message.Text, "可直接新建会话") {
+			sawInfo = true
+			break
+		}
+	}
+	if !sawInfo {
+		t.Fatalf("expected locked picker to explain new-thread fallback, got %#v", view.Messages)
+	}
+}
+
 func TestTargetPickerConfirmExistingThreadAttachesSelection(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -118,6 +307,61 @@ func TestTargetPickerConfirmExistingThreadAttachesSelection(t *testing.T) {
 	}
 	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已切换会话" {
 		t.Fatalf("expected succeeded target picker card, got %#v", got)
+	}
+}
+
+func TestReconcileSelectedThreadLostOpensLockedWorkspaceTargetPicker(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 8, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-web",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-web",
+	})
+
+	delete(svc.root.Instances["inst-web"].Threads, "thread-web")
+	events := svc.reconcileInstanceSurfaceThreads("inst-web")
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected lost selected thread to return surface to unbound, got %#v", surface)
+	}
+	var sawNotice bool
+	var picker *control.FeishuTargetPickerView
+	for _, event := range events {
+		if event.SurfaceSessionID == "surface-1" && event.Notice != nil && event.Notice.Code == "selected_thread_lost" {
+			sawNotice = true
+		}
+		if event.SurfaceSessionID == "surface-1" && event.TargetPickerView != nil {
+			picker = event.TargetPickerView
+		}
+	}
+	if !sawNotice || picker == nil {
+		t.Fatalf("expected lost-thread notice plus locked target picker, got %#v", events)
+	}
+	if !picker.WorkspaceSelectionLocked || !picker.AllowNewThread || !testutil.SamePath(picker.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected lost-thread picker to stay scoped to current workspace, got %#v", picker)
+	}
+	if picker.SelectedSessionValue != targetPickerNewThreadValue || picker.ConfirmLabel != "新建会话" || !picker.CanConfirm {
+		t.Fatalf("expected lost-thread picker to fall back to new-thread action, got %#v", picker)
 	}
 }
 

@@ -6,24 +6,38 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-// FeishuDirectSelectionPromptFromView projects the UI-owned selection view into the prompt
-// shape currently consumed by the Feishu card renderer.
-func FeishuDirectSelectionPromptFromView(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (control.FeishuDirectSelectionPrompt, bool) {
+type selectionRenderModel struct {
+	Kind         control.SelectionPromptKind
+	Layout       string
+	ViewMode     string
+	Title        string
+	Hint         string
+	ContextTitle string
+	ContextText  string
+	ContextKey   string
+	Page         int
+	TotalPages   int
+	ReturnPage   int
+	Options      []control.SelectionOption
+}
+
+func selectionRenderModelFromView(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (selectionRenderModel, bool) {
+	semantics := control.DeriveFeishuSelectionSemantics(view)
 	switch {
-	case view.Prompt != nil:
-		return control.FeishuDirectSelectionPrompt(*view.Prompt), true
 	case view.Instance != nil && view.PromptKind == control.SelectionPromptAttachInstance:
-		return instanceSelectionPromptFromView(*view.Instance, ctx), true
+		return instanceSelectionRenderModelFromView(*view.Instance, ctx, semantics), true
 	case view.Workspace != nil && view.PromptKind == control.SelectionPromptAttachWorkspace:
-		return workspaceSelectionPromptFromView(*view.Workspace, ctx), true
+		return workspaceSelectionRenderModelFromView(*view.Workspace, ctx, semantics), true
 	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread:
-		return threadSelectionPromptFromView(*view.Thread), true
+		return threadSelectionRenderModelFromView(*view.Thread, semantics), true
+	case view.KickThread != nil && view.PromptKind == control.SelectionPromptKickThread:
+		return kickThreadSelectionRenderModelFromView(*view.KickThread, semantics), true
 	default:
-		return control.FeishuDirectSelectionPrompt{}, false
+		return selectionRenderModel{}, false
 	}
 }
 
-func instanceSelectionPromptFromView(view control.FeishuInstanceSelectionView, ctx *control.FeishuUISelectionContext) control.FeishuDirectSelectionPrompt {
+func instanceSelectionRenderModelFromView(view control.FeishuInstanceSelectionView, _ *control.FeishuUISelectionContext, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for index, entry := range view.Entries {
 		options = append(options, control.SelectionOption{
@@ -35,21 +49,18 @@ func instanceSelectionPromptFromView(view control.FeishuInstanceSelectionView, c
 			Disabled:    entry.Disabled,
 		})
 	}
-	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:    control.SelectionPromptAttachInstance,
-		Layout:  "grouped_attach_instance",
-		Title:   "在线 VS Code 实例",
-		Options: options,
+	model := selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		Options:      options,
 	}
-	if ctx != nil {
-		prompt.Title = firstNonEmpty(strings.TrimSpace(ctx.Title), prompt.Title)
-		prompt.ContextTitle = strings.TrimSpace(ctx.ContextTitle)
-		prompt.ContextText = strings.TrimSpace(ctx.ContextText)
-	}
-	return prompt
+	return model
 }
 
-func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView, ctx *control.FeishuUISelectionContext) control.FeishuDirectSelectionPrompt {
+func workspaceSelectionRenderModelFromView(view control.FeishuWorkspaceSelectionView, ctx *control.FeishuUISelectionContext, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	available := make([]control.SelectionOption, 0, len(view.Entries))
 	unavailable := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
@@ -70,11 +81,11 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 			disabled = true
 		}
 		option := control.SelectionOption{
-			OptionID:    entry.WorkspaceKey,
+			OptionID:    strings.TrimSpace(entry.WorkspaceKey),
 			Label:       firstNonEmpty(strings.TrimSpace(entry.WorkspaceLabel), strings.TrimSpace(entry.WorkspaceKey)),
 			ButtonLabel: buttonLabel,
 			AgeText:     strings.TrimSpace(entry.AgeText),
-			MetaText:    workspaceSelectionMetaText(strings.TrimSpace(entry.AgeText), entry.HasVSCodeActivity, entry.Busy, !entry.Attachable && !entry.RecoverableOnly, entry.RecoverableOnly),
+			MetaText:    control.FormatFeishuWorkspaceSelectionMetaText(strings.TrimSpace(entry.AgeText), entry.HasVSCodeActivity, entry.Busy, !entry.Attachable && !entry.RecoverableOnly, entry.RecoverableOnly),
 			ActionKind:  actionKind,
 			Disabled:    disabled,
 		}
@@ -100,142 +111,139 @@ func workspaceSelectionPromptFromView(view control.FeishuWorkspaceSelectionView,
 		hint = "当前没有其他可接管工作区。"
 	}
 
-	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:       control.SelectionPromptAttachWorkspace,
-		Layout:     "grouped_attach_workspace",
-		Title:      "工作区列表",
-		Hint:       hint,
-		ViewMode:   "paged",
-		Page:       view.Page,
-		TotalPages: view.TotalPages,
-		Options:    options,
+	model := selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		Hint:         hint,
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Page:         view.Page,
+		TotalPages:   view.TotalPages,
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		Options:      options,
 	}
-	if view.Current != nil {
-		prompt.ContextTitle = "当前工作区"
-		prompt.ContextText = workspaceSelectionContextText(
-			firstNonEmpty(strings.TrimSpace(view.Current.WorkspaceLabel), strings.TrimSpace(view.Current.WorkspaceKey)),
-			strings.TrimSpace(view.Current.AgeText),
-		)
-		prompt.ContextKey = strings.TrimSpace(view.Current.WorkspaceKey)
-	}
-	return prompt
+	return model
 }
 
-func threadSelectionPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+func threadSelectionRenderModelFromView(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	switch view.Mode {
 	case control.FeishuThreadSelectionNormalWorkspaceView:
-		return threadWorkspacePromptFromView(view)
+		return threadWorkspaceRenderModelFromView(view, semantics)
 	case control.FeishuThreadSelectionNormalGlobalRecent, control.FeishuThreadSelectionNormalGlobalAll:
-		return threadGlobalPromptFromView(view)
+		return threadGlobalRenderModelFromView(view, semantics)
 	case control.FeishuThreadSelectionNormalScopedAll, control.FeishuThreadSelectionNormalScopedRecent:
-		return threadScopedPromptFromView(view)
-	case control.FeishuThreadSelectionVSCodeAll, control.FeishuThreadSelectionVSCodeScopedAll:
-		return threadVSCodePromptFromView(view)
+		return threadScopedRenderModelFromView(view, semantics)
+	case control.FeishuThreadSelectionVSCodeAll, control.FeishuThreadSelectionVSCodeScopedAll, control.FeishuThreadSelectionVSCodeRecent:
+		return threadVSCodeRenderModelFromView(view, semantics)
 	default:
-		return threadVSCodePromptFromView(view)
+		return threadVSCodeRenderModelFromView(view, semantics)
 	}
 }
 
-func threadWorkspacePromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+func threadWorkspaceRenderModelFromView(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
 	}
-	title := "全部会话"
-	if view.Workspace != nil {
-		title = firstNonEmpty(strings.TrimSpace(view.Workspace.WorkspaceLabel), strings.TrimSpace(view.Workspace.WorkspaceKey), "工作区") + " 全部会话"
-	}
-	return control.FeishuDirectSelectionPrompt{
-		Kind:       control.SelectionPromptUseThread,
-		Layout:     "workspace_grouped_useall",
-		Title:      title,
-		ViewMode:   string(view.Mode),
-		Page:       view.Page,
-		TotalPages: view.TotalPages,
-		ReturnPage: view.ReturnPage,
-		ContextKey: strings.TrimSpace(firstNonEmpty(
-			func() string {
-				if view.Workspace == nil {
-					return ""
-				}
-				return view.Workspace.WorkspaceKey
-			}(),
-		)),
-		Options: options,
+	return selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Page:         view.Page,
+		TotalPages:   view.TotalPages,
+		ReturnPage:   view.ReturnPage,
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		Options:      options,
 	}
 }
 
-func threadGlobalPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+func threadGlobalRenderModelFromView(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, true))
 	}
-	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:       control.SelectionPromptUseThread,
-		Layout:     "workspace_grouped_useall",
-		Title:      "全部会话",
-		ViewMode:   string(view.Mode),
-		Page:       view.Page,
-		TotalPages: view.TotalPages,
-		Options:    options,
+	model := selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Page:         view.Page,
+		TotalPages:   view.TotalPages,
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		Options:      options,
 	}
-	if view.CurrentWorkspace != nil {
-		prompt.ContextTitle = "当前工作区"
-		prompt.ContextKey = strings.TrimSpace(view.CurrentWorkspace.WorkspaceKey)
-		line := firstNonEmpty(strings.TrimSpace(view.CurrentWorkspace.WorkspaceLabel), strings.TrimSpace(view.CurrentWorkspace.WorkspaceKey))
-		if age := strings.TrimSpace(view.CurrentWorkspace.AgeText); age != "" {
-			line += " · " + age
-		}
-		prompt.ContextText = strings.Join([]string{line, "同工作区内切换请直接用 /use"}, "\n")
-	}
-	return prompt
+	return model
 }
 
-func threadScopedPromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+func threadScopedRenderModelFromView(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
 		options = append(options, threadSelectionOption(entry, false))
 	}
-	title := "最近会话"
-	if view.Mode == control.FeishuThreadSelectionNormalScopedAll {
-		title = "当前工作区全部会话"
-	}
-	return control.FeishuDirectSelectionPrompt{
-		Kind:       control.SelectionPromptUseThread,
-		Title:      title,
-		ViewMode:   string(view.Mode),
-		Page:       view.Page,
-		TotalPages: view.TotalPages,
-		Options:    options,
+	return selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Page:         view.Page,
+		TotalPages:   view.TotalPages,
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		Options:      options,
 	}
 }
 
-func threadVSCodePromptFromView(view control.FeishuThreadSelectionView) control.FeishuDirectSelectionPrompt {
+func threadVSCodeRenderModelFromView(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
 	options := make([]control.SelectionOption, 0, len(view.Entries))
 	for _, entry := range view.Entries {
 		options = append(options, vscodeThreadSelectionOption(entry))
 	}
-	title := "最近会话"
-	if view.Mode == control.FeishuThreadSelectionVSCodeAll || view.Mode == control.FeishuThreadSelectionVSCodeScopedAll {
-		title = "当前实例全部会话"
+	model := selectionRenderModel{
+		Kind:         semantics.PromptKind,
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Page:         view.Page,
+		TotalPages:   view.TotalPages,
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		Options:      options,
 	}
-	prompt := control.FeishuDirectSelectionPrompt{
-		Kind:       control.SelectionPromptUseThread,
-		Layout:     "vscode_instance_threads",
-		Title:      title,
-		ViewMode:   string(view.Mode),
-		Page:       view.Page,
-		TotalPages: view.TotalPages,
-		Options:    options,
+	return model
+}
+
+func kickThreadSelectionRenderModelFromView(view control.FeishuKickThreadSelectionView, semantics control.FeishuSelectionSemantics) selectionRenderModel {
+	threadID := strings.TrimSpace(view.ThreadID)
+	return selectionRenderModel{
+		Kind:   semantics.PromptKind,
+		Layout: strings.TrimSpace(semantics.Layout),
+		Title:  strings.TrimSpace(semantics.Title),
+		Hint:   strings.TrimSpace(view.Hint),
+		Options: []control.SelectionOption{
+			{
+				Index:       1,
+				OptionID:    "cancel",
+				Label:       "保留当前状态，不执行强踢。",
+				ButtonLabel: firstNonEmpty(strings.TrimSpace(view.CancelLabel), "取消"),
+			},
+			{
+				Index:       2,
+				OptionID:    threadID,
+				Label:       strings.TrimSpace(view.ThreadLabel),
+				Subtitle:    strings.TrimSpace(view.ThreadSubtitle),
+				ButtonLabel: firstNonEmpty(strings.TrimSpace(view.ConfirmLabel), "强踢并占用"),
+			},
+		},
 	}
-	if view.CurrentInstance != nil {
-		prompt.ContextTitle = "当前实例"
-		prompt.ContextText = strings.TrimSpace(view.CurrentInstance.Label)
-		if status := strings.TrimSpace(view.CurrentInstance.Status); status != "" {
-			prompt.ContextText += " · " + status
-		}
-	}
-	return prompt
 }
 
 func vscodeThreadSelectionOption(entry control.FeishuThreadSelectionEntry) control.SelectionOption {
@@ -327,35 +335,4 @@ func threadSelectionConversationHint(entry control.FeishuThreadSelectionEntry) s
 		return "最近回复：" + lastAssistant
 	}
 	return ""
-}
-
-func workspaceSelectionMetaText(ageText string, hasVSCodeActivity, busy, unavailable, recoverableOnly bool) string {
-	parts := make([]string, 0, 2)
-	if age := strings.TrimSpace(ageText); age != "" {
-		parts = append(parts, age)
-	}
-	switch {
-	case busy:
-		parts = append(parts, "当前被其他飞书会话接管")
-	case recoverableOnly:
-		parts = append(parts, "后台可恢复")
-	case unavailable:
-		parts = append(parts, "当前暂不可接管")
-	case hasVSCodeActivity:
-		parts = append(parts, "有 VS Code 活动")
-	}
-	if len(parts) == 0 {
-		return "可接管"
-	}
-	return strings.Join(parts, " · ")
-}
-
-func workspaceSelectionContextText(label, ageText string) string {
-	label = strings.TrimSpace(label)
-	parts := []string{label}
-	if age := strings.TrimSpace(ageText); age != "" {
-		parts[0] += " · " + age
-	}
-	parts = append(parts, "同工作区内继续工作可 /use，或直接发送文本（也可 /new）")
-	return strings.Join(parts, "\n")
 }

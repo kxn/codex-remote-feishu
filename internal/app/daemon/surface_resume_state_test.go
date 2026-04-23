@@ -872,7 +872,14 @@ func TestDaemonNormalResumeFallsBackToWorkspace(t *testing.T) {
 	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
 		t.Fatalf("expected workspace fallback to clear stale headless hint, got %#v", hint)
 	}
-	if len(gateway.operations) == 0 || !strings.Contains(gateway.operations[len(gateway.operations)-1].CardBody, "已先回到工作区") {
+	var sawFallbackNotice bool
+	for _, op := range gateway.operations {
+		if strings.Contains(op.CardBody, "已先回到工作区") {
+			sawFallbackNotice = true
+			break
+		}
+	}
+	if !sawFallbackNotice {
 		t.Fatalf("expected workspace fallback notice, got %#v", gateway.operations)
 	}
 }

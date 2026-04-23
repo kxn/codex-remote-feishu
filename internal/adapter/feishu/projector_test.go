@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -85,27 +84,42 @@ func TestProjectSelectionPromptAsCard(t *testing.T) {
 
 func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Kind:         control.SelectionPromptAttachWorkspace,
-		ContextTitle: "当前工作区",
-		ContextText:  "droid · 5分前\n同工作区内继续工作可 /use，或直接发送文本（也可 /new）",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "/data/dl/web",
-				Label:       "web",
-				MetaText:    "2分前 · 有 VS Code 活动",
-				ButtonLabel: "切换",
+	view := control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptAttachWorkspace,
+		Workspace: &control.FeishuWorkspaceSelectionView{
+			Current: &control.FeishuWorkspaceSelectionCurrent{
+				WorkspaceKey:   "/data/dl/droid",
+				WorkspaceLabel: "droid",
+				AgeText:        "5分前",
 			},
-			{
-				Index:    2,
-				OptionID: "/data/dl/ops",
-				Label:    "ops",
-				MetaText: "1小时前 · 当前被其他飞书会话接管",
-				Disabled: true,
+			Entries: []control.FeishuWorkspaceSelectionEntry{
+				{
+					WorkspaceKey:      "/data/dl/web",
+					WorkspaceLabel:    "web",
+					AgeText:           "2分前",
+					HasVSCodeActivity: true,
+					Attachable:        true,
+				},
+				{
+					WorkspaceKey:   "/data/dl/ops",
+					WorkspaceLabel: "ops",
+					AgeText:        "1小时前",
+					Busy:           true,
+				},
 			},
 		},
-	}))
+	}
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:          eventcontract.KindSelection,
+		SelectionView: &view,
+		SelectionContext: &control.FeishuUISelectionContext{
+			DTOOwner:   control.FeishuUIDTOwnerSelection,
+			PromptKind: control.SelectionPromptAttachWorkspace,
+			Surface: control.FeishuUISurfaceContext{
+				AttachedInstanceID: "inst-current",
+			},
+		},
+	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
@@ -155,20 +169,26 @@ func TestProjectWorkspaceSelectionPromptAsCard(t *testing.T) {
 
 func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Kind:  control.SelectionPromptUseThread,
-		Title: "最近会话",
-		Options: []control.SelectionOption{
-			{
-				Index:               1,
-				OptionID:            "thread-1",
-				Label:               "修复登录流程",
-				ButtonLabel:         "修复登录流程",
-				Subtitle:            "/data/dl/droid\n可接管",
+	view := control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread: &control.FeishuThreadSelectionView{
+			Mode: control.FeishuThreadSelectionNormalScopedRecent,
+			Entries: []control.FeishuThreadSelectionEntry{{
+				ThreadID:            "thread-1",
+				Summary:             "修复登录流程",
+				Status:              "可接管",
 				AllowCrossWorkspace: true,
-			},
+			}},
 		},
-	}))
+	}
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:          eventcontract.KindSelection,
+		SelectionView: &view,
+		SelectionContext: &control.FeishuUISelectionContext{
+			DTOOwner:   control.FeishuUIDTOwnerSelection,
+			PromptKind: control.SelectionPromptUseThread,
+		},
+	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
@@ -195,7 +215,7 @@ func TestProjectSessionSelectionPromptUsesButtonFirstLayout(t *testing.T) {
 	if value["kind"] != "use_thread" || value["thread_id"] != "thread-1" || value["allow_cross_workspace"] != true {
 		t.Fatalf("unexpected action payload: %#v", value)
 	}
-	if plainTextContent(ops[0].CardElements[2]) != "/data/dl/droid\n可接管" {
+	if plainTextContent(ops[0].CardElements[2]) != "可接管" {
 		t.Fatalf("unexpected option detail element: %#v", ops[0].CardElements[2])
 	}
 }
@@ -237,55 +257,6 @@ func TestProjectWorkspaceSelectionPromptPreservesShowWorkspaceThreadsAction(t *t
 	}
 }
 
-func TestProjectWorkspaceSelectionPromptRendersExpandAction(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Kind:  control.SelectionPromptAttachWorkspace,
-		Title: "工作区列表",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "/data/dl/web",
-				Label:       "web",
-				ButtonLabel: "切换",
-				MetaText:    "2分前 · 有 VS Code 活动",
-			},
-			{
-				Index:       2,
-				Label:       "全部工作区",
-				ButtonLabel: "全部工作区",
-				MetaText:    "还有 3 个工作区未显示",
-				ActionKind:  "show_all_workspaces",
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if len(ops[0].CardElements) != 6 {
-		t.Fatalf("expected workspace card to include more section, got %#v", ops[0].CardElements)
-	}
-	if ops[0].CardElements[3]["content"] != "**更多**" {
-		t.Fatalf("expected more header, got %#v", ops[0].CardElements[3])
-	}
-	actionRow := cardElementButtons(t, ops[0].CardElements[4])
-	if len(actionRow) != 1 {
-		t.Fatalf("expected one expand action button, got %#v", ops[0].CardElements[4])
-	}
-	if cardButtonLabel(t, actionRow[0]) != "查看全部 · 全部工作区" {
-		t.Fatalf("unexpected expand button label: %#v", actionRow[0])
-	}
-	value := cardButtonPayload(t, actionRow[0])
-	if value["kind"] != "show_all_workspaces" {
-		t.Fatalf("unexpected expand payload: %#v", value)
-	}
-	renderedElements := renderedV2BodyElements(t, ops[0])
-	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
-	if renderedValue["kind"] != "show_all_workspaces" {
-		t.Fatalf("unexpected rendered expand payload: %#v", renderedValue)
-	}
-}
-
 func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 	projector := NewProjector()
 	event := selectionPromptEvent(control.FeishuDirectSelectionPrompt{
@@ -300,98 +271,6 @@ func TestProjectSelectionPromptStampsDaemonLifecycleID(t *testing.T) {
 	value := cardButtonPayload(t, actionRow[0])
 	if value["daemon_lifecycle_id"] != "life-1" {
 		t.Fatalf("expected selection prompt action to carry daemon lifecycle id, got %#v", value)
-	}
-}
-
-func TestProjectUseAllSelectionPromptGroupsByWorkspace(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout:       "workspace_grouped_useall",
-		Kind:         control.SelectionPromptUseThread,
-		Title:        "全部会话",
-		ContextTitle: "当前工作区",
-		ContextText:  "droid · 5分前\n同工作区内切换请直接用 /use",
-		ContextKey:   "/data/dl/droid",
-		Options: []control.SelectionOption{
-			{
-				Index:       3,
-				OptionID:    "thread-2",
-				Label:       "别的会话",
-				ButtonLabel: "别的会话",
-				GroupKey:    "/data/dl/web",
-				GroupLabel:  "web",
-				AgeText:     "2分前",
-				MetaText:    "2分14秒前",
-			},
-			{
-				Index:       1,
-				OptionID:    "thread-1",
-				Label:       "当前会话",
-				ButtonLabel: "当前会话",
-				GroupKey:    "/data/dl/droid",
-				GroupLabel:  "droid",
-				MetaText:    "已接管",
-				IsCurrent:   true,
-			},
-			{
-				Index:       4,
-				OptionID:    "thread-3",
-				Label:       "另一个会话",
-				ButtonLabel: "另一个会话",
-				GroupKey:    "/data/dl/web",
-				GroupLabel:  "web",
-				AgeText:     "2分前",
-				MetaText:    "38分前 · VS Code 占用中",
-			},
-			{
-				Index:       5,
-				OptionID:    "thread-4",
-				Label:       "不可接管会话",
-				ButtonLabel: "不可接管会话",
-				GroupKey:    "/data/dl/ops",
-				GroupLabel:  "ops",
-				AgeText:     "1小时前",
-				MetaText:    "当前被其他飞书会话接管，暂不可接管",
-				Disabled:    true,
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	wantHeaders := []string{"**当前会话**", "**当前工作区**", "web · 2分前", "ops · 1小时前"}
-	for _, header := range wantHeaders {
-		if !containsCardTextExact(ops[0].CardElements, header) {
-			t.Fatalf("expected grouped header %q, got %#v", header, ops[0].CardElements)
-		}
-	}
-	var buttonLabels []string
-	for _, element := range ops[0].CardElements {
-		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
-			continue
-		}
-		for _, button := range cardElementButtons(t, element) {
-			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
-		}
-	}
-	if strings.Join(buttonLabels, " | ") != "当前 · 当前会话 | 查看当前工作区全部会话 | 接管 · 别的会话 | 接管 · 另一个会话" {
-		t.Fatalf("unexpected grouped button labels: %#v", buttonLabels)
-	}
-	var rendered []string
-	for _, element := range ops[0].CardElements {
-		if content := cardTextContent(element); content != "" {
-			rendered = append(rendered, content)
-		}
-	}
-	for _, fragment := range []string{
-		"droid · 5分前\n同工作区内切换请直接用 /use",
-		"1. 2分14秒前",
-		"2. 38分前 · VS Code 占用中",
-		"当前被其他飞书会话接管，暂不可接管",
-	} {
-		if !containsString(rendered, fragment) {
-			t.Fatalf("expected rendered grouped content to include %q, got %#v", fragment, rendered)
-		}
 	}
 }
 
@@ -555,332 +434,6 @@ func TestProjectUseAllSelectionPromptLimitsWorkspaceToFiveAndAddsExpandButtons(t
 	}
 	if strings.Join(buttonLabels, " | ") != "当前 · 当前会话 | 查看当前工作区全部会话 | 接管 · web-1 | 接管 · web-2 | 展开 web" {
 		t.Fatalf("unexpected grouped/limited button labels: %#v", buttonLabels)
-	}
-}
-
-func TestProjectUseAllSelectionPromptRendersWorkspaceGroupExpandAction(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout: "workspace_grouped_useall",
-		Kind:   control.SelectionPromptUseThread,
-		Title:  "全部会话",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "thread-1",
-				Label:       "web-1",
-				ButtonLabel: "web-1",
-				GroupKey:    "/data/dl/web",
-				GroupLabel:  "web",
-				AgeText:     "2分前",
-				MetaText:    "2分前",
-			},
-			{
-				Index:       2,
-				Label:       "全部工作区",
-				ButtonLabel: "全部工作区",
-				MetaText:    "还有 3 个工作区未显示",
-				ActionKind:  "show_all_thread_workspaces",
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	if ops[0].CardElements[3]["content"] != "**更多**" {
-		t.Fatalf("expected more header, got %#v", ops[0].CardElements)
-	}
-	actionRow := cardElementButtons(t, ops[0].CardElements[4])
-	if len(actionRow) != 1 {
-		t.Fatalf("expected one expand action button, got %#v", ops[0].CardElements[4])
-	}
-	if cardButtonLabel(t, actionRow[0]) != "查看全部 · 全部工作区" {
-		t.Fatalf("unexpected expand button label: %#v", actionRow[0])
-	}
-	value := cardButtonPayload(t, actionRow[0])
-	if value["kind"] != "show_all_thread_workspaces" {
-		t.Fatalf("unexpected expand payload: %#v", value)
-	}
-	renderedElements := renderedV2BodyElements(t, ops[0])
-	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
-	if renderedValue["kind"] != "show_all_thread_workspaces" {
-		t.Fatalf("unexpected rendered expand payload: %#v", renderedValue)
-	}
-}
-
-func TestProjectUseAllSelectionPromptRendersWorkspaceGroupReturnAction(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout: "workspace_grouped_useall",
-		Kind:   control.SelectionPromptUseThread,
-		Title:  "全部会话",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "thread-1",
-				Label:       "web-1",
-				ButtonLabel: "web-1",
-				GroupKey:    "/data/dl/web",
-				GroupLabel:  "web",
-				AgeText:     "2分前",
-				MetaText:    "2分前",
-			},
-			{
-				Index:       2,
-				Label:       "最近工作区",
-				ButtonLabel: "最近工作区",
-				MetaText:    "回到最近 5 个工作区",
-				ActionKind:  "show_recent_thread_workspaces",
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	actionRow := cardElementButtons(t, ops[0].CardElements[4])
-	if len(actionRow) != 1 {
-		t.Fatalf("expected one return action button, got %#v", ops[0].CardElements[4])
-	}
-	if cardButtonLabel(t, actionRow[0]) != "返回 · 最近工作区" {
-		t.Fatalf("unexpected return button label: %#v", actionRow[0])
-	}
-	value := cardButtonPayload(t, actionRow[0])
-	if value["kind"] != "show_recent_thread_workspaces" {
-		t.Fatalf("unexpected return payload: %#v", value)
-	}
-	renderedElements := renderedV2BodyElements(t, ops[0])
-	renderedValue := renderedButtonCallbackValue(t, renderedElements[4])
-	if renderedValue["kind"] != "show_recent_thread_workspaces" {
-		t.Fatalf("unexpected rendered return payload: %#v", renderedValue)
-	}
-}
-
-func TestProjectUseAllExpandedSelectionPromptUsesWorkspaceIndexAndFitsInlineCallback(t *testing.T) {
-	projector := NewProjector()
-	options := []control.SelectionOption{
-		{
-			Index:       1,
-			OptionID:    "thread-current",
-			Label:       "当前会话",
-			ButtonLabel: "当前会话",
-			GroupKey:    "/data/dl/current",
-			GroupLabel:  "current",
-			MetaText:    "已接管",
-			IsCurrent:   true,
-		},
-	}
-	index := 2
-	for workspace := 1; workspace <= 40; workspace++ {
-		workspaceKey := fmt.Sprintf("/data/dl/projects/team-alpha/service-%02d", workspace)
-		workspaceLabel := fmt.Sprintf("service-%02d", workspace)
-		for thread := 1; thread <= 3; thread++ {
-			options = append(options, control.SelectionOption{
-				Index:       index,
-				OptionID:    fmt.Sprintf("thread-%02d-%d", workspace, thread),
-				Label:       fmt.Sprintf("%s-thread-%d", workspaceLabel, thread),
-				ButtonLabel: fmt.Sprintf("%s-thread-%d", workspaceLabel, thread),
-				GroupKey:    workspaceKey,
-				GroupLabel:  workspaceLabel,
-				AgeText:     fmt.Sprintf("%d分前", workspace),
-				MetaText:    fmt.Sprintf("%d分前", thread),
-			})
-			index++
-		}
-	}
-	options = append(options,
-		control.SelectionOption{
-			Index:       index,
-			OptionID:    "thread-ops-disabled",
-			Label:       "ops-thread",
-			ButtonLabel: "ops-thread",
-			GroupKey:    "/data/dl/projects/team-alpha/ops",
-			GroupLabel:  "ops",
-			AgeText:     "2小时前",
-			MetaText:    "当前被其他飞书会话接管，暂不可接管",
-			Disabled:    true,
-		},
-		control.SelectionOption{
-			Index:       index + 1,
-			Label:       "最近工作区",
-			ButtonLabel: "最近工作区",
-			ActionKind:  "show_recent_thread_workspaces",
-		},
-	)
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout:       "workspace_grouped_useall",
-		Kind:         control.SelectionPromptUseThread,
-		Title:        "全部会话",
-		ContextTitle: "当前工作区",
-		ContextText:  "current · 1分前\n同工作区内切换请直接用 /use",
-		ContextKey:   "/data/dl/current",
-		Options:      options,
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	var buttonLabels []string
-	for _, element := range ops[0].CardElements {
-		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
-			continue
-		}
-		for _, button := range cardElementButtons(t, element) {
-			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
-		}
-	}
-	for _, want := range []string{
-		"当前 · 当前会话",
-		"查看当前工作区全部会话",
-		"查看全部 · service-01 (3)",
-		"查看全部 · service-40 (3)",
-		"不可恢复 · ops",
-		"返回 · 最近工作区",
-	} {
-		if !containsString(buttonLabels, want) {
-			t.Fatalf("expected workspace index button %q, got %#v", want, buttonLabels)
-		}
-	}
-	for _, unexpected := range []string{
-		"接管 · service-01-thread-1",
-		"接管 · service-40-thread-3",
-	} {
-		if containsString(buttonLabels, unexpected) {
-			t.Fatalf("did not expect per-thread button %q in expanded workspace index: %#v", unexpected, buttonLabels)
-		}
-	}
-	response := callbackCardResponse(&ActionResult{ReplaceCurrentCard: &ops[0]})
-	if response == nil {
-		t.Fatalf("expected inline callback response for expanded workspace index")
-	}
-	payload, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("marshal inline callback response: %v", err)
-	}
-	if len(payload) >= 20000 {
-		t.Fatalf("expected inline callback response under 20K, got %d bytes", len(payload))
-	}
-}
-
-func TestProjectVSCodeRecentSelectionPromptShowsInstanceSummaryAndMore(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout:       "vscode_instance_threads",
-		Kind:         control.SelectionPromptUseThread,
-		Title:        "最近会话",
-		ContextTitle: "当前实例",
-		ContextText:  "droid · 当前跟随中",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "thread-current",
-				Label:       "修复登录流程",
-				ButtonLabel: "修复登录流程",
-				MetaText:    "当前跟随中 · 20秒前",
-				IsCurrent:   true,
-			},
-			{
-				Index:       2,
-				OptionID:    "thread-focus",
-				Label:       "整理日志",
-				ButtonLabel: "整理日志",
-				MetaText:    "VS Code 当前焦点 · 1分前",
-			},
-			{
-				Index:       3,
-				ButtonLabel: "当前实例全部会话",
-				MetaText:    "展开当前实例内的全部会话",
-				ActionKind:  "show_scoped_threads",
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	wantHeaders := []string{"**当前实例**", "**当前会话**", "**可接管**", "**更多**"}
-	for _, header := range wantHeaders {
-		found := false
-		for _, element := range ops[0].CardElements {
-			if element["content"] == header {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("expected header %q, got %#v", header, ops[0].CardElements)
-		}
-	}
-	var buttonLabels []string
-	for _, element := range ops[0].CardElements {
-		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
-			continue
-		}
-		for _, button := range cardElementButtons(t, element) {
-			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
-		}
-	}
-	if strings.Join(buttonLabels, " | ") != "当前 · 修复登录流程 | 接管 · 整理日志 | 查看全部 · 当前实例全部会话" {
-		t.Fatalf("unexpected vscode recent button labels: %#v", buttonLabels)
-	}
-}
-
-func TestProjectVSCodeAllSelectionPromptUsesNumberedMetaRows(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Layout:       "vscode_instance_threads",
-		Kind:         control.SelectionPromptUseThread,
-		Title:        "当前实例全部会话",
-		ContextTitle: "当前实例",
-		ContextText:  "droid · 当前跟随中",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "thread-current",
-				Label:       "修复登录流程",
-				ButtonLabel: "修复登录流程",
-				MetaText:    "当前跟随中 · 20秒前",
-				IsCurrent:   true,
-			},
-			{
-				Index:       2,
-				OptionID:    "thread-focus",
-				Label:       "整理日志",
-				ButtonLabel: "整理日志",
-				MetaText:    "VS Code 当前焦点 · 1分前",
-			},
-			{
-				Index:       3,
-				OptionID:    "thread-old",
-				Label:       "历史会话",
-				ButtonLabel: "历史会话",
-				MetaText:    "已被其他飞书会话接管",
-				Disabled:    true,
-			},
-		},
-	}))
-	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
-		t.Fatalf("unexpected ops: %#v", ops)
-	}
-	var rendered []string
-	for _, element := range ops[0].CardElements {
-		if content := cardTextContent(element); content != "" {
-			rendered = append(rendered, content)
-		}
-	}
-	for _, fragment := range []string{"**当前实例**", "**当前会话**", "**全部会话**", "1. VS Code 当前焦点 · 1分前", "2. 已被其他飞书会话接管"} {
-		if !containsString(rendered, fragment) {
-			t.Fatalf("expected rendered vscode all content to include %q, got %#v", fragment, rendered)
-		}
-	}
-	var buttonLabels []string
-	for _, element := range ops[0].CardElements {
-		if element["tag"] != "button" && element["tag"] != "column_set" && element["tag"] != "action" {
-			continue
-		}
-		for _, button := range cardElementButtons(t, element) {
-			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
-		}
-	}
-	if strings.Join(buttonLabels, " | ") != "当前 · 修复登录流程 | 接管 · 整理日志 | 不可接管 · 历史会话" {
-		t.Fatalf("unexpected vscode all button labels: %#v", buttonLabels)
 	}
 }
 

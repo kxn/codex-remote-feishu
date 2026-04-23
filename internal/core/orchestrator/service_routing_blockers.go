@@ -248,7 +248,15 @@ func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []eve
 }
 
 func (s *Service) autoPromptUseThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []eventcontract.Event {
-	if surface == nil || inst == nil || len(visibleThreads(inst)) == 0 {
+	if surface == nil || inst == nil {
+		return nil
+	}
+	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if workspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface)); workspaceKey != "" {
+			return s.openLockedWorkspaceTargetPicker(surface, workspaceKey, true)
+		}
+	}
+	if len(visibleThreads(inst)) == 0 {
 		return nil
 	}
 	return s.presentThreadSelection(surface, false)

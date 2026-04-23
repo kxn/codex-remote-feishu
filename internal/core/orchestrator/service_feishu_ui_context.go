@@ -69,91 +69,18 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 	return context
 }
 
-func (s *Service) buildFeishuSelectionContextFromPromptView(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) *control.FeishuUISelectionContext {
-	return &control.FeishuUISelectionContext{
+func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) *control.FeishuUISelectionContext {
+	semantics := control.DeriveFeishuSelectionSemantics(view)
+	context := &control.FeishuUISelectionContext{
 		DTOOwner:     control.FeishuUIDTOwnerSelection,
 		Surface:      s.buildFeishuUISurfaceContext(surface),
-		PromptKind:   prompt.Kind,
-		Layout:       strings.TrimSpace(prompt.Layout),
-		Title:        strings.TrimSpace(prompt.Title),
-		ContextTitle: strings.TrimSpace(prompt.ContextTitle),
-		ContextText:  strings.TrimSpace(prompt.ContextText),
-		ContextKey:   strings.TrimSpace(prompt.ContextKey),
-	}
-}
-
-func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) *control.FeishuUISelectionContext {
-	context := &control.FeishuUISelectionContext{
-		DTOOwner:   control.FeishuUIDTOwnerSelection,
-		Surface:    s.buildFeishuUISurfaceContext(surface),
-		PromptKind: view.PromptKind,
-	}
-	if view.Prompt != nil {
-		return s.buildFeishuSelectionContextFromPromptView(surface, *view.Prompt)
-	}
-	if view.Instance != nil {
-		context.Layout = "vscode_instance_list"
-		context.Title = "在线 VS Code 实例"
-		if view.Instance.Current != nil {
-			context.ContextTitle = "当前实例"
-			context.ContextText = strings.TrimSpace(view.Instance.Current.ContextText)
-		}
-		return context
-	}
-	if view.Workspace != nil {
-		context.Layout = "grouped_attach_workspace"
-		context.Title = "工作区列表"
-		context.ViewMode = "paged"
-		if view.Workspace.Current != nil {
-			context.ContextTitle = "当前工作区"
-			context.ContextText = workspaceSelectionContextText(view.Workspace.Current.WorkspaceLabel, view.Workspace.Current.AgeText)
-			context.ContextKey = strings.TrimSpace(view.Workspace.Current.WorkspaceKey)
-		}
-		return context
-	}
-	if view.Thread == nil {
-		return context
-	}
-	context.ViewMode = string(view.Thread.Mode)
-	switch view.Thread.Mode {
-	case control.FeishuThreadSelectionNormalGlobalRecent:
-		context.Layout = "workspace_grouped_useall"
-		context.Title = "全部会话"
-	case control.FeishuThreadSelectionNormalGlobalAll:
-		context.Layout = "workspace_grouped_useall"
-		context.Title = "全部会话"
-	case control.FeishuThreadSelectionNormalScopedRecent:
-		context.Title = "最近会话"
-	case control.FeishuThreadSelectionNormalScopedAll:
-		context.Title = "当前工作区全部会话"
-	case control.FeishuThreadSelectionNormalWorkspaceView:
-		context.Layout = "workspace_grouped_useall"
-		if view.Thread.Workspace != nil {
-			context.Title = strings.TrimSpace(view.Thread.Workspace.WorkspaceLabel) + " 全部会话"
-			context.ContextKey = strings.TrimSpace(view.Thread.Workspace.WorkspaceKey)
-		}
-	case control.FeishuThreadSelectionVSCodeRecent:
-		context.Layout = "vscode_instance_threads"
-		context.Title = "最近会话"
-	case control.FeishuThreadSelectionVSCodeAll, control.FeishuThreadSelectionVSCodeScopedAll:
-		context.Layout = "vscode_instance_threads"
-		context.Title = "当前实例全部会话"
-	}
-	if view.Thread.CurrentWorkspace != nil {
-		context.ContextTitle = "当前工作区"
-		context.ContextKey = strings.TrimSpace(view.Thread.CurrentWorkspace.WorkspaceKey)
-		line := strings.TrimSpace(view.Thread.CurrentWorkspace.WorkspaceLabel)
-		if age := strings.TrimSpace(view.Thread.CurrentWorkspace.AgeText); age != "" {
-			line += " · " + age
-		}
-		context.ContextText = strings.Join([]string{line, "同工作区内切换请直接用 /use"}, "\n")
-	}
-	if view.Thread.CurrentInstance != nil {
-		context.ContextTitle = "当前实例"
-		context.ContextText = strings.TrimSpace(view.Thread.CurrentInstance.Label)
-		if status := strings.TrimSpace(view.Thread.CurrentInstance.Status); status != "" {
-			context.ContextText += " · " + status
-		}
+		PromptKind:   semantics.PromptKind,
+		ViewMode:     strings.TrimSpace(semantics.ViewMode),
+		Layout:       strings.TrimSpace(semantics.Layout),
+		Title:        strings.TrimSpace(semantics.Title),
+		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
+		ContextText:  strings.TrimSpace(semantics.ContextText),
+		ContextKey:   strings.TrimSpace(semantics.ContextKey),
 	}
 	return context
 }
@@ -195,16 +122,19 @@ func (s *Service) buildFeishuPathPickerContextFromView(surface *state.SurfaceCon
 
 func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuTargetPickerView) *control.FeishuUITargetPickerContext {
 	return &control.FeishuUITargetPickerContext{
-		DTOOwner:             control.FeishuUIDTOwnerTargetPicker,
-		Surface:              s.buildFeishuUISurfaceContext(surface),
-		PickerID:             strings.TrimSpace(view.PickerID),
-		Source:               view.Source,
-		Title:                strings.TrimSpace(view.Title),
-		Page:                 view.Page,
-		SelectedMode:         view.SelectedMode,
-		SelectedSource:       view.SelectedSource,
-		SelectedWorkspaceKey: strings.TrimSpace(view.SelectedWorkspaceKey),
-		SelectedSessionValue: strings.TrimSpace(view.SelectedSessionValue),
+		DTOOwner:                 control.FeishuUIDTOwnerTargetPicker,
+		Surface:                  s.buildFeishuUISurfaceContext(surface),
+		PickerID:                 strings.TrimSpace(view.PickerID),
+		Source:                   view.Source,
+		Title:                    strings.TrimSpace(view.Title),
+		Page:                     view.Page,
+		WorkspaceSelectionLocked: view.WorkspaceSelectionLocked,
+		LockedWorkspaceKey:       strings.TrimSpace(view.LockedWorkspaceKey),
+		AllowNewThread:           view.AllowNewThread,
+		SelectedMode:             view.SelectedMode,
+		SelectedSource:           view.SelectedSource,
+		SelectedWorkspaceKey:     strings.TrimSpace(view.SelectedWorkspaceKey),
+		SelectedSessionValue:     strings.TrimSpace(view.SelectedSessionValue),
 	}
 }
 
@@ -224,29 +154,6 @@ func (s *Service) buildFeishuThreadHistoryContextFromView(surface *state.Surface
 		SelectedTurnID: strings.TrimSpace(view.SelectedTurnID),
 		Loading:        view.Loading,
 	}
-}
-
-func (s *Service) feishuDirectSelectionPromptEvent(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt) eventcontract.Event {
-	return s.feishuDirectSelectionPromptEventWithInline(surface, prompt, false)
-}
-
-func (s *Service) feishuDirectSelectionPromptEventWithInline(surface *state.SurfaceConsoleRecord, prompt control.FeishuDirectSelectionPrompt, inline bool) eventcontract.Event {
-	promptView := prompt
-	view := control.FeishuSelectionView{
-		PromptKind: prompt.Kind,
-		Prompt:     &promptView,
-	}
-	return surfaceEventFromPayload(
-		surface,
-		eventcontract.SelectionPayload{
-			View:    view,
-			Context: s.buildFeishuSelectionContextFromView(surface, view),
-		},
-		navigationDeliverySemantics(),
-		inline,
-		"",
-		"",
-	)
 }
 
 func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) eventcontract.Event {

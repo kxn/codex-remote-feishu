@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	feishuadapter "github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -46,13 +45,155 @@ func firstButtonLabels(entries []control.CommandCatalogEntry) []string {
 
 func eventSelectionPrompt(event eventcontract.Event) (*control.FeishuDirectSelectionPrompt, bool) {
 	if event.SelectionView != nil {
-		prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(*event.SelectionView, event.SelectionContext)
+		prompt, ok := selectionPromptForTest(*event.SelectionView, event.SelectionContext)
 		if !ok {
 			return nil, false
 		}
 		return &prompt, true
 	}
 	return nil, false
+}
+
+func selectionPromptForTest(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (control.FeishuDirectSelectionPrompt, bool) {
+	switch {
+	case view.Instance != nil && view.PromptKind == control.SelectionPromptAttachInstance:
+		options := make([]control.SelectionOption, 0, len(view.Instance.Entries))
+		for index, entry := range view.Instance.Entries {
+			options = append(options, control.SelectionOption{
+				Index:       index + 1,
+				OptionID:    strings.TrimSpace(entry.InstanceID),
+				Label:       strings.TrimSpace(entry.Label),
+				ButtonLabel: strings.TrimSpace(entry.ButtonLabel),
+				MetaText:    strings.TrimSpace(entry.MetaText),
+				Disabled:    entry.Disabled,
+			})
+		}
+		return control.FeishuDirectSelectionPrompt{
+			Kind:         control.SelectionPromptAttachInstance,
+			Layout:       strings.TrimSpace(firstNonEmpty(selectionContextLayout(ctx), "vscode_instance_list")),
+			Title:        strings.TrimSpace(firstNonEmpty(selectionContextTitle(ctx), "在线 VS Code 实例")),
+			ContextTitle: selectionContextLabel(ctx),
+			ContextText:  selectionContextText(ctx),
+			Options:      options,
+		}, true
+	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread:
+		options := make([]control.SelectionOption, 0, len(view.Thread.Entries))
+		for index, entry := range view.Thread.Entries {
+			options = append(options, control.SelectionOption{
+				Index:               index + 1,
+				OptionID:            strings.TrimSpace(entry.ThreadID),
+				Label:               threadPromptLabelForTest(view.Thread.Mode, entry),
+				ButtonLabel:         threadPromptLabelForTest(view.Thread.Mode, entry),
+				MetaText:            threadPromptMetaForTest(entry),
+				AgeText:             strings.TrimSpace(entry.AgeText),
+				GroupKey:            strings.TrimSpace(entry.WorkspaceKey),
+				GroupLabel:          strings.TrimSpace(entry.WorkspaceLabel),
+				IsCurrent:           entry.Current,
+				Disabled:            entry.Disabled,
+				AllowCrossWorkspace: entry.AllowCrossWorkspace,
+			})
+		}
+		return control.FeishuDirectSelectionPrompt{
+			Kind:         control.SelectionPromptUseThread,
+			Layout:       selectionContextLayout(ctx),
+			Title:        selectionContextTitle(ctx),
+			ContextTitle: selectionContextLabel(ctx),
+			ContextText:  selectionContextText(ctx),
+			ContextKey:   selectionContextKey(ctx),
+			ViewMode:     string(view.Thread.Mode),
+			Page:         view.Thread.Page,
+			TotalPages:   view.Thread.TotalPages,
+			ReturnPage:   view.Thread.ReturnPage,
+			Options:      options,
+		}, true
+	case view.KickThread != nil && view.PromptKind == control.SelectionPromptKickThread:
+		return control.FeishuDirectSelectionPrompt{
+			Kind:  control.SelectionPromptKickThread,
+			Title: strings.TrimSpace(firstNonEmpty(selectionContextTitle(ctx), "强踢当前会话？")),
+			Hint:  strings.TrimSpace(view.KickThread.Hint),
+			Options: []control.SelectionOption{
+				{Index: 1, OptionID: "cancel", Label: "保留当前状态，不执行强踢。", ButtonLabel: firstNonEmpty(strings.TrimSpace(view.KickThread.CancelLabel), "取消")},
+				{Index: 2, OptionID: strings.TrimSpace(view.KickThread.ThreadID), Label: strings.TrimSpace(view.KickThread.ThreadLabel), Subtitle: strings.TrimSpace(view.KickThread.ThreadSubtitle), ButtonLabel: firstNonEmpty(strings.TrimSpace(view.KickThread.ConfirmLabel), "强踢并占用")},
+			},
+		}, true
+	default:
+		return control.FeishuDirectSelectionPrompt{}, false
+	}
+}
+
+func selectionContextTitle(ctx *control.FeishuUISelectionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.Title)
+}
+
+func selectionContextLabel(ctx *control.FeishuUISelectionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.ContextTitle)
+}
+
+func selectionContextText(ctx *control.FeishuUISelectionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.ContextText)
+}
+
+func selectionContextKey(ctx *control.FeishuUISelectionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.ContextKey)
+}
+
+func selectionContextLayout(ctx *control.FeishuUISelectionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.Layout)
+}
+
+func threadPromptLabelForTest(mode control.FeishuThreadSelectionViewMode, entry control.FeishuThreadSelectionEntry) string {
+	if mode == control.FeishuThreadSelectionVSCodeRecent || mode == control.FeishuThreadSelectionVSCodeAll || mode == control.FeishuThreadSelectionVSCodeScopedAll {
+		if text := strings.TrimSpace(entry.FirstUserMessage); text != "" {
+			return text
+		}
+		if text := strings.TrimSpace(entry.LastUserMessage); text != "" {
+			return text
+		}
+		if text := strings.TrimSpace(entry.LastAssistantMessage); text != "" {
+			return text
+		}
+		if parts := strings.SplitN(strings.TrimSpace(entry.Summary), " · ", 2); len(parts) == 2 {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	return strings.TrimSpace(firstNonEmpty(entry.Summary, entry.ThreadID))
+}
+
+func threadPromptMetaForTest(entry control.FeishuThreadSelectionEntry) string {
+	status := strings.TrimSpace(entry.Status)
+	if entry.Current {
+		parts := []string{firstNonEmpty(status, "当前跟随中")}
+		if age := strings.TrimSpace(entry.AgeText); age != "" {
+			parts = append(parts, age)
+		}
+		return strings.Join(parts, " · ")
+	}
+	parts := make([]string, 0, 2)
+	if entry.VSCodeFocused {
+		parts = append(parts, "VS Code 当前焦点")
+	}
+	if age := strings.TrimSpace(entry.AgeText); age != "" {
+		parts = append(parts, age)
+	}
+	if len(parts) != 0 {
+		return strings.Join(parts, " · ")
+	}
+	return status
 }
 
 func selectionPromptFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuDirectSelectionPrompt {

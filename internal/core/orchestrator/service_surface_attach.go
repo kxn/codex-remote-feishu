@@ -115,9 +115,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 			Text: noticeText,
 		},
 	})
-	if visibleThreadCount != 0 {
-		events = append(events, s.autoPromptUseThread(surface, inst)...)
-	}
+	events = append(events, s.autoPromptUseThread(surface, inst)...)
 	return events
 }
 

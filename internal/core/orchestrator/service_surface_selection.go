@@ -354,37 +354,6 @@ func (s *Service) workspaceLatestVisibleThreadUsedAt(instances []*state.Instance
 	return latest
 }
 
-func workspaceSelectionMetaText(ageText string, hasVSCodeActivity, busy, unavailable, recoverableOnly bool) string {
-	parts := make([]string, 0, 2)
-	if age := strings.TrimSpace(ageText); age != "" {
-		parts = append(parts, age)
-	}
-	switch {
-	case busy:
-		parts = append(parts, "当前被其他飞书会话接管")
-	case recoverableOnly:
-		parts = append(parts, "后台可恢复")
-	case unavailable:
-		parts = append(parts, "当前暂不可接管")
-	case hasVSCodeActivity:
-		parts = append(parts, "有 VS Code 活动")
-	}
-	if len(parts) == 0 {
-		return "可接管"
-	}
-	return strings.Join(parts, " · ")
-}
-
-func workspaceSelectionContextText(label, ageText string) string {
-	label = strings.TrimSpace(label)
-	parts := []string{label}
-	if age := strings.TrimSpace(ageText); age != "" {
-		parts[0] += " · " + age
-	}
-	parts = append(parts, "同工作区内继续工作可 /use，或直接发送文本（也可 /new）")
-	return strings.Join(parts, "\n")
-}
-
 func instanceWorkspaceSelectionKeys(inst *state.InstanceRecord) []string {
 	if inst == nil {
 		return nil

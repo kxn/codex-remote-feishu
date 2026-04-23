@@ -127,29 +127,60 @@ func targetPickerModePageElements(view control.FeishuTargetPickerView, daemonLif
 
 func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, 4)
-	elements = append(elements, map[string]any{
-		"tag":     "markdown",
-		"content": "**工作区**",
-	})
-	elements = append(elements, pathPickerSelectStaticElement(
-		cardTargetPickerWorkspaceFieldName,
-		firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
-		stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID), daemonLifecycleID),
-		targetPickerWorkspaceOptions(view.WorkspaceOptions),
-		strings.TrimSpace(view.SelectedWorkspaceKey),
-	))
-	elements = append(elements, map[string]any{
-		"tag":     "markdown",
-		"content": "**会话**",
-	})
-	elements = append(elements, pathPickerSelectStaticElement(
-		cardTargetPickerSessionFieldName,
-		firstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
-		stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID), daemonLifecycleID),
-		targetPickerSessionOptions(view.SessionOptions),
-		strings.TrimSpace(view.SelectedSessionValue),
-	))
+	renderWorkspaceSelect := !view.WorkspaceSelectionLocked &&
+		(view.ShowWorkspaceSelect || len(view.WorkspaceOptions) != 0 || strings.TrimSpace(view.SelectedWorkspaceKey) != "")
+	renderSessionSelect := view.ShowSessionSelect ||
+		len(view.SessionOptions) != 0 ||
+		strings.TrimSpace(view.SelectedSessionValue) != "" ||
+		strings.TrimSpace(view.SessionPlaceholder) != ""
+	if view.WorkspaceSelectionLocked {
+		if sections := targetPickerLockedWorkspaceSections(view); len(sections) != 0 {
+			elements = appendCardTextSections(elements, sections)
+		}
+	} else if renderWorkspaceSelect {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**工作区**",
+		})
+		elements = append(elements, pathPickerSelectStaticElement(
+			cardTargetPickerWorkspaceFieldName,
+			firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
+			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID), daemonLifecycleID),
+			targetPickerWorkspaceOptions(view.WorkspaceOptions),
+			strings.TrimSpace(view.SelectedWorkspaceKey),
+		))
+	}
+	if renderSessionSelect {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": "**会话**",
+		})
+		elements = append(elements, pathPickerSelectStaticElement(
+			cardTargetPickerSessionFieldName,
+			firstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
+			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID), daemonLifecycleID),
+			targetPickerSessionOptions(view.SessionOptions),
+			strings.TrimSpace(view.SelectedSessionValue),
+		))
+	}
 	return elements
+}
+
+func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
+	lines := make([]string, 0, 2)
+	if label := strings.TrimSpace(view.SelectedWorkspaceLabel); label != "" {
+		lines = append(lines, label)
+	}
+	if meta := strings.TrimSpace(view.SelectedWorkspaceMeta); meta != "" {
+		lines = append(lines, meta)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return []control.FeishuCardTextSection{{
+		Label: "当前工作区",
+		Lines: lines,
+	}}
 }
 
 func targetPickerSourcePageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {

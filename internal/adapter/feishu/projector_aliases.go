@@ -25,13 +25,6 @@ func selectionViewStructuredProjection(
 	return projectorpkg.SelectionViewStructuredProjection(view, ctx, daemonLifecycleID)
 }
 
-func FeishuDirectSelectionPromptFromView(
-	view control.FeishuSelectionView,
-	ctx *control.FeishuUISelectionContext,
-) (control.FeishuDirectSelectionPrompt, bool) {
-	return projectorpkg.FeishuDirectSelectionPromptFromView(view, ctx)
-}
-
 func pathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	return projectorpkg.PathPickerElements(view, daemonLifecycleID)
 }

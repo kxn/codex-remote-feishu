@@ -17,10 +17,10 @@ const (
 // Feishu adapter for workspace/thread selection cards.
 type FeishuSelectionView struct {
 	PromptKind SelectionPromptKind
-	Prompt     *FeishuDirectSelectionPrompt
 	Instance   *FeishuInstanceSelectionView
 	Workspace  *FeishuWorkspaceSelectionView
 	Thread     *FeishuThreadSelectionView
+	KickThread *FeishuKickThreadSelectionView
 }
 
 type FeishuInstanceSelectionView struct {
@@ -106,4 +106,13 @@ type FeishuThreadSelectionEntry struct {
 	Disabled             bool
 	AllowCrossWorkspace  bool
 	Current              bool
+}
+
+type FeishuKickThreadSelectionView struct {
+	ThreadID       string
+	ThreadLabel    string
+	ThreadSubtitle string
+	Hint           string
+	CancelLabel    string
+	ConfirmLabel   string
 }

@@ -152,6 +152,61 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 	}
 }
 
+func TestTargetPickerElementsRenderLockedWorkspaceAsReadOnlyContext(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:                 "picker-1",
+		WorkspaceSelectionLocked: true,
+		SelectedWorkspaceKey:     "/data/dl/web",
+		SelectedWorkspaceLabel:   "web",
+		SelectedWorkspaceMeta:    "当前绑定工作区",
+		SessionPlaceholder:       "选择会话",
+		ConfirmLabel:             "切换",
+		SessionOptions: []control.FeishuTargetPickerSessionOption{
+			{Value: "thread:thread-2", Kind: control.FeishuTargetPickerSessionThread, Label: "整理样式", MetaText: "刚刚"},
+		},
+	}, "life-locked")
+
+	selectCount := 0
+	for _, element := range elements {
+		if cardStringValue(element["tag"]) == "select_static" {
+			selectCount++
+		}
+	}
+	if selectCount != 1 {
+		t.Fatalf("expected locked target picker to render session select only, got %#v", elements)
+	}
+	if !containsMarkdownExact(elements, "**当前工作区**") {
+		t.Fatalf("expected locked picker to render read-only workspace summary, got %#v", elements)
+	}
+	var sawWorkspaceSummary bool
+	for _, element := range elements {
+		text := plainTextContent(element)
+		if strings.Contains(text, "web") && strings.Contains(text, "当前绑定工作区") {
+			sawWorkspaceSummary = true
+			break
+		}
+	}
+	if !sawWorkspaceSummary {
+		t.Fatalf("expected locked picker to render read-only workspace summary text, got %#v", elements)
+	}
+	if containsMarkdownExact(elements, "**工作区**") {
+		t.Fatalf("did not expect editable workspace header for locked picker, got %#v", elements)
+	}
+	actions := cardActionsFromElements(elements)
+	var sawWorkspace, sawSession bool
+	for _, action := range actions {
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerSelectWorkspace:
+			sawWorkspace = true
+		case cardActionKindTargetPickerSelectSession:
+			sawSession = true
+		}
+	}
+	if sawWorkspace || !sawSession {
+		t.Fatalf("expected locked picker to keep only session selection callback, got %#v", actions)
+	}
+}
+
 func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
 		PickerID:               "picker-1",

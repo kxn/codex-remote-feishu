@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-04-22`
-> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、upgrade owner-flow、共享过程卡、attention ping 与 turn reply 语义见正文。其中 request family 现已统一收口到同一套前台生命周期契约：`request_user_input`、approval、`permissions_request_approval`、`mcp_server_elicitation` 都会在最终决策提交后先 inline replace 成 `waiting_dispatch` 只读态，再派发真正的 request response；`request_user_input` 与 form 模式 `mcp_server_elicitation` 继续保持“单题自动推进”：卡面只显示当前题，选项纵向排列，自由输入改成同一行紧凑表单并在行尾放 `提交`，底部只保留 `取消`；`request_control` 负责 `skip_optional`、`cancel_turn`、`cancel_request` 这类非回答型动作；提案计划卡使用 `FeishuPageView` 并显式抑制默认 related back button。
+> Updated: `2026-04-23`
+> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）也统一回到锁定当前工作区的 target picker。selection 卡片这轮进一步收口到 `FeishuSelectionView + FeishuSelectionSemantics`：VS Code `/list` 继续按钮式实例卡，VS Code `/use` / `/useall` 统一成当前实例内的 dropdown，kick-thread confirm 也走同一 selection substrate；adapter live 路径不再回退 `FeishuDirectSelectionPrompt`。其余 target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、upgrade owner-flow、共享过程卡、attention ping 与 turn reply 语义见正文。
 
 ## 1. 文档定位
 
@@ -65,8 +65,8 @@
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
-  - 对 normal mode `/list` / `/use` / `/useall`，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
-  - 对 VS Code instance/thread selection 与其余 legacy selection path，当前仍先产出 `FeishuSelectionView` read model，再连同 `FeishuSelectionContext` 穿过 `UIEvent` 边界
+  - 对 normal mode `/list` / `/use` / `/useall`，以及 attach-unbound / `selected_thread_lost` / `thread_claim_lost` 这类被动恢复入口，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
+  - 对 VS Code instance/thread selection、kick-thread confirm，以及仍保留 selection 卡形态的少量兼容路径，当前统一先产出 `FeishuSelectionView` read model，再连同 `FeishuSelectionContext` 穿过 `UIEvent` 边界
   - 对 `/menu` 与 bare `/mode` `/autowhip` `/reasoning` `/access` `/plan` `/model` `/verbose`，当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
   - 对 approval / `request_user_input` / MCP request cards，当前先产出 `FeishuRequestView`，再连同 `FeishuRequestContext` 穿过 `UIEvent` 边界
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
@@ -81,9 +81,9 @@
     [internal/adapter/feishu/projector/target_picker.go](../../internal/adapter/feishu/projector/target_picker.go)
     负责把 `FeishuTargetPickerView` 投影成当前 target picker 卡片
     [internal/adapter/feishu/projector/selection_view.go](../../internal/adapter/feishu/projector/selection_view.go)
-    负责 selection view 的 compat prompt 投影 helper（供 structured projector 复用）
+    负责把 `FeishuSelectionView + FeishuSelectionSemantics` 归一整理成本地 render model，供 button/dropdown 两类投影复用
     [internal/adapter/feishu/projector/selection_structured.go](../../internal/adapter/feishu/projector/selection_structured.go)
-    负责 selection view 的统一投影入口：VS Code `/list` 按钮式 instance view 与 `/use` / `/useall` 下拉式 thread view 走直接结构化投影，其余 legacy selection path 走 compat prompt helper；`projector.go` 不再保留单独的 selection fallback 分支
+    负责 selection view 的统一结构化投影入口：VS Code `/list` 按钮式 instance view、VS Code `/use` / `/useall` dropdown、normal button-based selection 与 kick-thread confirm 当前都直接消费 `FeishuSelectionView`；`projector.go` 不再保留单独的 selection fallback 分支
     [internal/adapter/feishu/projector/page_catalog.go](../../internal/adapter/feishu/projector/page_catalog.go)
     负责把 `FeishuPageView` 投影成页面卡，并为按钮/表单写入 `page_action` / `page_submit` payload
     [internal/adapter/feishu/projector/path_picker.go](../../internal/adapter/feishu/projector/path_picker.go)
@@ -144,11 +144,13 @@
   - dropdown 刷新与 confirm 已不再经由 `FeishuDirectSelectionPrompt` 兜底
   - `Page` / `StageLabel` / `Question` 当前仍是 editing / processing / terminal 的稳定页头合同，但 normal mode 主路径已经改成：`/workspace list` 直接落 `Page=target`，`/workspace new dir` 直接落 `Page=local_directory`，`/workspace new git` 直接落 `Page=git`
   - `FeishuTargetPickerPageMode` / `FeishuTargetPickerPageSource` 仍保留在 DTO / callback 协议里做兼容，但当前主路径默认不会把它们投影给 normal-mode 用户
-- `control.FeishuDirectSelectionPrompt` 仍然存在，但已经不再是 workspace/thread selection 的唯一主载体：
-  - vscode instance/thread selection 与其余 legacy selection path 现在跨边界携带的是 `control.FeishuSelectionView`
-  - generic legacy prompt 既可能显式挂在 `FeishuSelectionView.Prompt`，也可能由 `FeishuSelectionView` 的 workspace/thread 子视图在 adapter 层经 compat helper 归一投影成 `FeishuDirectSelectionPrompt`
-  - VS Code `/list` 的 instance selection 与 `/use` / `/useall` 的 thread selection 当前已在 adapter 层直接生成 Feishu V2 卡片，不再依赖 prompt compat 投影
-  - 其他 selection 场景，例如 kick-thread confirm，仍可直接使用 `FeishuDirectSelectionPrompt`
+- `control.FeishuSelectionView` 当前已经是 live selection UI 的主载体：
+  - VS Code `/list` 的 instance selection、VS Code `/use` / `/useall` 的 thread selection，以及 kick-thread confirm，当前都直接跨 `UIEvent` 边界携带 `FeishuSelectionView`
+  - title / layout / context / hidden-entry hint 当前统一由 `control.DeriveFeishuSelectionSemantics(...)` 派生，orchestrator 的 `FeishuSelectionContext` 与 adapter projector 共用这一份语义 owner，不再各自重复推导
+  - VS Code thread dropdown 当前会直接隐藏 disabled thread，并用 plain-text hint 提示“已省略当前不可切换的会话”
+- `control.FeishuDirectSelectionPrompt` 仍然保留，但当前只剩测试 / mockfeishu 兼容用途，不再是 live adapter 输入：
+  - workspace/thread selection live 路径已经不再从 `FeishuSelectionView` 回退投影成 `FeishuDirectSelectionPrompt`
+  - kick-thread confirm 等 live selection 也直接消费 `FeishuSelectionView`
 - `control.FeishuPathPickerView` 当前已经是路径选择器跨 `UIEvent` 边界的主载体：
   - projector 直接以它为 owner 生成 `path_picker_*` callback payload
   - 当前不会再把目录浏览过程编码回 `FeishuDirectSelectionPrompt`
@@ -158,7 +160,7 @@
   - `UIEvent` 已经携带独立的 `FeishuSelectionContext` / `FeishuPageContext` / `FeishuRequestContext`（legacy command 路径仍保留 `FeishuCommandContext`）
   - Feishu UI controller 已通过这层 boundary 分流 pure navigation；后续继续扩 controller 时，默认仍应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
   - target picker cards 现在是 “read model -> `FeishuTargetPickerView` -> adapter projection -> Feishu V2 卡片” 三段；后续修改 normal `/list` / `/use` / `/useall` 的默认选择、页头单题文案、前置阻塞校验、confirm 按钮或 stale-selection 行为时，默认应落在 target picker read model / projection 层，而不是回到旧 selection query 函数里继续混改
-  - selection cards 现在主要服务于 VS Code / legacy selection path；其中 VS Code `/list` / `/use` / `/useall` 已是 “read model -> `FeishuSelectionView` -> adapter structured projection -> Feishu V2 卡片” 三段，其余 compat prompt 仍保留 “read model -> `FeishuSelectionView` -> adapter structured entrypoint -> compat helper -> `FeishuDirectSelectionPrompt`” 四段；后续修改这些路径的交互与文案时，默认仍应落在 adapter structured projection / compat projection 或 selection view 结构层
+  - selection cards 现在主要服务于 VS Code instance/thread selection 与 kick-thread confirm；它们已经统一成 “read model -> `FeishuSelectionView` / `FeishuSelectionSemantics` -> adapter structured projection -> Feishu V2 卡片” 三段。后续修改这些路径的交互与文案时，默认应落在 selection semantics / structured projection / selection view 结构层，而不是重新引入 prompt compat 载体
   - menu/config/root pages 现在统一是 “`FeishuCatalogView` -> `FeishuPageView` -> page projector -> Feishu V2 卡片” 三段；直接 owner-flow 页面则是 “`FeishuPageView` -> page projector -> Feishu V2 卡片”；后续修改 `/menu` 或 bare config cards 的 breadcrumbs、按钮布局、回退按钮、摘要文案时，默认应落在 catalog/page read model 或 page projector 层
 - `ActionShow*` 与 bare config `Action*Command` 当前若仍存在，属于 gateway / parser 的 transport compatibility 层；live path 会先归并到 `FeishuUIIntent`，不再代表主产品 reducer owner。
 - 如果只是换卡片样式、按钮 payload、inline replace 策略，优先更新本文。
@@ -560,8 +562,8 @@ MCP request 卡片当前新增的可视语义：
   - 这些提示的目的就是阻止旧卡或非 owner 点击继续改写当前前台状态，因此当前继续保留为显式独立拒绝提示
 3. legacy `FeishuSelectionView`
   - normal mode 主 `/workspace list`，以及 alias `/list` / `/use` / `/useall`，已迁到 target picker
-  - 但 VS Code instance/thread selection、attach / kick 等旧选择流当前仍通过 `FeishuSelectionView -> FeishuDirectSelectionPrompt` 路径承接
-  - 这条路径当前被视为 live 保留例外，而不是本轮前台卡 contract 迁移中的漏网主路径
+  - VS Code instance/thread selection 与 kick-thread confirm 当前仍走 `FeishuSelectionView`，但 adapter live 路径已经直接消费 `FeishuSelectionView + FeishuSelectionSemantics`，不再回退 `FeishuDirectSelectionPrompt`
+  - 因此这条 selection substrate 现在是明确保留的 live path，而不是旧 compat prompt 的残留漏网路径
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
 
 ## 6. 当前 freshness / old-card 语义
@@ -632,7 +634,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/control/feishu_ui_boundary.go](../../internal/core/control/feishu_ui_boundary.go)
 - [internal/core/control/feishu_target_picker.go](../../internal/core/control/feishu_target_picker.go)
 - [internal/core/control/feishu_selection_view.go](../../internal/core/control/feishu_selection_view.go)
-- [internal/core/control/feishu_selection_prompt_view.go](../../internal/core/control/feishu_selection_prompt_view.go)
+- [internal/core/control/feishu_selection_semantics.go](../../internal/core/control/feishu_selection_semantics.go)
 - [internal/core/control/feishu_command_view.go](../../internal/core/control/feishu_command_view.go)
 - [internal/core/control/feishu_request_view.go](../../internal/core/control/feishu_request_view.go)
 - [internal/core/control/feishu_command_page_catalog.go](../../internal/core/control/feishu_command_page_catalog.go)

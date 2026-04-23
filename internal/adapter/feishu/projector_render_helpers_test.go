@@ -9,15 +9,170 @@ import (
 )
 
 func selectionPromptEvent(prompt control.FeishuDirectSelectionPrompt) eventcontract.Event {
-	view := control.FeishuSelectionView{
-		PromptKind: prompt.Kind,
-	}
-	promptView := prompt
-	view.Prompt = &promptView
+	view, ctx := selectionViewFromLegacyPrompt(prompt)
 	return eventcontract.Event{
-		Kind:          eventcontract.KindSelection,
-		SelectionView: &view,
+		Kind:             eventcontract.KindSelection,
+		SelectionView:    &view,
+		SelectionContext: ctx,
 	}
+}
+
+func selectionViewFromLegacyPrompt(prompt control.FeishuDirectSelectionPrompt) (control.FeishuSelectionView, *control.FeishuUISelectionContext) {
+	view := control.FeishuSelectionView{PromptKind: prompt.Kind}
+	ctx := &control.FeishuUISelectionContext{
+		DTOOwner:     control.FeishuUIDTOwnerSelection,
+		PromptKind:   prompt.Kind,
+		ViewMode:     strings.TrimSpace(prompt.ViewMode),
+		Layout:       strings.TrimSpace(prompt.Layout),
+		Title:        strings.TrimSpace(prompt.Title),
+		ContextTitle: strings.TrimSpace(prompt.ContextTitle),
+		ContextText:  strings.TrimSpace(prompt.ContextText),
+		ContextKey:   strings.TrimSpace(prompt.ContextKey),
+	}
+	switch prompt.Kind {
+	case control.SelectionPromptAttachInstance:
+		view.Instance = legacyInstanceSelectionView(prompt)
+	case control.SelectionPromptAttachWorkspace:
+		view.Workspace = legacyWorkspaceSelectionView(prompt)
+	case control.SelectionPromptUseThread:
+		view.Thread = legacyThreadSelectionView(prompt)
+	case control.SelectionPromptKickThread:
+		view.KickThread = legacyKickThreadSelectionView(prompt)
+	}
+	return view, ctx
+}
+
+func legacyInstanceSelectionView(prompt control.FeishuDirectSelectionPrompt) *control.FeishuInstanceSelectionView {
+	view := &control.FeishuInstanceSelectionView{
+		Entries: make([]control.FeishuInstanceSelectionEntry, 0, len(prompt.Options)),
+	}
+	if strings.TrimSpace(prompt.ContextTitle) != "" || strings.TrimSpace(prompt.ContextText) != "" {
+		view.Current = &control.FeishuInstanceSelectionCurrent{
+			ContextText: strings.TrimSpace(prompt.ContextText),
+		}
+	}
+	for _, option := range prompt.Options {
+		view.Entries = append(view.Entries, control.FeishuInstanceSelectionEntry{
+			InstanceID:  strings.TrimSpace(option.OptionID),
+			Label:       strings.TrimSpace(option.Label),
+			ButtonLabel: strings.TrimSpace(option.ButtonLabel),
+			MetaText:    strings.TrimSpace(option.MetaText),
+			Disabled:    option.Disabled,
+		})
+	}
+	return view
+}
+
+func legacyWorkspaceSelectionView(prompt control.FeishuDirectSelectionPrompt) *control.FeishuWorkspaceSelectionView {
+	view := &control.FeishuWorkspaceSelectionView{
+		Page:       prompt.Page,
+		TotalPages: prompt.TotalPages,
+		Entries:    make([]control.FeishuWorkspaceSelectionEntry, 0, len(prompt.Options)),
+	}
+	if strings.TrimSpace(prompt.ContextKey) != "" || strings.TrimSpace(prompt.ContextText) != "" {
+		view.Current = &control.FeishuWorkspaceSelectionCurrent{
+			WorkspaceKey: strings.TrimSpace(prompt.ContextKey),
+		}
+	}
+	for _, option := range prompt.Options {
+		if strings.TrimSpace(option.ActionKind) == cardActionKindShowAllWorkspaces || strings.TrimSpace(option.ActionKind) == cardActionKindShowRecentWorkspaces {
+			continue
+		}
+		entry := control.FeishuWorkspaceSelectionEntry{
+			WorkspaceKey:   strings.TrimSpace(option.OptionID),
+			WorkspaceLabel: firstNonEmpty(strings.TrimSpace(option.Label), strings.TrimSpace(option.OptionID)),
+			AgeText:        strings.TrimSpace(option.AgeText),
+		}
+		switch strings.TrimSpace(option.ActionKind) {
+		case cardActionKindShowWorkspaceThreads:
+			entry.RecoverableOnly = true
+		default:
+			entry.Attachable = !option.Disabled
+			entry.Busy = option.Disabled
+		}
+		view.Entries = append(view.Entries, entry)
+	}
+	return view
+}
+
+func legacyThreadSelectionView(prompt control.FeishuDirectSelectionPrompt) *control.FeishuThreadSelectionView {
+	mode := control.FeishuThreadSelectionViewMode(strings.TrimSpace(prompt.ViewMode))
+	if mode == "" {
+		switch {
+		case strings.TrimSpace(prompt.Layout) == "vscode_instance_threads" && strings.TrimSpace(prompt.Title) == "当前实例全部会话":
+			mode = control.FeishuThreadSelectionVSCodeAll
+		case strings.TrimSpace(prompt.Layout) == "vscode_instance_threads":
+			mode = control.FeishuThreadSelectionVSCodeRecent
+		case strings.TrimSpace(prompt.Layout) == "workspace_grouped_useall" && strings.TrimSpace(prompt.ContextTitle) != "":
+			mode = control.FeishuThreadSelectionNormalGlobalAll
+		case strings.TrimSpace(prompt.Layout) == "workspace_grouped_useall":
+			mode = control.FeishuThreadSelectionNormalWorkspaceView
+		case strings.TrimSpace(prompt.Title) == "当前工作区全部会话":
+			mode = control.FeishuThreadSelectionNormalScopedAll
+		default:
+			mode = control.FeishuThreadSelectionNormalScopedRecent
+		}
+	}
+	view := &control.FeishuThreadSelectionView{
+		Mode:       mode,
+		Page:       prompt.Page,
+		TotalPages: prompt.TotalPages,
+		ReturnPage: prompt.ReturnPage,
+		Entries:    make([]control.FeishuThreadSelectionEntry, 0, len(prompt.Options)),
+	}
+	if strings.TrimSpace(prompt.ContextKey) != "" {
+		view.Workspace = &control.FeishuThreadSelectionWorkspaceContext{
+			WorkspaceKey: strings.TrimSpace(prompt.ContextKey),
+		}
+		view.CurrentWorkspace = &control.FeishuThreadSelectionWorkspaceContext{
+			WorkspaceKey: strings.TrimSpace(prompt.ContextKey),
+		}
+	}
+	if strings.TrimSpace(prompt.ContextTitle) == "当前实例" {
+		view.CurrentInstance = &control.FeishuThreadSelectionInstanceContext{
+			Label: strings.TrimSpace(prompt.ContextText),
+		}
+	}
+	for _, option := range prompt.Options {
+		switch strings.TrimSpace(option.ActionKind) {
+		case cardActionKindShowThreads, cardActionKindShowAllThreads, cardActionKindShowScopedThreads, cardActionKindShowAllThreadWorkspaces, cardActionKindShowRecentThreadWorkspaces:
+			continue
+		}
+		view.Entries = append(view.Entries, control.FeishuThreadSelectionEntry{
+			ThreadID:            strings.TrimSpace(option.OptionID),
+			Summary:             firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), strings.TrimSpace(option.OptionID)),
+			WorkspaceKey:        strings.TrimSpace(option.GroupKey),
+			WorkspaceLabel:      strings.TrimSpace(option.GroupLabel),
+			AgeText:             strings.TrimSpace(option.AgeText),
+			AllowCrossWorkspace: option.AllowCrossWorkspace,
+			Current:             option.IsCurrent,
+			Disabled:            option.Disabled,
+		})
+	}
+	return view
+}
+
+func legacyKickThreadSelectionView(prompt control.FeishuDirectSelectionPrompt) *control.FeishuKickThreadSelectionView {
+	view := &control.FeishuKickThreadSelectionView{
+		Hint:         strings.TrimSpace(prompt.Hint),
+		CancelLabel:  "取消",
+		ConfirmLabel: "强踢并占用",
+	}
+	for _, option := range prompt.Options {
+		if strings.TrimSpace(option.OptionID) == "cancel" {
+			if label := strings.TrimSpace(option.ButtonLabel); label != "" {
+				view.CancelLabel = label
+			}
+			continue
+		}
+		view.ThreadID = strings.TrimSpace(option.OptionID)
+		view.ThreadLabel = strings.TrimSpace(option.Label)
+		view.ThreadSubtitle = strings.TrimSpace(option.Subtitle)
+		if label := strings.TrimSpace(option.ButtonLabel); label != "" {
+			view.ConfirmLabel = label
+		}
+	}
+	return view
 }
 
 func commandCatalogEvent(catalog control.FeishuPageView) eventcontract.Event {

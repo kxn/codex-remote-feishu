@@ -50,7 +50,7 @@ func TestVSCodeModeListFiltersOutHeadlessInstances(t *testing.T) {
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Title != "在线 VS Code 实例" || prompt.Layout != "grouped_attach_instance" {
+	if prompt.Title != "在线 VS Code 实例" || prompt.Layout != "vscode_instance_list" {
 		t.Fatalf("expected vscode attach prompt title, got %#v", prompt)
 	}
 	if len(prompt.Options) != 1 || prompt.Options[0].OptionID != "inst-vscode-1" {
@@ -131,7 +131,7 @@ func TestVSCodeModeListShowsCurrentInstanceSummaryAndFocusSortedCandidates(t *te
 		t.Fatalf("expected one selection prompt, got %#v", events)
 	}
 	prompt := selectionPromptFromEvent(t, events[0])
-	if prompt.Layout != "grouped_attach_instance" || prompt.ContextTitle != "当前实例" {
+	if prompt.Layout != "vscode_instance_list" || prompt.ContextTitle != "当前实例" {
 		t.Fatalf("unexpected vscode instance prompt metadata: %#v", prompt)
 	}
 	if !strings.Contains(prompt.ContextText, "droid · 当前跟随中") || !strings.Contains(prompt.ContextText, "换实例才用 /list") {
@@ -196,9 +196,6 @@ func TestVSCodeModeListBuildsStructuredInstanceSelectionView(t *testing.T) {
 	view := selectionViewFromEvent(t, events[0])
 	if view.Instance == nil {
 		t.Fatalf("expected structured instance selection view, got %#v", view)
-	}
-	if view.Prompt != nil {
-		t.Fatalf("expected vscode /list to avoid legacy prompt payload, got %#v", view)
 	}
 	if view.Instance.Current == nil || !strings.Contains(view.Instance.Current.ContextText, "droid · 当前跟随中") {
 		t.Fatalf("expected current instance summary in structured view, got %#v", view.Instance.Current)

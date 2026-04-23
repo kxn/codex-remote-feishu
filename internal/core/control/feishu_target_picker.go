@@ -104,6 +104,9 @@ type FeishuTargetPickerView struct {
 	ShowWorkspaceSelect    bool
 	ShowSessionSelect      bool
 	ShowSourceSelect       bool
+	WorkspaceSelectionLocked bool
+	LockedWorkspaceKey       string
+	AllowNewThread           bool
 	ModePlaceholder        string
 	WorkspacePlaceholder   string
 	SessionPlaceholder     string

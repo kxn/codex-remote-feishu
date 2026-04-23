@@ -9,7 +9,7 @@ import (
 
 const useThreadWorkspacePreviewLimit = 2
 
-func useThreadSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadSelectionPromptElements(prompt selectionRenderModel, daemonLifecycleID string) []map[string]any {
 	if useThreadPromptUsesVSCodeInstanceLayout(prompt) {
 		return useThreadVSCodeInstanceElements(prompt, daemonLifecycleID)
 	}
@@ -63,11 +63,11 @@ func useThreadSelectionPromptElements(prompt control.FeishuDirectSelectionPrompt
 	return elements
 }
 
-func useThreadPromptUsesVSCodeInstanceLayout(prompt control.FeishuDirectSelectionPrompt) bool {
+func useThreadPromptUsesVSCodeInstanceLayout(prompt selectionRenderModel) bool {
 	return strings.TrimSpace(prompt.Layout) == "vscode_instance_threads"
 }
 
-func useThreadVSCodeInstanceElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Options)*3+8)
 	isFullView := strings.TrimSpace(prompt.Title) == "当前实例全部会话"
 
@@ -200,7 +200,7 @@ type useThreadWorkspaceGroup struct {
 	Options []control.SelectionOption
 }
 
-func useThreadPromptUsesWorkspaceGrouping(prompt control.FeishuDirectSelectionPrompt) bool {
+func useThreadPromptUsesWorkspaceGrouping(prompt selectionRenderModel) bool {
 	if strings.TrimSpace(prompt.Layout) != "workspace_grouped_useall" {
 		return false
 	}
@@ -212,7 +212,7 @@ func useThreadPromptUsesWorkspaceGrouping(prompt control.FeishuDirectSelectionPr
 	return false
 }
 
-func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) []map[string]any {
+func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecycleID string) []map[string]any {
 	elements := make([]map[string]any, 0, len(prompt.Options)*3+8)
 	currentOptions := make([]control.SelectionOption, 0, 1)
 	moreOptions := make([]control.SelectionOption, 0, 1)
@@ -365,7 +365,7 @@ func useThreadWorkspaceGroupedElements(prompt control.FeishuDirectSelectionPromp
 	return elements
 }
 
-func useThreadExpandedWorkspaceIndex(prompt control.FeishuDirectSelectionPrompt, singleWorkspaceView bool, moreOptions []control.SelectionOption) bool {
+func useThreadExpandedWorkspaceIndex(prompt selectionRenderModel, singleWorkspaceView bool, moreOptions []control.SelectionOption) bool {
 	if singleWorkspaceView {
 		return false
 	}
@@ -383,7 +383,7 @@ func useThreadExpandedWorkspaceIndex(prompt control.FeishuDirectSelectionPrompt,
 	return false
 }
 
-func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string, currentOptions []control.SelectionOption, groups []useThreadWorkspaceGroup, moreOptions []control.SelectionOption) []map[string]any {
+func useThreadWorkspaceIndexElements(prompt selectionRenderModel, daemonLifecycleID string, currentOptions []control.SelectionOption, groups []useThreadWorkspaceGroup, moreOptions []control.SelectionOption) []map[string]any {
 	elements := make([]map[string]any, 0, len(groups)+len(moreOptions)+8)
 
 	if len(currentOptions) > 0 {
@@ -463,7 +463,7 @@ func useThreadWorkspaceIndexElements(prompt control.FeishuDirectSelectionPrompt,
 	return elements
 }
 
-func useThreadActionElement(prompt control.FeishuDirectSelectionPrompt, option control.SelectionOption, daemonLifecycleID string) map[string]any {
+func useThreadActionElement(prompt selectionRenderModel, option control.SelectionOption, daemonLifecycleID string) map[string]any {
 	return selectionOptionButton(prompt, option, daemonLifecycleID)
 }
 
@@ -472,7 +472,7 @@ func workspaceThreadsButton(label, workspaceKey string, returnPage int, daemonLi
 	return cardCallbackButtonElement(label, "default", value, false, "fill")
 }
 
-func useThreadPromptFooter(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string) map[string]any {
+func useThreadPromptFooter(prompt selectionRenderModel, daemonLifecycleID string) map[string]any {
 	buttons := []map[string]any{}
 	if strings.TrimSpace(prompt.ViewMode) == string(control.FeishuThreadSelectionNormalWorkspaceView) {
 		if prompt.ReturnPage > 0 {
@@ -495,7 +495,7 @@ func useThreadPromptFooter(prompt control.FeishuDirectSelectionPrompt, daemonLif
 	return cardButtonGroupElement(buttons)
 }
 
-func useThreadPageButton(prompt control.FeishuDirectSelectionPrompt, daemonLifecycleID string, page int, previous bool) map[string]any {
+func useThreadPageButton(prompt selectionRenderModel, daemonLifecycleID string, page int, previous bool) map[string]any {
 	label := "下一页"
 	if previous {
 		label = "上一页"

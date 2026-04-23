@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-22`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；同时保持 VS Code `/list` / `/use` / `/useall` 的结构化实例/线程卡、统一参数页、target-picker/path-picker/request gate、upgrade owner-flow、surface resume state 与 global runtime 提示等现状。此次还把 `request_user_input` / form 模式 `mcp_server_elicitation` 的 request gate 收敛到“单题自动推进 + 显式 skip/cancel 控制 + 最后一题才 resolve request”的语义，并把 turn 完成后的 `item/plan/delta` 继续落成独立的提案计划 page card；细节见正文。
+> Updated: `2026-04-23`
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。其余统一参数页、target-picker/path-picker/request gate、upgrade owner-flow、surface resume state 与 global runtime 提示保持现状；细节见正文。
 
 ## 1. 文档定位
 
@@ -162,16 +162,21 @@ surface 不是单一枚举，而是五层正交状态叠加。
    5. `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_open_path_picker` 都只刷新同一张卡或其子步骤，不会立即 attach 或 switch；`target_picker_select_mode` / `target_picker_select_source` 仍保留 transport 兼容，但当前主路径默认不会命中。
    6. `target_picker_cancel` 是当前三张工作会话业务卡的显式退出路径：编辑态会把当前卡封成 `已取消` 终态；若 Git 长链路正处于 processing，则会封成 `已取消导入` 并执行 best-effort cancel。
    7. `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 normal mode 下当前都只负责“重新打开或刷新 `/workspace list` 切换卡”，不再维持旧的分页 selection-card 主路径。
-   8. `/new` 已变成 workspace-owned prepared state。
-   9. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
+   8. 被动恢复入口也统一复用 target picker，而不是旧的 scoped selection prompt：
+      1. `attach unbound`、`selected_thread_lost`、`thread_claim_lost` 当前都会打开“锁定当前工作区”的 target picker。
+      2. 这类卡片会隐藏工作区下拉，只保留当前工作区的会话候选；若当前工作区只剩 `new_thread` 可走，会自动预选这一个候选。
+      3. 用户若尝试从旧卡切到别的工作区，或确认一个已经不属于当前工作区的旧候选，服务端不会 cross-workspace fallback，而是刷新同一张锁定卡，并明确提示“当前工作区已锁定”。
+   9. `/new` 已变成 workspace-owned prepared state。
+   10. `/follow` 在 normal mode 下只返回迁移提示，不再进入 follow route。
 10. `vscode mode` 当前已经完成这一轮收窄：
    1. `/list` attach/switch instance 后默认进入 follow-first，而不是落回 pinned/unbound。
    2. 默认跟随目标只看 `ObservedFocusedThreadID`，不再回落 `ActiveThreadID`。
    3. detached `vscode /use` / `/useall` 会直接拒绝，并要求先 `/list`。
-   4. attached `vscode /use` / `/useall` 只看当前 attached instance 的已知 thread 集合；其中 `/use` 也是最近 5 个 + `show_scoped_threads`，`/useall` 才是当前实例全部会话。
-   5. `vscode /use` 的 one-shot force-pick 会保留 `RouteMode=follow_local`，后续 observed focus 仍可覆盖。
-   6. 若 `/list`、`/use`、`/useall` 来自带 `daemon_lifecycle_id` 的当前菜单卡 callback，实例列表 / 线程列表 / attach 结果 / use 结果会继续沿当前菜单卡时间线收口，不再退回 submission-anchor 或额外 detached notice。
-   7. 若 stamped `/mode vscode` 在切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先静默自动迁到 `managed_shim`，成功后直接继续 open prompt / resume failure 等后续链路；只有缺 target、自动迁移失败、或需要修复的 managed shim，才会把首张可投影提示卡优先替换当前卡。纯文本 `/mode vscode` 仍保留原来的异步提示语义。
+   4. attached `vscode /use` / `/useall` 只看当前 attached instance 的已知 thread 集合；`/use` 显示最近 5 个，`/useall` 显示当前实例全部会话，两者都统一成当前实例内的 dropdown 选择。
+   5. dropdown 当前不会再把不可切换 thread 作为 disabled 选项渲染在卡面里，而是直接隐藏，并在卡片正文追加 plain-text 提示说明“已省略当前不可切换的会话”。
+   6. `vscode /use` 的 one-shot force-pick 会保留 `RouteMode=follow_local`，后续 observed focus 仍可覆盖。
+   7. 若 `/list`、`/use`、`/useall` 来自带 `daemon_lifecycle_id` 的当前菜单卡 callback，实例列表 / 线程列表 / attach 结果 / use 结果会继续沿当前菜单卡时间线收口，不再退回 submission-anchor 或额外 detached notice。
+   8. 若 stamped `/mode vscode` 在切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先静默自动迁到 `managed_shim`，成功后直接继续 open prompt / resume failure 等后续链路；只有缺 target、自动迁移失败、或需要修复的 managed shim，才会把首张可投影提示卡优先替换当前卡。纯文本 `/mode vscode` 仍保留原来的异步提示语义。
 
 ### 3.2 路由主状态
 
@@ -344,6 +349,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    1. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都直接打开 `Page=target`。
    2. attached `/use` 会预填当前 workspace；`/useall` 与 workspace-scoped 入口仍允许跨 workspace，但不会锁死选择。
    3. 当前没有已有 workspace 时，不会再退回旧的 `模式` / `来源` 页；切换卡会直接落在 `目标` 页，并通过阻塞消息告诉用户先走新建路径。
+   4. `attach unbound`、`selected_thread_lost`、`thread_claim_lost` 这类被动恢复入口当前也走同一套 `UIEventFeishuTargetPicker`，但会打开锁定当前工作区的变体：隐藏工作区下拉，只允许在当前工作区内重新确认会话或继续 `new_thread`。
 3. `目标` 页下，会话下拉始终基于当前选中的 workspace 动态重建。
    1. 先列该 workspace 下当前可接管或可恢复的 thread。
    2. picker 首次打开时，只有 surface 当前已经绑定到该 workspace 的某个 `SelectedThreadID`，且该 thread 仍在候选里，才默认选中该 thread。
@@ -371,6 +377,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 8. 旧的 normal-mode grouped workspace/thread selection cards 不再是主路径。
    1. 当前不再保留旧 `create_workspace` transport 兼容入口；normal mode 的新工作区路径统一走 `/workspace new dir` / `/workspace new git` 这两张业务卡。
    2. `show_all_workspaces` / `show_recent_workspaces` / `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 normal mode 下当前都退化成“用指定 source / workspace 重新打开 target picker”的兼容导航入口。
+   3. 被动恢复路径也不再回到旧 scoped selection prompt；一律刷新锁定当前工作区的 target picker，并拒绝 silent fallback。
 9. confirm 后真正 attach / switch 时，`attachWorkspace()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 normal mode 下仍然会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
 
 结果：
@@ -406,9 +413,10 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 对应实现里：
 
 1. detached `/use` / `/useall` 仍直接拒绝，并提示先 `/list` 选择一个 VS Code 实例；若入口来自 stamped 菜单卡，这张提示卡会直接替换当前菜单卡，不再外跳提交态锚点。
-2. attached `/use` 继续显示当前实例最近 5 个 thread，并保留 `show_scoped_threads`；`/useall` 继续显示当前实例全部 thread。
-3. thread 选择按钮仍走 `use_thread -> ActionUseThread`。
-4. 选择 thread 后，same-thread / busy / attach-known-thread / visible-thread 切换等既有产品语义保持不变；但若入口来自 stamped 菜单卡，首张可投影结果卡会继续替回当前菜单卡，不再额外 append 一张 detached notice 或“命令已提交”锚点卡。
+2. attached `/use` 当前显示当前实例最近 5 个 thread 的 dropdown；`/useall` 显示当前实例全部 thread 的 dropdown。
+3. dropdown 当前会直接过滤掉不可切换 thread，不再把它们作为 disabled 选项留在卡面里；若发生过滤，卡片正文会追加 plain-text 提示。
+4. thread 选择仍走 `use_thread -> ActionUseThread`；只是 Feishu 投影从旧按钮/分页 prompt 收敛成当前实例内的结构化 dropdown。
+5. 选择 thread 后，same-thread / busy / attach-known-thread / visible-thread 切换等既有产品语义保持不变；但若入口来自 stamped 菜单卡，首张可投影结果卡会继续替回当前菜单卡，不再额外 append 一张 detached notice 或“命令已提交”锚点卡。
 
 ### 4.1.3 stamped `/mode vscode` 与 `/vscode-migrate` 的 owner-card 收口边界
 
@@ -804,9 +812,10 @@ R5 NewThreadReady
    3. 这张切换卡现在只保留“工作区 + 会话”两个下拉，不再出现模式切换、来源切换，也不再提供 `新建会话`。
    4. `/workspace new dir` 与 `/workspace new git` 是两张独立业务卡：前者直接做目录接入，后者直接做 Git URL 导入；`/workspace new` 只负责把这两条路径并列展示出来。
    5. normal mode 下的 `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 当前都只负责在 same-context 中重新打开或刷新 `/workspace list` 这张切换卡。
-   6. `/workspace list` 当前主路径只会发出 `target_picker_select_workspace` / `target_picker_select_session`；`target_picker_select_mode` / `target_picker_select_source` 仍保留 transport 兼容，但主路径默认不会命中。`/workspace new dir` / `git` 则会继续使用 `target_picker_open_path_picker` 打开目录子步骤，并在同一张 owner card 内 inline replace 往返。
-   7. `target_picker_confirm` 虽然仍是异步产品动作，但三条业务卡都会把 processing / terminal 结果收回同一张 owner card，而不再额外 append 主结果卡。
-   8. 若 confirm 时原选择已经失效，当前会刷新一张最新 picker 并返回 `target_picker_selection_changed`，不会 silent fallback 到别的 thread / workspace。
+   6. `attach unbound`、`selected_thread_lost`、`thread_claim_lost` 当前也会复用这张切换卡，但会锁定在当前 workspace：工作区下拉隐藏、旧跨 workspace 选择会被驳回并刷新提示。
+   7. `/workspace list` 当前主路径只会发出 `target_picker_select_workspace` / `target_picker_select_session`；`target_picker_select_mode` / `target_picker_select_source` 仍保留 transport 兼容，但主路径默认不会命中。`/workspace new dir` / `git` 则会继续使用 `target_picker_open_path_picker` 打开目录子步骤，并在同一张 owner card 内 inline replace 往返。
+   8. `target_picker_confirm` 虽然仍是异步产品动作，但三条业务卡都会把 processing / terminal 结果收回同一张 owner card，而不再额外 append 主结果卡。
+   9. 若 confirm 时原选择已经失效，当前会刷新一张最新 picker 并返回 `target_picker_selection_changed`，不会 silent fallback 到别的 thread / workspace；锁定当前工作区的恢复卡也遵守同一条规则。
 7. target picker confirm 的产品落点当前分三类：
    1. `/workspace list` 既有会话：复用现有 resolver 顺序 `当前 attached instance 内可见 thread -> free existing visible instance -> reusable managed headless -> create managed headless`。
    2. `/workspace list` 既有会话但需要跨 workspace / 跨实例：仍会先走 detach-like 清理，丢弃 staged/queued draft、清 request / capture / prompt override，再 attach 到新目标。

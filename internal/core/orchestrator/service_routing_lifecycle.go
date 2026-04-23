@@ -203,24 +203,15 @@ func (s *Service) presentKickThreadPrompt(surface *state.SurfaceConsoleRecord, i
 	if subtitle == "" {
 		subtitle = s.threadSelectionSubtitle(surface, inst, thread)
 	}
-	return []eventcontract.Event{s.feishuDirectSelectionPromptEvent(surface, control.FeishuDirectSelectionPrompt{
-		Kind:  control.SelectionPromptKickThread,
-		Title: "强踢当前会话？",
-		Hint:  "只有对方当前空闲时才能强踢；确认前会再次校验状态。",
-		Options: []control.SelectionOption{
-			{
-				Index:       1,
-				OptionID:    "cancel",
-				Label:       "保留当前状态，不执行强踢。",
-				ButtonLabel: "取消",
-			},
-			{
-				Index:       2,
-				OptionID:    threadID,
-				Label:       title,
-				Subtitle:    subtitle,
-				ButtonLabel: "强踢并占用",
-			},
+	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptKickThread,
+		KickThread: &control.FeishuKickThreadSelectionView{
+			ThreadID:       threadID,
+			ThreadLabel:    title,
+			ThreadSubtitle: subtitle,
+			Hint:           "只有对方当前空闲时才能强踢；确认前会再次校验状态。",
+			CancelLabel:    "取消",
+			ConfirmLabel:   "强踢并占用",
 		},
 	})}
 }

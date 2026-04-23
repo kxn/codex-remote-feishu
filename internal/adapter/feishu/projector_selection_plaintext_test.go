@@ -4,21 +4,30 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
 func TestProjectSelectionPromptKeepsMarkdownMetacharactersInsidePlainTextDetailBlock(t *testing.T) {
 	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", selectionPromptEvent(control.FeishuDirectSelectionPrompt{
-		Kind:  control.SelectionPromptUseThread,
-		Title: "最近会话",
-		Options: []control.SelectionOption{{
-			Index:       1,
-			OptionID:    "thread-1",
-			Label:       "修复 `登录`",
-			ButtonLabel: "修复 `登录`",
-			Subtitle:    "/data/dl/#demo\n- 列表项\n[本地链接](docs/demo.md)",
-		}},
-	}))
+	view := control.FeishuSelectionView{
+		PromptKind: control.SelectionPromptUseThread,
+		Thread: &control.FeishuThreadSelectionView{
+			Mode: control.FeishuThreadSelectionNormalScopedRecent,
+			Entries: []control.FeishuThreadSelectionEntry{{
+				ThreadID: "thread-1",
+				Summary:  "修复 `登录`",
+				Status:   "/data/dl/#demo\n- 列表项\n[本地链接](docs/demo.md)",
+			}},
+		},
+	}
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:          eventcontract.KindSelection,
+		SelectionView: &view,
+		SelectionContext: &control.FeishuUISelectionContext{
+			DTOOwner:   control.FeishuUIDTOwnerSelection,
+			PromptKind: control.SelectionPromptUseThread,
+		},
+	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}

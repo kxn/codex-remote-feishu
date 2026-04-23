@@ -553,17 +553,21 @@ func TestAttachWithoutDefaultThreadEntersUnboundAndPromptsUse(t *testing.T) {
 	if surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected surface to enter attached_unbound, got attached=%q selected=%q route=%q", surface.AttachedInstanceID, surface.SelectedThreadID, surface.RouteMode)
 	}
-	var sawNotice, sawPrompt bool
+	var sawNotice bool
+	var picker *control.FeishuTargetPickerView
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "attached" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
-			sawPrompt = true
+		if event.TargetPickerView != nil {
+			picker = event.TargetPickerView
 		}
 	}
-	if !sawNotice || !sawPrompt {
-		t.Fatalf("expected attach notice plus /use prompt, got %#v", events)
+	if !sawNotice || picker == nil {
+		t.Fatalf("expected attach notice plus locked target picker, got %#v", events)
+	}
+	if !picker.WorkspaceSelectionLocked || !picker.AllowNewThread || !testutil.SamePath(picker.SelectedWorkspaceKey, "/data/dl/droid") {
+		t.Fatalf("expected locked current-workspace picker after attach, got %#v", picker)
 	}
 }
 
@@ -598,17 +602,21 @@ func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected workspace attach to land unbound, got selected=%q route=%q", surface.SelectedThreadID, surface.RouteMode)
 	}
-	var sawNotice, sawPrompt bool
+	var sawNotice bool
+	var picker *control.FeishuTargetPickerView
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "workspace_attached" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
-			sawPrompt = true
+		if event.TargetPickerView != nil {
+			picker = event.TargetPickerView
 		}
 	}
-	if !sawNotice || !sawPrompt {
-		t.Fatalf("expected workspace attach notice plus /use prompt, got %#v", events)
+	if !sawNotice || picker == nil {
+		t.Fatalf("expected workspace attach notice plus locked target picker, got %#v", events)
+	}
+	if !picker.WorkspaceSelectionLocked || !picker.AllowNewThread || !testutil.SamePath(picker.SelectedWorkspaceKey, "/data/dl/droid") {
+		t.Fatalf("expected locked current-workspace picker after workspace attach, got %#v", picker)
 	}
 }
 
@@ -668,17 +676,21 @@ func TestAttachWorkspaceSwitchClearsPinnedThread(t *testing.T) {
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected workspace switch to clear pinned thread, got selected=%q route=%q", surface.SelectedThreadID, surface.RouteMode)
 	}
-	var sawNotice, sawPrompt bool
+	var sawNotice bool
+	var picker *control.FeishuTargetPickerView
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "workspace_switched" && strings.Contains(event.Notice.Text, "/use") {
 			sawNotice = true
 		}
-		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
-			sawPrompt = true
+		if event.TargetPickerView != nil {
+			picker = event.TargetPickerView
 		}
 	}
-	if !sawNotice || !sawPrompt {
-		t.Fatalf("expected workspace switch notice plus /use prompt, got %#v", events)
+	if !sawNotice || picker == nil {
+		t.Fatalf("expected workspace switch notice plus locked target picker, got %#v", events)
+	}
+	if !picker.WorkspaceSelectionLocked || !picker.AllowNewThread || !testutil.SamePath(picker.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected locked current-workspace picker after workspace switch, got %#v", picker)
 	}
 }
 
@@ -1276,15 +1288,18 @@ func TestAttachWorkspaceUsesThreadWorkspaceFromBroadHeadlessPool(t *testing.T) {
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected broad-pool workspace attach to remain unbound, got %#v", surface)
 	}
-	var threadPrompt *control.FeishuDirectSelectionPrompt
+	var picker *control.FeishuTargetPickerView
 	for _, event := range events {
-		if prompt, ok := eventSelectionPrompt(event); ok && prompt.Kind == control.SelectionPromptUseThread {
-			threadPrompt = prompt
+		if event.TargetPickerView != nil {
+			picker = event.TargetPickerView
 			break
 		}
 	}
-	if threadPrompt == nil || len(threadPrompt.Options) != 1 || threadPrompt.Options[0].OptionID != "thread-fs" {
-		t.Fatalf("expected /use prompt to be scoped to selected workspace, got %#v", events)
+	if picker == nil || !picker.WorkspaceSelectionLocked || !testutil.SamePath(picker.SelectedWorkspaceKey, "/data/dl/atlas") {
+		t.Fatalf("expected locked target picker to be scoped to selected workspace, got %#v", events)
+	}
+	if _, ok := targetPickerSessionOption(picker, targetPickerThreadValue("thread-fs")); !ok {
+		t.Fatalf("expected locked target picker to expose atlas session only, got %#v", picker.SessionOptions)
 	}
 }
 
@@ -1400,9 +1415,13 @@ func TestUseBusyIdleThreadShowsKickPromptAndConfirmTransfersClaim(t *testing.T) 
 		t.Fatalf("expected requesting surface to claim thread-1, got selected=%q route=%q", second.SelectedThreadID, second.RouteMode)
 	}
 	var sawVictimNotice, sawWinnerNotice bool
+	var victimPicker *control.FeishuTargetPickerView
 	for _, event := range confirm {
 		if event.SurfaceSessionID == "surface-1" && event.Notice != nil && event.Notice.Code == "thread_claim_lost" {
 			sawVictimNotice = true
+		}
+		if event.SurfaceSessionID == "surface-1" && event.TargetPickerView != nil {
+			victimPicker = event.TargetPickerView
 		}
 		if event.SurfaceSessionID == "surface-2" && event.Notice != nil && event.Notice.Code == "thread_kicked" {
 			sawWinnerNotice = true
@@ -1410,6 +1429,9 @@ func TestUseBusyIdleThreadShowsKickPromptAndConfirmTransfersClaim(t *testing.T) 
 	}
 	if !sawVictimNotice || !sawWinnerNotice {
 		t.Fatalf("expected kick notices for both surfaces, got %#v", confirm)
+	}
+	if victimPicker == nil || !victimPicker.WorkspaceSelectionLocked || !victimPicker.AllowNewThread || !testutil.SamePath(victimPicker.SelectedWorkspaceKey, "/data/dl/droid") {
+		t.Fatalf("expected victim surface to get locked current-workspace picker, got %#v", confirm)
 	}
 }
 

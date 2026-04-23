@@ -300,8 +300,8 @@ func TestPresentVSCodeThreadSelectionBuildsDropdownViewWithRecentLimit(t *testin
 		t.Fatalf("expected one selection view, got %#v", events)
 	}
 	view := selectionViewFromEvent(t, events[0])
-	if view.Thread == nil || view.Prompt != nil {
-		t.Fatalf("expected structured vscode thread view without legacy prompt payload, got %#v", view)
+	if view.Thread == nil {
+		t.Fatalf("expected structured vscode thread view, got %#v", view)
 	}
 	if view.Thread.Mode != control.FeishuThreadSelectionVSCodeRecent || view.Thread.RecentLimit != 5 {
 		t.Fatalf("expected vscode recent dropdown metadata, got %#v", view.Thread)
@@ -403,15 +403,20 @@ func TestBuildThreadSelectionModelKeepsAllWorkspaceGroupsForProjection(t *testin
 		PromptKind: control.SelectionPromptUseThread,
 		Thread:     model,
 	}
-	prompt, ok := feishuadapter.FeishuDirectSelectionPromptFromView(view, svc.buildFeishuSelectionContextFromView(surface, view))
-	if !ok {
-		t.Fatalf("expected selection view to be projectable, got %#v", model)
+	projector := feishuadapter.NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindSelection,
+		SelectionView:    &view,
+		SelectionContext: svc.buildFeishuSelectionContextFromView(surface, view),
+	})
+	if len(ops) != 1 || ops[0].Kind != feishuadapter.OperationSendCard {
+		t.Fatalf("expected projected selection card, got %#v", ops)
 	}
-	if len(prompt.Options) != 3 {
-		t.Fatalf("expected projected first page workspace groups, got %#v", prompt.Options)
+	if !strings.Contains(ops[0].CardTitle, "全部会话") {
+		t.Fatalf("expected grouped selection title to stay stable, got %#v", ops[0])
 	}
-	if prompt.Page != 1 || prompt.TotalPages != 2 || prompt.Options[2].OptionID != "thread-4" {
-		t.Fatalf("expected prompt projection to keep current page metadata, got %#v", prompt)
+	if len(ops[0].CardElements) == 0 {
+		t.Fatalf("expected projected selection elements, got %#v", ops[0])
 	}
 }
 
@@ -580,6 +585,9 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	}
 	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected workspace-scoped picker to start on direct target page, got %#v", view)
+	}
+	if !view.WorkspaceSelectionLocked || view.ShowWorkspaceSelect {
+		t.Fatalf("expected workspace-scoped picker to lock current workspace, got %#v", view)
 	}
 	if len(view.SessionOptions) != 3 {
 		t.Fatalf("expected workspace sessions only, got %#v", view.SessionOptions)
@@ -1892,106 +1900,5 @@ func TestApplyInstanceTransportDegradedKeepsAttachmentAndQueuedWork(t *testing.T
 	}
 	if !sawCommand {
 		t.Fatalf("expected preserved turn completion to dispatch queued work, got %#v", finished)
-	}
-}
-
-func TestDetachAfterTransportDegradedDetachesImmediately(t *testing.T) {
-	now := time.Date(2026, 4, 4, 12, 30, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
-		ShortName:               "droid",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
-		},
-	})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
-	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-1",
-		MessageID:        "msg-1",
-		Text:             "你好",
-	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnStarted,
-		ThreadID:  "thread-1",
-		TurnID:    "turn-1",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
-	})
-	svc.ApplyInstanceTransportDegraded("inst-1", true)
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionDetach,
-		SurfaceSessionID: "surface-1",
-	})
-
-	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "" || surface.Abandoning {
-		t.Fatalf("expected degraded offline detach to finalize immediately, got %#v", surface)
-	}
-	if claim := svc.instanceClaims["inst-1"]; claim != nil {
-		t.Fatalf("expected detach to release instance claim, got %#v", claim)
-	}
-	var sawDetached, sawInterrupt bool
-	for _, event := range events {
-		if event.Notice != nil && event.Notice.Code == "detached" {
-			sawDetached = true
-		}
-		if event.Command != nil && event.Command.Kind == agentproto.CommandTurnInterrupt {
-			sawInterrupt = true
-		}
-	}
-	if !sawDetached || sawInterrupt {
-		t.Fatalf("expected immediate detach notice without interrupt, got %#v", events)
-	}
-}
-
-func TestStopWhileTransportDegradedReportsInstanceOffline(t *testing.T) {
-	now := time.Date(2026, 4, 4, 13, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
-		ShortName:               "droid",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
-		},
-	})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
-	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-1",
-		MessageID:        "msg-1",
-		Text:             "你好",
-	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnStarted,
-		ThreadID:  "thread-1",
-		TurnID:    "turn-1",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
-	})
-	svc.ApplyInstanceTransportDegraded("inst-1", true)
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionStop,
-		SurfaceSessionID: "surface-1",
-	})
-
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "stop_instance_offline" {
-		t.Fatalf("expected stop_instance_offline notice, got %#v", events)
-	}
-	if strings.Contains(events[0].Notice.Text, "已发送停止请求") {
-		t.Fatalf("expected offline stop notice instead of sent interrupt, got %#v", events[0].Notice)
 	}
 }

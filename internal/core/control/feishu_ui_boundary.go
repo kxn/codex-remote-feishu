@@ -113,6 +113,9 @@ type FeishuUITargetPickerContext struct {
 	Source               TargetPickerRequestSource
 	Title                string
 	Page                 FeishuTargetPickerPage
+	WorkspaceSelectionLocked bool
+	LockedWorkspaceKey       string
+	AllowNewThread           bool
 	SelectedMode         FeishuTargetPickerMode
 	SelectedSource       FeishuTargetPickerSourceKind
 	SelectedWorkspaceKey string
