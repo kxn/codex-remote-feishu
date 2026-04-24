@@ -1,16 +1,17 @@
 ---
 name: build-page-mock
-description: "Use when creating or revising a page mock, browser-runnable prototype, or interactive demo for this repository's web, setup, onboarding, status, or admin pages. Ensures the artifact is final-user-facing, hides design-intent text, uses fake data only as interactive coverage, and stays fully runnable and responsive including portrait/landscape changes."
+description: "Use when creating or revising a page mock, browser-runnable prototype, or interactive demo for this repository's web, setup, onboarding, status, or admin pages, and also when implementing a real product page from an approved mock. Ensures the artifact is final-user-facing, hides design-intent text, uses fake data only as interactive coverage, and keeps the final product aligned with the approved mock except for real business data."
 ---
 
 # build-page-mock
 
-Use this skill when the task is to create, revise, or review a page mock / prototype / interactive demo that users should experience in a browser.
+Use this skill when the task is to create, revise, review, or implement from a page mock / prototype / interactive demo that users should experience in a browser.
 
 Typical triggers:
 
 - user asks for `页面 Mock` / `页面原型` / `高保真原型` / `可交互 demo`
 - user asks for a browser-runnable preview page before the real backend is ready
+- user asks to `按 mock 落产品` / `从 mock 生成页面` / `按原型实现最终页面`
 - touched files include `docs/draft/*mock*.html`, `web/src/**` preview routes, or `internal/app/daemon/adminui/**` mock pages
 
 ## Read first
@@ -54,6 +55,13 @@ Read these docs before editing:
 - If layout or navigation should differ by breakpoint or orientation, implement those behaviors in the mock.
 - Do not rely on a single static viewport.
 
+### 6. The approved mock is the user-visible contract for the real product
+
+- When implementing the real product from an approved mock, keep user-visible structure, copy, states, interaction paths, and responsive behavior aligned with that mock.
+- The main allowed difference is replacing fake business data and local fake services with real data and real integrations.
+- Do not add extra user-visible copy during implementation just because the backend, validation, or edge cases are more complicated than the mock.
+- If the user-visible contract must change, update the mock or the canonical guideline first, then update the product.
+
 ## Delivery checklist
 
 Before finishing, verify:
@@ -63,5 +71,6 @@ Before finishing, verify:
 3. All visible controls and flows work.
 4. Fake data covers the page's full interactive surface.
 5. Desktop, mobile, and orientation changes remain usable.
+6. If implementing from an approved mock, the real product still matches that mock in all user-visible aspects except business data.
 
 If one of these fails, the mock is not done.

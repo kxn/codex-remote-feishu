@@ -1,4 +1,4 @@
 interface:
   display_name: "页面 Mock 构建"
   short_description: "最终用户视角、浏览器可运行、全交互可用的页面 mock"
-  default_prompt: "Use $build-page-mock when creating or revising a page mock, browser-runnable prototype, or interactive demo in this repository so it stays final-user-facing, fully interactive, and responsive."
+  default_prompt: "Use $build-page-mock when creating a page mock or implementing a real page from an approved mock in this repository so user-visible content stays final-user-facing, fully interactive, responsive, and aligned with the approved mock except for real business data."

@@ -179,6 +179,8 @@ Use `.codex/skills/build-page-mock/` when working on:
 
 - `页面 Mock`
 - 浏览器可运行的页面原型 / interactive demo
+- 从已确认 mock 落最终产品页面
+- `按 mock 落产品` / `从 mock 生成页面` / `按原型实现最终页面`
 - `docs/draft/*mock*.html`
 - `web/src/**` 或 `internal/app/daemon/adminui/**` 下新增的 mock / preview 页面
 - 需要用假数据覆盖真实交互的用户可见页面预览
