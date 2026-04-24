@@ -299,6 +299,187 @@ v1 暂不纳入：
 - 这些错误面虽然也可能“能恢复”，但它们不属于“上游推理失败自动恢复”的单一问题域；
 - 现在先把 turn 级上游失败做干净，比把所有错误都往一个恢复桶里塞更稳。
 
+### 5.7 回复关系必须从“触发消息”升级成“根回复锚点”
+
+这轮讨论里暴露出的一个重要产品问题是：
+
+- 之前比较粗的规则是“一个 turn 自动发出来的消息，reply 到触发这个 turn 的那条消息”；
+- 但对自动恢复 turn 来说，真正触发下一次 turn 的，往往是系统自己发出的恢复提示卡；
+- 如果继续按这条粗规则执行，后续消息就会开始 reply 到系统卡，而不是 reply 到最初的用户请求。
+
+这不符合产品语义。
+
+自动恢复 turn 的正确理解应是：
+
+- 系统在继续回答原用户请求；
+- 系统提示卡只是状态说明，不是新的业务父消息。
+
+因此这里必须引入更硬的概念：
+
+1. `Root Reply Anchor`
+   - 本轮工作真正对应的根用户消息锚点；
+   - 通常是最初把这个 turn 跑起来的那条用户消息。
+2. `Trigger Message`
+   - 直接导致本次动作发生的消息；
+   - 对自动恢复来说，它可能是系统提示卡，也可能根本不是用户消息。
+3. `Owner Card Message`
+   - 某张卡后续是否 patch 自己所依赖的 message id；
+   - 它只决定“谁 patch 谁”，不决定“后续结果 reply 给谁”。
+
+这里的产品规则应改成：
+
+- turn 输出 reply 到自己的 `Root Reply Anchor`，而不是机械地 reply 到“最近一次触发消息”。
+
+### 5.8 自动恢复链路的 reply contract
+
+建议把自动恢复链路的 reply 关系固定成下面这套 contract。
+
+示例：
+
+1. 用户消息 `U0`
+2. 第一次 turn `T0`
+3. `T0` 因上游失败中断
+4. 系统发自动恢复提示卡 `N1`
+5. 自动恢复 turn `T1`
+6. `T1` 过程中如果再弹 approval / MCP / 用户补充问题卡，记为 `R1`
+7. `T1` 最终答复，记为 `F1`
+
+建议的关系是：
+
+1. `U0` 是整个恢复链路的 `Root Reply Anchor`
+2. `T0` 的错误提示如果要保留为独立消息，也 reply 到 `U0`
+3. 自动恢复提示卡 `N1` reply 到 `U0`
+4. `T1` 的中间输出 reply 到 `U0`
+5. `T1` 的 approval / MCP / request_user_input 卡 reply 到 `U0`
+6. `T1` 的最终答复 `F1` reply 到 `U0`
+7. 如果 `N1` 后续需要更新 attempt 次数或 terminal 状态，走 owner-card patch，不改变 `Root Reply Anchor`
+
+换句话说：
+
+- 因果链可以是 `U0 -> T0 -> N1 -> T1`
+- reply 链必须保持为“`N1`、`R1`、`F1` 都作为 `U0` 的同级回复挂回原请求”
+
+更准确地写就是：
+
+- `N1` 是 reply 给 `U0` 的一条状态消息；
+- `T1` 并不是在“回复 `N1`”，它仍然是在“回复 `U0`”。
+
+因此自动恢复实现里必须遵守：
+
+1. 恢复提示卡的 `message_id` 不能反写成下一次恢复 turn 的 `ReplyToMessageID`
+2. 恢复 turn 的 queue item 必须继承原 `Root Reply Anchor`
+3. 恢复提示卡如果需要 patch 自己，单独保存自己的 owner-card `message_id`
+
+### 5.9 自动恢复提示卡的产品策略
+
+当前如果直接复用现状，很容易出现这样的用户可见链路：
+
+1. 先来一张红色 `turn_failed`
+2. 紧接着又来一张“正在自动恢复”的提示卡
+3. 然后又出现新的最终答复
+
+这会让用户感知非常别扭：
+
+- 一边像是在说“这轮已经失败”
+- 一边又像是在说“其实没有失败，我已经继续了”
+
+因此从产品角度，自动恢复开启且实际 schedule 成功时，更合理的做法是：
+
+1. 不再把这次失败直接呈现成一个“终局红卡”
+2. 而是改成一张“可恢复中的状态卡”或较弱语气的提示卡
+3. 如果后续自动恢复成功，历史上保留这张提示卡即可，不需要再围绕它生成新的 reply 链
+4. 如果后续 attempt 全部耗尽，则优先 patch 这张提示卡为 terminal failure，或至少让终局失败与这张卡形成同一条可理解的恢复叙事
+
+这里建议优先采用：
+
+- “单次恢复 episode 只 append 一张提示卡，后续 attempt/终止状态优先 patch 同一张卡”
+
+这样可以避免：
+
+- 每次重试都再 append 一张新提示卡
+- 在同一个 root anchor 下刷出过多系统噪音
+
+### 5.10 其他产品冲突与建议
+
+除了 reply 关系，这里还要额外注意几类容易漏掉的产品冲突。
+
+#### 5.10.1 与现有 pending / typing / reaction 语义的冲突
+
+当前 `autowhip` 的一个重要特征是：
+
+- 它不伪造新的用户消息；
+- `SourceMessageID` 为空；
+- 因此不会对原用户消息补 `THINKING`、queue pending、`ThumbsUp` / `ThumbsDown`。
+
+如果自动恢复也沿用这条策略，那么：
+
+- 用户主要依赖“自动恢复提示卡”感知系统仍在继续；
+- 而不是依赖原用户消息上的 reaction。
+
+这本身是可以接受的，但它是一个明确的产品取舍，不能视为 incidental behavior。
+
+#### 5.10.2 与 approval / MCP / 用户询问问题卡的冲突
+
+如果自动恢复 turn 在中途又弹出 request card：
+
+- 这些卡从业务语义上仍然是在继续处理 `U0` 对应的原任务；
+- 因此也应 reply 到 `Root Reply Anchor`；
+- 不能 reply 到自动恢复提示卡。
+
+否则用户看到的会是：
+
+- 系统卡下面再挂系统卡；
+- 最后真正的业务结果离原请求越来越远。
+
+#### 5.10.3 与最终答复标题预览的冲突
+
+当前 final card 标题预览来自 `sourceMessagePreview`。
+
+如果自动恢复 turn 把恢复提示卡错误地当成新的 source：
+
+- 最终答复标题就可能变成“✅ 最后答复：正在自动恢复...”之类的错误上下文。
+
+这也是为什么必须显式保留原 `Root Reply Anchor` 及其 preview。
+
+#### 5.10.4 与用户显式新消息的冲突
+
+自动恢复只应该延续“同一个原请求”。
+
+如果用户在等待自动恢复期间又发了新的显式消息，则产品上应明确：
+
+1. 这是新的用户意图；
+2. 旧的 pending auto-recovery 应取消或至少不再自动 dispatch；
+3. 新消息成为新的 `Root Reply Anchor`。
+
+否则系统会在用户已经手动接管后，继续偷偷补发旧的自动恢复 turn。
+
+#### 5.10.5 与 `/stop` 的冲突
+
+如果用户对自动恢复出来的 turn 再次 `/stop`：
+
+- 这次 `/stop` 应针对当前 running attempt 生效；
+- 并让自动恢复 episode 进入明确的“用户手动终止”状态；
+- 不能在本轮收尾后再次自动续跑。
+
+这意味着：
+
+- “恢复 episode”与“单个 attempt turn”虽然相关，但不能混成一个状态概念。
+
+#### 5.10.6 与观察性/追溯的冲突
+
+如果只保留一个 reply anchor，而不额外记录“是谁触发了这次 attempt”，后面会有两个问题：
+
+1. 用户可见线程是对的；
+2. 但开发者视角无法看出这次 turn 是人工继续、自动恢复，还是别的系统动作触发的。
+
+所以实现上最好同时保留：
+
+1. `Root Reply Anchor`
+2. `Attempt Trigger Kind`
+3. `Recovery Notice Message ID`
+
+前者服务产品展示，后两者服务追溯和调试。
+
 ## 6. 与 `autowhip` 的关系
 
 这次讨论后，对 `autowhip` 的方向建议如下。
@@ -347,6 +528,7 @@ v1 暂不纳入：
    - `turn.completed -> schedule pending runtime -> tick dispatch -> enqueue special queue item`
    - reply anchor 复用
    - frozen route / override 复用
+   - owner-card patch 基座可复用，但不能把 owner-card `message_id` 混成 reply anchor
 2. 应删除或重命名的部分：
    - `AutoContinueReasonRetryableFailure`
    - `RetryableFailureCount`
@@ -366,9 +548,11 @@ v1 暂不纳入：
    - 只保留 `autowhip` 自己需要的运行时状态；
    - 去掉 `retryable_failure` 相关字段与计数。
 2. 新增独立的恢复 runtime record
-   - 承接“上游失败自动恢复”的 enable、pending、attempt、reply anchor 等状态。
+   - 承接“上游失败自动恢复”的 enable、pending、attempt、root reply anchor、owner notice card 等状态。
 3. active remote turn binding
    - 新增 `interrupt_requested` 类字段，用于 turn 终止原因分类。
+4. 自动恢复 episode 运行时
+   - 建议显式区分 `Root Reply Anchor` 与 `Recovery Notice Message ID`，避免把提示卡错当成后续业务消息的 reply 父节点。
 
 如果这一步不做，只把现有 `AutoContinueRuntimeRecord` 再加几个字段，后面大概率还会再次回到“到底这算 autowhip 还是算错误恢复”的混乱状态。
 
@@ -391,6 +575,8 @@ v1 暂不纳入：
    - attempt count
    - due at
    - chosen prompt kind
+   - root reply anchor
+   - recovery notice message id
 4. 明确记录“为什么没有恢复”：
    - completed
    - user interrupted
