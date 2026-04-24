@@ -592,14 +592,6 @@
     </style>
   </head>
   <body>
-    <!--
-      Visible-content contract
-      Final user: 已经接好机器、日常维护本机接入的人
-      Current task: 看清当前是否可用，并处理最常见的维护动作
-      Allowed information types: 健康摘要、待处理事项、飞书应用状态、常用维护入口、与当前动作直接相关的说明
-      Disallowed information types: 内部标识、协议状态、路径地址、原始错误堆、实现策略名词默认上屏
-      Allowed feedback slots: 页面通知条、卡片内 notice、字段错误、确认弹层、完成 toast
-    -->
     <div id="app"></div>
     <div id="modal" class="modal" aria-live="polite"></div>
     <div id="toast" class="toast"></div>
@@ -609,8 +601,8 @@
         { id: "apps", label: "飞书应用", hint: "新增、接入和维护飞书应用。" },
         { id: "instances", label: "工作实例", hint: "确认当前有哪些实例在线。" },
         { id: "storage", label: "文档与图片", hint: "按需清理旧内容。" },
-        { id: "vscode", label: "VS Code", hint: "只保留当前真的需要处理的入口。" },
-        { id: "support", label: "支持信息", hint: "需要排障时再展开。" },
+        { id: "vscode", label: "VS Code", hint: "继续处理这台机器上的 VS Code。" },
+        { id: "support", label: "当前摘要", hint: "需要转发给别人时再打开。" },
       ];
 
       const state = {
@@ -619,7 +611,7 @@
         notice: {
           tone: "good",
           title: "这台机器现在可以正常使用",
-          message: "日常只需要关注待处理事项和你正在操作的区块，技术支持信息默认保持收起。",
+          message: "如果你要继续处理某一项，直接从下面的分区进入即可。",
         },
         toast: null,
         modal: null,
@@ -652,14 +644,14 @@
             status: { tone: "warn", label: "待补全", detail: "这条飞书应用已经接进来，但还有基础项没有补齐。" },
             pending: [
               { id: "verify", title: "重新测试连接", detail: "建议先确认这份凭证仍然可用。", done: false },
-              { id: "publish", title: "完成发布确认", detail: "让最近做的后台设置真正生效。", done: false },
+              { id: "publish", title: "完成发布确认", detail: "让最近做的后台设置正式生效。", done: false },
             ],
             lastNotice: "最近一次保存已经成功，但你还没有重新确认连接。",
           },
         ],
         instances: [
-          { id: "inst-1", name: "Design Review", workspace: "/workspace/design", status: { tone: "good", label: "在线" }, detail: "刚刚还在继续处理任务。" },
-          { id: "inst-2", name: "Backend Cleanup", workspace: "/workspace/server", status: { tone: "neutral", label: "空闲" }, detail: "目前没有正在运行的会话。" },
+          { id: "inst-1", name: "官网改版", workspace: "品牌官网", status: { tone: "good", label: "在线" }, detail: "刚刚还有新内容返回。" },
+          { id: "inst-2", name: "知识库整理", workspace: "团队知识库", status: { tone: "neutral", label: "空闲" }, detail: "目前没有新的进行中任务。" },
         ],
         storage: {
           images: { count: 28, size: "126 MB", active: 4 },
@@ -887,7 +879,7 @@
         });
         state.selectedAppId = "app-manual";
         resetDraftFromApp();
-        setNotice("good", "已创建手动接入入口", "继续在飞书应用页完成连接测试即可。");
+        setNotice("good", "已创建手动接入项", "继续在飞书应用页完成连接测试即可。");
         showToast("good", "已创建", "现在可以继续填写或核对凭证。");
         closeModal();
         render();
@@ -922,7 +914,7 @@
           onConfirm: () => {
             state.storage.images.count = 8;
             state.storage.images.size = "34 MB";
-            setNotice("good", "旧图片已清理", "当前只保留仍在使用的图片。");
+            setNotice("good", "旧图片已清理", "当前保留的都是还在使用的图片。");
             showToast("good", "已清理", "图片暂存已经缩减。");
             closeModal();
             render();
@@ -959,7 +951,7 @@
         }
         state.vscodeReady = true;
         setNotice("good", "VS Code 已准备好", "以后如果扩展升级，只需要回到这页重新处理一次。");
-        showToast("good", "已接入", "VS Code 入口已经准备好。");
+        showToast("good", "已接入", "VS Code 已经可以继续使用。");
         render();
       }
 
@@ -973,15 +965,15 @@
         ].join("\n");
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text).then(() => {
-            setNotice("good", "支持信息已复制", "把这份摘要发给同事或支持人员即可。");
-            showToast("good", "已复制", "支持信息已写入剪贴板。");
+            setNotice("good", "当前摘要已复制", "把这份摘要发给需要协助你的人即可。");
+            showToast("good", "已复制", "当前摘要已写入剪贴板。");
             render();
           });
         } else {
           openModal({
             type: "info",
             title: "这台浏览器暂时不能直接复制",
-            message: "你可以手动复制下面这份支持信息：",
+            message: "你可以手动复制下面这份当前摘要：",
             detail: text,
           });
         }
@@ -996,7 +988,7 @@
         return (
           '<aside class="sidebar' +
           (state.navOpen ? " open" : "") +
-          '"><div><p class="eyebrow">Codex Remote</p><h1>本地管理</h1><p>日常只看当前是否可用，以及你正在处理的那部分内容。</p></div><div class="nav-list">' +
+          '"><div><p class="eyebrow">Codex Remote</p><h1>本地管理</h1><p>在这里查看当前状态，并继续处理常用设置。</p></div><div class="nav-list">' +
           sections
             .map((section) => {
               return (
@@ -1036,7 +1028,7 @@
           " 条飞书应用。</p></article>" +
           '<article class="card"><h3>待处理事项</h3><div class="stat-value">' +
           needsAttention +
-          "</div><p>这里只算现在最容易影响使用体验的项目。</p></article>" +
+          "</div><p>优先看看这些项目。</p></article>" +
           '<article class="card"><h3>工作实例</h3><div class="stat-value">' +
           state.instances.length +
           "</div><p>当前有 " +
@@ -1044,8 +1036,8 @@
           " 个实例在线。</p></article>" +
           '<article class="card"><h3>文档与图片</h3><div class="stat-value">' +
           (state.storage.images.count + state.storage.previews.reduce((sum, item) => sum + item.files, 0)) +
-          "</div><p>这里只保留概览，需要清理时再进入对应分区。</p></article></section>" +
-          '<section class="panel"><div class="row-head"><div><h3>建议优先处理</h3><p>默认只列最值得先看的动作，不把技术细节塞进首页。</p></div>' +
+          "</div><p>有需要时再进入对应分区处理。</p></article></section>" +
+          '<section class="panel"><div class="row-head"><div><h3>建议优先处理</h3><p>先从这些项目开始会更省事。</p></div>' +
           statusHTML(needsAttention ? "warn" : "good", needsAttention ? "建议处理" : "当前稳定") +
           '</div><div class="attention-list">' +
           [
@@ -1079,7 +1071,7 @@
       function renderApps() {
         const app = activeApp();
         return (
-          '<section class="split-layout"><aside class="panel"><div class="row-head"><div><h3>飞书应用列表</h3><p>列表里只保留名字、状态和待处理数量，不把技术字段默认挂出来。</p></div><button class="button-secondary" type="button" onclick="beginNewApp()">新增飞书应用</button></div><div class="app-list">' +
+          '<section class="split-layout"><aside class="panel"><div class="row-head"><div><h3>飞书应用列表</h3><p>选择一条飞书应用继续查看或修改。</p></div><button class="button-secondary" type="button" onclick="beginNewApp()">新增飞书应用</button></div><div class="app-list">' +
           (state.apps.length
             ? state.apps
                 .map((item) => {
@@ -1091,7 +1083,7 @@
           (app
             ? '<div class="card-grid"><section class="panel"><div class="row-head"><div><h3>' +
               app.name +
-              "</h3><p>这里只保留你当前正在维护这条飞书应用时真正需要的内容。</p></div>" +
+              "</h3><p>在这里查看当前状态，并继续处理这条飞书应用。</p></div>" +
               statusHTML(app.status.tone, app.status.label) +
               '</div><div class="summary-tags">' +
               statusHTML(app.enabled ? "good" : "neutral", app.enabled ? "已启用" : "已停用") +
@@ -1121,7 +1113,7 @@
               '</button></div><div class="form-actions"><button class="button-primary" type="button" onclick="saveApp()">保存更改</button><button class="button-secondary" type="button" onclick="verifyApp()">测试连接</button><button class="button-ghost" type="button" onclick="reconnectApp()">重新连接</button><button class="button-ghost" type="button" onclick="toggleAppEnabled()">' +
               (app.enabled ? "停用飞书应用" : "启用飞书应用") +
               '</button><button class="button-danger" type="button" onclick="confirmDeleteApp()">删除飞书应用</button></div></section>' +
-              '<section class="panel"><div class="row-head"><div><h3>建议处理</h3><p>默认只展示当前这条飞书应用真正需要处理的事情。</p></div>' +
+              '<section class="panel"><div class="row-head"><div><h3>建议处理</h3><p>按顺序处理下面这些事项即可。</p></div>' +
               (app.pending.length ? statusHTML("warn", "有待处理项") : statusHTML("good", "当前稳定")) +
               '</div>' +
               (app.pending.length
@@ -1133,7 +1125,7 @@
                     .join("") +
                   '<div class="button-row"><button class="button-primary" type="button" onclick="completePendingTasks()">刷新当前状态</button></div></div>'
                 : '<div class="notice good"><strong>当前没有明显待处理项</strong><p>这条飞书应用已经处于比较稳定的状态。</p></div>') +
-              '<details class="details"><summary>查看接入细节</summary><div class="details-body"><p>只有在你真的要回飞书后台核对设置时，才展开这里。</p><div class="support-list"><div class="support-row"><strong>基础权限</strong><p>先保证基础对话与交互必需的权限已开通；文档预览权限留给确实需要的人再补。</p></div><div class="support-row"><strong>事件与回调</strong><p>确认消息和回调都已经回到当前这台机器。</p></div><div class="support-row"><strong>菜单与发布</strong><p>菜单先保留常用入口，后台设置改完后记得发布当前版本。</p></div></div></div></details></section></div>'
+              '<details class="details"><summary>查看飞书后台检查清单</summary><div class="details-body"><div class="support-list"><div class="support-row"><strong>基础权限</strong><p>先确认基础对话与交互需要的权限都已经开通。</p></div><div class="support-row"><strong>事件与回调</strong><p>确认消息和回调都已经正确开启。</p></div><div class="support-row"><strong>菜单与发布</strong><p>菜单设置完成后，记得发布当前版本。</p></div></div></div></details></section></div>'
             : "") +
           "</section>"
         );
@@ -1141,7 +1133,7 @@
 
       function renderInstances() {
         return (
-          '<section class="panel"><div class="row-head"><div><h3>工作实例</h3><p>这里只做一件事：帮你确认当前有哪些实例在线，以及它们是否还在继续工作。</p></div>' +
+          '<section class="panel"><div class="row-head"><div><h3>工作实例</h3><p>看看当前有哪些实例在线，以及它们是否还在继续工作。</p></div>' +
           statusHTML(state.instances.some((item) => item.status.label === "在线") ? "good" : "neutral", "当前可见") +
           '</div><div class="card-grid two">' +
           state.instances
@@ -1155,7 +1147,7 @@
 
       function renderStorage() {
         return (
-          '<section class="card-grid two"><article class="panel"><div class="row-head"><div><h3>图片暂存</h3><p>默认只看占用和是否需要清理。</p></div>' +
+          '<section class="card-grid two"><article class="panel"><div class="row-head"><div><h3>图片暂存</h3><p>查看当前占用，并按需清理旧内容。</p></div>' +
           statusHTML("neutral", "按需清理") +
           '</div><div class="card-grid two"><div class="card"><strong>暂存文件</strong><p class="stat-value">' +
           state.storage.images.count +
@@ -1163,8 +1155,8 @@
           state.storage.images.active +
           " 个</p></div><div class=\"card\"><strong>占用空间</strong><p class=\"stat-value\">" +
           state.storage.images.size +
-          '</p><p>只在需要时清理旧图片。</p></div></div><div class="button-row"><button class="button-secondary" type="button" onclick="cleanupImages()">清理旧图片</button></div></article>' +
-          '<article class="panel"><div class="row-head"><div><h3>文档预览</h3><p>按飞书应用分别查看，默认只看哪一条值得先清理。</p></div>' +
+          '</p><p>需要时再清理即可。</p></div></div><div class="button-row"><button class="button-secondary" type="button" onclick="cleanupImages()">清理旧图片</button></div></article>' +
+          '<article class="panel"><div class="row-head"><div><h3>文档预览</h3><p>按飞书应用分别查看当前占用情况。</p></div>' +
           statusHTML("warn", "可逐条清理") +
           '</div><div class="task-list">' +
           state.storage.previews
@@ -1178,7 +1170,7 @@
 
       function renderVSCode() {
         return (
-          '<section class="panel"><div class="row-head"><div><h3>VS Code</h3><p>默认只说你现在要不要在这台机器上继续处理，而不是先把实现细节摊开。</p></div>' +
+          '<section class="panel"><div class="row-head"><div><h3>VS Code</h3><p>如果你准备在这台机器上继续使用 VS Code，可以现在一起处理。</p></div>' +
           statusHTML(state.vscodeReady ? "good" : "warn", state.vscodeReady ? "已处理" : "待处理") +
           '</div><div class="card-grid two"><article class="card"><h4>你要怎么用</h4><div class="button-row"><button class="' +
           (state.vscodeScenario === "current" ? "button-secondary" : "button-ghost") +
@@ -1187,11 +1179,11 @@
           '" type="button" onclick="setVSCodeScenario(\'later\')">以后再处理</button></div><p>' +
           (state.vscodeScenario === "current"
             ? "如果你现在就要在这台机器上继续用 VS Code，可以直接处理。"
-            : "如果你暂时不用，这一步可以不打断当前接入。 ") +
+            : "如果你暂时不用，可以以后再处理。 ") +
           '</p></article><article class="card"><h4>当前说明</h4><p>' +
           (state.vscodeScenario === "current"
-            ? "只要这台机器上已经安装扩展，就可以直接继续。以后扩展升级，再回来重新处理一次即可。"
-            : "这不会影响你现在继续使用。等你真的要在这台机器上用 VS Code，再回来处理。") +
+            ? "只要这台机器上已经安装扩展，就可以继续。以后需要时再回来处理也可以。"
+            : "这不会影响你现在继续使用。等你需要时，再回来处理。") +
           '</p></article></div><div class="button-row"><button class="button-primary" type="button" onclick="continueVSCode()">' +
           (state.vscodeScenario === "later" ? "稍后处理" : "继续处理 VS Code") +
           "</button></div></section>"
@@ -1200,11 +1192,11 @@
 
       function renderSupport() {
         return (
-          '<section class="panel"><div class="row-head"><div><h3>支持信息</h3><p>默认还是用人话。只有在你真的要找人协助时，才展开更细的支持摘要。</p></div>' +
+          '<section class="panel"><div class="row-head"><div><h3>当前摘要</h3><p>如果你要把当前情况发给同事，可以直接复制这一份摘要。</p></div>' +
           statusHTML("neutral", "按需展开") +
-          '</div><div class="support-list"><article class="support-row"><strong>先复制一份简版支持信息</strong><p>这份摘要不暴露内部实现结构，只保留别人协助你时通常最先需要知道的内容。</p><div class="button-row"><button class="button-secondary" type="button" onclick="copySupportInfo()">复制支持信息</button></div></article><details class="details" ' +
+          '</div><div class="support-list"><article class="support-row"><strong>复制当前摘要</strong><p>把当前状态整理成一段简短说明，方便转给需要协助你的人。</p><div class="button-row"><button class="button-secondary" type="button" onclick="copySupportInfo()">复制当前摘要</button></div></article><details class="details" ' +
           (state.supportExpanded ? "open" : "") +
-          '><summary onclick="toggleSupport(event)">查看更细的支持摘要</summary><div class="details-body"><div class="support-copy"><p>这里不默认展示在主界面，只在你明确需要时再展开。</p><code>本地管理页：仅本机可访问\n当前选中飞书应用：' +
+          '><summary onclick="toggleSupport(event)">查看当前摘要内容</summary><div class="details-body"><div class="support-copy"><p>你可以直接复制下面这段内容。</p><code>当前页面：本地管理\n当前选中飞书应用：' +
           escapeHTML(activeApp() ? activeApp().name : "无") +
           "\n当前飞书应用状态：" +
           escapeHTML(activeApp() ? activeApp().status.label : "无") +
@@ -1262,7 +1254,7 @@
         if (state.modal.type === "new-app") {
           modal.className = "modal open";
           modal.innerHTML =
-            '<div class="modal-card"><h3>新增飞书应用</h3><p>这里只先让你选一条最常用的新增路径，后面的内容留在真正需要的时候再展示。</p><div class="button-row"><button class="button-primary" type="button" onclick="saveNewApp(\'new\')">扫码新建飞书应用</button><button class="button-secondary" type="button" onclick="saveNewApp(\'existing\')">接入已有飞书应用</button></div><div class="modal-actions"><button class="button-ghost" type="button" onclick="closeModal()">取消</button></div></div>';
+            '<div class="modal-card"><h3>新增飞书应用</h3><p>选择一种方式继续。</p><div class="button-row"><button class="button-primary" type="button" onclick="saveNewApp(\'new\')">扫码新建飞书应用</button><button class="button-secondary" type="button" onclick="saveNewApp(\'existing\')">接入已有飞书应用</button></div><div class="modal-actions"><button class="button-ghost" type="button" onclick="closeModal()">取消</button></div></div>';
           return;
         }
         if (state.modal.type === "confirm") {
@@ -1308,7 +1300,7 @@
       }
 
       function refreshPage() {
-        setNotice("good", "状态已刷新", "默认只刷新你现在关心的结果，不在页面上额外展开内部细节。");
+        setNotice("good", "状态已刷新", "你现在看到的是最新结果。");
         showToast("good", "已刷新", "当前页面状态已更新。");
         render();
       }

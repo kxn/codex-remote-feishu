@@ -616,14 +616,6 @@
     </style>
   </head>
   <body>
-    <!--
-      Visible-content contract
-      Final user: 第一次在本机完成 Codex Remote 接入的人
-      Current task: 一步步把本机和一个飞书应用接到可用状态
-      Allowed information types: 当前步骤目标、必做操作、当前状态、与本步直接相关的外部平台字段、下一步入口
-      Disallowed information types: 内部路径、解析链路、运行时实现名词、产品外说明、未来步骤正文、默认上屏的排障细节
-      Allowed feedback slots: 页头结果条、字段下校验、步骤内说明卡、阻断弹层
-    -->
     <div id="app"></div>
     <div id="modal" class="modal-layer" aria-live="polite"></div>
     <script>
@@ -641,7 +633,7 @@
         notice: {
           tone: "warn",
           title: "先确认这台机器已经准备好",
-          message: "当前向导只展示你现在要处理的这一步。环境通过后，后面的飞书和 VS Code 步骤才会开放。",
+          message: "完成这一步后，就可以继续连接飞书应用。",
         },
         modal: null,
         machine: {
@@ -651,7 +643,7 @@
           checks: [
             { id: "service", title: "本地服务已启动", summary: "这台机器上的本地服务已经可以响应。", tone: "good" },
             { id: "command", title: "Codex 命令可用", summary: "还需要先确认这台机器上可以直接启动 Codex。", tone: "danger" },
-            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和扩展入口。", tone: "good" },
+            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和 VS Code。", tone: "good" },
           ],
         },
         connect: {
@@ -771,10 +763,10 @@
           state.machine.checks = [
             { id: "service", title: "本地服务已启动", summary: "这台机器上的本地服务可以继续使用。", tone: "good" },
             { id: "command", title: "Codex 命令可用", summary: "已经确认这台机器可以直接启动 Codex。", tone: "good" },
-            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和扩展入口。", tone: "good" },
+            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和 VS Code。", tone: "good" },
           ];
           state.currentStep = "connect";
-          setNotice("good", "这台机器已经准备好了", "现在可以继续连接飞书应用。后面的步骤只会在真正需要时显示。");
+          setNotice("good", "这台机器已经准备好了", "现在可以继续连接飞书应用。");
           render();
         }, 900);
       }
@@ -872,7 +864,7 @@
         }
         state.vscode.finished = true;
         state.currentStep = "finish";
-        setNotice("good", "VS Code 已接入", "以后如果扩展升级，只需要回到本地管理页重新处理一次入口。");
+        setNotice("good", "VS Code 已接入", "以后需要调整时，再回到本地管理页处理即可。");
         render();
       }
 
@@ -887,7 +879,7 @@
         state.notice = {
           tone: "warn",
           title: "已回到向导开头",
-          message: "当前只回看结构示意，不会清掉你已经看到的状态样例。",
+          message: "你可以重新从第一步开始查看。",
         };
         render();
       }
@@ -897,7 +889,7 @@
           "基础权限：机器人能力、消息发送、卡片回调",
           "事件订阅：消息和回调事件",
           "回调方式：保存并启用",
-          "机器人菜单：至少保留常用入口",
+          "机器人菜单：把常用功能加进去",
           "发布应用：确认当前版本已发布",
         ];
         const text = lines.join("\n");
@@ -917,7 +909,7 @@
           (state.railOpen ? " open" : "") +
           '">' +
           '<div class="rail-top">' +
-          '<div><p class="eyebrow">Codex Remote</p><h1>设置向导</h1><p>只展示当前要做的步骤，不把后面的正文提前摊开。</p></div>' +
+          '<div><p class="eyebrow">Codex Remote</p><h1>设置向导</h1><p>跟着下面几步做完，就可以开始使用。</p></div>' +
           '<button class="mobile-menu-button" type="button" onclick="toggleRail()">收起</button>' +
           "</div>" +
           '<div class="step-list">' +
@@ -976,20 +968,20 @@
 
       function renderStartStep() {
         return (
-          '<section class="card soft"><h3>先确认这台机器能不能直接开始用</h3><p>这一步只回答一件事：你现在能不能继续接飞书应用。如果还不行，就只聚焦把这台机器先修好。</p><div class="card-grid two">' +
+          '<section class="card soft"><h3>先确认这台机器是否可以继续</h3><p>检查通过以后，就继续连接飞书应用。</p><div class="card-grid two">' +
           '<article class="card"><h4>当前结果</h4><div class="summary-row">' +
           (state.machine.ready ? statusHTML("good", "可以继续") : statusHTML("danger", "还不能继续")) +
           (state.machine.rechecked ? statusHTML("neutral", "已重新检查") : statusHTML("neutral", "首次进入")) +
           '</div><p>' +
           (state.machine.ready
             ? "这台机器已经满足继续接入飞书应用的基本条件。"
-            : "先把这台机器准备好，再继续飞书和 VS Code 步骤。") +
+            : "请先把这台机器准备好，再继续下一步。") +
           '</p><div class="inline-actions"><button class="button-primary" type="button" onclick="startCheck()" ' +
           (state.machine.loading ? "disabled" : "") +
           ">" +
           (state.machine.loading ? "正在检查..." : state.machine.ready ? "再检查一次" : "我已经修好，重新检查") +
           '</button></div></article>' +
-          '<article class="card"><h4>你现在要看什么</h4><div class="bullet-list"><p>只看这台机器是否已经准备好。</p><p>不提前展开飞书后台清单和 VS Code 说明。</p><p>通过以后再进入下一步。</p></div></article>' +
+          '<article class="card"><h4>完成后会发生什么</h4><div class="bullet-list"><p>通过以后，继续连接飞书应用。</p><p>如果还有未完成项，会在这里直接提示。</p><p>处理完再重新检查一次即可。</p></div></article>' +
           "</div></section>" +
           '<section class="card"><h4>检查结果</h4><div class="check-list">' +
           state.machine.checks
@@ -1012,7 +1004,7 @@
       function renderConnectStep() {
         const isNew = state.connect.mode === "new";
         return (
-          '<section class="card soft"><h3>这次要怎么接飞书应用？</h3><p>只先选一种方式。后面的飞书后台步骤和 VS Code 设置会在真正需要的时候再出现。</p><div class="choice-grid">' +
+          '<section class="card soft"><h3>这次要怎么连接飞书应用？</h3><p>选一种最适合你的方式继续。</p><div class="choice-grid">' +
           '<button class="choice-card' +
           (isNew ? " selected" : "") +
           '" type="button" onclick="chooseConnectMode(\'new\')"><strong>新建飞书应用</strong><p>推荐。用手机扫码后，页面自动把新应用接回来。</p></button>' +
@@ -1021,7 +1013,7 @@
           '" type="button" onclick="chooseConnectMode(\'existing\')"><strong>接入已有飞书应用</strong><p>如果你已经在飞书开放平台有应用，直接填写 App ID 和 App Secret。</p></button>' +
           "</div></section>" +
           (isNew
-            ? '<section class="card"><div class="card-grid two"><article class="card"><h4>扫码新建</h4><p>请用飞书手机客户端扫码。完成后，页面会继续带你走到下一步。</p><div class="qr-box">扫码创建飞书应用</div><div class="inline-actions"><button class="button-primary" type="button" onclick="completeQRCode()">我已完成扫码</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>这一步只保留必要说明</h4><div class="bullet-list"><p>扫码成功后再展示新应用名称和下一步。</p><p>不把后面的权限、事件、菜单一次性铺满整页。</p><p>如果你改成手动接入，下面才会出现字段。</p></div></article></div></section>'
+            ? '<section class="card"><div class="card-grid two"><article class="card"><h4>扫码新建</h4><p>请用飞书手机客户端扫码。完成后，继续下一步。</p><div class="qr-box">扫码创建飞书应用</div><div class="inline-actions"><button class="button-primary" type="button" onclick="completeQRCode()">我已完成扫码</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>需要准备什么</h4><div class="bullet-list"><p>一部已经登录飞书的手机。</p><p>扫码后按提示完成创建。</p><p>完成后回到这里继续。</p></div></article></div></section>'
             : '<section class="card"><div class="card-grid two"><article class="card"><h4>已有飞书应用</h4><div class="field-grid"><div class="field"><label for="app-id">App ID</label><input id="app-id" value="' +
               escapeHTML(state.connect.fields.appId) +
               '" oninput="updateField(\'appId\', this.value)" placeholder="例如 cli_xxx" />' +
@@ -1030,7 +1022,7 @@
               escapeHTML(state.connect.fields.appSecret) +
               '" oninput="updateField(\'appSecret\', this.value)" placeholder="例如 secret_xxx" />' +
               (state.connect.errors.appSecret ? '<div class="field-error">' + state.connect.errors.appSecret + "</div>" : "") +
-              '</div></div><div class="inline-actions"><button class="button-primary" type="button" onclick="validateExistingApp()">验证并继续</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>你要做的只有这三件事</h4><div class="bullet-list"><p>打开飞书应用后台。</p><p>复制 App ID 和 App Secret。</p><p>回来验证连接是否通过。</p></div></article></div></section>')
+              '</div></div><div class="inline-actions"><button class="button-primary" type="button" onclick="validateExistingApp()">验证并继续</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>怎么找到这两个字段</h4><div class="bullet-list"><p>打开飞书开放平台。</p><p>进入目标应用的凭证与基础信息页面。</p><p>复制 App ID 和 App Secret 后回来继续。</p></div></article></div></section>')
         );
       }
 
@@ -1039,13 +1031,13 @@
           { id: "permissions", title: "导入基础权限", summary: "保证这条飞书应用已经具备基础对话与交互需要的权限。" },
           { id: "events", title: "开启事件订阅", summary: "让消息和回调事件能够回到这台机器。" },
           { id: "callback", title: "保存回调方式", summary: "确认回调已经按当前接入方式启用。" },
-          { id: "menu", title: "设置机器人菜单", summary: "把常用入口放到飞书应用菜单里，后面使用会更顺手。" },
-          { id: "publish", title: "发布当前版本", summary: "让你刚才完成的设置真正对外生效。" },
+          { id: "menu", title: "设置机器人菜单", summary: "把常用功能加到飞书应用菜单里。 " },
+          { id: "publish", title: "发布当前版本", summary: "让刚才完成的设置正式生效。" },
         ];
         return (
-          '<section class="card soft"><div class="card-grid two"><article class="card"><h3>先把基础对话与交互准备好</h3><p>这里只有必做项。增强功能和可选能力先不在这里打断你。</p><div class="summary-row">' +
+          '<section class="card soft"><div class="card-grid two"><article class="card"><h3>先把基础对话与交互准备好</h3><p>把下面这些事项完成后，你就可以开始正常使用。</p><div class="summary-row">' +
           statusHTML(isCapabilityDone() ? "good" : "warn", isCapabilityDone() ? "已全部完成" : "还有待完成项") +
-          '</div></article><article class="card"><h4>这一步提供什么</h4><div class="bullet-list"><p>只保留基础功能真正需要的事项。</p><p>每项都讲人话，不把整份技术清单直接摊给用户。</p><p>如果你需要带着清单去飞书后台，可以一键复制简版说明。</p></div><div class="inline-actions"><button class="button-secondary" type="button" onclick="copyChecklist()">复制简版清单</button></div></article></div></section>' +
+          '</div></article><article class="card"><h4>你可以怎么做</h4><div class="bullet-list"><p>打开当前飞书应用后台逐项确认。</p><p>完成一项，就在这里勾掉一项。</p><p>需要时可以复制一份简版清单带过去。</p></div><div class="inline-actions"><button class="button-secondary" type="button" onclick="copyChecklist()">复制简版清单</button></div></article></div></section>' +
           '<section class="card"><h4>必做项</h4><div class="task-list">' +
           tasks
             .map((task) => {
@@ -1075,13 +1067,13 @@
 
       function renderVSCodeStep() {
         return (
-          '<section class="card soft"><h3>VS Code 现在要不要一起处理？</h3><p>这一步是可选项。只有你确实要在这台机器上用 VS Code 时，才需要现在继续。</p><div class="choice-grid">' +
+          '<section class="card soft"><h3>现在要不要一起处理 VS Code？</h3><p>如果你准备在这台机器上用 VS Code，可以现在一起完成。</p><div class="choice-grid">' +
           '<button class="choice-card' +
           (state.vscode.choice === "current" ? " selected" : "") +
-          '" type="button" onclick="chooseVSCode(\'current\')"><strong>要在这台机器上继续使用 VS Code</strong><p>现在一起完成，后面可以直接从这台机器进入 VS Code 使用。</p></button>' +
+          '" type="button" onclick="chooseVSCode(\'current\')"><strong>要在这台机器上继续使用 VS Code</strong><p>现在一起完成，之后就可以直接从这台机器继续使用。</p></button>' +
           '<button class="choice-card' +
           (state.vscode.choice === "later" ? " selected" : "") +
-          '" type="button" onclick="chooseVSCode(\'later\')"><strong>这一步稍后再说</strong><p>先把基础接入完成，以后需要时再回管理页处理。</p></button>' +
+          '" type="button" onclick="chooseVSCode(\'later\')"><strong>以后再处理</strong><p>先完成当前设置，需要时再回来继续。</p></button>' +
           "</div></section>" +
           (state.vscode.choice === "current"
             ? '<section class="card"><div class="card-grid two"><article class="card"><h4>当前要确认什么</h4><div class="bullet-list"><p>这台机器上已经安装 Codex 扩展。</p><p>你已经打开过一次 VS Code。</p><p>确认后，页面就能继续启用。</p></div><div class="inline-actions"><button class="button-secondary" type="button" onclick="markExtensionReady()">' +
@@ -1090,19 +1082,19 @@
               (state.vscode.extensionSeen ? statusHTML("good", "可以继续启用") : statusHTML("warn", "还在等待确认")) +
               "</div><p>" +
               (state.vscode.extensionSeen
-                ? "现在可以继续把这台机器上的 VS Code 接起来。"
+                ? "现在可以继续完成这一步。"
                 : "还没确认扩展是否已经安装。") +
               "</p></article></div></section>"
-            : '<section class="card"><h4>稍后再处理也没问题</h4><p>这不会影响你现在开始使用。等你真的要在这台机器上用 VS Code 时，再回本地管理页继续。</p></section>')
+            : '<section class="card"><h4>稍后再处理也没问题</h4><p>这不会影响你先开始使用。等你需要时，再回来继续。</p></section>')
         );
       }
 
       function renderFinishStep() {
         return (
-          '<section class="card soft"><h3>设置已经完成</h3><p>现在你已经可以开始使用 Codex Remote 了。后面如果要补其它能力，都回本地管理页继续处理。</p><div class="mini-card-grid"><article class="mini-card"><strong>这台机器</strong><p>已准备好</p></article><article class="mini-card"><strong>飞书应用</strong><p>已接入</p></article><article class="mini-card"><strong>VS Code</strong><p>' +
+          '<section class="card soft"><h3>设置已经完成</h3><p>现在你已经可以开始使用 Codex Remote 了。</p><div class="mini-card-grid"><article class="mini-card"><strong>这台机器</strong><p>已准备好</p></article><article class="mini-card"><strong>飞书应用</strong><p>已接入</p></article><article class="mini-card"><strong>VS Code</strong><p>' +
           (state.vscode.choice === "later" ? "稍后处理" : "已接入") +
           "</p></article></div></section>" +
-          '<section class="card"><h4>下一步去哪</h4><div class="bullet-list"><p>去本地管理页看整体状态。</p><p>以后要补文档预览、清理旧图片或继续处理 VS Code，都在那里完成。</p><p>如果这次只是想先把系统接通，到这里就够了。</p></div><div class="inline-actions"><a class="button-primary" href="#admin" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">进入本地管理页</a><button class="button-ghost" type="button" onclick="restartWizard()">回看向导结构</button></div></section>'
+          '<section class="card"><h4>下一步</h4><div class="bullet-list"><p>进入本地管理页查看当前状态。</p><p>以后需要清理图片、继续处理 VS Code 或补其它设置，都可以在那里完成。</p><p>如果你现在只是想先接通，到这里就可以了。</p></div><div class="inline-actions"><a class="button-primary" href="#admin" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">进入本地管理页</a><button class="button-ghost" type="button" onclick="restartWizard()">重新开始</button></div></section>'
         );
       }
 
@@ -1128,13 +1120,13 @@
           case "start":
             return { title: "先确认环境", text: "通过以后再进入飞书步骤。", primary: "继续检查", secondary: "" };
           case "connect":
-            return { title: "接飞书应用", text: "只在这一步出现接入方式和字段。", primary: state.connect.mode === "new" ? "我已完成扫码" : "验证并继续", secondary: "上一步" };
+            return { title: "连接飞书应用", text: "完成后继续下一步。", primary: state.connect.mode === "new" ? "我已完成扫码" : "验证并继续", secondary: "上一步" };
           case "capability":
-            return { title: "补齐基础能力", text: "只保留必做项，不把增强功能提前塞进来。", primary: "检查并继续", secondary: "上一步" };
+            return { title: "完成基础能力", text: "全部完成后继续。", primary: "检查并继续", secondary: "上一步" };
           case "vscode":
-            return { title: "处理可选项", text: "这一步可以现在完成，也可以稍后处理。", primary: state.vscode.choice === "later" ? "完成设置" : "继续", secondary: "上一步" };
+            return { title: "处理 VS Code", text: "可以现在完成，也可以稍后处理。", primary: state.vscode.choice === "later" ? "完成设置" : "继续", secondary: "上一步" };
           case "finish":
-            return { title: "去本地管理页", text: "后续维护动作统一在那里处理。", primary: "打开管理页", secondary: "重新看一遍" };
+            return { title: "进入本地管理页", text: "后续维护都在那里处理。", primary: "打开管理页", secondary: "重新开始" };
           default:
             return { title: "", text: "", primary: "", secondary: "" };
         }
@@ -1160,7 +1152,7 @@
             break;
           case "finish":
             window.location.hash = "admin";
-            setNotice("good", "可以进入本地管理页了", "这份页面只演示结构和交互方向，实际入口会落到本机管理页。");
+            setNotice("good", "可以进入本地管理页了", "下一步就从那里继续。");
             render();
             break;
         }
@@ -1211,7 +1203,7 @@
           '</h2><p>' +
           steps[currentIndex].hint +
           '</p></div><div class="stage-meta"><button class="mobile-menu-button" type="button" onclick="toggleRail()">步骤导航</button>' +
-          statusHTML(isStepUnlocked("finish") ? "good" : "warn", isStepUnlocked("finish") ? "可进入管理页" : "仍在设置中") +
+          statusHTML(isStepUnlocked("finish") ? "good" : "warn", isStepUnlocked("finish") ? "即将完成" : "进行中") +
           "</div></div><div class=\"stage-body\">" +
           renderNotice() +
           renderBody() +
