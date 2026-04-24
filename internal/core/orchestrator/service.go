@@ -594,9 +594,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		}
 		if event.Preview != "" {
 			thread.Preview = event.Preview
-			if strings.TrimSpace(thread.LastAssistantMessage) == "" {
-				thread.LastAssistantMessage = previewOfText(event.Preview)
-			}
 		}
 		if event.CWD != "" {
 			thread.CWD = event.CWD
@@ -657,9 +654,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 			if thread.Preview != "" {
 				current.Preview = thread.Preview
-				if strings.TrimSpace(current.LastAssistantMessage) == "" {
-					current.LastAssistantMessage = previewOfText(thread.Preview)
-				}
 			}
 			if thread.CWD != "" {
 				current.CWD = thread.CWD

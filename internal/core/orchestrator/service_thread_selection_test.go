@@ -946,8 +946,21 @@ func TestPendingRemoteDispatchKeepsLaterMessageQueuedUntilTurnStarts(t *testing.
 		MessageID:        "msg-2",
 		Text:             "排队",
 	})
-	if len(second) != 1 || second[0].PendingInput == nil || second[0].PendingInput.Status != string(state.QueueItemQueued) {
+	var pending *control.PendingInputState
+	var accepted bool
+	for _, event := range second {
+		if event.PendingInput != nil {
+			pending = event.PendingInput
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+	}
+	if pending == nil || pending.Status != string(state.QueueItemQueued) {
 		t.Fatalf("expected follow-up message to stay queued, got %#v", second)
+	}
+	if !accepted {
+		t.Fatalf("expected accepted notice for queued follow-up message, got %#v", second)
 	}
 	for _, event := range second {
 		if event.Command != nil {

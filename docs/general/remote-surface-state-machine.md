@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-28`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` 分别承接切换/目录/Git/Worktree 四张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。本轮还把 surface-level backend seam 正式落成真实状态：normal mode 现在区分 `codex` / `claude` 两个 backend，workspace defaults、surface resume 与 detached catalog context 都按 backend 分区，`/mode` 的底层语义也已收口成 `codex|claude|vscode`，其中 `normal` 仍作为 `codex` 的兼容 alias。另一个新变化是把上游 runtime 问题自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它由 orchestrator 本地 codex/gateway error-family policy 驱动，拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `[什么？]` / `[耸肩摊手]` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；review mode 的 detached review session 也已接入同一条远端状态机：review thread 会带显式 `source=review` / parent-thread 元数据，surface 会在不改绑当前选中 thread 的前提下记录 `ReviewSession` runtime，并把后续审阅文本继续路由到 review thread；与此同时，普通 attach/list/use 候选现在会显式排除 `source=review` 会话，不再把 detached review thread 混进 merged thread list、current-instance dropdown 或 workspace recency。本轮还把 `process.child.restart` 收口成“两段式 restart 合同”：`ack` 只代表新 child 已接管，thread restore 结果改由独立 outcome event 回传，daemon 会对 `/bendtomywill` 与 standalone Codex upgrade 统一等待最终 outcome，因此 late restore 不会再把 patch / upgrade 误判成已失败或已完成；细节见正文。
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` 分别承接切换/目录/Git/Worktree 四张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。本轮还把 surface-level backend seam 正式落成真实状态：normal mode 现在区分 `codex` / `claude` 两个 backend，workspace defaults、surface resume 与 detached catalog context 都按 backend 分区，`/mode` 的底层语义也已收口成 `codex|claude|vscode`，其中 `normal` 仍作为 `codex` 的兼容 alias。另一个新变化是把上游 runtime 问题自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它由 orchestrator 本地 codex/gateway error-family policy 驱动，拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；normal / verbose 下，用户新消息一旦被 surface 接受，也会立即收到一张 reply-thread `已接收` 状态卡，用来说明当前是已派发、排队、等待恢复还是等待本地交接；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `[什么？]` / `[耸肩摊手]` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；review mode 的 detached review session 也已接入同一条远端状态机：review thread 会带显式 `source=review` / parent-thread 元数据，surface 会在不改绑当前选中 thread 的前提下记录 `ReviewSession` runtime，并把后续审阅文本继续路由到 review thread；与此同时，普通 attach/list/use 候选现在会显式排除 `source=review` 会话，不再把 detached review thread 混进 merged thread list、current-instance dropdown 或 workspace recency。本轮还把 `process.child.restart` 收口成“两段式 restart 合同”：`ack` 只代表新 child 已接管，thread restore 结果改由独立 outcome event 回传，daemon 会对 `/bendtomywill` 与 standalone Codex upgrade 统一等待最终 outcome，因此 late restore 不会再把 patch / upgrade 误判成已失败或已完成；细节见正文。
 
 ## 1. 文档定位
 
@@ -1124,14 +1124,21 @@ E3 Running
 18. 当前 backoff 固定为：
    1. `incomplete_stop`（文本未出现收工口令）: `3s -> 10s -> 30s`，最多 3 次
 19. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
-19. remote turn 在 `turn.completed` 时，若当前 item 命中 `terminalCause=autocontinue_eligible_failure`，则 autoContinue 会接管收口：
+19. 普通用户输入 item 进入 queue 后，surface 当前会立刻补一层轻量可见反馈：
+   1. 只对 `SourceKind=user` 生效；quiet 继续静默
+   2. normal / verbose 会 reply 到原用户消息，发一张 `remote_turn_accepted` notice
+   3. notice 文案按 enqueue 后的真实状态决定：
+      1. 已进入 `dispatching/running` 时显示“正在发送到本地 Codex 并开始处理”
+      2. 仍在 `queued` 时会区分实例离线、`paused_for_local`、`handoff_wait`、已有活动任务等原因
+   4. 这层反馈不改变 queue / dispatch 状态机；它只是把 `E1/E2/E3` 的当前落点提前投影给飞书用户
+20. remote turn 在 `turn.completed` 时，若当前 item 命中 `terminalCause=autocontinue_eligible_failure`，则 autoContinue 会接管收口：
    1. direct `turn_failed` notice 被抑制
    2. surface 进入 autoContinue overlay，而不是 autowhip overlay
    3. 若当前没有 gate/backoff 阻挡，会立刻开始第 1 次自动继续
-20. `/stop` 对 autoContinue 有两条收口：
+21. `/stop` 对 autoContinue 有两条收口：
    1. 若 autoContinue 还在 `scheduled`，直接取消等待中的 episode
    2. 若 autoContinue attempt 已经 running，则 turn 收尾时按 `user_interrupted` 归因，不会继续 schedule 下一轮 autoContinue
-21. autoContinue 当前不会跨目标长期悬挂：
+22. autoContinue 当前不会跨目标长期悬挂：
    1. `/detach`
    2. `/new`
    3. `/use` / `/follow`

@@ -689,8 +689,21 @@ func TestQueuedMessageFreezesSurfaceOverrideAtEnqueue(t *testing.T) {
 		MessageID:        "msg-1",
 		Text:             "你好",
 	})
-	if len(queued) != 1 || queued[0].PendingInput == nil || queued[0].PendingInput.Status != string(state.QueueItemQueued) {
+	var pending *control.PendingInputState
+	var accepted bool
+	for _, event := range queued {
+		if event.PendingInput != nil {
+			pending = event.PendingInput
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+	}
+	if pending == nil || pending.Status != string(state.QueueItemQueued) {
 		t.Fatalf("expected queued-only event while paused, got %#v", queued)
+	}
+	if !accepted {
+		t.Fatalf("expected accepted notice while paused, got %#v", queued)
 	}
 
 	svc.ApplySurfaceAction(control.Action{
@@ -755,8 +768,21 @@ func TestLocalInteractionPausesRemoteQueueAndHandoffResumes(t *testing.T) {
 		MessageID:        "msg-1",
 		Text:             "你好",
 	})
-	if len(queued) != 1 || queued[0].PendingInput == nil || queued[0].PendingInput.Status != "queued" {
+	var pending *control.PendingInputState
+	accepted := false
+	for _, event := range queued {
+		if event.PendingInput != nil {
+			pending = event.PendingInput
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+	}
+	if pending == nil || pending.Status != "queued" {
 		t.Fatalf("expected queued-only event while paused, got %#v", queued)
+	}
+	if !accepted {
+		t.Fatalf("expected accepted notice while paused, got %#v", queued)
 	}
 
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{

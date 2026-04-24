@@ -88,3 +88,21 @@ func TestThreadSelectionEventsEmitNewThreadReadyNoticeFamilyEvent(t *testing.T) 
 		t.Fatalf("unexpected status lines: %#v", section.Lines)
 	}
 }
+
+func TestThreadSelectionEventsDoNotTreatPreviewAsRecentReply(t *testing.T) {
+	now := time.Date(2026, 4, 21, 10, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.threadSelectionEvents(surface, "thread-1", string(state.RouteModePinned), "droid · 修复登录流程", "用户自己的首条消息预览")
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected one notice-family event, got %#v", events)
+	}
+	if len(events[0].Notice.Sections) != 1 {
+		t.Fatalf("expected only title section when no real assistant reply exists, got %#v", events[0].Notice.Sections)
+	}
+	if events[0].Notice.Sections[0].Label != "当前输入目标" {
+		t.Fatalf("unexpected title section: %#v", events[0].Notice.Sections[0])
+	}
+}

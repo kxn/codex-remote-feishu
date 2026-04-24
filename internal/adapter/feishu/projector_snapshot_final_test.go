@@ -1448,6 +1448,76 @@ func TestProjectSnapshotTruncatesLongSelectedLastUserMessage(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotTruncatesLongSelectedLastAssistantMessage(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			Attachment: control.AttachmentSummary{
+				InstanceID:                         "inst-1",
+				DisplayName:                        "droid",
+				SelectedThreadID:                   "thread-1",
+				SelectedThreadTitle:                "droid · 这是一个特别长特别长特别长的当前输入目标标题",
+				SelectedThreadLastAssistantMessage: "这是一条特别长特别长特别长特别长的最近消息内容，需要在 status 卡片里缩略显示",
+				RouteMode:                          "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				ThreadID:                       "thread-1",
+				ThreadTitle:                    "droid · 这是一个特别长特别长特别长的当前输入目标标题",
+				CWD:                            "/data/dl/droid",
+				EffectiveModel:                 "gpt-5.4",
+				EffectiveReasoningEffort:       "medium",
+				EffectiveAccessMode:            "confirm",
+				EffectiveModelSource:           "surface_default",
+				EffectiveReasoningEffortSource: "surface_default",
+				EffectiveAccessModeSource:      "surface_default",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前输入目标：droid · 这是一个特别长特别长特别长的当前输入目标...",
+		"最近回复：这是一条特别长特别长特别长特别长的最近消息内容，...",
+	) {
+		t.Fatalf("expected snapshot rendering to compact long assistant text, got %q", rendered)
+	}
+}
+
+func TestProjectSnapshotDoesNotTreatPreviewAsRecentReply(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			Attachment: control.AttachmentSummary{
+				InstanceID:            "inst-1",
+				DisplayName:           "droid",
+				SelectedThreadID:      "thread-1",
+				SelectedThreadTitle:   "修复登录流程",
+				SelectedThreadPreview: "用户自己的首条消息预览",
+				RouteMode:             "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				ThreadID:                 "thread-1",
+				ThreadTitle:              "修复登录流程",
+				CWD:                      "/data/dl/droid",
+				EffectiveModel:           "gpt-5.4",
+				EffectiveReasoningEffort: "medium",
+				EffectiveAccessMode:      "confirm",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if strings.Contains(rendered, "最近回复：") {
+		t.Fatalf("expected snapshot not to render recent reply from preview only, got %q", rendered)
+	}
+}
+
 func TestProjectSnapshotNeutralizesDynamicThreadText(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

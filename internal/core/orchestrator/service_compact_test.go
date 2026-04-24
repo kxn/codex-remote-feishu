@@ -132,8 +132,21 @@ func TestCompactPendingQueuesLaterMessageUntilTurnCompletes(t *testing.T) {
 		MessageID:        "msg-after-compact",
 		Text:             "整理完以后继续",
 	})
-	if len(queued) != 1 || queued[0].PendingInput == nil || queued[0].PendingInput.Status != string(state.QueueItemQueued) {
+	var pending *control.PendingInputState
+	var accepted bool
+	for _, event := range queued {
+		if event.PendingInput != nil {
+			pending = event.PendingInput
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+	}
+	if pending == nil || pending.Status != string(state.QueueItemQueued) {
 		t.Fatalf("expected queued follow-up input, got %#v", queued)
+	}
+	if !accepted {
+		t.Fatalf("expected accepted notice for queued follow-up input, got %#v", queued)
 	}
 	for _, event := range queued {
 		if event.Command != nil {

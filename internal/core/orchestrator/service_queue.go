@@ -169,7 +169,9 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		QueuePosition: position,
 		QueueOn:       true,
 	}, queueItemSourceMessageIDs(item))...)
-	return append(events, s.dispatchNext(surface)...)
+	dispatchEvents := s.dispatchNext(surface)
+	events = append(events, s.acceptedQueueFeedbackEvent(surface, item, position)...)
+	return append(events, dispatchEvents...)
 }
 
 func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]agentproto.Input, []string, string) {

@@ -60,6 +60,9 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		if lastUser := strings.TrimSpace(snapshot.Attachment.SelectedThreadLastUserMessage); lastUser != "" {
 			lines = append(lines, snapshotLine("最近用户", compactSnapshotStatusText(lastUser, snapshotStatusPreviewLimit)))
 		}
+		if lastAssistant := strings.TrimSpace(snapshot.Attachment.SelectedThreadLastAssistantMessage); lastAssistant != "" {
+			lines = append(lines, snapshotLine("最近回复", compactSnapshotStatusText(lastAssistant, snapshotStatusPreviewLimit)))
+		}
 		if age := strings.TrimSpace(snapshot.Attachment.SelectedThreadAgeText); age != "" && age != "时间未知" {
 			lines = append(lines, snapshotLine("最近活跃", age))
 		}

@@ -47,6 +47,24 @@ func threadSelectionNotice(selection control.ThreadSelectionChanged) *control.No
 				Lines: []string{title},
 			})
 		}
+		if first := strings.TrimSpace(selection.FirstUserMessage); first != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "会话起点",
+				Lines: []string{first},
+			})
+		}
+		if lastUser := strings.TrimSpace(selection.LastUserMessage); lastUser != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "最近用户",
+				Lines: []string{lastUser},
+			})
+		}
+		if lastAssistant := strings.TrimSpace(selection.LastAssistantMessage); lastAssistant != "" {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "最近回复",
+				Lines: []string{lastAssistant},
+			})
+		}
 	}
 	return &control.Notice{
 		Code:     "thread_selection_changed",

@@ -734,6 +734,14 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 ### 7.2 过程消息
 
+用户从飞书发起正常 remote turn 后：
+
+- normal / verbose 当前都会先 reply 一张轻量 `已接收` 状态卡
+- 这张卡只说明消息已经进入 relay/orchestrator 并开始派发或排队，不展开工具级细节
+- 若实例离线、当前已有任务执行中、或本地 VS Code 正在占用，这张卡会直接把“已排队/等待恢复/等待交接”说清楚
+- quiet 继续保持静默；详细 `exec_command` / `web_search` / `dynamic_tool_call` 过程仍然只在 verbose 可见
+- 这张状态卡不替代最终答复；final reply 仍按原 reply anchor 单独送达
+
 非 final 的 `block.committed`：
 
 - 直接发纯文本
