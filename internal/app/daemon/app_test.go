@@ -317,8 +317,14 @@ func TestHandleGatewayActionReplacesMenuCardForRootNavigation(t *testing.T) {
 	if result.ReplaceCurrentCard.CardTitle != "命令菜单" {
 		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
 	}
-	if len(result.ReplaceCurrentCard.CardElements) == 0 || result.ReplaceCurrentCard.CardElements[0]["content"] != "菜单首页" {
-		t.Fatalf("expected bare /menu replacement card to render root breadcrumb, got %#v", result.ReplaceCurrentCard.CardElements)
+	if len(result.ReplaceCurrentCard.CardElements) == 0 {
+		t.Fatalf("expected bare /menu replacement card to render menu home header, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	rootContent, _ := result.ReplaceCurrentCard.CardElements[0]["content"].(string)
+	if !strings.Contains(rootContent, "Codex Remote Feishu · dev") ||
+		!strings.Contains(rootContent, "GitHub: [kxn/codex-remote-feishu](https://github.com/kxn/codex-remote-feishu)") ||
+		!strings.Contains(rootContent, "使用说明：[查看文档](https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc)") {
+		t.Fatalf("expected bare /menu replacement card to render menu home 3-line header, got %#v", result.ReplaceCurrentCard.CardElements[0])
 	}
 	for _, button := range operationCardButtons(*result.ReplaceCurrentCard) {
 		value := cardButtonPayload(button)

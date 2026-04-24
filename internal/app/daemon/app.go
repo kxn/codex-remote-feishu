@@ -213,6 +213,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		})
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
+	app.projector.SetMenuHomeVersion(serverIdentity.Version)
 	app.upgradeRuntime.Lookup = app.defaultReleaseLookup
 	app.upgradeRuntime.DevManifest = app.defaultDevManifestLookup
 	app.cronRuntime.bitableFactory = app.defaultCronBitableFactory

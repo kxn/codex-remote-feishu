@@ -1,19 +1,37 @@
 package projector
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
+
+const (
+	commandCatalogRootLabel = "菜单首页"
+	menuHomeProductName     = "Codex Remote Feishu"
+	menuHomeGitHubLabel     = "kxn/codex-remote-feishu"
+	menuHomeGitHubURL       = "https://github.com/kxn/codex-remote-feishu"
+	menuHomeUsageGuideURL   = "https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc"
+	menuHomeVersionFallback = "dev"
+)
+
+type PageRenderOptions struct {
+	MenuHomeVersion string
+}
 
 func PageBody(view control.FeishuPageView) string {
 	return ""
 }
 
 func PageElements(view control.FeishuPageView, daemonLifecycleID string) []map[string]any {
+	return PageElementsWithOptions(view, daemonLifecycleID, PageRenderOptions{})
+}
+
+func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID string, opts PageRenderOptions) []map[string]any {
 	view = control.NormalizeFeishuPageView(view)
 	elements := make([]map[string]any, 0, len(view.Sections)*3+len(view.SummarySections)*2+len(view.NoticeSections)*2+3)
-	if breadcrumb := commandCatalogBreadcrumbMarkdown(view.Breadcrumbs); breadcrumb != "" {
+	if breadcrumb := commandCatalogBreadcrumbMarkdown(view, opts); breadcrumb != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": breadcrumb,
@@ -307,9 +325,12 @@ func formatExamplesPlainText(examples []string) string {
 	return strings.Join(parts, "，")
 }
 
-func commandCatalogBreadcrumbMarkdown(items []control.CommandCatalogBreadcrumb) string {
-	parts := make([]string, 0, len(items))
-	for _, item := range items {
+func commandCatalogBreadcrumbMarkdown(view control.FeishuPageView, opts PageRenderOptions) string {
+	if menuHome := menuHomeHeaderMarkdown(view, opts); menuHome != "" {
+		return menuHome
+	}
+	parts := make([]string, 0, len(view.Breadcrumbs))
+	for _, item := range view.Breadcrumbs {
 		label := strings.TrimSpace(item.Label)
 		if label == "" {
 			continue
@@ -320,6 +341,27 @@ func commandCatalogBreadcrumbMarkdown(items []control.CommandCatalogBreadcrumb) 
 		return ""
 	}
 	return strings.Join(parts, " / ")
+}
+
+func menuHomeHeaderMarkdown(view control.FeishuPageView, opts PageRenderOptions) string {
+	if strings.TrimSpace(view.CommandID) != control.FeishuCommandMenu {
+		return ""
+	}
+	if len(view.Breadcrumbs) != 1 {
+		return ""
+	}
+	if strings.TrimSpace(view.Breadcrumbs[0].Label) != commandCatalogRootLabel {
+		return ""
+	}
+	version := strings.TrimSpace(opts.MenuHomeVersion)
+	if version == "" {
+		version = menuHomeVersionFallback
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("%s · %s", menuHomeProductName, version),
+		fmt.Sprintf("GitHub: [%s](%s)", menuHomeGitHubLabel, menuHomeGitHubURL),
+		fmt.Sprintf("使用说明：[查看文档](%s)", menuHomeUsageGuideURL),
+	}, "\n")
 }
 
 func cloneActionPayload(payload map[string]any) map[string]any {

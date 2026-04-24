@@ -156,6 +156,7 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 
 func TestProjectMenuHomeRendersRootBreadcrumbAndNamedGroupButtons(t *testing.T) {
 	projector := NewProjector()
+	projector.SetMenuHomeVersion("v9.9.9")
 	view := control.BuildFeishuCommandMenuHomePageView()
 	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(view))
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
@@ -165,8 +166,9 @@ func TestProjectMenuHomeRendersRootBreadcrumbAndNamedGroupButtons(t *testing.T) 
 	if len(ops[0].CardElements) != 1+len(groups) {
 		t.Fatalf("expected root breadcrumb plus one button row per group, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[0]["content"] != "菜单首页" {
-		t.Fatalf("expected root breadcrumb only, got %#v", ops[0].CardElements[0])
+	wantHeader := "Codex Remote Feishu · v9.9.9\nGitHub: [kxn/codex-remote-feishu](https://github.com/kxn/codex-remote-feishu)\n使用说明：[查看文档](https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc)"
+	if ops[0].CardElements[0]["content"] != wantHeader {
+		t.Fatalf("expected menu home header, got %#v", ops[0].CardElements[0])
 	}
 	labels := make([]string, 0, len(groups))
 	for _, element := range ops[0].CardElements[1:] {

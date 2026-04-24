@@ -78,6 +78,7 @@ const maxEmbeddedFileSummaryRows = 6
 type Projector struct {
 	readGitWorktree func(string) *gitWorktreeSummary
 	snapshotBinary  string
+	menuHomeVersion string
 }
 
 func NewProjector() *Projector {
@@ -89,6 +90,13 @@ func (p *Projector) SetSnapshotBinary(value string) {
 		return
 	}
 	p.snapshotBinary = strings.TrimSpace(value)
+}
+
+func (p *Projector) SetMenuHomeVersion(value string) {
+	if p == nil {
+		return
+	}
+	p.menuHomeVersion = strings.TrimSpace(value)
 }
 
 func (p *Projector) ProjectEvent(chatID string, event eventcontract.Event) []Operation {
@@ -173,7 +181,11 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			title = "页面"
 		}
 		body := projectorpkg.PageBody(pageView)
-		elements := projectorpkg.PageElements(pageView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.PageElementsWithOptions(
+			pageView,
+			firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID),
+			projectorpkg.PageRenderOptions{MenuHomeVersion: p.menuHomeVersion},
+		)
 		theme := firstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
 		operation := Operation{
 			Kind:             OperationSendCard,
