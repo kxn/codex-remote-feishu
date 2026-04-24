@@ -241,6 +241,11 @@ V1 合同：
 - 文件列表各行
 - 用时 / token / worktree footer
 
+同时：
+
+- preview 页面正常阅读态不提供用户可见的 `下载` 动作
+- 若实现上保留 raw diff 下载落点，也只能作为非默认显式入口存在，不能出现在正常页面 chrome 中
+
 ## 6.2 显示条件
 
 V1 仅在以下条件同时满足时显示 `查看`：
@@ -271,14 +276,14 @@ V1 仅在以下条件同时满足时显示 `查看`：
 
 ```text
 /preview/s/<scopePublicID>/<previewID>
-/preview/s/<scopePublicID>/<previewID>/download
 ```
 
 其中：
 
 - `scopePublicID` 复用现有 preview scope 的公开 ID
 - `previewID` 在本单中表示“一次 frozen turn diff artifact”，不是 live 文件路径
-- `/download` 返回 raw unified diff 下载
+
+若实现上为了调试、兼容或内部兜底保留 raw diff 下载端点，也应视为非用户可见的附属路由，而不是页面默认功能合同。
 
 ## 7.2 为什么继续复用 `/preview`
 
@@ -393,8 +398,8 @@ grant 继续按“消息级 prefix grant”复用。
       "parseStatus": "ok",
       "rawHeader": "diff --git ...",
       "rawPatch": "@@ ...",
-      "beforeText": "... optional ...",
-      "afterText": "... optional ...",
+      "beforeText": "... full frozen old file text when applicable ...",
+      "afterText": "... full frozen new file text when applicable ...",
       "hunks": [
         {
           "oldStart": 10,
@@ -412,8 +417,17 @@ grant 继续按“消息级 prefix grant”复用。
 
 - `rawUnifiedDiff` 始终保留 authoritative 原文
 - `files[]` 是 viewer 用的结构化冻结数据
-- `beforeText` / `afterText` 只在能稳定冻结时保存
+- viewer 所需的文件正文必须在 artifact 内冻结完整内容，而不是只存 hunk 附近若干行
+- `beforeText` / `afterText` 保存的是完整文件文本，不是片段
 - `hunks` 是解析结果，不替代 raw patch
+
+V1 需要进一步收紧为：
+
+- 对非 binary 文件，若要进入完整 viewer，artifact 必须带足该文件的完整冻结文本
+- `modify` 文件默认同时保存完整 `beforeText` 与完整 `afterText`
+- `add` / `copy` / 以新路径落地的 `rename`，至少保存完整 `afterText`
+- `delete` / 仅保留旧路径内容的场景，至少保存完整 `beforeText`
+- 若拿不到进入完整 viewer 所需的完整冻结文本，该文件不得伪装成完整 viewer，只能降级到 raw patch / raw diff
 
 ## 8.3 为什么不读当前磁盘
 
@@ -427,6 +441,11 @@ grant 继续按“消息级 prefix grant”复用。
 
 - 页面服务端按当前路径再去读 live 文件
 - 用 live 文件内容反推缺失上下文
+
+这条禁止也意味着：
+
+- 页面里看到的“完整文件上下文”必须来自 turn 结束时冻结进 artifact 的完整文本
+- 不能把“先存 patch，等打开时再去补正文”当作正式实现路线
 
 ## 8.4 parser 策略
 
@@ -494,7 +513,7 @@ gap 展开后应达到的视觉结果：
 
 - 文件列表
 - 基础文件元信息
-- 原始 diff 下载
+- raw patch / raw diff 的兜底阅读
 
 ## 10. 组件职责
 
@@ -554,7 +573,7 @@ gap 展开后应达到的视觉结果：
 - 复用当前 `/preview` 鉴权入口
 - 读取 turn diff artifact
 - 返回 turn diff viewer 页面
-- 在 `/download` 返回 raw unified diff
+- 若内部保留附属下载路由，仅作为非用户可见兜底，不进入默认页面交互
 
 ## 11. 失败与降级矩阵
 
@@ -614,7 +633,7 @@ gap 展开后应达到的视觉结果：
 
 - 在现有 web preview registry 上新增 turn diff artifact kind
 - 复用 scope manifest / blob / TTL / GC
-- 为 turn diff artifact 提供 raw diff 下载
+- 如需保留 raw diff 下载，仅作为非用户可见的附属能力，不进页面主交互
 
 ### 12.3 final card 渲染
 
@@ -637,7 +656,7 @@ gap 展开后应达到的视觉结果：
 - 页面横竖屏切换可在运行时响应，不需要刷新
 - gap 展开后与上下代码块无缝衔接
 - parse 失败、binary、rename/copy header、数据缺失时能明确降级
-- `/download` 返回 raw unified diff
+- 若保留内部附属下载路由，其返回内容应是 raw unified diff
 
 ## 14. 实现完成标准
 
@@ -645,7 +664,9 @@ gap 展开后应达到的视觉结果：
 - `查看` 直接落在原 final 卡的摘要头行
 - 页面是只读 frozen turn diff viewer
 - 打开页面时不依赖 live workspace 读盘
+- frozen artifact 内包含 viewer 所需的完整文件文本，不靠打开时补读磁盘
 - 页面不出现 reviewer 语义与解释性文案
+- 页面不出现用户可见的 `下载` 动作
 - portrait / landscape 都能正常阅读
 - 页面能按文件切换、按 hunk 阅读、按 gap 展开收起
 - 每个文件的滚动位置能在本页会话内记忆
