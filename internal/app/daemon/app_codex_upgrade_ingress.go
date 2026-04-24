@@ -14,6 +14,9 @@ func (a *App) maybeHandleStandaloneCodexUpgradeActionLocked(ctx context.Context,
 		return false
 	}
 	a.ensureSurfaceRouteForNotice(action)
+	if !a.standaloneCodexUpgradeAffectsSurfaceIDLocked(action.SurfaceSessionID) {
+		return false
+	}
 
 	if strings.TrimSpace(action.SurfaceSessionID) == strings.TrimSpace(tx.InitiatorSurface) {
 		a.handleUIEventsLocked(ctx, codexUpgradeBlockedEvents(action.SurfaceSessionID, false))

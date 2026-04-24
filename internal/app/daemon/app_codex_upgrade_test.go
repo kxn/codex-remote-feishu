@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
+	codexupgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -29,6 +30,7 @@ func TestCheckStandaloneCodexUpgradeAllowsRepeatedChecks(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/tmp/workspace",
 		WorkspaceKey:  "/tmp/workspace",
+		Source:        "headless",
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
@@ -80,6 +82,7 @@ func TestStandaloneCodexUpgradeQueuesOtherSurfaceInputUntilFinish(t *testing.T) 
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/tmp/workspace",
 		WorkspaceKey:  "/tmp/workspace",
+		Source:        "headless",
 		Online:        true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", CWD: "/tmp/workspace", Loaded: true},
@@ -174,6 +177,7 @@ func TestStandaloneCodexUpgradeBlocksInitiatorInput(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/tmp/workspace",
 		WorkspaceKey:  "/tmp/workspace",
+		Source:        "headless",
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
@@ -226,6 +230,230 @@ func TestStandaloneCodexUpgradeBlocksInitiatorInput(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for upgrade completion")
+	}
+}
+
+func TestCheckStandaloneCodexUpgradeIgnoresVSCodeBusyState(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixture uses unix shell scripts")
+	}
+
+	app, _ := newStandaloneCodexUpgradeTestApp(t)
+	app.codexUpgradeRuntime.LatestLookup = func(context.Context) (string, error) {
+		return "0.124.0", nil
+	}
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless",
+		WorkspaceRoot: "/tmp/workspace-headless",
+		WorkspaceKey:  "/tmp/workspace-headless",
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode",
+		WorkspaceRoot: "/tmp/workspace-vscode",
+		WorkspaceKey:  "/tmp/workspace-vscode",
+		Source:        "vscode",
+		Online:        true,
+		ActiveTurnID:  "turn-vscode",
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-vscode", "chat-vscode", "user-vscode", "inst-vscode", state.ProductModeVSCode)
+	app.service.Surface("surface-vscode").ActiveQueueItemID = "queue-vscode"
+
+	check, err := app.checkStandaloneCodexUpgrade(context.Background(), "")
+	if err != nil {
+		t.Fatalf("checkStandaloneCodexUpgrade: %v", err)
+	}
+	if !check.HasUpdate || !check.CanUpgrade {
+		t.Fatalf("expected vscode activity to be ignored for standalone upgrade, got %#v", check)
+	}
+	if len(check.BusyReasons) != 0 {
+		t.Fatalf("expected no busy reasons from vscode activity, got %#v", check.BusyReasons)
+	}
+}
+
+func TestStandaloneCodexUpgradeRestartsOnlyAffectedInstances(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixture uses unix shell scripts")
+	}
+
+	app, packageJSONPath := newStandaloneCodexUpgradeTestApp(t)
+	app.codexUpgradeRuntime.LatestLookup = func(context.Context) (string, error) {
+		return "0.124.0", nil
+	}
+	app.codexUpgradeRuntime.Install = func(_ context.Context, _ codexupgrade.Installation, version string) error {
+		return writeStandaloneCodexPackageVersion(packageJSONPath, version)
+	}
+
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless",
+		WorkspaceRoot: "/tmp/workspace-headless",
+		WorkspaceKey:  "/tmp/workspace-headless",
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode",
+		WorkspaceRoot: "/tmp/workspace-vscode",
+		WorkspaceKey:  "/tmp/workspace-vscode",
+		Source:        "vscode",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-init", "chat-init", "user-init", "inst-headless", state.ProductModeNormal)
+
+	var targets []string
+	var commands []agentproto.Command
+	app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
+		targets = append(targets, instanceID)
+		commands = append(commands, command)
+		return nil
+	}
+
+	done := make(chan error, 1)
+	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
+		SurfaceSessionID: "surface-init",
+		ActorUserID:      "user-init",
+		OnComplete: func(err error) {
+			done <- err
+		},
+	}); err != nil {
+		t.Fatalf("startStandaloneCodexUpgrade: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("upgrade completion: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upgrade completion")
+	}
+
+	if len(commands) != 1 {
+		t.Fatalf("expected exactly one restart command, got targets=%#v commands=%#v", targets, commands)
+	}
+	if targets[0] != "inst-headless" {
+		t.Fatalf("restart target = %q, want inst-headless", targets[0])
+	}
+	if commands[0].Kind != agentproto.CommandProcessChildRestart {
+		t.Fatalf("command kind = %q, want child restart", commands[0].Kind)
+	}
+}
+
+func TestStandaloneCodexUpgradePausesOnlyAffectedSurfaces(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixture uses unix shell scripts")
+	}
+
+	app, packageJSONPath := newStandaloneCodexUpgradeTestApp(t)
+	app.codexUpgradeRuntime.LatestLookup = func(context.Context) (string, error) {
+		return "0.124.0", nil
+	}
+	installStarted := make(chan struct{})
+	releaseInstall := make(chan struct{})
+	app.codexUpgradeRuntime.Install = func(_ context.Context, _ codexupgrade.Installation, version string) error {
+		close(installStarted)
+		<-releaseInstall
+		return writeStandaloneCodexPackageVersion(packageJSONPath, version)
+	}
+
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless",
+		WorkspaceRoot: "/tmp/workspace-headless",
+		WorkspaceKey:  "/tmp/workspace-headless",
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode",
+		WorkspaceRoot: "/tmp/workspace-vscode",
+		WorkspaceKey:  "/tmp/workspace-vscode",
+		Source:        "vscode",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-init", "chat-init", "user-init", "inst-headless", state.ProductModeNormal)
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-normal", "chat-normal", "user-normal", "inst-headless", state.ProductModeNormal)
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-vscode", "chat-vscode", "user-vscode", "inst-vscode", state.ProductModeVSCode)
+	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+
+	done := make(chan error, 1)
+	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
+		SurfaceSessionID: "surface-init",
+		ActorUserID:      "user-init",
+		OnComplete: func(err error) {
+			done <- err
+		},
+	}); err != nil {
+		t.Fatalf("startStandaloneCodexUpgrade: %v", err)
+	}
+
+	select {
+	case <-installStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for install hook to start")
+	}
+
+	if got := app.service.Surface("surface-normal").DispatchMode; got != state.DispatchModePausedForLocal {
+		t.Fatalf("surface-normal dispatch mode = %q, want paused_for_local", got)
+	}
+	if got := app.service.Surface("surface-vscode").DispatchMode; got != state.DispatchModeNormal {
+		t.Fatalf("surface-vscode dispatch mode = %q, want normal", got)
+	}
+
+	close(releaseInstall)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("upgrade completion: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upgrade completion")
+	}
+
+	if got := app.service.Surface("surface-normal").DispatchMode; got != state.DispatchModeNormal {
+		t.Fatalf("surface-normal dispatch mode after resume = %q, want normal", got)
+	}
+	if got := app.service.Surface("surface-vscode").DispatchMode; got != state.DispatchModeNormal {
+		t.Fatalf("surface-vscode dispatch mode after resume = %q, want normal", got)
+	}
+}
+
+func TestStandaloneCodexUpgradeIngressBypassesVSCodeSurface(t *testing.T) {
+	app := New(":0", ":0", newLifecycleGateway(), agentproto.ServerIdentity{})
+	app.codexUpgradeRuntime.Active = &codexupgraderuntime.Transaction{
+		ID:               "codex-upgrade-1",
+		InitiatorSurface: "surface-init",
+		PausedSurfaceIDs: map[string]bool{},
+	}
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-vscode",
+		WorkspaceRoot: "/tmp/workspace-vscode",
+		WorkspaceKey:  "/tmp/workspace-vscode",
+		Source:        "vscode",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	attachStandaloneCodexTestSurfaceWithMode(app, "surface-vscode", "chat-vscode", "user-vscode", "inst-vscode", state.ProductModeVSCode)
+
+	app.mu.Lock()
+	handled := app.maybeHandleStandaloneCodexUpgradeActionLocked(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-vscode",
+		ChatID:           "chat-vscode",
+		ActorUserID:      "user-vscode",
+		Text:             "continue",
+	})
+	app.mu.Unlock()
+
+	if handled {
+		t.Fatal("expected standalone codex upgrade ingress to ignore vscode surface input")
 	}
 }
 
@@ -292,11 +520,16 @@ func writeStandaloneCodexPackageVersion(path, version string) error {
 }
 
 func attachStandaloneCodexTestSurface(app *App, surfaceID, chatID, actorUserID, instanceID string) {
+	attachStandaloneCodexTestSurfaceWithMode(app, surfaceID, chatID, actorUserID, instanceID, state.ProductModeNormal)
+}
+
+func attachStandaloneCodexTestSurfaceWithMode(app *App, surfaceID, chatID, actorUserID, instanceID string, mode state.ProductMode) {
 	app.service.MaterializeSurface(surfaceID, "", chatID, actorUserID)
 	surface := app.service.Surface(surfaceID)
 	if surface == nil {
 		return
 	}
+	surface.ProductMode = state.NormalizeProductMode(mode)
 	surface.AttachedInstanceID = instanceID
 	surface.RouteMode = state.RouteModeUnbound
 }

@@ -128,6 +128,7 @@ func TestCodexUpgradeOwnerConfirmFailureReturnsToStableCheckedState(t *testing.T
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/tmp/workspace",
 		WorkspaceKey:  "/tmp/workspace",
+		Source:        "headless",
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
@@ -260,6 +261,7 @@ func TestCodexUpgradeOwnerFlowTerminalStaysOnInitiatorSurface(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/tmp/workspace",
 		WorkspaceKey:  "/tmp/workspace",
+		Source:        "headless",
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})

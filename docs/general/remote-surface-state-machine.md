@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-24`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动恢复从 `autowhip` 中拆成独立 `recovery` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用。
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动恢复从 `autowhip` 中拆成独立 `recovery` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；同时 standalone Codex 升级事务现在只会挂起真正依赖 standalone Codex 的非发起 surface，VS Code surface / instance 不再被这条事务一起暂停或重启；细节见正文。
 
 ## 1. 文档定位
 
@@ -247,7 +247,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `E1 Queued` | `QueuedQueueItemIDs` 非空，`ActiveQueueItemID == ""` | 有待派发远端输入 |
 | `E2 Dispatching` | `ActiveQueueItemID` 指向 `dispatching` | prompt 已发给 wrapper，turn 尚未建立 |
 | `E3 Running` | `ActiveQueueItemID` 指向 `running` | turn 已进入执行 |
-| `E4 PausedForLocal` | `DispatchMode=paused_for_local` | 当前 surface 的远端派发被暂停；现有来源包括本地 VS Code 活动，以及 daemon 显式发起的 standalone Codex 升级暂停 |
+| `E4 PausedForLocal` | `DispatchMode=paused_for_local` | 当前 surface 的远端派发被暂停；现有来源包括本地 VS Code 活动，以及 daemon 显式发起的 standalone Codex 升级暂停。后者只作用于真正依赖 standalone Codex 的 surface |
 | `E5 HandoffWait` | `DispatchMode=handoff_wait` | 本地刚结束，等待短窗口后恢复远端队列 |
 | `E6 Abandoning` | `Abandoning=true` | surface 已放弃接管，等待已有 turn 收尾后最终 detach |
 
@@ -278,7 +278,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `G5 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
 | `G6 AbandoningGate` | `Abandoning=true` | 只有 `/status`、`/autowhip` 与 `/recovery` 继续正常，其余动作被挡 |
 | `G7 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到“不能安全自动收口”的 VS Code 兼容性问题 | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发必要的修复/失败反馈；legacy `editor_settings` 若已存在可接管入口，会先静默自动迁到 `managed_shim`，只有缺 target、自动迁移失败或 stale managed shim 时才真正停在这个 gate。若这张提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡，否则保持独立 runtime 提示 |
-| `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 非空 | 这是 daemon 顶层的独立 upgrade gate，不复用现有 `codex-remote` owner-flow。发起 surface 的普通输入会被直接挡住；其它 attached surface 的文本/图片/文件会先按原路写入队列，再返回“升级完成后执行”的 notice，并保持 `DispatchMode=paused_for_local` 直到 upgrade runtime 显式恢复；非 queueable 命令/卡片动作当前仍直接拒绝 |
+| `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 非空 | 这是 daemon 顶层的独立 upgrade gate，不复用现有 `codex-remote` owner-flow。发起 surface 的普通输入会被直接挡住；其它真正依赖 standalone Codex 的 attached surface 会继续走“写入队列 + notice + `paused_for_local`”语义；VS Code surface / instance 当前完全排除在这条 gate 之外；非 queueable 命令/卡片动作当前仍直接拒绝 |
 
 补充说明：
 
@@ -1056,7 +1056,7 @@ E5 HandoffWait
 G0 None
   -- daemon startStandaloneCodexUpgrade(initiator surface) --> 发起 surface 进入 G10 StandaloneCodexUpgradeRunning
 
-E0/E1(other attached surface)
+E0/E1(other standalone-codex-backed surface)
   -- daemon startStandaloneCodexUpgrade --> E4 PausedForLocal
   -- 用户发送文本/图片/文件 --> 保持 E4；输入先按原 route 冻结进 queue，但不 dispatch
   -- daemon finishStandaloneCodexUpgrade(success/failure) --> E0 Idle 或 E1 Queued，并继续 dispatchNext
@@ -1065,9 +1065,10 @@ E0/E1(other attached surface)
 补充说明：
 
 1. 这是 daemon 级全局事务，不要求其它 surface 先收到主动广播。
-2. 非发起 surface 当前只有在用户真的尝试输入时，才会看到“当前正在升级 Codex，这条输入会在升级完成后执行”的 notice。
-3. 发起 surface 不会走“排队后恢复”语义；它的普通输入会被直接挡住，避免把 owner-flow 和普通 turn 混在一起。
-4. 这条路径当前只把 `ActionTextMessage`、`ActionImageMessage`、`ActionFileMessage` 当作 queueable input；其它 slash/menu/card 动作仍直接拒绝。
+2. 这里只覆盖真正依赖 standalone Codex 的 surface；attached VS Code surface、以及 detached 的 `vscode` mode surface 当前不会因为这条事务被 pause / busy / restart。
+3. 非发起 surface 当前只有在用户真的尝试输入时，才会看到“当前正在升级 Codex，这条输入会在升级完成后执行”的 notice。
+4. 发起 surface 不会走“排队后恢复”语义；它的普通输入会被直接挡住，避免把 owner-flow 和普通 turn 混在一起。
+5. 这条路径当前只把 `ActionTextMessage`、`ActionImageMessage`、`ActionFileMessage` 当作 queueable input；其它 slash/menu/card 动作仍直接拒绝。
 
 ### 5.4 daemon 重启恢复与 headless 生命周期
 
@@ -1303,7 +1304,7 @@ transport degraded retained attachment
 | `G4 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片/文件、revoke/reaction；`/workspace` 命令族、`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
 | `G5 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片/文件、`/workspace` 命令族、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成或取消；如需查看状态，可继续使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
 | `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
-| `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 运行中时，会先于现有 self-upgrade owner-flow gate 处理输入。发起 surface 只允许 `/status`、`/debug`、`/upgrade`、reaction/recall 与后续 standalone-codex-upgrade owner-flow 动作；其它普通输入直接返回 `codex_upgrade_running`。其它 attached surface 的文本/图片/文件会先通过既有 ingress 路径入队，但 dispatch 维持暂停，并追加“升级完成后执行”的同 code notice；非 queueable 命令/卡片动作当前直接拒绝，不进入缓存 |
+| `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 运行中时，会先于现有 self-upgrade owner-flow gate 处理输入。发起 surface 只允许 `/status`、`/debug`、`/upgrade`、reaction/recall 与后续 standalone-codex-upgrade owner-flow 动作；其它普通输入直接返回 `codex_upgrade_running`。其它真正依赖 standalone Codex 的 attached surface 的文本/图片/文件会先通过既有 ingress 路径入队，但 dispatch 维持暂停，并追加“升级完成后执行”的同 code notice；VS Code surface / instance 当前完全跳过这条 gate，不进入 pause / queue-after-upgrade 语义；非 queueable 命令/卡片动作当前直接拒绝，不进入缓存 |
 | `G6 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G6` 一致：只允许 `/status`、`/autowhip`、`/recovery`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
 | `G7 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发必要的修复/失败反馈；legacy `editor_settings` 若能安全静默迁到 `managed_shim`，则不会长时间停在这条 gate。surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示 |
 

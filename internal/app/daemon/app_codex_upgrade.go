@@ -129,7 +129,7 @@ func (a *App) startStandaloneCodexUpgrade(ctx context.Context, req codexUpgradeS
 		TargetVersion:      targetVersion,
 		InitiatorSurface:   strings.TrimSpace(req.SurfaceSessionID),
 		InitiatorUserID:    strings.TrimSpace(req.ActorUserID),
-		RestartInstanceIDs: a.onlineInstanceIDsLocked(),
+		RestartInstanceIDs: a.affectedOnlineInstanceIDsLocked(),
 		PausedSurfaceIDs:   map[string]bool{},
 		StartedAt:          time.Now().UTC(),
 	}
@@ -225,7 +225,7 @@ func (a *App) pauseCodexUpgradeSurfacesLocked(tx *codexupgraderuntime.Transactio
 			continue
 		}
 		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
-		if surfaceID == "" || surfaceID == tx.InitiatorSurface {
+		if surfaceID == "" || surfaceID == tx.InitiatorSurface || !a.standaloneCodexUpgradeAffectsSurfaceLocked(surface) {
 			continue
 		}
 		a.service.PauseSurfaceDispatch(surfaceID)
@@ -238,11 +238,11 @@ func (a *App) nextCodexUpgradeIDLocked() string {
 	return fmt.Sprintf("codex-upgrade-%d", a.codexUpgradeRuntime.NextSeq)
 }
 
-func (a *App) onlineInstanceIDsLocked() []string {
+func (a *App) affectedOnlineInstanceIDsLocked() []string {
 	instances := a.service.Instances()
 	values := make([]string, 0, len(instances))
 	for _, inst := range instances {
-		if inst == nil || !inst.Online {
+		if inst == nil || !inst.Online || !standaloneCodexUpgradeAffectsInstance(inst) {
 			continue
 		}
 		values = append(values, inst.InstanceID)
@@ -254,7 +254,7 @@ func (a *App) onlineInstanceIDsLocked() []string {
 func (a *App) codexUpgradeBusyReasonsLocked(initiatorSurfaceID string) []codexUpgradeBusyReason {
 	var reasons []codexUpgradeBusyReason
 	for _, inst := range a.service.Instances() {
-		if inst == nil || !inst.Online {
+		if inst == nil || !inst.Online || !standaloneCodexUpgradeAffectsInstance(inst) {
 			continue
 		}
 		if strings.TrimSpace(inst.ActiveTurnID) != "" {
@@ -265,6 +265,9 @@ func (a *App) codexUpgradeBusyReasonsLocked(initiatorSurfaceID string) []codexUp
 		}
 	}
 	for _, pending := range a.service.PendingRemoteTurns() {
+		if !a.standaloneCodexUpgradeAffectsInstanceIDLocked(pending.InstanceID) {
+			continue
+		}
 		reasons = append(reasons, codexUpgradeBusyReason{
 			InstanceID: pending.InstanceID,
 			SurfaceID:  pending.SurfaceSessionID,
@@ -272,7 +275,7 @@ func (a *App) codexUpgradeBusyReasonsLocked(initiatorSurfaceID string) []codexUp
 		})
 	}
 	for _, surface := range a.service.Surfaces() {
-		if surface == nil {
+		if surface == nil || !a.standaloneCodexUpgradeAffectsSurfaceLocked(surface) {
 			continue
 		}
 		if reason := codexUpgradeSurfaceBusyReason(surface, initiatorSurfaceID); reason != "" {
