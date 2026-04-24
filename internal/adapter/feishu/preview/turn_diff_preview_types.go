@@ -18,19 +18,19 @@ type turnDiffPreviewArtifact struct {
 }
 
 type turnDiffPreviewFile struct {
-	Key         string                  `json:"key,omitempty"`
-	Name        string                  `json:"name,omitempty"`
-	OldPath     string                  `json:"oldPath,omitempty"`
-	NewPath     string                  `json:"newPath,omitempty"`
-	ChangeKind  string                  `json:"changeKind,omitempty"`
-	Binary      bool                    `json:"binary,omitempty"`
-	ParseStatus string                  `json:"parseStatus,omitempty"`
-	RawPatch    string                  `json:"rawPatch,omitempty"`
-	BeforeText  string                  `json:"beforeText,omitempty"`
-	AfterText   string                  `json:"afterText,omitempty"`
-	Stats       turnDiffPreviewStats    `json:"stats"`
-	Lines       []turnDiffPreviewLine   `json:"lines,omitempty"`
-	Hunks       []turnDiffPreviewHunk   `json:"hunks,omitempty"`
+	Key         string                `json:"key,omitempty"`
+	Name        string                `json:"name,omitempty"`
+	OldPath     string                `json:"oldPath,omitempty"`
+	NewPath     string                `json:"newPath,omitempty"`
+	ChangeKind  string                `json:"changeKind,omitempty"`
+	Binary      bool                  `json:"binary,omitempty"`
+	ParseStatus string                `json:"parseStatus,omitempty"`
+	RawPatch    string                `json:"rawPatch,omitempty"`
+	BeforeText  string                `json:"beforeText,omitempty"`
+	AfterText   string                `json:"afterText,omitempty"`
+	Stats       turnDiffPreviewStats  `json:"stats"`
+	Lines       []turnDiffPreviewLine `json:"lines,omitempty"`
+	Hunks       []turnDiffPreviewHunk `json:"hunks,omitempty"`
 }
 
 type turnDiffPreviewStats struct {
