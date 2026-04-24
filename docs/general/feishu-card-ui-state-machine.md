@@ -61,6 +61,7 @@
     - `inline_view`：命中 `SupportsFeishuSynchronousCurrentCardReplacement(action)` 且首个事件显式 `InlineReplaceCurrentCard`
     - `first_result_card`：命中同一同步条件后，从事件流里挑首张可投影卡直接作为 `ReplaceCurrentCard`；`inline_view` 严格命中失败时也允许回退到这条首结果替换
     - active picker 阻断保护：若事件流是 `path_picker_active` / `target_picker_processing` 这类阻断 notice，daemon 会保持当前卡不替换，避免把活跃 owner 子步骤误封成终态
+  - 命令菜单 launcher 的 handoff 当前也统一读取 `ResolveFeishuFrontstageActionContract(action).LauncherDisposition`：`keep` 保留菜单导航/配置页，`enter_terminal` 当前用于 stamped `/help`、`/status`，其余 stamped launcher 动作默认 `enter_owner`
   - 旧 bare continuation / command submission anchor 当前已退出 live 路径，不再承接 stamped current-card 回调
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
@@ -772,7 +773,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/surface_resume_state_test.go](../../internal/app/daemon/surface_resume_state_test.go)
   - 锁定 detached vscode surface 的 open prompt 在 exact reconnect 后，会继续 patch 回原 guidance card，而不是追加独立“恢复成功”卡
 - [internal/core/control/inline_replacement_test.go](../../internal/core/control/inline_replacement_test.go)
-  - 锁定 `ResolveFeishuFrontstageActionContract(...)` / `SupportsFeishuSynchronousCurrentCardReplacement(...)` 的当前 frontstage contract：`inline_view`、`first_result_card`、lifecycle freshness、以及 legacy bare continuation / submission anchor 已退出 live 路径
+  - 锁定 `ResolveFeishuFrontstageActionContract(...)` / `SupportsFeishuSynchronousCurrentCardReplacement(...)` 的当前 frontstage contract：`inline_view`、`first_result_card`、`LauncherDisposition` 分类、lifecycle freshness、以及 legacy bare continuation / submission anchor 已退出 live 路径
 - [internal/app/daemon/app_inbound_lifecycle_test.go](../../internal/app/daemon/app_inbound_lifecycle_test.go)
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)

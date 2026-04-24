@@ -116,7 +116,6 @@ type FeishuFrontstageActionContract struct {
 	RequiresViewSession       bool
 	ViewSessionStrategy       string
 	ContinuationDaemonCommand DaemonCommandKind
-	TerminalResult            bool
 	FollowupPolicy            FeishuFollowupPolicy
 }
 
@@ -173,7 +172,6 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 
 	switch action.Kind {
 	case ActionShowCommandHelp, ActionStatus, ActionStop, ActionNewThread, ActionFollowLocal, ActionDetach:
-		contract.TerminalResult = true
 		contract.FollowupPolicy = FeishuFollowupPolicy{
 			DropClasses: []FeishuFollowupHandoffClass{
 				FeishuFollowupHandoffClassNotice,

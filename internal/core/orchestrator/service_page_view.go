@@ -187,22 +187,15 @@ func (s *Service) markCommandLauncherEnteredBusiness(surface *state.SurfaceConso
 	bumpOwnerCardFlowRevision(flow)
 }
 
-func shouldSealCommandLauncherForAction(kind control.ActionKind) bool {
-	switch kind {
-	case control.ActionShowCommandMenu,
-		control.ActionShowCommandHelp,
-		control.ActionModeCommand,
-		control.ActionAutoWhipCommand,
-		control.ActionAutoContinueCommand,
-		control.ActionReasoningCommand,
-		control.ActionAccessCommand,
-		control.ActionPlanCommand,
-		control.ActionModelCommand,
-		control.ActionVerboseCommand,
-		control.ActionStatus:
-		return false
+func (s *Service) applyCommandLauncherDisposition(surface *state.SurfaceConsoleRecord, action control.Action) {
+	switch control.ResolveFeishuFrontstageActionContract(action).LauncherDisposition {
+	case control.FeishuFrontstageLauncherEnterOwner:
+		s.markCommandLauncherEnteredBusiness(surface, commandLauncherPhaseBusinessHandoff)
+	case control.FeishuFrontstageLauncherKeep,
+		control.FeishuFrontstageLauncherEnterTerminal:
+		return
 	default:
-		return true
+		return
 	}
 }
 

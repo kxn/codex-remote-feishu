@@ -381,9 +381,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, *intent))
 	}
-	if shouldSealCommandLauncherForAction(action.Kind) {
-		s.markCommandLauncherEnteredBusiness(surface, commandLauncherPhaseBusinessHandoff)
-	}
+	s.applyCommandLauncherDisposition(surface, action)
 	var events []eventcontract.Event
 	switch action.Kind {
 	case control.ActionListInstances:

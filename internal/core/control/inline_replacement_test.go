@@ -579,6 +579,38 @@ func TestResolveFeishuFrontstageActionContractFollowupPolicy(t *testing.T) {
 	}
 }
 
+func TestResolveFeishuFrontstageActionContractLauncherDisposition(t *testing.T) {
+	tests := []struct {
+		name string
+		kind ActionKind
+		want FeishuFrontstageLauncherDisposition
+	}{
+		{name: "menu stays launcher", kind: ActionShowCommandMenu, want: FeishuFrontstageLauncherKeep},
+		{name: "mode stays launcher", kind: ActionModeCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "autowhip stays launcher", kind: ActionAutoWhipCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "autocontinue stays launcher", kind: ActionAutoContinueCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "reasoning stays launcher", kind: ActionReasoningCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "access stays launcher", kind: ActionAccessCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "plan stays launcher", kind: ActionPlanCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "model stays launcher", kind: ActionModelCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "verbose stays launcher", kind: ActionVerboseCommand, want: FeishuFrontstageLauncherKeep},
+		{name: "help enters terminal", kind: ActionShowCommandHelp, want: FeishuFrontstageLauncherEnterTerminal},
+		{name: "status enters terminal", kind: ActionStatus, want: FeishuFrontstageLauncherEnterTerminal},
+		{name: "stop enters owner", kind: ActionStop, want: FeishuFrontstageLauncherEnterOwner},
+		{name: "new enters owner", kind: ActionNewThread, want: FeishuFrontstageLauncherEnterOwner},
+		{name: "follow enters owner", kind: ActionFollowLocal, want: FeishuFrontstageLauncherEnterOwner},
+		{name: "detach enters owner", kind: ActionDetach, want: FeishuFrontstageLauncherEnterOwner},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveFeishuFrontstageActionContract(Action{Kind: tt.kind}).LauncherDisposition
+			if got != tt.want {
+				t.Fatalf("LauncherDisposition(%v) = %q, want %q", tt.kind, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFeishuFollowupPolicyKeepClassOverridesDrop(t *testing.T) {
 	policy := FeishuFollowupPolicy{
 		DropClasses: []FeishuFollowupHandoffClass{
