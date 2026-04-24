@@ -93,7 +93,7 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 func FeishuCommandHelpPageView() FeishuPageView {
 	return BuildFeishuCommandStaticPageView(
 		"命令帮助",
-		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
+		"以下是当前主展示的 canonical slash command。",
 		false,
 	)
 }
@@ -146,7 +146,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupCurrentWork:
 		return commandRank(commandID, FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandStatus)
 	case FeishuCommandGroupSendSettings:
-		return commandRank(commandID, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose)
+		return commandRank(commandID, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue)
 	case FeishuCommandGroupSwitchTarget:
 		return commandRank(
 			commandID,
@@ -163,7 +163,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 			FeishuCommandFollow,
 		)
 	case FeishuCommandGroupCommonTools:
-		return commandRank(commandID, FeishuCommandAutoContinue, FeishuCommandRecovery, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
+		return commandRank(commandID, FeishuCommandAutoWhip, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
 	case FeishuCommandGroupMaintenance:
 		return commandRank(commandID, FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
 	default:

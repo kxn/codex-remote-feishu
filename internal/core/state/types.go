@@ -93,8 +93,8 @@ type QueueItemSourceKind string
 
 const (
 	QueueItemSourceUser         QueueItemSourceKind = "user"
+	QueueItemSourceAutoWhip     QueueItemSourceKind = "auto_whip"
 	QueueItemSourceAutoContinue QueueItemSourceKind = "auto_continue"
-	QueueItemSourceRecovery     QueueItemSourceKind = "recovery"
 )
 
 type ImageState string
@@ -115,26 +115,26 @@ const (
 	FileDiscarded FileState = "discarded"
 )
 
-type AutoContinueReason string
+type AutoWhipReason string
 
 const (
-	AutoContinueReasonIncompleteStop AutoContinueReason = "incomplete_stop"
+	AutoWhipReasonIncompleteStop AutoWhipReason = "incomplete_stop"
 )
 
-type RecoveryEpisodeState string
+type AutoContinueEpisodeState string
 
 const (
-	RecoveryEpisodeScheduled RecoveryEpisodeState = "scheduled"
-	RecoveryEpisodeRunning   RecoveryEpisodeState = "running"
-	RecoveryEpisodeCompleted RecoveryEpisodeState = "completed"
-	RecoveryEpisodeFailed    RecoveryEpisodeState = "failed"
-	RecoveryEpisodeCancelled RecoveryEpisodeState = "cancelled"
+	AutoContinueEpisodeScheduled AutoContinueEpisodeState = "scheduled"
+	AutoContinueEpisodeRunning   AutoContinueEpisodeState = "running"
+	AutoContinueEpisodeCompleted AutoContinueEpisodeState = "completed"
+	AutoContinueEpisodeFailed    AutoContinueEpisodeState = "failed"
+	AutoContinueEpisodeCancelled AutoContinueEpisodeState = "cancelled"
 )
 
-type RecoveryTriggerKind string
+type AutoContinueTriggerKind string
 
 const (
-	RecoveryTriggerKindUpstreamRetryableFailure RecoveryTriggerKind = "upstream_retryable_failure"
+	AutoContinueTriggerKindUpstreamRetryableFailure AutoContinueTriggerKind = "upstream_retryable_failure"
 )
 
 type SurfaceMessageKind string
@@ -252,8 +252,8 @@ type SurfaceConsoleRecord struct {
 	SurfaceMessages      map[string]*SurfaceMessageRecord
 	LastThreadHistory    *agentproto.ThreadHistoryRecord
 	LastSelection        *SelectionAnnouncementRecord
-	AutoContinue         AutoContinueRuntimeRecord
-	Recovery             RecoveryRuntimeRecord
+	AutoWhip       AutoWhipRuntimeRecord
+	AutoContinue   AutoContinueRuntimeRecord
 }
 
 type ExecCommandProgressEntryRecord struct {
@@ -338,9 +338,9 @@ type DynamicToolProgressGroupRecord struct {
 	Status   string
 }
 
-type AutoContinueRuntimeRecord struct {
+type AutoWhipRuntimeRecord struct {
 	Enabled                      bool
-	PendingReason                AutoContinueReason
+	PendingReason                AutoWhipReason
 	PendingDueAt                 time.Time
 	ConsecutiveCount             int
 	LastTriggeredTurnID          string
@@ -350,12 +350,12 @@ type AutoContinueRuntimeRecord struct {
 	SuppressOnce                 bool
 }
 
-type RecoveryRuntimeRecord struct {
+type AutoContinueRuntimeRecord struct {
 	Enabled bool
-	Episode *PendingRecoveryEpisodeRecord
+	Episode *PendingAutoContinueEpisodeRecord
 }
 
-type PendingRecoveryEpisodeRecord struct {
+type PendingAutoContinueEpisodeRecord struct {
 	EpisodeID                  string
 	InstanceID                 string
 	ThreadID                   string
@@ -367,8 +367,8 @@ type PendingRecoveryEpisodeRecord struct {
 	RootReplyToMessagePreview  string
 	NoticeMessageID            string
 	NoticeAppendSeq            int
-	State                      RecoveryEpisodeState
-	TriggerKind                RecoveryTriggerKind
+	State                      AutoContinueEpisodeState
+	TriggerKind                AutoContinueTriggerKind
 	AttemptCount               int
 	ConsecutiveDryFailureCount int
 	PendingDueAt               time.Time
@@ -505,7 +505,7 @@ type QueueItemRecord struct {
 	ID                    string
 	SurfaceSessionID      string
 	SourceKind            QueueItemSourceKind
-	RecoveryEpisodeID     string
+	AutoContinueEpisodeID     string
 	SourceMessageID       string
 	SourceMessagePreview  string
 	SourceMessageIDs      []string

@@ -1043,13 +1043,13 @@ func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
+func TestProjectSnapshotDisplaysAutoWhipSummary(t *testing.T) {
 	projector := NewProjector()
 	dueAt := time.Date(2026, 4, 9, 12, 0, 30, 0, time.FixedZone("CST", 8*3600))
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind: eventcontract.KindSnapshot,
 		Snapshot: &control.Snapshot{
-			AutoContinue: control.AutoContinueSummary{
+			AutoWhip: control.AutoWhipSummary{
 				Enabled:          true,
 				PendingReason:    "incomplete_stop",
 				PendingDueAt:     dueAt,
@@ -1062,20 +1062,20 @@ func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	}
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered,
-		"autowhip：开启，连续 2 次，等待继续补打一轮",
+		"AutoWhip：开启，连续 2 次，等待继续补打一轮",
 		"计划于 2026-04-09 12:00:30 CST",
 	) {
 		t.Fatalf("unexpected snapshot rendering: %q", rendered)
 	}
 }
 
-func TestProjectSnapshotDisplaysRecoverySummary(t *testing.T) {
+func TestProjectSnapshotDisplaysAutoContinueSummary(t *testing.T) {
 	projector := NewProjector()
 	dueAt := time.Date(2026, 4, 9, 12, 0, 30, 0, time.FixedZone("CST", 8*3600))
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind: eventcontract.KindSnapshot,
 		Snapshot: &control.Snapshot{
-			Recovery: control.RecoverySummary{
+			AutoContinue: control.AutoContinueSummary{
 				Enabled:                    true,
 				State:                      "scheduled",
 				PendingDueAt:               dueAt,
@@ -1089,7 +1089,7 @@ func TestProjectSnapshotDisplaysRecoverySummary(t *testing.T) {
 	}
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered,
-		"自动恢复：开启，等待第 3 次自动恢复，连续空失败 2 次",
+		"自动继续：开启，等待第 3 次自动继续，连续空失败 2 次",
 		"计划于 2026-04-09 12:00:30 CST",
 	) {
 		t.Fatalf("unexpected snapshot rendering: %q", rendered)

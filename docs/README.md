@@ -172,7 +172,7 @@
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
 - [plan-mode-feishu-support-design.md](./draft/plan-mode-feishu-support-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
-- [upstream-retryable-turn-recovery-design.md](./draft/upstream-retryable-turn-recovery-design.md)
+- [upstream-retryable-turn-autocontinue-design.md](./draft/upstream-retryable-turn-autocontinue-design.md)
 - [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-preview-renderer-architecture-redesign.md](./draft/web-preview-renderer-architecture-redesign.md)

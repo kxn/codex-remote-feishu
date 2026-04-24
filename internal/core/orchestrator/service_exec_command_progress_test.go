@@ -14,10 +14,10 @@ import (
 func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -94,10 +94,10 @@ func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.
 func TestRecordExecCommandProgressMessageStartSeqAdvancesActiveCardWindow(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -136,10 +136,10 @@ func TestRecordExecCommandProgressMessageStartSeqAdvancesActiveCardWindow(t *tes
 func TestExecCommandProgressQuietVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityQuiet
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -163,10 +163,10 @@ func TestExecCommandProgressQuietVerbositySuppressesCard(t *testing.T) {
 func TestExecCommandProgressNormalVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -190,10 +190,10 @@ func TestExecCommandProgressNormalVerbositySuppressesCard(t *testing.T) {
 func TestFileChangeProgressNormalVerbosityShowsSharedProgressCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "改一下文件", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -243,10 +243,10 @@ func TestFileChangeProgressNormalVerbosityShowsSharedProgressCard(t *testing.T) 
 func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "改一下文件", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -297,10 +297,10 @@ func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.
 func TestFileChangeProgressQuietVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityQuiet
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "改一下文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "改一下文件", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -326,10 +326,10 @@ func TestFileChangeProgressQuietVerbositySuppressesCard(t *testing.T) {
 func TestWebSearchProgressNormalVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "查一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "查一下", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -350,10 +350,10 @@ func TestWebSearchProgressNormalVerbositySuppressesCard(t *testing.T) {
 func TestWebSearchSharesExecCommandProgressCardInVerbose(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -399,10 +399,10 @@ func TestWebSearchSharesExecCommandProgressCardInVerbose(t *testing.T) {
 func TestWebSearchProgressQuietVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityQuiet
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "查一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "查一下", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -423,10 +423,10 @@ func TestWebSearchProgressQuietVerbositySuppressesCard(t *testing.T) {
 func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读两个文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "读两个文件", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -486,10 +486,10 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 func TestDynamicToolCallProgressNormalVerbositySuppressesCard(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "读文件", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -515,10 +515,10 @@ func TestDynamicToolCallProgressNormalVerbositySuppressesCard(t *testing.T) {
 func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "读文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "读文件", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -571,10 +571,10 @@ func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "先看看代码", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "先看看代码", "turn-1")
 
 	readStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -665,10 +665,10 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "按顺序看看", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "按顺序看看", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -746,10 +746,10 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "按顺序看一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "按顺序看一下", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -827,10 +827,10 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "看下两个文件", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "看下两个文件", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -881,10 +881,10 @@ func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing
 func TestCommandExecutionExplorationProgressRecognizesQuotedRgRegexSearch(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "搜一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "搜一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -967,10 +967,10 @@ func TestParseCommandExecutionExplorationActionRejectsPipelineSearch(t *testing.
 func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -1028,10 +1028,10 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -1068,10 +1068,10 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1106,10 +1106,10 @@ func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) 
 func TestReasoningSummaryProgressKeepsCheckingPhraseInEnglish(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1133,10 +1133,10 @@ func TestReasoningSummaryProgressKeepsCheckingPhraseInEnglish(t *testing.T) {
 func TestExecCommandProgressReasoningAnimationTicksSlowly(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 6, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1175,10 +1175,10 @@ func TestExecCommandProgressReasoningAnimationTicksSlowly(t *testing.T) {
 func TestReasoningSummaryProgressIsClearedBeforeOrdinaryProgressEntries(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1226,10 +1226,10 @@ func TestReasoningSummaryProgressIsClearedBeforeOrdinaryProgressEntries(t *testi
 func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1288,10 +1288,10 @@ func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testi
 func TestReasoningSummaryProgressClearsOnTurnCompletion(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,

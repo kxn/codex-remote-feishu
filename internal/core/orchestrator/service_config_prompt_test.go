@@ -361,18 +361,18 @@ func TestAccessCommandUpdatesSnapshotAndQueueFreeze(t *testing.T) {
 	}
 }
 
-func TestAutoContinueCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
+func TestAutoWhipCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 	now := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
 	enabled := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionAutoContinueCommand,
+		Kind:             control.ActionAutoWhipCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/autowhip on",
 	})
-	if len(enabled) != 1 || enabled[0].Notice == nil || enabled[0].Notice.Code != "auto_continue_enabled" {
+	if len(enabled) != 1 || enabled[0].Notice == nil || enabled[0].Notice.Code != "autowhip_enabled" {
 		t.Fatalf("expected enable notice, got %#v", enabled)
 	}
 
@@ -380,24 +380,24 @@ func TestAutoContinueCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected snapshot after enable")
 	}
-	if !snapshot.AutoContinue.Enabled {
-		t.Fatalf("expected auto-continue enabled in snapshot, got %#v", snapshot.AutoContinue)
+	if !snapshot.AutoWhip.Enabled {
+		t.Fatalf("expected autowhip enabled in snapshot, got %#v", snapshot.AutoWhip)
 	}
 
 	disabled := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionAutoContinueCommand,
+		Kind:             control.ActionAutoWhipCommand,
 		SurfaceSessionID: "surface-1",
 		Text:             "/autowhip off",
 	})
-	if len(disabled) != 1 || disabled[0].Notice == nil || disabled[0].Notice.Code != "auto_continue_disabled" {
+	if len(disabled) != 1 || disabled[0].Notice == nil || disabled[0].Notice.Code != "autowhip_disabled" {
 		t.Fatalf("expected disable notice, got %#v", disabled)
 	}
-	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.AutoContinue.Enabled {
-		t.Fatalf("expected auto-continue disabled in snapshot, got %#v", snapshot)
+	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.AutoWhip.Enabled {
+		t.Fatalf("expected autowhip disabled in snapshot, got %#v", snapshot)
 	}
 }
 
-func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
+func TestSurfaceSnapshotIncludesAutoWhipSummary(t *testing.T) {
 	now := time.Date(2026, 4, 9, 11, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
@@ -406,9 +406,9 @@ func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
 		QueueItems:       map[string]*state.QueueItemRecord{},
 		StagedImages:     map[string]*state.StagedImageRecord{},
 		PendingRequests:  map[string]*state.RequestPromptRecord{},
-		AutoContinue: state.AutoContinueRuntimeRecord{
+		AutoWhip: state.AutoWhipRuntimeRecord{
 			Enabled:             true,
-			PendingReason:       state.AutoContinueReasonIncompleteStop,
+			PendingReason:       state.AutoWhipReasonIncompleteStop,
 			PendingDueAt:        now.Add(30 * time.Second),
 			ConsecutiveCount:    2,
 			LastTriggeredTurnID: "turn-1",
@@ -419,51 +419,51 @@ func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected snapshot")
 	}
-	if !snapshot.AutoContinue.Enabled ||
-		snapshot.AutoContinue.PendingReason != string(state.AutoContinueReasonIncompleteStop) ||
-		!snapshot.AutoContinue.PendingDueAt.Equal(now.Add(30*time.Second)) ||
-		snapshot.AutoContinue.ConsecutiveCount != 2 ||
-		snapshot.AutoContinue.LastTriggeredTurnID != "turn-1" {
-		t.Fatalf("unexpected auto-continue snapshot: %#v", snapshot.AutoContinue)
+	if !snapshot.AutoWhip.Enabled ||
+		snapshot.AutoWhip.PendingReason != string(state.AutoWhipReasonIncompleteStop) ||
+		!snapshot.AutoWhip.PendingDueAt.Equal(now.Add(30*time.Second)) ||
+		snapshot.AutoWhip.ConsecutiveCount != 2 ||
+		snapshot.AutoWhip.LastTriggeredTurnID != "turn-1" {
+		t.Fatalf("unexpected autowhip snapshot: %#v", snapshot.AutoWhip)
 	}
 }
 
-func TestAutoContinueSchedulesIncompleteStopAfterRemoteTurn(t *testing.T) {
+func TestAutoWhipSchedulesIncompleteStopAfterRemoteTurn(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "我先去检查一下还有没有遗漏。", nil)
 
-	if surface.AutoContinue.PendingReason != state.AutoContinueReasonIncompleteStop {
-		t.Fatalf("expected incomplete-stop schedule, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.PendingReason != state.AutoWhipReasonIncompleteStop {
+		t.Fatalf("expected incomplete-stop schedule, got %#v", surface.AutoWhip)
 	}
-	if !surface.AutoContinue.PendingDueAt.Equal(now.Add(3 * time.Second)) {
-		t.Fatalf("expected first incomplete-stop backoff at +3s, got %#v", surface.AutoContinue.PendingDueAt)
+	if !surface.AutoWhip.PendingDueAt.Equal(now.Add(3 * time.Second)) {
+		t.Fatalf("expected first incomplete-stop backoff at +3s, got %#v", surface.AutoWhip.PendingDueAt)
 	}
-	if surface.AutoContinue.IncompleteStopCount != 1 || surface.AutoContinue.ConsecutiveCount != 1 {
-		t.Fatalf("expected first incomplete-stop counters, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.IncompleteStopCount != 1 || surface.AutoWhip.ConsecutiveCount != 1 {
+		t.Fatalf("expected first incomplete-stop counters, got %#v", surface.AutoWhip)
 	}
-	if surface.AutoContinue.PendingReplyToMessageID != "msg-1" {
-		t.Fatalf("expected pending reply anchor to stick to original message, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.PendingReplyToMessageID != "msg-1" {
+		t.Fatalf("expected pending reply anchor to stick to original message, got %#v", surface.AutoWhip)
 	}
 }
 
-func TestAutoContinueStopsWhenFinalTextContainsStopPhrase(t *testing.T) {
+func TestAutoWhipStopsWhenFinalTextContainsStopPhrase(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 	events := completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "这边都检查过了，老板不要再打我了，真的没有事情干了", nil)
 
-	if surface.AutoContinue.PendingReason != "" || surface.AutoContinue.ConsecutiveCount != 0 {
-		t.Fatalf("expected stop phrase to keep autowhip idle, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.PendingReason != "" || surface.AutoWhip.ConsecutiveCount != 0 {
+		t.Fatalf("expected stop phrase to keep autowhip idle, got %#v", surface.AutoWhip)
 	}
 	var sawCompletedNotice bool
 	for _, event := range events {
-		if event.Notice != nil && event.Notice.Code == "auto_continue_completed" {
+		if event.Notice != nil && event.Notice.Code == "autowhip_completed" {
 			sawCompletedNotice = event.Notice.Title == "AutoWhip" && event.Notice.Text == "Codex 已经把活干完了，老板放过他吧"
 		}
 	}
@@ -472,41 +472,41 @@ func TestAutoContinueStopsWhenFinalTextContainsStopPhrase(t *testing.T) {
 	}
 }
 
-func TestAutoContinueDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testing.T) {
+func TestAutoWhipDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 	completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "我再检查一轮，把剩下的事情都扫掉。", nil)
 
 	now = now.Add(3 * time.Second)
 	tickEvents := svc.Tick(now)
 	if surface.ActiveQueueItemID == "" {
-		t.Fatal("expected auto-continue item to dispatch after backoff")
+		t.Fatal("expected autowhip item to dispatch after backoff")
 	}
 	autoItem := surface.QueueItems[surface.ActiveQueueItemID]
 	if autoItem == nil {
-		t.Fatal("expected auto-continue queue item")
+		t.Fatal("expected autowhip queue item")
 	}
-	if autoItem.SourceKind != state.QueueItemSourceAutoContinue || autoItem.SourceMessageID != "" || autoItem.ReplyToMessageID != "msg-1" {
-		t.Fatalf("unexpected auto-continue queue item: %#v", autoItem)
+	if autoItem.SourceKind != state.QueueItemSourceAutoWhip || autoItem.SourceMessageID != "" || autoItem.ReplyToMessageID != "msg-1" {
+		t.Fatalf("unexpected autowhip queue item: %#v", autoItem)
 	}
 	var prompt *agentproto.Command
 	var sawWhipStartedNotice bool
 	for _, event := range tickEvents {
 		if event.PendingInput != nil {
-			t.Fatalf("expected auto-continue enqueue/dispatch to skip pending projection, got %#v", tickEvents)
+			t.Fatalf("expected autowhip enqueue/dispatch to skip pending projection, got %#v", tickEvents)
 		}
 		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
 			prompt = event.Command
 		}
-		if event.Notice != nil && event.Notice.Code == "auto_continue_whip_started" {
+		if event.Notice != nil && event.Notice.Code == "autowhip_started" {
 			sawWhipStartedNotice = event.Notice.Title == "AutoWhip" && event.Notice.Text == "Codex疑似偷懒,已抽打 1次"
 		}
 	}
-	if prompt == nil || len(prompt.Prompt.Inputs) != 1 || prompt.Prompt.Inputs[0].Text != autoContinuePromptText {
-		t.Fatalf("expected auto-continue prompt send, got %#v", tickEvents)
+	if prompt == nil || len(prompt.Prompt.Inputs) != 1 || prompt.Prompt.Inputs[0].Text != autoWhipPromptText {
+		t.Fatalf("expected autowhip prompt send, got %#v", tickEvents)
 	}
 	if !sawWhipStartedNotice {
 		t.Fatalf("expected whip start notice, got %#v", tickEvents)
@@ -520,7 +520,7 @@ func TestAutoContinueDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testin
 	})
 	for _, event := range started {
 		if event.PendingInput != nil {
-			t.Fatalf("expected auto-continue running state to skip pending projection, got %#v", started)
+			t.Fatalf("expected autowhip running state to skip pending projection, got %#v", started)
 		}
 	}
 
@@ -529,43 +529,43 @@ func TestAutoContinueDispatchSkipsPendingProjectionButKeepsReplyAnchor(t *testin
 	var sawCompletedNotice bool
 	for _, event := range finished {
 		if event.PendingInput != nil {
-			t.Fatalf("expected auto-continue completion to skip pending projection, got %#v", finished)
+			t.Fatalf("expected autowhip completion to skip pending projection, got %#v", finished)
 		}
 		if event.Block != nil && event.SourceMessageID == "msg-1" {
 			sawReplyBlock = true
 		}
-		if event.Notice != nil && event.Notice.Code == "auto_continue_completed" {
+		if event.Notice != nil && event.Notice.Code == "autowhip_completed" {
 			sawCompletedNotice = event.Notice.Title == "AutoWhip" && event.Notice.Text == "Codex 已经把活干完了，老板放过他吧"
 		}
 	}
 	if !sawReplyBlock {
-		t.Fatalf("expected final auto-continue reply to stay anchored under original message, got %#v", finished)
+		t.Fatalf("expected final autowhip reply to stay anchored under original message, got %#v", finished)
 	}
 	if !sawCompletedNotice {
-		t.Fatalf("expected completion notice after auto-continue decides there is no more work, got %#v", finished)
+		t.Fatalf("expected completion notice after autowhip decides there is no more work, got %#v", finished)
 	}
-	if !surface.AutoContinue.Enabled || surface.AutoContinue.PendingReason != "" || surface.AutoContinue.ConsecutiveCount != 0 {
-		t.Fatalf("expected successful auto-continue completion to reset runtime state, got %#v", surface.AutoContinue)
+	if !surface.AutoWhip.Enabled || surface.AutoWhip.PendingReason != "" || surface.AutoWhip.ConsecutiveCount != 0 {
+		t.Fatalf("expected successful autowhip completion to reset runtime state, got %#v", surface.AutoWhip)
 	}
 }
 
-func TestStopSuppressesNextAutoContinueSchedule(t *testing.T) {
+func TestStopSuppressesNextAutoWhipSchedule(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionStop,
 		SurfaceSessionID: "surface-1",
 	})
-	if !surface.AutoContinue.SuppressOnce {
-		t.Fatalf("expected /stop to suppress the next auto-continue scheduling attempt, got %#v", surface.AutoContinue)
+	if !surface.AutoWhip.SuppressOnce {
+		t.Fatalf("expected /stop to suppress the next autowhip scheduling attempt, got %#v", surface.AutoWhip)
 	}
 
 	completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "", "我再去核一遍，看看还有没有别的活。", nil)
-	if surface.AutoContinue.PendingReason != "" || !surface.AutoContinue.Enabled || surface.AutoContinue.SuppressOnce {
-		t.Fatalf("expected suppressed turn completion to leave auto-continue enabled but idle, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.PendingReason != "" || !surface.AutoWhip.Enabled || surface.AutoWhip.SuppressOnce {
+		t.Fatalf("expected suppressed turn completion to leave autowhip enabled but idle, got %#v", surface.AutoWhip)
 	}
 }
 

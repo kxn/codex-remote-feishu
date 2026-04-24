@@ -20,7 +20,7 @@ func (s *Service) RecordPageTrackingMessage(surfaceID, trackingKey, messageID st
 		s.RecordOwnerCardFlowMessage(surfaceID, trackingKey, messageID)
 		return
 	}
-	if episode := activeRecoveryEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == trackingKey {
+	if episode := activeAutoContinueEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == trackingKey {
 		episode.NoticeMessageID = messageID
 		if record := s.lookupSurfaceMessageRecord(surface, messageID); record != nil {
 			episode.NoticeAppendSeq = record.AppendSeq
@@ -48,7 +48,7 @@ func (s *Service) RecordSurfaceOutboundMessage(surfaceID, messageID string, kind
 		AppendSeq:        surface.SurfaceMessageSeq,
 		RecordedAt:       s.now().UTC(),
 	}
-	if episode := activeRecoveryEpisode(surface); episode != nil && episode.NoticeMessageID == messageID {
+	if episode := activeAutoContinueEpisode(surface); episode != nil && episode.NoticeMessageID == messageID {
 		episode.NoticeAppendSeq = surface.SurfaceMessageSeq
 	}
 }
@@ -72,7 +72,7 @@ func (s *Service) lookupSurfaceMessageRecord(surface *state.SurfaceConsoleRecord
 	return &copy
 }
 
-func recoveryEpisodeCanPatchTail(surface *state.SurfaceConsoleRecord, episode *state.PendingRecoveryEpisodeRecord) bool {
+func autoContinueEpisodeCanPatchTail(surface *state.SurfaceConsoleRecord, episode *state.PendingAutoContinueEpisodeRecord) bool {
 	if surface == nil || episode == nil {
 		return false
 	}

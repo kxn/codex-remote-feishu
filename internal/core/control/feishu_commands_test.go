@@ -55,11 +55,28 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
+func TestParseFeishuTextActionRecognizesAutoWhipCommand(t *testing.T) {
 	tests := []string{
 		"/autowhip",
 		"/autowhip on",
 		"/autowhip off",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionAutoWhipCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionAutoWhipCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
+	tests := []string{
 		"/autocontinue",
 		"/autocontinue on",
 		"/autocontinue off",
@@ -78,25 +95,17 @@ func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRecognizesRecoveryCommand(t *testing.T) {
-	tests := []string{
+func TestParseFeishuTextActionRejectsLegacyRecoveryAliases(t *testing.T) {
+	for _, input := range []string{
 		"/recovery",
 		"/recovery on",
 		"/recovery off",
 		"/autorecovery",
 		"/autorecovery on",
 		"/autorecovery off",
-	}
-	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
-		if !ok {
-			t.Fatalf("expected %q to be parsed", input)
-		}
-		if action.Kind != ActionRecoveryCommand {
-			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionRecoveryCommand)
-		}
-		if action.Text != input {
-			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+	} {
+		if action, ok := ParseFeishuTextAction(input); ok {
+			t.Fatalf("expected %q to be rejected, got %#v", input, action)
 		}
 	}
 }
@@ -296,7 +305,7 @@ func TestFeishuRecommendedMenusStayInSuggestedOrder(t *testing.T) {
 	}
 }
 
-func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
+func TestFeishuCommandCatalogsIncludeAutoWhip(t *testing.T) {
 	for _, catalog := range []FeishuPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
 		found := false
 		for _, section := range catalog.Sections {
@@ -314,20 +323,20 @@ func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
 	}
 }
 
-func TestFeishuCommandCatalogsIncludeRecovery(t *testing.T) {
+func TestFeishuCommandCatalogsIncludeAutoContinue(t *testing.T) {
 	for _, catalog := range []FeishuPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
 		found := false
 		for _, section := range catalog.Sections {
 			for _, entry := range section.Entries {
 				for _, command := range entry.Commands {
-					if command == "/recovery" {
+					if command == "/autocontinue" {
 						found = true
 					}
 				}
 			}
 		}
 		if !found {
-			t.Fatalf("catalog %#v does not include /recovery", catalog.Title)
+			t.Fatalf("catalog %#v does not include /autocontinue", catalog.Title)
 		}
 	}
 }

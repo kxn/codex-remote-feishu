@@ -39,10 +39,10 @@ func ActionKindForFeishuCommandID(commandID string) (ActionKind, bool) {
 		return ActionShowHistory, true
 	case FeishuCommandMode:
 		return ActionModeCommand, true
+	case FeishuCommandAutoWhip:
+		return ActionAutoWhipCommand, true
 	case FeishuCommandAutoContinue:
 		return ActionAutoContinueCommand, true
-	case FeishuCommandRecovery:
-		return ActionRecoveryCommand, true
 	case FeishuCommandReasoning:
 		return ActionReasoningCommand, true
 	case FeishuCommandAccess:
@@ -98,10 +98,10 @@ func canonicalSlashForActionKind(kind ActionKind) string {
 		return "/history"
 	case ActionModeCommand:
 		return "/mode"
-	case ActionAutoContinueCommand:
+	case ActionAutoWhipCommand:
 		return "/autowhip"
-	case ActionRecoveryCommand:
-		return "/recovery"
+	case ActionAutoContinueCommand:
+		return "/autocontinue"
 	case ActionReasoningCommand:
 		return "/reasoning"
 	case ActionAccessCommand:

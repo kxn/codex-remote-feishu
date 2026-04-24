@@ -531,7 +531,7 @@ func TestHandleGatewayActionReplacesCardOwnedParameterApply(t *testing.T) {
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
 	result := app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:             control.ActionAutoContinueCommand,
+		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
@@ -610,7 +610,7 @@ func TestHandleGatewayActionKeepsTypedParameterApplyAppendOnly(t *testing.T) {
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
 	result := app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:             control.ActionAutoContinueCommand,
+		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",

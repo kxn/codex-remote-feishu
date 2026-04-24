@@ -1,8 +1,8 @@
-# 上游可重试失败自动恢复设计（草稿）
+# 上游可重试失败 AutoContinue 设计（草稿）
 
 > Type: `draft`
 > Updated: `2026-04-24`
-> Summary: 固化 turn 因上游推理异常中断后的自动恢复方案，明确它与 `autowhip` 的拆分边界，并记录当前讨论对 `/stop`、Codex 内部 retry 与错误归因的判断。
+> Summary: 固化 turn 因上游推理异常中断后的 `AutoContinue` 方案，明确它与 `autowhip` 的拆分边界，并记录当前讨论对 `/stop`、Codex 内部 retry 与错误归因的判断。
 
 ## 0. 文档定位
 
@@ -34,7 +34,7 @@
 
 ### 2.1 `autowhip` 现在已经承接了两条不同语义
 
-当前 surface 上的 `AutoContinueRuntimeRecord` 同时承接两条完全不同的触发链：
+当前 surface 上的 `AutoWhipRuntimeRecord` 同时承接两条完全不同的触发链：
 
 1. `incomplete_stop`
    - turn 正常结束，但最终文本不包含“老板不要再打我了，真的没有事情干了”这句停止口令；
@@ -157,7 +157,7 @@
 
 只要继续复用这些名字，后面的实现就很容易又滑回原来的混合语义：
 
-- `AutoContinueRuntimeRecord`
+- `AutoWhipRuntimeRecord`
 - `AutoContinueReasonRetryableFailure`
 - `RetryableFailureCount`
 - `AutoWhip` notice 文案
@@ -498,7 +498,7 @@ v1 暂不纳入：
 2. 它不会抢在自动恢复前执行。
 3. 自动恢复应先尝试把前一轮未完成任务续上。
 
-因此这里不再采用“用户新消息一出现就取消 auto-recovery”的方案。
+因此这里不再采用“用户新消息一出现就取消 autoContinue”的方案。
 
 #### 5.10.5 与 `/stop` 的冲突
 
@@ -530,7 +530,7 @@ v1 暂不纳入：
 
 1. `Root Reply Anchor`
 2. `Attempt Trigger Kind`
-3. `Recovery Notice Message ID`
+3. `AutoContinue Notice Message ID`
 
 前者服务产品展示，后两者服务追溯和调试。
 
@@ -596,19 +596,19 @@ v1 暂不纳入：
 
 ## 7. 建议的数据与状态迁移方向
 
-为了避免继续在 `AutoContinueRuntimeRecord` 上打补丁，建议最终形态至少做到：
+为了避免继续在 `AutoWhipRuntimeRecord` 上打补丁，建议最终形态至少做到：
 
-1. `AutoContinueRuntimeRecord`
+1. `AutoWhipRuntimeRecord`
    - 只保留 `autowhip` 自己需要的运行时状态；
    - 去掉 `retryable_failure` 相关字段与计数。
-2. 新增独立的恢复 runtime record
-   - 承接“上游失败自动恢复”的 enable、pending、attempt、root reply anchor、owner notice card 等状态。
+2. 新增独立的 autoContinue runtime record
+   - 承接“上游失败自动继续”的 enable、pending、attempt、root reply anchor、owner notice card 等状态。
 3. active remote turn binding
    - 新增 `interrupt_requested` 类字段，用于 turn 终止原因分类。
-4. 自动恢复 episode 运行时
-   - 建议显式区分 `Root Reply Anchor` 与 `Recovery Notice Message ID`，避免把提示卡错当成后续业务消息的 reply 父节点。
+4. autoContinue episode 运行时
+   - 建议显式区分 `Root Reply Anchor` 与 `AutoContinue Notice Message ID`，避免把提示卡错当成后续业务消息的 reply 父节点。
 
-如果这一步不做，只把现有 `AutoContinueRuntimeRecord` 再加几个字段，后面大概率还会再次回到“到底这算 autowhip 还是算错误恢复”的混乱状态。
+如果这一步不做，只把现有 `AutoWhipRuntimeRecord` 再加几个字段，后面大概率还会再次回到“到底这算 autowhip 还是算错误恢复”的混乱状态。
 
 ## 8. 观察性要求
 
@@ -630,7 +630,7 @@ v1 暂不纳入：
    - due at
    - chosen prompt kind
    - root reply anchor
-   - recovery notice message id
+   - autoContinue notice message id
 4. 明确记录“为什么没有恢复”：
    - completed
    - user interrupted
@@ -777,17 +777,17 @@ v1 暂不纳入：
 
 这样 patch 资格就变成显式状态，而不是“技术上能 patch，所以就继续 patch”。
 
-### 10.4 自动恢复应建独立 `PendingRecoveryEpisode`
+### 10.4 自动继续应建独立 `PendingAutoContinueEpisode`
 
 继续沿用普通 queue item 的问题已经很明确：
 
 1. FIFO 天然不表达“恢复优先于普通消息”
 2. `completeRemoteTurn(...)` 当前顺序先失败、再 dispatch、最后才 `maybeScheduleAutoContinue...`
-3. 继续借 `QueueItemSourceAutoContinue` 伪装，会让恢复逻辑长期被普通队列语义绑架
+3. 继续借 `QueueItemSourceAutoWhip` 伪装，会让恢复逻辑长期被普通队列语义绑架
 
 因此建议显式新增 `PendingRecoveryEpisode`，挂在 surface 级 runtime，下游 dispatch 顺序改成：
 
-1. 先看 recovery lane
+1. 先看 autoContinue lane
 2. 再看普通 queue
 
 建议 episode 至少承载：
@@ -810,7 +810,7 @@ v1 暂不纳入：
 - 恢复优先级
 - 恢复状态展示
 - 恢复 backoff
-- `/stop` 对 recovery 的终止
+- `/stop` 对 autoContinue 的终止
 
 才不需要继续借 `autowhip` 或普通 queue 做兼容式表达。
 
@@ -836,11 +836,11 @@ v1 暂不纳入：
 2. `finalizeRemoteTurnOutcome(...)`
    - 再根据 `TerminalCause` 决定：
      - completed
-     - enter recovery
+     - enter autoContinue
      - final failure
      - user interrupted
 
-只有明确不进入 recovery 时，才发最终失败答复。
+只有明确不进入 autoContinue 时，才发最终失败答复。
 
 ### 10.6 当前已达到可开工状态
 
@@ -877,17 +877,17 @@ v1 暂不纳入：
 本 issue 进入实现后，允许且预期出现的现有行为变化包括：
 
 1. 上游可重试失败不再直接走旧 `autowhip.retryable_failure` notice / 计数 / backoff
-2. 自动恢复开启且实际进入 recovery 时，不再先外发一张终局红色失败卡，再补恢复卡
-3. 恢复状态卡会成为单次 episode 的唯一状态卡，并受 tail-only patch gate 约束
-4. 恢复链路里被本单接管的 turn-owned 业务输出，会显式消费 `Root Reply Anchor`，不再让恢复提示卡 message id 抢走父锚点
+2. 自动继续开启且实际进入 autoContinue 时，不再先外发一张终局红色失败卡，再补提示卡
+3. autoContinue 状态卡会成为单次 episode 的唯一状态卡，并受 tail-only patch gate 约束
+4. autoContinue 链路里被本单接管的 turn-owned 业务输出，会显式消费 `Root Reply Anchor`，不再让 autoContinue 提示卡 message id 抢走父锚点
 
 本 issue 当前不要求同步完成的事情：
 
 1. 把全仓库所有既有 top-level business 卡统一翻成 reply lane
-2. 把 relay / wrapper / daemon / instance 侧所有可恢复错误面并入 recovery
+2. 把 relay / wrapper / daemon / instance 侧所有可恢复错误面并入 autoContinue
 3. 在同一轮里顺手重构所有 attention 相关策略
 
 也就是说：
 
-- 这单会把 recovery 相关结构收干净
+- 这单会把 autoContinue 相关结构收干净
 - 但不会借题发挥，把所有历史车道产品语义一次性重写

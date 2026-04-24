@@ -86,7 +86,7 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 	prevThreadID := surface.SelectedThreadID
 	prevRouteMode := surface.RouteMode
 	if prevThreadID != threadID || prevRouteMode != routeMode {
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 	}
 	s.releaseSurfaceThreadClaim(surface)
 	if !s.claimThread(surface, inst, threadID) {
@@ -134,7 +134,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	} else {
 		events = append(events, s.discardDrafts(surface)...)
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 		clearSurfaceRequestCapture(surface)
 		clearSurfaceRequests(surface)
 		s.clearPreparedNewThread(surface)
@@ -372,7 +372,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	} else {
 		events = append(events, s.discardDrafts(surface)...)
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 		clearSurfaceRequestCapture(surface)
 		clearSurfaceRequests(surface)
 		s.clearPreparedNewThread(surface)

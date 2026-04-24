@@ -221,10 +221,10 @@ func rejectedInboundIntentLabel(intent control.FeishuUIIntent) (label, command s
 		return "打开命令菜单", "/menu"
 	case control.FeishuUIIntentShowModeCatalog:
 		return "查看模式设置", "/mode"
-	case control.FeishuUIIntentShowAutoContinueCatalog:
+	case control.FeishuUIIntentShowAutoWhipCatalog:
 		return "查看 AutoWhip 设置", "/autowhip"
-	case control.FeishuUIIntentShowRecoveryCatalog:
-		return "查看自动恢复设置", "/recovery"
+	case control.FeishuUIIntentShowAutoContinueCatalog:
+		return "查看自动继续设置", "/autocontinue"
 	case control.FeishuUIIntentShowReasoningCatalog:
 		return "查看推理强度设置", "/reasoning"
 	case control.FeishuUIIntentShowAccessCatalog:

@@ -42,7 +42,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 		}
 		discarded := countPendingDrafts(surface)
 		events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到新会话待命状态，之前的提案计划已失效。")
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 		events = append(events, s.discardDrafts(surface)...)
 		surface.PreparedAt = s.now()
 		if discarded == 0 {
@@ -62,7 +62,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 	}
 	discarded := countPendingDrafts(surface)
 	events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到新会话待命状态，之前的提案计划已失效。")
-	clearRecoveryRuntime(surface)
+	clearAutoContinueRuntime(surface)
 	events = append(events, s.discardDrafts(surface)...)
 	prevThreadID := surface.SelectedThreadID
 	prevRouteMode := surface.RouteMode
@@ -578,12 +578,12 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []eventcontra
 			Text:     "已向当前运行中的 turn 发送停止请求。",
 			ThemeKey: "system",
 		}
-	} else if episode := activeRecoveryEpisode(surface); episode != nil && episode.State == state.RecoveryEpisodeScheduled {
-		events = append(events, s.cancelRecoveryEpisode(surface)...)
+	} else if episode := activeAutoContinueEpisode(surface); episode != nil && episode.State == state.AutoContinueEpisodeScheduled {
+		events = append(events, s.cancelAutoContinueEpisode(surface)...)
 		notice = control.Notice{
-			Code:     "recovery_stopped",
-			Title:    "已停止自动恢复",
-			Text:     "已停止等待中的自动恢复。",
+			Code:     "autocontinue_stopped",
+			Title:    "已停止自动继续",
+			Text:     "已停止等待中的自动继续。",
 			ThemeKey: "system",
 		}
 	} else if surface.ActiveQueueItemID != "" {

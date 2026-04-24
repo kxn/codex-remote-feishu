@@ -14,8 +14,8 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		ActorUserID:      surface.ActorUserID,
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
 		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
+		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
-		Recovery:         snapshotRecoverySummary(surface),
 	}
 	snapshot.Gate = s.snapshotGateSummary(surface)
 	if pending := surface.PendingHeadless; pending != nil {
@@ -130,27 +130,27 @@ func snapshotAttachmentObjectType(mode state.ProductMode, inst *state.InstanceRe
 	}
 }
 
+func snapshotAutoWhipSummary(surface *state.SurfaceConsoleRecord) control.AutoWhipSummary {
+	if surface == nil {
+		return control.AutoWhipSummary{}
+	}
+	return control.AutoWhipSummary{
+		Enabled:             surface.AutoWhip.Enabled,
+		PendingReason:       string(surface.AutoWhip.PendingReason),
+		PendingDueAt:        surface.AutoWhip.PendingDueAt,
+		ConsecutiveCount:    surface.AutoWhip.ConsecutiveCount,
+		LastTriggeredTurnID: surface.AutoWhip.LastTriggeredTurnID,
+	}
+}
+
 func snapshotAutoContinueSummary(surface *state.SurfaceConsoleRecord) control.AutoContinueSummary {
 	if surface == nil {
 		return control.AutoContinueSummary{}
 	}
-	return control.AutoContinueSummary{
-		Enabled:             surface.AutoContinue.Enabled,
-		PendingReason:       string(surface.AutoContinue.PendingReason),
-		PendingDueAt:        surface.AutoContinue.PendingDueAt,
-		ConsecutiveCount:    surface.AutoContinue.ConsecutiveCount,
-		LastTriggeredTurnID: surface.AutoContinue.LastTriggeredTurnID,
+	summary := control.AutoContinueSummary{
+		Enabled: surface.AutoContinue.Enabled,
 	}
-}
-
-func snapshotRecoverySummary(surface *state.SurfaceConsoleRecord) control.RecoverySummary {
-	if surface == nil {
-		return control.RecoverySummary{}
-	}
-	summary := control.RecoverySummary{
-		Enabled: surface.Recovery.Enabled,
-	}
-	if episode := activeRecoveryEpisode(surface); episode != nil {
+	if episode := activeAutoContinueEpisode(surface); episode != nil {
 		summary.State = string(episode.State)
 		summary.PendingDueAt = episode.PendingDueAt
 		summary.AttemptCount = episode.AttemptCount

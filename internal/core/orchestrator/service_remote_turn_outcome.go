@@ -194,9 +194,9 @@ func (s *Service) observeRemoteTurnActivity(instanceID string, event agentproto.
 		return
 	}
 	binding.AnyOutputSeen = true
-	if binding.RecoveryEpisodeID != "" {
+	if binding.AutoContinueEpisodeID != "" {
 		if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
-			if episode := activeRecoveryEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == strings.TrimSpace(binding.RecoveryEpisodeID) {
+			if episode := activeAutoContinueEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == strings.TrimSpace(binding.AutoContinueEpisodeID) {
 				episode.CurrentAttemptOutputSeen = true
 			}
 		}

@@ -16,10 +16,10 @@ func BuildFeishuCommandConfigPageView(view FeishuCatalogConfigView) FeishuPageVi
 	switch strings.TrimSpace(view.CommandID) {
 	case FeishuCommandMode:
 		return modePageViewFromCommandConfigView(view)
+	case FeishuCommandAutoWhip:
+		return autoWhipPageViewFromCommandConfigView(view)
 	case FeishuCommandAutoContinue:
 		return autoContinuePageViewFromCommandConfigView(view)
-	case FeishuCommandRecovery:
-		return recoveryPageViewFromCommandConfigView(view)
 	case FeishuCommandReasoning:
 		return reasoningPageViewFromCommandConfigView(view)
 	case FeishuCommandAccess:
@@ -50,8 +50,8 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	}})
 }
 
-func autoContinuePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
-	def, _ := FeishuCommandDefinitionByID(FeishuCommandAutoContinue)
+func autoWhipPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandAutoWhip)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
@@ -65,8 +65,8 @@ func autoContinuePageViewFromCommandConfigView(view FeishuCatalogConfigView) Fei
 	}})
 }
 
-func recoveryPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
-	def, _ := FeishuCommandDefinitionByID(FeishuCommandRecovery)
+func autoContinuePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandAutoContinue)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {

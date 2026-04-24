@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-24`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动恢复从 `autowhip` 中拆成独立 `recovery` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；同时 standalone Codex 升级事务现在只会挂起真正依赖 standalone Codex 的非发起 surface，VS Code surface / instance 不再被这条事务一起暂停或重启；细节见正文。
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；同时 standalone Codex 升级事务现在只会挂起真正依赖 standalone Codex 的非发起 surface，VS Code surface / instance 不再被这条事务一起暂停或重启；细节见正文。
 
 ## 1. 文档定位
 
@@ -276,7 +276,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `G3 RequestCapture` | `ActiveRequestCapture != nil` | 下一条普通文本会被当成拒绝反馈 |
 | `G4 PathPicker` | 当前 surface 的 active path picker runtime 非空 | 当前存在一个仍有效的飞书路径选择器；core 只关心“gate 是否存在、是否阻断 competing UI / route mutation、confirm/cancel 后如何交给 consumer”，不关心目录浏览细节 |
 | `G5 TargetPickerProcessing` | 当前 surface 的 active target picker 处于 Git processing | 当前存在一个仍有效的 Git 导入 owner-card 业务流；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 都会被挡住并提示等待完成、取消，或使用 `/status`；只保留 `/status`、reaction/recall 与 `target_picker_cancel` |
-| `G6 AbandoningGate` | `Abandoning=true` | 只有 `/status`、`/autowhip` 与 `/recovery` 继续正常，其余动作被挡 |
+| `G6 AbandoningGate` | `Abandoning=true` | 只有 `/status`、`/autowhip` 与 `/autocontinue` 继续正常，其余动作被挡 |
 | `G7 VSCodeCompatibilityBlocked` | `ProductMode=vscode`，surface detached，且本机检测到“不能安全自动收口”的 VS Code 兼容性问题 | daemon 不再自动恢复 exact instance，也不再发普通“请先打开 VS Code”提示，而是改发必要的修复/失败反馈；legacy `editor_settings` 若已存在可接管入口，会先静默自动迁到 `managed_shim`，只有缺 target、自动迁移失败或 stale managed shim 时才真正停在这个 gate。若这张提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡，否则保持独立 runtime 提示 |
 | `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 非空 | 这是 daemon 顶层的独立 upgrade gate，不复用现有 `codex-remote` owner-flow。发起 surface 的普通输入会被直接挡住；其它真正依赖 standalone Codex 的 attached surface 会继续走“写入队列 + notice + `paused_for_local`”语义；VS Code surface / instance 当前完全排除在这条 gate 之外；非 queueable 命令/卡片动作当前仍直接拒绝 |
 
@@ -310,13 +310,13 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 ### 3.6 autowhip overlay
 
-`AutoContinueRuntimeRecord` 当前不是新的 route state，而是 surface 上附加的一层运行时 overlay；用户可见命令面当前统一叫 `autowhip`：
+`AutoWhipRuntimeRecord` 当前不是新的 route state，而是 surface 上附加的一层运行时 overlay；用户可见命令面当前统一叫 `autowhip`：
 
 | 代号 | 条件 | 含义 |
 | --- | --- | --- |
-| `A0 Disabled` | `AutoContinue.Enabled=false` | 当前 surface 不做 autowhip |
-| `A1 EnabledIdle` | `AutoContinue.Enabled=true`，`PendingReason==""` | 已开启，但当前没有待触发的 autowhip |
-| `A2 Scheduled` | `AutoContinue.Enabled=true`，`PendingReason!= ""`，`PendingDueAt` 非空 | 已记录一次待触发 autowhip，等待 backoff 到期并再次过门禁 |
+| `A0 Disabled` | `AutoWhip.Enabled=false` | 当前 surface 不做 autowhip |
+| `A1 EnabledIdle` | `AutoWhip.Enabled=true`，`PendingReason==""` | 已开启，但当前没有待触发的 autowhip |
+| `A2 Scheduled` | `AutoWhip.Enabled=true`，`PendingReason!= ""`，`PendingDueAt` 非空 | 已记录一次待触发 autowhip，等待 backoff 到期并再次过门禁 |
 
 补充说明：
 
@@ -335,47 +335,47 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    2. 若 final assistant 文本命中收工口令，则不会继续 schedule / dispatch，而是立刻发一条 `AutoWhip` notice：`Codex 已经把活干完了，老板放过他吧`
    3. 若 `incomplete_stop` 已达到连续补打上限，则会回一条停止 notice，并清空当前 autowhip runtime
 
-### 3.7 recovery overlay
+### 3.7 autoContinue overlay
 
-`RecoveryRuntimeRecord` 当前也是 surface 上附加的一层运行时 overlay；用户可见命令面当前统一叫 `recovery`：
+`AutoContinueRuntimeRecord` 当前也是 surface 上附加的一层运行时 overlay；用户可见命令面当前统一叫 `autocontinue`：
 
 | 代号 | 条件 | 含义 |
 | --- | --- | --- |
-| `R0 Disabled` | `Recovery.Enabled=false` | 当前 surface 不做上游失败自动恢复 |
-| `R1 EnabledIdle` | `Recovery.Enabled=true`，`Episode==nil` | 已开启，但当前没有待恢复的 episode |
-| `R2 Scheduled` | `Recovery.Enabled=true`，`Episode.State=scheduled` | 已记录一次待恢复 episode，等待可派发或 backoff 到期 |
-| `R3 Running` | `Recovery.Enabled=true`，`Episode.State=running` | 当前正在执行一次自动恢复尝试 |
-| `R4 TerminalRetained` | `Recovery.Enabled=true`，`Episode.State=failed/cancelled` | 当前 episode 已停止；保留最后一次状态，等待用户切换目标、关闭 `/recovery`，或新的 episode 覆盖 |
+| `R0 Disabled` | `AutoContinue.Enabled=false` | 当前 surface 不做上游失败自动继续 |
+| `R1 EnabledIdle` | `AutoContinue.Enabled=true`，`Episode==nil` | 已开启，但当前没有待自动继续的 episode |
+| `R2 Scheduled` | `AutoContinue.Enabled=true`，`Episode.State=scheduled` | 已记录一次待自动继续 episode，等待可派发或 backoff 到期 |
+| `R3 Running` | `AutoContinue.Enabled=true`，`Episode.State=running` | 当前正在执行一次自动继续尝试 |
+| `R4 TerminalRetained` | `AutoContinue.Enabled=true`，`Episode.State=failed/cancelled` | 当前 episode 已停止；保留最后一次状态，等待用户切换目标、关闭 `/autocontinue`，或新的 episode 覆盖 |
 
 补充说明：
 
-1. recovery 只承接 `terminalCause=upstream_retryable_failure`：
+1. autoContinue 只承接 `terminalCause=upstream_retryable_failure`：
    1. `completed`、`user_interrupted`、`startup_failed`、`nonretryable_failure`、`transport_lost` 都不会进入这条 overlay。
-   2. translator 已把 `turn.start/thread.resume` 前置拒绝与真正 runtime failure 分开，因此 recovery 不会误接管“turn 还没真正开始”的失败。
-2. recovery queue item 是独立来源：
-   1. `SourceKind=recovery`
+   2. translator 已把 `turn.start/thread.resume` 前置拒绝与真正 runtime failure 分开，因此 autoContinue 不会误接管“turn 还没真正开始”的失败。
+2. autoContinue queue item 是独立来源：
+   1. `SourceKind=auto_continue`
    2. 真正 dispatch 前不会伪造用户 pending / typing / reaction
    3. 恢复 prompt 固定为系统生成的“请从中断处继续”
-3. recovery 的 dry-failure backoff 当前固定为：
+3. autoContinue 的 dry-failure backoff 当前固定为：
    1. 第 1、2 次连续空失败：立即重试
    2. 第 3 次：`2s`
    3. 第 4 次：`5s`
    4. 第 5 次：`10s`
    5. 第 6 次连续空失败：直接进入 `failed`
 4. 一旦某次恢复尝试出现任何输出，下一次再失败时会把 dry-failure 计数重置回“第一次立即重试”。
-5. recovery 调度优先级高于普通 queued item：
-   1. `dispatchNext(...)` 会先检查 pending recovery，再考虑普通 queue
+5. autoContinue 调度优先级高于普通 queued item：
+   1. `dispatchNext(...)` 会先检查 pending autoContinue，再考虑普通 queue
    2. 用户新消息与已排队消息会保留在原队列里，不会被丢弃
-6. recovery status card 与真正业务输出当前显式拆开：
+6. autoContinue 状态卡与真正业务输出当前显式拆开：
    1. 状态卡 reply 到原始用户消息
-   2. 后续恢复链路里的 final / request / plan / image / progress 继续沿用原始 reply anchor，不会改挂到 recovery 状态卡下面
+   2. 后续自动继续链路里的 final / request / plan / image / progress 继续沿用原始 reply anchor，不会改挂到状态卡下面
    3. 状态卡只允许在自己仍是当前 surface 尾消息时 patch；一旦后面出现更新消息，就冻结旧卡，后续状态改为 append 新卡
-7. recovery episode 当前不会跨目标长期悬挂：
+7. autoContinue episode 当前不会跨目标长期悬挂：
    1. `/detach`
    2. `/new`
    3. `/use` / `/follow` 等显式 route mutation
    4. 目标 thread 丢失或被强踢
-   以上路径都会清掉当前 episode，只保留 `/recovery` 的 enable 开关
+   以上路径都会清掉当前 episode，只保留 `/autocontinue` 的 enable 开关
 
 ## 4. 当前已实现的不变量
 
@@ -496,7 +496,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/autowhip`、`/recovery`、`/debug`、`/upgrade`、`/mode`、`/detach`、消息撤回、reaction。
+1. 允许：`/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
@@ -668,7 +668,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    2. pending reason
    3. pending due time
    4. consecutive count
-7. recovery runtime：
+7. autoContinue runtime：
    1. enabled / disabled
    2. current episode state
    3. pending due time
@@ -684,7 +684,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 5. 下一条文本是不是会先被 legacy `/model` capture 兼容态吃掉。
 6. 现在是执行中、排队中，还是被本地 VS Code 暂停。
 7. autowhip 当前是关闭、待触发，还是刚因 backoff 暂缓。
-8. recovery 当前是 idle、等待自动恢复，还是刚刚失败/取消。
+8. autoContinue 当前是 idle、等待自动继续，还是刚刚失败/取消。
 9. attachment 还在不在，以及当前是不是在等实例恢复。
 
 ### 4.12 `/mode` 是 surface 级 overlay，当前只负责记忆与清理切换
@@ -715,18 +715,18 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 2. `PendingHeadless` 期间 `/autowhip` 仍然允许，不会被顶层 gate 挡住。
 3. `Abandoning` 期间 `/autowhip` 也仍然允许，用户可以查看或关闭当前 surface 的 autowhip。
 4. daemon 重启后不恢复该开关；当前已接受这是内存态语义。
-5. slash/menu parser 当前仍兼容旧 `/autocontinue` / `autocontinue_*`，但 UI 与文档不再主动展示旧入口。
+5. 旧命令 alias 已移除；主展示与实际命令统一只保留 `/autowhip`。
 
-### 4.14 `/recovery` 是 surface 级、内存态、跨 route 可查询的恢复开关
+### 4.14 `/autocontinue` 是 surface 级、内存态、跨 route 可查询的自动继续开关
 
-当前 `/recovery` 不要求 surface 已 attach：
+当前 `/autocontinue` 不要求 surface 已 attach：
 
-1. detached surface 也可以直接 bare `/recovery` 查询并打开 on/off 参数卡；带参数时可直接切换。
-2. `PendingHeadless` 期间 `/recovery` 仍然允许，不会被顶层 gate 挡住。
-3. `Abandoning` 期间 `/recovery` 也仍然允许，用户可以查看或关闭当前 surface 的 recovery。
+1. detached surface 也可以直接 bare `/autocontinue` 查询并打开 on/off 参数卡；带参数时可直接切换。
+2. `PendingHeadless` 期间 `/autocontinue` 仍然允许，不会被顶层 gate 挡住。
+3. `Abandoning` 期间 `/autocontinue` 也仍然允许，用户可以查看或关闭当前 surface 的 autoContinue。
 4. daemon 重启后不恢复该开关；当前已接受这是内存态语义。
-5. slash/menu parser 当前兼容 `/autorecovery` / `autorecovery_*` alias，但 UI 与文档只主展示 `/recovery`。
-6. `/recovery` 只影响上游可重试失败自动恢复，不影响 `autowhip` 的 `incomplete_stop` 语义。
+5. 旧 `recovery` / `autorecovery` alias 已移除，UI、文档与解析器统一只保留 `/autocontinue`。
+6. `/autocontinue` 只影响上游可重试失败自动继续，不影响 `autowhip` 的 `incomplete_stop` 语义。
 
 ### 4.15 `/menu` 现在是阶段感知首页，不再是静态平铺目录
 
@@ -753,14 +753,14 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    2. `normal mode` 下旧 `/list`、`/use`、`/useall`、`/detach` 不再单列展示，只在新命令说明里保留 alias 解释。
    3. `vscode mode` 下帮助文本仍保留 `/list`、`/use`、`/useall` 三个独立入口。
 4. bare 参数命令现在统一走“快捷按钮 + 单字段表单”：
-   1. `参数设置`：`/reasoning`、`/model`、`/access`、`/plan`、`/verbose`
-   2. `常用工具 / 系统管理`：`/autowhip`、`/recovery`、`/mode`
+  1. `参数设置`：`/reasoning`、`/model`、`/access`、`/plan`、`/verbose`、`/autocontinue`
+  2. `常用工具 / 系统管理`：`/autowhip`、`/mode`
    3. 表单提交通过 card callback `page_submit` 直接回填结构化 `action_kind/field_name/action_arg_prefix`，再生成 canonical `Action.Text`。
 5. `常用工具` 分组里的 `/cron`，以及 `系统管理` 分组里的 `/debug`、`/upgrade` 当前仍然是直接触发 daemon 动作的命令入口，不属于参数卡表单。
 7. 二级分组当前通过卡片按钮 + breadcrumb 返回首页实现，不依赖飞书后台把整棵导航树都铺成静态菜单。
 8. 同上下文菜单导航当前已经支持“替换当前卡片”而不是追加新卡，但只限窄范围：
    1. `/menu` 首页 <-> 二级分组页
-   2. 从 `/menu` 分组页打开 bare `/mode`、`/autowhip`、`/recovery`、`/reasoning`、`/access`、`/plan`、`/model`、`/verbose`
+  2. 从 `/menu` 分组页打开 bare `/mode`、`/autowhip`、`/autocontinue`、`/reasoning`、`/access`、`/plan`、`/model`、`/verbose`
    3. bare 参数卡里的“返回上一层”
 9. 这条原地替换链路当前只在动作来自带 `CardDaemonLifecycleID` 的飞书卡片时启用：
    1. 网关通过 card callback 同步回包返回替换后的整张卡
@@ -772,7 +772,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 当前 autowhip queue item 仍沿用显式来源类型：
 
 1. `SourceKind=user`
-2. `SourceKind=auto_continue`
+2. `SourceKind=auto_whip`
 
 当前行为已经固定为：
 
@@ -784,22 +784,22 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    2. `ReplyToMessageID` 单独保留原用户消息锚点。
    3. 最终回复继续 reply 到原用户消息。
 
-### 4.17 recovery 调度走独立 queue lane，不借用状态卡 message id
+### 4.17 autoContinue 调度走独立 queue lane，不借用状态卡 message id
 
-当前 recovery queue item 也沿用显式来源类型：
+当前 autoContinue queue item 也沿用显式来源类型：
 
-1. `SourceKind=recovery`
+1. `SourceKind=auto_continue`
 2. `ReplyToMessageID` 固定保留原始用户消息锚点
-3. `RecoveryEpisodeID` 独立标识当前恢复 episode
+3. `AutoContinueEpisodeID` 独立标识当前 autoContinue episode
 
 当前行为已经固定为：
 
-1. recovery status card：
+1. autoContinue 状态卡：
    1. 首次发送显式走 reply-thread lane
    2. 当前只在自己仍是尾消息时允许 patch
    3. 一旦尾部已被后续消息占用，旧卡冻结；后续状态改为 append 新卡
-2. recovery item：
-   1. 不会把 recovery 状态卡自身的 `message_id` 反写成后续业务输出的 reply anchor
+2. autoContinue item：
+   1. 不会把 autoContinue 状态卡自身的 `message_id` 反写成后续业务输出的 reply anchor
    2. 真正的 final / request / plan / image / progress 输出仍 reply 到原用户消息
    3. dispatch 优先级高于普通 queued user item，但不会清空原队列
 
@@ -1016,14 +1016,14 @@ E3 Running
 17. 当前 backoff 固定为：
    1. `incomplete_stop`（文本未出现收工口令）: `3s -> 10s -> 30s`，最多 3 次
 18. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
-19. remote turn 在 `turn.completed` 时，若当前 item 命中 `terminalCause=upstream_retryable_failure`，则 recovery 会接管收口：
+19. remote turn 在 `turn.completed` 时，若当前 item 命中 `terminalCause=upstream_retryable_failure`，则 autoContinue 会接管收口：
    1. direct `turn_failed` notice 被抑制
-   2. surface 进入 recovery overlay，而不是 autowhip overlay
-   3. 若当前没有 gate/backoff 阻挡，会立刻开始第 1 次自动恢复
-20. `/stop` 对 recovery 有两条收口：
-   1. 若 recovery 还在 `scheduled`，直接取消等待中的 episode
-   2. 若 recovery attempt 已经 running，则 turn 收尾时按 `user_interrupted` 归因，不会继续 schedule 下一轮 recovery
-21. recovery 当前不会跨目标长期悬挂：
+   2. surface 进入 autoContinue overlay，而不是 autowhip overlay
+   3. 若当前没有 gate/backoff 阻挡，会立刻开始第 1 次自动继续
+20. `/stop` 对 autoContinue 有两条收口：
+   1. 若 autoContinue 还在 `scheduled`，直接取消等待中的 episode
+   2. 若 autoContinue attempt 已经 running，则 turn 收尾时按 `user_interrupted` 归因，不会继续 schedule 下一轮 autoContinue
+21. autoContinue 当前不会跨目标长期悬挂：
    1. `/detach`
    2. `/new`
    3. `/use` / `/follow`
@@ -1279,7 +1279,7 @@ transport degraded retained attachment
 | `/follow` | `normal`: 拒绝并提示迁移；`vscode`: 拒绝并提示先 `/list` | `normal`: 拒绝并提示迁移；`vscode`: 允许 | `normal`: 拒绝并提示迁移；`vscode`: 允许；若存在 compact/steer/queued/dispatching/running 则拒绝 route change | 允许 | 允许；若存在 compact/steer/queued/dispatching/running，则保持当前 thread 不切换 | 拒绝并提示迁移 |
 | `/mode` | 允许 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 | 允许；若有 compact/steer/queued/dispatching/running 则拒绝 |
 | `/autowhip` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
-| `/recovery` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| `/autocontinue` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/help` `/menu` `/debug` `/upgrade` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/steerall` | 允许；通常返回 noop 提示 | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 |
 | 文本 | 拒绝 | `normal`: 允许并隐式进入新会话首条输入；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
@@ -1289,7 +1289,7 @@ transport degraded retained attachment
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/detach` | 允许但通常只提示已 detached；normal mode 主展示命令是 `/workspace detach` | 允许；normal mode 主展示命令是 `/workspace detach` | 允许；normal mode 主展示命令是 `/workspace detach` | 允许；normal mode 主展示命令是 `/workspace detach` | 允许；normal mode 主展示命令是 `/workspace detach` | 允许；dispatching/running 时走 abandoning；normal mode 主展示命令是 `/workspace detach` |
-| bare `/mode` / bare `/autowhip` / bare `/recovery` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
+| bare `/mode` / bare `/autowhip` / bare `/autocontinue` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/model` `/reasoning` `/access` | 允许，但 detached 时只回恢复/参数卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/debug` `/upgrade` | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 |
 | 带参数 `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
@@ -1298,14 +1298,14 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/recovery`、`/debug`、`/upgrade`、`/mode`、`/detach`、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` / `/upgrade dev` 允许继续弹候选升级卡 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、revoke/reaction；其中 `/mode vscode` 会直接 kill 当前恢复流程并清空 headless restore 语义；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` / `/upgrade dev` 允许继续弹候选升级卡 |
 | `G2 PendingRequest` | 普通文本、图片、文件、`/new`、`/compact` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。通用 approval 现在覆盖 approval、`approval_command`、`approval_file_change`、`approval_network`，并直接按归一化后的 `availableDecisions` 响应，当前包含 `accept`、`acceptForSession`、`decline`、`cancel`；`request_user_input` 现在支持“单题自动推进”：按钮/表单先记录当前题答案，若仍有未完成题则 inline 刷到下一题；optional 题只能显式 `skip_optional`，最后一题答完后才会真正 seal 当前卡并提交。`cancel_turn` 会在清 gate 前先向当前 turn 发送 interrupt。顶层 `tool/requestUserInput` 与 `item` alias 继续共用这套状态机。`permissions_request_approval` 现在会投影成权限授予卡，支持“允许本次 / 本会话允许 / 拒绝”；`mcp_server_elicitation` 现在会按 mode 投影成“继续/拒绝/取消”卡，或带 schema 派生字段的单题表单卡。form 型 elicitation 同样是单题自动推进，optional 字段需要显式 `skip_optional`，底部 `cancel_request` 只取消当前 request、不打断 turn；两类卡都会在 `request_revision` 上做 same-daemon freshness 校验 |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、文件、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉 |
 | `G4 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片/文件、revoke/reaction；`/workspace` 命令族、`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
 | `G5 TargetPickerProcessing` | 只允许当前 Git 导入 owner-card 自己的 `target_picker_cancel`、`/status`、reaction/recall；普通文本/图片/文件、`/workspace` 命令族、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing Feishu card flow 当前都会被挡住，并提示“正在导入 Git 工作区，请等待完成或取消；如需查看状态，可继续使用 `/status`”；unauthorized 只回拒绝 notice，不清当前 gate；Git clone / prepare 完成、失败、取消或 flow 失效后会清 gate |
 | `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
 | `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 运行中时，会先于现有 self-upgrade owner-flow gate 处理输入。发起 surface 只允许 `/status`、`/debug`、`/upgrade`、reaction/recall 与后续 standalone-codex-upgrade owner-flow 动作；其它普通输入直接返回 `codex_upgrade_running`。其它真正依赖 standalone Codex 的 attached surface 的文本/图片/文件会先通过既有 ingress 路径入队，但 dispatch 维持暂停，并追加“升级完成后执行”的同 code notice；VS Code surface / instance 当前完全跳过这条 gate，不进入 pause / queue-after-upgrade 语义；非 queueable 命令/卡片动作当前直接拒绝，不进入缓存 |
-| `G6 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G6` 一致：只允许 `/status`、`/autowhip`、`/recovery`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
+| `G6 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G6` 一致：只允许 `/status`、`/autowhip`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
 | `G7 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发必要的修复/失败反馈；legacy `editor_settings` 若能安全静默迁到 `managed_shim`，则不会长时间停在这条 gate。surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示 |
 
 retained-offline overlay 额外规则：
@@ -1393,7 +1393,7 @@ retained-offline overlay 额外规则：
    10. `ActionShowHistory`
    11. `ActionHistoryPage`
    12. `ActionHistoryDetail`
-   13. bare `ActionModeCommand` / `ActionAutoContinueCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
+   13. bare `ActionModeCommand` / `ActionAutoWhipCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
 2. 这些动作只要命中 `InlineCardReplacementPolicy(...)`、来源卡片带有当前 daemon 的 lifecycle 标识、且首个 `UIEvent` 显式标记 `InlineReplaceCurrentCard`，就会先走原地替换；若同一动作后面还带异步命令（当前就是 `/history` 的 `thread.history.read`），daemon 仍会继续执行后续事件，不会因为同步 replace 而提前终止。
 3. `/help` 这类静态目录卡、apply 终态、request prompt 终态，以及 bare `/upgrade` / `/debug` 的状态卡与 upgrade 重启后结果 notice 等仍然沿用 append-only 消息语义，不在这轮同步回包范围内；当前例外是 `/upgrade latest` 一旦进入 daemon owner-card 流，会在同一张升级卡上继续 patch 到 confirm/running/restarting。
 

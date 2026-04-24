@@ -10,18 +10,18 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestRecoveryCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
+func TestAutoContinueCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 	now := time.Date(2026, 4, 9, 10, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
 	enabled := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionRecoveryCommand,
+		Kind:             control.ActionAutoContinueCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/recovery on",
+		Text:             "/autocontinue on",
 	})
-	if len(enabled) != 1 || enabled[0].Notice == nil || enabled[0].Notice.Code != "recovery_enabled" {
+	if len(enabled) != 1 || enabled[0].Notice == nil || enabled[0].Notice.Code != "autocontinue_enabled" {
 		t.Fatalf("expected enable notice, got %#v", enabled)
 	}
 
@@ -29,24 +29,24 @@ func TestRecoveryCommandUpdatesSnapshotWithoutAttach(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected snapshot after enable")
 	}
-	if !snapshot.Recovery.Enabled {
-		t.Fatalf("expected recovery enabled in snapshot, got %#v", snapshot.Recovery)
+	if !snapshot.AutoContinue.Enabled {
+		t.Fatalf("expected autocontinue enabled in snapshot, got %#v", snapshot.AutoContinue)
 	}
 
 	disabled := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionRecoveryCommand,
+		Kind:             control.ActionAutoContinueCommand,
 		SurfaceSessionID: "surface-1",
-		Text:             "/recovery off",
+		Text:             "/autocontinue off",
 	})
-	if len(disabled) != 1 || disabled[0].Notice == nil || disabled[0].Notice.Code != "recovery_disabled" {
+	if len(disabled) != 1 || disabled[0].Notice == nil || disabled[0].Notice.Code != "autocontinue_disabled" {
 		t.Fatalf("expected disable notice, got %#v", disabled)
 	}
-	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.Recovery.Enabled {
-		t.Fatalf("expected recovery disabled in snapshot, got %#v", snapshot)
+	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.AutoContinue.Enabled {
+		t.Fatalf("expected autocontinue disabled in snapshot, got %#v", snapshot)
 	}
 }
 
-func TestSurfaceSnapshotIncludesRecoverySummary(t *testing.T) {
+func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
 	now := time.Date(2026, 4, 9, 11, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
@@ -55,15 +55,15 @@ func TestSurfaceSnapshotIncludesRecoverySummary(t *testing.T) {
 		QueueItems:       map[string]*state.QueueItemRecord{},
 		StagedImages:     map[string]*state.StagedImageRecord{},
 		PendingRequests:  map[string]*state.RequestPromptRecord{},
-		Recovery: state.RecoveryRuntimeRecord{
+		AutoContinue: state.AutoContinueRuntimeRecord{
 			Enabled: true,
-			Episode: &state.PendingRecoveryEpisodeRecord{
-				EpisodeID:                  "recovery-1",
-				State:                      state.RecoveryEpisodeScheduled,
+			Episode: &state.PendingAutoContinueEpisodeRecord{
+				EpisodeID:                  "autocontinue-1",
+				State:                      state.AutoContinueEpisodeScheduled,
 				AttemptCount:               3,
 				ConsecutiveDryFailureCount: 2,
 				PendingDueAt:               now.Add(5 * time.Second),
-				TriggerKind:                state.RecoveryTriggerKindUpstreamRetryableFailure,
+				TriggerKind:                state.AutoContinueTriggerKindUpstreamRetryableFailure,
 			},
 		},
 	}
@@ -72,23 +72,24 @@ func TestSurfaceSnapshotIncludesRecoverySummary(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected snapshot")
 	}
-	if !snapshot.Recovery.Enabled ||
-		snapshot.Recovery.State != string(state.RecoveryEpisodeScheduled) ||
-		!snapshot.Recovery.PendingDueAt.Equal(now.Add(5*time.Second)) ||
-		snapshot.Recovery.AttemptCount != 3 ||
-		snapshot.Recovery.ConsecutiveDryFailureCount != 2 ||
-		snapshot.Recovery.TriggerKind != string(state.RecoveryTriggerKindUpstreamRetryableFailure) {
-		t.Fatalf("unexpected recovery snapshot: %#v", snapshot.Recovery)
+	if !snapshot.AutoContinue.Enabled ||
+		snapshot.AutoContinue.State != string(state.AutoContinueEpisodeScheduled) ||
+		!snapshot.AutoContinue.PendingDueAt.Equal(now.Add(5*time.Second)) ||
+		snapshot.AutoContinue.AttemptCount != 3 ||
+		snapshot.AutoContinue.ConsecutiveDryFailureCount != 2 ||
+		snapshot.AutoContinue.TriggerKind != string(state.AutoContinueTriggerKindUpstreamRetryableFailure) {
+		t.Fatalf("unexpected autocontinue snapshot: %#v", snapshot.AutoContinue)
 	}
 }
 
-func TestRecoveryDispatchesRetryableFailureImmediately(t *testing.T) {
+func TestAutoContinueDispatchesRetryableFailureImmediately(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 	events := completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "upstream stream closed", "", &agentproto.ErrorInfo{
 		Code:      "responseStreamDisconnected",
 		Layer:     "codex",
@@ -99,51 +100,52 @@ func TestRecoveryDispatchesRetryableFailureImmediately(t *testing.T) {
 		Retryable: true,
 	})
 
-	if surface.AutoContinue.PendingReason != "" {
-		t.Fatalf("expected retryable failure to stay out of autowhip runtime, got %#v", surface.AutoContinue)
+	if surface.AutoWhip.PendingReason != "" {
+		t.Fatalf("expected retryable failure to stay out of autowhip runtime, got %#v", surface.AutoWhip)
 	}
-	episode := surface.Recovery.Episode
+	episode := surface.AutoContinue.Episode
 	if episode == nil {
-		t.Fatal("expected recovery episode")
+		t.Fatal("expected autocontinue episode")
 	}
-	if episode.State != state.RecoveryEpisodeRunning || episode.AttemptCount != 1 || episode.ConsecutiveDryFailureCount != 1 {
-		t.Fatalf("expected immediate first recovery attempt, got %#v", episode)
+	if episode.State != state.AutoContinueEpisodeRunning || episode.AttemptCount != 1 || episode.ConsecutiveDryFailureCount != 1 {
+		t.Fatalf("expected immediate first autocontinue attempt, got %#v", episode)
 	}
 	if surface.ActiveQueueItemID == "" {
-		t.Fatalf("expected immediate recovery dispatch to occupy active queue")
+		t.Fatalf("expected immediate autocontinue dispatch to occupy active queue")
 	}
 	active := surface.QueueItems[surface.ActiveQueueItemID]
-	if active == nil || active.SourceKind != state.QueueItemSourceRecovery || active.RecoveryEpisodeID != episode.EpisodeID {
-		t.Fatalf("expected recovery queue item to dispatch, got %#v", active)
+	if active == nil || active.SourceKind != state.QueueItemSourceAutoContinue || active.AutoContinueEpisodeID != episode.EpisodeID {
+		t.Fatalf("expected autocontinue queue item to dispatch, got %#v", active)
 	}
 	var sawTurnFailedNotice bool
-	var sawRecoveryCard bool
-	var sawRecoveryPrompt bool
+	var sawAutoContinueCard bool
+	var sawAutoContinuePrompt bool
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "turn_failed" {
 			sawTurnFailedNotice = true
 		}
 		if event.PageView != nil && strings.TrimSpace(event.PageView.TrackingKey) == episode.EpisodeID {
-			sawRecoveryCard = true
+			sawAutoContinueCard = true
 		}
-		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == recoveryContinuePromptText {
-			sawRecoveryPrompt = true
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == autoContinuePromptText {
+			sawAutoContinuePrompt = true
 		}
 	}
 	if sawTurnFailedNotice {
-		t.Fatalf("expected recovery path to suppress direct turn_failed notice, got %#v", events)
+		t.Fatalf("expected autocontinue path to suppress direct turn_failed notice, got %#v", events)
 	}
-	if !sawRecoveryCard || !sawRecoveryPrompt {
-		t.Fatalf("expected recovery card plus prompt dispatch, got %#v", events)
+	if !sawAutoContinueCard || !sawAutoContinuePrompt {
+		t.Fatalf("expected autocontinue card plus prompt dispatch, got %#v", events)
 	}
 }
 
-func TestRecoveryDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *testing.T) {
+func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 
 	stopEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionStop,
@@ -169,34 +171,35 @@ func TestRecoveryDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *testing
 			Retryable: true,
 		},
 	})
-	if episode := surface.Recovery.Episode; episode != nil {
-		t.Fatalf("expected /stop to suppress recovery scheduling, got %#v", episode)
+	if episode := surface.AutoContinue.Episode; episode != nil {
+		t.Fatalf("expected /stop to suppress autocontinue scheduling, got %#v", episode)
 	}
 	if active := surface.ActiveQueueItemID; active != "" {
-		t.Fatalf("expected no recovery dispatch after /stop, got active %q", active)
+		t.Fatalf("expected no autocontinue dispatch after /stop, got active %q", active)
 	}
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "turn_failed" {
 			t.Fatalf("expected user stop not to emit failure notice, got %#v", events)
 		}
-		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == recoveryContinuePromptText {
-			t.Fatalf("expected user stop not to trigger recovery prompt, got %#v", events)
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == autoContinuePromptText {
+			t.Fatalf("expected user stop not to trigger autocontinue prompt, got %#v", events)
 		}
 	}
 }
 
-func TestDetachClearsPendingRecoveryEpisode(t *testing.T) {
+func TestDetachClearsPendingAutoContinueEpisode(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 18, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	surface.Recovery.Episode = &state.PendingRecoveryEpisodeRecord{
-		EpisodeID:       "recovery-1",
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
+		EpisodeID:       "autocontinue-1",
 		InstanceID:      "inst-1",
 		ThreadID:        "thread-1",
 		FrozenCWD:       "/data/dl/droid",
 		FrozenRouteMode: state.RouteModePinned,
-		State:           state.RecoveryEpisodeScheduled,
+		State:           state.AutoContinueEpisodeScheduled,
 		PendingDueAt:    now.Add(5 * time.Second),
 	}
 
@@ -209,23 +212,24 @@ func TestDetachClearsPendingRecoveryEpisode(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("expected detach events")
 	}
-	if !surface.Recovery.Enabled || surface.Recovery.Episode != nil {
-		t.Fatalf("expected detach to preserve recovery toggle but clear pending episode, got %#v", surface.Recovery)
+	if !surface.AutoContinue.Enabled || surface.AutoContinue.Episode != nil {
+		t.Fatalf("expected detach to preserve autocontinue toggle but clear pending episode, got %#v", surface.AutoContinue)
 	}
 }
 
-func TestNewThreadReadyClearsPendingRecoveryEpisode(t *testing.T) {
+func TestNewThreadReadyClearsPendingAutoContinueEpisode(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 19, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	surface.Recovery.Episode = &state.PendingRecoveryEpisodeRecord{
-		EpisodeID:       "recovery-1",
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
+		EpisodeID:       "autocontinue-1",
 		InstanceID:      "inst-1",
 		ThreadID:        "thread-1",
 		FrozenCWD:       "/data/dl/droid",
 		FrozenRouteMode: state.RouteModePinned,
-		State:           state.RecoveryEpisodeScheduled,
+		State:           state.AutoContinueEpisodeScheduled,
 		PendingDueAt:    now.Add(5 * time.Second),
 	}
 
@@ -238,17 +242,18 @@ func TestNewThreadReadyClearsPendingRecoveryEpisode(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("expected /new events")
 	}
-	if !surface.Recovery.Enabled || surface.Recovery.Episode != nil {
-		t.Fatalf("expected /new to preserve recovery toggle but clear pending episode, got %#v", surface.Recovery)
+	if !surface.AutoContinue.Enabled || surface.AutoContinue.Episode != nil {
+		t.Fatalf("expected /new to preserve autocontinue toggle but clear pending episode, got %#v", surface.AutoContinue)
 	}
 }
 
-func TestRecoveryPrioritizesQueuedUserInput(t *testing.T) {
+func TestAutoContinuePrioritizesQueuedUserInput(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 
 	queued := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -275,8 +280,8 @@ func TestRecoveryPrioritizesQueuedUserInput(t *testing.T) {
 		},
 	})
 	active := surface.QueueItems[surface.ActiveQueueItemID]
-	if active == nil || active.SourceKind != state.QueueItemSourceRecovery {
-		t.Fatalf("expected recovery to dispatch before queued user input, got active=%#v queued=%#v", active, surface.QueuedQueueItemIDs)
+	if active == nil || active.SourceKind != state.QueueItemSourceAutoContinue {
+		t.Fatalf("expected autocontinue to dispatch before queued user input, got active=%#v queued=%#v", active, surface.QueuedQueueItemIDs)
 	}
 	if len(surface.QueuedQueueItemIDs) != 1 {
 		t.Fatalf("expected original queued user input to remain queued, got %#v", surface.QueuedQueueItemIDs)
@@ -285,23 +290,24 @@ func TestRecoveryPrioritizesQueuedUserInput(t *testing.T) {
 	if queuedItem == nil || queuedItem.SourceKind != state.QueueItemSourceUser || queuedItem.SourceMessageID != "msg-2" {
 		t.Fatalf("expected queued user item to remain intact, got %#v", queuedItem)
 	}
-	var sawRecoveryPrompt bool
+	var sawAutoContinuePrompt bool
 	for _, event := range events {
-		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == recoveryContinuePromptText {
-			sawRecoveryPrompt = true
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == autoContinuePromptText {
+			sawAutoContinuePrompt = true
 		}
 	}
-	if !sawRecoveryPrompt {
-		t.Fatalf("expected recovery dispatch command, got %#v", events)
+	if !sawAutoContinuePrompt {
+		t.Fatalf("expected autocontinue dispatch command, got %#v", events)
 	}
 }
 
-func TestRecoveryOutputResetsDryFailureBackoff(t *testing.T) {
+func TestAutoContinueOutputResetsDryFailureBackoff(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 
 	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:         agentproto.EventTurnCompleted,
@@ -318,7 +324,7 @@ func TestRecoveryOutputResetsDryFailureBackoff(t *testing.T) {
 		},
 	})
 	if len(first) == 0 {
-		t.Fatal("expected first recovery dispatch")
+		t.Fatal("expected first autocontinue dispatch")
 	}
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnStarted,
@@ -349,30 +355,31 @@ func TestRecoveryOutputResetsDryFailureBackoff(t *testing.T) {
 			Retryable: true,
 		},
 	})
-	episode := surface.Recovery.Episode
+	episode := surface.AutoContinue.Episode
 	if episode == nil {
-		t.Fatal("expected recovery episode after second failure")
+		t.Fatal("expected autocontinue episode after second failure")
 	}
-	if episode.State != state.RecoveryEpisodeRunning || episode.AttemptCount != 2 || episode.ConsecutiveDryFailureCount != 1 {
+	if episode.State != state.AutoContinueEpisodeRunning || episode.AttemptCount != 2 || episode.ConsecutiveDryFailureCount != 1 {
 		t.Fatalf("expected output to reset dry failure backoff before next retry, got %#v", episode)
 	}
-	var sawRecoveryPrompt bool
+	var sawAutoContinuePrompt bool
 	for _, event := range second {
-		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == recoveryContinuePromptText {
-			sawRecoveryPrompt = true
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == autoContinuePromptText {
+			sawAutoContinuePrompt = true
 		}
 	}
-	if !sawRecoveryPrompt {
-		t.Fatalf("expected second recovery attempt to dispatch immediately after outputful failure, got %#v", second)
+	if !sawAutoContinuePrompt {
+		t.Fatalf("expected second autocontinue attempt to dispatch immediately after outputful failure, got %#v", second)
 	}
 }
 
-func TestRecoveryStatusCardStopsPatchingAfterTailMoves(t *testing.T) {
+func TestAutoContinueStatusCardStopsPatchingAfterTailMoves(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "继续处理", "turn-1")
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
 
 	_ = completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "upstream stream closed", "", &agentproto.ErrorInfo{
 		Code:      "responseStreamDisconnected",
@@ -383,32 +390,33 @@ func TestRecoveryStatusCardStopsPatchingAfterTailMoves(t *testing.T) {
 		TurnID:    "turn-1",
 		Retryable: true,
 	})
-	episode := surface.Recovery.Episode
+	episode := surface.AutoContinue.Episode
 	if episode == nil {
-		t.Fatal("expected recovery episode")
+		t.Fatal("expected autocontinue episode")
 	}
 
-	svc.RecordSurfaceOutboundMessage(surface.SurfaceSessionID, "om-recovery-1", state.SurfaceMessageKindCard, "msg-1")
-	svc.RecordPageTrackingMessage(surface.SurfaceSessionID, episode.EpisodeID, "om-recovery-1")
-	if got := recoveryStatusMessageID(surface, episode); got != "om-recovery-1" {
-		t.Fatalf("expected tail recovery card to remain patchable, got %q", got)
+	svc.RecordSurfaceOutboundMessage(surface.SurfaceSessionID, "om-autocontinue-1", state.SurfaceMessageKindCard, "msg-1")
+	svc.RecordPageTrackingMessage(surface.SurfaceSessionID, episode.EpisodeID, "om-autocontinue-1")
+	if got := autoContinueStatusMessageID(surface, episode); got != "om-autocontinue-1" {
+		t.Fatalf("expected tail autocontinue card to remain patchable, got %q", got)
 	}
 
 	svc.RecordSurfaceOutboundMessage(surface.SurfaceSessionID, "om-next-1", state.SurfaceMessageKindText, "msg-1")
-	event := svc.recoveryStatusCardEvent(surface, episode)
+	event := svc.autoContinueStatusCardEvent(surface, episode)
 	if event.PageView == nil {
-		t.Fatalf("expected recovery status page event, got %#v", event)
+		t.Fatalf("expected autocontinue status page event, got %#v", event)
 	}
 	if event.PageView.MessageID != "" {
-		t.Fatalf("expected recovery status card to stop patching after tail moves, got %#v", event.PageView)
+		t.Fatalf("expected autocontinue status card to stop patching after tail moves, got %#v", event.PageView)
 	}
 }
 
-func TestStartupFailureDoesNotEnterRecovery(t *testing.T) {
+func TestStartupFailureDoesNotEnterAutoContinue(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 40, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	surface.Recovery.Enabled = true
+	surface := setupAutoWhipSurface(t, svc)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
 
 	queued := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -434,8 +442,8 @@ func TestStartupFailureDoesNotEnterRecovery(t *testing.T) {
 			Retryable: true,
 		},
 	})
-	if episode := surface.Recovery.Episode; episode != nil {
-		t.Fatalf("expected startup failure to avoid recovery lane, got %#v", episode)
+	if episode := surface.AutoContinue.Episode; episode != nil {
+		t.Fatalf("expected startup failure to avoid autocontinue lane, got %#v", episode)
 	}
 	item := surface.QueueItems["queue-1"]
 	if item == nil || item.Status != state.QueueItemFailed {
@@ -446,8 +454,8 @@ func TestStartupFailureDoesNotEnterRecovery(t *testing.T) {
 		if event.Notice != nil && event.Notice.Code == "turn_failed" {
 			sawTurnFailed = true
 		}
-		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == recoveryContinuePromptText {
-			t.Fatalf("expected startup failure not to dispatch recovery prompt, got %#v", events)
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend && len(event.Command.Prompt.Inputs) == 1 && event.Command.Prompt.Inputs[0].Text == autoContinuePromptText {
+			t.Fatalf("expected startup failure not to dispatch autocontinue prompt, got %#v", events)
 		}
 	}
 	if !sawTurnFailed {

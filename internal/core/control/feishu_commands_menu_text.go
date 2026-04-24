@@ -40,7 +40,7 @@ func buildMenuModeText(value string) (string, bool) {
 	}
 }
 
-func buildMenuAutoContinueText(value string) (string, bool) {
+func buildMenuAutoWhipText(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
 	case "on", "off":
@@ -50,11 +50,11 @@ func buildMenuAutoContinueText(value string) (string, bool) {
 	}
 }
 
-func buildMenuRecoveryText(value string) (string, bool) {
+func buildMenuAutoContinueText(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
 	case "on", "off":
-		return "/recovery " + mode, true
+		return "/autocontinue " + mode, true
 	default:
 		return "", false
 	}

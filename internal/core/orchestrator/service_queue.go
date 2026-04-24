@@ -49,11 +49,11 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 	return s.enqueuePreparedQueueItem(surface, item, front)
 }
 
-func (s *Service) enqueueAutoContinueQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
+func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:      surface.SurfaceSessionID,
-		SourceKind:            state.QueueItemSourceAutoContinue,
+		SourceKind:            state.QueueItemSourceAutoWhip,
 		ReplyToMessageID:      strings.TrimSpace(replyToMessageID),
 		ReplyToMessagePreview: normalizeSourceMessagePreview(replyToMessagePreview),
 		Inputs:                inputs,
@@ -187,10 +187,10 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		if surface.DispatchMode != state.DispatchModeNormal || surface.ActiveQueueItemID != "" {
 			return nil
 		}
-		return s.maybeDispatchPendingRecovery(surface, s.now())
+		return s.maybeDispatchPendingAutoContinue(surface, s.now())
 	}
-	if recovery := s.maybeDispatchPendingRecovery(surface, s.now()); len(recovery) != 0 {
-		return recovery
+	if autoContinue := s.maybeDispatchPendingAutoContinue(surface, s.now()); len(autoContinue) != 0 {
+		return autoContinue
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.turns.pendingRemote[inst.InstanceID] != nil {
@@ -320,29 +320,29 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 		QueueOff:    true,
 	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, false)
 
-	handledByRecoveryCard := false
+	handledByAutoContinueCard := false
 	switch {
-	case outcome.Binding.RecoveryEpisodeID != "" && outcome.Cause == terminalCauseUserInterrupted:
-		events = append(events, s.cancelRecoveryEpisode(surface)...)
-		handledByRecoveryCard = true
-	case outcome.Binding.RecoveryEpisodeID != "" && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseUpstreamRetryableFailure:
-		if episode := activeRecoveryEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == strings.TrimSpace(outcome.Binding.RecoveryEpisodeID) {
+	case outcome.Binding.AutoContinueEpisodeID != "" && outcome.Cause == terminalCauseUserInterrupted:
+		events = append(events, s.cancelAutoContinueEpisode(surface)...)
+		handledByAutoContinueCard = true
+	case outcome.Binding.AutoContinueEpisodeID != "" && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseUpstreamRetryableFailure:
+		if episode := activeAutoContinueEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == strings.TrimSpace(outcome.Binding.AutoContinueEpisodeID) {
 			if outcome.AnyOutputSeen {
 				episode.NoticeMessageID = ""
 				episode.NoticeAppendSeq = 0
 			}
 			episode.LastProblem = cloneProblem(outcome.Problem)
-			episode.State = state.RecoveryEpisodeFailed
-			events = append(events, s.recoveryFailureEvent(surface, episode))
-			handledByRecoveryCard = true
+			episode.State = state.AutoContinueEpisodeFailed
+			events = append(events, s.autoContinueFailureEvent(surface, episode))
+			handledByAutoContinueCard = true
 		}
 	case outcome.Cause == terminalCauseUpstreamRetryableFailure:
-		recoveryEvents := s.maybeScheduleRecoveryAfterOutcome(outcome)
-		events = append(events, recoveryEvents...)
-		handledByRecoveryCard = len(recoveryEvents) != 0
+		autoContinueEvents := s.maybeScheduleAutoContinueAfterOutcome(outcome)
+		events = append(events, autoContinueEvents...)
+		handledByAutoContinueCard = len(autoContinueEvents) != 0
 	}
 
-	if !handledByRecoveryCard && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseUserInterrupted {
+	if !handledByAutoContinueCard && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseUserInterrupted {
 		if inst := s.root.Instances[outcome.InstanceID]; inst != nil {
 			s.clearThreadReplay(inst, outcome.ThreadID)
 		}
@@ -350,9 +350,9 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	}
 
 	if outcome.Cause == terminalCauseCompleted {
-		s.finishRecoveryEpisode(outcome)
+		s.finishAutoContinueEpisode(outcome)
 	}
-	events = append(events, s.maybeScheduleAutoContinueAfterRemoteTurn(surface, item, outcome.TurnID, outcome.Cause, outcome.FinalText, outcome.Summary)...)
+	events = append(events, s.maybeScheduleAutoWhipAfterRemoteTurn(surface, item, outcome.TurnID, outcome.Cause, outcome.FinalText, outcome.Summary)...)
 	s.clearRemoteTurn(outcome.InstanceID, outcome.TurnID)
 	events = append(events, s.finishSurfaceAfterWork(surface)...)
 	events = append(events, s.dispatchNext(surface)...)

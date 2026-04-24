@@ -24,7 +24,7 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []eventcont
 			continue
 		}
 		clearSurfaceRequestsForTurn(surface, threadID, "")
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 		prevThreadID := surface.SelectedThreadID
 		prevRouteMode := surface.RouteMode
 		s.releaseSurfaceThreadClaim(surface)

@@ -50,12 +50,12 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	switch strings.TrimSpace(view.CommandID) {
 	case FeishuCommandMode:
 		return []FeishuCardTextSection{singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置"))}
+	case FeishuCommandAutoWhip:
+		return []FeishuCardTextSection{singleValueCardSection("当前", autoWhipDisplayValue(view.CurrentValue))}
 	case FeishuCommandAutoContinue:
-		return []FeishuCardTextSection{singleValueCardSection("当前", autoContinueDisplayValue(view.CurrentValue))}
-	case FeishuCommandRecovery:
 		return []FeishuCardTextSection{
-			singleValueCardSection("当前", recoveryDisplayValue(view.CurrentValue)),
-			singleValueCardSection("作用范围", "只处理上游可重试失败，不影响 autowhip"),
+			singleValueCardSection("当前", autoContinueDisplayValue(view.CurrentValue)),
+			singleValueCardSection("作用范围", "只处理上游可重试失败，不影响 AutoWhip"),
 		}
 	case FeishuCommandReasoning:
 		return dualValueCardSections(
@@ -135,14 +135,14 @@ func commandDisplayValue(value, fallback string) string {
 	return strings.TrimSpace(value)
 }
 
-func autoContinueDisplayValue(value string) string {
+func autoWhipDisplayValue(value string) string {
 	if strings.EqualFold(strings.TrimSpace(value), "on") {
 		return "开启"
 	}
 	return "关闭"
 }
 
-func recoveryDisplayValue(value string) string {
+func autoContinueDisplayValue(value string) string {
 	if strings.EqualFold(strings.TrimSpace(value), "on") {
 		return "开启"
 	}

@@ -29,6 +29,23 @@ func (s *Service) buildModeCommandViewState(surface *state.SurfaceConsoleRecord,
 	}
 }
 
+func (s *Service) buildAutoWhipCommandView(surface *state.SurfaceConsoleRecord) control.FeishuCatalogView {
+	return s.buildAutoWhipCommandViewState(surface, control.FeishuCatalogConfigView{})
+}
+
+func (s *Service) buildAutoWhipCommandViewState(surface *state.SurfaceConsoleRecord, cardState control.FeishuCatalogConfigView) control.FeishuCatalogView {
+	current := "off"
+	if surface != nil && surface.AutoWhip.Enabled {
+		current = "on"
+	}
+	return control.FeishuCatalogView{
+		Config: s.applyCommandConfigCardState(&control.FeishuCatalogConfigView{
+			CommandID:    control.FeishuCommandAutoWhip,
+			CurrentValue: current,
+		}, cardState),
+	}
+}
+
 func (s *Service) buildAutoContinueCommandView(surface *state.SurfaceConsoleRecord) control.FeishuCatalogView {
 	return s.buildAutoContinueCommandViewState(surface, control.FeishuCatalogConfigView{})
 }
@@ -41,23 +58,6 @@ func (s *Service) buildAutoContinueCommandViewState(surface *state.SurfaceConsol
 	return control.FeishuCatalogView{
 		Config: s.applyCommandConfigCardState(&control.FeishuCatalogConfigView{
 			CommandID:    control.FeishuCommandAutoContinue,
-			CurrentValue: current,
-		}, cardState),
-	}
-}
-
-func (s *Service) buildRecoveryCommandView(surface *state.SurfaceConsoleRecord) control.FeishuCatalogView {
-	return s.buildRecoveryCommandViewState(surface, control.FeishuCatalogConfigView{})
-}
-
-func (s *Service) buildRecoveryCommandViewState(surface *state.SurfaceConsoleRecord, cardState control.FeishuCatalogConfigView) control.FeishuCatalogView {
-	current := "off"
-	if surface != nil && surface.Recovery.Enabled {
-		current = "on"
-	}
-	return control.FeishuCatalogView{
-		Config: s.applyCommandConfigCardState(&control.FeishuCatalogConfigView{
-			CommandID:    control.FeishuCommandRecovery,
 			CurrentValue: current,
 		}, cardState),
 	}

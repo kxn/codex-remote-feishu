@@ -31,7 +31,7 @@ type Service struct {
 	nextRequestCommandID  int
 	nextLocalRequestID    int
 	nextHeadlessID        int
-	nextRecoveryEpisodeID int
+	nextAutoContinueEpisodeID int
 	handoffUntil          map[string]time.Time
 	pausedUntil           map[string]time.Time
 	abandoningUntil       map[string]time.Time
@@ -69,7 +69,7 @@ type remoteTurnBinding struct {
 	InstanceID            string
 	SurfaceSessionID      string
 	QueueItemID           string
-	RecoveryEpisodeID     string
+	AutoContinueEpisodeID     string
 	AttemptTriggerKind    string
 	SourceMessageID       string
 	SourceMessagePreview  string
@@ -350,10 +350,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		switch action.Kind {
 		case control.ActionStatus:
 			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}})
+		case control.ActionAutoWhipCommand:
+			return s.filterEventsForSurfaceVisibility(s.handleAutoWhipCommand(surface, action))
 		case control.ActionAutoContinueCommand:
 			return s.filterEventsForSurfaceVisibility(s.handleAutoContinueCommand(surface, action))
-		case control.ActionRecoveryCommand:
-			return s.filterEventsForSurfaceVisibility(s.handleRecoveryCommand(surface, action))
 		case control.ActionDetach:
 			return s.filterEventsForSurfaceVisibility(notice(surface, "detach_pending", "当前仍在等待已发出的 turn 收尾，请稍后再试。"))
 		default:
@@ -369,7 +369,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if blocked := s.blockActionForActiveTargetPicker(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
-	s.noteAutoContinueAction(surface, action)
+	s.noteAutoWhipAction(surface, action)
 	switch action.Kind {
 	case control.ActionTextMessage:
 		s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindText)
@@ -503,10 +503,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handlePlanProposalDecision(surface, action)
 	case control.ActionVerboseCommand:
 		events = s.handleVerboseCommand(surface, action)
+	case control.ActionAutoWhipCommand:
+		events = s.handleAutoWhipCommand(surface, action)
 	case control.ActionAutoContinueCommand:
 		events = s.handleAutoContinueCommand(surface, action)
-	case control.ActionRecoveryCommand:
-		events = s.handleRecoveryCommand(surface, action)
 	case control.ActionModeCommand:
 		events = s.handleModeCommand(surface, action)
 	case control.ActionRespondRequest:
@@ -930,7 +930,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 				},
 			})
 		}
-		events = append(events, s.maybeDispatchPendingRecovery(surface, now)...)
+		events = append(events, s.maybeDispatchPendingAutoWhip(surface, now)...)
 		events = append(events, s.maybeDispatchPendingAutoContinue(surface, now)...)
 		events = append(events, s.tickExecCommandProgressAnimations(surface, now)...)
 	}

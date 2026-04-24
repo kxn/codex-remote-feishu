@@ -196,8 +196,8 @@ func ResolveFeishuLauncherDisposition(action Action) FeishuFrontstageLauncherDis
 	switch action.Kind {
 	case ActionShowCommandMenu,
 		ActionModeCommand,
+		ActionAutoWhipCommand,
 		ActionAutoContinueCommand,
-		ActionRecoveryCommand,
 		ActionReasoningCommand,
 		ActionAccessCommand,
 		ActionPlanCommand,
@@ -279,8 +279,8 @@ func AllowsCommandSubmissionAnchorReplacement(Action) bool { return false }
 func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 	switch action.Kind {
 	case ActionModeCommand,
+		ActionAutoWhipCommand,
 		ActionAutoContinueCommand,
-		ActionRecoveryCommand,
 		ActionReasoningCommand,
 		ActionAccessCommand,
 		ActionPlanCommand,
@@ -307,8 +307,8 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentShowWorkspaceNewGit,
 		FeishuUIIntentShowHistory,
 		FeishuUIIntentShowModeCatalog,
+		FeishuUIIntentShowAutoWhipCatalog,
 		FeishuUIIntentShowAutoContinueCatalog,
-		FeishuUIIntentShowRecoveryCatalog,
 		FeishuUIIntentShowReasoningCatalog,
 		FeishuUIIntentShowAccessCatalog,
 		FeishuUIIntentShowPlanCatalog,

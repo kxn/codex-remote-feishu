@@ -35,8 +35,8 @@ const (
 	ActionPlanCommand                 ActionKind = "surface.command.plan"
 	ActionPlanProposalDecision        ActionKind = "surface.command.plan_proposal_decision"
 	ActionVerboseCommand              ActionKind = "surface.command.verbose"
-	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
-	ActionRecoveryCommand             ActionKind = "surface.command.recovery"
+	ActionAutoWhipCommand         ActionKind = "surface.command.auto_whip"
+	ActionAutoContinueCommand    ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"
 	ActionSendFile                    ActionKind = "surface.command.send_file"
 	ActionRespondRequest              ActionKind = "surface.request.respond"
@@ -171,11 +171,11 @@ type Snapshot struct {
 	NextPrompt       PromptRouteSummary
 	Gate             GateSummary
 	Dispatch         DispatchSummary
-	AutoContinue     AutoContinueSummary
-	Recovery         RecoverySummary
-	PermissionGaps   []PermissionGapSummary
-	Instances        []InstanceSummary
-	Threads          []ThreadSummary
+	AutoWhip       AutoWhipSummary
+	AutoContinue   AutoContinueSummary
+	PermissionGaps []PermissionGapSummary
+	Instances      []InstanceSummary
+	Threads        []ThreadSummary
 }
 
 type PermissionGapSummary struct {
@@ -255,7 +255,7 @@ type DispatchSummary struct {
 	QueuedCount      int
 }
 
-type AutoContinueSummary struct {
+type AutoWhipSummary struct {
 	Enabled             bool
 	PendingReason       string
 	PendingDueAt        time.Time
@@ -263,7 +263,7 @@ type AutoContinueSummary struct {
 	LastTriggeredTurnID string
 }
 
-type RecoverySummary struct {
+type AutoContinueSummary struct {
 	Enabled                    bool
 	State                      string
 	PendingDueAt               time.Time

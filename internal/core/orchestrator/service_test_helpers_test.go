@@ -284,7 +284,7 @@ func recordLocalFinalText(t *testing.T, svc *Service, instanceID, threadID, turn
 	})
 }
 
-func setupAutoContinueSurface(t *testing.T, svc *Service) *state.SurfaceConsoleRecord {
+func setupAutoWhipSurface(t *testing.T, svc *Service) *state.SurfaceConsoleRecord {
 	t.Helper()
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
@@ -309,11 +309,11 @@ func setupAutoContinueSurface(t *testing.T, svc *Service) *state.SurfaceConsoleR
 	if surface == nil {
 		t.Fatal("expected attached surface")
 	}
-	surface.AutoContinue.Enabled = true
+	surface.AutoWhip.Enabled = true
 	return surface
 }
 
-func startRemoteTurnForAutoContinueTest(t *testing.T, svc *Service, messageID, text, turnID string) {
+func startRemoteTurnForAutoWhipTest(t *testing.T, svc *Service, messageID, text, turnID string) {
 	t.Helper()
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,

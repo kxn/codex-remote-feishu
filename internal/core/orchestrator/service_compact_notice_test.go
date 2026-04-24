@@ -316,9 +316,9 @@ func TestContextCompactionReplayStaysSilentWhenAttachedSurfaceQuiet(t *testing.T
 func TestCompactReplayKeepsStoredReplyAnchor(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 9, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityVerbose
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "整理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "整理一下", "turn-1")
 
 	svc.storeThreadReplayTurnNotice(svc.root.Instances["inst-1"], "thread-1", "turn-1", compactCompletionNotice())
 	svc.root.Instances["inst-1"].ActiveTurnID = ""

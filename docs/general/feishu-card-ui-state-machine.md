@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-24`
-> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）也统一回到锁定当前工作区的 target picker。selection 卡片这轮进一步收口到 `FeishuSelectionView + FeishuSelectionSemantics`：VS Code `/list` 继续按钮式实例卡，VS Code `/use` / `/useall` 统一成当前实例内的 dropdown，kick-thread confirm 也走同一 selection substrate；adapter live 路径不再回退 `FeishuDirectSelectionPrompt`。其余 target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；本轮还新增了 `/recovery` 参数卡与 reply-thread、tail-only patch 的 recovery 状态卡；`/upgrade` 根页现在会按 standalone Codex 安装状态决定是否暴露 `Codex 升级`，`/upgrade latest` 与 `/upgrade codex` 共用 `upgrade_owner_flow` callback family，但分别收口到 release / Codex 两条 owner-card flow；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、共享过程卡、原锚点 attention annotation 与 turn reply 语义见正文。
+> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）也统一回到锁定当前工作区的 target picker。selection 卡片这轮进一步收口到 `FeishuSelectionView + FeishuSelectionSemantics`：VS Code `/list` 继续按钮式实例卡，VS Code `/use` / `/useall` 统一成当前实例内的 dropdown，kick-thread confirm 也走同一 selection substrate；adapter live 路径不再回退 `FeishuDirectSelectionPrompt`。其余 target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；本轮还新增了 `/autocontinue` 参数卡与 reply-thread、tail-only patch 的自动继续状态卡；`/upgrade` 根页现在会按 standalone Codex 安装状态决定是否暴露 `Codex 升级`，`/upgrade latest` 与 `/upgrade codex` 共用 `upgrade_owner_flow` callback family，但分别收口到 release / Codex 两条 owner-card flow；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、共享过程卡、原锚点 attention annotation 与 turn reply 语义见正文。
 
 ## 1. 文档定位
 
@@ -67,7 +67,7 @@
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
   - 对 normal mode `/list` / `/use` / `/useall`，以及 attach-unbound / `selected_thread_lost` / `thread_claim_lost` 这类被动恢复入口，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
   - 对 VS Code instance/thread selection、kick-thread confirm，以及仍保留 selection 卡形态的少量兼容路径，当前统一先产出 `FeishuSelectionView` read model，再连同 `FeishuSelectionContext` 穿过 `UIEvent` 边界
-  - 对 `/menu` 与 bare `/mode` `/autowhip` `/recovery` `/reasoning` `/access` `/plan` `/model` `/verbose`，当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
+  - 对 `/menu` 与 bare `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/model` `/verbose`，当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
   - 对 approval / `request_user_input` / MCP request cards，当前先产出 `FeishuRequestView`，再连同 `FeishuRequestContext` 穿过 `UIEvent` 边界
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
 - `projector`
@@ -113,9 +113,9 @@
 | stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` | `launcher -> owner` | normal mode 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页，再按按钮继续替成 `/workspace new` 子页或三张独立业务卡。该路径当前通过显式 `launcher -> owner` handoff 进入业务卡，不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/detach` | `launcher -> terminal` | 点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并抑制重复终态 append。菜单 launcher flow 在 handoff 后立即退出，不再保留“半菜单半业务”活跃态 |
 | stamped `/menu current_work -> /steerall` | `launcher -> owner(steerall)` | 点击后会把当前菜单卡直接交给 steer-all owner flow。requested 进度态继续 patch 同一张卡；completed、no-op、failed / disconnect restore 才会把这张卡封成 sealed terminal，不再留下可重复点击的旧菜单 |
-| bare `/mode` / `/autowhip` / `/recovery` / `/reasoning` / `/access` / `/plan` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/recovery` `/reasoning` `/access` `/plan` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单。参数卡当前也统一承接 `body / notice / sealed` contract：业务区保留当前值/覆盖值/模型等上下文，notice 区承接成功、错误和 reopen 提示；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；其中 `/plan` 的 apply 只改当前 surface 的后续 `PlanMode`，不会追溯改写当前 running turn；如果某轮 turn 结束时存在最终 `item/plan/delta`，后续 append 的“提案计划”卡则单独归到 `plan_proposal` owner family，不复用 bare `/plan` 参数卡本身；其中 stamped `/mode vscode` 若切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先同步静默自动迁到 `managed_shim`，成功后不再额外弹迁移提示卡；若仍需要可见下一步（缺 target、自动迁移失败、managed shim 修复、open prompt 或恢复提示），daemon 才会把首张可投影提示卡同位替回当前卡，并把该 surface 记录成可继续 patch 的 VS Code guidance card；后续异步 runtime 提示只要仍命中这块 card，就继续回写同一张卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
+| bare `/mode` / `/autowhip` / `/autocontinue` / `/reasoning` / `/access` / `/plan` / `/model` / `/verbose` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单。参数卡当前也统一承接 `body / notice / sealed` contract：业务区保留当前值/覆盖值/模型等上下文，notice 区承接成功、错误和 reopen 提示；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；其中 `/plan` 的 apply 只改当前 surface 的后续 `PlanMode`，不会追溯改写当前 running turn；如果某轮 turn 结束时存在最终 `item/plan/delta`，后续 append 的“提案计划”卡则单独归到 `plan_proposal` owner family，不复用 bare `/plan` 参数卡本身；其中 stamped `/mode vscode` 若切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先同步静默自动迁到 `managed_shim`，成功后不再额外弹迁移提示卡；若仍需要可见下一步（缺 target、自动迁移失败、managed shim 修复、open prompt 或恢复提示），daemon 才会把首张可投影提示卡同位替回当前卡，并把该 surface 记录成可继续 patch 的 VS Code guidance card；后续异步 runtime 提示只要仍命中这块 card，就继续回写同一张卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
 | `plan_proposal` | `mixed` | turn 完成后若本轮缓存了最终 `item/plan/delta`，orchestrator 会 append 一张 patchable `FeishuPageView` 提案计划卡；这张 page 当前显式设置 `SuppressDefaultRelatedButtons=true`，不会自动补默认 related back button。点击 `直接执行` / `清空上下文并执行` / `取消` 时，gateway 解析 `picker_id + option_id` 回到 `ActionPlanProposalDecision`，并继续在同一张卡上 seal 收口。该卡不是 request gate，不阻塞后续输入；一旦用户继续输入、切线程/切 route、开始新 turn 或卡片过期，也会被服务端 seal 成失效态 |
-| `recovery_status` | `mixed` | 上游可重试失败进入 recovery overlay 时，orchestrator 会 append 一张 patchable `FeishuPageView` 状态卡。该卡显式 reply 到原始用户消息，并通过 `TrackingKey=RecoveryEpisodeID` 回写 `message_id`；只要它仍是当前 surface 尾卡，scheduled / running / failed / cancelled 会继续 patch 回同一张卡。一旦后面出现新的消息，这张卡就冻结；后续同 episode 状态改为 append 新卡。该卡只承载恢复状态，不接管后续业务输出的 reply anchor |
+| `autocontinue_status` | `mixed` | 上游可重试失败进入 autoContinue overlay 时，orchestrator 会 append 一张 patchable `FeishuPageView` 状态卡。该卡显式 reply 到原始用户消息，并通过 `TrackingKey=AutoContinueEpisodeID` 回写 `message_id`；只要它仍是当前 surface 尾卡，scheduled / running / failed / cancelled 会继续 patch 回同一张卡。一旦后面出现新的消息，这张卡就冻结；后续同 episode 状态改为 append 新卡。该卡只承载自动继续状态，不接管后续业务输出的 reply anchor |
 | bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuPageView` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前仅保留 `管理页外链`，`/upgrade track` 子页当前仅保留 track 切换按钮；`/upgrade` 根页会在当前 Codex 是 standalone-upgradeable 安装时额外显示 `Codex 升级` 按钮，bundle-backed 或其他不可升级安装则静默隐藏。若来自带 `daemon_lifecycle_id` 的当前 page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade codex`、`/upgrade dev`、`/upgrade local`、`/debug admin`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 page 上显示错误并保留表单默认值 |
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuPageView` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 page-result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、通用 approval 的 `requestKind`/`availableDecisions` 归一化、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期、`request_user_input` / form 模式 `mcp_server_elicitation` 的当前题索引、分步暂存、`skip_optional`、turn/request 级取消，以及 permissions / elicitation 的结构化回写与最终提交校验属于产品状态机 |
@@ -354,7 +354,7 @@ MCP request 卡片当前新增的可视语义：
 - `ActionShowCommandMenu`
 - bare `/mode`
 - bare `/autowhip`
-- bare `/recovery`
+- bare `/autocontinue`
 - bare `/reasoning`
 - bare `/access`
 - bare `/plan`
@@ -392,7 +392,8 @@ MCP request 卡片当前新增的可视语义：
   - `/history` 当前不额外分阶段，normal / vscode 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
   - 其余命令默认可见
   - `current_work` 分组当前的 canonical menu-visible 命令为 `/stop`、`/compact`、`/steerall`、`/status`，以及仅 `normal_working` 可见的 `/new`
-  - `common_tools` 分组当前的 canonical menu-visible 命令为 `/autowhip`、`/recovery`、`/history`、`/cron`、`/sendfile`
+  - `send_settings` 分组当前的 canonical menu-visible 命令为 `/reasoning`、`/model`、`/access`、`/plan`、`/verbose`、`/autocontinue`
+  - `common_tools` 分组当前的 canonical menu-visible 命令为 `/autowhip`、`/history`、`/cron`、`/sendfile`
   - `maintenance` 分组当前的 canonical menu-visible 命令为 `/mode`、`/upgrade`、`/debug`、`/help`
   - `switch_target` 分组当前还带一层 mode-aware display projection：
     - `normal mode` 只显示一个入口，标题为 `工作会话`，实际命令仍是 canonical `/list`
@@ -457,10 +458,10 @@ MCP request 卡片当前新增的可视语义：
 当前新增补充：
 
 - 参数卡 apply 当前是分流语义：
-  - 若动作来自当前参数卡的 stamped callback（也就是 callback payload 带有效 `daemon_lifecycle_id`，且命中当前参数页 owner），`/mode` `/autowhip` `/recovery` `/verbose` `/model` `/reasoning` `/access` 的 apply 会走同卡 patch
+  - 若动作来自当前参数卡的 stamped callback（也就是 callback payload 带有效 `daemon_lifecycle_id`，且命中当前参数页 owner），`/mode` `/autowhip` `/autocontinue` `/verbose` `/model` `/reasoning` `/access` 的 apply 会走同卡 patch
   - 成功与 no-op 会把原卡封成 sealed terminal card，并附带“如需再次调整，请重新发送对应命令”的 reopen 提示
   - 校验失败、参数格式错误、或仍未接管目标等前置条件失败，会继续留在同一张参数卡上，保留可重试表单；必要时把刚才输入的参数回填到默认值
-  - 若动作不是从当前参数卡 callback 进入，例如用户直接发送 `/mode vscode`、`/autowhip on`、`/recovery on`，则仍保持 append-only，不会把普通文本 slash 升级成 inline replace
+  - 若动作不是从当前参数卡 callback 进入，例如用户直接发送 `/mode vscode`、`/autowhip on`、`/autocontinue on`，则仍保持 append-only，不会把普通文本 slash 升级成 inline replace
 - stamped 菜单命令里的非 inline 命令当前分成几类：
   - `/help`、`/status` 会直接把首个结果卡替成当前菜单卡；不再 append 一张脱离原卡的帮助卡/状态卡
   - `/list`、`/use`、`/useall` 会直接把首个实例列表 / 线程列表 / 提示 / 结果卡替成当前菜单卡；不再回退到 submission anchor。`/list` attach 成功后若同一事件流里还带 thread-selection follow-up，daemon 也会抑制这张重复卡

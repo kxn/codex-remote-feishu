@@ -407,10 +407,10 @@ func TestApplySurfaceActionVerboseCommandUpdatesSurface(t *testing.T) {
 func TestQuietVerbosityHidesPlanButKeepsFinal(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityQuiet
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	planEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventTurnPlanUpdated,
@@ -445,10 +445,10 @@ func TestQuietVerbosityHidesPlanButKeepsFinal(t *testing.T) {
 func TestNormalVerbosityKeepsPlanUpdates(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
+	surface := setupAutoWhipSurface(t, svc)
 	surface.Verbosity = state.SurfaceVerbosityNormal
 
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	planEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventTurnPlanUpdated,

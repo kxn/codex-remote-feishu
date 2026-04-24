@@ -14,7 +14,7 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	}
 	instanceID := surface.AttachedInstanceID
 	events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已断开，当前提案计划已失效。")
-	clearRecoveryRuntime(surface)
+	clearAutoContinueRuntime(surface)
 	s.clearRemoteOwnership(surface)
 	s.releaseSurfaceWorkspaceClaim(surface)
 	s.releaseSurfaceThreadClaim(surface)
@@ -80,7 +80,7 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []eventcontra
 	events := []eventcontract.Event{}
 	events = append(events, s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到 follow 模式，之前的提案计划已失效。")...)
 	if surface.RouteMode != state.RouteModeFollowLocal || surface.SelectedThreadID != "" {
-		clearRecoveryRuntime(surface)
+		clearAutoContinueRuntime(surface)
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
 		if blocked := s.blockPreparedNewThreadRouteExit(surface); blocked != nil {
@@ -259,7 +259,7 @@ func (s *Service) confirmKickThread(surface *state.SurfaceConsoleRecord, threadI
 
 func (s *Service) kickThreadOwner(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string, victim *state.SurfaceConsoleRecord) []eventcontract.Event {
 	events := s.releaseVictimThread(victim, inst, threadID)
-	clearRecoveryRuntime(surface)
+	clearAutoContinueRuntime(surface)
 	events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, s.surfaceThreadPickRouteMode(surface))...)
 	events = append(events, notice(surface, "thread_kicked", "已接管目标会话。原拥有者已退回未绑定状态。")...)
 	return events
@@ -270,7 +270,7 @@ func (s *Service) releaseVictimThread(surface *state.SurfaceConsoleRecord, inst 
 		return nil
 	}
 	clearSurfaceRequestsForTurn(surface, threadID, "")
-	clearRecoveryRuntime(surface)
+	clearAutoContinueRuntime(surface)
 	prevThreadID := surface.SelectedThreadID
 	prevRouteMode := surface.RouteMode
 	s.releaseSurfaceThreadClaim(surface)

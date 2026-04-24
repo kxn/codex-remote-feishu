@@ -559,10 +559,11 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 		t.Fatalf("expected builtin help catalog to avoid legacy markdown tags, got %q", body)
 	}
 	if !containsAll(body,
-		"以下是当前主展示的 canonical slash command。历史 alias 仍可兼容，但不再作为新的主展示入口。",
+		"以下是当前主展示的 canonical slash command。",
 		"命令：/model",
 		"命令：/reasoning",
 		"命令：/access",
+		"命令：/autocontinue",
 		"命令：/use",
 		"命令：/menu",
 	) {

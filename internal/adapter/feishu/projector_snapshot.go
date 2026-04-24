@@ -83,11 +83,11 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		}
 	}
 	lines = append(lines, formatSnapshotGitFieldsPlain(worktree)...)
-	if autoContinue := snapshotAutoContinueTextPlain(snapshot.AutoContinue); autoContinue != "" {
-		lines = append(lines, snapshotLine("autowhip", autoContinue))
+	if autoWhip := snapshotAutoWhipTextPlain(snapshot.AutoWhip); autoWhip != "" {
+		lines = append(lines, snapshotLine("AutoWhip", autoWhip))
 	}
-	if recovery := snapshotRecoveryTextPlain(snapshot.Recovery); recovery != "" {
-		lines = append(lines, snapshotLine("自动恢复", recovery))
+	if autoContinue := snapshotAutoContinueTextPlain(snapshot.AutoContinue); autoContinue != "" {
+		lines = append(lines, snapshotLine("自动继续", autoContinue))
 	}
 
 	sections := []control.FeishuCardTextSection{{Lines: lines}}
@@ -276,7 +276,7 @@ func snapshotGateText(summary control.GateSummary) string {
 	}
 }
 
-func snapshotAutoContinueTextPlain(summary control.AutoContinueSummary) string {
+func snapshotAutoWhipTextPlain(summary control.AutoWhipSummary) string {
 	stateText := "关闭"
 	if summary.Enabled {
 		stateText = "开启"
@@ -299,7 +299,7 @@ func snapshotAutoContinueTextPlain(summary control.AutoContinueSummary) string {
 	return strings.Join(parts, "，")
 }
 
-func snapshotRecoveryTextPlain(summary control.RecoverySummary) string {
+func snapshotAutoContinueTextPlain(summary control.AutoContinueSummary) string {
 	if !summary.Enabled {
 		return "关闭"
 	}
@@ -309,15 +309,15 @@ func snapshotRecoveryTextPlain(summary control.RecoverySummary) string {
 		parts = append(parts, "空闲")
 	case "scheduled":
 		if summary.AttemptCount > 0 {
-			parts = append(parts, fmt.Sprintf("等待第 %d 次自动恢复", summary.AttemptCount))
+			parts = append(parts, fmt.Sprintf("等待第 %d 次自动继续", summary.AttemptCount))
 		} else {
-			parts = append(parts, "等待自动恢复")
+			parts = append(parts, "等待自动继续")
 		}
 	case "running":
 		if summary.AttemptCount > 0 {
-			parts = append(parts, fmt.Sprintf("第 %d 次自动恢复进行中", summary.AttemptCount))
+			parts = append(parts, fmt.Sprintf("第 %d 次自动继续进行中", summary.AttemptCount))
 		} else {
-			parts = append(parts, "自动恢复进行中")
+			parts = append(parts, "自动继续进行中")
 		}
 	case "failed":
 		parts = append(parts, "本轮已停止")

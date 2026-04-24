@@ -33,22 +33,22 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 		},
 		{
 			name:   "bare autowhip",
-			action: Action{Kind: ActionAutoContinueCommand, Text: "/autowhip"},
-			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowAutoContinueCatalog, RawText: "/autowhip"},
+			action: Action{Kind: ActionAutoWhipCommand, Text: "/autowhip"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowAutoWhipCatalog, RawText: "/autowhip"},
 		},
 		{
 			name:   "autowhip apply stays product owned",
-			action: Action{Kind: ActionAutoContinueCommand, Text: "/autowhip on"},
+			action: Action{Kind: ActionAutoWhipCommand, Text: "/autowhip on"},
 			want:   nil,
 		},
 		{
-			name:   "bare recovery",
-			action: Action{Kind: ActionRecoveryCommand, Text: "/recovery"},
-			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowRecoveryCatalog, RawText: "/recovery"},
+			name:   "bare autocontinue",
+			action: Action{Kind: ActionAutoContinueCommand, Text: "/autocontinue"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowAutoContinueCatalog, RawText: "/autocontinue"},
 		},
 		{
-			name:   "recovery apply stays product owned",
-			action: Action{Kind: ActionRecoveryCommand, Text: "/recovery on"},
+			name:   "autocontinue apply stays product owned",
+			action: Action{Kind: ActionAutoContinueCommand, Text: "/autocontinue on"},
 			want:   nil,
 		},
 		{

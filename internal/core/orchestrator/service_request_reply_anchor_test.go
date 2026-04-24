@@ -11,8 +11,8 @@ import (
 func TestRemoteRequestPromptCarriesTurnReplyAnchor(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	setupAutoContinueSurface(t, svc)
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	setupAutoWhipSurface(t, svc)
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventRequestStarted,
@@ -39,8 +39,8 @@ func TestRemoteRequestPromptCarriesTurnReplyAnchor(t *testing.T) {
 func TestReplayFinalUsesStoredReplyAnchor(t *testing.T) {
 	now := time.Date(2026, 4, 7, 12, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	surface := setupAutoContinueSurface(t, svc)
-	startRemoteTurnForAutoContinueTest(t, svc, "msg-1", "处理一下", "turn-1")
+	surface := setupAutoWhipSurface(t, svc)
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
 
 	svc.storeThreadReplayText(svc.root.Instances["inst-1"], "thread-1", "turn-1", "item-1", "这是缓存的 final")
 	replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay
