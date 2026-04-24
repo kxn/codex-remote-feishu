@@ -14,7 +14,9 @@ import (
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
+	codexupgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime"
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
@@ -134,6 +136,7 @@ type App struct {
 	externalAccessShutdownWait chan struct{}
 	webPreviewGrants           map[string]*previewGrantRecord
 	surfaceResumeRuntime       surfaceResumeRuntimeState
+	codexUpgradeRuntime        codexupgraderuntime.State
 	upgradeRuntime             upgraderuntime.State
 
 	relayListener          net.Listener
@@ -176,6 +179,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
 		surfaceResumeRuntime:        newSurfaceResumeRuntimeState(),
+		codexUpgradeRuntime:         codexupgraderuntime.NewState(),
 		upgradeRuntime:              upgraderuntime.NewState(),
 		cronRuntime:                 newCronRuntimeState(),
 		feishuRuntime:               newFeishuRuntimeState(),
@@ -196,6 +200,14 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gatewayApplyTimeout:         30 * time.Second,
 		finalPreviewTimeout:         90 * time.Second,
 		commandAnchorRecallDelay:    8 * time.Second,
+	}
+	app.codexUpgradeRuntime.LatestLookup = func(ctx context.Context) (string, error) {
+		return codexupgrade.LookupLatestVersion(ctx, codexupgrade.LatestVersionOptions{})
+	}
+	app.codexUpgradeRuntime.Install = func(ctx context.Context, installation codexupgrade.Installation, version string) error {
+		return codexupgrade.InstallGlobal(ctx, version, codexupgrade.InstallOptions{
+			NPMCommand: installation.NPMCommand,
+		})
 	}
 	app.projector.SetSnapshotBinary(formatStatusSnapshotBinary(serverIdentity))
 	app.upgradeRuntime.Lookup = app.defaultReleaseLookup

@@ -232,6 +232,9 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncSurfaceResumeStateLocked(nil)
 		return nil
 	}
+	if a.maybeHandleStandaloneCodexUpgradeActionLocked(ctx, action) {
+		return nil
+	}
 	if a.upgradeOwnerFlowBlocksInputLocked() && !upgradeOwnerFlowAllowsAction(action) {
 		a.ensureSurfaceRouteForNotice(action)
 		a.handleUIEventsLocked(ctx, upgradeOwnerFlowBlockedEvents(action.SurfaceSessionID))

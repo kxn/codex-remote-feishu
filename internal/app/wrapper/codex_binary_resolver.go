@@ -14,6 +14,22 @@ import (
 )
 
 func resolveNormalCodexBinary(configPath, configured string) (string, error) {
+	return resolveNormalCodexBinaryWithOptions(configPath, configured, true)
+}
+
+// ResolveNormalCodexBinaryPreview returns the same effective binary selection
+// that the wrapper would use at runtime, but without rewriting config.
+func ResolveNormalCodexBinaryPreview(configured string) (string, error) {
+	return resolveNormalCodexBinaryWithOptions("", configured, false)
+}
+
+// LooksLikeVSCodeBundleCodexPath reports whether the given path points into a
+// VS Code bundled Codex installation.
+func LooksLikeVSCodeBundleCodexPath(path string) bool {
+	return looksLikeVSCodeBundleCodexPath(path)
+}
+
+func resolveNormalCodexBinaryWithOptions(configPath, configured string, persist bool) (string, error) {
 	configured = strings.TrimSpace(configured)
 	if configured == "" {
 		return configured, nil
@@ -36,13 +52,17 @@ func resolveNormalCodexBinary(configPath, configured string) (string, error) {
 	}
 
 	if _, err := exec.LookPath("codex"); err == nil {
-		persistNormalCodexBinary(configPath, "codex")
+		if persist {
+			persistNormalCodexBinary(configPath, "codex")
+		}
 		log.Printf("wrapper: shared normal codex binary self-healed from vscode bundle path %q to PATH codex", configured)
 		return "codex", nil
 	}
 
 	if fallback := firstUsableVSCodeBundleCodex(configured); fallback != "" {
-		persistNormalCodexBinary(configPath, "codex")
+		if persist {
+			persistNormalCodexBinary(configPath, "codex")
+		}
 		log.Printf("wrapper: shared normal codex binary points to vscode bundle path %q; PATH codex unavailable, temporarily using vscode bundle codex %q", configured, fallback)
 		return fallback, nil
 	}
