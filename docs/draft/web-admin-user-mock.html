@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Remote 本地管理</title>
+    <style>
+      :root {
+        --bg: #eef1ed;
+        --panel: rgba(250, 252, 247, 0.9);
+        --panel-strong: #fffefb;
+        --ink: #223234;
+        --muted: #657577;
+        --line: rgba(34, 50, 52, 0.12);
+        --accent: #17695b;
+        --accent-strong: #124a40;
+        --accent-soft: rgba(23, 105, 91, 0.1);
+        --warn: #b97224;
+        --warn-soft: rgba(185, 114, 36, 0.1);
+        --danger: #b34e4e;
+        --danger-soft: rgba(179, 78, 78, 0.1);
+        --good: #177b55;
+        --good-soft: rgba(23, 123, 85, 0.1);
+        --shadow: 0 24px 60px rgba(21, 29, 33, 0.12);
+        --radius-xl: 30px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top right, rgba(23, 105, 91, 0.12), transparent 28%),
+          radial-gradient(circle at top left, rgba(249, 185, 98, 0.14), transparent 24%),
+          linear-gradient(180deg, #f4f6f2 0%, #edf0ea 100%);
+      }
+
+      body {
+        padding: 24px;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+
+      a {
+        color: var(--accent-strong);
+      }
+
+      .shell {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 286px minmax(0, 1fr);
+        gap: 22px;
+      }
+
+      .sidebar,
+      .main,
+      .modal-card,
+      .toast {
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        padding: 24px;
+        border-radius: var(--radius-xl);
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        box-shadow: var(--shadow);
+        display: grid;
+        gap: 18px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--accent);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .sidebar h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.12;
+      }
+
+      .sidebar p,
+      .main p,
+      .card p,
+      .panel p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .nav-button {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.62);
+        text-align: left;
+      }
+
+      .nav-button.active {
+        background: linear-gradient(135deg, rgba(23, 105, 91, 0.15), rgba(255, 255, 255, 0.9));
+        box-shadow: inset 0 0 0 1px rgba(23, 105, 91, 0.14);
+      }
+
+      .nav-button small {
+        display: block;
+        color: var(--muted);
+      }
+
+      .mobile-nav-button {
+        display: none;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      .main {
+        background: rgba(255, 255, 255, 0.62);
+        border-radius: 34px;
+        border: 1px solid rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        min-height: calc(100vh - 48px);
+      }
+
+      .main-head {
+        padding: 28px 32px 20px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+      }
+
+      .main-head h2 {
+        margin: 0 0 10px;
+        font-size: clamp(30px, 4vw, 44px);
+        line-height: 1.06;
+      }
+
+      .head-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .page-body {
+        padding: 26px 32px 34px;
+        display: grid;
+        gap: 20px;
+      }
+
+      .notice,
+      .toast {
+        border-radius: 18px;
+        padding: 16px 18px;
+        border: 1px solid transparent;
+      }
+
+      .notice strong,
+      .toast strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 15px;
+      }
+
+      .notice.good,
+      .toast.good {
+        background: var(--good-soft);
+        border-color: rgba(23, 123, 85, 0.12);
+      }
+
+      .notice.warn,
+      .toast.warn {
+        background: var(--warn-soft);
+        border-color: rgba(185, 114, 36, 0.12);
+      }
+
+      .notice.danger,
+      .toast.danger {
+        background: var(--danger-soft);
+        border-color: rgba(179, 78, 78, 0.12);
+      }
+
+      .card-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .card-grid.four {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card-grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card,
+      .panel {
+        background: var(--panel-strong);
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(34, 50, 52, 0.08);
+        padding: 22px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .card h3,
+      .panel h3,
+      .panel h4 {
+        margin: 0;
+      }
+
+      .stat-value {
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1;
+        font-weight: 800;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .status-pill.good {
+        background: var(--good-soft);
+        color: var(--good);
+      }
+
+      .status-pill.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+
+      .status-pill.danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .status-pill.neutral {
+        background: rgba(101, 117, 119, 0.12);
+        color: #556467;
+      }
+
+      .attention-list,
+      .task-list,
+      .support-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .attention-row,
+      .task-row,
+      .support-row {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .row-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .button-row,
+      .form-actions,
+      .modal-actions,
+      .switch-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .button-primary,
+      .button-secondary,
+      .button-ghost,
+      .button-danger {
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 999px;
+        font-weight: 700;
+        transition: transform 140ms ease, filter 140ms ease;
+      }
+
+      .button-primary:hover,
+      .button-secondary:hover,
+      .button-ghost:hover,
+      .button-danger:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-primary {
+        background: linear-gradient(135deg, var(--accent), #23947f);
+        color: #fff;
+      }
+
+      .button-secondary {
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+      }
+
+      .button-ghost {
+        background: rgba(34, 50, 52, 0.06);
+        color: var(--ink);
+      }
+
+      .button-danger {
+        background: rgba(179, 78, 78, 0.1);
+        color: var(--danger);
+      }
+
+      .button-primary:disabled,
+      .button-secondary:disabled,
+      .button-ghost:disabled,
+      .button-danger:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .split-layout {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 18px;
+      }
+
+      .app-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .app-list button {
+        width: 100%;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(34, 50, 52, 0.08);
+        text-align: left;
+        display: grid;
+        gap: 8px;
+      }
+
+      .app-list button.active {
+        background: linear-gradient(135deg, rgba(23, 105, 91, 0.12), rgba(255, 255, 255, 0.92));
+        box-shadow: inset 0 0 0 1px rgba(23, 105, 91, 0.14);
+      }
+
+      .list-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .field-grid .wide {
+        grid-column: 1 / -1;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .field input,
+      .field textarea {
+        width: 100%;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(34, 50, 52, 0.14);
+        background: #fffef9;
+        color: var(--ink);
+      }
+
+      .field textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .field-error {
+        color: var(--danger);
+        font-size: 13px;
+      }
+
+      .summary-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .details {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(248, 250, 246, 0.82);
+      }
+
+      .details summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 16px 18px;
+        font-weight: 700;
+      }
+
+      .details summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .details-body {
+        padding: 0 18px 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .support-copy {
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(23, 105, 91, 0.06);
+        border: 1px solid rgba(23, 105, 91, 0.08);
+      }
+
+      .support-copy code {
+        display: block;
+        margin-top: 10px;
+        padding: 14px;
+        border-radius: 14px;
+        background: #f5f3ee;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+
+      .toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        width: min(360px, calc(100vw - 32px));
+        display: none;
+        box-shadow: 0 20px 50px rgba(22, 30, 35, 0.18);
+        z-index: 16;
+      }
+
+      .toast.show {
+        display: block;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(20, 28, 32, 0.52);
+        z-index: 20;
+      }
+
+      .modal.open {
+        display: flex;
+      }
+
+      .modal-card {
+        width: min(560px, 100%);
+        background: var(--panel-strong);
+        border-radius: 30px;
+        padding: 24px;
+        box-shadow: 0 26px 70px rgba(18, 25, 30, 0.24);
+        display: grid;
+        gap: 14px;
+      }
+
+      .modal-card h3 {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .inline-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      @media (max-width: 1120px) {
+        body {
+          padding: 16px;
+        }
+
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          display: none;
+        }
+
+        .sidebar.open {
+          display: grid;
+        }
+
+        .mobile-nav-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .card-grid.four,
+        .card-grid.two,
+        .split-layout,
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .main-head,
+        .page-body {
+          padding-left: 18px;
+          padding-right: 18px;
+        }
+
+        .head-actions,
+        .button-row,
+        .form-actions,
+        .modal-actions {
+          width: 100%;
+        }
+
+        .head-actions button,
+        .button-row button,
+        .form-actions button,
+        .modal-actions button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Visible-content contract
+      Final user: 已经接好机器、日常维护本机接入的人
+      Current task: 看清当前是否可用，并处理最常见的维护动作
+      Allowed information types: 健康摘要、待处理事项、飞书应用状态、常用维护入口、与当前动作直接相关的说明
+      Disallowed information types: 内部标识、协议状态、路径地址、原始错误堆、实现策略名词默认上屏
+      Allowed feedback slots: 页面通知条、卡片内 notice、字段错误、确认弹层、完成 toast
+    -->
+    <div id="app"></div>
+    <div id="modal" class="modal" aria-live="polite"></div>
+    <div id="toast" class="toast"></div>
+    <script>
+      const sections = [
+        { id: "overview", label: "概览", hint: "先看这台机器现在是否能正常使用。" },
+        { id: "apps", label: "飞书应用", hint: "新增、接入和维护飞书应用。" },
+        { id: "instances", label: "工作实例", hint: "确认当前有哪些实例在线。" },
+        { id: "storage", label: "文档与图片", hint: "按需清理旧内容。" },
+        { id: "vscode", label: "VS Code", hint: "只保留当前真的需要处理的入口。" },
+        { id: "support", label: "支持信息", hint: "需要排障时再展开。" },
+      ];
+
+      const state = {
+        navOpen: window.innerWidth > 1120,
+        section: "overview",
+        notice: {
+          tone: "good",
+          title: "这台机器现在可以正常使用",
+          message: "日常只需要关注待处理事项和你正在操作的区块，技术支持信息默认保持收起。",
+        },
+        toast: null,
+        modal: null,
+        selectedAppId: "app-main",
+        appDraft: {},
+        appErrors: {},
+        onboardingMode: "new",
+        supportExpanded: false,
+        vscodeScenario: "current",
+        vscodeReady: false,
+        apps: [
+          {
+            id: "app-main",
+            name: "团队飞书应用",
+            appId: "cli_team_001",
+            appSecret: "secret_team_001",
+            enabled: true,
+            status: { tone: "good", label: "可用", detail: "当前这条飞书应用已经可以正常对话。" },
+            pending: [
+              { id: "preview", title: "补开文档预览权限", detail: "如果你要把 Markdown 预览上传到飞书云盘，再补这一项即可。", done: false },
+            ],
+            lastNotice: null,
+          },
+          {
+            id: "app-ops",
+            name: "值班飞书应用",
+            appId: "cli_ops_019",
+            appSecret: "secret_ops_019",
+            enabled: true,
+            status: { tone: "warn", label: "待补全", detail: "这条飞书应用已经接进来，但还有基础项没有补齐。" },
+            pending: [
+              { id: "verify", title: "重新测试连接", detail: "建议先确认这份凭证仍然可用。", done: false },
+              { id: "publish", title: "完成发布确认", detail: "让最近做的后台设置真正生效。", done: false },
+            ],
+            lastNotice: "最近一次保存已经成功，但你还没有重新确认连接。",
+          },
+        ],
+        instances: [
+          { id: "inst-1", name: "Design Review", workspace: "/workspace/design", status: { tone: "good", label: "在线" }, detail: "刚刚还在继续处理任务。" },
+          { id: "inst-2", name: "Backend Cleanup", workspace: "/workspace/server", status: { tone: "neutral", label: "空闲" }, detail: "目前没有正在运行的会话。" },
+        ],
+        storage: {
+          images: { count: 28, size: "126 MB", active: 4 },
+          previews: [
+            { id: "team", name: "团队飞书应用", status: { tone: "good", label: "正常" }, files: 16, lastUsed: "今天 14:20" },
+            { id: "ops", name: "值班飞书应用", status: { tone: "warn", label: "可清理" }, files: 42, lastUsed: "3 天前" },
+          ],
+        },
+      };
+
+      function activeApp() {
+        return state.apps.find((app) => app.id === state.selectedAppId) || null;
+      }
+
+      function resetDraftFromApp() {
+        const app = activeApp();
+        state.appDraft = app
+          ? {
+              name: app.name,
+              appId: app.appId,
+              appSecret: app.appSecret,
+              enabled: app.enabled,
+            }
+          : { name: "", appId: "", appSecret: "", enabled: true };
+        state.appErrors = {};
+      }
+
+      resetDraftFromApp();
+
+      function statusHTML(tone, text) {
+        return '<span class="status-pill ' + tone + '">' + text + "</span>";
+      }
+
+      function setNotice(tone, title, message) {
+        state.notice = { tone, title, message };
+      }
+
+      function showToast(tone, title, message) {
+        state.toast = { tone, title, message };
+        renderToast();
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => {
+          state.toast = null;
+          renderToast();
+        }, 2600);
+      }
+
+      function openModal(content) {
+        state.modal = content;
+        renderModal();
+      }
+
+      function closeModal() {
+        state.modal = null;
+        renderModal();
+      }
+
+      function switchSection(sectionId) {
+        state.section = sectionId;
+        if (window.innerWidth <= 1120) {
+          state.navOpen = false;
+        }
+        render();
+      }
+
+      function selectApp(appId) {
+        state.selectedAppId = appId;
+        resetDraftFromApp();
+        setNotice("neutral", "", "");
+        render();
+      }
+
+      function updateDraft(field, value) {
+        state.appDraft[field] = field === "enabled" ? value : value;
+        if (state.appErrors[field]) {
+          delete state.appErrors[field];
+        }
+        render();
+      }
+
+      function saveApp() {
+        const errors = {};
+        if (!state.appDraft.name.trim()) {
+          errors.name = "请先给这条飞书应用起一个容易辨认的名字。";
+        }
+        if (!state.appDraft.appId.trim()) {
+          errors.appId = "请先填写 App ID。";
+        }
+        if (!state.appDraft.appSecret.trim()) {
+          errors.appSecret = "请先填写 App Secret。";
+        }
+        state.appErrors = errors;
+        if (Object.keys(errors).length) {
+          setNotice("danger", "这次保存还没有完成", "请先修正当前字段，再继续保存。");
+          render();
+          return;
+        }
+        const app = activeApp();
+        app.name = state.appDraft.name.trim();
+        app.appId = state.appDraft.appId.trim();
+        app.appSecret = state.appDraft.appSecret.trim();
+        app.enabled = Boolean(state.appDraft.enabled);
+        app.lastNotice = "本地更改已经保存。";
+        app.status = {
+          tone: "warn",
+          label: "待确认",
+          detail: "这次更改已经保存，建议马上重新测试连接，确认现在还能正常使用。",
+        };
+        setNotice("good", "更改已保存", "建议下一步立即测试连接，避免把旧状态当成仍然可用。");
+        showToast("good", "已保存", "飞书应用信息已更新。");
+        render();
+      }
+
+      function verifyApp() {
+        const app = activeApp();
+        if (!state.appDraft.appId.trim() || !state.appDraft.appSecret.trim()) {
+          state.appErrors.appId = state.appDraft.appId.trim() ? "" : "请先填写 App ID。";
+          state.appErrors.appSecret = state.appDraft.appSecret.trim() ? "" : "请先填写 App Secret。";
+          setNotice("danger", "还不能测试连接", "请先把必填字段补齐。");
+          render();
+          return;
+        }
+        if (state.appDraft.appId.startsWith("bad_")) {
+          app.lastNotice = "这次连接测试失败，请核对你当前复制的是不是这条飞书应用的凭证。";
+          app.status = {
+            tone: "danger",
+            label: "连接失败",
+            detail: "目前还不能正常使用，请先修正这条飞书应用的凭证。",
+          };
+          setNotice("danger", "连接测试失败", "请核对 App ID、App Secret，以及飞书后台里这条应用是否仍然启用。");
+          render();
+          return;
+        }
+        app.status = {
+          tone: "good",
+          label: "可用",
+          detail: "连接测试通过，这条飞书应用现在可以继续使用。",
+        };
+        app.lastNotice = "连接测试刚刚通过。";
+        app.pending = app.pending.filter((item) => item.id !== "verify");
+        setNotice("good", "连接测试通过", "这条飞书应用已经确认可用。");
+        showToast("good", "已通过", "你可以继续补齐其它事项。");
+        render();
+      }
+
+      function reconnectApp() {
+        const app = activeApp();
+        app.lastNotice = "已经重新拉起这条飞书应用的连接，状态会在下一次刷新后更新。";
+        setNotice("warn", "已触发重新连接", "如果你刚改完飞书后台设置，可以稍等片刻再看状态。");
+        showToast("warn", "已发起", "重新连接请求已发送。");
+        render();
+      }
+
+      function toggleAppEnabled() {
+        const app = activeApp();
+        app.enabled = !app.enabled;
+        state.appDraft.enabled = app.enabled;
+        app.status = app.enabled
+          ? { tone: "warn", label: "待确认", detail: "已经重新启用，建议马上测试连接。" }
+          : { tone: "neutral", label: "已停用", detail: "这条飞书应用已经停用，不会再被默认使用。" };
+        setNotice("good", app.enabled ? "已重新启用" : "已停用", app.enabled ? "建议现在就重新测试连接。" : "以后需要时可以再启用。");
+        render();
+      }
+
+      function toggleTask(taskId) {
+        const app = activeApp();
+        const task = app.pending.find((item) => item.id === taskId);
+        if (!task) {
+          return;
+        }
+        task.done = !task.done;
+        render();
+      }
+
+      function completePendingTasks() {
+        const app = activeApp();
+        const undone = app.pending.filter((item) => !item.done);
+        if (undone.length) {
+          setNotice("warn", "还有待处理项", "先把这张卡片里的待处理项完成，再刷新状态。");
+          render();
+          return;
+        }
+        app.pending = [];
+        app.status = { tone: "good", label: "可用", detail: "这条飞书应用的当前待处理项已经全部完成。" };
+        setNotice("good", "待处理项已清空", "现在这条飞书应用可以按可用状态展示。");
+        showToast("good", "已完成", "这条飞书应用已经回到稳定状态。");
+        render();
+      }
+
+      function beginNewApp() {
+        openModal({
+          type: "new-app",
+        });
+      }
+
+      function saveNewApp(mode) {
+        if (mode === "new") {
+          state.apps.unshift({
+            id: "app-new",
+            name: "新飞书应用",
+            appId: "cli_new_088",
+            appSecret: "secret_new_088",
+            enabled: true,
+            status: { tone: "warn", label: "待确认", detail: "扫码创建已经完成，建议先测试连接。" },
+            pending: [{ id: "verify", title: "测试连接", detail: "先确认这份新凭证已经可以正常使用。", done: false }],
+            lastNotice: "刚刚新增，建议先完成第一轮连接测试。",
+          });
+          state.selectedAppId = "app-new";
+          resetDraftFromApp();
+          setNotice("good", "新飞书应用已加入列表", "现在直接在这个页面里继续测试连接和补齐事项。");
+          showToast("good", "已新增", "新飞书应用已经接进来了。");
+          closeModal();
+          render();
+          return;
+        }
+        state.apps.unshift({
+          id: "app-manual",
+          name: "手动接入应用",
+          appId: "cli_manual_105",
+          appSecret: "secret_manual_105",
+          enabled: true,
+          status: { tone: "warn", label: "待确认", detail: "凭证已经录入，下一步请先测试连接。" },
+          pending: [{ id: "verify", title: "测试连接", detail: "先确认这份凭证已经可用。", done: false }],
+          lastNotice: null,
+        });
+        state.selectedAppId = "app-manual";
+        resetDraftFromApp();
+        setNotice("good", "已创建手动接入入口", "继续在飞书应用页完成连接测试即可。");
+        showToast("good", "已创建", "现在可以继续填写或核对凭证。");
+        closeModal();
+        render();
+      }
+
+      function confirmDeleteApp() {
+        const app = activeApp();
+        openModal({
+          type: "confirm",
+          title: "确认删除这条飞书应用？",
+          message: "删除后，这台机器将不再继续使用它。这个操作不会帮你删除飞书开放平台里的原应用。",
+          confirmLabel: "确认删除",
+          danger: true,
+          onConfirm: () => {
+            state.apps = state.apps.filter((item) => item.id !== app.id);
+            state.selectedAppId = state.apps[0] ? state.apps[0].id : "";
+            resetDraftFromApp();
+            setNotice("warn", "已删除当前飞书应用", state.apps.length ? "你可以继续管理列表里的其它飞书应用。" : "当前机器还没有飞书应用，建议先新增一条。");
+            showToast("warn", "已删除", "当前飞书应用已从列表移除。");
+            closeModal();
+            render();
+          },
+        });
+      }
+
+      function cleanupImages() {
+        openModal({
+          type: "confirm",
+          title: "清理旧图片？",
+          message: "会保留仍在使用的图片，只清掉当前已经不再需要的旧内容。",
+          confirmLabel: "清理旧图片",
+          onConfirm: () => {
+            state.storage.images.count = 8;
+            state.storage.images.size = "34 MB";
+            setNotice("good", "旧图片已清理", "当前只保留仍在使用的图片。");
+            showToast("good", "已清理", "图片暂存已经缩减。");
+            closeModal();
+            render();
+          },
+        });
+      }
+
+      function cleanupPreview(id) {
+        const item = state.storage.previews.find((preview) => preview.id === id);
+        openModal({
+          type: "confirm",
+          title: "清理这条飞书应用的旧预览？",
+          message: "会保留新的内容，只清掉已经很久没再使用的旧预览。",
+          confirmLabel: "清理旧预览",
+          onConfirm: () => {
+            item.files = 6;
+            item.lastUsed = "今天 16:00";
+            item.status = { tone: "good", label: "正常" };
+            setNotice("good", "旧预览已清理", "这条飞书应用的预览目录已经恢复到较轻的占用状态。");
+            showToast("good", "已清理", "文档预览目录已更新。");
+            closeModal();
+            render();
+          },
+        });
+      }
+
+      function continueVSCode() {
+        if (state.vscodeScenario === "later") {
+          state.vscodeReady = false;
+          setNotice("warn", "VS Code 已留到以后处理", "这不会影响你现在继续使用。");
+          showToast("warn", "已稍后处理", "以后再回这页继续。");
+          render();
+          return;
+        }
+        state.vscodeReady = true;
+        setNotice("good", "VS Code 已准备好", "以后如果扩展升级，只需要回到这页重新处理一次。");
+        showToast("good", "已接入", "VS Code 入口已经准备好。");
+        render();
+      }
+
+      function copySupportInfo() {
+        const text = [
+          "机器状态：可用",
+          "飞书应用数量：" + state.apps.length,
+          "当前选中应用：" + (activeApp() ? activeApp().name : "无"),
+          "文档预览目录状态：已记录",
+          "VS Code 当前状态：" + (state.vscodeReady ? "已接入" : "待处理"),
+        ].join("\n");
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            setNotice("good", "支持信息已复制", "把这份摘要发给同事或支持人员即可。");
+            showToast("good", "已复制", "支持信息已写入剪贴板。");
+            render();
+          });
+        } else {
+          openModal({
+            type: "info",
+            title: "这台浏览器暂时不能直接复制",
+            message: "你可以手动复制下面这份支持信息：",
+            detail: text,
+          });
+        }
+      }
+
+      function toggleNav() {
+        state.navOpen = !state.navOpen;
+        render();
+      }
+
+      function renderSidebar() {
+        return (
+          '<aside class="sidebar' +
+          (state.navOpen ? " open" : "") +
+          '"><div><p class="eyebrow">Codex Remote</p><h1>本地管理</h1><p>日常只看当前是否可用，以及你正在处理的那部分内容。</p></div><div class="nav-list">' +
+          sections
+            .map((section) => {
+              return (
+                '<button class="nav-button' +
+                (section.id === state.section ? " active" : "") +
+                '" type="button" onclick="switchSection(\'' +
+                section.id +
+                "')\"><div><strong>" +
+                section.label +
+                "</strong><small>" +
+                section.hint +
+                "</small></div>" +
+                statusHTML(section.id === state.section ? "good" : "neutral", section.id === state.section ? "当前" : "查看") +
+                "</button>"
+              );
+            })
+            .join("") +
+          "</div></aside>"
+        );
+      }
+
+      function renderNotice() {
+        if (!state.notice || !state.notice.title) {
+          return "";
+        }
+        return '<section class="notice ' + state.notice.tone + '"><strong>' + state.notice.title + "</strong><p>" + state.notice.message + "</p></section>";
+      }
+
+      function renderOverview() {
+        const needsAttention = state.apps.filter((app) => app.status.tone !== "good").length + state.storage.previews.filter((item) => item.status.tone === "warn").length + (state.vscodeReady ? 0 : 1);
+        return (
+          '<section class="card-grid four">' +
+          '<article class="card"><h3>飞书应用</h3><div class="stat-value">' +
+          state.apps.length +
+          "</div><p>当前机器已经接入 " +
+          state.apps.length +
+          " 条飞书应用。</p></article>" +
+          '<article class="card"><h3>待处理事项</h3><div class="stat-value">' +
+          needsAttention +
+          "</div><p>这里只算现在最容易影响使用体验的项目。</p></article>" +
+          '<article class="card"><h3>工作实例</h3><div class="stat-value">' +
+          state.instances.length +
+          "</div><p>当前有 " +
+          state.instances.filter((item) => item.status.label === "在线").length +
+          " 个实例在线。</p></article>" +
+          '<article class="card"><h3>文档与图片</h3><div class="stat-value">' +
+          (state.storage.images.count + state.storage.previews.reduce((sum, item) => sum + item.files, 0)) +
+          "</div><p>这里只保留概览，需要清理时再进入对应分区。</p></article></section>" +
+          '<section class="panel"><div class="row-head"><div><h3>建议优先处理</h3><p>默认只列最值得先看的动作，不把技术细节塞进首页。</p></div>' +
+          statusHTML(needsAttention ? "warn" : "good", needsAttention ? "建议处理" : "当前稳定") +
+          '</div><div class="attention-list">' +
+          [
+            {
+              title: "值班飞书应用还有待补全项",
+              detail: "建议先重新测试连接，再完成发布确认。",
+              action: "去飞书应用",
+              onClick: "focusOpsApp()",
+            },
+            {
+              title: "VS Code 还没有处理",
+              detail: "如果你要在这台机器上继续用 VS Code，现在可以一起处理。",
+              action: "去 VS Code",
+              onClick: "switchSection('vscode')",
+            },
+            {
+              title: "有一条文档预览已经很久没再使用",
+              detail: "现在清理，能让这台机器保持更轻的占用。",
+              action: "去文档与图片",
+              onClick: "switchSection('storage')",
+            },
+          ]
+            .map((item) => {
+              return '<article class="attention-row"><div class="row-head"><div><strong>' + item.title + "</strong><p>" + item.detail + '</p></div>' + statusHTML("warn", "待处理") + '</div><div class="button-row"><button class="button-secondary" type="button" onclick="' + item.onClick + '">' + item.action + "</button></div></article>";
+            })
+            .join("") +
+          "</div></section>"
+        );
+      }
+
+      function renderApps() {
+        const app = activeApp();
+        return (
+          '<section class="split-layout"><aside class="panel"><div class="row-head"><div><h3>飞书应用列表</h3><p>列表里只保留名字、状态和待处理数量，不把技术字段默认挂出来。</p></div><button class="button-secondary" type="button" onclick="beginNewApp()">新增飞书应用</button></div><div class="app-list">' +
+          (state.apps.length
+            ? state.apps
+                .map((item) => {
+                  return '<button type="button" class="' + (item.id === state.selectedAppId ? "active" : "") + '" onclick="selectApp(\'' + item.id + "')\"><div class=\"list-meta\"><strong>" + item.name + "</strong>" + statusHTML(item.status.tone, item.status.label) + "</div><p>" + item.status.detail + '</p><div class="inline-pills">' + statusHTML(item.enabled ? "good" : "neutral", item.enabled ? "已启用" : "已停用") + (item.pending.length ? statusHTML("warn", "待处理 " + item.pending.length + " 项") : statusHTML("good", "当前稳定")) + "</div></button>";
+                })
+                .join("")
+            : '<div class="card"><h3>还没有飞书应用</h3><p>先新增一条，再回来继续做连接测试和维护。</p><div class="button-row"><button class="button-primary" type="button" onclick="beginNewApp()">新增首个飞书应用</button></div></div>') +
+          "</div></aside>" +
+          (app
+            ? '<div class="card-grid"><section class="panel"><div class="row-head"><div><h3>' +
+              app.name +
+              "</h3><p>这里只保留你当前正在维护这条飞书应用时真正需要的内容。</p></div>" +
+              statusHTML(app.status.tone, app.status.label) +
+              '</div><div class="summary-tags">' +
+              statusHTML(app.enabled ? "good" : "neutral", app.enabled ? "已启用" : "已停用") +
+              (app.pending.length ? statusHTML("warn", "还有 " + app.pending.length + " 项待处理") : statusHTML("good", "当前稳定")) +
+              '</div><p>' +
+              app.status.detail +
+              '</p>' +
+              (app.lastNotice ? '<div class="notice warn"><strong>最近提示</strong><p>' + app.lastNotice + "</p></div>" : "") +
+              '<div class="field-grid"><div class="field"><label for="name">飞书应用名称</label><input id="name" value="' +
+              escapeHTML(state.appDraft.name || "") +
+              '" oninput="updateDraft(\'name\', this.value)" />' +
+              (state.appErrors.name ? '<div class="field-error">' + state.appErrors.name + "</div>" : "") +
+              '</div><div class="field"><label for="appid">App ID</label><input id="appid" value="' +
+              escapeHTML(state.appDraft.appId || "") +
+              '" oninput="updateDraft(\'appId\', this.value)" />' +
+              (state.appErrors.appId ? '<div class="field-error">' + state.appErrors.appId + "</div>" : "") +
+              '</div><div class="field wide"><label for="secret">App Secret</label><input id="secret" type="password" value="' +
+              escapeHTML(state.appDraft.appSecret || "") +
+              '" oninput="updateDraft(\'appSecret\', this.value)" />' +
+              (state.appErrors.appSecret ? '<div class="field-error">' + state.appErrors.appSecret + "</div>" : "") +
+              '</div></div><div class="switch-row"><button class="' +
+              (state.appDraft.enabled ? "button-secondary" : "button-ghost") +
+              '" type="button" onclick="updateDraft(\'enabled\', ' +
+              (!state.appDraft.enabled) +
+              ')">' +
+              (state.appDraft.enabled ? "当前：已启用" : "当前：已停用") +
+              '</button></div><div class="form-actions"><button class="button-primary" type="button" onclick="saveApp()">保存更改</button><button class="button-secondary" type="button" onclick="verifyApp()">测试连接</button><button class="button-ghost" type="button" onclick="reconnectApp()">重新连接</button><button class="button-ghost" type="button" onclick="toggleAppEnabled()">' +
+              (app.enabled ? "停用飞书应用" : "启用飞书应用") +
+              '</button><button class="button-danger" type="button" onclick="confirmDeleteApp()">删除飞书应用</button></div></section>' +
+              '<section class="panel"><div class="row-head"><div><h3>建议处理</h3><p>默认只展示当前这条飞书应用真正需要处理的事情。</p></div>' +
+              (app.pending.length ? statusHTML("warn", "有待处理项") : statusHTML("good", "当前稳定")) +
+              '</div>' +
+              (app.pending.length
+                ? '<div class="task-list">' +
+                  app.pending
+                    .map((task) => {
+                      return '<article class="task-row"><div class="row-head"><div><strong>' + task.title + "</strong><p>" + task.detail + "</p></div>" + statusHTML(task.done ? "good" : "warn", task.done ? "已完成" : "待处理") + '</div><div class="button-row"><button class="' + (task.done ? "button-ghost" : "button-secondary") + '" type="button" onclick="toggleTask(\'' + task.id + "')\">" + (task.done ? "撤回示例状态" : "我已完成这项") + '</button></div></article>';
+                    })
+                    .join("") +
+                  '<div class="button-row"><button class="button-primary" type="button" onclick="completePendingTasks()">刷新当前状态</button></div></div>'
+                : '<div class="notice good"><strong>当前没有明显待处理项</strong><p>这条飞书应用已经处于比较稳定的状态。</p></div>') +
+              '<details class="details"><summary>查看接入细节</summary><div class="details-body"><p>只有在你真的要回飞书后台核对设置时，才展开这里。</p><div class="support-list"><div class="support-row"><strong>基础权限</strong><p>先保证基础对话与交互必需的权限已开通；文档预览权限留给确实需要的人再补。</p></div><div class="support-row"><strong>事件与回调</strong><p>确认消息和回调都已经回到当前这台机器。</p></div><div class="support-row"><strong>菜单与发布</strong><p>菜单先保留常用入口，后台设置改完后记得发布当前版本。</p></div></div></div></details></section></div>'
+            : "") +
+          "</section>"
+        );
+      }
+
+      function renderInstances() {
+        return (
+          '<section class="panel"><div class="row-head"><div><h3>工作实例</h3><p>这里只做一件事：帮你确认当前有哪些实例在线，以及它们是否还在继续工作。</p></div>' +
+          statusHTML(state.instances.some((item) => item.status.label === "在线") ? "good" : "neutral", "当前可见") +
+          '</div><div class="card-grid two">' +
+          state.instances
+            .map((instance) => {
+              return '<article class="card"><div class="row-head"><div><strong>' + instance.name + "</strong><p>" + instance.workspace + "</p></div>" + statusHTML(instance.status.tone, instance.status.label) + "</div><p>" + instance.detail + "</p></article>";
+            })
+            .join("") +
+          "</div></section>"
+        );
+      }
+
+      function renderStorage() {
+        return (
+          '<section class="card-grid two"><article class="panel"><div class="row-head"><div><h3>图片暂存</h3><p>默认只看占用和是否需要清理。</p></div>' +
+          statusHTML("neutral", "按需清理") +
+          '</div><div class="card-grid two"><div class="card"><strong>暂存文件</strong><p class="stat-value">' +
+          state.storage.images.count +
+          "</p><p>仍在使用 " +
+          state.storage.images.active +
+          " 个</p></div><div class=\"card\"><strong>占用空间</strong><p class=\"stat-value\">" +
+          state.storage.images.size +
+          '</p><p>只在需要时清理旧图片。</p></div></div><div class="button-row"><button class="button-secondary" type="button" onclick="cleanupImages()">清理旧图片</button></div></article>' +
+          '<article class="panel"><div class="row-head"><div><h3>文档预览</h3><p>按飞书应用分别查看，默认只看哪一条值得先清理。</p></div>' +
+          statusHTML("warn", "可逐条清理") +
+          '</div><div class="task-list">' +
+          state.storage.previews
+            .map((preview) => {
+              return '<article class="task-row"><div class="row-head"><div><strong>' + preview.name + "</strong><p>最近使用：" + preview.lastUsed + " · 当前共 " + preview.files + " 个文件</p></div>" + statusHTML(preview.status.tone, preview.status.label) + '</div><div class="button-row"><button class="button-secondary" type="button" onclick="cleanupPreview(\'' + preview.id + "')\">清理旧预览</button></div></article>";
+            })
+            .join("") +
+          "</div></article></section>"
+        );
+      }
+
+      function renderVSCode() {
+        return (
+          '<section class="panel"><div class="row-head"><div><h3>VS Code</h3><p>默认只说你现在要不要在这台机器上继续处理，而不是先把实现细节摊开。</p></div>' +
+          statusHTML(state.vscodeReady ? "good" : "warn", state.vscodeReady ? "已处理" : "待处理") +
+          '</div><div class="card-grid two"><article class="card"><h4>你要怎么用</h4><div class="button-row"><button class="' +
+          (state.vscodeScenario === "current" ? "button-secondary" : "button-ghost") +
+          '" type="button" onclick="setVSCodeScenario(\'current\')">要在这台机器上继续使用</button><button class="' +
+          (state.vscodeScenario === "later" ? "button-secondary" : "button-ghost") +
+          '" type="button" onclick="setVSCodeScenario(\'later\')">以后再处理</button></div><p>' +
+          (state.vscodeScenario === "current"
+            ? "如果你现在就要在这台机器上继续用 VS Code，可以直接处理。"
+            : "如果你暂时不用，这一步可以不打断当前接入。 ") +
+          '</p></article><article class="card"><h4>当前说明</h4><p>' +
+          (state.vscodeScenario === "current"
+            ? "只要这台机器上已经安装扩展，就可以直接继续。以后扩展升级，再回来重新处理一次即可。"
+            : "这不会影响你现在继续使用。等你真的要在这台机器上用 VS Code，再回来处理。") +
+          '</p></article></div><div class="button-row"><button class="button-primary" type="button" onclick="continueVSCode()">' +
+          (state.vscodeScenario === "later" ? "稍后处理" : "继续处理 VS Code") +
+          "</button></div></section>"
+        );
+      }
+
+      function renderSupport() {
+        return (
+          '<section class="panel"><div class="row-head"><div><h3>支持信息</h3><p>默认还是用人话。只有在你真的要找人协助时，才展开更细的支持摘要。</p></div>' +
+          statusHTML("neutral", "按需展开") +
+          '</div><div class="support-list"><article class="support-row"><strong>先复制一份简版支持信息</strong><p>这份摘要不暴露内部实现结构，只保留别人协助你时通常最先需要知道的内容。</p><div class="button-row"><button class="button-secondary" type="button" onclick="copySupportInfo()">复制支持信息</button></div></article><details class="details" ' +
+          (state.supportExpanded ? "open" : "") +
+          '><summary onclick="toggleSupport(event)">查看更细的支持摘要</summary><div class="details-body"><div class="support-copy"><p>这里不默认展示在主界面，只在你明确需要时再展开。</p><code>本地管理页：仅本机可访问\n当前选中飞书应用：' +
+          escapeHTML(activeApp() ? activeApp().name : "无") +
+          "\n当前飞书应用状态：" +
+          escapeHTML(activeApp() ? activeApp().status.label : "无") +
+          "\n工作实例数：" +
+          state.instances.length +
+          "\n文档预览状态：已记录\nVS Code 状态：" +
+          (state.vscodeReady ? "已处理" : "待处理") +
+          '</code></div></div></details></div></section>'
+        );
+      }
+
+      function renderSection() {
+        switch (state.section) {
+          case "overview":
+            return renderOverview();
+          case "apps":
+            return renderApps();
+          case "instances":
+            return renderInstances();
+          case "storage":
+            return renderStorage();
+          case "vscode":
+            return renderVSCode();
+          case "support":
+            return renderSupport();
+          default:
+            return "";
+        }
+      }
+
+      function render() {
+        const sectionMeta = sections.find((item) => item.id === state.section);
+        document.getElementById("app").innerHTML =
+          '<div class="shell">' +
+          renderSidebar() +
+          '<main class="main"><div class="main-head"><div><p class="eyebrow">本地管理</p><h2>' +
+          sectionMeta.label +
+          '</h2><p>' +
+          sectionMeta.hint +
+          '</p></div><div class="head-actions"><button class="mobile-nav-button" type="button" onclick="toggleNav()">分区导航</button><button class="button-ghost" type="button" onclick="refreshPage()">刷新状态</button></div></div><div class="page-body">' +
+          renderNotice() +
+          renderSection() +
+          "</div></main></div>";
+        renderModal();
+        renderToast();
+      }
+
+      function renderModal() {
+        const modal = document.getElementById("modal");
+        if (!state.modal) {
+          modal.className = "modal";
+          modal.innerHTML = "";
+          return;
+        }
+        if (state.modal.type === "new-app") {
+          modal.className = "modal open";
+          modal.innerHTML =
+            '<div class="modal-card"><h3>新增飞书应用</h3><p>这里只先让你选一条最常用的新增路径，后面的内容留在真正需要的时候再展示。</p><div class="button-row"><button class="button-primary" type="button" onclick="saveNewApp(\'new\')">扫码新建飞书应用</button><button class="button-secondary" type="button" onclick="saveNewApp(\'existing\')">接入已有飞书应用</button></div><div class="modal-actions"><button class="button-ghost" type="button" onclick="closeModal()">取消</button></div></div>';
+          return;
+        }
+        if (state.modal.type === "confirm") {
+          modal.className = "modal open";
+          modal.innerHTML =
+            '<div class="modal-card"><h3>' +
+            state.modal.title +
+            "</h3><p>" +
+            state.modal.message +
+            '</p><div class="modal-actions"><button class="' +
+            (state.modal.danger ? "button-danger" : "button-primary") +
+            '" type="button" onclick="confirmModalAction()">' +
+            state.modal.confirmLabel +
+            '</button><button class="button-ghost" type="button" onclick="closeModal()">取消</button></div></div>';
+          return;
+        }
+        modal.className = "modal open";
+        modal.innerHTML =
+          '<div class="modal-card"><h3>' +
+          state.modal.title +
+          "</h3><p>" +
+          state.modal.message +
+          '</p><pre style="margin:0;padding:14px;border-radius:14px;background:#f6f3ed;white-space:pre-wrap;overflow:auto;">' +
+          escapeHTML(state.modal.detail || "") +
+          '</pre><div class="modal-actions"><button class="button-primary" type="button" onclick="closeModal()">我知道了</button></div></div>';
+      }
+
+      function renderToast() {
+        const toast = document.getElementById("toast");
+        if (!state.toast) {
+          toast.className = "toast";
+          toast.innerHTML = "";
+          return;
+        }
+        toast.className = "toast show " + state.toast.tone;
+        toast.innerHTML = "<strong>" + state.toast.title + "</strong><p>" + state.toast.message + "</p>";
+      }
+
+      function confirmModalAction() {
+        if (state.modal && state.modal.onConfirm) {
+          state.modal.onConfirm();
+        }
+      }
+
+      function refreshPage() {
+        setNotice("good", "状态已刷新", "默认只刷新你现在关心的结果，不在页面上额外展开内部细节。");
+        showToast("good", "已刷新", "当前页面状态已更新。");
+        render();
+      }
+
+      function focusOpsApp() {
+        state.section = "apps";
+        state.selectedAppId = "app-ops";
+        resetDraftFromApp();
+        setNotice("warn", "已定位到值班飞书应用", "你现在可以直接在当前页测试连接并处理待补全项。");
+        render();
+      }
+
+      function setVSCodeScenario(value) {
+        state.vscodeScenario = value;
+        render();
+      }
+
+      function toggleSupport(event) {
+        event.preventDefault();
+        state.supportExpanded = !state.supportExpanded;
+        render();
+      }
+
+      function escapeHTML(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      window.switchSection = switchSection;
+      window.toggleNav = toggleNav;
+      window.selectApp = selectApp;
+      window.updateDraft = updateDraft;
+      window.saveApp = saveApp;
+      window.verifyApp = verifyApp;
+      window.reconnectApp = reconnectApp;
+      window.toggleAppEnabled = toggleAppEnabled;
+      window.toggleTask = toggleTask;
+      window.completePendingTasks = completePendingTasks;
+      window.beginNewApp = beginNewApp;
+      window.saveNewApp = saveNewApp;
+      window.closeModal = closeModal;
+      window.confirmDeleteApp = confirmDeleteApp;
+      window.confirmModalAction = confirmModalAction;
+      window.cleanupImages = cleanupImages;
+      window.cleanupPreview = cleanupPreview;
+      window.continueVSCode = continueVSCode;
+      window.refreshPage = refreshPage;
+      window.focusOpsApp = focusOpsApp;
+      window.setVSCodeScenario = setVSCodeScenario;
+      window.toggleSupport = toggleSupport;
+      window.copySupportInfo = copySupportInfo;
+
+      window.addEventListener("resize", () => {
+        if (window.innerWidth > 1120) {
+          state.navOpen = true;
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Remote 设置向导</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe7;
+        --bg-strong: #f8f4ed;
+        --panel: rgba(255, 252, 246, 0.88);
+        --panel-strong: #fffdf8;
+        --ink: #213039;
+        --muted: #63727d;
+        --line: rgba(33, 48, 57, 0.12);
+        --accent: #0d7a68;
+        --accent-strong: #085448;
+        --warn: #b86b1d;
+        --danger: #b24949;
+        --good: #187d56;
+        --shadow: 0 24px 70px rgba(33, 48, 57, 0.12);
+        --radius-xl: 28px;
+        --radius-lg: 20px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255, 187, 92, 0.18), transparent 32%),
+          radial-gradient(circle at right, rgba(13, 122, 104, 0.14), transparent 28%),
+          linear-gradient(180deg, #f7f2ea 0%, #f1ebe2 100%);
+      }
+
+      body {
+        padding: 24px;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+
+      a {
+        color: var(--accent-strong);
+      }
+
+      .app-shell {
+        max-width: 1360px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .rail,
+      .stage,
+      .footer-bar,
+      .modal-card {
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      .rail {
+        position: sticky;
+        top: 24px;
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.75);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+        padding: 24px;
+      }
+
+      .rail-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .rail h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      .rail p,
+      .stage p,
+      .card p,
+      .notice p,
+      .step-link small {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .mobile-menu-button {
+        display: none;
+        border-radius: 999px;
+        padding: 10px 14px;
+        background: rgba(13, 122, 104, 0.1);
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      .step-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .step-link {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 14px;
+        align-items: center;
+        width: 100%;
+        text-align: left;
+        padding: 16px 18px;
+        border-radius: var(--radius-lg);
+        background: rgba(255, 255, 255, 0.55);
+        border: 1px solid transparent;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .step-link:hover:not(:disabled) {
+        transform: translateY(-1px);
+        border-color: rgba(13, 122, 104, 0.22);
+      }
+
+      .step-link:disabled {
+        cursor: not-allowed;
+        opacity: 0.58;
+      }
+
+      .step-link.current {
+        background: linear-gradient(135deg, rgba(13, 122, 104, 0.14), rgba(255, 255, 255, 0.92));
+        border-color: rgba(13, 122, 104, 0.22);
+      }
+
+      .step-index {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(13, 122, 104, 0.12);
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      .step-link.done .step-index {
+        background: rgba(24, 125, 86, 0.14);
+        color: var(--good);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .status-pill.good {
+        background: rgba(24, 125, 86, 0.12);
+        color: var(--good);
+      }
+
+      .status-pill.warn {
+        background: rgba(184, 107, 29, 0.12);
+        color: var(--warn);
+      }
+
+      .status-pill.danger {
+        background: rgba(178, 73, 73, 0.12);
+        color: var(--danger);
+      }
+
+      .status-pill.neutral {
+        background: rgba(99, 114, 125, 0.12);
+        color: #50606a;
+      }
+
+      .stage {
+        min-height: calc(100vh - 48px);
+        background: rgba(255, 253, 248, 0.58);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        border-radius: 34px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .stage-head {
+        padding: 28px 32px 18px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+      }
+
+      .stage-head h2 {
+        margin: 0 0 10px;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.08;
+      }
+
+      .stage-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .stage-body {
+        padding: 28px 32px 140px;
+        display: grid;
+        gap: 22px;
+      }
+
+      .notice {
+        border-radius: var(--radius-lg);
+        padding: 16px 18px;
+        border: 1px solid transparent;
+        display: grid;
+        gap: 8px;
+      }
+
+      .notice strong {
+        font-size: 15px;
+      }
+
+      .notice.good {
+        background: rgba(24, 125, 86, 0.08);
+        border-color: rgba(24, 125, 86, 0.12);
+      }
+
+      .notice.warn {
+        background: rgba(184, 107, 29, 0.08);
+        border-color: rgba(184, 107, 29, 0.12);
+      }
+
+      .notice.danger {
+        background: rgba(178, 73, 73, 0.08);
+        border-color: rgba(178, 73, 73, 0.12);
+      }
+
+      .card-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .card-grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card {
+        background: var(--panel-strong);
+        border: 1px solid rgba(33, 48, 57, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 22px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .card.soft {
+        background: linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(250, 245, 238, 0.84));
+      }
+
+      .card h3,
+      .card h4 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .summary-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .check-list,
+      .task-list,
+      .bullet-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .check-item,
+      .task-item {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .check-item-top,
+      .task-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .task-item.done {
+        border-color: rgba(24, 125, 86, 0.18);
+        background: rgba(24, 125, 86, 0.06);
+      }
+
+      .task-item strong,
+      .check-item strong {
+        font-size: 16px;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .field input {
+        width: 100%;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(33, 48, 57, 0.14);
+        background: #fffdfa;
+        color: var(--ink);
+      }
+
+      .field input:focus {
+        outline: 2px solid rgba(13, 122, 104, 0.22);
+        border-color: rgba(13, 122, 104, 0.28);
+      }
+
+      .field-error {
+        color: var(--danger);
+        font-size: 13px;
+      }
+
+      .choice-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .choice-card {
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(33, 48, 57, 0.1);
+        background: rgba(255, 255, 255, 0.82);
+        padding: 20px;
+        display: grid;
+        gap: 10px;
+        text-align: left;
+      }
+
+      .choice-card.selected {
+        border-color: rgba(13, 122, 104, 0.26);
+        box-shadow: inset 0 0 0 1px rgba(13, 122, 104, 0.12);
+        background: linear-gradient(135deg, rgba(13, 122, 104, 0.1), rgba(255, 255, 255, 0.92));
+      }
+
+      .qr-box {
+        aspect-ratio: 1;
+        width: min(100%, 280px);
+        border-radius: 24px;
+        background:
+          linear-gradient(90deg, rgba(13, 122, 104, 0.1) 25%, transparent 25%, transparent 50%, rgba(13, 122, 104, 0.1) 50%, rgba(13, 122, 104, 0.1) 75%, transparent 75%),
+          linear-gradient(rgba(13, 122, 104, 0.1) 25%, transparent 25%, transparent 50%, rgba(13, 122, 104, 0.1) 50%, rgba(13, 122, 104, 0.1) 75%, transparent 75%),
+          #fbfaf5;
+        background-size: 34px 34px;
+        border: 1px solid rgba(13, 122, 104, 0.14);
+        display: grid;
+        place-items: center;
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      .inline-actions,
+      .footer-actions,
+      .modal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .button-primary,
+      .button-secondary,
+      .button-ghost {
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 999px;
+        font-weight: 700;
+        transition: transform 140ms ease, filter 140ms ease;
+      }
+
+      .button-primary:hover,
+      .button-secondary:hover,
+      .button-ghost:hover {
+        transform: translateY(-1px);
+        filter: brightness(0.99);
+      }
+
+      .button-primary {
+        background: linear-gradient(135deg, var(--accent), #169e85);
+        color: #fff;
+      }
+
+      .button-secondary {
+        background: rgba(13, 122, 104, 0.1);
+        color: var(--accent-strong);
+      }
+
+      .button-ghost {
+        background: rgba(33, 48, 57, 0.06);
+        color: var(--ink);
+      }
+
+      .button-primary:disabled,
+      .button-secondary:disabled,
+      .button-ghost:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+        transform: none;
+      }
+
+      .footer-bar {
+        position: sticky;
+        bottom: 18px;
+        margin: -102px 18px 18px;
+        border-radius: 24px;
+        background: rgba(23, 36, 44, 0.9);
+        color: #fefaf3;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 60px rgba(12, 18, 24, 0.2);
+        padding: 18px 20px;
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .footer-copy {
+        display: grid;
+        gap: 4px;
+      }
+
+      .footer-copy strong {
+        font-size: 16px;
+      }
+
+      .footer-copy span {
+        color: rgba(254, 250, 243, 0.72);
+        font-size: 14px;
+      }
+
+      .footer-bar .button-secondary,
+      .footer-bar .button-ghost {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fefaf3;
+      }
+
+      .footer-bar .button-primary {
+        background: linear-gradient(135deg, #ffb44d, #ff8b39);
+        color: #362211;
+      }
+
+      .modal-layer {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(22, 29, 33, 0.5);
+        z-index: 20;
+      }
+
+      .modal-layer.open {
+        display: flex;
+      }
+
+      .modal-card {
+        width: min(560px, 100%);
+        background: var(--panel-strong);
+        border-radius: 28px;
+        padding: 24px;
+        box-shadow: 0 28px 80px rgba(18, 26, 32, 0.24);
+        display: grid;
+        gap: 14px;
+      }
+
+      .modal-card h3 {
+        margin: 0;
+        font-size: 26px;
+      }
+
+      .summary-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .mini-card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .mini-card {
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(13, 122, 104, 0.06);
+        border: 1px solid rgba(13, 122, 104, 0.08);
+        display: grid;
+        gap: 6px;
+      }
+
+      .mini-card strong {
+        font-size: 15px;
+      }
+
+      @media (max-width: 1080px) {
+        body {
+          padding: 16px;
+        }
+
+        .app-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .rail {
+          position: static;
+          top: auto;
+          display: none;
+        }
+
+        .rail.open {
+          display: block;
+        }
+
+        .mobile-menu-button {
+          display: inline-flex;
+        }
+
+        .card-grid.two,
+        .choice-grid,
+        .mini-card-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .stage-head,
+        .stage-body {
+          padding-left: 18px;
+          padding-right: 18px;
+        }
+
+        .footer-bar {
+          margin: -110px 12px 12px;
+          padding: 16px;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .footer-actions {
+          width: 100%;
+          flex-direction: column-reverse;
+        }
+
+        .footer-actions button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Visible-content contract
+      Final user: 第一次在本机完成 Codex Remote 接入的人
+      Current task: 一步步把本机和一个飞书应用接到可用状态
+      Allowed information types: 当前步骤目标、必做操作、当前状态、与本步直接相关的外部平台字段、下一步入口
+      Disallowed information types: 内部路径、解析链路、运行时实现名词、产品外说明、未来步骤正文、默认上屏的排障细节
+      Allowed feedback slots: 页头结果条、字段下校验、步骤内说明卡、阻断弹层
+    -->
+    <div id="app"></div>
+    <div id="modal" class="modal-layer" aria-live="polite"></div>
+    <script>
+      const steps = [
+        { id: "start", label: "准备这台机器", hint: "先确认这台机器已经具备正常使用条件。" },
+        { id: "connect", label: "连接飞书应用", hint: "选择新建或接入已有飞书应用。" },
+        { id: "capability", label: "完成基础能力", hint: "把基础对话与交互需要的飞书后台设置补齐。" },
+        { id: "vscode", label: "VS Code（可选）", hint: "如果你要在这台机器上用 VS Code，现在一起处理。" },
+        { id: "finish", label: "完成设置", hint: "确认已完成的内容，并进入本地管理页。" },
+      ];
+
+      const state = {
+        railOpen: window.innerWidth > 1080,
+        currentStep: "start",
+        notice: {
+          tone: "warn",
+          title: "先确认这台机器已经准备好",
+          message: "当前向导只展示你现在要处理的这一步。环境通过后，后面的飞书和 VS Code 步骤才会开放。",
+        },
+        modal: null,
+        machine: {
+          ready: false,
+          loading: false,
+          rechecked: false,
+          checks: [
+            { id: "service", title: "本地服务已启动", summary: "这台机器上的本地服务已经可以响应。", tone: "good" },
+            { id: "command", title: "Codex 命令可用", summary: "还需要先确认这台机器上可以直接启动 Codex。", tone: "danger" },
+            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和扩展入口。", tone: "good" },
+          ],
+        },
+        connect: {
+          mode: "new",
+          connected: false,
+          qrDone: false,
+          fields: {
+            appId: "",
+            appSecret: "",
+          },
+          errors: {},
+        },
+        capability: {
+          permissions: false,
+          events: false,
+          callback: false,
+          menu: false,
+          publish: false,
+        },
+        vscode: {
+          choice: null,
+          extensionSeen: false,
+          finished: false,
+        },
+      };
+
+      function isMachineReady() {
+        return state.machine.ready;
+      }
+
+      function isConnected() {
+        return state.connect.connected;
+      }
+
+      function isCapabilityDone() {
+        return Object.values(state.capability).every(Boolean);
+      }
+
+      function isVSCodeDone() {
+        return state.vscode.choice === "later" || state.vscode.finished;
+      }
+
+      function isStepUnlocked(stepId) {
+        switch (stepId) {
+          case "start":
+            return true;
+          case "connect":
+            return isMachineReady();
+          case "capability":
+            return isMachineReady() && isConnected();
+          case "vscode":
+            return isMachineReady() && isConnected() && isCapabilityDone();
+          case "finish":
+            return isMachineReady() && isConnected() && isCapabilityDone() && isVSCodeDone();
+          default:
+            return false;
+        }
+      }
+
+      function stepState(stepId) {
+        if (state.currentStep === stepId) {
+          return "current";
+        }
+        switch (stepId) {
+          case "start":
+            return isMachineReady() ? "done" : "current";
+          case "connect":
+            return !isMachineReady() ? "locked" : isConnected() ? "done" : state.currentStep === "connect" ? "current" : "upcoming";
+          case "capability":
+            return !isConnected() ? "locked" : isCapabilityDone() ? "done" : state.currentStep === "capability" ? "current" : "upcoming";
+          case "vscode":
+            return !isCapabilityDone() ? "locked" : isVSCodeDone() ? "done" : state.currentStep === "vscode" ? "current" : "upcoming";
+          case "finish":
+            return !isVSCodeDone() ? "locked" : "upcoming";
+          default:
+            return "locked";
+        }
+      }
+
+      function statusHTML(type, text) {
+        return '<span class="status-pill ' + type + '">' + text + "</span>";
+      }
+
+      function setNotice(tone, title, message) {
+        state.notice = { tone, title, message };
+      }
+
+      function openModal(title, message, detail) {
+        state.modal = { title, message, detail };
+        renderModal();
+      }
+
+      function closeModal() {
+        state.modal = null;
+        renderModal();
+      }
+
+      function gotoStep(stepId) {
+        if (!isStepUnlocked(stepId)) {
+          return;
+        }
+        state.currentStep = stepId;
+        if (window.innerWidth <= 1080) {
+          state.railOpen = false;
+        }
+        render();
+      }
+
+      function startCheck() {
+        state.machine.loading = true;
+        setNotice("warn", "正在重新检查这台机器", "我们会再次确认当前机器是否已经满足继续接入的条件。");
+        render();
+        window.setTimeout(() => {
+          state.machine.loading = false;
+          state.machine.ready = true;
+          state.machine.rechecked = true;
+          state.machine.checks = [
+            { id: "service", title: "本地服务已启动", summary: "这台机器上的本地服务可以继续使用。", tone: "good" },
+            { id: "command", title: "Codex 命令可用", summary: "已经确认这台机器可以直接启动 Codex。", tone: "good" },
+            { id: "network", title: "网络访问正常", summary: "当前网络可以继续连接飞书和扩展入口。", tone: "good" },
+          ];
+          state.currentStep = "connect";
+          setNotice("good", "这台机器已经准备好了", "现在可以继续连接飞书应用。后面的步骤只会在真正需要时显示。");
+          render();
+        }, 900);
+      }
+
+      function chooseConnectMode(mode) {
+        state.connect.mode = mode;
+        state.connect.connected = false;
+        state.connect.qrDone = false;
+        state.connect.errors = {};
+        setNotice("neutral", "", "");
+        render();
+      }
+
+      function completeQRCode() {
+        state.connect.qrDone = true;
+        state.connect.connected = true;
+        state.connect.errors = {};
+        state.currentStep = "capability";
+        setNotice("good", "飞书应用已经接进来了", "下一步只处理基础对话与交互必须完成的飞书后台设置。");
+        render();
+      }
+
+      function updateField(field, value) {
+        state.connect.fields[field] = value;
+        state.connect.connected = false;
+        if (state.connect.errors[field]) {
+          delete state.connect.errors[field];
+        }
+        render();
+      }
+
+      function validateExistingApp() {
+        const errors = {};
+        if (!state.connect.fields.appId.trim()) {
+          errors.appId = "请先填写 App ID。";
+        }
+        if (!state.connect.fields.appSecret.trim()) {
+          errors.appSecret = "请先填写 App Secret。";
+        }
+        if (state.connect.fields.appId.trim() && state.connect.fields.appId.trim().length < 6) {
+          errors.appId = "这个 App ID 看起来不完整，请再核对一次。";
+        }
+        if (state.connect.fields.appId.trim().startsWith("bad_")) {
+          errors.appId = "当前填写的 App ID 无法通过连接测试，请确认你复制的是正在使用的飞书应用。";
+        }
+        state.connect.errors = errors;
+        if (Object.keys(errors).length > 0) {
+          setNotice("danger", "这一步还没有完成", "请先修正页面上的字段，再继续连接测试。");
+          render();
+          return;
+        }
+        state.connect.connected = true;
+        state.currentStep = "capability";
+        setNotice("good", "连接测试已经通过", "飞书应用已经接好，下一步继续补齐基础能力。");
+        render();
+      }
+
+      function toggleCapability(task) {
+        state.capability[task] = !state.capability[task];
+        render();
+      }
+
+      function continueCapability() {
+        if (!isCapabilityDone()) {
+          setNotice("warn", "还有必做项没完成", "先把基础权限、事件、回调、菜单和发布都处理好，再继续。");
+          render();
+          return;
+        }
+        state.currentStep = "vscode";
+        setNotice("good", "基础对话与交互已经就绪", "这台机器现在已经可以开始使用。VS Code 是可选项，可以现在处理，也可以稍后再说。");
+        render();
+      }
+
+      function chooseVSCode(choice) {
+        state.vscode.choice = choice;
+        render();
+      }
+
+      function continueVSCode() {
+        if (!state.vscode.choice) {
+          openModal("还差一步", "请先选择你是否要在这台机器上继续处理 VS Code。");
+          return;
+        }
+        if (state.vscode.choice === "later") {
+          state.vscode.finished = true;
+          state.currentStep = "finish";
+          setNotice("warn", "VS Code 已稍后处理", "你现在可以先完成设置。以后需要时，再回到本地管理页继续。");
+          render();
+          return;
+        }
+        if (!state.vscode.extensionSeen) {
+          setNotice("warn", "还没检测到这台机器上的 VS Code 扩展", "请先在这台机器上打开一次 VS Code，并确认已经安装 Codex 扩展。完成后再回来继续。");
+          render();
+          return;
+        }
+        state.vscode.finished = true;
+        state.currentStep = "finish";
+        setNotice("good", "VS Code 已接入", "以后如果扩展升级，只需要回到本地管理页重新处理一次入口。");
+        render();
+      }
+
+      function markExtensionReady() {
+        state.vscode.extensionSeen = true;
+        setNotice("good", "已经检测到 VS Code 扩展", "现在可以继续在这台机器上启用 VS Code。");
+        render();
+      }
+
+      function restartWizard() {
+        state.currentStep = "start";
+        state.notice = {
+          tone: "warn",
+          title: "已回到向导开头",
+          message: "当前只回看结构示意，不会清掉你已经看到的状态样例。",
+        };
+        render();
+      }
+
+      function copyChecklist() {
+        const lines = [
+          "基础权限：机器人能力、消息发送、卡片回调",
+          "事件订阅：消息和回调事件",
+          "回调方式：保存并启用",
+          "机器人菜单：至少保留常用入口",
+          "发布应用：确认当前版本已发布",
+        ];
+        const text = lines.join("\n");
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            setNotice("good", "清单已复制", "你可以直接把这份简版清单带去飞书后台逐项确认。");
+            render();
+          });
+        } else {
+          openModal("这台浏览器暂时不能直接复制", "请手动记录这份清单：", text);
+        }
+      }
+
+      function renderStepRail() {
+        return (
+          '<aside class="rail' +
+          (state.railOpen ? " open" : "") +
+          '">' +
+          '<div class="rail-top">' +
+          '<div><p class="eyebrow">Codex Remote</p><h1>设置向导</h1><p>只展示当前要做的步骤，不把后面的正文提前摊开。</p></div>' +
+          '<button class="mobile-menu-button" type="button" onclick="toggleRail()">收起</button>' +
+          "</div>" +
+          '<div class="step-list">' +
+          steps
+            .map((step, index) => {
+              const stateName = stepState(step.id);
+              const badge =
+                stateName === "done"
+                  ? statusHTML("good", "已完成")
+                  : stateName === "current"
+                    ? statusHTML("warn", "当前")
+                    : stateName === "locked"
+                      ? statusHTML("neutral", "未开始")
+                      : statusHTML("neutral", "待处理");
+              return (
+                '<button class="step-link ' +
+                stateName +
+                (step.id === state.currentStep ? " current" : "") +
+                '" type="button" onclick="gotoStep(\'' +
+                step.id +
+                '\')" ' +
+                (isStepUnlocked(step.id) ? "" : "disabled") +
+                ">" +
+                '<span class="step-index">' +
+                (index + 1) +
+                "</span>" +
+                "<div><strong>" +
+                step.label +
+                "</strong><small>" +
+                step.hint +
+                "</small></div>" +
+                badge +
+                "</button>"
+              );
+            })
+            .join("") +
+          "</div>" +
+          "</aside>"
+        );
+      }
+
+      function renderNotice() {
+        if (!state.notice || !state.notice.title) {
+          return "";
+        }
+        return (
+          '<section class="notice ' +
+          state.notice.tone +
+          '"><strong>' +
+          state.notice.title +
+          "</strong><p>" +
+          state.notice.message +
+          "</p></section>"
+        );
+      }
+
+      function renderStartStep() {
+        return (
+          '<section class="card soft"><h3>先确认这台机器能不能直接开始用</h3><p>这一步只回答一件事：你现在能不能继续接飞书应用。如果还不行，就只聚焦把这台机器先修好。</p><div class="card-grid two">' +
+          '<article class="card"><h4>当前结果</h4><div class="summary-row">' +
+          (state.machine.ready ? statusHTML("good", "可以继续") : statusHTML("danger", "还不能继续")) +
+          (state.machine.rechecked ? statusHTML("neutral", "已重新检查") : statusHTML("neutral", "首次进入")) +
+          '</div><p>' +
+          (state.machine.ready
+            ? "这台机器已经满足继续接入飞书应用的基本条件。"
+            : "先把这台机器准备好，再继续飞书和 VS Code 步骤。") +
+          '</p><div class="inline-actions"><button class="button-primary" type="button" onclick="startCheck()" ' +
+          (state.machine.loading ? "disabled" : "") +
+          ">" +
+          (state.machine.loading ? "正在检查..." : state.machine.ready ? "再检查一次" : "我已经修好，重新检查") +
+          '</button></div></article>' +
+          '<article class="card"><h4>你现在要看什么</h4><div class="bullet-list"><p>只看这台机器是否已经准备好。</p><p>不提前展开飞书后台清单和 VS Code 说明。</p><p>通过以后再进入下一步。</p></div></article>' +
+          "</div></section>" +
+          '<section class="card"><h4>检查结果</h4><div class="check-list">' +
+          state.machine.checks
+            .map((check) => {
+              return (
+                '<article class="check-item"><div class="check-item-top"><div><strong>' +
+                check.title +
+                "</strong><p>" +
+                check.summary +
+                "</p></div>" +
+                statusHTML(check.tone === "good" ? "good" : "danger", check.tone === "good" ? "通过" : "待处理") +
+                "</div></article>"
+              );
+            })
+            .join("") +
+          "</div></section>"
+        );
+      }
+
+      function renderConnectStep() {
+        const isNew = state.connect.mode === "new";
+        return (
+          '<section class="card soft"><h3>这次要怎么接飞书应用？</h3><p>只先选一种方式。后面的飞书后台步骤和 VS Code 设置会在真正需要的时候再出现。</p><div class="choice-grid">' +
+          '<button class="choice-card' +
+          (isNew ? " selected" : "") +
+          '" type="button" onclick="chooseConnectMode(\'new\')"><strong>新建飞书应用</strong><p>推荐。用手机扫码后，页面自动把新应用接回来。</p></button>' +
+          '<button class="choice-card' +
+          (!isNew ? " selected" : "") +
+          '" type="button" onclick="chooseConnectMode(\'existing\')"><strong>接入已有飞书应用</strong><p>如果你已经在飞书开放平台有应用，直接填写 App ID 和 App Secret。</p></button>' +
+          "</div></section>" +
+          (isNew
+            ? '<section class="card"><div class="card-grid two"><article class="card"><h4>扫码新建</h4><p>请用飞书手机客户端扫码。完成后，页面会继续带你走到下一步。</p><div class="qr-box">扫码创建飞书应用</div><div class="inline-actions"><button class="button-primary" type="button" onclick="completeQRCode()">我已完成扫码</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>这一步只保留必要说明</h4><div class="bullet-list"><p>扫码成功后再展示新应用名称和下一步。</p><p>不把后面的权限、事件、菜单一次性铺满整页。</p><p>如果你改成手动接入，下面才会出现字段。</p></div></article></div></section>'
+            : '<section class="card"><div class="card-grid two"><article class="card"><h4>已有飞书应用</h4><div class="field-grid"><div class="field"><label for="app-id">App ID</label><input id="app-id" value="' +
+              escapeHTML(state.connect.fields.appId) +
+              '" oninput="updateField(\'appId\', this.value)" placeholder="例如 cli_xxx" />' +
+              (state.connect.errors.appId ? '<div class="field-error">' + state.connect.errors.appId + "</div>" : "") +
+              '</div><div class="field"><label for="app-secret">App Secret</label><input id="app-secret" type="password" value="' +
+              escapeHTML(state.connect.fields.appSecret) +
+              '" oninput="updateField(\'appSecret\', this.value)" placeholder="例如 secret_xxx" />' +
+              (state.connect.errors.appSecret ? '<div class="field-error">' + state.connect.errors.appSecret + "</div>" : "") +
+              '</div></div><div class="inline-actions"><button class="button-primary" type="button" onclick="validateExistingApp()">验证并继续</button><a class="button-secondary" href="https://open.feishu.cn/app?lang=zh-CN" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">打开飞书开放平台</a></div></article><article class="card"><h4>你要做的只有这三件事</h4><div class="bullet-list"><p>打开飞书应用后台。</p><p>复制 App ID 和 App Secret。</p><p>回来验证连接是否通过。</p></div></article></div></section>')
+        );
+      }
+
+      function renderCapabilityStep() {
+        const tasks = [
+          { id: "permissions", title: "导入基础权限", summary: "保证这条飞书应用已经具备基础对话与交互需要的权限。" },
+          { id: "events", title: "开启事件订阅", summary: "让消息和回调事件能够回到这台机器。" },
+          { id: "callback", title: "保存回调方式", summary: "确认回调已经按当前接入方式启用。" },
+          { id: "menu", title: "设置机器人菜单", summary: "把常用入口放到飞书应用菜单里，后面使用会更顺手。" },
+          { id: "publish", title: "发布当前版本", summary: "让你刚才完成的设置真正对外生效。" },
+        ];
+        return (
+          '<section class="card soft"><div class="card-grid two"><article class="card"><h3>先把基础对话与交互准备好</h3><p>这里只有必做项。增强功能和可选能力先不在这里打断你。</p><div class="summary-row">' +
+          statusHTML(isCapabilityDone() ? "good" : "warn", isCapabilityDone() ? "已全部完成" : "还有待完成项") +
+          '</div></article><article class="card"><h4>这一步提供什么</h4><div class="bullet-list"><p>只保留基础功能真正需要的事项。</p><p>每项都讲人话，不把整份技术清单直接摊给用户。</p><p>如果你需要带着清单去飞书后台，可以一键复制简版说明。</p></div><div class="inline-actions"><button class="button-secondary" type="button" onclick="copyChecklist()">复制简版清单</button></div></article></div></section>' +
+          '<section class="card"><h4>必做项</h4><div class="task-list">' +
+          tasks
+            .map((task) => {
+              const done = state.capability[task.id];
+              return (
+                '<article class="task-item' +
+                (done ? " done" : "") +
+                '"><div class="task-top"><div><strong>' +
+                task.title +
+                "</strong><p>" +
+                task.summary +
+                "</p></div>" +
+                statusHTML(done ? "good" : "warn", done ? "已完成" : "待处理") +
+                '</div><div class="inline-actions"><button class="' +
+                (done ? "button-ghost" : "button-secondary") +
+                '" type="button" onclick="toggleCapability(\'' +
+                task.id +
+                "')\">" +
+                (done ? "撤回示例状态" : "我已完成这项") +
+                "</button></div></article>"
+              );
+            })
+            .join("") +
+          "</div></section>"
+        );
+      }
+
+      function renderVSCodeStep() {
+        return (
+          '<section class="card soft"><h3>VS Code 现在要不要一起处理？</h3><p>这一步是可选项。只有你确实要在这台机器上用 VS Code 时，才需要现在继续。</p><div class="choice-grid">' +
+          '<button class="choice-card' +
+          (state.vscode.choice === "current" ? " selected" : "") +
+          '" type="button" onclick="chooseVSCode(\'current\')"><strong>要在这台机器上继续使用 VS Code</strong><p>现在一起完成，后面可以直接从这台机器进入 VS Code 使用。</p></button>' +
+          '<button class="choice-card' +
+          (state.vscode.choice === "later" ? " selected" : "") +
+          '" type="button" onclick="chooseVSCode(\'later\')"><strong>这一步稍后再说</strong><p>先把基础接入完成，以后需要时再回管理页处理。</p></button>' +
+          "</div></section>" +
+          (state.vscode.choice === "current"
+            ? '<section class="card"><div class="card-grid two"><article class="card"><h4>当前要确认什么</h4><div class="bullet-list"><p>这台机器上已经安装 Codex 扩展。</p><p>你已经打开过一次 VS Code。</p><p>确认后，页面就能继续启用。</p></div><div class="inline-actions"><button class="button-secondary" type="button" onclick="markExtensionReady()">' +
+              (state.vscode.extensionSeen ? "已检测到扩展" : "我已经打开 VS Code 并确认扩展已安装") +
+              '</button></div></article><article class="card"><h4>当前状态</h4><div class="summary-row">' +
+              (state.vscode.extensionSeen ? statusHTML("good", "可以继续启用") : statusHTML("warn", "还在等待确认")) +
+              "</div><p>" +
+              (state.vscode.extensionSeen
+                ? "现在可以继续把这台机器上的 VS Code 接起来。"
+                : "还没确认扩展是否已经安装。") +
+              "</p></article></div></section>"
+            : '<section class="card"><h4>稍后再处理也没问题</h4><p>这不会影响你现在开始使用。等你真的要在这台机器上用 VS Code 时，再回本地管理页继续。</p></section>')
+        );
+      }
+
+      function renderFinishStep() {
+        return (
+          '<section class="card soft"><h3>设置已经完成</h3><p>现在你已经可以开始使用 Codex Remote 了。后面如果要补其它能力，都回本地管理页继续处理。</p><div class="mini-card-grid"><article class="mini-card"><strong>这台机器</strong><p>已准备好</p></article><article class="mini-card"><strong>飞书应用</strong><p>已接入</p></article><article class="mini-card"><strong>VS Code</strong><p>' +
+          (state.vscode.choice === "later" ? "稍后处理" : "已接入") +
+          "</p></article></div></section>" +
+          '<section class="card"><h4>下一步去哪</h4><div class="bullet-list"><p>去本地管理页看整体状态。</p><p>以后要补文档预览、清理旧图片或继续处理 VS Code，都在那里完成。</p><p>如果这次只是想先把系统接通，到这里就够了。</p></div><div class="inline-actions"><a class="button-primary" href="#admin" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">进入本地管理页</a><button class="button-ghost" type="button" onclick="restartWizard()">回看向导结构</button></div></section>'
+        );
+      }
+
+      function renderBody() {
+        switch (state.currentStep) {
+          case "start":
+            return renderStartStep();
+          case "connect":
+            return renderConnectStep();
+          case "capability":
+            return renderCapabilityStep();
+          case "vscode":
+            return renderVSCodeStep();
+          case "finish":
+            return renderFinishStep();
+          default:
+            return "";
+        }
+      }
+
+      function footerCopy() {
+        switch (state.currentStep) {
+          case "start":
+            return { title: "先确认环境", text: "通过以后再进入飞书步骤。", primary: "继续检查", secondary: "" };
+          case "connect":
+            return { title: "接飞书应用", text: "只在这一步出现接入方式和字段。", primary: state.connect.mode === "new" ? "我已完成扫码" : "验证并继续", secondary: "上一步" };
+          case "capability":
+            return { title: "补齐基础能力", text: "只保留必做项，不把增强功能提前塞进来。", primary: "检查并继续", secondary: "上一步" };
+          case "vscode":
+            return { title: "处理可选项", text: "这一步可以现在完成，也可以稍后处理。", primary: state.vscode.choice === "later" ? "完成设置" : "继续", secondary: "上一步" };
+          case "finish":
+            return { title: "去本地管理页", text: "后续维护动作统一在那里处理。", primary: "打开管理页", secondary: "重新看一遍" };
+          default:
+            return { title: "", text: "", primary: "", secondary: "" };
+        }
+      }
+
+      function runPrimaryAction() {
+        switch (state.currentStep) {
+          case "start":
+            startCheck();
+            break;
+          case "connect":
+            if (state.connect.mode === "new") {
+              completeQRCode();
+            } else {
+              validateExistingApp();
+            }
+            break;
+          case "capability":
+            continueCapability();
+            break;
+          case "vscode":
+            continueVSCode();
+            break;
+          case "finish":
+            window.location.hash = "admin";
+            setNotice("good", "可以进入本地管理页了", "这份页面只演示结构和交互方向，实际入口会落到本机管理页。");
+            render();
+            break;
+        }
+      }
+
+      function runSecondaryAction() {
+        switch (state.currentStep) {
+          case "connect":
+          case "capability":
+          case "vscode":
+            gotoStep(steps[Math.max(0, steps.findIndex((item) => item.id === state.currentStep) - 1)].id);
+            break;
+          case "finish":
+            restartWizard();
+            break;
+        }
+      }
+
+      function renderFooter() {
+        const copy = footerCopy();
+        return (
+          '<div class="footer-bar"><div class="footer-copy"><strong>' +
+          copy.title +
+          "</strong><span>" +
+          copy.text +
+          '</span></div><div class="footer-actions">' +
+          (copy.secondary
+            ? '<button class="button-ghost" type="button" onclick="runSecondaryAction()">' + copy.secondary + "</button>"
+            : "") +
+          '<button class="button-primary" type="button" onclick="runPrimaryAction()">' +
+          copy.primary +
+          "</button></div></div>"
+        );
+      }
+
+      function render() {
+        const currentIndex = steps.findIndex((step) => step.id === state.currentStep);
+        const app = document.getElementById("app");
+        app.innerHTML =
+          '<div class="app-shell">' +
+          renderStepRail() +
+          '<main class="stage"><div class="stage-head"><div><p class="eyebrow">步骤 ' +
+          (currentIndex + 1) +
+          " / " +
+          steps.length +
+          '</p><h2>' +
+          steps[currentIndex].label +
+          '</h2><p>' +
+          steps[currentIndex].hint +
+          '</p></div><div class="stage-meta"><button class="mobile-menu-button" type="button" onclick="toggleRail()">步骤导航</button>' +
+          statusHTML(isStepUnlocked("finish") ? "good" : "warn", isStepUnlocked("finish") ? "可进入管理页" : "仍在设置中") +
+          "</div></div><div class=\"stage-body\">" +
+          renderNotice() +
+          renderBody() +
+          "</div>" +
+          renderFooter() +
+          "</main></div>";
+        renderModal();
+      }
+
+      function renderModal() {
+        const modal = document.getElementById("modal");
+        if (!state.modal) {
+          modal.className = "modal-layer";
+          modal.innerHTML = "";
+          return;
+        }
+        modal.className = "modal-layer open";
+        modal.innerHTML =
+          '<div class="modal-card" role="dialog" aria-modal="true"><h3>' +
+          state.modal.title +
+          "</h3><p>" +
+          state.modal.message +
+          "</p>" +
+          (state.modal.detail ? "<pre style=\"margin:0;padding:16px;border-radius:16px;background:#f7f3ec;overflow:auto;white-space:pre-wrap;\">" + escapeHTML(state.modal.detail) + "</pre>" : "") +
+          '<div class="modal-actions"><button class="button-primary" type="button" onclick="closeModal()">我知道了</button></div></div>';
+      }
+
+      function escapeHTML(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function toggleRail() {
+        state.railOpen = !state.railOpen;
+        render();
+      }
+
+      window.gotoStep = gotoStep;
+      window.startCheck = startCheck;
+      window.chooseConnectMode = chooseConnectMode;
+      window.completeQRCode = completeQRCode;
+      window.updateField = updateField;
+      window.validateExistingApp = validateExistingApp;
+      window.toggleCapability = toggleCapability;
+      window.continueCapability = continueCapability;
+      window.chooseVSCode = chooseVSCode;
+      window.continueVSCode = continueVSCode;
+      window.markExtensionReady = markExtensionReady;
+      window.runPrimaryAction = runPrimaryAction;
+      window.runSecondaryAction = runSecondaryAction;
+      window.toggleRail = toggleRail;
+      window.closeModal = closeModal;
+      window.restartWizard = restartWizard;
+      window.copyChecklist = copyChecklist;
+
+      window.addEventListener("resize", () => {
+        if (window.innerWidth > 1080) {
+          state.railOpen = true;
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
