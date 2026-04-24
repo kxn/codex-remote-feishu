@@ -2,315 +2,407 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-24`
-> Summary: 收敛只读 frozen turn diff viewer 的产品边界、页面交互、已确认 mock 细节和 snapshot 承载方案。
+> Summary: 收敛 authoritative turn diff snapshot 的 frozen preview 全流程、final 挂链合同、`/preview` 路由与授权复用、以及 renderer 的降级规则。
 
 ## 1. 背景
 
-当前仓库已经把上游 `turn/diff/updated` 接成 authoritative `TurnDiffSnapshot`，并在 turn 结束时挂到 final block 上；但现有前台只消费了文件修改摘要，没有提供一条真正可读的 turn 级 diff 查看页。
+当前仓库已经打通了：
 
-最近这轮产品讨论已经把 `#307` 的方向收得比较清楚：
+- 上游 `turn/diff/updated`
+- orchestrator 侧 authoritative `TurnDiffSnapshot`
+- turn 结束时把 latest aggregated diff 带到 final event
 
-- 这条能力只服务于“看这一轮最终改了什么”
-- 页面语义必须是 `turn-scoped`、`frozen`、`read-only`
-- 它和未来 live workspace diff reviewer 完全切开
-- 它不是 raw unified diff 文本页，而是一个“按文件切换、带上下文折叠”的只读 diff viewer
+但前台现在仍只有“本次修改”摘要，没有一条真正可读的 turn 级 diff 查看页。
 
-因此，这张单的重点不再是“如何把一段 patch 文本塞进现有 preview 页面”，而是：
+这张单不是在现有 preview 页面里临时塞一段 patch 文本，而是补一条独立能力：
 
-- 如何把 authoritative turn diff 冻结成一个可信 snapshot
-- 如何在不触碰 live workspace 的前提下，把这个 snapshot 渲染成可读的文件级 diff viewer
-- 如何在风格上和现有 preview 页面保持一致，但在正文 renderer 上走专门路线
+- source of truth 是 authoritative `TurnDiffSnapshot`
+- 页面语义是 `turn-scoped`、`frozen`、`read-only`
+- 页面目标是“查看这一轮最终改了什么”
+- 它与 `#215` / `#144` 的 live workspace reviewer 明确分开
 
-当前已确认的用户可见 mock 见：
+当前已确认的最终用户可见 mock 见：
 
 - `docs/draft/turn-diff-frozen-preview-mock.html`
 
-## 2. 产品定位
+本文是 `#307` 的实现主设计，不再只描述页面长相，而是把交付链路也一起收口。
 
-一句话定义：
+## 2. 一句话定义
 
-> `#307` 是一个只读、冻结、按文件切换、带上下文折叠的 turn diff viewer；它不是 raw diff 文本页，也不是 live workspace reviewer。
+> `#307` 提供的是一个只读、冻结、按文件切换、带上下文折叠的 turn diff viewer；它不是 raw unified diff 文本页，也不是 live workspace reviewer。
 
-更具体地说：
+## 3. 产品边界
 
-- source of truth 是 turn 结束时的 authoritative `TurnDiffSnapshot`
-- 打开后看到的是“当时那一轮的冻结结果”，不是当前工作区此刻的真实状态
-- 页面内不提供任何修改仓库状态的动作
-- 页面不承载 `accept`、`reject`、`revert`、`stage`、`unstage` 等 reviewer 语义
+### 3.1 属于本单的
 
-## 3. 明确边界
+- final turn diff summary 上的 `查看` 入口
+- immutable turn diff snapshot artifact
+- 专门的 turn diff viewer renderer
+- portrait / landscape 自适应阅读
+- hunk 上下文、gap 折叠展开、文件切换、阅读位置记忆
+- parse 失败、binary、rename/copy、数据缺失时的明确降级
 
-### 3.1 与 `#144` / `#215` 的边界
+### 3.2 不属于本单的
 
-`#144` / `#215` 的目标是 live workspace diff reviewer：
+- live workspace diff reviewer
+- `accept` / `reject` / `revert` / `stage` / `unstage`
+- frozen viewer 跳去 live reviewer
+- 基于当前磁盘内容的再计算
+- 预烘焙永久 HTML 成品
 
-- 关注当前 Git 状态
-- 后续可能支持 hunk 或 file 级动作
-- 页面语义是“现在工作区是什么样”
+### 3.3 与 `#215` / `#144` 的边界
 
-`#307` 的目标不是这条路线：
+`#215` / `#144` 解决的是 live workspace 路线：
 
-- 不读 live workspace
-- 不关心当前 Git 状态是否已经变化
-- 不给任何动作入口
-- 只展示“那一轮结束时的冻结 patch 视图”
+- 关注当前工作区状态
+- 后续可能支持 reviewer 动作
+- 语义是“现在仓库是什么样”
 
-这两条能力在产品、数据源和页面语义上都必须显式拆开，不互相借词，不互相预埋按钮。
+`#307` 解决的是 frozen snapshot 路线：
 
-### 3.2 非目标
+- 只看某一轮结束时的 authoritative diff
+- 不依赖当前仓库是否已经继续变化
+- 不给任何修改仓库状态的入口
 
-- 不实现 `accept / reject / revert / stage / unstage`
-- 不给 frozen viewer 增加“跳去 live reviewer”的入口
-- 不把当前文件实时读盘结果混入这张页面
-- 不把 raw unified diff 直接当成最终用户界面
-- 不把这张页做成一份预烘焙、不可演进的静态 HTML 成品
+两条路线必须分开，不共享 reviewer 语义，不互相预埋按钮。
 
-## 4. 用户体验目标
+## 4. 用户可见合同
 
-### 4.1 用户要看到什么
+### 4.1 入口
 
-用户不是只想看 patch 文本，而是想看：
+主入口跟随 final card 里的“本次修改”摘要头行。
 
-- 这轮涉及了哪些文件
-- 某个文件里到底改到了哪里
-- 每个 hunk 周围的上下文是什么
-- hunk 之间那些未修改内容是否可以先折叠、需要时再展开
+V1 合同：
 
-因此页面默认应提供：
+- 不额外发新消息
+- 不在正文里插一段解释
+- 只在摘要头行追加一个 `查看` 链接
 
-- 文件级切换
-- hunk 级阅读
-- 上下文保留
-- 中间未修改区折叠
-- 文件内阅读位置记忆
+这个链接的语义是：
 
-### 4.2 用户不要看到什么
+- 查看本轮 diff 快照
+- 不是打开当前工作区 diff
 
-页面里不应出现：
+### 4.2 正常阅读态只保留必要信息
 
-- `accept`
-- `reject`
-- `revert`
-- `stage`
-- `unstage`
-- `reviewer`
-- `apply`
-
-唯一允许的“动作”应该是纯阅读动作，例如：
-
-- 切换文件
-- 展开/收起未修改区
-
-phase-1 不要求为了“功能完整”额外堆出下载、解释、跳转等辅助控件；只要基础阅读动作成立即可。
-
-## 5. 入口与消息形态
-
-这条能力的主入口应跟随 final turn summary。
-
-推荐形态：
-
-- 在 turn 结束后的 diff summary 区域中提供一个 `查看` 链接
-- 视觉位置可落在 summary 第一行右侧
-- 点击后进入 turn diff viewer
-
-这个链接不是“打开当前工作区 diff”，而是“查看本轮 diff 快照”。
-
-这层 frozen 语义由入口位置、上下文和页面类型本身承担，不要求在正常阅读态再额外堆解释文案。
-
-## 6. 页面形态
-
-### 6.1 外层风格
-
-虽然底层 artifact / renderer 已经不同于现有通用 preview，但外层风格应与当前 preview 页面保持基本一致。
-
-需要保持一致的部分包括：
-
-- 页面留白、边距、基础配色和排版节奏
-- notice / expired / unavailable 等系统态样式
-
-需要明确不同的部分是：
-
-- 正文区域不是现有通用 file preview renderer
-- 正文区域是一个专门的 turn diff viewer
-- 不复用当前 artifact lineage diff-first 那条正文语义
-
-也就是说，建议复用“preview shell 风格”，但不复用“preview 正文 renderer 语义”。
-
-同时，这张页面不应堆解释性文案来“教用户怎么看”。
-
-默认只保留最小必要信息：
+正常阅读态只应出现：
 
 - 文件选择
 - 文件名
 - `+/-` 统计
-- 正文 diff 阅读区
+- diff 阅读区
 
-除非进入异常态，否则不应额外出现：
+正常阅读态不应出现：
 
 - 教学式 banner
-- “首次进入会怎样”的提示文案
-- 图例说明
-- “这是什么页面”的长说明
-- 为了补充设计意图而加入的说明文字
+- 解释设计意图的提示文案
+- “这是 frozen 页面”的长说明
+- reviewer 术语和 reviewer 动作
 
-系统说明文案应只保留给真正需要解释的状态，例如：
+系统说明文案只留给真正异常的状态：
 
 - 过期
+- 不可用
 - 数据缺失
 - 无法渲染
 
-### 6.2 竖屏
+### 4.3 响应式布局
 
-竖屏模式下：
+竖屏：
 
-- 顶部收敛成一条轻量 bar
-- bar 内只保留 preview 图标和文件选择下拉
-- 下拉内容是本次 diff 涉及的文件列表
-- 页面正文一次只展示当前选中的一个文件
-- 文件切换后，正文切到对应文件的 diff 阅读区
+- 顶部是一条轻量 selector bar
+- bar 内只保留 preview 图标和文件选择
+- 正文一次只显示一个文件
 
-### 6.3 横屏
+横屏：
 
-横屏模式下：
-
-- 文件选择区转为左侧列表
-- 右侧是当前文件的 diff 阅读区
+- 左侧是文件列表
+- 右侧是阅读区
 - 正常阅读态不保留顶部 frame / 标题区
-- 左右布局优先保证桌面横屏阅读效率
 
-### 6.4 文件切换与阅读位置记忆
+这条切换必须是运行时响应式的：
 
-页面内需要维护一个非持久化的阅读状态：
+- 不能只在页面初次加载时判断一次
+- 用户旋转设备或调整窗口后，布局应立即切换
 
-- 为每个文件记住当前页面会话中的上次滚动位置
-- 在几个文件之间来回切换时，恢复到该文件上次阅读位置
-- 该状态只保存在当前页面内存中，不需要持久化到服务端
+### 4.4 Hunk / gap 合同
 
-首次进入文件时：
+- 默认上下文行数取 `8`
+- 大段未修改内容默认折叠
+- gap 可展开，也可再次收起
+- gap 展开后应与上下代码块无缝衔接
+- 当下方 hunk 已与展开后的 gap 连成连续阅读流时，下方 hunk 头条不再保留独立分隔感
+- 展开/收起应尽量保持当前阅读位置，不把页面跳回顶部
 
-- 若该文件之前没有本页会话内的滚动记录，则默认滚到第一个 hunk
+### 4.5 文件切换与阅读记忆
 
-### 6.5 Hunk 展示
+- 每个文件记住本页会话内的滚动位置
+- 文件间来回切换时恢复该位置
+- 首次进入文件时滚到第一个 hunk
+- 这份状态只保存在页面内存中，不做持久化
 
-每个文件应按 hunk 组织显示。
+## 5. 端到端工作流
 
-默认行为：
+## 5.1 触发条件
 
-- 每个 hunk 周围展示有限的未修改上下文
-- phase-1 默认上下文行数建议取 `8` 行
-- 这个数字不作为 blocker，后续可以微调
-- 若首个 hunk 离文件开头很近，应直接从文件开头开始显示
-- 若首个 hunk 前仍有较长未修改内容，应在顶部显示可展开的折叠块，而不是直接从中间行号起跳
+只有同时满足下面条件时，才生成 turn diff viewer：
 
-### 6.6 未修改区折叠
+- 当前事件是 final assistant block
+- 当前 turn 带有非空 `TurnDiffSnapshot.Diff`
+- `TurnDiffSnapshot` 对应本轮最终 authoritative diff
 
-文件中的长段未修改内容不应默认全展开。
+不会在这些场景触发：
 
-推荐行为：
+- 中途流式更新
+- 普通 `/help` `/status` 等单步结果
+- 没有 diff 的 final
 
-- hunk 之间的长段未修改区默认折叠
-- 折叠区显示成一个可点击的 gap bar
-- 用户可一键展开该段未修改内容
-- 展开后允许再次收起
-- 展开后的 gap 应与上下代码块无缝衔接，不再保留额外分隔条
-- 当下方 hunk 已与展开 gap 连成连续阅读流时，其 hunk 标题条应隐藏
-- 展开/收起应尽量保持当前阅读位置，不应把页面重新跳回顶部
+## 5.2 authoritative diff 的来源
 
-这条交互应尽量靠近 GitHub 的阅读习惯，但不需要复刻 reviewer 语义。
+当前 authoritative 来源保持不变：
 
-## 7. 数据语义与承载方式
+- orchestrator 在 `service_turn_diff.go` 中按 `instance + thread + turn` 暂存上游 `event.TurnDiff`
+- turn 终态时把该 snapshot 取出并挂到 final event 上
+- 后续 viewer 只消费这个 final event 上携带的 snapshot
 
-### 7.1 冻结生成时机
+也就是说，`#307` 不改变上游 diff 的 capture 语义，只改变它在 final 投递阶段的使用方式。
 
-这份 snapshot 的生成时机应明确固定为：
+## 5.3 冻结时机
 
-- `turn 刚结束时`
+冻结时机固定为：
 
-更具体地说：
+- turn 刚结束时
+- final event 正在投递之前或投递同一事务内
 
-- authoritative `TurnDiffSnapshot` 已经收齐
-- turn 已进入最终终态
-- final turn diff summary 即将投影或刚开始投影
+不允许把冻结时机延后到：
 
-此时应一次性把 viewer 所需的数据冻结下来，并产出 immutable snapshot artifact。
+- 用户第一次点击 `查看`
+- 页面首次打开时
+- 服务端首次渲染时
 
-不应把生成时机延后到：
+只要延后冻结，就会引入“仓库后来又变了”的漂移风险，破坏 frozen 语义。
 
-- 用户第一次点击 `查看` 时
-- 后续某次懒加载打开页面时
-- 或页面服务端首次访问时
+## 5.4 主路径
 
-因为只要延后生成，就会引入“工作区后来又变了”的风险，破坏 frozen 语义。
+建议沿用现有 final preview rewrite 主路径，而不是单独再发一个“补链消息”：
 
-### 7.2 不采用 live 读磁盘
+1. `deliverUIEventWithContextMode(...)` 识别到 final block
+2. 组装 `FinalBlockPreviewRequest`
+3. preview 层在同一次调用里完成两件事：
+   - 继续处理正文内已有 preview rewrite
+   - 若存在 `TurnDiffSnapshot`，生成 frozen turn diff preview artifact 并返回 viewer 链接
+4. app 把这条链接作为 delivery-only metadata 挂回 event
+5. projector 渲染 final card：
+   - 正文仍来自 block
+   - “本次修改”摘要头行在有链接时追加 `查看`
+6. gateway 发送最终卡片
 
-不推荐在打开页面时再去读当前工作区硬盘文件内容。
+这里的关键点是：
+
+- viewer 链接是 final delivery artifact，不是新的业务数据
+- 不把 URL 塞回 `TurnDiffSnapshot` 或 `FileChangeSummary`
+- projector 只负责把已经拿到的链接渲染到摘要头行
+
+## 5.5 second-chance patch
+
+当前 final block 已有 second-chance patch 机制：
+
+- 首次 preview rewrite 超时或失败时，先照常把 final 发出去
+- 后台再重跑一次 preview rewrite，并尝试 update 同一张 final 卡
+
+`#307` 的 viewer 链接应复用这条现有机制。
+
+这意味着：
+
+- 首次生成失败时，不额外 append 一条“查看 diff”消息
+- second-chance 成功时，直接更新原 final 卡，让摘要头行补上 `查看`
+- 用户最终仍只看到一张 final 卡
+
+这条约束直接对应当前产品意见：
+
+- 不要为了 `@`、提醒或补链语义再额外发一条消息
+- 应该把真正需要用户点击的入口挂在原事件本身
+
+## 6. final 卡挂链合同
+
+## 6.1 挂载位置
+
+链接只挂在 final card 的文件修改摘要头行。
+
+推荐头行格式：
+
+```markdown
+**本次修改** 3 个文件  <font color='green'>+8</font> <font color='red'>-3</font>  [查看](https://...)
+```
+
+不改动：
+
+- final 正文内容
+- 文件列表各行
+- 用时 / token / worktree footer
+
+## 6.2 显示条件
+
+V1 仅在以下条件同时满足时显示 `查看`：
+
+- final card 有文件修改摘要头行
+- turn diff preview artifact 成功生成并拿到了 URL
+
+否则：
+
+- 保持当前摘要头行原样
+- 不出现空按钮、占位文案或死链
+
+## 6.3 不新增新的卡片形态
+
+不新增：
+
+- 新 owner-card
+- 新 request-card
+- 新独立 notice
+
+这只是 final card 上的派生 delivery artifact，不是新的前台业务对象。
+
+## 7. 链接、路由与授权合同
+
+## 7.1 路由形态
+
+沿用当前 `/preview` 的公共路由前缀：
+
+```text
+/preview/s/<scopePublicID>/<previewID>
+/preview/s/<scopePublicID>/<previewID>/download
+```
+
+其中：
+
+- `scopePublicID` 复用现有 preview scope 的公开 ID
+- `previewID` 在本单中表示“一次 frozen turn diff artifact”，不是 live 文件路径
+- `/download` 返回 raw unified diff 下载
+
+## 7.2 为什么继续复用 `/preview`
+
+这里不需要新开一条公网暴露基座。
+
+应直接复用已有：
+
+- external-access listener / provider
+- prefix grant
+- path-scoped session
+- `/preview/s/<scopePublicID>/` 路径授权模型
 
 原因：
 
-- turn 结束后，工作区可能已被后续 turn 继续修改
-- 用户可能手动改过文件、切过分支、rebase 过
-- 如果页面在打开时再读 live 文件，看到的上下文就会和那一轮的 diff snapshot 脱节
+- turn diff viewer 本质上也是 preview delivery
+- 它只是 artifact 类型和 renderer 变了，不需要重做公网授权层
 
-这会直接破坏这张页面最重要的产品语义：
+## 7.3 外链形态
 
-- authoritative
-- frozen
-- read-only
+公开链接仍按现有 external-access foundation 发行：
 
-因此，页面绝不能依赖“打开时读当前磁盘”来拼上下文。
+```text
+https://<public-base>/g/<grant-id>/?t=<exchange-token>
+```
 
-### 7.3 不采用预烘焙静态 HTML
+交换完成后建立的 cookie 仍应绑定到：
 
-也不推荐在 turn 结束时一次性生成最终 HTML 页面并永久保存。
+```text
+/preview/s/<scopePublicID>/
+```
 
-原因：
+这样用户在同一条 final message 里点击任意一个 preview 链接后：
 
-- 页面本身包含交互：文件切换、gap 展开/收起、阅读位置记忆
-- 后续如果样式、折叠交互、移动端布局要调整，预烘焙页面会把旧页面永久锁死
-- 这种能力本质上更适合“冻结数据 + 专用 renderer”，而不是“冻结最终 HTML”
+- 同 scope 下的其它 preview 链接都可复用会话
+- 不需要每个链接重新走一遍授权
 
-因此推荐冻结的是“数据快照”，不是最终展示 HTML。
+## 7.4 grant 复用边界
 
-### 7.4 推荐方案：immutable snapshot payload + dedicated renderer
+grant 继续按“消息级 prefix grant”复用。
 
-推荐承载方式：
+具体做法：
 
-- turn 刚结束时生成一个 immutable snapshot artifact
-- artifact 内不仅保存 raw unified diff
-- 还保存渲染这张页面所需的冻结文件快照和结构化元数据
-- 页面打开时由专用 renderer 根据该 snapshot 生成最终 HTML
+- 复用 `PreviewGrantKey`
+- `TargetBasePath` 继续指向 `/preview/s/<scopePublicID>/`
+- 同一条 final message 内：
+  - 正文里被 rewrite 的 preview 链接
+  - 文件摘要头行上的 turn diff `查看`
+  应共享同一个 grant window
 
-这样可以同时满足：
+跨消息不复用同一个 grant window。
+
+这保证：
+
+- 同一条消息内体验一致
+- 新消息不会继续借用旧消息即将过期的 grant
+
+## 7.5 artifact TTL 与外链 TTL
+
+语义上要区分两层寿命：
+
+- artifact / record TTL：本地 frozen 数据寿命，继续复用 preview cache 的 record/blob 机制
+- link / session TTL：外链授权寿命，继续复用现有 preview grant 默认值
+
+当前实现基线：
+
+- preview grant 默认 `24h`
+- preview record 默认 `7d`
+- preview blob 默认 `14d`
+
+因此：
+
+- 链接会过期
+- frozen artifact 可以比链接活得更久
+- 以后若同 scope 下重新签发新 grant，仍可访问尚未被 GC 的 artifact
+
+## 8. 冻结 artifact 合同
+
+## 8.1 核心原则
+
+冻结的是“数据快照”，不是最终 HTML。
+
+页面打开时由专用 renderer 读取 frozen artifact 渲染最终 HTML，这样可以同时满足：
 
 - 数据语义冻结
 - 页面表现可迭代
-- 外链服务端只需要服务一个 immutable artifact
-- 不再依赖 live workspace
+- 不依赖 live workspace
 
-## 8. Snapshot 模型建议
+## 8.2 artifact 建议结构
 
-推荐的 artifact 不是“只有一段 raw diff”的极简文本，而是面向 viewer 的冻结数据包。
+建议新增独立的 turn diff artifact kind，例如：
 
-示意结构：
+- `artifactKind = "turn_diff_snapshot"`
+- `rendererKind = "turn_diff"`
+
+建议保存的最小数据结构：
 
 ```json
 {
-  "threadId": "thread-1",
-  "turnId": "turn-1",
+  "schemaVersion": 1,
+  "threadID": "thread-1",
+  "turnID": "turn-1",
   "generatedAt": "2026-04-24T12:00:00Z",
   "rawUnifiedDiff": "diff --git ...",
   "files": [
     {
-      "fileKey": "0",
-      "oldPath": "a/internal/x.go",
-      "newPath": "b/internal/x.go",
+      "fileID": "0",
+      "oldPath": "internal/old.go",
+      "newPath": "internal/new.go",
+      "displayPath": "internal/new.go",
       "changeKind": "modify",
+      "binary": false,
+      "parseStatus": "ok",
+      "rawHeader": "diff --git ...",
       "rawPatch": "@@ ...",
       "beforeText": "... optional ...",
       "afterText": "... optional ...",
-      "binary": false,
-      "parseStatus": "ok"
+      "hunks": [
+        {
+          "oldStart": 10,
+          "oldLines": 5,
+          "newStart": 10,
+          "newLines": 6
+        }
+      ]
     }
   ]
 }
@@ -318,129 +410,258 @@ phase-1 不要求为了“功能完整”额外堆出下载、解释、跳转等
 
 其中：
 
-- `rawUnifiedDiff` 仍保留 authoritative 原文，便于下载和调试
-- `files[]` 承载文件级阅读所需的冻结数据
-- 文本文件优先保留可用的冻结全文快照
-- 删除文件时优先保留 `beforeText`
-- 新增或修改文件时优先保留 `afterText`
-- 若能稳定得到两侧文本，则可同时保留 `beforeText` 和 `afterText`
+- `rawUnifiedDiff` 始终保留 authoritative 原文
+- `files[]` 是 viewer 用的结构化冻结数据
+- `beforeText` / `afterText` 只在能稳定冻结时保存
+- `hunks` 是解析结果，不替代 raw patch
 
-核心原则是：
+## 8.3 为什么不读当前磁盘
 
-- viewer 所需的上下文数据必须在 turn 结束时冻结到 artifact 内
-- viewer 打开时不再向 live workspace 取数
+打开页面时回读当前磁盘会直接破坏 frozen 语义：
 
-## 9. 渲染策略
+- 文件可能已经被后续 turn 改过
+- 文件可能被用户手动改过
+- 文件可能被移动、删除、切支、rebase
 
-### 9.1 phase-1 目标
+因此 V1 明确禁止：
 
-phase-1 的 renderer 需要做到：
+- 页面服务端按当前路径再去读 live 文件
+- 用 live 文件内容反推缺失上下文
 
-- 按 diff 文件顺序列出文件
-- 支持切换文件
-- 按 hunk 展示 patch
-- 展示有限上下文
-- 折叠大段未修改内容
-- 支持 gap 展开/收起
-- 支持页面内阅读位置记忆
+## 8.4 parser 策略
 
-### 9.2 数据不足时的降级
+parser 采用保守策略：
 
-若某个文件无法可靠生成完整 viewer 数据，则不要 silent fail。
+- 只认 diff 文本里显式存在的 `rename from/to`
+- 只认显式存在的 `copy from/to`
+- 不根据 delete + add 自行推断 rename
+- binary header、未知 header、无法匹配的 patch 一律进入降级
 
-推荐降级顺序：
+这条策略对齐此前已经确认的方向：
 
-1. 文件级 raw patch 视图
-2. 整体 raw unified diff 视图
+- authoritative source 是上游 diff 文本
+- viewer 不擅自发明额外语义
 
-特殊场景包括：
+## 9. renderer 合同
 
-- binary header
-- rename/copy header 无法完整冻结文本
-- patch parse 失败
-- 文件快照缺失
+## 9.1 外层壳
 
-这些情况仍可保留：
+外层壳继续跟现有 preview 页面保持风格一致：
 
-- 文件列表项
-- 基础元信息
-- raw patch 或 raw diff 下载
+- 基础留白
+- 排版节奏
+- 过期 / unavailable 系统态
 
-但不应伪装成完整文件级 viewer。
+但正文 renderer 不能复用当前普通 file preview 的正文语义。
 
-## 10. 与现有 preview 基座的关系
+本单需要的是：
 
-这条能力与现有 preview 的关系应当是：
+- preview shell 一致
+- turn diff renderer 专用
 
-- 复用已有 grant / path / TTL / external-access 基座
-- 复用 preview shell 的页面风格
-- 新增专门的 turn diff artifact 和 renderer
+## 9.2 初始定位
 
-不应理解成：
+页面首次打开时：
 
-- 沿用当前 file preview artifact 语义
-- 复用当前 previous/current 文本 diff-first renderer
-- 或把 turn diff viewer 强塞回普通文件预览路径
+- 默认选中第一个有 hunk 的文件
+- 若所有文件都无法结构化渲染，则打开 raw diff fallback
 
-更合适的理解是：
+首次进入某个文件时：
 
-- 这是 preview delivery 基座上的一个新只读 viewer 类型
+- 默认滚到第一个 hunk
 
-## 11. 前端状态建议
+## 9.3 gap 展开行为
 
-页面内需要维护的最小前端状态包括：
+gap 展开后应达到的视觉结果：
 
-- 当前选中的文件
-- 每个文件当前是否已访问
-- 每个文件上次滚动位置
-- 每个 gap 是否已展开
+- 展开内容直接填进上下两个块之间
+- 不再保留一条额外断层
+- 下方若已经接成连续阅读流，对应 hunk 的开头条应隐藏
 
-状态范围：
+再次收起时：
 
-- 只在当前页面会话内有效
-- 不写服务端
-- 不要求刷新后恢复
+- 恢复成单条 gap bar
+- 阅读位置尽量保持在当前附近
 
-## 12. phase-1 默认值
+## 9.4 降级阅读态
 
-以下默认值已经足够进入设计实现，不需要继续卡住：
+当某个文件无法形成完整 viewer 时，降级顺序固定为：
 
-- 默认上下文行数：`8`
-- 文件顺序：沿 raw diff 中出现顺序
-- 首次打开页面：选中第一个有 hunk 的文件
-- 首次打开文件：滚到第一个 hunk
-- 再次切回已访问文件：恢复该文件上次滚动位置
-- 竖屏：顶部轻量 selector bar
-- 横屏：左侧文件列表，顶部 frame 默认隐藏
-- gap 展开后与上下代码块无缝拼接
+1. 文件级 raw patch
+2. 整体 raw unified diff
 
-这些默认值后续可以微调，但不改变整体设计方向。
+降级不应影响：
 
-## 13. 完成标准
+- 文件列表
+- 基础文件元信息
+- 原始 diff 下载
 
-当 `#307` 进入实现完成态时，至少应满足：
+## 10. 组件职责
 
-- final turn diff summary 可挂出 `查看` 链接
-- 链接打开的是只读 frozen turn diff viewer
-- 页面不出现任何 reviewer / accept / reject 语义
-- 正常阅读态不出现额外解释性文案
-- 页面能按文件切换
-- 页面能按 hunk 阅读，并保留有限上下文
-- 大段未修改内容默认折叠，可展开/收起
+## 10.1 orchestrator
+
+职责：
+
+- 继续维护 authoritative `TurnDiffSnapshot`
+- 在 turn 终态把 snapshot 带到 final event
+
+不负责：
+
+- 生成外链
+- 生成 viewer 页面
+- 拼接 markdown `查看` 链接
+
+## 10.2 app / daemon
+
+职责：
+
+- 在 final 投递路径组装 `FinalBlockPreviewRequest`
+- 继续负责 `PreviewGrantKey`
+- 继续负责 second-chance final patch 调度
+- 把 preview 层返回的 turn diff viewer metadata 挂回 event
+
+不负责：
+
+- 直接拼 summary markdown
+- 在 daemon 层硬编码 Feishu 卡片内容
+
+## 10.3 preview registry / publisher
+
+职责：
+
+- 把 `TurnDiffSnapshot` 冻结成 immutable artifact
+- 给 artifact 分配 `previewID`
+- 复用当前 preview cache 和 scope manifest
+- 复用 `IssueScopePrefix(...)`
+- 返回最终 viewer URL
+
+## 10.4 projector
+
+职责：
+
+- 在 final 文件摘要头行追加 `查看`
+- 无链接时保持现有 summary 头行不变
+
+不负责：
+
+- 自己签发 URL
+- 自己推导 scope / grant
+
+## 10.5 web preview route
+
+职责：
+
+- 复用当前 `/preview` 鉴权入口
+- 读取 turn diff artifact
+- 返回 turn diff viewer 页面
+- 在 `/download` 返回 raw unified diff
+
+## 11. 失败与降级矩阵
+
+### 11.1 生成前
+
+- 没有 `TurnDiffSnapshot`
+  - 不生成 viewer
+  - final 卡保持当前行为
+
+- `TurnDiffSnapshot.Diff` 为空
+  - 视为没有 viewer
+  - 不生成空链接
+
+### 11.2 生成中
+
+- artifact publish 失败
+  - 首次发送时不挂 `查看`
+  - second-chance patch 可再次尝试
+  - 若最终仍失败，则 final 卡保持无链接
+
+- grant 签发失败
+  - 同上，不出现空链接
+
+- parse 失败
+  - 仍可生成 viewer
+  - 页面退回 raw patch / raw diff 阅读态
+
+### 11.3 打开时
+
+- preview record 丢失
+  - 返回 unavailable 系统态
+
+- preview record 过期
+  - 返回 expired 系统态
+
+- 外链授权过期
+  - 走现有 external-access 失效语义
+  - 不新增 turn diff 专属鉴权分支
+
+- 文件是 binary
+  - 不伪装成文本 viewer
+  - 显示 binary / raw patch / 下载降级态
+
+## 12. 实现切分建议
+
+### 12.1 carrier 与接口
+
+- 扩展 final preview 结果，让它能返回“turn diff viewer metadata”
+- 这份 metadata 只包含 delivery 信息，例如：
+  - `URL`
+  - `DownloadURL`（若需要）
+  - `ScopePublicID`
+  - `PreviewID`
+- 不把这类字段写回 authoritative `TurnDiffSnapshot`
+
+### 12.2 artifact 与 registry
+
+- 在现有 web preview registry 上新增 turn diff artifact kind
+- 复用 scope manifest / blob / TTL / GC
+- 为 turn diff artifact 提供 raw diff 下载
+
+### 12.3 final card 渲染
+
+- projector 的文件摘要头行支持追加 `查看`
+- 保持无链接场景的输出与现在一致
+- second-chance patch 路径也要能把这条链接补回同一张 final 卡
+
+### 12.4 web renderer
+
+- 新增 `turn_diff` renderer
+- 复用 preview shell
+- 正文渲染遵守当前已确认 mock
+
+## 13. 验证面
+
+- final card 有文件摘要且 turn diff preview 成功时，头行出现 `查看`
+- `查看` 链接打开的是 frozen turn diff viewer，而不是 live workspace
+- 链接与正文 preview 链接共享同一条消息级 grant
+- second-chance patch 成功时，补的是原 final 卡，不是 append 新消息
+- 页面横竖屏切换可在运行时响应，不需要刷新
 - gap 展开后与上下代码块无缝衔接
-- 横竖屏都能完成基础阅读
-- 页面内能记住每个文件的阅读位置
+- parse 失败、binary、rename/copy header、数据缺失时能明确降级
+- `/download` 返回 raw unified diff
+
+## 14. 实现完成标准
+
+- final turn diff summary 可挂出 `查看`
+- `查看` 直接落在原 final 卡的摘要头行
+- 页面是只读 frozen turn diff viewer
 - 打开页面时不依赖 live workspace 读盘
+- 页面不出现 reviewer 语义与解释性文案
+- portrait / landscape 都能正常阅读
+- 页面能按文件切换、按 hunk 阅读、按 gap 展开收起
+- 每个文件的滚动位置能在本页会话内记忆
+- 解析失败和异常场景有明确降级
 - 外层风格与现有 preview 页面保持基本一致
 
-## 14. 后续不在本单讨论的内容
+## 15. 当前结论
 
-以下内容即使未来存在，也不属于 `#307` 的范围：
+到这一步，`#307` 的设计已经不再只停留在页面外观，而是具备直接开工所需的核心合同：
 
-- live workspace diff viewer
-- hunk accept / reject
-- file accept / reject
-- frozen viewer 跳转到 live reviewer
-- PR / commit / branch 级 reviewer 产品
+- 什么时候生成
+- 由谁生成
+- 挂在哪里
+- 链接长什么样
+- 复用哪条授权链路
+- 页面读什么数据
+- 异常时如何降级
 
-如果未来要做这些能力，应继续留在 `#144` / `#215` 那条产品线上，而不是回流到 `#307`。
+后续实现应直接以本文和已确认 mock 为准，不再回到“是否先做一个 raw diff 页面”这条临时路线。
