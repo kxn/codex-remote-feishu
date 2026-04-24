@@ -127,10 +127,9 @@ func planProposalEvent(surface *state.SurfaceConsoleRecord, flow *activeOwnerCar
 	return surfaceEventFromPayload(
 		surface,
 		eventcontract.PagePayload{View: view},
-		eventcontract.DeliverySemantics{},
-		inlineReplace,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: inlineReplaceMode(inlineReplace),
+		},
 	)
 }
 

@@ -126,6 +126,85 @@ func TestCanonicalSemanticsUsesExplicitOverride(t *testing.T) {
 	}
 }
 
+func TestCanonicalMessageDeliveryDefaults(t *testing.T) {
+	tests := []struct {
+		name  string
+		event Event
+		want  MessageDelivery
+	}{
+		{
+			name: "page patches top level message",
+			event: Event{
+				Payload: PagePayload{
+					View: control.FeishuPageView{Title: "菜单"},
+				},
+			},
+			want: MessageDelivery{
+				FirstSendLane: MessageLaneTopLevel,
+				Mutation:      MessageMutationPatchSameMessage,
+			},
+		},
+		{
+			name: "plan update stays top level append only",
+			event: Event{
+				Payload: PlanUpdatePayload{
+					PlanUpdate: control.PlanUpdate{Explanation: "继续"},
+				},
+			},
+			want: MessageDelivery{
+				FirstSendLane: MessageLaneTopLevel,
+				Mutation:      MessageMutationAppendOnly,
+			},
+		},
+		{
+			name: "timeline text defaults to reply thread append only",
+			event: Event{
+				Payload: TimelineTextPayload{
+					TimelineText: control.TimelineText{Text: "处理中"},
+				},
+			},
+			want: MessageDelivery{
+				FirstSendLane: MessageLaneReplyThread,
+				Mutation:      MessageMutationAppendOnly,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.event.CanonicalMessageDelivery(); got != tt.want {
+				t.Fatalf("CanonicalMessageDelivery() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterEventsByFollowupPolicyUsesCanonicalHandoffClass(t *testing.T) {
+	events := []Event{
+		{
+			Payload: NoticePayload{
+				Notice:          control.Notice{Code: "thread_selection_changed"},
+				ThreadSelection: &control.ThreadSelectionChanged{ThreadID: "thread-1"},
+			},
+		},
+		{
+			Payload: NoticePayload{
+				Notice: control.Notice{Code: "generic_notice"},
+			},
+		},
+	}
+
+	filtered := FilterEventsByFollowupPolicy(events, FollowupPolicy{
+		DropClasses: []HandoffClass{HandoffClassThreadSelection},
+	})
+	if len(filtered) != 1 {
+		t.Fatalf("expected one event after filtering thread selection, got %#v", filtered)
+	}
+	if got := filtered[0].CanonicalSemantics().HandoffClass; got != HandoffClassNotice {
+		t.Fatalf("unexpected remaining handoff class %q", got)
+	}
+}
+
 func TestEventMetaNormalizesAttentionAnnotation(t *testing.T) {
 	meta := EventMeta{
 		Attention: AttentionAnnotation{

@@ -121,7 +121,7 @@ func (s *Service) autoContinueStatusCardEvent(surface *state.SurfaceConsoleRecor
 			},
 			SourceMessageID:      strings.TrimSpace(episode.RootReplyToMessageID),
 			SourceMessagePreview: strings.TrimSpace(episode.RootReplyToMessagePreview),
-			MessageDelivery:      patchTailReplyThreadMessageDelivery(),
+			MessageDelivery:      eventcontract.ReplyThreadPatchTailDelivery(),
 		},
 	)
 }

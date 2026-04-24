@@ -104,7 +104,7 @@ func (s *Service) applyTurnPlanUpdate(instanceID string, event agentproto.Event)
 		PlanUpdate:       update,
 	}
 	if strings.TrimSpace(sourceMessageID) != "" {
-		outbound.Meta.MessageDelivery = replyThreadMessageDelivery()
+		outbound.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
 	}
 	return []eventcontract.Event{outbound}
 }

@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -11,24 +10,19 @@ import (
 func surfaceEventFromPayload(
 	surface *state.SurfaceConsoleRecord,
 	payload eventcontract.Payload,
-	semantics eventcontract.DeliverySemantics,
-	inlineReplaceCurrentCard bool,
-	sourceMessageID string,
-	sourceMessagePreview string,
+	meta eventcontract.EventMeta,
 ) eventcontract.Event {
-	target := eventcontract.TargetRef{
-		GatewayID:        strings.TrimSpace(firstNonEmpty(surfaceGatewayID(surface))),
-		SurfaceSessionID: strings.TrimSpace(firstNonEmpty(surfaceSessionID(surface))),
+	target := meta.Target.Normalized()
+	if target.GatewayID == "" {
+		target.GatewayID = strings.TrimSpace(firstNonEmpty(surfaceGatewayID(surface)))
 	}
+	if target.SurfaceSessionID == "" {
+		target.SurfaceSessionID = strings.TrimSpace(firstNonEmpty(surfaceSessionID(surface)))
+	}
+	meta.Target = target
 	return eventcontract.NewEventFromPayload(
 		payload,
-		eventcontract.EventMeta{
-			Target:               target,
-			SourceMessageID:      strings.TrimSpace(sourceMessageID),
-			SourceMessagePreview: strings.TrimSpace(sourceMessagePreview),
-			InlineReplaceMode:    inlineReplaceMode(inlineReplaceCurrentCard),
-			Semantics:            semantics,
-		},
+		meta,
 	)
 }
 
@@ -37,27 +31,6 @@ func inlineReplaceMode(inline bool) eventcontract.InlineReplaceMode {
 		return eventcontract.InlineReplaceCurrentCard
 	}
 	return eventcontract.InlineReplaceNone
-}
-
-func replyThreadMessageDelivery() eventcontract.MessageDelivery {
-	return eventcontract.MessageDelivery{
-		FirstSendLane: eventcontract.MessageLaneReplyThread,
-		Mutation:      eventcontract.MessageMutationAppendOnly,
-	}
-}
-
-func patchSameMessageMessageDelivery() eventcontract.MessageDelivery {
-	return eventcontract.MessageDelivery{
-		FirstSendLane: eventcontract.MessageLaneTopLevel,
-		Mutation:      eventcontract.MessageMutationPatchSameMessage,
-	}
-}
-
-func patchTailReplyThreadMessageDelivery() eventcontract.MessageDelivery {
-	return eventcontract.MessageDelivery{
-		FirstSendLane: eventcontract.MessageLaneReplyThread,
-		Mutation:      eventcontract.MessageMutationPatchTailIfLatest,
-	}
 }
 
 func surfaceGatewayID(surface *state.SurfaceConsoleRecord) string {
@@ -72,38 +45,4 @@ func surfaceSessionID(surface *state.SurfaceConsoleRecord) string {
 		return ""
 	}
 	return strings.TrimSpace(surface.SurfaceSessionID)
-}
-
-func noticeDeliverySemantics(notice control.Notice, hasThreadSelection bool) eventcontract.DeliverySemantics {
-	semantics := eventcontract.DeliverySemantics{
-		VisibilityClass:        eventcontract.VisibilityClassUINavigation,
-		HandoffClass:           eventcontract.HandoffClassNotice,
-		FirstResultDisposition: eventcontract.FirstResultDispositionDrop,
-		OwnerCardDisposition:   eventcontract.OwnerCardDispositionDrop,
-	}
-	if noticeIsAlwaysVisible(notice) {
-		semantics.VisibilityClass = eventcontract.VisibilityClassAlwaysVisible
-	}
-	if hasThreadSelection {
-		semantics.HandoffClass = eventcontract.HandoffClassThreadSelection
-	}
-	return semantics
-}
-
-func navigationDeliverySemantics() eventcontract.DeliverySemantics {
-	return eventcontract.DeliverySemantics{
-		VisibilityClass:        eventcontract.VisibilityClassUINavigation,
-		HandoffClass:           eventcontract.HandoffClassNavigation,
-		FirstResultDisposition: eventcontract.FirstResultDispositionKeep,
-		OwnerCardDisposition:   eventcontract.OwnerCardDispositionKeep,
-	}
-}
-
-func terminalDeliverySemantics() eventcontract.DeliverySemantics {
-	return eventcontract.DeliverySemantics{
-		VisibilityClass:        eventcontract.VisibilityClassAlwaysVisible,
-		HandoffClass:           eventcontract.HandoffClassTerminalContent,
-		FirstResultDisposition: eventcontract.FirstResultDispositionKeep,
-		OwnerCardDisposition:   eventcontract.OwnerCardDispositionKeep,
-	}
 }

@@ -602,7 +602,7 @@ func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record
 	event := s.requestViewEvent(surface, s.requestPromptView(record, threadTitleHint))
 	event.SourceMessageID = strings.TrimSpace(record.SourceMessageID)
 	if event.SourceMessageID != "" {
-		event.Meta.MessageDelivery = replyThreadMessageDelivery()
+		event.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
 	}
 	return event
 }

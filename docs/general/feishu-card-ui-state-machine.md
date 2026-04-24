@@ -341,6 +341,7 @@ MCP request 卡片当前新增的可视语义：
   - 首结果替换后的 followup 抑制当前已从旧的 notice/thread-selection 布尔位迁到显式 `FollowupPolicy`：
     - action contract 提供 `DropClasses / KeepClasses`
     - daemon 统一按 `eventcontract` handoff class 过滤 followup，而不是再按 payload/kind 做散落判断
+    - `control` action contract 与 `eventcontract` 当前共享同一套 handoff taxonomy，不再各自维护一套 notice/thread-selection 枚举真相
   - `/stop`、`/new`、`/follow`、`/detach` 落地后会抑制重复终态 notice append
   - `attach_instance` 若后续带 thread-selection announce，daemon 也会抑制这类重复 append，避免菜单卡收口后又补一张同义结果卡
 4. active picker 阻断例外

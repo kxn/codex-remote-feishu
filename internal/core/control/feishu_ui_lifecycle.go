@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/handoffcontract"
+)
 
 const (
 	FeishuUIInlineReplaceFreshnessDaemonLifecycle = "daemon_lifecycle"
@@ -24,86 +28,17 @@ const (
 	FeishuFrontstageLauncherEnterTerminal FeishuFrontstageLauncherDisposition = "enter_terminal"
 )
 
-type FeishuFollowupHandoffClass string
+type FeishuFollowupHandoffClass = handoffcontract.HandoffClass
 
 const (
-	FeishuFollowupHandoffClassNotice          FeishuFollowupHandoffClass = "notice"
-	FeishuFollowupHandoffClassThreadSelection FeishuFollowupHandoffClass = "thread_selection"
-	FeishuFollowupHandoffClassNavigation      FeishuFollowupHandoffClass = "ui_navigation"
-	FeishuFollowupHandoffClassProcessDetail   FeishuFollowupHandoffClass = "process_detail"
-	FeishuFollowupHandoffClassTerminal        FeishuFollowupHandoffClass = "terminal_content"
+	FeishuFollowupHandoffClassNotice          = handoffcontract.HandoffClassNotice
+	FeishuFollowupHandoffClassThreadSelection = handoffcontract.HandoffClassThreadSelection
+	FeishuFollowupHandoffClassNavigation      = handoffcontract.HandoffClassNavigation
+	FeishuFollowupHandoffClassProcessDetail   = handoffcontract.HandoffClassProcessDetail
+	FeishuFollowupHandoffClassTerminal        = handoffcontract.HandoffClassTerminalContent
 )
 
-type FeishuFollowupPolicy struct {
-	DropClasses []FeishuFollowupHandoffClass
-	KeepClasses []FeishuFollowupHandoffClass
-}
-
-func (policy FeishuFollowupPolicy) Normalized() FeishuFollowupPolicy {
-	policy.DropClasses = normalizeFollowupClasses(policy.DropClasses)
-	policy.KeepClasses = normalizeFollowupClasses(policy.KeepClasses)
-	return policy
-}
-
-func (policy FeishuFollowupPolicy) Empty() bool {
-	policy = policy.Normalized()
-	return len(policy.DropClasses) == 0 && len(policy.KeepClasses) == 0
-}
-
-func (policy FeishuFollowupPolicy) ShouldDropHandoffClass(class string) bool {
-	class = strings.TrimSpace(class)
-	if class == "" {
-		return false
-	}
-	policy = policy.Normalized()
-	for _, keep := range policy.KeepClasses {
-		if strings.TrimSpace(string(keep)) == class {
-			return false
-		}
-	}
-	for _, drop := range policy.DropClasses {
-		if strings.TrimSpace(string(drop)) == class {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeFollowupClasses(classes []FeishuFollowupHandoffClass) []FeishuFollowupHandoffClass {
-	if len(classes) == 0 {
-		return nil
-	}
-	out := make([]FeishuFollowupHandoffClass, 0, len(classes))
-	seen := map[FeishuFollowupHandoffClass]struct{}{}
-	for _, class := range classes {
-		normalized := normalizeFollowupClass(class)
-		if normalized == "" {
-			continue
-		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func normalizeFollowupClass(class FeishuFollowupHandoffClass) FeishuFollowupHandoffClass {
-	switch FeishuFollowupHandoffClass(strings.TrimSpace(string(class))) {
-	case FeishuFollowupHandoffClassNotice,
-		FeishuFollowupHandoffClassThreadSelection,
-		FeishuFollowupHandoffClassNavigation,
-		FeishuFollowupHandoffClassProcessDetail,
-		FeishuFollowupHandoffClassTerminal:
-		return FeishuFollowupHandoffClass(strings.TrimSpace(string(class)))
-	default:
-		return ""
-	}
-}
+type FeishuFollowupPolicy = handoffcontract.FollowupPolicy
 
 // FeishuFrontstageActionContract is the single action-level contract that
 // decides whether the current stamped card may be replaced synchronously and

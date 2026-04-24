@@ -1,5 +1,7 @@
 package eventcontract
 
+import "github.com/kxn/codex-remote-feishu/internal/core/handoffcontract"
+
 type InlineReplaceMode string
 
 const (
@@ -18,15 +20,15 @@ const (
 	VisibilityClassUINavigation  VisibilityClass = "ui_navigation"
 )
 
-type HandoffClass string
+type HandoffClass = handoffcontract.HandoffClass
 
 const (
-	HandoffClassDefault         HandoffClass = ""
-	HandoffClassNavigation      HandoffClass = "ui_navigation"
-	HandoffClassNotice          HandoffClass = "notice"
-	HandoffClassThreadSelection HandoffClass = "thread_selection"
-	HandoffClassProcessDetail   HandoffClass = "process_detail"
-	HandoffClassTerminalContent HandoffClass = "terminal_content"
+	HandoffClassDefault         = handoffcontract.HandoffClassDefault
+	HandoffClassNavigation      = handoffcontract.HandoffClassNavigation
+	HandoffClassNotice          = handoffcontract.HandoffClassNotice
+	HandoffClassThreadSelection = handoffcontract.HandoffClassThreadSelection
+	HandoffClassProcessDetail   = handoffcontract.HandoffClassProcessDetail
+	HandoffClassTerminalContent = handoffcontract.HandoffClassTerminalContent
 )
 
 type FirstResultDisposition string

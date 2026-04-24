@@ -35,3 +35,17 @@ func (delivery MessageDelivery) Normalized() MessageDelivery {
 	}
 	return delivery
 }
+
+func ReplyThreadAppendOnlyDelivery() MessageDelivery {
+	return MessageDelivery{
+		FirstSendLane: MessageLaneReplyThread,
+		Mutation:      MessageMutationAppendOnly,
+	}
+}
+
+func ReplyThreadPatchTailDelivery() MessageDelivery {
+	return MessageDelivery{
+		FirstSendLane: MessageLaneReplyThread,
+		Mutation:      MessageMutationPatchTailIfLatest,
+	}
+}

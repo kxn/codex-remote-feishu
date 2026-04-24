@@ -163,10 +163,9 @@ func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view c
 			View:    view,
 			Context: s.buildFeishuSelectionContextFromView(surface, view),
 		},
-		navigationDeliverySemantics(),
-		true,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: eventcontract.InlineReplaceCurrentCard,
+		},
 	)
 }
 
@@ -177,10 +176,7 @@ func (s *Service) requestViewEvent(surface *state.SurfaceConsoleRecord, view con
 			View:    view,
 			Context: s.buildFeishuRequestContextFromView(surface, view),
 		},
-		terminalDeliverySemantics(),
-		false,
-		"",
-		"",
+		eventcontract.EventMeta{},
 	)
 }
 
@@ -196,10 +192,9 @@ func (s *Service) pathPickerViewEvent(surface *state.SurfaceConsoleRecord, view 
 			View:    view,
 			Context: s.buildFeishuPathPickerContextFromView(surface, view),
 		},
-		navigationDeliverySemantics(),
-		inline,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: inlineReplaceMode(inline),
+		},
 	)
 }
 
@@ -225,10 +220,9 @@ func (s *Service) targetPickerViewEvent(surface *state.SurfaceConsoleRecord, vie
 			View:    view,
 			Context: s.buildFeishuTargetPickerContextFromView(surface, view),
 		},
-		navigationDeliverySemantics(),
-		inline,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: inlineReplaceMode(inline),
+		},
 	)
 }
 
@@ -257,9 +251,10 @@ func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, vi
 			View:    view,
 			Context: s.buildFeishuThreadHistoryContextFromView(surface, view),
 		},
-		navigationDeliverySemantics(),
-		inline,
-		sourceMessageID,
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode:    inlineReplaceMode(inline),
+			SourceMessageID:      strings.TrimSpace(sourceMessageID),
+			SourceMessagePreview: "",
+		},
 	)
 }

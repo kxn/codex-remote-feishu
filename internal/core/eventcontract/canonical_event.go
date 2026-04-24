@@ -227,7 +227,7 @@ func (event Event) CanonicalMessageDelivery() MessageDelivery {
 	}
 }
 
-func FilterEventsByFollowupPolicy(events []Event, policy control.FeishuFollowupPolicy) []Event {
+func FilterEventsByFollowupPolicy(events []Event, policy FollowupPolicy) []Event {
 	if len(events) == 0 {
 		return nil
 	}

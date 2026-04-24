@@ -23,10 +23,9 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 			View:    view,
 			Context: s.buildFeishuPageContextFromView(surface, view),
 		},
-		navigationDeliverySemantics(),
-		true,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: eventcontract.InlineReplaceCurrentCard,
+		},
 	)
 }
 

@@ -167,7 +167,7 @@ func (s *Service) remoteTurnFailureEvent(outcome *remoteTurnOutcome) eventcontra
 		Notice:           notice,
 	}
 	if strings.TrimSpace(event.SourceMessageID) != "" {
-		event.Meta.MessageDelivery = replyThreadMessageDelivery()
+		event.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
 	}
 	return event
 }

@@ -30,10 +30,7 @@ func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMo
 			Notice:          *notice,
 			ThreadSelection: selection,
 		},
-		noticeDeliverySemantics(*notice, true),
-		false,
-		"",
-		"",
+		eventcontract.EventMeta{},
 	)
 }
 

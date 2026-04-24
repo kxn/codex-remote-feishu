@@ -346,7 +346,7 @@ func removeUIEventAt(events []eventcontract.Event, idx int) []eventcontract.Even
 	return append(out, events[idx+1:]...)
 }
 
-func filterUIEventsByFollowupPolicy(events []eventcontract.Event, policy control.FeishuFollowupPolicy) []eventcontract.Event {
+func filterUIEventsByFollowupPolicy(events []eventcontract.Event, policy eventcontract.FollowupPolicy) []eventcontract.Event {
 	return eventcontract.FilterEventsByFollowupPolicy(events, policy)
 }
 

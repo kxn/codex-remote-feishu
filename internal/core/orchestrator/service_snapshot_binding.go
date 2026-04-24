@@ -86,10 +86,7 @@ func notice(surface *state.SurfaceConsoleRecord, code, text string) []eventcontr
 	return []eventcontract.Event{surfaceEventFromPayload(
 		surface,
 		eventcontract.NoticePayload{Notice: notice},
-		noticeDeliverySemantics(notice, false),
-		false,
-		"",
-		"",
+		eventcontract.EventMeta{},
 	)}
 }
 

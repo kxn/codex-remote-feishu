@@ -433,7 +433,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 		},
 	}
 	if strings.TrimSpace(replySourceMessageID) != "" {
-		outbound.Meta.MessageDelivery = replyThreadMessageDelivery()
+		outbound.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
 	}
 	return append(events, outbound)
 }

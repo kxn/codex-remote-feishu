@@ -323,7 +323,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 		ExecCommandProgress: snapshot,
 	}
 	if strings.TrimSpace(sourceMessageID) != "" {
-		outbound.Meta.MessageDelivery = replyThreadMessageDelivery()
+		outbound.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
 	}
 	return []eventcontract.Event{outbound}
 }

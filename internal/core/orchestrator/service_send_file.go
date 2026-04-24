@@ -73,10 +73,9 @@ func sendFileInlineTerminalEvent(surface *state.SurfaceConsoleRecord, messageID,
 	return surfaceEventFromPayload(
 		surface,
 		eventcontract.PagePayload{View: view},
-		eventcontract.DeliverySemantics{},
-		true,
-		"",
-		"",
+		eventcontract.EventMeta{
+			InlineReplaceMode: eventcontract.InlineReplaceCurrentCard,
+		},
 	)
 }
 
