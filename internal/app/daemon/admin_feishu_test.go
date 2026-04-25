@@ -227,6 +227,9 @@ func TestAdminFeishuEventSubscriptionTestStartAndPass(t *testing.T) {
 	if gateway.applied[0].Kind != feishu.OperationSendCard || gateway.applied[0].CardTitle != "事件订阅测试" {
 		t.Fatalf("unexpected prompt operation: %#v", gateway.applied[0])
 	}
+	if gateway.applied[0].AttentionUserID != "user-1" {
+		t.Fatalf("expected event test card to mention recipient, got %#v", gateway.applied[0])
+	}
 	cardPayload, err := json.Marshal(gateway.applied[0].CardElements)
 	if err != nil {
 		t.Fatalf("marshal event test card: %v", err)
@@ -273,12 +276,30 @@ func TestAdminFeishuCallbackTestStartAndPass(t *testing.T) {
 	if len(gateway.applied) != 1 || gateway.applied[0].Kind != feishu.OperationSendCard {
 		t.Fatalf("expected one callback test card, got %#v", gateway.applied)
 	}
+	if gateway.applied[0].AttentionUserID != "user-1" {
+		t.Fatalf("expected callback test card to mention recipient, got %#v", gateway.applied[0])
+	}
 	callbackPayload, err := json.Marshal(gateway.applied[0].CardElements)
 	if err != nil {
 		t.Fatalf("marshal callback test card: %v", err)
 	}
 	if !strings.Contains(string(callbackPayload), "点此测试回调") {
 		t.Fatalf("expected callback button in card, got %s", string(callbackPayload))
+	}
+	button := gateway.applied[0].CardElements[len(gateway.applied[0].CardElements)-1]
+	if button["tag"] != "button" {
+		t.Fatalf("expected callback test card to use direct button element, got %#v", gateway.applied[0].CardElements)
+	}
+	if _, ok := button["value"].(map[string]any); ok {
+		t.Fatalf("expected callback test card to avoid legacy button value payload, got %#v", button)
+	}
+	behaviors, _ := button["behaviors"].([]map[string]any)
+	if len(behaviors) != 1 || behaviors[0]["type"] != "callback" {
+		t.Fatalf("expected callback test button to use one callback behavior, got %#v", button)
+	}
+	value, _ := behaviors[0]["value"].(map[string]any)
+	if value["kind"] != "page_action" || value["action_kind"] != string(control.ActionFeishuAppTestCallback) {
+		t.Fatalf("unexpected callback test button payload: %#v", value)
 	}
 
 	app.HandleAction(context.Background(), control.Action{

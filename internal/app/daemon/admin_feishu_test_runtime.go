@@ -138,12 +138,13 @@ func (a *App) startFeishuAppTest(ctx context.Context, gatewayID string, kind fei
 func feishuAppEventSubscriptionTestOperation(app adminFeishuAppSummary, test feishuAppTestContext) feishu.Operation {
 	events := feishuEventRequirementLines(feishuapp.DefaultManifest().Events)
 	return feishu.Operation{
-		Kind:          feishu.OperationSendCard,
-		GatewayID:     app.ID,
-		ReceiveID:     test.Recipient.ReceiveID,
-		ReceiveIDType: test.Recipient.ReceiveIDType,
-		CardTitle:     "事件订阅测试",
-		CardThemeKey:  "info",
+		Kind:            feishu.OperationSendCard,
+		GatewayID:       app.ID,
+		ReceiveID:       test.Recipient.ReceiveID,
+		ReceiveIDType:   test.Recipient.ReceiveIDType,
+		AttentionUserID: feishuAppTestAttentionUserID(test.Recipient),
+		CardTitle:       "事件订阅测试",
+		CardThemeKey:    "info",
 		CardElements: []map[string]any{
 			{
 				"tag":     "markdown",
@@ -177,12 +178,13 @@ func feishuAppCallbackTestOperation(app adminFeishuAppSummary, recipient feishuA
 		daemonLifecycleID,
 	)
 	return feishu.Operation{
-		Kind:          feishu.OperationSendCard,
-		GatewayID:     app.ID,
-		ReceiveID:     recipient.ReceiveID,
-		ReceiveIDType: recipient.ReceiveIDType,
-		CardTitle:     "回调测试",
-		CardThemeKey:  "info",
+		Kind:            feishu.OperationSendCard,
+		GatewayID:       app.ID,
+		ReceiveID:       recipient.ReceiveID,
+		ReceiveIDType:   recipient.ReceiveIDType,
+		AttentionUserID: feishuAppTestAttentionUserID(recipient),
+		CardTitle:       "回调测试",
+		CardThemeKey:    "info",
 		CardElements: []map[string]any{
 			{
 				"tag":     "markdown",
@@ -203,21 +205,26 @@ func feishuAppCallbackTestOperation(app adminFeishuAppSummary, recipient feishuA
 				},
 			},
 			{
-				"tag": "action",
-				"actions": []map[string]any{
-					{
-						"tag":  "button",
-						"type": "primary",
-						"text": map[string]any{
-							"tag":     "plain_text",
-							"content": "点此测试回调",
-						},
-						"value": value,
-					},
+				"tag":  "button",
+				"type": "primary",
+				"text": map[string]any{
+					"tag":     "plain_text",
+					"content": "点此测试回调",
 				},
+				"behaviors": []map[string]any{{
+					"type":  "callback",
+					"value": value,
+				}},
 			},
 		},
 	}
+}
+
+func feishuAppTestAttentionUserID(recipient feishuAppWebTestRecipient) string {
+	if strings.TrimSpace(recipient.ActorUserID) != "" {
+		return strings.TrimSpace(recipient.ActorUserID)
+	}
+	return strings.TrimSpace(recipient.ReceiveID)
 }
 
 func (a *App) beginFeishuAppTest(gatewayID string, kind feishuAppTestKind, recipient feishuAppWebTestRecipient) feishuAppTestContext {
