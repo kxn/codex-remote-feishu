@@ -49,6 +49,7 @@
     "scopes": {
       "tenant": [
         "drive:drive",
+        "base:app:create",
         "bitable:app",
         "im:datasync.feed_card.time_sensitive:write",
         "im:message",
@@ -74,6 +75,10 @@
     {
       "event": "im.message.reaction.created_v1",
       "purpose": "用户给 queued 文本加 ThumbsUp 时，可把它升级成对当前执行回复的跟进。"
+    },
+    {
+      "event": "im.message.reaction.deleted_v1",
+      "purpose": "用户撤销消息 reaction 时，同步撤销对应的反馈动作。"
     },
     {
       "event": "application.bot.menu_v6",
