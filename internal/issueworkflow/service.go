@@ -18,6 +18,7 @@ const (
 	processingLabel          = "processing"
 	statusLabelImplementable = "status:implementable-now"
 	statusLabelInvestigation = "status:needs-investigation"
+	statusLabelNeedsPlan     = "status:needs-plan"
 	statusLabelClarification = "status:needs-clarification"
 	statusLabelBlocked       = "status:blocked"
 	recordedStateMissing     = "missing-status-label"
@@ -28,7 +29,7 @@ var (
 	requiredSections               = []string{"背景", "目标", "完成标准"}
 	preferredSections              = []string{"范围", "非目标", "相关文档", "涉及文件", "建议范围", "实现参考", "检查参考", "收尾参考"}
 	executionSections              = []string{"实现参考", "检查参考", "收尾参考"}
-	statusLabels                   = []string{statusLabelImplementable, statusLabelInvestigation, statusLabelClarification, statusLabelBlocked}
+	statusLabels                   = []string{statusLabelImplementable, statusLabelInvestigation, statusLabelNeedsPlan, statusLabelClarification, statusLabelBlocked}
 	categoryLabels                 = []string{"enhancement", "bug", "maintainability", "testing", "documentation"}
 	executionDecisionRequiredItems = []string{"是否拆分", "当前执行单元", "verifier 决策"}
 	executionSnapshotFields        = []string{"当前阶段", "当前执行点", "已完成", "下一步", "恢复步骤"}
@@ -117,6 +118,11 @@ func (s *Service) Prepare(ctx context.Context, opts PrepareOptions) (PrepareResu
 		if result.Status == PrepareStatusReady {
 			result.Issue.Labels = appendSortedUnique(result.Issue.Labels, processingLabel)
 			result.Lint = BuildLintReport(*result.Issue, opts.WorkflowMode)
+		}
+	}
+	if result.Status == PrepareStatusReady {
+		if workflowCheck := workflowContractCheck(result.Lint); workflowCheck != nil && workflowCheck.Status == CheckStatusFail {
+			result.Status = PrepareStatusBlockedWorkflowContract
 		}
 	}
 	if result.SnapshotPath == "" {
@@ -388,15 +394,18 @@ func BuildLintReport(issue Issue, mode WorkflowMode) LintReport {
 			Message:  "execution snapshot is self-contradictory: " + strings.Join(report.WorkflowGuardrails.SnapshotContradictions, "; "),
 		})
 	}
-	if report.WorkflowMode == WorkflowModeFast {
-		return report
-	}
 	explicitlyImplementable := len(report.RequiredMissing) == 0 && len(report.StatusLabels) == 1 && report.CurrentRecordedState == statusLabelImplementable
-	if !containsSection(report.PreferredMissing, "建议范围") && len(report.RequiredMissing) == 0 {
-		// no-op: explicit staged-plan section already present
-	} else if explicitlyImplementable && containsSection(report.PreferredMissing, "建议范围") {
+	explicitlyNeedsPlan := len(report.RequiredMissing) == 0 && len(report.StatusLabels) == 1 && report.CurrentRecordedState == statusLabelNeedsPlan
+	if explicitlyNeedsPlan && containsSection(report.PreferredMissing, "建议范围") {
 		report.Findings = append(report.Findings, LintFinding{
-			Severity: LintSeverityInfo,
+			Severity: LintSeverityError,
+			Code:     "missing-staged-plan-section",
+			Message:  "issue is explicitly marked `status:needs-plan` but body does not yet include `建议范围`",
+		})
+	}
+	if explicitlyImplementable && containsSection(report.PreferredMissing, "建议范围") {
+		report.Findings = append(report.Findings, LintFinding{
+			Severity: LintSeverityError,
 			Code:     "missing-staged-plan-section",
 			Message:  "issue is explicitly marked `status:implementable-now` but body does not yet include `建议范围`",
 		})
@@ -405,7 +414,7 @@ func BuildLintReport(issue Issue, mode WorkflowMode) LintReport {
 		missingExecutionSections := intersectSections(report.PreferredMissing, executionSections)
 		if len(missingExecutionSections) > 0 {
 			report.Findings = append(report.Findings, LintFinding{
-				Severity: LintSeverityInfo,
+				Severity: LintSeverityError,
 				Code:     "missing-execution-context-sections",
 				Message:  "issue is explicitly marked `status:implementable-now` but body does not yet include execution context sections: " + strings.Join(missingExecutionSections, ", "),
 			})
@@ -589,10 +598,31 @@ func detectWorkflowGuardrails(body string, sections documentSections, implementa
 }
 
 func workflowContractCheck(report LintReport) *CheckResult {
-	if !report.WorkflowGuardrails.ExecutionDecisionRequired {
+	enforcePlanningContract := report.CurrentRecordedState == statusLabelNeedsPlan || report.CurrentRecordedState == statusLabelImplementable
+	if !enforcePlanningContract && !report.WorkflowGuardrails.ExecutionDecisionRequired {
 		return nil
 	}
 	problems := make([]string, 0)
+	if enforcePlanningContract && len(report.RequiredMissing) > 0 {
+		problems = append(problems, "missing required sections: "+strings.Join(report.RequiredMissing, ", "))
+	}
+	if enforcePlanningContract && containsSection(report.PreferredMissing, "建议范围") {
+		problems = append(problems, "missing `建议范围` section")
+	}
+	if report.CurrentRecordedState == statusLabelNeedsPlan {
+		if len(problems) == 0 {
+			return &CheckResult{Name: "issue_workflow_contract", Status: CheckStatusPass, Message: "ok"}
+		}
+		return &CheckResult{
+			Name:    "issue_workflow_contract",
+			Status:  CheckStatusFail,
+			Message: strings.Join(problems, "; "),
+		}
+	}
+	missingExecutionSections := intersectSections(report.PreferredMissing, executionSections)
+	if len(missingExecutionSections) > 0 {
+		problems = append(problems, "missing execution context sections: "+strings.Join(missingExecutionSections, ", "))
+	}
 	if !report.WorkflowGuardrails.ExecutionDecisionSectionFound {
 		problems = append(problems, "missing `执行决策` section")
 	}

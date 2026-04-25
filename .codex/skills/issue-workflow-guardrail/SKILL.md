@@ -278,11 +278,12 @@ What each command owns:
   - fetches the live issue snapshot from GitHub
   - claims `processing` when available
   - can reclaim a stale `processing` claim after the configured stale window
+  - returns non-ready when a mature state label such as `status:needs-plan` or `status:implementable-now` still lacks its required workflow contract
   - writes a reusable snapshot JSON under `.codex/state/issue-workflow/`
 - `lint`
   - checks required issue sections
   - checks status/category/scope label shape
-  - warns when the staged-plan section is still missing on an issue explicitly marked `status:implementable-now`
+  - fails when `status:needs-plan` or `status:implementable-now` is missing its required staged-plan / execution contract
   - fails when the execution snapshot says only close-out tail work remains but `当前执行点` / `下一步` still point at more implementation or validation
 - `finish`
   - runs the fixed local mechanical checks
@@ -377,7 +378,7 @@ Use the issue body for durable structure:
 - related files
 - acceptance criteria
 - execution decision (`是否拆分`, `当前执行单元`, verifier plan, and why)
-- staged plan (`建议范围`) when work is not truly single-stage
+- staged plan (`建议范围`) once the issue enters `status:needs-plan`, even if the current plan only has one execution unit
 - execution snapshot (`当前执行点`, `恢复步骤`, and related fields) when work spans multiple stages or turns
 - implementation context (`实现参考`)
 - check context (`检查参考`)
@@ -428,6 +429,7 @@ After refining against the latest code, classify the issue into one of these sta
 
 - `implementable now`
 - `needs investigation`
+- `needs plan`
 - `needs clarification`
 - `blocked`
 
@@ -438,6 +440,7 @@ Compare the reassessed state with the issue's previously recorded actionable sta
 - If the state changed in either direction, update the issue body, labels, and concise evidence as needed, then run `finish --issue <number> --skip-checks` and stop there for this turn.
 - If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, then run `finish --issue <number> --skip-checks` and stop there for this turn.
 - Only when the issue was already implementable and remains implementable after reassessment may coding start immediately.
+- Do not code directly from `needs investigation` or `needs plan`; first update the issue until `status:implementable-now` and `lint` are both clean.
 - Even on that path, write or refresh the execution decision record before coding.
 - The minimum start sequence is: `prepare` -> re-read workflow doc and skill -> refresh `执行决策` -> refresh snapshot when applicable -> `lint` -> code.
 
@@ -448,9 +451,11 @@ Workflow-managed issues should carry exactly one explicit workflow status label.
 Apply exactly one of:
 
 - `status:implementable-now`
-  - use when the issue has enough context to start implementation safely
+  - use only when the issue has enough context to start implementation safely, including a written `建议范围`, `执行决策`, and execution context sections
 - `status:needs-investigation`
   - use when the code or runtime path must be researched before safe implementation
+- `status:needs-plan`
+  - use when technical investigation is sufficient, but the execution plan has not yet been durably written back
 - `status:needs-clarification`
   - use when product intent, user expectation, or acceptance criteria are still unclear
 - `status:blocked`

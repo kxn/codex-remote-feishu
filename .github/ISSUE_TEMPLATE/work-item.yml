@@ -13,7 +13,7 @@ body:
         - 你希望最后变成什么样
         - 你手上已经有的证据、限制或担心点
 
-        后续如果进入正式 workflow，会再补 `建议范围`、`实现参考`、`检查参考`、`收尾参考` 等执行字段，并按情况调整 `status:*` 标签。
+        后续如果进入正式 workflow，会再补 `建议范围`、`实现参考`、`检查参考`、`收尾参考` 等执行字段，并按情况把状态从 `status:needs-investigation` 推进到 `status:needs-plan` / `status:implementable-now`。
 
   - type: dropdown
     id: issue_type

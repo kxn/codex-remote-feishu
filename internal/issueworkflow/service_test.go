@@ -110,7 +110,7 @@ func TestPrepareClaimsProcessingAndWritesSnapshot(t *testing.T) {
 				"## 完成标准",
 				"done",
 			}, "\n"),
-			Labels: []string{"bug", "area:daemon", statusLabelImplementable},
+			Labels: []string{"bug", "area:daemon", statusLabelInvestigation},
 		},
 	}
 	svc := &Service{
@@ -186,7 +186,7 @@ func TestPrepareReclaimsStaleProcessingClaim(t *testing.T) {
 				"## 完成标准",
 				"done",
 			}, "\n"),
-			Labels: []string{"bug", "area:daemon", statusLabelImplementable, "processing"},
+			Labels: []string{"bug", "area:daemon", statusLabelInvestigation, "processing"},
 		},
 	}
 	svc := &Service{
@@ -234,7 +234,7 @@ func TestPrepareBlocksFreshProcessingClaim(t *testing.T) {
 				"## 完成标准",
 				"done",
 			}, "\n"),
-			Labels: []string{"bug", "area:daemon", statusLabelImplementable, "processing"},
+			Labels: []string{"bug", "area:daemon", statusLabelInvestigation, "processing"},
 		},
 	}
 	svc := &Service{
@@ -262,6 +262,47 @@ func TestPrepareBlocksFreshProcessingClaim(t *testing.T) {
 	}
 	if len(gh.removedLabels) != 0 || len(gh.addedLabels) != 0 {
 		t.Fatalf("did not expect label churn for fresh processing claim, got %#v / %#v", gh.removedLabels, gh.addedLabels)
+	}
+}
+
+func TestPrepareBlocksWorkflowContractForImplementableIssue(t *testing.T) {
+	root := t.TempDir()
+	gh := &fakeGitHubClient{
+		issue: Issue{
+			Number: 22,
+			Title:  "修复 attach 行为",
+			Body: strings.Join([]string{
+				"# 标题",
+				"",
+				"## 背景",
+				"body",
+				"## 目标",
+				"goal",
+				"## 完成标准",
+				"done",
+			}, "\n"),
+			Labels: []string{"bug", "area:daemon", statusLabelImplementable},
+		},
+	}
+	svc := &Service{
+		RootDir: root,
+		Git: &fakeGitClient{
+			branch:    "master",
+			head:      "abc123",
+			originURL: "https://github.com/kxn/codex-remote-feishu.git",
+		},
+		GitHub: gh,
+		Now:    func() time.Time { return time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC) },
+	}
+	result, err := svc.Prepare(context.Background(), PrepareOptions{IssueNumber: 22, ClaimProcessing: true, WorkflowMode: WorkflowModeFull})
+	if err != nil {
+		t.Fatalf("Prepare error = %v", err)
+	}
+	if result.Status != PrepareStatusBlockedWorkflowContract {
+		t.Fatalf("unexpected prepare result: %#v", result)
+	}
+	if got := gh.addedLabels; len(got) != 1 || got[0] != "processing" {
+		t.Fatalf("added labels = %#v, want processing", got)
 	}
 }
 
@@ -432,7 +473,7 @@ func TestFinishReleasesProcessingWhenChecksFail(t *testing.T) {
 	}
 }
 
-func TestBuildLintReportFastModeSkipsStagedPlanInfo(t *testing.T) {
+func TestBuildLintReportRequiresStagedPlanEvenInFastMode(t *testing.T) {
 	issue := Issue{
 		Body: strings.Join([]string{
 			"## 背景",
@@ -453,10 +494,10 @@ func TestBuildLintReportFastModeSkipsStagedPlanInfo(t *testing.T) {
 		t.Fatalf("fast workflow mode = %q", fastReport.WorkflowMode)
 	}
 	if !hasFindingCode(fullReport.Findings, "missing-staged-plan-section") {
-		t.Fatalf("expected full mode to keep staged-plan info finding, got %#v", fullReport.Findings)
+		t.Fatalf("expected full mode to require staged-plan finding, got %#v", fullReport.Findings)
 	}
-	if hasFindingCode(fastReport.Findings, "missing-staged-plan-section") {
-		t.Fatalf("did not expect fast mode to require staged-plan info finding, got %#v", fastReport.Findings)
+	if !hasFindingCode(fastReport.Findings, "missing-staged-plan-section") {
+		t.Fatalf("expected fast mode to keep staged-plan finding, got %#v", fastReport.Findings)
 	}
 }
 
@@ -475,7 +516,24 @@ func TestBuildLintReportFlagsMissingExecutionContextSections(t *testing.T) {
 		Labels: []string{"bug", "area:daemon", statusLabelImplementable},
 	}, WorkflowModeFull)
 	if !hasFindingCode(report.Findings, "missing-execution-context-sections") {
-		t.Fatalf("expected execution-context info finding, got %#v", report.Findings)
+		t.Fatalf("expected execution-context finding, got %#v", report.Findings)
+	}
+}
+
+func TestBuildLintReportRequiresStagedPlanForNeedsPlanState(t *testing.T) {
+	report := BuildLintReport(Issue{
+		Body: strings.Join([]string{
+			"## 背景",
+			"body",
+			"## 目标",
+			"goal",
+			"## 完成标准",
+			"done",
+		}, "\n"),
+		Labels: []string{"bug", "area:daemon", statusLabelNeedsPlan},
+	}, WorkflowModeFull)
+	if !hasFindingCode(report.Findings, "missing-staged-plan-section") {
+		t.Fatalf("expected staged-plan finding for needs-plan state, got %#v", report.Findings)
 	}
 }
 
@@ -556,6 +614,54 @@ func TestBuildLintReportFlagsContradictoryExecutionSnapshot(t *testing.T) {
 	if !hasFindingCode(report.Findings, "contradictory-execution-snapshot") {
 		t.Fatalf("expected contradictory-execution-snapshot finding, got %#v", report.Findings)
 	}
+	check := workflowContractCheck(report)
+	if check == nil || check.Status != CheckStatusFail {
+		t.Fatalf("expected workflow contract check to fail, got %#v", check)
+	}
+}
+
+func TestWorkflowContractCheckFailsWhenNeedsPlanIssueHasNoPlan(t *testing.T) {
+	report := BuildLintReport(Issue{
+		Body: strings.Join([]string{
+			"## 背景",
+			"body",
+			"## 目标",
+			"goal",
+			"## 完成标准",
+			"done",
+		}, "\n"),
+		Labels: []string{"bug", "area:daemon", statusLabelNeedsPlan},
+	}, WorkflowModeFull)
+	check := workflowContractCheck(report)
+	if check == nil || check.Status != CheckStatusFail {
+		t.Fatalf("expected workflow contract check to fail, got %#v", check)
+	}
+}
+
+func TestWorkflowContractCheckFailsWhenImplementableIssueLacksExecutionContext(t *testing.T) {
+	report := BuildLintReport(Issue{
+		Body: strings.Join([]string{
+			"## 背景",
+			"body",
+			"## 目标",
+			"goal",
+			"## 完成标准",
+			"done",
+			"## 建议范围",
+			"stage 1",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
+			"## 执行决策",
+			"- 是否拆分：否",
+			"- 当前执行单元：当前 issue",
+			"- verifier 决策：需要",
+		}, "\n"),
+		Labels: []string{"bug", "area:daemon", statusLabelImplementable},
+	}, WorkflowModeFull)
 	check := workflowContractCheck(report)
 	if check == nil || check.Status != CheckStatusFail {
 		t.Fatalf("expected workflow contract check to fail, got %#v", check)
@@ -825,6 +931,12 @@ func TestFinishCloseFailsWithoutVerifierPassForMediumIssue(t *testing.T) {
 			"done",
 			"## 建议范围",
 			"stage 1",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：否",
 			"- 当前执行单元：#22",
@@ -879,6 +991,12 @@ func TestFinishCloseFailsWhenChildRollupMissing(t *testing.T) {
 			"#247",
 			"## 建议范围",
 			"stage 1",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：否",
 			"- 当前执行单元：#22",
@@ -940,6 +1058,12 @@ func TestFinishCloseFailsForLegacyChildContract(t *testing.T) {
 			"done",
 			"## 建议范围",
 			"stage 1",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：否",
 			"- 当前执行单元：#22",
@@ -1006,6 +1130,14 @@ func TestFinishCloseFailsWhenParentSummaryIncomplete(t *testing.T) {
 			"close",
 			"## 恢复步骤",
 			"resume",
+			"## 建议范围",
+			"close-out",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：是",
 			"- 当前执行单元：#247",
@@ -1059,6 +1191,12 @@ func TestFinishClosePassesWithVerifierAndRollups(t *testing.T) {
 			"#247",
 			"## 建议范围",
 			"stage 1",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：否",
 			"- 当前执行单元：#248",
@@ -1100,6 +1238,14 @@ func TestFinishClosePassesWithVerifierAndRollups(t *testing.T) {
 			"close",
 			"## 恢复步骤",
 			"resume",
+			"## 建议范围",
+			"close-out",
+			"## 实现参考",
+			"impl",
+			"## 检查参考",
+			"check",
+			"## 收尾参考",
+			"finish",
 			"## 执行决策",
 			"- 是否拆分：是",
 			"- 当前执行单元：#247",

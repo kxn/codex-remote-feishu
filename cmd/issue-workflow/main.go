@@ -287,12 +287,29 @@ func renderPrepare(result issueworkflow.PrepareResult) string {
 		lines = append(lines, fmt.Sprintf("snapshot: %s", result.SnapshotPath))
 	}
 	lines = append(lines, renderLintSummary(result.Lint)...)
-	if result.Status == issueworkflow.PrepareStatusReady {
+	switch result.Status {
+	case issueworkflow.PrepareStatusReady:
 		lines = append(lines, "next:")
 		lines = append(lines, "  - re-read docs/general/issue-orchestration-workflow.md and .codex/skills/issue-workflow-guardrail/SKILL.md after prepare sync")
-		lines = append(lines, "  - write or refresh `执行决策` before coding")
-		lines = append(lines, "  - if staged or multi-turn, refresh the execution snapshot before coding")
-		lines = append(lines, "  - run lint after the issue body is updated")
+		switch result.Lint.CurrentRecordedState {
+		case "status:needs-investigation":
+			lines = append(lines, "  - deepen technical/code-path investigation until split/dependency/validation boundaries are clear")
+			lines = append(lines, "  - do not start coding; update the issue and rerun lint after the investigation write-back")
+		case "status:needs-plan":
+			lines = append(lines, "  - write or refresh `建议范围` and the execution plan before moving the issue forward")
+			lines = append(lines, "  - do not start coding until the issue reaches `status:implementable-now` and lint is clean")
+		case "status:implementable-now":
+			lines = append(lines, "  - write or refresh `执行决策` before coding")
+			lines = append(lines, "  - if staged or multi-turn, refresh the execution snapshot before coding")
+			lines = append(lines, "  - run lint after the issue body is updated")
+		default:
+			lines = append(lines, "  - refresh the issue body and labels before coding")
+			lines = append(lines, "  - run lint after the issue body is updated")
+		}
+	case issueworkflow.PrepareStatusBlockedWorkflowContract:
+		lines = append(lines, "next:")
+		lines = append(lines, "  - refresh the issue body so the current workflow status has its required contract")
+		lines = append(lines, "  - rerun lint and only treat the issue as stage-ready after the workflow contract is clean")
 	}
 	return strings.Join(lines, "\n")
 }

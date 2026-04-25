@@ -43,9 +43,10 @@ type IssueComment struct {
 type PrepareStatus string
 
 const (
-	PrepareStatusReady                  PrepareStatus = "ready"
-	PrepareStatusBlockedDirtyWorktree   PrepareStatus = "blocked_dirty_worktree"
-	PrepareStatusBlockedProcessingClaim PrepareStatus = "blocked_processing_claim"
+	PrepareStatusReady                   PrepareStatus = "ready"
+	PrepareStatusBlockedDirtyWorktree    PrepareStatus = "blocked_dirty_worktree"
+	PrepareStatusBlockedProcessingClaim  PrepareStatus = "blocked_processing_claim"
+	PrepareStatusBlockedWorkflowContract PrepareStatus = "blocked_workflow_contract"
 )
 
 type ProcessingAction string

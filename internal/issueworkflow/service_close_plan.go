@@ -60,9 +60,21 @@ func buildClosePlanActions(issue Issue, report LintReport, checks []CheckResult,
 		})
 		return actions
 	}
-	if report.WorkflowGuardrails.ExecutionDecisionRequired {
-		problems := make([]string, 0, 3)
-		if !report.WorkflowGuardrails.ExecutionDecisionSectionFound {
+	enforcePlanningContract := report.CurrentRecordedState == statusLabelNeedsPlan || report.CurrentRecordedState == statusLabelImplementable
+	if enforcePlanningContract || report.WorkflowGuardrails.ExecutionDecisionRequired {
+		problems := make([]string, 0, 5)
+		if len(report.RequiredMissing) > 0 {
+			problems = append(problems, "add required sections: "+strings.Join(report.RequiredMissing, ", "))
+		}
+		if containsSection(report.PreferredMissing, "建议范围") {
+			problems = append(problems, "add `建议范围`")
+		}
+		if report.CurrentRecordedState == statusLabelImplementable {
+			if missingExecutionSections := intersectSections(report.PreferredMissing, executionSections); len(missingExecutionSections) > 0 {
+				problems = append(problems, "fill execution context sections: "+strings.Join(missingExecutionSections, ", "))
+			}
+		}
+		if !report.WorkflowGuardrails.ExecutionDecisionSectionFound && report.WorkflowGuardrails.ExecutionDecisionRequired {
 			problems = append(problems, "add `执行决策`")
 		}
 		if len(report.WorkflowGuardrails.ExecutionDecisionMissingItems) > 0 {
