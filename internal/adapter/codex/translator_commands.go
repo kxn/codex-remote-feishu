@@ -11,84 +11,7 @@ import (
 func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, error) {
 	switch command.Kind {
 	case agentproto.CommandPromptSend:
-		if command.Target.ThreadID == "" {
-			t.pendingLocalNewThreadTurn = false
-			requestID := t.nextRequest("thread-start")
-			t.pendingThreadCreate[requestID] = pendingThreadCreate{Command: command}
-			params := t.buildThreadStartParams(command.Target.CWD, command.Overrides)
-			if command.Target.InternalHelper {
-				params["ephemeral"] = true
-				params["persistExtendedHistory"] = false
-				t.pendingInternalThreadSet[requestID] = true
-			}
-			t.debugf(
-				"translate remote prompt: command=%s action=thread/start request=%s targetThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
-				command.CommandID,
-				requestID,
-				command.Target.ThreadID,
-				command.Target.CWD,
-				t.currentThreadID,
-				choose(command.Origin.Surface, command.Origin.ChatID),
-				len(command.Prompt.Inputs),
-			)
-			payload := map[string]any{
-				"id":     requestID,
-				"method": "thread/start",
-				"params": params,
-			}
-			bytes, err := json.Marshal(payload)
-			if err != nil {
-				return nil, err
-			}
-			return [][]byte{append(bytes, '\n')}, nil
-		}
-		delete(t.pendingLocalTurnByThread, command.Target.ThreadID)
-		if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID {
-			requestID := t.nextRequest("thread-resume")
-			t.pendingThreadResume[requestID] = pendingThreadResume{
-				ThreadID: command.Target.ThreadID,
-				Command:  command,
-			}
-			t.debugf(
-				"translate remote prompt: command=%s action=thread/resume request=%s targetThread=%s cwd=%s currentThread=%s knownCWD=%s surface=%s inputs=%d",
-				command.CommandID,
-				requestID,
-				command.Target.ThreadID,
-				command.Target.CWD,
-				t.currentThreadID,
-				t.knownThreadCWD[command.Target.ThreadID],
-				choose(command.Origin.Surface, command.Origin.ChatID),
-				len(command.Prompt.Inputs),
-			)
-			payload := map[string]any{
-				"id":     requestID,
-				"method": "thread/resume",
-				"params": map[string]any{
-					"threadId": command.Target.ThreadID,
-					"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
-				},
-			}
-			bytes, err := json.Marshal(payload)
-			if err != nil {
-				return nil, err
-			}
-			return [][]byte{append(bytes, '\n')}, nil
-		}
-		payload, requestID, err := t.directTurnStart(command.Target.ThreadID, command, false)
-		if err != nil {
-			return nil, err
-		}
-		t.debugf(
-			"translate remote prompt: command=%s action=turn/start request=%s targetThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
-			command.CommandID,
-			requestID,
-			command.Target.ThreadID,
-			command.Target.CWD,
-			t.currentThreadID,
-			choose(command.Origin.Surface, command.Origin.ChatID),
-			len(command.Prompt.Inputs),
-		)
-		return [][]byte{payload}, nil
+		return t.translatePromptSend(command)
 	case agentproto.CommandThreadCompactStart:
 		threadID := strings.TrimSpace(command.Target.ThreadID)
 		if threadID == "" {
@@ -231,6 +154,152 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 	default:
 		return nil, nil
 	}
+}
+
+func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, error) {
+	switch command.Target.EffectivePromptExecutionMode() {
+	case agentproto.PromptExecutionModeForkEphemeral:
+		return t.translatePromptSendForkEphemeral(command)
+	case agentproto.PromptExecutionModeStartEphemeral:
+		return t.translatePromptSendThreadStart(command, true)
+	case agentproto.PromptExecutionModeStartNew:
+		return t.translatePromptSendThreadStart(command, false)
+	default:
+		return t.translatePromptSendResumeOrDirect(command)
+	}
+}
+
+func (t *Translator) translatePromptSendThreadStart(command agentproto.Command, ephemeral bool) ([][]byte, error) {
+	t.pendingLocalNewThreadTurn = false
+	requestID := t.nextRequest("thread-start")
+	t.pendingThreadCreate[requestID] = pendingThreadCreate{
+		Command: command,
+		Action:  "thread/start",
+	}
+	params := t.buildThreadStartParams(command.Target.CWD, command.Overrides)
+	if ephemeral {
+		params["ephemeral"] = true
+		params["persistExtendedHistory"] = false
+	}
+	if command.Target.InternalHelper {
+		t.pendingInternalThreadSet[requestID] = true
+	}
+	t.debugf(
+		"translate remote prompt: command=%s mode=%s action=thread/start request=%s targetThread=%s sourceThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
+		command.CommandID,
+		command.Target.EffectivePromptExecutionMode(),
+		requestID,
+		command.Target.ThreadID,
+		command.Target.SourceThreadID,
+		command.Target.CWD,
+		t.currentThreadID,
+		choose(command.Origin.Surface, command.Origin.ChatID),
+		len(command.Prompt.Inputs),
+	)
+	payload := map[string]any{
+		"id":     requestID,
+		"method": "thread/start",
+		"params": params,
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{append(bytes, '\n')}, nil
+}
+
+func (t *Translator) translatePromptSendForkEphemeral(command agentproto.Command) ([][]byte, error) {
+	sourceThreadID := strings.TrimSpace(choose(command.Target.SourceThreadID, command.Target.ThreadID))
+	if sourceThreadID == "" {
+		return nil, fmt.Errorf("prompt.send fork_ephemeral requires source thread id")
+	}
+	requestID := t.nextRequest("thread-fork")
+	t.pendingThreadCreate[requestID] = pendingThreadCreate{
+		Command: command,
+		Action:  "thread/fork",
+	}
+	if command.Target.InternalHelper {
+		t.pendingInternalThreadSet[requestID] = true
+	}
+	t.debugf(
+		"translate remote prompt: command=%s mode=%s action=thread/fork request=%s sourceThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
+		command.CommandID,
+		command.Target.EffectivePromptExecutionMode(),
+		requestID,
+		sourceThreadID,
+		command.Target.CWD,
+		t.currentThreadID,
+		choose(command.Origin.Surface, command.Origin.ChatID),
+		len(command.Prompt.Inputs),
+	)
+	payload := map[string]any{
+		"id":     requestID,
+		"method": "thread/fork",
+		"params": map[string]any{
+			"threadId":  sourceThreadID,
+			"ephemeral": true,
+		},
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{append(bytes, '\n')}, nil
+}
+
+func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Command) ([][]byte, error) {
+	if strings.TrimSpace(command.Target.ThreadID) == "" {
+		return t.translatePromptSendThreadStart(command, false)
+	}
+	delete(t.pendingLocalTurnByThread, command.Target.ThreadID)
+	if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID {
+		requestID := t.nextRequest("thread-resume")
+		t.pendingThreadResume[requestID] = pendingThreadResume{
+			ThreadID: command.Target.ThreadID,
+			Command:  command,
+		}
+		t.debugf(
+			"translate remote prompt: command=%s mode=%s action=thread/resume request=%s targetThread=%s cwd=%s currentThread=%s knownCWD=%s surface=%s inputs=%d",
+			command.CommandID,
+			command.Target.EffectivePromptExecutionMode(),
+			requestID,
+			command.Target.ThreadID,
+			command.Target.CWD,
+			t.currentThreadID,
+			t.knownThreadCWD[command.Target.ThreadID],
+			choose(command.Origin.Surface, command.Origin.ChatID),
+			len(command.Prompt.Inputs),
+		)
+		payload := map[string]any{
+			"id":     requestID,
+			"method": "thread/resume",
+			"params": map[string]any{
+				"threadId": command.Target.ThreadID,
+				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
+			},
+		}
+		bytes, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{append(bytes, '\n')}, nil
+	}
+	payload, requestID, err := t.directTurnStart(command.Target.ThreadID, command, false)
+	if err != nil {
+		return nil, err
+	}
+	t.debugf(
+		"translate remote prompt: command=%s mode=%s action=turn/start request=%s targetThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
+		command.CommandID,
+		command.Target.EffectivePromptExecutionMode(),
+		requestID,
+		command.Target.ThreadID,
+		command.Target.CWD,
+		t.currentThreadID,
+		choose(command.Origin.Surface, command.Origin.ChatID),
+		len(command.Prompt.Inputs),
+	)
+	return [][]byte{payload}, nil
 }
 
 func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]byte, error) {

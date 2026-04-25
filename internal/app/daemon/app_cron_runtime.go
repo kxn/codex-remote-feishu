@@ -36,6 +36,8 @@ func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) b
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandPromptSend,
 		Target: agentproto.Target{
+			ExecutionMode:         agentproto.PromptExecutionModeStartEphemeral,
+			SurfaceBindingPolicy:  agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
 			CreateThreadIfMissing: true,
 			InternalHelper:        true,
 			CWD:                   firstNonEmpty(strings.TrimSpace(run.RunDirectory), strings.TrimSpace(run.WorkspaceKey)),

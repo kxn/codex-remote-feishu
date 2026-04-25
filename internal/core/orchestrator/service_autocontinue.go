@@ -148,16 +148,19 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 	}
 	if !continuing || episode == nil {
 		episode = &state.PendingAutoContinueEpisodeRecord{
-			EpisodeID:                 s.nextAutoContinueEpisodeToken(),
-			InstanceID:                outcome.InstanceID,
-			ThreadID:                  strings.TrimSpace(firstNonEmpty(outcome.ThreadID, outcome.Item.FrozenThreadID)),
-			FrozenCWD:                 strings.TrimSpace(firstNonEmpty(outcome.Binding.ThreadCWD, outcome.Item.FrozenCWD)),
-			FrozenRouteMode:           outcome.Item.RouteModeAtEnqueue,
-			FrozenOverride:            outcome.Item.FrozenOverride,
-			FrozenPlanMode:            outcome.Item.FrozenPlanMode,
-			RootReplyToMessageID:      strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
-			RootReplyToMessagePreview: strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
-			TriggerKind:               state.AutoContinueTriggerKindUpstreamRetryableFailure,
+			EpisodeID:                  s.nextAutoContinueEpisodeToken(),
+			InstanceID:                 outcome.InstanceID,
+			ThreadID:                   strings.TrimSpace(firstNonEmpty(outcome.ThreadID, outcome.Item.FrozenThreadID)),
+			FrozenCWD:                  strings.TrimSpace(firstNonEmpty(outcome.Binding.ThreadCWD, outcome.Item.FrozenCWD)),
+			FrozenExecutionMode:        outcome.Item.FrozenExecutionMode,
+			FrozenSourceThreadID:       outcome.Item.FrozenSourceThreadID,
+			FrozenSurfaceBindingPolicy: outcome.Item.FrozenSurfaceBindingPolicy,
+			FrozenRouteMode:            outcome.Item.RouteModeAtEnqueue,
+			FrozenOverride:             outcome.Item.FrozenOverride,
+			FrozenPlanMode:             outcome.Item.FrozenPlanMode,
+			RootReplyToMessageID:       strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
+			RootReplyToMessagePreview:  strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
+			TriggerKind:                state.AutoContinueTriggerKindUpstreamRetryableFailure,
 		}
 		surface.AutoContinue.Episode = episode
 	}
@@ -252,10 +255,18 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: autoContinuePromptText}},
 		FrozenThreadID:        episode.ThreadID,
 		FrozenCWD:             episode.FrozenCWD,
-		FrozenOverride:        episode.FrozenOverride,
-		FrozenPlanMode:        episode.FrozenPlanMode,
-		RouteModeAtEnqueue:    episode.FrozenRouteMode,
-		Status:                state.QueueItemDispatching,
+		FrozenExecutionMode:   episode.FrozenExecutionMode,
+		FrozenSourceThreadID:  episode.FrozenSourceThreadID,
+		FrozenSurfaceBindingPolicy: agentproto.EffectiveSurfaceBindingPolicy(
+			episode.FrozenSurfaceBindingPolicy,
+		),
+		FrozenOverride:     episode.FrozenOverride,
+		FrozenPlanMode:     episode.FrozenPlanMode,
+		RouteModeAtEnqueue: episode.FrozenRouteMode,
+		Status:             state.QueueItemDispatching,
+	}
+	if item.FrozenExecutionMode == "" {
+		item.FrozenExecutionMode = defaultPromptExecutionModeForThread(item.FrozenThreadID)
 	}
 	surface.QueueItems[item.ID] = item
 	surface.ActiveQueueItemID = item.ID
@@ -283,9 +294,13 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 			MessageID: episode.RootReplyToMessageID,
 		},
 		Target: agentproto.Target{
-			ThreadID:              item.FrozenThreadID,
-			CWD:                   item.FrozenCWD,
-			CreateThreadIfMissing: item.FrozenThreadID == "",
+			ExecutionMode:        item.FrozenExecutionMode,
+			SourceThreadID:       item.FrozenSourceThreadID,
+			SurfaceBindingPolicy: item.FrozenSurfaceBindingPolicy,
+			ThreadID:             item.FrozenThreadID,
+			CWD:                  item.FrozenCWD,
+			CreateThreadIfMissing: item.FrozenExecutionMode == agentproto.PromptExecutionModeStartNew ||
+				(item.FrozenExecutionMode == "" && item.FrozenThreadID == ""),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: item.Inputs,

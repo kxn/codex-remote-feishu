@@ -504,7 +504,7 @@ func TestTranslatorDebugLogsRemoteResumeFollowup(t *testing.T) {
 	}
 
 	joined := strings.Join(debugLogs, "\n")
-	if !strings.Contains(joined, "translate remote prompt: command=cmd-1 action=thread/resume request=relay-thread-resume-0") {
+	if !strings.Contains(joined, "translate remote prompt: command=cmd-1 mode=resume_existing action=thread/resume request=relay-thread-resume-0") {
 		t.Fatalf("expected thread/resume debug log, got %s", joined)
 	}
 	if !strings.Contains(joined, "observe server thread/resume result: request=relay-thread-resume-0 thread=thread-2 followup=relay-turn-start-1") {

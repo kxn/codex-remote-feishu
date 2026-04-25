@@ -202,12 +202,18 @@ type Origin struct {
 }
 
 type Target struct {
-	ThreadID               string `json:"threadId,omitempty"`
-	CreateThreadIfMissing  bool   `json:"createThreadIfMissing,omitempty"`
-	InternalHelper         bool   `json:"internalHelper,omitempty"`
-	CWD                    string `json:"cwd,omitempty"`
-	TurnID                 string `json:"turnId,omitempty"`
-	UseActiveTurnIfOmitted bool   `json:"useActiveTurnIfOmitted,omitempty"`
+	// Detached branch foundation:
+	// - ExecutionMode/SourceThreadID are consumed by translator (#429).
+	// - SurfaceBindingPolicy is carried through queue/runtime for #430 and #428.
+	ExecutionMode          PromptExecutionMode  `json:"executionMode,omitempty"`
+	SourceThreadID         string               `json:"sourceThreadId,omitempty"`
+	SurfaceBindingPolicy   SurfaceBindingPolicy `json:"surfaceBindingPolicy,omitempty"`
+	ThreadID               string               `json:"threadId,omitempty"`
+	CreateThreadIfMissing  bool                 `json:"createThreadIfMissing,omitempty"`
+	InternalHelper         bool                 `json:"internalHelper,omitempty"`
+	CWD                    string               `json:"cwd,omitempty"`
+	TurnID                 string               `json:"turnId,omitempty"`
+	UseActiveTurnIfOmitted bool                 `json:"useActiveTurnIfOmitted,omitempty"`
 }
 
 type Prompt struct {

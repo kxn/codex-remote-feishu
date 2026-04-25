@@ -123,15 +123,16 @@
 
 - `thread/start`：`遵循但有适配压缩`
 - `thread/resume`：`遵循但有适配压缩`
-- `thread/fork`：`未遵循/未实现`
+- `thread/fork`：`遵循但有适配压缩`
 
 现状：
 
 - relay 的 `prompt.send` 在缺 thread 时会先发 native `thread/start`，收到结果后再自动补 `turn/start`。
 - 已有 thread 但未聚焦时，会先发 `thread/resume`，再自动补 `turn/start`。
+- `fork_ephemeral` 执行目标会先发 native `thread/fork`，收到结果后再自动补 `turn/start`。
 - 这条“先 thread，再 turn”的官方顺序是对的。
 - 但我们在 relay 层把中间 JSON-RPC response 压平了，不把 `thread/start` / `thread/resume` response 暴露成上层状态机的一部分。
-- `thread/fork` 完全没有对应 command/event 建模。
+- `thread/fork` 也沿用同一套 response 压缩路径，不单独暴露中间 response。
 
 证据：
 
@@ -508,7 +509,7 @@
 | `initialize -> initialized` | 遵循 | VS Code 透传不乱序；headless 已在 relay 连接前同步补齐 `initialize -> initialized` 严格握手 |
 | `thread/start -> thread/started` | 遵循但有适配压缩 | relay remote prompt 已按这个顺序驱动 |
 | `thread/resume` | 遵循但有适配压缩 | remote prompt 恢复 thread 后再补 `turn/start` |
-| `thread/fork` | 未遵循/未实现 | 无 relay/headless command 建模 |
+| `thread/fork` | 遵循但有适配压缩 | remote prompt 的 `fork_ephemeral` 已接通 `thread/fork -> turn/start` |
 | `thread/list + cursor/filter` | 部分遵循 | 只实现“刷新快照”，固定 `limit=50`，没有 cursor/filter 面 |
 | `thread/read(includeTurns)` | 遵循但有适配压缩 | 被压成 `thread.history.read` |
 | `thread/loaded/list` | 未遵循/未实现 | 无真实 command 建模 |

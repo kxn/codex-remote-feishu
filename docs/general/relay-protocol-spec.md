@@ -32,6 +32,7 @@
 
 - `thread/start`
 - `thread/resume`
+- `thread/fork`
 - `thread/name/set`
 - `thread/list`
 - `thread/read`
@@ -231,6 +232,9 @@ wrapper 收到 `command` 后总是回传 accept/reject：
   - `chatId`
   - `messageId`
 - `target`
+  - `executionMode`
+  - `sourceThreadId`
+  - `surfaceBindingPolicy`
   - `threadId`
   - `cwd`
   - `createThreadIfMissing`
@@ -242,6 +246,23 @@ wrapper 收到 `command` 后总是回传 accept/reject：
   - `model`
   - `reasoningEffort`
   - `accessMode`
+
+`executionMode` 当前支持：
+
+- `resume_existing`
+- `start_new`
+- `start_ephemeral`
+- `fork_ephemeral`
+
+`surfaceBindingPolicy` 当前支持：
+
+- `follow_execution_thread`
+- `keep_surface_selection`
+
+兼容性说明：
+
+- 为保持旧调用点行为，`threadId + createThreadIfMissing` 仍保留并继续被 translator 接受。
+- 未显式给 `executionMode` 时，translator 会按旧语义回落到 `resume_existing` 或 `start_new`。
 
 ### 4.2 `turn.steer`
 

@@ -42,6 +42,7 @@ type Translator struct {
 
 type pendingThreadCreate struct {
 	Command agentproto.Command
+	Action  string
 }
 
 type pendingThreadResume struct {

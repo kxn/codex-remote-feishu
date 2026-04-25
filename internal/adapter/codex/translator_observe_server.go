@@ -78,7 +78,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			delete(t.pendingThreadCreate, requestID)
 			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
 				delete(t.pendingInternalThreadSet, requestID)
-				t.debugf("observe server thread/start error: request=%s error=%s", requestID, errMsg)
+				action := choose(strings.TrimSpace(pending.Action), "thread/start")
+				t.debugf("observe server %s error: request=%s error=%s", action, requestID, errMsg)
 				return Result{Events: []agentproto.Event{{
 					Kind:                 agentproto.EventTurnCompleted,
 					Status:               "failed",
@@ -104,7 +105,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			if err != nil {
 				return Result{}, err
 			}
-			t.debugf("observe server thread/start result: request=%s thread=%s followup=%s", requestID, threadID, followupID)
+			action := choose(strings.TrimSpace(pending.Action), "thread/start")
+			t.debugf("observe server %s result: request=%s thread=%s followup=%s", action, requestID, threadID, followupID)
 			return Result{
 				Suppress:        true,
 				OutboundToCodex: [][]byte{followup},

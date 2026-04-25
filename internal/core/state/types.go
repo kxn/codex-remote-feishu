@@ -360,6 +360,9 @@ type PendingAutoContinueEpisodeRecord struct {
 	InstanceID                 string
 	ThreadID                   string
 	FrozenCWD                  string
+	FrozenExecutionMode        agentproto.PromptExecutionMode
+	FrozenSourceThreadID       string
+	FrozenSurfaceBindingPolicy agentproto.SurfaceBindingPolicy
 	FrozenRouteMode            RouteMode
 	FrozenOverride             ModelConfigRecord
 	FrozenPlanMode             PlanModeSetting
@@ -516,10 +519,14 @@ type QueueItemRecord struct {
 	RestoreAsStagedImage  bool
 	FrozenThreadID        string
 	FrozenCWD             string
-	FrozenOverride        ModelConfigRecord
-	FrozenPlanMode        PlanModeSetting
-	RouteModeAtEnqueue    RouteMode
-	Status                QueueItemStatus
+	// #429 execution carrier; runtime/product follow-ups are in #430/#428.
+	FrozenExecutionMode        agentproto.PromptExecutionMode
+	FrozenSourceThreadID       string
+	FrozenSurfaceBindingPolicy agentproto.SurfaceBindingPolicy
+	FrozenOverride             ModelConfigRecord
+	FrozenPlanMode             PlanModeSetting
+	RouteModeAtEnqueue         RouteMode
+	Status                     QueueItemStatus
 }
 
 type StagedImageRecord struct {
