@@ -421,7 +421,7 @@ func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 		t.Fatalf("expected preset form to use select_static, got %#v", preset.Form.Field)
 	}
 	options := preset.Form.Field.Options
-	if len(options) != 5 || options[0].Value != "gpt-5.4" || options[1].Value != "gpt-5.4-mini" || options[2].Value != "gpt-5.3-codex" || options[3].Value != "gpt-5.2" || options[4].Value != "gpt-5.2-codex" {
+	if len(options) != 6 || options[0].Value != "gpt-5.5" || options[1].Value != "gpt-5.4" || options[2].Value != "gpt-5.4-mini" || options[3].Value != "gpt-5.3-codex" || options[4].Value != "gpt-5.2" || options[5].Value != "gpt-5.2-codex" {
 		t.Fatalf("unexpected model preset options: %#v", options)
 	}
 	manual := catalog.Sections[1].Entries[0]
