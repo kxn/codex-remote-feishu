@@ -363,20 +363,7 @@ func pathPickerSelectStaticLabel(entry control.FeishuPathPickerEntry) string {
 }
 
 func pathPickerSelectStaticElement(name, placeholder string, payload map[string]any, options []map[string]any, initialOption string) map[string]any {
-	element := map[string]any{
-		"tag":         "select_static",
-		"name":        strings.TrimSpace(name),
-		"placeholder": cardPlainText(placeholder),
-		"options":     options,
-		"behaviors": []map[string]any{{
-			"type":  "callback",
-			"value": cloneCardMap(payload),
-		}},
-	}
-	if strings.TrimSpace(initialOption) != "" {
-		element["initial_option"] = strings.TrimSpace(initialOption)
-	}
-	return element
+	return selectStaticElement(name, placeholder, payload, options, initialOption)
 }
 
 func pathPickerFieldActionPayload(kind, pickerID, fieldName string) map[string]any {
