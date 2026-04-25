@@ -14,6 +14,10 @@ export interface JSONResult<T> {
   data: T;
 }
 
+export interface JSONRequestOptions {
+  timeoutMs?: number;
+}
+
 export class APIRequestError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -28,8 +32,16 @@ export class APIRequestError extends Error {
   }
 }
 
-export async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const result = await requestJSONAllowHTTPError<T | APIErrorShape>(path, init);
+export async function requestJSON<T>(
+  path: string,
+  init?: RequestInit,
+  options?: JSONRequestOptions,
+): Promise<T> {
+  const result = await requestJSONAllowHTTPError<T | APIErrorShape>(
+    path,
+    init,
+    options,
+  );
   if (!result.ok) {
     const payload = result.data as APIErrorShape;
     const apiError = payload.error;
@@ -43,28 +55,51 @@ export async function requestJSON<T>(path: string, init?: RequestInit): Promise<
   return result.data as T;
 }
 
-export async function requestJSONAllowHTTPError<T>(path: string, init?: RequestInit): Promise<JSONResult<T>> {
-  const response = await fetch(resolveRequestPath(path), {
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+export async function requestJSONAllowHTTPError<T>(
+  path: string,
+  init?: RequestInit,
+  options?: JSONRequestOptions,
+): Promise<JSONResult<T>> {
+  const timeout = createTimeoutSignal(options?.timeoutMs, init?.signal);
+  try {
+    const response = await fetch(resolveRequestPath(path), {
+      credentials: "same-origin",
+      ...init,
+      signal: timeout.signal,
+      headers: {
+        Accept: "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
 
-  const text = await response.text();
-  const contentType = response.headers.get("content-type") ?? "";
-  const isJSON = contentType.includes("application/json");
+    const text = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+    const isJSON = contentType.includes("application/json");
 
-  if (!isJSON) {
-    throw new APIRequestError(response.status, `unexpected response content-type: ${contentType || "unknown"}`);
+    if (!isJSON) {
+      throw new APIRequestError(
+        response.status,
+        `unexpected response content-type: ${contentType || "unknown"}`,
+      );
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: JSON.parse(text) as T,
+    };
+  } catch (error: unknown) {
+    if (timeout.timedOut && isAbortError(error)) {
+      throw new APIRequestError(
+        408,
+        "request timed out",
+        "request_timeout",
+        options?.timeoutMs,
+      );
+    }
+    throw error;
+  } finally {
+    timeout.cleanup();
   }
-  return {
-    ok: response.ok,
-    status: response.status,
-    data: JSON.parse(text) as T,
-  };
 }
 
 export async function requestVoid(path: string, init?: RequestInit): Promise<void> {
@@ -95,14 +130,19 @@ export async function requestVoid(path: string, init?: RequestInit): Promise<voi
   throw new APIRequestError(response.status, text.trim() || response.statusText);
 }
 
-export async function sendJSON<TResponse>(path: string, method: string, body?: unknown): Promise<TResponse> {
+export async function sendJSON<TResponse>(
+  path: string,
+  method: string,
+  body?: unknown,
+  options?: JSONRequestOptions,
+): Promise<TResponse> {
   const headers: Record<string, string> = {};
   const init: RequestInit = { method, headers };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
   }
-  return requestJSON<TResponse>(path, init);
+  return requestJSON<TResponse>(path, init, options);
 }
 
 export function formatError(error: unknown): string {
@@ -122,6 +162,52 @@ export function formatError(error: unknown): string {
 
 function resolveRequestPath(path: string): string {
   return relativeLocalPath(path);
+}
+
+function createTimeoutSignal(timeoutMs?: number, upstream?: AbortSignal | null) {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return {
+      signal: upstream,
+      timedOut: false,
+      cleanup: () => {},
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutID = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const abortFromUpstream = () => controller.abort();
+  if (upstream) {
+    if (upstream.aborted) {
+      controller.abort();
+    } else {
+      upstream.addEventListener("abort", abortFromUpstream, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    get timedOut() {
+      return timedOut;
+    },
+    cleanup: () => {
+      clearTimeout(timeoutID);
+      upstream?.removeEventListener("abort", abortFromUpstream);
+    },
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "AbortError"
+  );
 }
 
 function formatErrorDetails(details: unknown): string {

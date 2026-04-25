@@ -90,6 +90,8 @@ const setupSteps: Array<{ id: SetupStepID; name: string }> = [
 ];
 
 const defaultQRCodePollIntervalSeconds = 5;
+const vscodeApplyTimeoutMs = 10_000;
+const vscodeDetectRecoveryTimeoutMs = 5_000;
 
 export function SetupRoute() {
   const [loading, setLoading] = useState(true);
@@ -576,17 +578,51 @@ export function SetupRoute() {
           mode: mode || "managed_shim",
           bundleEntrypoint: vscode.latestBundleEntrypoint,
         },
+        { timeoutMs: vscodeApplyTimeoutMs },
       );
       setVSCode(response);
       setVSCodeError("");
       setVSCodeDone(true);
       setNotice({ tone: "good", message: "VS Code 集成已完成。" });
       setCurrentStep("done");
-    } catch {
-      setNotice({ tone: "danger", message: "当前还不能完成 VS Code 集成，请稍后重试。" });
+    } catch (error: unknown) {
+      if (await maybeRecoverVSCodeApply(error)) {
+        return;
+      }
+      setNotice({
+        tone: "danger",
+        message: "当前还不能确认 VS Code 集成结果，请稍后重试。",
+      });
     } finally {
       setActionBusy("");
     }
+  }
+
+  async function maybeRecoverVSCodeApply(error: unknown): Promise<boolean> {
+    const refreshed = await loadVSCodeState(
+      "/api/setup/vscode/detect",
+      vscodeDetectRecoveryTimeoutMs,
+    );
+    if (refreshed.data) {
+      setVSCode(refreshed.data);
+      setVSCodeError("");
+      if (vscodeIsReady(refreshed.data)) {
+        setVSCodeDone(true);
+        setNotice({ tone: "good", message: "VS Code 集成已完成。" });
+        setCurrentStep("done");
+        return true;
+      }
+    }
+
+    if (error instanceof APIRequestError && error.code === "request_timeout") {
+      setNotice({
+        tone: "warn",
+        message: "集成请求返回超时，当前还不能确认已完成，请稍后重试。",
+      });
+      return true;
+    }
+
+    return false;
   }
 
   function renderCurrentStep() {

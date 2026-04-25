@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SetupRoute } from "./SetupRoute";
+import type { VSCodeDetectResponse } from "../lib/types";
 import {
   makeApp,
   makeBootstrap,
@@ -519,4 +520,191 @@ describe("SetupRoute", () => {
     expect(writeText).toHaveBeenCalledWith("card.action.trigger");
     expect(await screen.findByText("已复制回调名。")).toBeInTheDocument();
   });
+
+  it("recovers when vscode apply times out but detect shows ready", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    const initialDetect = makeVSCodeState({
+      latestShim: {
+        exists: false,
+        installed: false,
+        matchesBinary: false,
+        realBinaryExists: false,
+      },
+    });
+    const readyDetect = makeVSCodeState();
+
+    installSetupRoutesForVSCode({
+      initialDetect,
+      recoveryDetect: readyDetect,
+      applyHandler: () => new Promise(() => {}),
+    });
+
+    render(<SetupRoute />);
+
+    await advanceSetupToVSCode(user);
+
+    await user.click(screen.getByRole("button", { name: "确认集成" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "欢迎使用" }, { timeout: 12_000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("VS Code 集成已完成。")).toBeInTheDocument();
+  }, 15_000);
+
+  it("restores setup interactivity when vscode apply fails and detect is still not ready", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    const initialDetect = makeVSCodeState({
+      latestShim: {
+        exists: false,
+        installed: false,
+        matchesBinary: false,
+        realBinaryExists: false,
+      },
+    });
+
+    installSetupRoutesForVSCode({
+      initialDetect,
+      recoveryDetect: initialDetect,
+      applyHandler: {
+        status: 500,
+        body: {
+          error: {
+            code: "vscode_apply_failed",
+            message: "failed to apply vscode integration",
+          },
+        },
+      },
+    });
+
+    render(<SetupRoute />);
+
+    await advanceSetupToVSCode(user);
+
+    const button = screen.getByRole("button", { name: "确认集成" });
+    await user.click(button);
+
+    expect(
+      await screen.findByText("当前还不能确认 VS Code 集成结果，请稍后重试。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "VS Code 集成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认集成" })).not.toBeDisabled();
+  });
 });
+
+async function advanceSetupToVSCode(user: ReturnType<typeof userEvent.setup>) {
+  expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
+  ).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "下一步" }));
+  expect(await screen.findByRole("heading", { name: "回调配置" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "下一步" }));
+  expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "下一步" }));
+  expect(await screen.findByRole("heading", { name: "自动启动" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "下一步" }));
+  expect(await screen.findByRole("heading", { name: "VS Code 集成" })).toBeInTheDocument();
+}
+
+function installSetupRoutesForVSCode(options: {
+  initialDetect: VSCodeDetectResponse;
+  recoveryDetect?: VSCodeDetectResponse;
+  applyHandler: Parameters<typeof installMockFetch>[0][string];
+}) {
+  let detectCalls = 0;
+
+  installMockFetch({
+    "/api/setup/bootstrap-state": { body: makeBootstrap() },
+    "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+    "/api/setup/feishu/apps": {
+      body: {
+        apps: [
+          makeApp({
+            id: "bot-vscode",
+            name: "VS Code 机器人",
+            verifiedAt: "2026-04-25T09:00:00Z",
+          }),
+        ],
+      },
+    },
+    "/api/setup/runtime-requirements/detect": {
+      body: makeRuntimeRequirementsDetect(),
+    },
+    "/api/setup/feishu/apps/bot-vscode/permission-check": {
+      body: makePermissionCheck({
+        app: makeApp({ id: "bot-vscode" }),
+        ready: true,
+      }),
+    },
+    "/api/setup/feishu/apps/bot-vscode/test-events": {
+      body: {
+        gatewayId: "bot-vscode",
+        startedAt: "2026-04-25T09:01:00Z",
+        expiresAt: "2026-04-25T09:11:00Z",
+        phrase: "测试",
+        message: "事件订阅测试提示已发送。",
+      },
+    },
+    "/api/setup/feishu/apps/bot-vscode/test-callback": {
+      body: {
+        gatewayId: "bot-vscode",
+        startedAt: "2026-04-25T09:02:00Z",
+        expiresAt: "2026-04-25T09:12:00Z",
+        message: "回调测试卡片已发送。",
+      },
+    },
+    "/api/setup/feishu/apps/bot-vscode/install-tests/events/clear": {
+      body: {},
+    },
+    "/api/setup/feishu/apps/bot-vscode/install-tests/callback/clear": {
+      body: {},
+    },
+    "/api/setup/autostart/detect": {
+      body: {
+        platform: "linux",
+        supported: true,
+        status: "enabled",
+        configured: true,
+        enabled: true,
+        canApply: true,
+      },
+    },
+    "/api/setup/vscode/detect": () => {
+      detectCalls += 1;
+      return {
+        body:
+          detectCalls === 1 || !options.recoveryDetect
+            ? options.initialDetect
+            : options.recoveryDetect,
+      };
+    },
+    "/api/setup/vscode/apply": options.applyHandler,
+  });
+}
+
+function makeVSCodeState(
+  overrides: Omit<Partial<VSCodeDetectResponse>, "latestShim" | "settings"> & {
+    latestShim?: Partial<VSCodeDetectResponse["latestShim"]>;
+    settings?: Partial<VSCodeDetectResponse["settings"]>;
+  } = {},
+): VSCodeDetectResponse {
+  const base = makeVSCodeDetect();
+  return {
+    ...base,
+    ...overrides,
+    settings: {
+      ...base.settings,
+      ...(overrides.settings || {}),
+    },
+    latestShim: {
+      ...base.latestShim,
+      ...(overrides.latestShim || {}),
+    },
+  };
+}

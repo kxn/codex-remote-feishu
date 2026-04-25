@@ -80,7 +80,7 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
     if (!handler) {
       throw new Error(`Unhandled fetch for ${method} ${path}`);
     }
-    const response = typeof handler === "function" ? await handler(call) : handler;
+    const response = await resolveMockHandler(handler, call, init?.signal ?? request?.signal);
     return new Response(JSON.stringify(response.body ?? {}), {
       status: response.status ?? 200,
       headers: {
@@ -91,4 +91,41 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
   });
 
   return { calls, fetchMock };
+}
+
+async function resolveMockHandler(
+  handler: MockHandler,
+  call: MockFetchCall,
+  signal?: AbortSignal | null,
+): Promise<MockResponse> {
+  if (!signal) {
+    return typeof handler === "function" ? await handler(call) : handler;
+  }
+  if (signal.aborted) {
+    throw buildAbortError();
+  }
+
+  return await new Promise<MockResponse>((resolve, reject) => {
+    const abort = () => reject(buildAbortError());
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(typeof handler === "function" ? handler(call) : handler).then(
+      (response) => {
+        signal.removeEventListener("abort", abort);
+        resolve(response);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function buildAbortError() {
+  if (typeof DOMException === "function") {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+  const error = new Error("The operation was aborted.");
+  error.name = "AbortError";
+  return error;
 }

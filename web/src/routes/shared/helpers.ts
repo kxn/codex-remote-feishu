@@ -10,10 +10,13 @@ export function blankToUndefined(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-export async function loadVSCodeState(path: string): Promise<{ data: VSCodeDetectResponse | null; error: string }> {
+export async function loadVSCodeState(
+  path: string,
+  timeoutMs?: number,
+): Promise<{ data: VSCodeDetectResponse | null; error: string }> {
   try {
     return {
-      data: await requestJSON<VSCodeDetectResponse>(path),
+      data: await requestJSON<VSCodeDetectResponse>(path, undefined, { timeoutMs }),
       error: "",
     };
   } catch (err: unknown) {
