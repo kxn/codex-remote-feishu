@@ -120,6 +120,28 @@ export interface FeishuAppVerifyResponse {
   result: VerifyResult;
 }
 
+export interface FeishuAppPermissionCheckItem {
+  scope: string;
+  scopeType?: string;
+}
+
+export interface FeishuAppPermissionCheckResponse {
+  app: FeishuAppSummary;
+  ready: boolean;
+  missingScopes?: FeishuAppPermissionCheckItem[];
+  grantJSON?: string;
+  consoleURL?: string;
+  lastCheckedAt?: string;
+}
+
+export interface FeishuAppTestStartResponse {
+  gatewayId: string;
+  startedAt: string;
+  expiresAt: string;
+  phrase?: string;
+  message: string;
+}
+
 export interface FeishuOnboardingSession {
   id: string;
   status: string;
@@ -335,4 +357,20 @@ export interface PreviewDriveCleanupResponse {
     skippedUnknownLastUsedCount: number;
     summary: PreviewDriveSummary;
   };
+}
+
+export interface LogsStorageStatusResponse {
+  rootDir: string;
+  fileCount: number;
+  totalBytes: number;
+  latestFileAt?: string;
+}
+
+export interface LogsStorageCleanupResponse {
+  rootDir: string;
+  olderThanHours: number;
+  deletedFiles: number;
+  deletedBytes: number;
+  remainingFileCount: number;
+  remainingBytes: number;
 }

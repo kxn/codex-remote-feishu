@@ -1,1011 +1,1024 @@
 import { useEffect, useMemo, useState } from "react";
+import packageInfo from "../../package.json";
 import {
   APIRequestError,
-  formatError,
+  type APIErrorShape,
   requestJSON,
   requestJSONAllowHTTPError,
-  requestVoid,
   sendJSON,
 } from "../lib/api";
-import { relativeLocalPath } from "../lib/paths";
 import type {
-  AdminInstanceSummary,
-  AdminInstancesResponse,
+  AutostartDetectResponse,
   BootstrapState,
-  FeishuAppMutation,
-  FeishuAppPublishCheckResponse,
+  FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
-  FeishuAppsResponse,
   FeishuAppSummary,
+  FeishuAppTestStartResponse,
   FeishuAppVerifyResponse,
-  FeishuManifestResponse,
-  FeishuOnboardingCompleteResponse,
-  FeishuOnboardingSession,
-  FeishuOnboardingSessionResponse,
-  FeishuRuntimeApplyFailureDetails,
-  GatewayStatus,
+  FeishuAppsResponse,
   ImageStagingCleanupResponse,
   ImageStagingStatusResponse,
+  LogsStorageCleanupResponse,
+  LogsStorageStatusResponse,
   PreviewDriveCleanupResponse,
   PreviewDriveStatusResponse,
-  RuntimeStatus,
   VSCodeDetectResponse,
 } from "../lib/types";
-import { ErrorState, LoadingState, ShellFrame } from "../components/ui";
 import {
-  AdminFeishuPanel,
-  AdminInstancesPanel,
-  AdminOverviewPanel,
-  AdminStoragePanel,
-  AdminTechnicalPanel,
-  AdminVSCodePanel,
-} from "./admin/AdminPanels";
-import {
-  appToDraft,
-  emptyDraft,
-  syncDraftSelection,
-  vscodeReadinessText,
-} from "./admin/helpers";
-import {
-  blankToUndefined,
-  buildAdminFeishuVerifySuccessMessage,
+  loadAutostartState,
   loadVSCodeState,
-  type VSCodeUsageScenario,
   vscodeApplyModeForScenario,
-  vscodeHasDetectedBundle,
-  vscodePrimaryActionLabel,
+  vscodeIsReady,
 } from "./shared/helpers";
-import type { AppDraft, Notice, PreviewMap } from "./admin/types";
-import { newAppID } from "./admin/types";
-import type { FeishuConnectMode, FeishuConnectStage } from "./setup/types";
+
+type NoticeTone = "good" | "warn" | "danger";
+
+type DetailNotice = {
+  tone: NoticeTone;
+  message: string;
+};
+
+type PermissionSummaryState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; data: FeishuAppPermissionCheckResponse }
+  | { status: "missing"; data: FeishuAppPermissionCheckResponse }
+  | { status: "error"; message: string };
+
+type RuntimeApplyFailureDetails = {
+  gatewayId?: string;
+  app?: FeishuAppSummary;
+};
+
+type NewRobotForm = {
+  name: string;
+  appId: string;
+  appSecret: string;
+};
+
+const newRobotID = "new";
 
 export function AdminRoute() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
-  const [manifest, setManifest] = useState<
-    FeishuManifestResponse["manifest"] | null
-  >(null);
+  const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
+  const [permissionChecks, setPermissionChecks] = useState<
+    Record<string, PermissionSummaryState>
+  >({});
+  const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
+  const [newRobotForm, setNewRobotForm] = useState<NewRobotForm>({
+    name: "",
+    appId: "",
+    appSecret: "",
+  });
+  const [autostart, setAutostart] = useState<AutostartDetectResponse | null>(
+    null,
+  );
+  const [autostartError, setAutostartError] = useState("");
   const [vscode, setVSCode] = useState<VSCodeDetectResponse | null>(null);
-  const [vscodeError, setVSCodeError] = useState<string>("");
-  const [vscodeScenario, setVSCodeScenario] =
-    useState<VSCodeUsageScenario | null>(null);
-  const [instances, setInstances] = useState<AdminInstanceSummary[]>([]);
+  const [vscodeError, setVSCodeError] = useState("");
   const [imageStaging, setImageStaging] =
     useState<ImageStagingStatusResponse | null>(null);
-  const [previews, setPreviews] = useState<PreviewMap>({});
-  const [selectedAppID, setSelectedAppID] = useState<string>(newAppID);
-  const [draft, setDraft] = useState<AppDraft>(emptyDraft());
-  const [feishuConnectStage, setFeishuConnectStage] =
-    useState<FeishuConnectStage>("mode_select");
-  const [feishuConnectMode, setFeishuConnectMode] =
-    useState<FeishuConnectMode | null>(null);
-  const [onboardingSession, setOnboardingSession] =
-    useState<FeishuOnboardingSession | null>(null);
-  const [onboardingCompletion, setOnboardingCompletion] =
-    useState<FeishuOnboardingCompleteResponse | null>(null);
-  const [onboardingNeedsManualRetry, setOnboardingNeedsManualRetry] =
-    useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [error, setError] = useState<string>("");
-  const [busyAction, setBusyAction] = useState("");
+  const [imageStagingError, setImageStagingError] = useState("");
+  const [logsStorage, setLogsStorage] = useState<LogsStorageStatusResponse | null>(
+    null,
+  );
+  const [logsStorageError, setLogsStorageError] = useState("");
+  const [previewMap, setPreviewMap] = useState<
+    Record<string, PreviewDriveStatusResponse>
+  >({});
+  const [previewError, setPreviewError] = useState("");
+  const [actionBusy, setActionBusy] = useState("");
+  const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
 
-  async function loadAdminData(preferredAppID?: string) {
+  const selectedApp = useMemo(
+    () => apps.find((app) => app.id === selectedRobotID) ?? null,
+    [apps, selectedRobotID],
+  );
+  const selectedPermission: PermissionSummaryState = selectedApp
+    ? permissionChecks[selectedApp.id] || { status: "idle" }
+    : { status: "idle" };
+  const versionTitle = `Codex Remote v${packageInfo.version} 管理`;
+  const previewSummary = useMemo(() => {
+    return Object.values(previewMap).reduce(
+      (accumulator, item) => {
+        accumulator.fileCount += item.summary.fileCount;
+        accumulator.bytes += item.summary.estimatedBytes;
+        return accumulator;
+      },
+      { fileCount: 0, bytes: 0 },
+    );
+  }, [previewMap]);
+
+  useEffect(() => {
+    document.title = versionTitle;
+  }, [versionTitle]);
+
+  useEffect(() => {
+    void loadAdminPage().catch(() => {
+      setLoadError("当前页面暂时无法读取状态，请刷新后重试。");
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    setPermissionChecks((current) => {
+      const next: Record<string, PermissionSummaryState> = {};
+      for (const app of apps) {
+        next[app.id] = current[app.id] || { status: "idle" };
+      }
+      return next;
+    });
+  }, [apps]);
+
+  useEffect(() => {
+    for (const app of apps) {
+      const current = permissionChecks[app.id];
+      if (current && current.status !== "idle") {
+        continue;
+      }
+      void loadPermissionCheck(app.id);
+    }
+  }, [apps, permissionChecks]);
+
+  async function loadAdminPage(options?: { preferredRobotID?: string }) {
+    setLoading(true);
+    setLoadError("");
+
     const [
       bootstrapState,
-      runtimeState,
       appList,
-      manifestResponse,
+      autostartState,
       vscodeState,
-      instancesResponse,
-      imageStatus,
+      imageResult,
+      logsResult,
     ] = await Promise.all([
       requestJSON<BootstrapState>("/api/admin/bootstrap-state"),
-      requestJSON<RuntimeStatus>("/api/admin/runtime-status"),
       requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
-      requestJSON<FeishuManifestResponse>("/api/admin/feishu/manifest"),
+      loadAutostartState("/api/admin/autostart/detect"),
       loadVSCodeState("/api/admin/vscode/detect"),
-      requestJSON<AdminInstancesResponse>("/api/admin/instances"),
-      requestJSON<ImageStagingStatusResponse>(
-        "/api/admin/storage/image-staging",
-      ),
+      safeRequest<ImageStagingStatusResponse>("/api/admin/storage/image-staging"),
+      safeRequest<LogsStorageStatusResponse>("/api/admin/storage/logs"),
     ]);
 
     const previewResults = await Promise.allSettled(
-      appList.apps.map((app) =>
-        requestJSON<PreviewDriveStatusResponse>(
+      appList.apps.map(async (app) => {
+        const data = await requestJSON<PreviewDriveStatusResponse>(
           `/api/admin/storage/preview-drive/${encodeURIComponent(app.id)}`,
-        ),
-      ),
+        );
+        return [app.id, data] as const;
+      }),
     );
-    const previewMap: PreviewMap = {};
+
+    const previews: Record<string, PreviewDriveStatusResponse> = {};
+    let previewFailed = false;
     previewResults.forEach((result) => {
       if (result.status === "fulfilled") {
-        previewMap[result.value.gatewayId] = result.value;
-      }
-    });
-
-    setBootstrap(bootstrapState);
-    setRuntime(runtimeState);
-    setApps(appList.apps);
-    setManifest(manifestResponse.manifest);
-    setVSCode(vscodeState.data);
-    setVSCodeError(vscodeState.error);
-    setInstances(instancesResponse.instances);
-    setImageStaging(imageStatus);
-    setPreviews(previewMap);
-    syncDraftSelection(
-      appList.apps,
-      preferredAppID ?? selectedAppID,
-      setSelectedAppID,
-      setDraft,
-    );
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadAdminData()
-      .then(() => {
-        if (!cancelled) {
-          setError("");
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(formatError(err));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const activeApp =
-    selectedAppID === newAppID
-      ? null
-      : (apps.find((app) => app.id === selectedAppID) ?? null);
-  const scopesJSON = useMemo(
-    () =>
-      JSON.stringify(
-        manifest?.scopesImport ?? { scopes: { tenant: [], user: [] } },
-        null,
-        2,
-      ),
-    [manifest],
-  );
-  const basicScopesJSON = useMemo(() => {
-    const allTenantScopes = manifest?.scopesImport?.scopes?.tenant ?? [];
-    const basicTenantScopes = allTenantScopes.filter(
-      (scope) =>
-        scope !== "drive:drive" &&
-        scope !== "im:datasync.feed_card.time_sensitive:write",
-    );
-    return JSON.stringify(
-      {
-        scopes: {
-          tenant: basicTenantScopes,
-          user: manifest?.scopesImport?.scopes?.user ?? [],
-        },
-      },
-      null,
-      2,
-    );
-  }, [manifest]);
-  const gatewayRows = useMemo(() => {
-    const source = runtime?.gateways?.length
-      ? runtime.gateways
-      : (bootstrap?.gateways ?? []);
-    return source;
-  }, [bootstrap?.gateways, runtime?.gateways]);
-  const setupURL = relativeLocalPath(bootstrap?.admin.setupURL || "/setup");
-  const vscodePrimaryLabel = vscodePrimaryActionLabel(vscode, vscodeScenario);
-  const vscodeCanContinue =
-    Boolean(vscode) &&
-    (vscode?.sshSession
-      ? vscodeHasDetectedBundle(vscode)
-      : vscodeScenario !== null &&
-        (vscodeScenario === "remote_only" || vscodeHasDetectedBundle(vscode)));
-
-  useEffect(() => {
-    if (vscode?.sshSession) {
-      setVSCodeScenario(null);
-    }
-  }, [vscode?.sshSession]);
-
-  useEffect(() => {
-    resetFeishuConnectFlow(apps.length > 0 ? "existing" : "new");
-  }, [selectedAppID, apps.length]);
-
-  async function runAction(
-    label: string,
-    work: () => Promise<void>,
-    onError?: (err: unknown) => Promise<boolean>,
-  ) {
-    setBusyAction(label);
-    setNotice(null);
-    try {
-      await work();
-    } catch (err: unknown) {
-      if (onError && (await onError(err))) {
+        previews[result.value[0]] = result.value[1];
         return;
       }
-      setNotice({ tone: "danger", message: formatError(err) });
+      previewFailed = true;
+    });
+
+    const nextSelectedRobotID =
+      appList.apps.find((app) => app.id === options?.preferredRobotID)?.id ||
+      appList.apps.find((app) => app.id === selectedRobotID)?.id ||
+      appList.apps[0]?.id ||
+      newRobotID;
+
+    setBootstrap(bootstrapState);
+    setApps(appList.apps);
+    setSelectedRobotID(nextSelectedRobotID);
+    setAutostart(autostartState.data);
+    setAutostartError(autostartState.error);
+    setVSCode(vscodeState.data);
+    setVSCodeError(vscodeState.error);
+    setImageStaging(imageResult.data);
+    setImageStagingError(imageResult.error);
+    setLogsStorage(logsResult.data);
+    setLogsStorageError(logsResult.error);
+    setPreviewMap(previews);
+    setPreviewError(previewFailed ? "部分预览文件状态暂时没有读取成功。" : "");
+    setLoading(false);
+  }
+
+  async function loadPermissionCheck(appID: string) {
+    setPermissionChecks((current) => ({
+      ...current,
+      [appID]: { status: "loading" },
+    }));
+    const response = await requestJSONAllowHTTPError<
+      FeishuAppPermissionCheckResponse | APIErrorShape
+    >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/permission-check`);
+    if (!response.ok) {
+      setPermissionChecks((current) => ({
+        ...current,
+        [appID]: {
+          status: "error",
+          message: "暂时无法读取权限状态，请稍后重试。",
+        },
+      }));
+      return;
+    }
+    const payload = response.data as FeishuAppPermissionCheckResponse;
+    setPermissionChecks((current) => ({
+      ...current,
+      [appID]: payload.ready
+        ? { status: "ready", data: payload }
+        : { status: "missing", data: payload },
+    }));
+  }
+
+  async function createRobot() {
+    if (!newRobotForm.appId.trim() || !newRobotForm.appSecret.trim()) {
+      setDetailNotice({
+        tone: "danger",
+        message: "请填写完整的 App ID 和 App Secret。",
+      });
+      return;
+    }
+
+    setActionBusy("create-robot");
+    try {
+      const saved = await sendJSON<FeishuAppResponse>("/api/admin/feishu/apps", "POST", {
+        name: blankToUndefined(newRobotForm.name),
+        appId: blankToUndefined(newRobotForm.appId),
+        appSecret: blankToUndefined(newRobotForm.appSecret),
+        enabled: true,
+      });
+      const verify = await requestJSONAllowHTTPError<FeishuAppVerifyResponse>(
+        `/api/admin/feishu/apps/${encodeURIComponent(saved.app.id)}/verify`,
+        { method: "POST" },
+      );
+      await loadAdminPage({ preferredRobotID: saved.app.id });
+      setSelectedRobotID(saved.app.id);
+      void loadPermissionCheck(saved.app.id);
+      if (!verify.ok) {
+        setDetailNotice({
+          tone: "danger",
+          message: "连接验证没有通过，请检查 App ID 和 App Secret 后重试。",
+        });
+        return;
+      }
+      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
+      setNewRobotForm({ name: "", appId: "", appSecret: "" });
+    } catch (error: unknown) {
+      if (await maybeRecoverRuntimeApplyFailure(error)) {
+        return;
+      }
+      setDetailNotice({ tone: "danger", message: "当前还不能保存这个机器人，请稍后重试。" });
     } finally {
-      setBusyAction("");
+      setActionBusy("");
     }
   }
 
-  function selectApp(app: FeishuAppSummary) {
-    setSelectedAppID(app.id);
-    setDraft(appToDraft(app));
-    setNotice(null);
-  }
-
-  function beginNewApp() {
-    setSelectedAppID(newAppID);
-    setDraft(emptyDraft());
-    setNotice(null);
-  }
-
-  function resetFeishuConnectFlow(nextMode?: FeishuConnectMode) {
-    setFeishuConnectStage("mode_select");
-    setFeishuConnectMode(nextMode ?? (apps.length > 0 ? "existing" : "new"));
-    setOnboardingSession(null);
-    setOnboardingCompletion(null);
-    setOnboardingNeedsManualRetry(false);
-  }
-
-  async function handleFeishuRuntimeApplyFailure(
-    err: unknown,
-    fallbackAppID: string,
-  ): Promise<boolean> {
-    if (
-      !(err instanceof APIRequestError) ||
-      err.code !== "gateway_apply_failed"
-    ) {
+  async function maybeRecoverRuntimeApplyFailure(error: unknown): Promise<boolean> {
+    if (!(error instanceof APIRequestError) || error.code !== "gateway_apply_failed") {
       return false;
     }
-    const details = parseFeishuRuntimeApplyFailureDetails(err.details);
-    const preferredAppID =
-      details?.app?.id || details?.gatewayId || fallbackAppID || newAppID;
-    try {
-      await loadAdminData(preferredAppID);
-    } catch (reloadErr: unknown) {
-      setNotice({ tone: "danger", message: formatError(reloadErr) });
-      return true;
+    const details = error.details as RuntimeApplyFailureDetails | undefined;
+    await loadAdminPage({
+      preferredRobotID: details?.app?.id || details?.gatewayId,
+    });
+    if (details?.app?.id || details?.gatewayId) {
+      setSelectedRobotID(details?.app?.id || details?.gatewayId || newRobotID);
     }
-    setNotice({
+    setDetailNotice({
       tone: "warn",
       message:
-        details?.app?.runtimeApply?.action === "remove" &&
-        !details.app.persisted
-          ? "删除已保存，但运行时移除还没成功。页面已刷新为“待移除”状态，请重试移除。"
-          : "更改已保存到本地配置，但运行时还没应用成功。页面已刷新为“未生效”状态，请重试应用。",
+        "配置已经保存，但当前运行中的机器人还没有同步完成。请稍后刷新状态后再继续。",
     });
     return true;
   }
 
-  async function continueFeishuConnectModeSelection() {
-    if (!feishuConnectMode) {
-      setNotice({ tone: "danger", message: "请先选择你想怎么接入飞书应用。" });
+  async function triggerRobotTest(kind: "events" | "callback") {
+    if (!selectedApp?.id) {
       return;
     }
-    if (feishuConnectMode === "existing") {
-      setFeishuConnectStage("existing_manual");
-      setOnboardingSession(null);
-      setOnboardingNeedsManualRetry(false);
-      return;
-    }
-    await startFeishuOnboarding();
-  }
-
-  async function startFeishuOnboarding() {
-    await runAction("start-feishu-onboarding", async () => {
-      const response = await sendJSON<FeishuOnboardingSessionResponse>(
-        "/api/admin/feishu/onboarding/sessions",
-        "POST",
-      );
-      setFeishuConnectMode("new");
-      setFeishuConnectStage("new_qr");
-      setOnboardingSession(response.session);
-      setOnboardingCompletion(null);
-      setOnboardingNeedsManualRetry(false);
+    setActionBusy(`test-${kind}`);
+    const response = await requestJSONAllowHTTPError<
+      FeishuAppTestStartResponse | APIErrorShape
+    >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/${kind === "events" ? "test-events" : "test-callback"}`, {
+      method: "POST",
     });
-  }
-
-  async function refreshFeishuOnboarding(options?: { silent?: boolean }) {
-    if (!onboardingSession?.id) {
-      return;
-    }
-    try {
-      const response = await requestJSON<FeishuOnboardingSessionResponse>(
-        `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(onboardingSession.id)}`,
-      );
-      setOnboardingSession(response.session);
-      if (response.session.status === "pending") {
-        setOnboardingNeedsManualRetry(false);
-      }
-    } catch (err: unknown) {
-      if (options?.silent) {
-        return;
-      }
-      throw err;
-    }
-  }
-
-  async function retryOnboardingComplete() {
-    if (!onboardingSession?.id) {
-      setNotice({
-        tone: "danger",
-        message: "当前还没有可用的扫码会话。请重新开始扫码。",
-      });
-      return;
-    }
-    await runAction("complete-feishu-onboarding", async () => {
-      const response =
-        await requestJSONAllowHTTPError<FeishuOnboardingCompleteResponse>(
-          `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(onboardingSession.id)}/complete`,
-          { method: "POST" },
-        );
-      setOnboardingSession(response.data.session);
-      if (!response.ok) {
-        const detail =
-          `${response.data.result.errorCode || "verify_failed"} ${response.data.result.errorMessage || ""}`.trim();
-        setOnboardingNeedsManualRetry(true);
-        setNotice({
-          tone: "danger",
-          message:
-            `扫码创建的飞书应用已经拿到凭据，但连接测试失败：${detail}`.trim(),
-        });
-        return;
-      }
-      setOnboardingCompletion(response.data);
-      setOnboardingNeedsManualRetry(false);
-      setFeishuConnectStage("new_qr_notice");
-    });
-  }
-
-  async function continueOnboardingNotice() {
-    if (!onboardingCompletion) {
-      setNotice({
-        tone: "danger",
-        message: "当前还没有可继续的扫码结果。请重新开始扫码。",
-      });
-      return;
-    }
-    await runAction("continue-feishu-onboarding-notice", async () => {
-      await loadAdminData(onboardingCompletion.app.id);
-      setNotice({
-        tone:
-          onboardingCompletion.app.status?.state === "connected"
-            ? "good"
-            : "warn",
-        message: buildAdminFeishuVerifySuccessMessage(
-          onboardingCompletion.app,
-          onboardingCompletion.result.duration,
-        ),
-      });
-      resetFeishuConnectFlow("existing");
-    });
-  }
-
-  async function saveAndVerifyNewApp() {
-    if (draft.appId.trim() === "") {
-      setNotice({ tone: "danger", message: "请先填写 App ID。" });
-      return;
-    }
-    if (draft.appSecret.trim() === "") {
-      setNotice({ tone: "danger", message: "请先填写 App Secret。" });
-      return;
-    }
-    await runAction("create-app", async () => {
-      const response = await sendJSON<FeishuAppResponse>(
-        "/api/admin/feishu/apps",
-        "POST",
-        {
-          id: blankToUndefined(draft.id),
-          name: blankToUndefined(draft.name),
-          appId: blankToUndefined(draft.appId),
-          appSecret: blankToUndefined(draft.appSecret),
-          enabled: draft.enabled,
-        },
-      );
-      const verifyResponse =
-        await requestJSONAllowHTTPError<FeishuAppVerifyResponse>(
-          `/api/admin/feishu/apps/${encodeURIComponent(response.app.id)}/verify`,
-          {
-            method: "POST",
-          },
-        );
-      await loadAdminData(response.app.id);
-      if (!verifyResponse.ok) {
-        const detail =
-          `${verifyResponse.data.result.errorCode || "verify_failed"} ${verifyResponse.data.result.errorMessage || ""}`.trim();
-        setNotice({
-          tone: "danger",
-          message: `飞书应用已保存，但连接测试失败：${detail}`.trim(),
-        });
-        return;
-      }
-      resetFeishuConnectFlow("existing");
-      setNotice({
-        tone:
-          verifyResponse.data.app.status?.state === "connected"
-            ? "good"
-            : "warn",
-        message: buildAdminFeishuVerifySuccessMessage(
-          verifyResponse.data.app,
-          verifyResponse.data.result.duration,
-        ),
-      });
-    });
-  }
-
-  async function saveApp() {
-    if (activeApp?.readOnly && !draft.isNew) {
-      return;
-    }
-    await runAction(
-      draft.isNew ? "create-app" : "save-app",
-      async () => {
-        const payload = {
-          id: draft.isNew ? blankToUndefined(draft.id) : undefined,
-          name: blankToUndefined(draft.name),
-          appId: blankToUndefined(draft.appId),
-          appSecret: blankToUndefined(draft.appSecret),
-          enabled: draft.enabled,
-        };
-        const path = draft.isNew
-          ? "/api/admin/feishu/apps"
-          : `/api/admin/feishu/apps/${encodeURIComponent(selectedAppID)}`;
-        const method = draft.isNew ? "POST" : "PUT";
-        const response = await sendJSON<FeishuAppResponse>(
-          path,
-          method,
-          payload,
-        );
-        await loadAdminData(response.app.id);
-        setNotice({
-          tone: feishuMutationTone(response.mutation),
-          message:
-            response.mutation?.message ||
-            (draft.isNew ? "飞书应用已创建。" : "飞书应用配置已更新。"),
-        });
-      },
-      async (err) =>
-        handleFeishuRuntimeApplyFailure(
-          err,
-          draft.isNew
-            ? blankToUndefined(draft.id) || selectedAppID
-            : selectedAppID,
-        ),
-    );
-  }
-
-  async function verifyApp() {
-    if (!activeApp) {
-      return;
-    }
-    await runAction("verify-app", async () => {
-      const response = await requestJSONAllowHTTPError<FeishuAppVerifyResponse>(
-        `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/verify`,
-        {
-          method: "POST",
-        },
-      );
-      await loadAdminData(activeApp.id);
-      if (response.ok) {
-        setNotice({
-          tone:
-            response.data.app.status?.state === "connected" ? "good" : "warn",
-          message: buildAdminFeishuVerifySuccessMessage(
-            response.data.app,
-            response.data.result.duration,
-          ),
-        });
-        return;
-      }
-      setNotice({
+    if (!response.ok) {
+      const payload = readAPIError(response);
+      setDetailNotice({
         tone: "danger",
         message:
-          `连接测试失败：${response.data.result.errorCode || "verify_failed"} ${response.data.result.errorMessage || ""}`.trim(),
+          payload?.code === "feishu_app_test_target_unavailable"
+            ? "请先在飞书里给这个机器人发送一条消息，再回到网页重试。"
+            : kind === "events"
+              ? "事件订阅测试没有发出，请稍后重试。"
+              : "回调测试没有发出，请稍后重试。",
       });
+      setActionBusy("");
+      return;
+    }
+    const payload = response.data as FeishuAppTestStartResponse;
+    setDetailNotice({
+      tone: "good",
+      message: payload.message,
     });
+    setActionBusy("");
   }
 
-  async function reconnectApp() {
-    if (!activeApp) {
+  async function deleteRobot() {
+    if (!deleteTargetID) {
       return;
     }
-    await runAction("reconnect-app", async () => {
-      await sendJSON<FeishuAppResponse>(
-        `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/reconnect`,
-        "POST",
+    setActionBusy("delete-robot");
+    try {
+      const response = await requestJSONAllowHTTPError<unknown>(
+        `/api/admin/feishu/apps/${encodeURIComponent(deleteTargetID)}`,
+        { method: "DELETE" },
       );
-      await loadAdminData(activeApp.id);
-      setNotice({ tone: "good", message: "已请求重新连接这条飞书应用。" });
-    });
-  }
-
-  async function toggleAppEnabled(enabled: boolean) {
-    if (!activeApp) {
-      return;
-    }
-    await runAction(
-      enabled ? "enable-app" : "disable-app",
-      async () => {
-        const endpoint = enabled ? "enable" : "disable";
-        await sendJSON<FeishuAppResponse>(
-          `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/${endpoint}`,
-          "POST",
+      if (!response.ok) {
+        throw new APIRequestError(
+          response.status,
+          "delete failed",
+          readAPIError(response)?.code,
+          readAPIError(response)?.details,
         );
-        await loadAdminData(activeApp.id);
-        setNotice({
-          tone: enabled ? "good" : "warn",
-          message: enabled ? "飞书应用已启用。" : "飞书应用已停用。",
-        });
-      },
-      async (err) => handleFeishuRuntimeApplyFailure(err, activeApp.id),
-    );
-  }
-
-  async function deleteApp() {
-    if (!activeApp) {
-      return;
-    }
-    if (!window.confirm(`删除飞书 App “${activeApp.name || activeApp.id}”？`)) {
-      return;
-    }
-    await runAction(
-      "delete-app",
-      async () => {
-        await requestVoid(
-          `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}`,
-          { method: "DELETE" },
-        );
-        await loadAdminData(newAppID);
-        setNotice({ tone: "good", message: "飞书应用已删除。" });
-      },
-      async (err) => handleFeishuRuntimeApplyFailure(err, activeApp.id),
-    );
-  }
-
-  async function retryRuntimeApply() {
-    if (!activeApp?.runtimeApply?.pending) {
-      return;
-    }
-    const pendingRemoval =
-      activeApp.runtimeApply.action === "remove" && !activeApp.persisted;
-    await runAction(
-      "retry-runtime-apply",
-      async () => {
-        await requestVoid(
-          `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/retry-apply`,
-          { method: "POST" },
-        );
-        await loadAdminData(pendingRemoval ? newAppID : activeApp.id);
-        setNotice({
-          tone: "good",
-          message: pendingRemoval
-            ? "运行时移除已重试成功。"
-            : "保存的运行时配置已重新应用。",
-        });
-      },
-      async (err) => handleFeishuRuntimeApplyFailure(err, activeApp.id),
-    );
-  }
-
-  async function cleanupImageStaging() {
-    await runAction("cleanup-images", async () => {
-      const response = await sendJSON<ImageStagingCleanupResponse>(
-        "/api/admin/storage/image-staging/cleanup",
-        "POST",
-        {
-          olderThanHours: 24,
-        },
-      );
-      setImageStaging({
-        rootDir: response.rootDir,
-        fileCount: response.remainingFileCount,
-        totalBytes: response.remainingBytes,
-        activeFileCount: imageStaging?.activeFileCount ?? 0,
-        activeBytes: imageStaging?.activeBytes ?? 0,
-      });
-      await loadAdminData(activeApp?.id);
-      setNotice({
-        tone: "good",
-        message: `图片暂存区已清理，删除 ${response.deletedFiles} 个文件。`,
-      });
-    });
-  }
-
-  async function cleanupPreview(gatewayID: string) {
-    await runAction(`cleanup-preview-${gatewayID}`, async () => {
-      const response = await sendJSON<PreviewDriveCleanupResponse>(
-        `/api/admin/storage/preview-drive/${encodeURIComponent(gatewayID)}/cleanup`,
-        "POST",
-        {
-          olderThanHours: 24,
-        },
-      );
-      if (response.result.deletedFileCount > 0) {
-        setNotice({
-          tone: "good",
-          message: `${response.name || response.gatewayId} 预览文件已清理 ${response.result.deletedFileCount} 项。`,
-        });
-      } else {
-        setNotice({
-          tone: "warn",
-          message: `${response.name || response.gatewayId} 本次未命中可清理的预览文件。`,
-        });
       }
-      await loadAdminData(gatewayID);
-    });
+      await loadAdminPage();
+      setDetailNotice({ tone: "good", message: "机器人已删除。" });
+      setDeleteTargetID(null);
+    } catch (error: unknown) {
+      if (await maybeRecoverRuntimeApplyFailure(error)) {
+        setDeleteTargetID(null);
+        return;
+      }
+      setDetailNotice({ tone: "danger", message: "当前还不能删除这个机器人，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+      setDeleteTargetID(null);
+    }
   }
 
-  async function applyVSCode(
-    mode: string,
-    successMessage = "VS Code 接入方式已更新。",
-  ) {
-    if (!vscode) {
-      return;
+  async function enableAutostart() {
+    setActionBusy("autostart");
+    try {
+      const response = await sendJSON<AutostartDetectResponse>(
+        "/api/admin/autostart/apply",
+        "POST",
+      );
+      setAutostart(response);
+      setAutostartError("");
+    } catch {
+      setAutostartError("自动运行设置暂时没有更新成功。");
+    } finally {
+      setActionBusy("");
     }
-    await runAction(`vscode-${mode}`, async () => {
+  }
+
+  async function repairVSCode() {
+    setActionBusy("vscode");
+    try {
+      if (!vscode) {
+        await loadAdminPage({ preferredRobotID: selectedRobotID });
+        return;
+      }
+      if (vscode.needsShimReinstall && vscode.latestBundleEntrypoint) {
+        const response = await sendJSON<VSCodeDetectResponse>(
+          "/api/admin/vscode/reinstall-shim",
+          "POST",
+          { bundleEntrypoint: vscode.latestBundleEntrypoint },
+        );
+        setVSCode(response);
+        setVSCodeError("");
+        return;
+      }
+      const mode = vscodeApplyModeForScenario(vscode, "current_machine");
       const response = await sendJSON<VSCodeDetectResponse>(
         "/api/admin/vscode/apply",
         "POST",
-        { mode },
+        {
+          mode: mode || "managed_shim",
+          bundleEntrypoint: vscode.latestBundleEntrypoint,
+        },
       );
       setVSCode(response);
       setVSCodeError("");
-      setNotice({ tone: "good", message: successMessage });
-    });
+    } catch {
+      setVSCodeError("VS Code 集成暂时没有更新成功。");
+    } finally {
+      setActionBusy("");
+    }
   }
 
-  async function continueVSCode() {
-    if (!vscode) {
-      return;
-    }
-    if (vscode.sshSession) {
-      if (!vscodeHasDetectedBundle(vscode)) {
-        setNotice({
-          tone: "warn",
-          message:
-            "还没检测到这台远程机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code Remote 窗口，并确保 Codex 扩展已经安装。",
-        });
-        return;
-      }
-      await applyVSCode(
-        "managed_shim",
-        "已接管这台远程机器上的 VS Code 扩展入口。以后如果扩展升级，回到管理页重新安装扩展入口即可。",
-      );
-      return;
-    }
-    if (!vscodeScenario) {
-      setNotice({
-        tone: "warn",
-        message: "请先选择你以后主要怎么使用 VS Code 里的 Codex。",
-      });
-      return;
-    }
-    if (vscodeScenario === "remote_only") {
-      setNotice({
-        tone: "warn",
-        message:
-          "当前机器先不做 VS Code 接入。等你在目标 SSH 机器上安装 codex-remote 后，再在那里完成 VS Code 接入即可。",
-      });
-      return;
-    }
-    const mode = vscodeApplyModeForScenario(vscode, vscodeScenario);
-    if (!mode) {
-      setNotice({
-        tone: "danger",
-        message: "当前选择还不能映射到可执行的 VS Code 接入方式。",
-      });
-      return;
-    }
-    if (mode === "managed_shim" && !vscodeHasDetectedBundle(vscode)) {
-      setNotice({
-        tone: "warn",
-        message:
-          "还没检测到这台机器上的 VS Code 扩展安装。请先在这台机器上打开一次 VS Code，并确保 Codex 扩展已经安装。",
-      });
-      return;
-    }
-    await applyVSCode(
-      "managed_shim",
-      "已接管这台机器上的 VS Code 扩展入口。当前策略不会写本机 settings.json；如果扩展升级，回到管理页重新安装扩展入口即可。",
-    );
-  }
-
-  async function reinstallShim() {
-    if (!vscode) {
-      return;
-    }
-    await runAction("reinstall-shim", async () => {
-      const response = await sendJSON<VSCodeDetectResponse>(
-        "/api/admin/vscode/reinstall-shim",
+  async function cleanupImageStaging() {
+    setActionBusy("cleanup-image");
+    try {
+      const response = await sendJSON<ImageStagingCleanupResponse>(
+        "/api/admin/storage/image-staging/cleanup",
         "POST",
       );
-      setVSCode(response);
-      setVSCodeError("");
-      setNotice({ tone: "good", message: "已重新安装 VS Code 扩展入口。" });
-    });
-  }
-
-  async function copyBasicScopesJSON() {
-    await runAction("copy-basic-scopes", async () => {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("当前浏览器环境不支持剪贴板写入。");
-      }
-      await navigator.clipboard.writeText(basicScopesJSON);
-      setNotice({ tone: "good", message: "基础权限 JSON 已复制。" });
-    });
-  }
-
-  async function updateWizardState(
-    payload: Partial<{
-      scopesExported: boolean;
-      eventsConfirmed: boolean;
-      callbacksConfirmed: boolean;
-      menusConfirmed: boolean;
-      published: boolean;
-    }>,
-    successMessage: string,
-  ) {
-    if (!activeApp) {
-      return;
-    }
-    await runAction("update-feishu-wizard", async () => {
-      const response = await sendJSON<FeishuAppResponse>(
-        `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/wizard`,
-        "PATCH",
-        payload,
+      setImageStaging((current) =>
+        current
+          ? {
+              ...current,
+              fileCount: response.remainingFileCount,
+              totalBytes: response.remainingBytes,
+            }
+          : current,
       );
-      await loadAdminData(response.app.id);
-      setNotice({ tone: "good", message: successMessage });
-    });
+      setImageStagingError("");
+    } catch {
+      setImageStagingError("图片暂存清理没有完成，请稍后重试。");
+    } finally {
+      setActionBusy("");
+    }
   }
 
-  async function checkPublish() {
-    if (!activeApp) {
-      return;
+  async function cleanupLogsStorage() {
+    setActionBusy("cleanup-logs");
+    try {
+      const response = await sendJSON<LogsStorageCleanupResponse>(
+        "/api/admin/storage/logs/cleanup",
+        "POST",
+        { olderThanHours: 24 },
+      );
+      setLogsStorage((current) =>
+        current
+          ? {
+              ...current,
+              fileCount: response.remainingFileCount,
+              totalBytes: response.remainingBytes,
+            }
+          : current,
+      );
+      setLogsStorageError("");
+    } catch {
+      setLogsStorageError("日志清理没有完成，请稍后重试。");
+    } finally {
+      setActionBusy("");
     }
-    await runAction("check-feishu-publish", async () => {
-      const response =
-        await requestJSONAllowHTTPError<FeishuAppPublishCheckResponse>(
-          `/api/admin/feishu/apps/${encodeURIComponent(activeApp.id)}/publish-check`,
-          {
-            method: "POST",
-          },
-        );
-      await loadAdminData(activeApp.id);
-      if (response.ok) {
-        setNotice({ tone: "good", message: "已确认飞书应用发布完成。" });
-        return;
-      }
-      const issues = response.data.issues?.length
-        ? response.data.issues.join("；")
-        : "当前还不能确认已经发布完成。";
-      setNotice({ tone: "warn", message: `发布验收还没通过：${issues}` });
-    });
   }
 
-  useEffect(() => {
-    if (
-      selectedAppID !== newAppID ||
-      feishuConnectStage !== "new_qr" ||
-      !onboardingSession?.id
-    ) {
+  async function cleanupPreviewDrive() {
+    if (apps.length === 0) {
       return;
     }
-    if (
-      onboardingSession.status === "ready" &&
-      !onboardingNeedsManualRetry &&
-      busyAction !== "complete-feishu-onboarding"
-    ) {
-      void retryOnboardingComplete();
-      return;
+    setActionBusy("cleanup-preview");
+    try {
+      const results = await Promise.allSettled(
+        apps.map((app) =>
+          sendJSON<PreviewDriveCleanupResponse>(
+            `/api/admin/storage/preview-drive/${encodeURIComponent(app.id)}/cleanup`,
+            "POST",
+          ),
+        ),
+      );
+      const nextMap: Record<string, PreviewDriveStatusResponse> = { ...previewMap };
+      let failed = false;
+      results.forEach((result) => {
+        if (result.status !== "fulfilled") {
+          failed = true;
+          return;
+        }
+        nextMap[result.value.gatewayId] = {
+          gatewayId: result.value.gatewayId,
+          name: result.value.name,
+          summary: result.value.result.summary,
+        };
+      });
+      setPreviewMap(nextMap);
+      setPreviewError(failed ? "部分预览文件暂时没有清理成功。" : "");
+    } catch {
+      setPreviewError("预览文件清理没有完成，请稍后重试。");
+    } finally {
+      setActionBusy("");
     }
-    if (onboardingSession.status !== "pending") {
-      return;
+  }
+
+  function renderRobotDetail() {
+    if (!selectedApp) {
+      return (
+        <section className="panel">
+          <div className="step-stage-head">
+            <h2>新增机器人</h2>
+            <p>完成连接验证后会自动进入权限检查。</p>
+          </div>
+          <div className="form-grid">
+            <label className="field">
+              <span>机器人名称</span>
+              <input
+                aria-label="机器人名称"
+                placeholder="例如：运营机器人"
+                value={newRobotForm.name}
+                onChange={(event) =>
+                  setNewRobotForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>App ID</span>
+              <input
+                aria-label="App ID"
+                placeholder="请输入 App ID"
+                value={newRobotForm.appId}
+                onChange={(event) =>
+                  setNewRobotForm((current) => ({
+                    ...current,
+                    appId: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field form-grid-span-2">
+              <span>App Secret</span>
+              <input
+                aria-label="App Secret"
+                placeholder="请输入 App Secret"
+                value={newRobotForm.appSecret}
+                onChange={(event) =>
+                  setNewRobotForm((current) => ({
+                    ...current,
+                    appSecret: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={actionBusy === "create-robot"}
+              onClick={() => void createRobot()}
+            >
+              验证并保存
+            </button>
+          </div>
+          {detailNotice ? (
+            <div className={`notice-banner ${detailNotice.tone}`}>
+              {detailNotice.message}
+            </div>
+          ) : null}
+        </section>
+      );
     }
-    const delay = Math.max(
-      2_000,
-      (onboardingSession.pollIntervalSeconds ?? 5) * 1_000,
+
+    return (
+      <section className="panel">
+        <div className="step-stage-head">
+          <h2>{selectedApp.name || "未命名机器人"}</h2>
+          <p>机器人状态与测试入口。</p>
+        </div>
+        <dl className="definition-list">
+          <div>
+            <dt>App ID</dt>
+            <dd>{selectedApp.appId || "未填写"}</dd>
+          </div>
+          <div>
+            <dt>连接状态</dt>
+            <dd>{describeConnectionState(selectedApp)}</dd>
+          </div>
+          <div>
+            <dt>启用状态</dt>
+            <dd>{selectedApp.enabled ? "已启用" : "未启用"}</dd>
+          </div>
+          <div>
+            <dt>最近验证</dt>
+            <dd>{selectedApp.verifiedAt ? formatTimestamp(selectedApp.verifiedAt) : "暂未验证"}</dd>
+          </div>
+        </dl>
+        {selectedApp.runtimeApply?.pending ? (
+          <div className="notice-banner warn">
+            当前机器人还在同步设置，请稍后刷新状态后再继续操作。
+          </div>
+        ) : null}
+        {selectedPermission.status === "missing" ? (
+          <>
+            <div className="notice-banner danger">
+              当前还需要补齐权限。
+            </div>
+            <div className="scope-list">
+              {(selectedPermission.data.missingScopes || []).map((scope: { scope: string; scopeType?: string }) => (
+                <span
+                  key={`${scope.scopeType || "tenant"}-${scope.scope}`}
+                  className="scope-pill"
+                >
+                  <code>{scope.scope}</code>
+                </span>
+              ))}
+            </div>
+            <div className="button-row">
+              <a
+                className="ghost-button"
+                href={
+                  selectedPermission.data.consoleURL ||
+                  buildFeishuConsoleURL(selectedApp.appId)
+                }
+                rel="noreferrer"
+                target="_blank"
+              >
+                打开飞书后台处理权限
+              </a>
+            </div>
+          </>
+        ) : null}
+        {selectedPermission.status === "error" ? (
+          <div className="notice-banner warn">{selectedPermission.message}</div>
+        ) : null}
+        {detailNotice ? (
+          <div className={`notice-banner ${detailNotice.tone}`}>
+            {detailNotice.message}
+          </div>
+        ) : null}
+        <div className="button-row">
+          <button
+            className="primary-button"
+            type="button"
+            disabled={actionBusy === "test-events" || Boolean(selectedApp.runtimeApply?.pending)}
+            onClick={() => void triggerRobotTest("events")}
+          >
+            测试事件订阅
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={actionBusy === "test-callback" || Boolean(selectedApp.runtimeApply?.pending)}
+            onClick={() => void triggerRobotTest("callback")}
+          >
+            测试回调
+          </button>
+          <button
+            className="danger-button"
+            type="button"
+            disabled={Boolean(selectedApp.readOnly)}
+            onClick={() => setDeleteTargetID(selectedApp.id)}
+          >
+            删除机器人
+          </button>
+        </div>
+        {selectedApp.readOnly ? (
+          <p className="wizard-hero-copy">当前机器人由运行环境提供，不能在这里删除。</p>
+        ) : null}
+      </section>
     );
-    const timer = window.setTimeout(() => {
-      void refreshFeishuOnboarding({ silent: true });
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [
-    busyAction,
-    feishuConnectStage,
-    onboardingNeedsManualRetry,
-    onboardingSession?.id,
-    onboardingSession?.pollIntervalSeconds,
-    onboardingSession?.status,
-    selectedAppID,
-  ]);
+  }
+
+  if (loading) {
+    return (
+      <div className="product-page">
+        <header className="product-topbar">
+          <h1>{versionTitle}</h1>
+          <p>管理机器人、系统集成与本地存储。</p>
+        </header>
+        <section className="panel">
+          <div className="empty-state">
+            <div className="loading-dot" />
+            <span>正在读取最新状态</span>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="product-page">
+        <header className="product-topbar">
+          <h1>{versionTitle}</h1>
+          <p>管理机器人、系统集成与本地存储。</p>
+        </header>
+        <section className="panel">
+          <div className="empty-state error">
+            <strong>当前页面暂时无法打开</strong>
+            <p>{loadError}</p>
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void loadAdminPage()}
+              >
+                重新加载
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
-    <ShellFrame
-      routeLabel="Admin"
-      title="本地管理"
-      subtitle="查看当前可用状态，管理飞书应用、工作实例、文档预览和 VS Code。"
-      nav={[
-        { label: "运行概览", href: "#overview" },
-        { label: "飞书应用", href: "#feishu" },
-        { label: "工作实例", href: "#instances" },
-        { label: "文档与图片", href: "#storage" },
-        { label: "VS Code", href: "#vscode" },
-        { label: "技术详情", href: "#technical" },
-      ]}
-      actions={
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => void loadAdminData(activeApp?.id)}
-          disabled={busyAction !== ""}
-        >
-          立即刷新
-        </button>
-      }
-    >
-      {!bootstrap && !error ? (
-        <LoadingState
-          title="正在加载管理页"
-          description="读取飞书应用、实例、文档预览和 VS Code 状态。"
-        />
+    <div className="product-page">
+      <header className="product-topbar">
+        <h1>{versionTitle}</h1>
+        <p>管理机器人、系统集成与本地存储。</p>
+      </header>
+
+      <section className="panel">
+        <div className="step-stage-head">
+          <h2>机器人管理</h2>
+          <p>查看所有机器人并处理需要关注的状态。</p>
+        </div>
+        <div className="robot-layout" style={{ marginTop: "1rem" }}>
+          <div className="robot-list">
+            {apps.map((app) => {
+              const permission = permissionChecks[app.id];
+              const showWarn =
+                permission?.status === "missing" || Boolean(app.runtimeApply?.pending);
+              return (
+                <button
+                  key={app.id}
+                  className={`robot-list-button${selectedRobotID === app.id ? " active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setDetailNotice(null);
+                    setSelectedRobotID(app.id);
+                  }}
+                >
+                  <div className="robot-list-head">
+                    <strong>{app.name || "未命名机器人"}</strong>
+                    {showWarn ? <span className="robot-tag warn">有异常</span> : null}
+                  </div>
+                  <p>{app.appId || "未填写 App ID"}</p>
+                </button>
+              );
+            })}
+            <button
+              className={`robot-list-button${selectedRobotID === newRobotID ? " active" : ""}`}
+              type="button"
+              onClick={() => {
+                setDetailNotice(null);
+                setSelectedRobotID(newRobotID);
+              }}
+            >
+              <div className="robot-list-head">
+                <strong>新增机器人</strong>
+                <span className="robot-tag">新增</span>
+              </div>
+              <p>点击开始接入</p>
+            </button>
+          </div>
+          {renderRobotDetail()}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="step-stage-head">
+          <h2>系统集成</h2>
+          <p>统一管理自动运行设置与 VS Code 集成。</p>
+        </div>
+        <div className="soft-grid two-column" style={{ marginTop: "1rem" }}>
+          <article className="soft-card-v2">
+            <h4>自动运行设置</h4>
+            <p>{describeAutostart(autostart, autostartError)}</p>
+            {autostartError ? (
+              <div className="notice-banner warn">{autostartError}</div>
+            ) : null}
+            {!autostartError && autostart?.supported && !autostart.enabled ? (
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={actionBusy === "autostart" || !autostart.canApply}
+                  onClick={() => void enableAutostart()}
+                >
+                  启用自动运行
+                </button>
+              </div>
+            ) : null}
+          </article>
+          <article className="soft-card-v2">
+            <h4>VS Code 集成</h4>
+            <p>{describeVSCode(vscode, vscodeError)}</p>
+            {vscodeError ? (
+              <div className="notice-banner warn">{vscodeError}</div>
+            ) : null}
+            <div className="button-row">
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={actionBusy === "vscode"}
+                onClick={() => void repairVSCode()}
+              >
+                重新检查并修复
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="step-stage-head">
+          <h2>存储管理</h2>
+          <p>查看占用并按需清理旧文件。</p>
+        </div>
+        <div className="soft-grid" style={{ marginTop: "1rem" }}>
+          <article className="soft-card-v2">
+            <h4>预览文件</h4>
+            <p>
+              {formatFileSummary(previewSummary.fileCount, previewSummary.bytes)}
+            </p>
+            {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "cleanup-preview" || apps.length === 0}
+                onClick={() => void cleanupPreviewDrive()}
+              >
+                清理旧预览
+              </button>
+            </div>
+          </article>
+          <article className="soft-card-v2">
+            <h4>图片暂存</h4>
+            <p>
+              {formatFileSummary(
+                imageStaging?.fileCount || 0,
+                imageStaging?.totalBytes || 0,
+              )}
+            </p>
+            {imageStagingError ? (
+              <div className="notice-banner warn">{imageStagingError}</div>
+            ) : null}
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "cleanup-image"}
+                onClick={() => void cleanupImageStaging()}
+              >
+                清理旧图片
+              </button>
+            </div>
+          </article>
+          <article className="soft-card-v2">
+            <h4>日志文件</h4>
+            <p>
+              {formatFileSummary(
+                logsStorage?.fileCount || 0,
+                logsStorage?.totalBytes || 0,
+              )}
+            </p>
+            {logsStorageError ? (
+              <div className="notice-banner warn">{logsStorageError}</div>
+            ) : null}
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "cleanup-logs"}
+                onClick={() => void cleanupLogsStorage()}
+              >
+                清理一天前日志
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      {deleteTargetID ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-robot-title"
+          >
+            <h3 id="delete-robot-title">确认删除机器人</h3>
+            <p className="modal-copy">
+              删除后将移除“
+              {apps.find((app) => app.id === deleteTargetID)?.name || "当前机器人"}
+              ”，此操作不可恢复。
+            </p>
+            <div className="modal-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => setDeleteTargetID(null)}
+              >
+                取消
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={actionBusy === "delete-robot"}
+                onClick={() => void deleteRobot()}
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
-      {error ? (
-        <ErrorState
-          title="无法加载管理页状态"
-          description="页面已经打开，但后台状态读取失败。"
-          detail={error}
-        />
-      ) : null}
-      {bootstrap && runtime && manifest && imageStaging ? (
-        <>
-          <AdminOverviewPanel
-            bootstrap={bootstrap}
-            apps={apps}
-            instances={instances}
-            imageStaging={imageStaging}
-            previews={previews}
-            vscode={vscode}
-            vscodeError={vscodeError}
-            notice={notice}
-            onBeginNewApp={() => {
-              beginNewApp();
-              window.location.hash = "feishu";
-            }}
-            onInspectApp={(app) => {
-              selectApp(app);
-              window.location.hash = "feishu";
-            }}
-          />
-          <AdminFeishuPanel
-            apps={apps}
-            manifest={manifest}
-            basicScopesJSON={basicScopesJSON}
-            selectedAppID={selectedAppID}
-            draft={draft}
-            activeApp={activeApp}
-            activePreview={
-              activeApp ? previews[activeApp.id]?.summary : undefined
-            }
-            busyAction={busyAction}
-            connectStage={feishuConnectStage}
-            connectMode={feishuConnectMode}
-            onboardingSession={onboardingSession}
-            onboardingCompletion={onboardingCompletion}
-            onboardingNeedsManualRetry={onboardingNeedsManualRetry}
-            onBeginNewApp={beginNewApp}
-            onSelectApp={selectApp}
-            onDraftChange={setDraft}
-            onConnectModeChange={setFeishuConnectMode}
-            onContinueModeSelection={() =>
-              void continueFeishuConnectModeSelection()
-            }
-            onVerifyNewAppManual={() => void saveAndVerifyNewApp()}
-            onBackToModeSelection={() =>
-              resetFeishuConnectFlow(feishuConnectMode ?? undefined)
-            }
-            onRefreshOnboarding={() => void refreshFeishuOnboarding()}
-            onRestartOnboarding={() => void startFeishuOnboarding()}
-            onSwitchToExistingFlow={() => {
-              setFeishuConnectMode("existing");
-              setFeishuConnectStage("existing_manual");
-              setOnboardingSession(null);
-              setOnboardingCompletion(null);
-              setOnboardingNeedsManualRetry(false);
-            }}
-            onRetryOnboardingComplete={() => void retryOnboardingComplete()}
-            onContinueOnboardingNotice={() => void continueOnboardingNotice()}
-            onSaveApp={() => void saveApp()}
-            onVerifyApp={() => void verifyApp()}
-            onReconnectApp={() => void reconnectApp()}
-            onRetryRuntimeApply={() => void retryRuntimeApply()}
-            onToggleAppEnabled={(enabled) => void toggleAppEnabled(enabled)}
-            onDeleteApp={() => void deleteApp()}
-            onCopyBasicScopesJSON={() => void copyBasicScopesJSON()}
-            onConfirmScopes={() =>
-              void updateWizardState(
-                { scopesExported: true },
-                "已记录：基础权限已处理。",
-              )
-            }
-            onConfirmEvents={() =>
-              void updateWizardState(
-                { eventsConfirmed: true },
-                "已记录：事件订阅已处理。",
-              )
-            }
-            onConfirmCallbacks={() =>
-              void updateWizardState(
-                { callbacksConfirmed: true },
-                "已记录：卡片回调已处理。",
-              )
-            }
-            onConfirmMenus={() =>
-              void updateWizardState(
-                { menusConfirmed: true },
-                "已记录：飞书应用菜单已处理。",
-              )
-            }
-            onCheckPublish={() => void checkPublish()}
-          />
-          <AdminInstancesPanel instances={instances} />
-          <AdminStoragePanel
-            apps={apps}
-            imageStaging={imageStaging}
-            previews={previews}
-            busyAction={busyAction}
-            onCleanupImageStaging={() => void cleanupImageStaging()}
-            onCleanupPreview={(gatewayID) => void cleanupPreview(gatewayID)}
-          />
-          <AdminVSCodePanel
-            vscode={vscode}
-            vscodeError={vscodeError}
-            busyAction={busyAction}
-            readinessText={vscodeReadinessText(vscode)}
-            scenario={vscodeScenario}
-            primaryActionLabel={vscodePrimaryLabel}
-            canContinueVSCode={vscodeCanContinue}
-            onScenarioChange={setVSCodeScenario}
-            onContinueVSCode={() => void continueVSCode()}
-            onApplyVSCode={(mode) => void applyVSCode(mode)}
-            onReinstallShim={() => void reinstallShim()}
-          />
-          <AdminTechnicalPanel
-            bootstrap={bootstrap}
-            gatewayRows={gatewayRows}
-            activeApp={activeApp}
-            scopesJSON={scopesJSON}
-            setupURL={setupURL}
-          />
-        </>
-      ) : null}
-    </ShellFrame>
+    </div>
   );
 }
 
-function feishuMutationTone(mutation?: FeishuAppMutation): Notice["tone"] {
-  switch (mutation?.kind) {
-    case "identity_changed":
-    case "credentials_changed":
-      return "warn";
-    default:
-      return "good";
+async function safeRequest<T>(path: string) {
+  try {
+    return {
+      data: await requestJSON<T>(path),
+      error: "",
+    };
+  } catch {
+    return {
+      data: null,
+      error: "暂时没有读取成功，请稍后重试。",
+    };
   }
 }
 
-function parseFeishuRuntimeApplyFailureDetails(
-  value: unknown,
-): FeishuRuntimeApplyFailureDetails | null {
-  if (!value || typeof value !== "object") {
+function blankToUndefined(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function readAPIError(response: { ok: boolean; data: unknown }) {
+  if (response.ok) {
     return null;
   }
-  return value as FeishuRuntimeApplyFailureDetails;
+  const payload = response.data as APIErrorShape;
+  return payload.error || null;
+}
+
+function buildFeishuConsoleURL(appID?: string) {
+  if (!appID?.trim()) {
+    return "https://open.feishu.cn/app?lang=zh-CN";
+  }
+  return `https://open.feishu.cn/app/${appID.trim()}?lang=zh-CN`;
+}
+
+function describeConnectionState(app: FeishuAppSummary): string {
+  switch (app.status?.state) {
+    case "connected":
+      return "连接正常";
+    case "disabled":
+      return "已停用";
+    case "error":
+      return "需要处理";
+    default:
+      return "待确认";
+  }
+}
+
+function describeAutostart(
+  autostart: AutostartDetectResponse | null,
+  error: string,
+): string {
+  if (error) {
+    return "暂时没有读取成功。";
+  }
+  if (!autostart) {
+    return "暂时没有读取成功。";
+  }
+  if (!autostart.supported) {
+    return "当前系统不支持。";
+  }
+  return autostart.enabled ? "当前已启用。" : "当前未启用。";
+}
+
+function describeVSCode(
+  vscode: VSCodeDetectResponse | null,
+  error: string,
+): string {
+  if (error) {
+    return "暂时没有读取成功。";
+  }
+  if (!vscode) {
+    return "暂时没有读取成功。";
+  }
+  return vscodeIsReady(vscode)
+    ? "当前已接入。"
+    : "检测到 VS Code 集成未完成，请先修复。";
+}
+
+function formatBytes(value: number): string {
+  if (value <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let current = value;
+  let index = 0;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
+  }
+  return `${current >= 100 || index === 0 ? current.toFixed(0) : current.toFixed(1)} ${units[index]}`;
+}
+
+function formatFileSummary(fileCount: number, bytes: number): string {
+  return `${fileCount} 个文件，约 ${formatBytes(bytes)}`;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "暂不可用";
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }

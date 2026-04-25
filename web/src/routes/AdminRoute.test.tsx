@@ -1,23 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
   makeBootstrap,
   makeImageStagingStatus,
-  makeManifest,
+  makeLogsStorageStatus,
+  makePermissionCheck,
   makePreviewDriveStatus,
-  makeRuntimeStatus,
   makeVSCodeDetect,
 } from "../test/fixtures";
 import { installMockFetch } from "../test/http";
 
 describe("AdminRoute", () => {
-  beforeEach(() => {
-    window.history.replaceState({}, "", "/");
-  });
-
   it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
     window.history.replaceState({}, "", "/g/demo/admin");
 
@@ -25,15 +21,31 @@ describe("AdminRoute", () => {
       "/g/demo/api/admin/bootstrap-state": {
         body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
       },
-      "/g/demo/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/g/demo/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/g/demo/api/admin/feishu/manifest": {
-        body: { manifest: makeManifest() },
+      "/g/demo/api/admin/feishu/apps": {
+        body: { apps: [makeApp({ id: "bot-1", name: "Main Bot" })] },
+      },
+      "/g/demo/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "Main Bot" }),
+          ready: true,
+        }),
+      },
+      "/g/demo/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
       },
       "/g/demo/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/g/demo/api/admin/instances": { body: { instances: [] } },
       "/g/demo/api/admin/storage/image-staging": {
         body: makeImageStagingStatus(),
+      },
+      "/g/demo/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
       },
       "/g/demo/api/admin/storage/preview-drive/bot-1": {
         body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
@@ -42,9 +54,8 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(
-      await screen.findByRole("button", { name: "新增飞书应用" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /新增机器人/ })).toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
     expect(
@@ -52,567 +63,323 @@ describe("AdminRoute", () => {
     ).toBe(true);
   });
 
-  it("keeps app repair inside admin instead of linking back to setup", async () => {
-    window.history.replaceState({}, "", "/g/demo/admin");
-    const user = userEvent.setup();
+  it("marks robots with permission issues and shows the warning in detail", async () => {
+    window.history.replaceState({}, "", "/admin");
 
     installMockFetch({
-      "/g/demo/api/admin/bootstrap-state": {
-        body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
-      },
-      "/g/demo/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/g/demo/api/admin/feishu/apps": {
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
         body: {
           apps: [
             makeApp({
-              wizard: {
-                connectionVerifiedAt: "2026-04-10T09:00:00Z",
-                eventsConfirmedAt: "2026-04-10T09:01:00Z",
-                callbacksConfirmedAt: "2026-04-10T09:02:00Z",
-                menusConfirmedAt: "2026-04-10T09:03:00Z",
-                publishedAt: "2026-04-10T09:04:00Z",
-              },
+              id: "bot-team",
+              name: "协作机器人",
+              appId: "cli_team",
             }),
           ],
         },
       },
-      "/g/demo/api/admin/feishu/manifest": {
-        body: { manifest: makeManifest() },
+      "/api/admin/feishu/apps/bot-team/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-team", name: "协作机器人", appId: "cli_team" }),
+          ready: false,
+          missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
+        }),
       },
-      "/g/demo/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/g/demo/api/admin/instances": { body: { instances: [] } },
-      "/g/demo/api/admin/storage/image-staging": {
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
         body: makeImageStagingStatus(),
       },
-      "/g/demo/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
       },
-      "/g/demo/api/admin/feishu/apps/bot-1/wizard": (call) => {
-        expect(JSON.parse(String(call.init?.body))).toEqual({
-          scopesExported: true,
-        });
-        return {
-          body: {
-            app: makeApp({
-              wizard: {
-                connectionVerifiedAt: "2026-04-10T09:00:00Z",
-                scopesExportedAt: "2026-04-10T09:00:30Z",
-                eventsConfirmedAt: "2026-04-10T09:01:00Z",
-                callbacksConfirmedAt: "2026-04-10T09:02:00Z",
-                menusConfirmedAt: "2026-04-10T09:03:00Z",
-                publishedAt: "2026-04-10T09:04:00Z",
-              },
-            }),
-          },
-        };
+      "/api/admin/storage/preview-drive/bot-team": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-team", name: "协作机器人" }),
       },
     });
 
     render(<AdminRoute />);
 
-    expect(await screen.findByText("导入基础权限")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "继续完成首次配置" }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "我已完成" }));
-    expect(
-      await screen.findByText("已记录：基础权限已处理。"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("有异常")).toBeInTheDocument();
+    expect(await screen.findByText("当前还需要补齐权限。")).toBeInTheDocument();
+    expect(screen.getByText("drive:drive")).toBeInTheDocument();
   });
 
-  it("toggles the shell section navigation and closes it after selecting a section", async () => {
+  it("creates a new robot and switches to its status page after verify", async () => {
+    window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    const toggle = screen.getByRole("button", { name: "打开分区导航" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-
-    await user.click(screen.getByRole("link", { name: "飞书应用" }));
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-  });
-
-  it("shows the admin error state when bootstrap loading fails", async () => {
-    installMockFetch({
-      "/api/admin/bootstrap-state": {
-        status: 500,
-        body: { error: { message: "bootstrap load failed" } },
-      },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-    });
-
-    render(<AdminRoute />);
-
-    expect(screen.getByText("正在读取最新状态")).toBeInTheDocument();
-    expect(await screen.findByText("无法加载管理页状态")).toBeInTheDocument();
-    expect(screen.getByText("bootstrap load failed")).toBeInTheDocument();
-  });
-
-  it("shows read-only app state and disables save controls", async () => {
-    const app = makeApp({
-      id: "bot-readonly",
-      name: "Readonly Bot",
-      readOnly: true,
-      readOnlyReason: "当前由启动参数接管，只能查看状态，不能在管理页修改。",
-    });
+    let appsConfigured = false;
 
     installMockFetch({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [app] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-readonly": {
-        body: makePreviewDriveStatus({
-          gatewayId: "bot-readonly",
-          name: "Readonly Bot",
-        }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findAllByText(
-        "当前由启动参数接管，只能查看状态，不能在管理页修改。",
-      ),
-    ).not.toHaveLength(0);
-    expect(screen.getByLabelText("飞书应用名称")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "保存更改" })).toBeDisabled();
-  });
-
-  it("reloads and shows pending runtime apply state after saved-but-not-applied error", async () => {
-    let appListCalls = 0;
-    const user = userEvent.setup();
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": () => {
-        appListCalls += 1;
-        if (appListCalls === 1) {
-          return { body: { apps: [makeApp()] } };
-        }
-        return {
-          body: {
-            apps: [
-              makeApp({
-                runtimeApply: {
-                  pending: true,
-                  action: "upsert",
-                  error: "dial tcp 127.0.0.1:443: connect refused",
-                  retryAvailable: true,
-                },
-              }),
-            ],
-          },
-        };
-      },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
-      },
-      "/api/admin/feishu/apps/bot-1": {
-        status: 500,
-        body: {
-          error: {
-            code: "gateway_apply_failed",
-            message: "feishu config saved but runtime apply failed",
-            retryable: true,
-            details: {
-              gatewayId: "bot-1",
+      "/api/admin/feishu/apps": (call) => {
+        if (call.method === "POST") {
+          appsConfigured = true;
+          return {
+            status: 201,
+            body: {
               app: makeApp({
-                runtimeApply: {
-                  pending: true,
-                  action: "upsert",
-                  error: "dial tcp 127.0.0.1:443: connect refused",
-                  retryAvailable: true,
-                },
+                id: "bot-new",
+                name: "运营机器人",
+                appId: "cli_new",
               }),
             },
-          },
-        },
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findByRole("button", { name: "保存更改" }),
-    ).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "保存更改" }));
-
-    expect(
-      await screen.findByText(
-        "更改已保存到本地配置，但运行时还没应用成功。页面已刷新为“未生效”状态，请重试应用。",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("待同步").length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("button", { name: "重试应用" }),
-    ).toBeInTheDocument();
-  });
-
-  it("shows existing-app manual connect flow when adding a new app from admin", async () => {
-    const user = userEvent.setup();
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findByRole("button", { name: "新增飞书应用" }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "新增飞书应用" }));
-    await user.click(screen.getByRole("radio", { name: /接入已有飞书应用/ }));
-    await user.click(screen.getByRole("button", { name: "下一步" }));
-
-    expect(await screen.findByText("已有飞书应用怎么接")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "保存并验证" }),
-    ).toBeInTheDocument();
-  });
-
-  it("creates a new admin bot through qr onboarding", async () => {
-    const user = userEvent.setup();
-    let appListCalls = 0;
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": () => {
-        appListCalls += 1;
-        if (appListCalls === 1) {
-          return { body: { apps: [makeApp()] } };
+          };
         }
         return {
           body: {
-            apps: [
-              makeApp(),
-              makeApp({
-                id: "bot-qr",
-                name: "扫码 Bot",
-                appId: "cli_qr",
-                wizard: {
-                  credentialsSavedAt: "2026-04-10T09:00:00Z",
-                  connectionVerifiedAt: "2026-04-10T09:00:05Z",
-                },
-              }),
-            ],
+            apps: appsConfigured
+              ? [
+                  makeApp({
+                    id: "bot-new",
+                    name: "运营机器人",
+                    appId: "cli_new",
+                    verifiedAt: "2026-04-25T09:10:00Z",
+                    wizard: {
+                      connectionVerifiedAt: "2026-04-25T09:10:00Z",
+                    },
+                  }),
+                ]
+              : [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
           },
         };
       },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      "/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "主机器人" }),
+          ready: true,
+        }),
       },
-      "/api/admin/storage/preview-drive/bot-qr": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-qr", name: "扫码 Bot" }),
+      "/api/admin/feishu/apps/bot-new/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-new", name: "运营机器人", appId: "cli_new" }),
+          ready: true,
+        }),
       },
-      "/api/admin/feishu/onboarding/sessions": {
-        status: 201,
-        body: {
-          session: {
-            id: "session-admin-1",
-            status: "pending",
-            qrCodeDataUrl: "data:image/png;base64,abc",
-            verificationUrl: "https://example.test/qr",
-            pollIntervalSeconds: 2,
-          },
-        },
-      },
-      "/api/admin/feishu/onboarding/sessions/session-admin-1": {
-        body: {
-          session: {
-            id: "session-admin-1",
-            status: "ready",
-            qrCodeDataUrl: "data:image/png;base64,abc",
-            verificationUrl: "https://example.test/qr",
-            appId: "cli_qr",
-            displayName: "扫码 Bot",
-            pollIntervalSeconds: 2,
-          },
-        },
-      },
-      "/api/admin/feishu/onboarding/sessions/session-admin-1/complete": {
+      "/api/admin/feishu/apps/bot-new/verify": {
         body: {
           app: makeApp({
-            id: "bot-qr",
-            name: "扫码 Bot",
-            appId: "cli_qr",
+            id: "bot-new",
+            name: "运营机器人",
+            appId: "cli_new",
+            verifiedAt: "2026-04-25T09:10:00Z",
             wizard: {
-              credentialsSavedAt: "2026-04-10T09:00:00Z",
-              connectionVerifiedAt: "2026-04-10T09:00:05Z",
+              connectionVerifiedAt: "2026-04-25T09:10:00Z",
             },
           }),
-          result: {
-            connected: true,
-            duration: 1,
-          },
-          session: {
-            id: "session-admin-1",
-            status: "completed",
-            appId: "cli_qr",
-            displayName: "扫码 Bot",
+          result: { connected: true, duration: 1_000_000_000 },
+        },
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+      "/api/admin/storage/preview-drive/bot-new": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-new", name: "运营机器人" }),
+      },
+    });
+
+    render(<AdminRoute />);
+
+    await user.click(await screen.findByRole("button", { name: /新增机器人/ }));
+    await user.type(screen.getByLabelText("机器人名称"), "运营机器人");
+    await user.type(screen.getByLabelText("App ID"), "cli_new");
+    await user.type(screen.getByLabelText("App Secret"), "secret_new");
+    await user.click(screen.getByRole("button", { name: "验证并保存" }));
+
+    expect(await screen.findByRole("heading", { name: "运营机器人" })).toBeInTheDocument();
+    expect(await screen.findByText("已完成连接验证。")).toBeInTheDocument();
+  });
+
+  it("opens the delete modal and removes the robot after confirmation", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    let removed = false;
+
+    installMockFetch({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": () => ({
+        body: {
+          apps: removed ? [] : [makeApp({ id: "bot-delete", name: "待删除机器人", appId: "cli_delete" })],
+        },
+      }),
+      "/api/admin/feishu/apps/bot-delete/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-delete", name: "待删除机器人" }),
+          ready: true,
+        }),
+      },
+      "/api/admin/feishu/apps/bot-delete": () => {
+        removed = true;
+        return { body: {} };
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-delete": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-delete", name: "待删除机器人" }),
+      },
+    });
+
+    render(<AdminRoute />);
+
+    await user.click(await screen.findByRole("button", { name: "删除机器人" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("确认删除机器人");
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByRole("heading", { name: "新增机器人" })).toBeInTheDocument();
+    expect(await screen.findByText("机器人已删除。")).toBeInTheDocument();
+  });
+
+  it("shows the recent-surface fallback when event test cannot find a target", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+
+    installMockFetch({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "主机器人" }),
+          ready: true,
+        }),
+      },
+      "/api/admin/feishu/apps/bot-1/test-events": {
+        status: 409,
+        body: {
+          error: {
+            code: "feishu_app_test_target_unavailable",
+            message: "target unavailable",
           },
         },
       },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
     });
 
     render(<AdminRoute />);
 
+    await user.click(await screen.findByRole("button", { name: "测试事件订阅" }));
     expect(
-      await screen.findByRole("button", { name: "新增飞书应用" }),
+      await screen.findByText("请先在飞书里给这个机器人发送一条消息，再回到网页重试。"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "新增飞书应用" }));
-    await user.click(screen.getByRole("radio", { name: /新建飞书应用/ }));
-    await user.click(screen.getByRole("button", { name: "下一步" }));
-
-    expect(await screen.findByText("扫码创建飞书应用")).toBeInTheDocument();
-    expect(
-      await screen.findByText(/页面会每 2 秒自动检查一次扫码结果/),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "刷新二维码状态" }));
-    expect(await screen.findByText("扫码创建已经完成")).toBeInTheDocument();
-    expect(screen.getByText(/drive:drive/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "下一步" }));
-    expect(await screen.findByText(/连接测试成功/)).toBeInTheDocument();
   });
 
-  it("applies managed shim for local plus remote ssh usage from the admin panel", async () => {
+  it("cleans up logs and updates the visible count", async () => {
+    window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
+
     installMockFetch({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": {
-        body: makeVSCodeDetect({
-          latestBundleEntrypoint:
-            "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-          recordedBundleEntrypoint:
-            "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-          candidateBundleEntrypoints: [
-            "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-          ],
-          settings: {
-            path: "/tmp/settings.json",
-            exists: true,
-            cliExecutable: "/usr/local/bin/codex",
-            matchesBinary: false,
-          },
-          latestShim: {
-            entrypoint: "/tmp/codex-shim.js",
-            exists: true,
-            realBinaryPath: "/usr/local/bin/codex",
-            realBinaryExists: true,
-            installed: true,
-            matchesBinary: false,
-          },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "主机器人" }),
+          ready: true,
         }),
       },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
       },
-      "/api/admin/vscode/apply": (call) => {
-        expect(JSON.parse(String(call.init?.body))).toEqual({
-          mode: "managed_shim",
-        });
-        return {
-          body: makeVSCodeDetect({
-            currentMode: "managed_shim",
-            latestBundleEntrypoint:
-              "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-            recordedBundleEntrypoint:
-              "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-            candidateBundleEntrypoints: [
-              "/tmp/.vscode/extensions/openai.chatgpt-remote/dist/extension.js",
-            ],
-            settings: {
-              path: "/tmp/settings.json",
-              exists: true,
-              cliExecutable: "/usr/local/bin/codex",
-              matchesBinary: false,
-            },
-            latestShim: {
-              entrypoint: "/tmp/codex-shim.js",
-              exists: true,
-              realBinaryPath: "/usr/local/bin/codex",
-              realBinaryExists: true,
-              installed: true,
-              matchesBinary: true,
-            },
-          }),
-        };
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findByText("你以后主要怎么使用 VS Code 里的 Codex？"),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("radio", { name: /要在当前这台机器上使用/ }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "在这台机器上启用 VS Code" }),
-    );
-
-    expect(
-      await screen.findByText(/已接管这台机器上的 VS Code 扩展入口/),
-    ).toBeInTheDocument();
-  });
-
-  it("hides manual managed-instance controls from the admin panel", async () => {
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
       "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus({ fileCount: 128, totalBytes: 860 * 1024 * 1024 }),
+      },
+      "/api/admin/storage/logs/cleanup": {
+        body: {
+          rootDir: "/tmp/logs",
+          olderThanHours: 24,
+          deletedFiles: 70,
+          deletedBytes: 440 * 1024 * 1024,
+          remainingFileCount: 58,
+          remainingBytes: 420 * 1024 * 1024,
+        },
+      },
       "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
       },
     });
 
     render(<AdminRoute />);
 
-    expect(
-      await screen.findByText(/后台恢复实例由系统自动管理/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "新建实例" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("可由管理页删除")).not.toBeInTheDocument();
-  });
-
-  it("does not render shared exploration progress in the admin panel", async () => {
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": {
-        body: makeRuntimeStatus({
-          surfaces: [{ id: "surface-1" }],
-        }),
-      },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(await screen.findByText("当前实例")).toBeInTheDocument();
-    expect(screen.queryByText("进行中的会话")).not.toBeInTheDocument();
-    expect(screen.queryByText("探索中")).not.toBeInTheDocument();
-    expect(screen.queryByText("会话起点：")).not.toBeInTheDocument();
-  });
-
-  it("does not show preview reconcile controls in the admin panel", async () => {
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findByText(
-        /每条飞书应用都会在自己的飞书云盘里维护固定的预览目录/,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "检查目录一致性" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows drive permission guidance instead of failing preview status loads", async () => {
-    installMockFetch({
-      "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/runtime-status": { body: makeRuntimeStatus() },
-      "/api/admin/feishu/apps": { body: { apps: [makeApp()] } },
-      "/api/admin/feishu/manifest": { body: { manifest: makeManifest() } },
-      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
-      "/api/admin/instances": { body: { instances: [] } },
-      "/api/admin/storage/image-staging": { body: makeImageStagingStatus() },
-      "/api/admin/storage/preview-drive/bot-1": {
-        body: makePreviewDriveStatus({
-          gatewayId: "bot-1",
-          name: "Main Bot",
-          summary: {
-            fileCount: 0,
-            scopeCount: 0,
-            estimatedBytes: 0,
-            unknownSizeFileCount: 0,
-            status: "permission_required",
-            statusMessage:
-              "当前飞书应用还没有开通飞书云盘权限。如需 Markdown 预览，请为应用开通 `drive:drive` 权限。",
-          },
-        }),
-      },
-    });
-
-    render(<AdminRoute />);
-
-    expect(
-      await screen.findAllByText(/当前飞书应用还没有开通飞书云盘权限/),
-    ).not.toHaveLength(0);
-    expect(screen.getByText("需开通 Drive 权限")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "清理旧预览" })).toBeDisabled();
+    expect(await screen.findByText("128 个文件，约 860 MB")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "清理一天前日志" }));
+    expect(await screen.findByText("58 个文件，约 420 MB")).toBeInTheDocument();
   });
 });

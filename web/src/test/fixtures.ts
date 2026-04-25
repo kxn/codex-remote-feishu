@@ -2,10 +2,12 @@ import type {
   AdminInstanceSummary,
   AutostartDetectResponse,
   BootstrapState,
+  FeishuAppPermissionCheckResponse,
   FeishuAppSummary,
   FeishuManifest,
   GatewayStatus,
   ImageStagingStatusResponse,
+  LogsStorageStatusResponse,
   PreviewDriveStatusResponse,
   RuntimeRequirementsDetectResponse,
   RuntimeStatus,
@@ -226,6 +228,36 @@ export function makePreviewDriveStatus(
       estimatedBytes: 0,
       unknownSizeFileCount: 0,
     },
+    ...overrides,
+  };
+}
+
+export function makePermissionCheck(
+  overrides: Partial<FeishuAppPermissionCheckResponse> = {},
+): FeishuAppPermissionCheckResponse {
+  return {
+    app: makeApp(),
+    ready: true,
+    missingScopes: [],
+    grantJSON: `{
+  "scopes": {
+    "tenant": [],
+    "user": []
+  }
+}`,
+    consoleURL: "https://open.feishu.cn/app/cli_main?lang=zh-CN",
+    lastCheckedAt: "2026-04-25T08:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeLogsStorageStatus(
+  overrides: Partial<LogsStorageStatusResponse> = {},
+): LogsStorageStatusResponse {
+  return {
+    rootDir: "/tmp/logs",
+    fileCount: 0,
+    totalBytes: 0,
     ...overrides,
   };
 }
