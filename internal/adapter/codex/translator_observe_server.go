@@ -17,6 +17,15 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	if id, ok := message["id"]; ok {
 		requestID := fmt.Sprint(id)
+		if t.startupThreadListBorrowArmed &&
+			t.pendingThreadListRequestID == "" &&
+			requestID != "" &&
+			requestID == t.startupThreadListBorrowRequestID {
+			t.pendingThreadListRequestID = requestID
+			t.pendingThreadListBorrowed = true
+			t.startupThreadListBorrowSatisfied = true
+			t.startupThreadListBorrowRequestID = ""
+		}
 		if pending, ok := t.pendingSuppressedResponse[requestID]; ok {
 			delete(t.pendingSuppressedResponse, requestID)
 			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
@@ -196,18 +205,21 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if requestID == t.pendingThreadListRequestID {
 			delete(t.threadRefreshRecords, "")
 			t.pendingThreadListRequestID = ""
+			borrowed := t.pendingThreadListBorrowed
+			t.pendingThreadListBorrowed = false
 			t.threadRefreshOrder = nil
 			threads := parseThreadList(message["result"])
 			t.debugf(
-				"observe server thread/list refresh: request=%s threads=%d currentThread=%s",
+				"observe server thread/list refresh: request=%s borrowed=%t threads=%d currentThread=%s",
 				requestID,
+				borrowed,
 				len(threads),
 				t.currentThreadID,
 			)
 			if len(threads) == 0 {
 				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
 				return Result{
-					Suppress: true,
+					Suppress: !borrowed,
 					Events: []agentproto.Event{{
 						Kind:    agentproto.EventThreadsSnapshot,
 						Threads: nil,
@@ -219,6 +231,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				thread.ListOrder = index + 1
 				t.threadRefreshRecords[thread.ThreadID] = thread
 				t.threadRefreshOrder = append(t.threadRefreshOrder, thread.ThreadID)
+				if !threadRefreshNeedsRead(thread) {
+					continue
+				}
 				readID := t.nextRequest("thread-read")
 				t.pendingThreadReads[readID] = thread.ThreadID
 				payload := map[string]any{
@@ -234,13 +249,23 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				outbound = append(outbound, append(bytes, '\n'))
 			}
+			if len(outbound) == 0 {
+				t.debugf(
+					"observe server thread/list refresh satisfied from list: request=%s borrowed=%t threads=%d",
+					requestID,
+					borrowed,
+					len(threads),
+				)
+				return t.finishThreadRefresh(!borrowed), nil
+			}
 			t.debugf(
-				"observe server thread/list refresh followups: request=%s threadReads=%d firstThread=%s",
+				"observe server thread/list refresh followups: request=%s borrowed=%t threadReads=%d firstThread=%s",
 				requestID,
+				borrowed,
 				len(outbound),
 				threads[0].ThreadID,
 			)
-			return Result{Suppress: true, OutboundToCodex: outbound}, nil
+			return Result{Suppress: !borrowed, OutboundToCodex: outbound}, nil
 		}
 		if threadID, exists := t.pendingThreadReads[requestID]; exists {
 			record := t.threadRefreshRecords[threadID]
@@ -261,45 +286,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.threadRefreshRecords[threadID] = record
 			delete(t.pendingThreadReads, requestID)
 			if len(t.pendingThreadReads) == 0 {
-				records := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
-				seen := map[string]bool{}
-				for _, originalThreadID := range t.threadRefreshOrder {
-					current, ok := t.threadRefreshRecords[originalThreadID]
-					if !ok || current.ThreadID == "" || seen[current.ThreadID] {
-						continue
-					}
-					records = append(records, current)
-					seen[current.ThreadID] = true
-				}
-				extras := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
-				for _, current := range t.threadRefreshRecords {
-					if current.ThreadID == "" || seen[current.ThreadID] {
-						continue
-					}
-					extras = append(extras, current)
-				}
-				sort.Slice(extras, func(i, j int) bool {
-					if extras[i].ListOrder != extras[j].ListOrder {
-						return extras[i].ListOrder < extras[j].ListOrder
-					}
-					return strings.Compare(extras[i].ThreadID, extras[j].ThreadID) < 0
-				})
-				records = append(records, extras...)
-				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
-				t.threadRefreshOrder = nil
+				result := t.finishThreadRefresh(true)
 				t.debugf(
 					"observe server thread refresh completed: request=%s records=%d currentThread=%s",
 					requestID,
-					len(records),
+					len(result.Events[0].Threads),
 					t.currentThreadID,
 				)
-				return Result{
-					Suppress: true,
-					Events: []agentproto.Event{{
-						Kind:    agentproto.EventThreadsSnapshot,
-						Threads: records,
-					}},
-				}, nil
+				return result, nil
 			}
 			return Result{Suppress: true}, nil
 		}
@@ -755,6 +749,55 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}}}, nil
 	default:
 		return Result{}, nil
+	}
+}
+
+func threadRefreshNeedsRead(record agentproto.ThreadSnapshotRecord) bool {
+	if strings.TrimSpace(record.CWD) == "" {
+		return true
+	}
+	if strings.TrimSpace(record.Name) == "" && strings.TrimSpace(record.Preview) == "" {
+		return true
+	}
+	if record.RuntimeStatus == nil && strings.TrimSpace(record.State) == "" {
+		return true
+	}
+	return false
+}
+
+func (t *Translator) finishThreadRefresh(suppress bool) Result {
+	records := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
+	seen := map[string]bool{}
+	for _, originalThreadID := range t.threadRefreshOrder {
+		current, ok := t.threadRefreshRecords[originalThreadID]
+		if !ok || current.ThreadID == "" || seen[current.ThreadID] {
+			continue
+		}
+		records = append(records, current)
+		seen[current.ThreadID] = true
+	}
+	extras := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
+	for _, current := range t.threadRefreshRecords {
+		if current.ThreadID == "" || seen[current.ThreadID] {
+			continue
+		}
+		extras = append(extras, current)
+	}
+	sort.Slice(extras, func(i, j int) bool {
+		if extras[i].ListOrder != extras[j].ListOrder {
+			return extras[i].ListOrder < extras[j].ListOrder
+		}
+		return strings.Compare(extras[i].ThreadID, extras[j].ThreadID) < 0
+	})
+	records = append(records, extras...)
+	t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
+	t.threadRefreshOrder = nil
+	return Result{
+		Suppress: suppress,
+		Events: []agentproto.Event{{
+			Kind:    agentproto.EventThreadsSnapshot,
+			Threads: records,
+		}},
 	}
 }
 

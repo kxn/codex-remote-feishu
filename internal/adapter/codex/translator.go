@@ -28,13 +28,17 @@ type Translator struct {
 	turnStartByThread       map[string]map[string]any
 	newThreadTurnTemplate   map[string]any
 
-	pendingThreadListRequestID string
-	pendingThreadReads         map[string]string
-	threadRefreshRecords       map[string]agentproto.ThreadSnapshotRecord
-	threadRefreshOrder         []string
-	pendingThreadHistoryReads  map[string]pendingThreadHistoryRead
-	pendingSuppressedResponse  map[string]suppressedResponseContext
-	pendingRequestTypes        map[string]agentproto.RequestType
+	pendingThreadListRequestID       string
+	pendingThreadListBorrowed        bool
+	pendingThreadReads               map[string]string
+	threadRefreshRecords             map[string]agentproto.ThreadSnapshotRecord
+	threadRefreshOrder               []string
+	startupThreadListBorrowArmed     bool
+	startupThreadListBorrowSatisfied bool
+	startupThreadListBorrowRequestID string
+	pendingThreadHistoryReads        map[string]pendingThreadHistoryRead
+	pendingSuppressedResponse        map[string]suppressedResponseContext
+	pendingRequestTypes              map[string]agentproto.RequestType
 }
 
 type pendingThreadCreate struct {

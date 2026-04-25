@@ -25,10 +25,11 @@ type App struct {
 }
 
 const (
-	steerCommandResponseTimeout = 5 * time.Second
-	wrapperChildRestoreTimeout  = 5 * time.Second
-	wrapperChildStopGrace       = 2 * time.Second
-	wrapperChildWaitTimeout     = 5 * time.Second
+	steerCommandResponseTimeout       = 5 * time.Second
+	wrapperChildRestoreTimeout        = 5 * time.Second
+	wrapperChildStopGrace             = 2 * time.Second
+	wrapperChildWaitTimeout           = 5 * time.Second
+	wrapperStartupRefreshBorrowWindow = 300 * time.Millisecond
 )
 
 type shutdownRequest struct {
@@ -225,6 +226,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 
 	var client *relayws.Client
 	connectedOnce := false
+	startupThreadsRefreshHandled := false
 	client = relayws.NewClient(a.config.RelayServerURL, agentproto.Hello{
 		Protocol: agentproto.WireProtocol,
 		Instance: agentproto.InstanceHello{
@@ -300,6 +302,24 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				firstNonEmpty(command.Origin.Surface, command.Origin.ChatID),
 				len(command.Prompt.Inputs),
 			)
+			if command.Kind == agentproto.CommandThreadsRefresh &&
+				!startupThreadsRefreshHandled &&
+				strings.EqualFold(firstNonEmpty(a.config.Source, "vscode"), "vscode") {
+				startupThreadsRefreshHandled = true
+				a.translator.ArmStartupThreadListBorrow()
+				a.debugf(
+					"relay command startup refresh borrow window opened: command=%s window=%s",
+					command.CommandID,
+					wrapperStartupRefreshBorrowWindow,
+				)
+				timer := time.NewTimer(wrapperStartupRefreshBorrowWindow)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return ctx.Err()
+				case <-timer.C:
+				}
+			}
 			outbound, err := a.translator.TranslateCommand(command)
 			if err != nil {
 				a.debugf("relay command translation failed: command=%s err=%v", command.CommandID, err)

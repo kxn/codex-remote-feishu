@@ -16,6 +16,14 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 	params, _ := message["params"].(map[string]any)
 
 	switch method {
+	case "thread/list":
+		if t.startupThreadListBorrowArmed && t.startupThreadListBorrowRequestID == "" {
+			if requestID, ok := message["id"]; ok {
+				t.startupThreadListBorrowRequestID = fmt.Sprint(requestID)
+				t.debugf("observe client thread/list captured for startup refresh: request=%s", t.startupThreadListBorrowRequestID)
+			}
+		}
+		return Result{}, nil
 	case "thread/resume":
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)

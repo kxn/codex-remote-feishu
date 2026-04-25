@@ -167,8 +167,31 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		}
 		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandThreadsRefresh:
+		if t.startupThreadListBorrowSatisfied {
+			t.startupThreadListBorrowArmed = false
+			t.startupThreadListBorrowSatisfied = false
+			t.startupThreadListBorrowRequestID = ""
+			t.debugf(
+				"translate threads refresh: startup borrow already satisfied currentThread=%s inflightReads=%d",
+				t.currentThreadID,
+				len(t.pendingThreadReads),
+			)
+			return nil, nil
+		}
+		if borrowedRequestID, ok := t.consumeStartupThreadListBorrow(); ok {
+			t.pendingThreadListRequestID = borrowedRequestID
+			t.pendingThreadListBorrowed = true
+			t.debugf(
+				"translate threads refresh: borrow request=%s currentThread=%s inflightReads=%d",
+				borrowedRequestID,
+				t.currentThreadID,
+				len(t.pendingThreadReads),
+			)
+			return nil, nil
+		}
 		requestID := t.nextRequest("threads-refresh")
 		t.pendingThreadListRequestID = requestID
+		t.pendingThreadListBorrowed = false
 		t.debugf(
 			"translate threads refresh: request=%s currentThread=%s inflightReads=%d",
 			requestID,
@@ -361,6 +384,23 @@ func (t *Translator) buildInputs(inputs []agentproto.Input) []map[string]any {
 		}
 	}
 	return output
+}
+
+func (t *Translator) ArmStartupThreadListBorrow() {
+	t.startupThreadListBorrowArmed = true
+	t.startupThreadListBorrowSatisfied = false
+	t.startupThreadListBorrowRequestID = ""
+}
+
+func (t *Translator) consumeStartupThreadListBorrow() (string, bool) {
+	requestID := strings.TrimSpace(t.startupThreadListBorrowRequestID)
+	t.startupThreadListBorrowArmed = false
+	t.startupThreadListBorrowSatisfied = false
+	t.startupThreadListBorrowRequestID = ""
+	if requestID == "" {
+		return "", false
+	}
+	return requestID, true
 }
 
 func (t *Translator) nextRequest(prefix string) string {
