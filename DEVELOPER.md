@@ -274,7 +274,7 @@ make install-hooks
 当前约定：
 
 - `pre-commit` 只跑快速、低副作用检查；实际检查项以 `scripts/check/pre-commit.sh` 为准，不再在文档里逐条展开
-- `./safe-push.sh` 只负责 clean worktree、同步远端、必要时补跑 `go test ./...` 后再推送，不替代 `pre-commit`
+- `./safe-push.sh` 会在推送前补跑一次仓库级 Go 格式检查，并负责 clean worktree、同步远端、必要时补跑 `go test ./...` 后再推送；它仍不替代 `pre-commit` 的其余本地提交检查
 - 提交和推送阶段都不跑 Web 构建或 release smoke；发布前仍应执行下面的完整自检
 
 ## 发布前自检

@@ -32,15 +32,6 @@ bash scripts/check/no-legacy-names.sh
 bash scripts/check/feishu-call-broker.sh
 bash scripts/check/eventcontract-legacy-guards.sh
 bash scripts/check/go-file-length.sh
-
-files="$(find cmd internal testkit -name '*.go' | sort)"
-if [[ -n "${files}" ]]; then
-  output="$(gofmt -l ${files})"
-  if [[ -n "${output}" ]]; then
-    echo "${output}" >&2
-    echo "Run make fmt to format remaining Go files before committing." >&2
-    exit 1
-  fi
-fi
+bash scripts/check/go-format.sh
 
 bash scripts/check/release-track-version.sh

@@ -27,6 +27,9 @@ It intentionally does not try to auto-resolve conflicts or recover from test
 failures. In those cases it stops and leaves the repository state visible for
 manual handling.
 
+It also verifies repository Go formatting before any fetch/rebase/push work so
+missing local git hooks cannot leak gofmt failures into CI.
+
 options:
   --remote <name>    remote to push/fetch (default: tracking remote, else origin)
   --branch <name>    branch to push/rebase against (default: tracking branch, else current branch)
@@ -96,6 +99,9 @@ if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
   echo "working tree has untracked files; add, ignore, or move them before safe-push" >&2
   exit 1
 fi
+
+printf '[0/5] verify gofmt\n'
+bash scripts/check/go-format.sh
 
 current_branch="$(git branch --show-current)"
 if [[ -z "${current_branch}" ]]; then
