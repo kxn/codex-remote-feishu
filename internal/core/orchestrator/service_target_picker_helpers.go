@@ -83,6 +83,28 @@ func targetPickerDefaultWorkspaceSelection(options []control.FeishuTargetPickerW
 	return ""
 }
 
+func targetPickerWorkspaceOptionIndex(options []control.FeishuTargetPickerWorkspaceOption, value string) int {
+	for i, option := range options {
+		if option.Value == value {
+			return i
+		}
+	}
+	return -1
+}
+
+func targetPickerWorkspaceValueAtCursor(options []control.FeishuTargetPickerWorkspaceOption, cursor int) string {
+	if len(options) == 0 {
+		return ""
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= len(options) {
+		cursor = len(options) - 1
+	}
+	return normalizeTargetPickerWorkspaceSelection(options[cursor].Value)
+}
+
 func normalizeTargetPickerWorkspaceSelection(value string) string {
 	return normalizeWorkspaceClaimKey(value)
 }
@@ -280,6 +302,28 @@ func targetPickerDefaultSourceSelection(options []control.FeishuTargetPickerSour
 		}
 	}
 	return ""
+}
+
+func targetPickerSessionOptionIndex(options []control.FeishuTargetPickerSessionOption, value string) int {
+	for i, option := range options {
+		if option.Value == value {
+			return i
+		}
+	}
+	return -1
+}
+
+func normalizeTargetPickerDropdownCursor(cursor int, optionCount int) int {
+	if optionCount <= 0 {
+		return 0
+	}
+	if cursor < 0 {
+		return 0
+	}
+	if cursor >= optionCount {
+		return optionCount - 1
+	}
+	return cursor
 }
 
 func targetPickerSourceAvailable(options []control.FeishuTargetPickerSourceOption, value control.FeishuTargetPickerSourceKind) bool {

@@ -439,6 +439,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 		cardActionKindTargetPickerSelectSource,
 		cardActionKindTargetPickerSelectWorkspace,
 		cardActionKindTargetPickerSelectSession,
+		cardActionKindTargetPickerPage,
 		cardActionKindTargetPickerOpenPathPicker,
 		cardActionKindTargetPickerBack,
 		cardActionKindTargetPickerCancel,

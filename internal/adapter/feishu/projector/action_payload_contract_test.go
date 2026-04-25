@@ -48,6 +48,24 @@ func TestActionPayloadTargetPickerValueOmitsEmptyTargetValue(t *testing.T) {
 	}
 }
 
+func TestActionPayloadTargetPickerCursorUsesCanonicalShape(t *testing.T) {
+	payload := actionPayloadTargetPickerCursor("picker-1", cardTargetPickerSessionFieldName, 0)
+	if payload[cardActionPayloadKeyKind] != cardActionKindTargetPickerPage || payload[cardActionPayloadKeyPickerID] != "picker-1" {
+		t.Fatalf("unexpected target picker page payload: %#v", payload)
+	}
+	if payload[cardActionPayloadKeyFieldName] != cardTargetPickerSessionFieldName {
+		t.Fatalf("expected target picker field name, got %#v", payload)
+	}
+	if _, ok := payload[cardActionPayloadKeyCursor]; ok {
+		t.Fatalf("did not expect zero cursor to be serialized, got %#v", payload)
+	}
+
+	next := actionPayloadTargetPickerCursor("picker-1", cardTargetPickerWorkspaceFieldName, 7)
+	if next[cardActionPayloadKeyCursor] != 7 {
+		t.Fatalf("expected positive cursor to be serialized, got %#v", next)
+	}
+}
+
 func TestActionPayloadWithLifecycleAddsLifecycleID(t *testing.T) {
 	payload := actionPayloadNavigation(cardActionKindShowAllWorkspaces)
 	stamped := actionPayloadWithLifecycle(payload, "life-1")

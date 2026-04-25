@@ -264,6 +264,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentTargetPickerSelectSource,
 		FeishuUIIntentTargetPickerSelectWorkspace,
 		FeishuUIIntentTargetPickerSelectSession,
+		FeishuUIIntentTargetPickerPage,
 		FeishuUIIntentTargetPickerOpenPathPicker,
 		FeishuUIIntentTargetPickerBack,
 		FeishuUIIntentTargetPickerCancel,

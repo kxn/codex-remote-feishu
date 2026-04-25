@@ -179,6 +179,40 @@ func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsTargetPickerPageAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-page", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":       cardActionKindTargetPickerPage,
+					"picker_id":  "picker-1",
+					"field_name": cardTargetPickerSessionFieldName,
+					"cursor":     42,
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-target-picker-page",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected target picker page action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerPage || action.PickerID != "picker-1" {
+		t.Fatalf("unexpected target picker page action: %#v", action)
+	}
+	if action.FieldName != cardTargetPickerSessionFieldName || action.Cursor != 42 {
+		t.Fatalf("unexpected target picker page payload: %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsTargetPickerCancelAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-target-picker-cancel", "feishu:app-1:user:user-1")

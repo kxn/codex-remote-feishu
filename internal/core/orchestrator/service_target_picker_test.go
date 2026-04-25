@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
@@ -139,6 +140,117 @@ func TestTargetPickerLockedWorkspaceRejectsWorkspaceSwitch(t *testing.T) {
 	}
 	if !sawWarning {
 		t.Fatalf("expected locked picker warning after stale workspace switch, got %#v", got.Messages)
+	}
+}
+
+func TestTargetPickerPageWorkspaceSwitchRecomputesSessions(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 2, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-droid",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-droid": {ThreadID: "thread-droid", Name: "修复登录", CWD: "/data/dl/droid", LastUsedAt: now.Add(-2 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", LastUsedAt: now.Add(-1 * time.Minute)},
+		},
+	})
+
+	initial := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if !testutil.SamePath(initial.SelectedWorkspaceKey, "/data/dl/web") {
+		t.Fatalf("expected initial selection on most recent workspace, got %#v", initial)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerPage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         initial.PickerID,
+		FieldName:        frontstagecontract.CardTargetPickerWorkspaceFieldName,
+		Cursor:           1,
+	})
+	got := targetPickerFromEvent(t, events[0])
+	if !testutil.SamePath(got.SelectedWorkspaceKey, "/data/dl/droid") || got.WorkspaceCursor != 1 {
+		t.Fatalf("expected workspace page action to switch visible workspace, got %#v", got)
+	}
+	if got.SessionCursor != 0 || got.SelectedSessionValue != "" || got.CanConfirm {
+		t.Fatalf("expected workspace page action to reset session selection state, got %#v", got)
+	}
+	if _, ok := targetPickerSessionOption(got, targetPickerThreadValue("thread-droid")); !ok {
+		t.Fatalf("expected workspace page action to recompute session list, got %#v", got.SessionOptions)
+	}
+	if _, ok := targetPickerSessionOption(got, targetPickerThreadValue("thread-web")); ok {
+		t.Fatalf("expected workspace page action to drop stale workspace sessions, got %#v", got.SessionOptions)
+	}
+}
+
+func TestTargetPickerPageSessionKeepsWorkspaceStateAndClearsSelection(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 2, 45, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", Loaded: true, LastUsedAt: now.Add(-1 * time.Minute)},
+			"thread-alt": {ThreadID: "thread-alt", Name: "修复按钮", CWD: "/data/dl/web", Loaded: true, LastUsedAt: now.Add(-2 * time.Minute)},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-web",
+	})
+
+	initial := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if initial.SelectedSessionValue != targetPickerThreadValue("thread-web") || !initial.CanConfirm {
+		t.Fatalf("expected initial picker to carry current thread selection, got %#v", initial)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerPage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         initial.PickerID,
+		FieldName:        frontstagecontract.CardTargetPickerSessionFieldName,
+		Cursor:           1,
+	})
+	got := targetPickerFromEvent(t, events[0])
+	if !testutil.SamePath(got.SelectedWorkspaceKey, "/data/dl/web") || got.WorkspaceCursor != initial.WorkspaceCursor {
+		t.Fatalf("expected session page action to preserve workspace state, got %#v", got)
+	}
+	if got.SessionCursor != 1 || got.SelectedSessionValue != "" || got.CanConfirm {
+		t.Fatalf("expected session page action to clear invisible session selection, got %#v", got)
 	}
 }
 

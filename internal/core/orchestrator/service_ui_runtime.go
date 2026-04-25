@@ -82,6 +82,8 @@ type activeTargetPickerRecord struct {
 	AllowNewThread       bool
 	SelectedMode         control.FeishuTargetPickerMode
 	SelectedSource       control.FeishuTargetPickerSourceKind
+	WorkspaceCursor      int
+	SessionCursor        int
 	SelectedWorkspaceKey string
 	SelectedSessionValue string
 	LocalDirectoryPath   string

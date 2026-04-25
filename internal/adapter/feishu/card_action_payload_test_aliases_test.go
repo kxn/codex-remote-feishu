@@ -69,6 +69,7 @@ const (
 	cardActionKindTargetPickerSelectSource    = frontstagecontract.CardActionKindTargetPickerSelectSource
 	cardActionKindTargetPickerSelectWorkspace = frontstagecontract.CardActionKindTargetPickerSelectWorkspace
 	cardActionKindTargetPickerSelectSession   = frontstagecontract.CardActionKindTargetPickerSelectSession
+	cardActionKindTargetPickerPage            = frontstagecontract.CardActionKindTargetPickerPage
 	cardActionKindTargetPickerOpenPathPicker  = frontstagecontract.CardActionKindTargetPickerOpenPathPicker
 	cardActionKindTargetPickerBack            = frontstagecontract.CardActionKindTargetPickerBack
 	cardActionKindTargetPickerCancel          = frontstagecontract.CardActionKindTargetPickerCancel

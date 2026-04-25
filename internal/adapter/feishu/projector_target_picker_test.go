@@ -1,9 +1,11 @@
 package feishu
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -207,6 +209,134 @@ func TestTargetPickerElementsRenderLockedWorkspaceAsReadOnlyContext(t *testing.T
 	}
 }
 
+func TestTargetPickerElementsPaginateLargeDualSelectAndKeepFooter(t *testing.T) {
+	workspaceOptions := make([]control.FeishuTargetPickerWorkspaceOption, 0, 120)
+	for i := 0; i < 120; i++ {
+		value := "workspace-" + leftPad3(i)
+		workspaceOptions = append(workspaceOptions, control.FeishuTargetPickerWorkspaceOption{
+			Value:    value,
+			Label:    "工作区 " + leftPad3(i) + " " + strings.Repeat("w", 80),
+			MetaText: "最近活动 " + strings.Repeat("m", 80),
+		})
+	}
+	sessionOptions := make([]control.FeishuTargetPickerSessionOption, 0, 180)
+	for i := 0; i < 180; i++ {
+		value := "thread:thread-" + leftPad3(i)
+		sessionOptions = append(sessionOptions, control.FeishuTargetPickerSessionOption{
+			Value:    value,
+			Kind:     control.FeishuTargetPickerSessionThread,
+			Label:    "会话 " + leftPad3(i) + " " + strings.Repeat("s", 100),
+			MetaText: "最近消息 " + strings.Repeat("t", 100),
+		})
+	}
+
+	view := control.FeishuTargetPickerView{
+		PickerID:             "picker-1",
+		Title:                "选择工作区与会话",
+		WorkspacePlaceholder: "选择工作区",
+		SessionPlaceholder:   "选择会话",
+		WorkspaceCursor:      48,
+		SessionCursor:        132,
+		SelectedWorkspaceKey: "workspace-048",
+		SelectedSessionValue: "thread:thread-132",
+		ConfirmLabel:         "切换",
+		CanConfirm:           true,
+		WorkspaceOptions:     workspaceOptions,
+		SessionOptions:       sessionOptions,
+	}
+
+	elements := targetPickerElements(view, "life-large")
+	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", targetPickerTheme(view), elements, true)
+	if err != nil {
+		t.Fatalf("measure target picker card: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("expected paginated target picker to fit transport budget, got %d bytes", size)
+	}
+
+	var sawWorkspacePage, sawSessionPage, sawConfirm bool
+	for _, action := range cardActionsFromElements(elements) {
+		value := cardValueMap(action)
+		switch value[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerPage:
+			switch value[cardActionPayloadKeyFieldName] {
+			case cardTargetPickerWorkspaceFieldName:
+				sawWorkspacePage = true
+			case cardTargetPickerSessionFieldName:
+				sawSessionPage = true
+			}
+		case cardActionKindTargetPickerConfirm:
+			sawConfirm = true
+		}
+	}
+	if !sawWorkspacePage || !sawSessionPage {
+		t.Fatalf("expected large target picker to render page callbacks for both selects, got %#v", elements)
+	}
+	if !sawConfirm || !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected large target picker to keep footer actions visible, got %#v", elements)
+	}
+	if !containsCardTextExact(elements, targetPickerPaginationHint) {
+		t.Fatalf("expected large target picker to render pagination hint, got %#v", elements)
+	}
+}
+
+func TestTargetPickerElementsPaginateLockedWorkspaceSessionAndKeepFooter(t *testing.T) {
+	sessionOptions := make([]control.FeishuTargetPickerSessionOption, 0, 180)
+	for i := 0; i < 180; i++ {
+		value := "thread:thread-" + leftPad3(i)
+		sessionOptions = append(sessionOptions, control.FeishuTargetPickerSessionOption{
+			Value:    value,
+			Kind:     control.FeishuTargetPickerSessionThread,
+			Label:    "会话 " + leftPad3(i) + " " + strings.Repeat("s", 120),
+			MetaText: "最近消息 " + strings.Repeat("t", 120),
+		})
+	}
+
+	view := control.FeishuTargetPickerView{
+		PickerID:                 "picker-1",
+		Title:                    "选择工作区与会话",
+		WorkspaceSelectionLocked: true,
+		SelectedWorkspaceKey:     "/data/dl/web",
+		SelectedWorkspaceLabel:   "web",
+		SelectedWorkspaceMeta:    "当前绑定工作区",
+		SessionPlaceholder:       "选择会话",
+		SessionCursor:            121,
+		SelectedSessionValue:     "thread:thread-121",
+		ConfirmLabel:             "切换",
+		CanConfirm:               true,
+		SessionOptions:           sessionOptions,
+	}
+
+	elements := targetPickerElements(view, "life-locked-large")
+	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", targetPickerTheme(view), elements, true)
+	if err != nil {
+		t.Fatalf("measure locked target picker card: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("expected locked target picker to fit transport budget, got %d bytes", size)
+	}
+
+	var sawSessionPage, sawWorkspacePage bool
+	for _, action := range cardActionsFromElements(elements) {
+		value := cardValueMap(action)
+		if value[cardActionPayloadKeyKind] != cardActionKindTargetPickerPage {
+			continue
+		}
+		switch value[cardActionPayloadKeyFieldName] {
+		case cardTargetPickerSessionFieldName:
+			sawSessionPage = true
+		case cardTargetPickerWorkspaceFieldName:
+			sawWorkspacePage = true
+		}
+	}
+	if !sawSessionPage || sawWorkspacePage {
+		t.Fatalf("expected locked target picker to paginate only the session lane, got %#v", elements)
+	}
+	if !containsCardTextExact(elements, targetPickerPaginationHint) {
+		t.Fatalf("expected locked target picker to render pagination hint, got %#v", elements)
+	}
+}
+
 func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
 		PickerID:               "picker-1",
@@ -228,6 +358,10 @@ func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing
 	if !containsMarkdownWithPrefix(elements, "**已切换会话**") {
 		t.Fatalf("expected terminal target picker card to render final status text, got %#v", elements)
 	}
+}
+
+func leftPad3(value int) string {
+	return fmt.Sprintf("%03d", value)
 }
 
 func TestTargetPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) {

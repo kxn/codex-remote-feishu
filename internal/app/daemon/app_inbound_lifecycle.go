@@ -206,6 +206,7 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		control.ActionTargetPickerSelectSource,
 		control.ActionTargetPickerSelectWorkspace,
 		control.ActionTargetPickerSelectSession,
+		control.ActionTargetPickerPage,
 		control.ActionTargetPickerOpenPathPicker,
 		control.ActionTargetPickerCancel,
 		control.ActionTargetPickerConfirm:

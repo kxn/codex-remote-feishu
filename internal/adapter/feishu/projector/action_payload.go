@@ -23,6 +23,7 @@ const (
 	cardActionPayloadKeyActionArg             = frontstagecontract.CardActionPayloadKeyActionArg
 	cardActionPayloadKeyActionArgPrefix       = frontstagecontract.CardActionPayloadKeyActionArgPrefix
 	cardActionPayloadKeyFieldName             = frontstagecontract.CardActionPayloadKeyFieldName
+	cardActionPayloadKeyCursor                = frontstagecontract.CardActionPayloadKeyCursor
 	cardActionPayloadKeyPickerID              = frontstagecontract.CardActionPayloadKeyPickerID
 	cardActionPayloadKeyEntryName             = frontstagecontract.CardActionPayloadKeyEntryName
 	cardActionPayloadKeyTargetValue           = frontstagecontract.CardActionPayloadKeyTargetValue
@@ -60,6 +61,7 @@ const (
 	cardActionKindTargetPickerSelectSource    = frontstagecontract.CardActionKindTargetPickerSelectSource
 	cardActionKindTargetPickerSelectWorkspace = frontstagecontract.CardActionKindTargetPickerSelectWorkspace
 	cardActionKindTargetPickerSelectSession   = frontstagecontract.CardActionKindTargetPickerSelectSession
+	cardActionKindTargetPickerPage            = frontstagecontract.CardActionKindTargetPickerPage
 	cardActionKindTargetPickerOpenPathPicker  = frontstagecontract.CardActionKindTargetPickerOpenPathPicker
 	cardActionKindTargetPickerBack            = frontstagecontract.CardActionKindTargetPickerBack
 	cardActionKindTargetPickerCancel          = frontstagecontract.CardActionKindTargetPickerCancel
@@ -85,6 +87,7 @@ var (
 	actionPayloadRequestControl    = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadPathPicker        = frontstagecontract.ActionPayloadPathPicker
 	actionPayloadTargetPicker      = frontstagecontract.ActionPayloadTargetPicker
+	actionPayloadTargetPickerCursor = frontstagecontract.ActionPayloadTargetPickerCursor
 	actionPayloadTargetPickerValue = frontstagecontract.ActionPayloadTargetPickerValue
 	actionPayloadThreadHistory     = frontstagecontract.ActionPayloadThreadHistory
 )

@@ -111,6 +111,8 @@ type FeishuTargetPickerView struct {
 	WorkspacePlaceholder     string
 	SessionPlaceholder       string
 	SourcePlaceholder        string
+	WorkspaceCursor          int
+	SessionCursor            int
 	SelectedWorkspaceKey     string
 	SelectedSessionValue     string
 	SelectedWorkspaceLabel   string

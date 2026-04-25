@@ -121,6 +121,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 		return s.handleTargetPickerSelectWorkspace(surface, intent.PickerID, intent.WorkspaceKey, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerSelectSession:
 		return s.handleTargetPickerSelectSession(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
+	case control.FeishuUIIntentTargetPickerPage:
+		return s.handleTargetPickerPage(surface, intent.PickerID, intent.FieldName, intent.Cursor, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerOpenPathPicker:
 		return s.handleTargetPickerOpenPathPicker(surface, intent.PickerID, intent.TargetValue, intent.ActorUserID, intent.RequestAnswers)
 	case control.FeishuUIIntentTargetPickerBack:

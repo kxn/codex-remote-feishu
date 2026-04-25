@@ -26,6 +26,7 @@ const (
 	CardActionPayloadKeyActionArg             = "action_arg"
 	CardActionPayloadKeyActionArgPrefix       = "action_arg_prefix"
 	CardActionPayloadKeyFieldName             = "field_name"
+	CardActionPayloadKeyCursor                = "cursor"
 	CardActionPayloadKeyPickerID              = "picker_id"
 	CardActionPayloadKeyEntryName             = "entry_name"
 	CardActionPayloadKeyTargetValue           = "target_value"
@@ -69,6 +70,7 @@ const (
 	CardActionKindTargetPickerSelectSource    = "target_picker_select_source"
 	CardActionKindTargetPickerSelectWorkspace = "target_picker_select_workspace"
 	CardActionKindTargetPickerSelectSession   = "target_picker_select_session"
+	CardActionKindTargetPickerPage            = "target_picker_page"
 	CardActionKindTargetPickerOpenPathPicker  = "target_picker_open_path_picker"
 	CardActionKindTargetPickerBack            = "target_picker_back"
 	CardActionKindTargetPickerCancel          = "target_picker_cancel"
@@ -278,6 +280,17 @@ func ActionPayloadTargetPickerValue(kind, pickerID, targetValue string) map[stri
 	payload := ActionPayloadTargetPicker(kind, pickerID)
 	if strings.TrimSpace(targetValue) != "" {
 		payload[CardActionPayloadKeyTargetValue] = strings.TrimSpace(targetValue)
+	}
+	return payload
+}
+
+func ActionPayloadTargetPickerCursor(pickerID, fieldName string, cursor int) map[string]any {
+	payload := ActionPayloadTargetPicker(CardActionKindTargetPickerPage, pickerID)
+	if strings.TrimSpace(fieldName) != "" {
+		payload[CardActionPayloadKeyFieldName] = strings.TrimSpace(fieldName)
+	}
+	if cursor > 0 {
+		payload[CardActionPayloadKeyCursor] = cursor
 	}
 	return payload
 }

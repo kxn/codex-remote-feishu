@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-04-24`
-> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）也统一回到锁定当前工作区的 target picker。selection 卡片这轮进一步收口到 `FeishuSelectionView + FeishuSelectionSemantics`：VS Code `/list` 继续按钮式实例卡，VS Code `/use` / `/useall` 统一成当前实例内的 dropdown，kick-thread confirm 也走同一 selection substrate；adapter live 路径不再回退 `FeishuDirectSelectionPrompt`。其余 target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；本轮还新增了 `/autocontinue` 参数卡与 reply-thread、tail-only patch 的自动继续状态卡；`/upgrade` 根页现在会按 standalone Codex 安装状态决定是否暴露 `Codex 升级`，`/upgrade latest` 与 `/upgrade codex` 共用 `upgrade_owner_flow` callback family，但分别收口到 release / Codex 两条 owner-card flow；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、共享过程卡、原锚点 attention annotation 与 turn reply 语义见正文。
+> Updated: `2026-04-25`
+> Summary: 当前实现把 normal mode 的工作会话收敛到 `workspace` 命令族与三张独立 target-picker 卡：bare `/workspace` 与 `/workspace new` 是 page-owner 父页，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三条业务路径，`/list` `/use` `/useall` 只保留 alias；被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）也统一回到锁定当前工作区的 target picker。`/workspace list` 的 target page 现已接入 byte-budget dropdown pagination：workspace / session 双下拉通过 `target_picker_page(picker_id + field_name + cursor)` 走同卡翻页，workspace 预算目标 `1/3`、session `2/3`，并支持空余预算回借；workspace 翻页会重算 session 候选，session 翻页则保留 workspace 状态并清空不可见会话选择。selection 卡片这轮进一步收口到 `FeishuSelectionView + FeishuSelectionSemantics`：VS Code `/list` 继续按钮式实例卡，VS Code `/use` / `/useall` 统一成当前实例内的 dropdown，kick-thread confirm 也走同一 selection substrate；adapter live 路径不再回退 `FeishuDirectSelectionPrompt`。其余 target picker / path picker / history 继续共用 owner-card runtime，并统一承载 `body / notice / sealed` contract；本轮还新增了 `/autocontinue` 参数卡与 reply-thread、tail-only patch 的自动继续状态卡；`/upgrade` 根页现在会按 standalone Codex 安装状态决定是否暴露 `Codex 升级`，`/upgrade latest` 与 `/upgrade codex` 共用 `upgrade_owner_flow` callback family，但分别收口到 release / Codex 两条 owner-card flow；菜单、帮助、page-result replacement、request cards、plan proposal、VS Code guidance、共享过程卡、原锚点 attention annotation 与 turn reply 语义见正文。
 
 ## 1. 文档定位
 
@@ -102,7 +102,8 @@
 | `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/workspace list` 切换卡；`/list` 这类旧入口只是 alias，不再决定新的主展示结构 |
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | normal mode 下当前也只负责重新打开 `/workspace list` 切换卡；vscode mode 下会刷新当前实例的结构化 thread dropdown，不再维持旧分页 prompt |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 normal mode 主路径实际使用的是三张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` 直接落各自业务页，因此 `target_picker_select_workspace` / `target_picker_select_session` 是主路径仍在使用的回调，而 `target_picker_select_mode` / `target_picker_select_source` 只保留 transport/runtime 兼容。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace 时会显式清空当前会话选择 |
+| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 normal mode 主路径实际使用的是三张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` 直接落各自业务页，因此 `target_picker_select_workspace` / `target_picker_select_session` 是主路径仍在使用的回调，而 `target_picker_select_mode` / `target_picker_select_source` 只保留 transport/runtime 兼容。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace 或显式改选 session 时会按当前卡状态重建 picker read model |
+| `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 的 dropdown 翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm |
 | `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git processing 态是 `已取消导入`，并会 best-effort 停掉 clone / prepare；随后清掉 active target picker / owner-card flow |
 | `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、按已选目录执行接入、或按主卡 Git 表单 + 已选父目录执行导入的产品语义仍由 orchestrator 决定。当前 `/workspace list` 只做“已有工作区 + 已有会话”切换，不再暴露 `新建会话`；`/workspace new dir` 与 `/workspace new git` 会分别把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；Git 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
@@ -184,7 +185,7 @@
 - callback payload schema 已收束到 [internal/core/frontstagecontract/callback_payload.go](../../internal/core/frontstagecontract/callback_payload.go)
 - projector、gateway、daemon owner-card producer 与 orchestrator owner-card producer 现在共用这份 schema 常量/构造 helper，不再继续各自扩一份裸字符串约定
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
-- 分页导航与 target picker 下拉当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view 或当前 picker 并 inline replace 原卡。
+- 分页导航与 target picker 下拉当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target picker dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 
 ### 4.2 当前常见 payload 字段
 
@@ -201,6 +202,7 @@
 | `target_picker_select_source` | `picker_id`、`target_value` | 兼容保留的来源页回调；当前 projector 仍支持把 `local_directory` / `git_url` 写入 payload，但 normal-mode 主路径默认不会发出这类回调 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | `/workspace list` 切换卡的工作区下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
 | `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread；当前 normal-mode 卡不再发出 `new_thread` |
+| `target_picker_page` | `picker_id`、`field_name`、`cursor` | `/workspace list` target page 的 dropdown 翻页回调；`field_name` 区分 workspace / session lane，`cursor` 是动态 byte-budget 分页使用的 start-index。workspace 翻页会把对应 cursor 处的 workspace 设为当前选择并重算 session 列表；session 翻页会保留 workspace 状态，但显式清空当前 session 选择，避免 invisible confirm |
 | `target_picker_open_path_picker` | `picker_id`、`target_value`、`request_answers` | `/workspace new dir` / `/workspace new git` 主卡的子步骤导航；当前 `target_value` 表示 `local_directory` 或 `git_parent_dir`，`request_answers` 用来把 Git 主卡里的 `repo_url` / `directory_name` 草稿一起带回服务端 |
 | `target_picker_cancel` | `picker_id`、`request_answers` | 三张独立工作会话卡共用的退出按钮；gateway 只需命中当前 active picker，并把必要草稿带回；服务端随后会把当前卡封成对应 terminal 态：普通编辑态为 `已取消`，Git processing 态为 `已取消导入`，随后清掉 active picker / owner-card flow |
 | `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session`、`request_answers` | 三张独立工作会话卡共用的确认按钮：`/workspace list` 把当前表单值送到产品层执行 attach / switch；`/workspace new dir` 与 `/workspace new git` 都会在同一张 owner card 上进入 processing / terminal，其中前者要求目录已通过前置校验且不能命中已知 workspace，后者要求 repo / 落地父目录预览有效；Git 长链路会先 patch 成 `正在导入 Git 工作区`，随后在 clone 成功后继续 patch 到“接入工作区 / 准备会话”，并允许同卡 `取消导入` |
@@ -382,6 +384,7 @@ MCP request 卡片当前新增的可视语义：
 - `ActionTargetPickerSelectSource`
 - `ActionTargetPickerSelectWorkspace`
 - `ActionTargetPickerSelectSession`
+- `ActionTargetPickerPage`
 - `ActionTargetPickerOpenPathPicker`
 - `ActionTargetPickerCancel`
 
@@ -424,6 +427,11 @@ MCP request 卡片当前新增的可视语义：
   - `/workspace new dir` 与 `/workspace new git` 首次打开则分别直接落在 `目录` / `Git` 页；bare `/workspace` 与 `/workspace new` 自身只做 page-owner 父页导航
   - editing / processing / terminal 页面当前统一先显示 step tag，再显示单一主问题；不再把旧的“当前工作区 / 当前会话 / 路径摘要”作为编辑页首屏
   - `目标` 页继续把 `工作区 + 会话` 保留在同一页；工作区 label 足够时只显示 label，只有 basename 冲突时才额外补路径 meta 做消歧
+  - `目标` 页当前不再把全部 `workspace/session` 选项直接灌进两个 `select_static`；projector 会按 Feishu transport byte budget 做动态分页，并确保底部 footer 仍可见
+  - 双下拉预算目标当前固定为 `workspace 1/3 : session 2/3`，并支持空余预算回借；工作区锁定场景则只分页 session lane
+  - dropdown 翻页当前统一走 `target_picker_page(picker_id + field_name + cursor)`；`cursor` 是 start-index，不是固定页码
+  - workspace lane 翻页属于主上下文切换：服务端会把 cursor 处 workspace 设为当前选择、重算 session options，并把旧 session 选择清空到不可确认态
+  - session lane 翻页属于同 workspace 内浏览更多：服务端会保留 workspace cursor / 选中 workspace，但若原 session 不在新可见页内，会主动清空选中并禁用 confirm，避免 invisible confirm
   - `已有工作区` 路径下，不再为了“帮用户猜一个候选”去回退到其他 recoverable thread
   - 或者 surface 当前已经绑定到同 workspace 的某个 thread，且该 thread 仍在候选里，才默认选中该 thread
   - 如果只是当前 workspace 已选中，但 surface 处于 detached / unbound，session 会保持空值，等待用户显式选择
@@ -696,7 +704,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/projector_preview_supplement_test.go](../../internal/adapter/feishu/projector_preview_supplement_test.go)
   - 锁定 final preview supplement 保持顶层 append-only，不借用 final reply 的 reply anchor
 - [internal/adapter/feishu/projector_target_picker_test.go](../../internal/adapter/feishu/projector_target_picker_test.go)
-  - 锁定 `FeishuTargetPickerView` 的页头 `StageLabel` / `Question`、模式/来源次级标签、双下拉与 Git 表单 payload、`daemon_lifecycle_id` stamp、confirm 按钮结构，以及带 `MessageID` 时改走 `OperationUpdateCard`、terminal stage 移除交互控件
+  - 锁定 `FeishuTargetPickerView` 的页头 `StageLabel` / `Question`、target page 双下拉的 byte-budget pagination / footer 保留、Git 表单 payload、`daemon_lifecycle_id` stamp、confirm 按钮结构，以及带 `MessageID` 时改走 `OperationUpdateCard`、terminal stage 移除交互控件
 - [internal/adapter/feishu/projector_path_picker_test.go](../../internal/adapter/feishu/projector_path_picker_test.go)
   - 锁定 `FeishuPathPickerView` 的按钮 payload、`daemon_lifecycle_id` stamp、enter/select 区分、带 `MessageID` 时改走 `OperationUpdateCard`，以及 target-picker-owned 子步骤会切到 compact owner-subpage 布局，terminal path picker 会移除选择控件并只保留状态摘要
 - [internal/core/orchestrator/service_final_card_test.go](../../internal/core/orchestrator/service_final_card_test.go)
@@ -706,7 +714,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_final_card_test.go](../../internal/app/daemon/app_final_card_test.go)
   - 锁定同步 preview 超时后的 second-chance final patch：同卡 `message.patch`、无改进静默跳过、detach 后 anchor 失效即放弃，以及 split final reply 只回补主卡、不重发 overflow cards
 - [internal/adapter/feishu/gateway_target_picker_test.go](../../internal/adapter/feishu/gateway_target_picker_test.go)
-  - 锁定 `target_picker_*` callback payload 能正确回到 `control.Action`
+  - 锁定 `target_picker_*` 与 `target_picker_page` callback payload 能正确回到 `control.Action`
 - [internal/adapter/feishu/gateway_test.go](../../internal/adapter/feishu/gateway_test.go)
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + stamped command result replacement + dormant command submission anchor compatibility branch）、无 lifecycle 导航仍异步 ack、card/text attention annotation 的 reply/fallback 出站路径，以及共享更新卡的 `message.patch` 出站路径
 - [internal/app/daemon/app_upgrade_owner_card_test.go](../../internal/app/daemon/app_upgrade_owner_card_test.go)

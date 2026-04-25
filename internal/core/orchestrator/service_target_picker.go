@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -100,6 +101,8 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		AllowNewThread:       opts.AllowNewThread,
 		SelectedMode:         targetPickerDefaultMode(source),
 		SelectedSource:       control.FeishuTargetPickerSourceLocalDirectory,
+		WorkspaceCursor:      -1,
+		SessionCursor:        -1,
 		SelectedWorkspaceKey: selectedWorkspaceKey,
 		SelectedSessionValue: targetPickerAutoSession,
 		CreatedAt:            s.now(),
@@ -175,6 +178,7 @@ func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsol
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
 	}
 	record.SelectedWorkspaceKey = normalizeTargetPickerWorkspaceSelection(workspaceKey)
+	record.SessionCursor = 0
 	record.SelectedSessionValue = ""
 	if targetPickerNormalizePage(record.Page, record.Source, record.SelectedMode, record.SelectedSource) == control.FeishuTargetPickerPageMode &&
 		record.SelectedMode == control.FeishuTargetPickerModeExistingWorkspace {
@@ -198,6 +202,41 @@ func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleR
 	if targetPickerNormalizePage(record.Page, record.Source, record.SelectedMode, record.SelectedSource) == control.FeishuTargetPickerPageMode &&
 		record.SelectedMode == control.FeishuTargetPickerModeExistingWorkspace {
 		record.Page = control.FeishuTargetPickerPageTarget
+	}
+	view, err := s.buildTargetPickerView(surface, record)
+	if err != nil {
+		return notice(surface, "target_picker_unavailable", err.Error())
+	}
+	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
+}
+
+func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pickerID, fieldName string, cursor int, actorUserID string, answers map[string][]string) []eventcontract.Event {
+	record, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID)
+	if blocked != nil {
+		return blocked
+	}
+	resetTargetPickerEditingState(record)
+	s.applyTargetPickerDraftAnswers(record, answers)
+	switch strings.TrimSpace(fieldName) {
+	case frontstagecontract.CardTargetPickerWorkspaceFieldName:
+		if normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey) != "" {
+			view, err := s.buildTargetPickerView(surface, record)
+			if err != nil {
+				return notice(surface, "target_picker_unavailable", err.Error())
+			}
+			return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
+		}
+		options := targetPickerWorkspaceOptions(s.targetPickerWorkspaceEntries(surface))
+		record.WorkspaceCursor = normalizeTargetPickerDropdownCursor(cursor, len(options))
+		record.SelectedWorkspaceKey = targetPickerWorkspaceValueAtCursor(options, record.WorkspaceCursor)
+		record.SessionCursor = -1
+		record.SelectedSessionValue = targetPickerAutoSession
+	case frontstagecontract.CardTargetPickerSessionFieldName:
+		options := s.targetPickerSessionOptions(surface, record.SelectedWorkspaceKey, record.Source, record.AllowNewThread)
+		record.SessionCursor = normalizeTargetPickerDropdownCursor(cursor, len(options))
+		record.SelectedSessionValue = ""
+	default:
+		return notice(surface, "target_picker_invalid_page_action", "当前翻页动作无效，请重新打开目标选择器。")
 	}
 	view, err := s.buildTargetPickerView(surface, record)
 	if err != nil {
@@ -543,6 +582,21 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		selectedSession = ""
 	}
 	record.SelectedSessionValue = selectedSession
+	workspaceCursor := 0
+	if !workspaceSelectionLocked {
+		workspaceCursor = record.WorkspaceCursor
+		if workspaceCursor < 0 {
+			workspaceCursor = targetPickerWorkspaceOptionIndex(workspaceOptions, selectedWorkspace)
+		}
+		workspaceCursor = normalizeTargetPickerDropdownCursor(workspaceCursor, len(workspaceOptions))
+	}
+	record.WorkspaceCursor = workspaceCursor
+	sessionCursor := record.SessionCursor
+	if sessionCursor < 0 {
+		sessionCursor = targetPickerSessionOptionIndex(sessionOptions, selectedSession)
+	}
+	sessionCursor = normalizeTargetPickerDropdownCursor(sessionCursor, len(sessionOptions))
+	record.SessionCursor = sessionCursor
 	page := targetPickerNormalizePage(record.Page, record.Source, mode, sourceKind)
 	record.Page = page
 
@@ -663,6 +717,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		WorkspacePlaceholder:     "选择工作区",
 		SessionPlaceholder:       "选择会话",
 		SourcePlaceholder:        "选择工作区来源",
+		WorkspaceCursor:          workspaceCursor,
+		SessionCursor:            sessionCursor,
 		SelectedWorkspaceKey:     selectedWorkspace,
 		SelectedSessionValue:     selectedSession,
 		SelectedWorkspaceLabel:   selectedWorkspaceLabel,

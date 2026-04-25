@@ -96,6 +96,24 @@ func parseTargetPickerCardAction(
 			TargetPickerValue: targetValue,
 			Inbound:           meta,
 		}, true
+	case cardActionKindTargetPickerPage:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+		if pickerID == "" || fieldName == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionTargetPickerPage,
+			GatewayID:        strings.TrimSpace(env.GatewayID),
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         pickerID,
+			FieldName:        fieldName,
+			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Inbound:          meta,
+		}, true
 	case cardActionKindTargetPickerOpenPathPicker:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		targetValue := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))

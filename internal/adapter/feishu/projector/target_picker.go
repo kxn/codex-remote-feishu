@@ -10,43 +10,10 @@ import (
 
 func TargetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	view = control.NormalizeFeishuTargetPickerView(view)
-	elements := make([]map[string]any, 0, 18)
 	if view.Phase != frontstagecontract.PhaseEditing {
 		return targetPickerStageElements(view, daemonLifecycleID)
 	}
-	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.Question)...)
-	switch view.Page {
-	case control.FeishuTargetPickerPageMode:
-		elements = append(elements, targetPickerModePageElements(view, daemonLifecycleID)...)
-	case control.FeishuTargetPickerPageSource:
-		elements = append(elements, targetPickerSourcePageElements(view, daemonLifecycleID)...)
-	case control.FeishuTargetPickerPageLocalDirectory:
-		elements = append(elements, targetPickerLocalDirectoryElements(view, daemonLifecycleID)...)
-	case control.FeishuTargetPickerPageGit:
-		elements = append(elements, targetPickerGitURLElements(view, daemonLifecycleID)...)
-	default:
-		elements = append(elements, targetPickerTargetPageElements(view, daemonLifecycleID)...)
-	}
-	if messages := TargetPickerMessageElements(view.SourceMessages); len(messages) != 0 {
-		elements = append(elements, messages...)
-	}
-	if messages := TargetPickerMessageElements(view.Messages); len(messages) != 0 {
-		elements = append(elements, messages...)
-	}
-	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
-			elements = append(elements, block)
-		}
-	}
-	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
-		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
-	}
-	if targetPickerUsesInlineGitForm(view) {
-		return elements
-	}
-	elements = appendCardFooterButtonGroup(elements, targetPickerEditingFooterButtons(view, daemonLifecycleID))
-	return elements
+	return targetPickerEditingElements(view, daemonLifecycleID)
 }
 
 func targetPickerStageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -123,47 +90,6 @@ func targetPickerModePageElements(view control.FeishuTargetPickerView, daemonLif
 	return targetPickerChoicePageElements(
 		targetPickerModeChoiceItems(view, daemonLifecycleID),
 	)
-}
-
-func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	elements := make([]map[string]any, 0, 4)
-	renderWorkspaceSelect := !view.WorkspaceSelectionLocked &&
-		(view.ShowWorkspaceSelect || len(view.WorkspaceOptions) != 0 || strings.TrimSpace(view.SelectedWorkspaceKey) != "")
-	renderSessionSelect := view.ShowSessionSelect ||
-		len(view.SessionOptions) != 0 ||
-		strings.TrimSpace(view.SelectedSessionValue) != "" ||
-		strings.TrimSpace(view.SessionPlaceholder) != ""
-	if view.WorkspaceSelectionLocked {
-		if sections := targetPickerLockedWorkspaceSections(view); len(sections) != 0 {
-			elements = appendCardTextSections(elements, sections)
-		}
-	} else if renderWorkspaceSelect {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**工作区**",
-		})
-		elements = append(elements, pathPickerSelectStaticElement(
-			cardTargetPickerWorkspaceFieldName,
-			firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID), daemonLifecycleID),
-			targetPickerWorkspaceOptions(view.WorkspaceOptions),
-			strings.TrimSpace(view.SelectedWorkspaceKey),
-		))
-	}
-	if renderSessionSelect {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": "**会话**",
-		})
-		elements = append(elements, pathPickerSelectStaticElement(
-			cardTargetPickerSessionFieldName,
-			firstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID), daemonLifecycleID),
-			targetPickerSessionOptions(view.SessionOptions),
-			strings.TrimSpace(view.SelectedSessionValue),
-		))
-	}
-	return elements
 }
 
 func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
