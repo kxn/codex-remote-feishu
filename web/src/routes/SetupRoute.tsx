@@ -84,6 +84,8 @@ const setupSteps: Array<{ id: SetupStepID; name: string }> = [
   { id: "done", name: "完成" },
 ];
 
+const defaultQRCodePollIntervalSeconds = 5;
+
 export function SetupRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -216,9 +218,13 @@ export function SetupRoute() {
     if (onboardingSession.status !== "pending") {
       return;
     }
+    const pollDelaySeconds = Math.max(
+      onboardingSession.pollIntervalSeconds || defaultQRCodePollIntervalSeconds,
+      defaultQRCodePollIntervalSeconds,
+    );
     const timer = window.setTimeout(() => {
       void refreshQRCodeSession(onboardingSession.id);
-    }, 2_000);
+    }, pollDelaySeconds * 1_000);
     return () => window.clearTimeout(timer);
   }, [actionBusy, connectError, connectMode, currentStep, onboardingSession]);
 
@@ -511,7 +517,10 @@ export function SetupRoute() {
         status: "error",
         message:
           error?.code === "feishu_app_web_test_recipient_unavailable"
-            ? String(error.details || "当前机器人还没有可用的飞书测试接收者。")
+            ? String(
+                error.details ||
+                  "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
+              )
             : "暂时没有把测试提示发送成功，请稍后重试。",
       });
       return;
@@ -953,7 +962,12 @@ export function SetupRoute() {
         <p className="support-copy">
           前往
           {" "}
-          <a href={activeConsoleLinks?.events || "#"} rel="noreferrer" target="_blank">
+          <a
+            className="inline-link"
+            href={activeConsoleLinks?.events || "#"}
+            rel="noreferrer"
+            target="_blank"
+          >
             飞书后台
           </a>
           {" "}
@@ -1000,7 +1014,12 @@ export function SetupRoute() {
         <p className="support-copy">
           前往
           {" "}
-          <a href={activeConsoleLinks?.callback || "#"} rel="noreferrer" target="_blank">
+          <a
+            className="inline-link"
+            href={activeConsoleLinks?.callback || "#"}
+            rel="noreferrer"
+            target="_blank"
+          >
             飞书后台
           </a>
           {" "}
@@ -1039,7 +1058,12 @@ export function SetupRoute() {
         <p className="support-copy">
           前往
           {" "}
-          <a href={activeConsoleLinks?.bot || "#"} rel="noreferrer" target="_blank">
+          <a
+            className="inline-link"
+            href={activeConsoleLinks?.bot || "#"}
+            rel="noreferrer"
+            target="_blank"
+          >
             飞书后台
           </a>
           {" "}

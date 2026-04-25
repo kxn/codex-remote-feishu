@@ -1185,7 +1185,14 @@ button {
 .inline-link {
   color: var(--accent-strong);
   text-decoration: underline;
-  text-decoration-thickness: 0.08em;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.16em;
+  font-weight: 600;
+}
+
+.inline-link:hover,
+.inline-link:focus-visible {
+  color: var(--accent);
 }
 
 .completed-card {

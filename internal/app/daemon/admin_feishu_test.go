@@ -74,6 +74,7 @@ type fakeFeishuSetupClient struct {
 	startErr       error
 	pollResults    []feishuRegistrationPollResult
 	pollErr        error
+	pollErrs       []error
 	describeResult feishuAppIdentity
 	describeErr    error
 	pollCalls      int
@@ -85,6 +86,13 @@ func (f *fakeFeishuSetupClient) StartRegistration(context.Context) (feishuRegist
 }
 
 func (f *fakeFeishuSetupClient) PollRegistration(context.Context, string) (feishuRegistrationPollResult, error) {
+	if len(f.pollErrs) > 0 {
+		err := f.pollErrs[0]
+		f.pollErrs = f.pollErrs[1:]
+		if err != nil {
+			return feishuRegistrationPollResult{}, err
+		}
+	}
 	if f.pollErr != nil {
 		return feishuRegistrationPollResult{}, f.pollErr
 	}
@@ -384,6 +392,44 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	}
 	if loaded.Config.Feishu.Apps[0].Name != "扫码 Bot" || loaded.Config.Feishu.Apps[0].VerifiedAt == nil {
 		t.Fatalf("unexpected saved app: %#v", loaded.Config.Feishu.Apps[0])
+	}
+}
+
+func TestSetupFeishuOnboardingPollTransientErrorKeepsPending(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	setupClient := &fakeFeishuSetupClient{
+		startResult: feishuRegistrationStartResult{
+			DeviceCode:      "device-poll-retry",
+			VerificationURL: "https://example.test/retry-qr",
+			ExpiresAt:       time.Now().Add(5 * time.Minute),
+		},
+		pollErrs: []error{errors.New("temporary poll timeout")},
+	}
+	app.feishuRuntime.setup = setupClient
+
+	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create onboarding status = %d, want 201 body=%s", createRec.Code, createRec.Body.String())
+	}
+	var createResp feishuOnboardingSessionResponse
+	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode onboarding create: %v", err)
+	}
+
+	getRec := performAdminRequest(t, app, http.MethodGet, "/api/setup/feishu/onboarding/sessions/"+createResp.Session.ID, "")
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get onboarding after transient poll failure status = %d, want 200 body=%s", getRec.Code, getRec.Body.String())
+	}
+	var getResp feishuOnboardingSessionResponse
+	if err := json.NewDecoder(getRec.Body).Decode(&getResp); err != nil {
+		t.Fatalf("decode onboarding get after transient failure: %v", err)
+	}
+	if getResp.Session.Status != feishuOnboardingStatusPending {
+		t.Fatalf("expected onboarding session to stay pending, got %#v", getResp.Session)
+	}
+	if getResp.Session.ErrorCode != "" || getResp.Session.ErrorMessage != "" {
+		t.Fatalf("expected transient poll failure to stay hidden from page state, got %#v", getResp.Session)
 	}
 }
 

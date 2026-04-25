@@ -70,7 +70,7 @@ func (a *App) handleFeishuAppTestStart(w http.ResponseWriter, r *http.Request, k
 			writeAPIError(w, http.StatusConflict, apiError{
 				Code:    "feishu_app_web_test_recipient_unavailable",
 				Message: "the current feishu app does not have a bound web test recipient",
-				Details: "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+				Details: "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
 			})
 		default:
 			writeAPIError(w, http.StatusBadGateway, apiError{

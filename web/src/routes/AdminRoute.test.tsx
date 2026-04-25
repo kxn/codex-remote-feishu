@@ -316,7 +316,7 @@ describe("AdminRoute", () => {
             code: "feishu_app_web_test_recipient_unavailable",
             message: "recipient unavailable",
             details:
-              "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+              "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
           },
         },
       },
@@ -347,7 +347,7 @@ describe("AdminRoute", () => {
     await user.click(await screen.findByRole("button", { name: "测试事件订阅" }));
     expect(
       await screen.findByText(
-        "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+        "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
       ),
     ).toBeInTheDocument();
   });

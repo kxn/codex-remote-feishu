@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -445,6 +446,12 @@ func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardi
 	}
 	a.feishuRuntime.onboarding[session.ID] = session
 	a.feishuRuntime.mu.Unlock()
+	log.Printf(
+		"feishu onboarding created: session=%s expires_at=%s poll_interval=%s",
+		session.ID,
+		session.ExpiresAt.Format(time.RFC3339),
+		session.PollInterval,
+	)
 	return feishuOnboardingSessionToView(session), nil
 }
 
@@ -480,12 +487,16 @@ func (a *App) refreshFeishuOnboardingSession(ctx context.Context, sessionID stri
 		a.feishuRuntime.mu.Lock()
 		session, ok = a.feishuRuntime.onboarding[sessionID]
 		if ok && session != nil {
-			session.Status = feishuOnboardingStatusFailed
-			session.ErrorCode = "poll_failed"
-			session.ErrorMessage = err.Error()
-			session.LastPolledAt = time.Now().UTC()
+			now := time.Now().UTC()
+			session.Status = feishuOnboardingStatusPending
+			session.LastPolledAt = now
+			if pollInterval <= 0 {
+				pollInterval = 5 * time.Second
+			}
+			session.NextPollAt = now.Add(pollInterval)
 		}
 		a.feishuRuntime.mu.Unlock()
+		log.Printf("feishu onboarding poll transient error: session=%s err=%v", sessionID, err)
 		view, ok := a.snapshotFeishuOnboardingSession(sessionID)
 		return view, ok, nil
 	}
@@ -524,14 +535,27 @@ func (a *App) refreshFeishuOnboardingSession(ctx context.Context, sessionID stri
 		session.DisplayName = firstNonEmpty(displayName, session.AppID)
 		session.ErrorCode = ""
 		session.ErrorMessage = ""
+		log.Printf(
+			"feishu onboarding ready: session=%s app_id=%s installer_id_present=%t",
+			sessionID,
+			session.AppID,
+			strings.TrimSpace(session.InstallerID) != "",
+		)
 	case feishuOnboardingStatusExpired:
 		session.Status = feishuOnboardingStatusExpired
 		session.ErrorCode = pollResult.ErrorCode
 		session.ErrorMessage = pollResult.ErrorMessage
+		log.Printf("feishu onboarding expired: session=%s code=%s", sessionID, session.ErrorCode)
 	case feishuOnboardingStatusFailed:
 		session.Status = feishuOnboardingStatusFailed
 		session.ErrorCode = pollResult.ErrorCode
 		session.ErrorMessage = pollResult.ErrorMessage
+		log.Printf(
+			"feishu onboarding failed: session=%s code=%s message=%s",
+			sessionID,
+			session.ErrorCode,
+			session.ErrorMessage,
+		)
 	default:
 		session.Status = feishuOnboardingStatusPending
 	}
@@ -852,6 +876,7 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 		Guide:    buildFeishuOnboardingGuide(),
 	}
 	if verifyErr != nil {
+		log.Printf("feishu onboarding verify failed: session=%s gateway=%s err=%v", sessionID, gatewayID, verifyErr)
 		writeJSON(w, http.StatusBadGateway, response)
 		return
 	}
@@ -861,6 +886,7 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 	}
 	response.Session = a.markOnboardingSessionCompleted(sessionID, gatewayID, summary, mutation, result)
 	a.maybeSendFeishuAppVerifySuccessNotices(r.Context(), gatewayID, strings.HasPrefix(r.URL.Path, "/api/setup/"))
+	log.Printf("feishu onboarding completed: session=%s gateway=%s app_id=%s", sessionID, gatewayID, summary.AppID)
 	writeJSON(w, http.StatusOK, response)
 }
 

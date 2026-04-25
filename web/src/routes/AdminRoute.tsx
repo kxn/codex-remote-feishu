@@ -59,6 +59,7 @@ type NewRobotForm = {
 };
 
 const newRobotID = "new";
+const defaultQRCodePollIntervalSeconds = 5;
 
 export function AdminRoute() {
   const [loading, setLoading] = useState(true);
@@ -177,9 +178,13 @@ export function AdminRoute() {
     if (onboardingSession.status !== "pending") {
       return;
     }
+    const pollDelaySeconds = Math.max(
+      onboardingSession.pollIntervalSeconds || defaultQRCodePollIntervalSeconds,
+      defaultQRCodePollIntervalSeconds,
+    );
     const timer = window.setTimeout(() => {
       void refreshQRCodeSession(onboardingSession.id);
-    }, 2_000);
+    }, pollDelaySeconds * 1_000);
     return () => window.clearTimeout(timer);
   }, [actionBusy, connectError, connectMode, onboardingSession, selectedRobotID]);
 
@@ -410,7 +415,10 @@ export function AdminRoute() {
         tone: "danger",
         message:
           payload?.code === "feishu_app_web_test_recipient_unavailable"
-            ? String(payload.details || "当前机器人还没有可用的飞书测试接收者。")
+            ? String(
+                payload.details ||
+                  "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
+              )
             : kind === "events"
               ? "事件订阅测试没有发出，请稍后重试。"
               : "回调测试没有发出，请稍后重试。",

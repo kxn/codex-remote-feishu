@@ -199,7 +199,7 @@ describe("SetupRoute", () => {
     expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
   });
 
-  it("starts qr onboarding automatically, polls every 2 seconds, and advances to permissions", async () => {
+  it("starts qr onboarding automatically, polls every 5 seconds, and advances to permissions", async () => {
     window.history.replaceState({}, "", "/setup");
     let appsConfigured = false;
 
@@ -289,10 +289,10 @@ describe("SetupRoute", () => {
     expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
 
     expect(
-      await screen.findByRole("heading", { name: "权限检查" }, { timeout: 4_000 }),
+      await screen.findByRole("heading", { name: "权限检查" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
     expect(await screen.findByText("当前还不能进入下一步，请先补齐缺失权限。")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("shows the bound-recipient error when event test target is unavailable", async () => {
     window.history.replaceState({}, "", "/setup");
@@ -327,7 +327,7 @@ describe("SetupRoute", () => {
             code: "feishu_app_web_test_recipient_unavailable",
             message: "recipient unavailable",
             details:
-              "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+              "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
           },
         },
       },
@@ -352,7 +352,7 @@ describe("SetupRoute", () => {
     ).toBeInTheDocument();
     expect(
       await screen.findByText(
-        "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+        "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
       ),
     ).toBeInTheDocument();
   });
