@@ -90,6 +90,9 @@ func TestWrapperStartupRefreshBorrowsVSCodeThreadList(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("send refresh: %v", err)
 	}
+	// Mirror the real startup ordering: the daemon-origin refresh arrives first,
+	// then the VS Code UI issues its own thread/list shortly afterwards.
+	time.Sleep(100 * time.Millisecond)
 
 	if _, err := io.WriteString(stdinWriter, mustJSONLine(t, map[string]any{
 		"id":     "codex.chatSessionProvider:0",
