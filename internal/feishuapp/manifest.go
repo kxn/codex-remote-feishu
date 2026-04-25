@@ -55,6 +55,7 @@ func DefaultManifest() Manifest {
 			Scopes: PermissionScopes{
 				Tenant: []string{
 					"drive:drive",
+					"base:app:create",
 					"bitable:app",
 					"im:datasync.feed_card.time_sensitive:write",
 					"im:message",
@@ -72,6 +73,7 @@ func DefaultManifest() Manifest {
 			{Event: "im.message.receive_v1", Purpose: "接收用户发给机器人的文本和图片消息"},
 			{Event: "im.message.recalled_v1", Purpose: "处理用户撤回消息"},
 			{Event: "im.message.reaction.created_v1", Purpose: "处理用户对消息的反馈动作"},
+			{Event: "im.message.reaction.deleted_v1", Purpose: "处理用户对消息的反馈动作"},
 			{Event: "application.bot.menu_v6", Purpose: "处理机器人菜单点击"},
 		},
 		Callbacks: []CallbackRequirement{
