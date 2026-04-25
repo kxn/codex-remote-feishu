@@ -94,12 +94,12 @@ type FeishuSettings struct {
 }
 
 type FeishuAppConfig struct {
-	ID         string               `json:"id,omitempty"`
-	Name       string               `json:"name,omitempty"`
-	AppID      string               `json:"appId,omitempty"`
-	AppSecret  string               `json:"appSecret,omitempty"`
-	Enabled    *bool                `json:"enabled,omitempty"`
-	VerifiedAt *time.Time           `json:"verifiedAt,omitempty"`
+	ID         string     `json:"id,omitempty"`
+	Name       string     `json:"name,omitempty"`
+	AppID      string     `json:"appId,omitempty"`
+	AppSecret  string     `json:"appSecret,omitempty"`
+	Enabled    *bool      `json:"enabled,omitempty"`
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
 }
 
 type DebugSettings struct {

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
-	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func errFeishuAppNotFound(gatewayID string) error {
