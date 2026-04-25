@@ -55,6 +55,7 @@ const (
 	cardActionKindSubmitRequestForm           = frontstagecontract.CardActionKindSubmitRequestForm
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerSelect            = frontstagecontract.CardActionKindPathPickerSelect
+	cardActionKindPathPickerPage              = frontstagecontract.CardActionKindPathPickerPage
 	cardActionKindPathPickerConfirm           = frontstagecontract.CardActionKindPathPickerConfirm
 	cardActionKindPathPickerCancel            = frontstagecontract.CardActionKindPathPickerCancel
 	cardActionKindTargetPickerSelectMode      = frontstagecontract.CardActionKindTargetPickerSelectMode
@@ -86,6 +87,7 @@ var (
 	actionPayloadRequestRespond     = frontstagecontract.ActionPayloadRequestRespond
 	actionPayloadRequestControl     = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadPathPicker         = frontstagecontract.ActionPayloadPathPicker
+	actionPayloadPathPickerCursor   = frontstagecontract.ActionPayloadPathPickerCursor
 	actionPayloadTargetPicker       = frontstagecontract.ActionPayloadTargetPicker
 	actionPayloadTargetPickerCursor = frontstagecontract.ActionPayloadTargetPickerCursor
 	actionPayloadTargetPickerValue  = frontstagecontract.ActionPayloadTargetPickerValue

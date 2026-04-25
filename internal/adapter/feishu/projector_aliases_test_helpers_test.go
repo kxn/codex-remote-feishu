@@ -5,7 +5,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-const targetPickerPaginationHint = "超出卡片大小，如未找到请翻页。"
+const (
+	targetPickerPaginationHint = "超出卡片大小，如未找到请翻页。"
+	pathPickerPaginationHint   = "超出卡片大小，如未找到请翻页。"
+)
 
 func projectNoticeContent(notice control.Notice) (string, []map[string]any) {
 	return projectorpkg.ProjectNoticeContent(notice)

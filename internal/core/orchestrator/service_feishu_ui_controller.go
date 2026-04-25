@@ -109,6 +109,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, inten
 		return s.handlePathPickerUp(surface, intent.PickerID, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerSelect:
 		return s.handlePathPickerSelect(surface, intent.PickerID, intent.PickerEntry, intent.ActorUserID)
+	case control.FeishuUIIntentPathPickerPage:
+		return s.handlePathPickerPage(surface, intent.PickerID, intent.FieldName, intent.Cursor, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerConfirm:
 		return s.handlePathPickerConfirm(surface, intent.PickerID, intent.ActorUserID)
 	case control.FeishuUIIntentPathPickerCancel:

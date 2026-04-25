@@ -26,6 +26,7 @@ const (
 	cardActionPayloadKeyActionArg             = frontstagecontract.CardActionPayloadKeyActionArg
 	cardActionPayloadKeyActionArgPrefix       = frontstagecontract.CardActionPayloadKeyActionArgPrefix
 	cardActionPayloadKeyFieldName             = frontstagecontract.CardActionPayloadKeyFieldName
+	cardActionPayloadKeyCursor                = frontstagecontract.CardActionPayloadKeyCursor
 	cardActionPayloadKeyPickerID              = frontstagecontract.CardActionPayloadKeyPickerID
 	cardActionPayloadKeyEntryName             = frontstagecontract.CardActionPayloadKeyEntryName
 	cardActionPayloadKeyTargetValue           = frontstagecontract.CardActionPayloadKeyTargetValue
@@ -63,6 +64,7 @@ const (
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerUp                = frontstagecontract.CardActionKindPathPickerUp
 	cardActionKindPathPickerSelect            = frontstagecontract.CardActionKindPathPickerSelect
+	cardActionKindPathPickerPage              = frontstagecontract.CardActionKindPathPickerPage
 	cardActionKindPathPickerConfirm           = frontstagecontract.CardActionKindPathPickerConfirm
 	cardActionKindPathPickerCancel            = frontstagecontract.CardActionKindPathPickerCancel
 	cardActionKindTargetPickerSelectMode      = frontstagecontract.CardActionKindTargetPickerSelectMode
@@ -98,7 +100,9 @@ var (
 	actionPayloadRequestControl         = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadSubmitRequestForm      = frontstagecontract.ActionPayloadSubmitRequestForm
 	actionPayloadPathPicker             = frontstagecontract.ActionPayloadPathPicker
+	actionPayloadPathPickerCursor       = frontstagecontract.ActionPayloadPathPickerCursor
 	actionPayloadTargetPicker           = frontstagecontract.ActionPayloadTargetPicker
+	actionPayloadTargetPickerCursor     = frontstagecontract.ActionPayloadTargetPickerCursor
 	actionPayloadTargetPickerValue      = frontstagecontract.ActionPayloadTargetPickerValue
 	actionPayloadThreadHistory          = frontstagecontract.ActionPayloadThreadHistory
 )

@@ -33,6 +33,7 @@ const (
 	FeishuUIIntentPathPickerEnter             FeishuUIIntentKind = "path_picker_enter"
 	FeishuUIIntentPathPickerUp                FeishuUIIntentKind = "path_picker_up"
 	FeishuUIIntentPathPickerSelect            FeishuUIIntentKind = "path_picker_select"
+	FeishuUIIntentPathPickerPage              FeishuUIIntentKind = "path_picker_page"
 	FeishuUIIntentPathPickerConfirm           FeishuUIIntentKind = "path_picker_confirm"
 	FeishuUIIntentPathPickerCancel            FeishuUIIntentKind = "path_picker_cancel"
 	FeishuUIIntentTargetPickerSelectMode      FeishuUIIntentKind = "target_picker_select_mode"
@@ -149,6 +150,8 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerUp, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerSelect:
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerSelect, PickerID: action.PickerID, PickerEntry: action.PickerEntry, ActorUserID: action.ActorUserID}, true
+	case ActionPathPickerPage:
+		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerPage, PickerID: action.PickerID, FieldName: action.FieldName, Cursor: action.Cursor, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerConfirm:
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerConfirm, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerCancel:

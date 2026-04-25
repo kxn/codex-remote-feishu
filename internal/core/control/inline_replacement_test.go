@@ -142,6 +142,11 @@ func TestInlineCardReplacementPolicyActionSet(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "path picker pagination",
+			action: Action{Kind: ActionPathPickerPage, PickerID: "picker-1", FieldName: "path_picker_file", Cursor: 7},
+			want:   true,
+		},
+		{
 			name:   "history page navigation",
 			action: Action{Kind: ActionHistoryPage, PickerID: "history-1", Page: 1},
 			want:   true,

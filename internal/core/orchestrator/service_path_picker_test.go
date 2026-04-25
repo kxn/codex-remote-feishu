@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
@@ -221,6 +223,149 @@ func TestOpenPathPickerFileModeAllowsParentDirectoryEntry(t *testing.T) {
 	back := singlePathPickerEvent(t, enterEvents)
 	if !testutil.SamePath(back.CurrentPath, root) {
 		t.Fatalf("expected parent entry to return to root, got %#v", back)
+	}
+}
+
+func TestPathPickerPageFileClearsSelectionAndDisablesConfirm(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	for i := 0; i < 3; i++ {
+		name := filepath.Join(root, fmt.Sprintf("file-%d.txt", i))
+		if err := os.WriteFile(name, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write file %d: %v", i, err)
+		}
+	}
+
+	view := singlePathPickerEvent(t, svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeFile,
+		RootPath: root,
+	}))
+	selected := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerSelect,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		PickerEntry:      "file-1.txt",
+	}))
+	if !selected.CanConfirm {
+		t.Fatalf("expected file selection to enable confirm, got %#v", selected)
+	}
+
+	paged := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerPage,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		FieldName:        frontstagecontract.CardPathPickerFileSelectFieldName,
+		Cursor:           1,
+	}))
+	if paged.FileCursor != 1 || paged.SelectedPath != "" || paged.CanConfirm {
+		t.Fatalf("expected file page turn to clear invisible selection, got %#v", paged)
+	}
+}
+
+func TestPathPickerPageDirectoryPreservesFileSelectionAndEnterResetsCursors(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "alpha"), 0o755); err != nil {
+		t.Fatalf("mkdir alpha: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "beta"), 0o755); err != nil {
+		t.Fatalf("mkdir beta: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	view := singlePathPickerEvent(t, svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeFile,
+		RootPath: root,
+	}))
+	selected := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerSelect,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		PickerEntry:      "file.txt",
+	}))
+
+	paged := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerPage,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		FieldName:        frontstagecontract.CardPathPickerDirectorySelectFieldName,
+		Cursor:           1,
+	}))
+	if paged.DirectoryCursor != 1 {
+		t.Fatalf("expected directory page turn to update cursor, got %#v", paged)
+	}
+	if !testutil.SamePath(paged.SelectedPath, selected.SelectedPath) || !paged.CanConfirm {
+		t.Fatalf("expected directory page turn to preserve file selection, got %#v", paged)
+	}
+
+	entered := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerEnter,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		PickerEntry:      "beta",
+	}))
+	if !testutil.SamePath(entered.CurrentPath, filepath.Join(root, "beta")) {
+		t.Fatalf("expected enter to switch directory, got %#v", entered)
+	}
+	if entered.DirectoryCursor != 0 || entered.FileCursor != 0 {
+		t.Fatalf("expected enter to reset pagination cursors, got %#v", entered)
+	}
+	if entered.SelectedPath != "" || entered.CanConfirm {
+		t.Fatalf("expected enter to clear stale file selection, got %#v", entered)
+	}
+}
+
+func TestPathPickerUpResetsPaginationCursors(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "root-file.txt"), []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write root file: %v", err)
+	}
+
+	view := singlePathPickerEvent(t, svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:        control.PathPickerModeFile,
+		RootPath:    root,
+		InitialPath: nested,
+	}))
+	surface := svc.root.Surfaces["surface-1"]
+	record := svc.activePathPicker(surface)
+	record.DirectoryCursor = 4
+	record.FileCursor = 5
+
+	up := singlePathPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerUp,
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	}))
+	if !testutil.SamePath(up.CurrentPath, root) {
+		t.Fatalf("expected up to return to root, got %#v", up)
+	}
+	if up.DirectoryCursor != 0 || up.FileCursor != 0 {
+		t.Fatalf("expected up to reset pagination cursors, got %#v", up)
 	}
 }
 

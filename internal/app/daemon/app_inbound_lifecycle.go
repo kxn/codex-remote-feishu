@@ -200,7 +200,7 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "跟随当前", "/follow"
 	case control.ActionDetach:
 		return "解除接管", "/detach"
-	case control.ActionPathPickerEnter, control.ActionPathPickerUp, control.ActionPathPickerSelect, control.ActionPathPickerConfirm, control.ActionPathPickerCancel:
+	case control.ActionPathPickerEnter, control.ActionPathPickerUp, control.ActionPathPickerSelect, control.ActionPathPickerPage, control.ActionPathPickerConfirm, control.ActionPathPickerCancel:
 		return "路径选择器卡片动作", ""
 	case control.ActionTargetPickerSelectMode,
 		control.ActionTargetPickerSelectSource,
@@ -252,6 +252,8 @@ func rejectedInboundIntentLabel(intent control.FeishuUIIntent) (label, command s
 		return "返回上一级目录", ""
 	case control.FeishuUIIntentPathPickerSelect:
 		return "选择路径", ""
+	case control.FeishuUIIntentPathPickerPage:
+		return "切换路径候选页", ""
 	case control.FeishuUIIntentTargetPickerSelectWorkspace:
 		return "切换工作区候选", ""
 	case control.FeishuUIIntentTargetPickerSelectSession:

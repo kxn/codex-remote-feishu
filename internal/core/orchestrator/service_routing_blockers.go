@@ -94,6 +94,7 @@ func (s *Service) blockActionForActivePathPicker(surface *state.SurfaceConsoleRe
 		control.ActionPathPickerEnter,
 		control.ActionPathPickerUp,
 		control.ActionPathPickerSelect,
+		control.ActionPathPickerPage,
 		control.ActionPathPickerConfirm,
 		control.ActionPathPickerCancel:
 		return nil

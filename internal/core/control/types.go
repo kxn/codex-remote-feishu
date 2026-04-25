@@ -65,6 +65,7 @@ const (
 	ActionPathPickerEnter             ActionKind = "surface.path_picker.enter"
 	ActionPathPickerUp                ActionKind = "surface.path_picker.up"
 	ActionPathPickerSelect            ActionKind = "surface.path_picker.select"
+	ActionPathPickerPage              ActionKind = "surface.path_picker.page"
 	ActionPathPickerConfirm           ActionKind = "surface.path_picker.confirm"
 	ActionPathPickerCancel            ActionKind = "surface.path_picker.cancel"
 	ActionTargetPickerSelectMode      ActionKind = "surface.target_picker.select_mode"

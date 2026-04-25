@@ -90,6 +90,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentPathPickerEnter, PickerID: "picker-1", PickerEntry: "subdir"},
 		},
 		{
+			name:   "path picker page",
+			action: Action{Kind: ActionPathPickerPage, PickerID: "picker-1", FieldName: "path_picker_file", Cursor: 9},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentPathPickerPage, PickerID: "picker-1", FieldName: "path_picker_file", Cursor: 9},
+		},
+		{
 			name:   "path picker confirm",
 			action: Action{Kind: ActionPathPickerConfirm, PickerID: "picker-1"},
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentPathPickerConfirm, PickerID: "picker-1"},

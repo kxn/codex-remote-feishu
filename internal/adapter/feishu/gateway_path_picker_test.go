@@ -164,3 +164,37 @@ func TestParseCardActionTriggerEventBuildsPathPickerNavigationActions(t *testing
 		})
 	}
 }
+
+func TestParseCardActionTriggerEventBuildsPathPickerPageAction(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-picker-page", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":       cardActionKindPathPickerPage,
+					"picker_id":  "picker-1",
+					"field_name": cardPathPickerFileSelectFieldName,
+					"cursor":     17,
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-picker-page",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected path picker page action to parse")
+	}
+	if action.Kind != control.ActionPathPickerPage || action.PickerID != "picker-1" {
+		t.Fatalf("unexpected path picker page action: %#v", action)
+	}
+	if action.FieldName != cardPathPickerFileSelectFieldName || action.Cursor != 17 {
+		t.Fatalf("unexpected path picker page payload: %#v", action)
+	}
+}

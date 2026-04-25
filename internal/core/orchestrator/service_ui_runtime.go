@@ -134,6 +134,8 @@ type activePathPickerRecord struct {
 	RootPath        string
 	CurrentPath     string
 	SelectedPath    string
+	DirectoryCursor int
+	FileCursor      int
 	StatusTitle     string
 	StatusText      string
 	StatusSections  []control.FeishuCardTextSection

@@ -64,6 +64,7 @@ const (
 	CardActionKindPathPickerEnter             = "path_picker_enter"
 	CardActionKindPathPickerUp                = "path_picker_up"
 	CardActionKindPathPickerSelect            = "path_picker_select"
+	CardActionKindPathPickerPage              = "path_picker_page"
 	CardActionKindPathPickerConfirm           = "path_picker_confirm"
 	CardActionKindPathPickerCancel            = "path_picker_cancel"
 	CardActionKindTargetPickerSelectMode      = "target_picker_select_mode"
@@ -265,6 +266,17 @@ func ActionPayloadPathPicker(kind, pickerID, entryName string) map[string]any {
 	}
 	if strings.TrimSpace(entryName) != "" {
 		payload[CardActionPayloadKeyEntryName] = strings.TrimSpace(entryName)
+	}
+	return payload
+}
+
+func ActionPayloadPathPickerCursor(pickerID, fieldName string, cursor int) map[string]any {
+	payload := ActionPayloadPathPicker(CardActionKindPathPickerPage, pickerID, "")
+	if strings.TrimSpace(fieldName) != "" {
+		payload[CardActionPayloadKeyFieldName] = strings.TrimSpace(fieldName)
+	}
+	if cursor > 0 {
+		payload[CardActionPayloadKeyCursor] = cursor
 	}
 	return payload
 }

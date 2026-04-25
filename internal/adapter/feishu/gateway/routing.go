@@ -435,6 +435,24 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			PickerID:         pickerID,
 			Inbound:          meta,
 		}, true
+	case cardActionKindPathPickerPage:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+		if pickerID == "" || fieldName == "" {
+			return control.Action{}, false
+		}
+		return control.Action{
+			Kind:             control.ActionPathPickerPage,
+			GatewayID:        gatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         pickerID,
+			FieldName:        fieldName,
+			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Inbound:          meta,
+		}, true
 	case cardActionKindTargetPickerSelectMode,
 		cardActionKindTargetPickerSelectSource,
 		cardActionKindTargetPickerSelectWorkspace,

@@ -86,6 +86,8 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 		RootPath:        rootPath,
 		CurrentPath:     currentPath,
 		SelectedPath:    selectedPath,
+		DirectoryCursor: -1,
+		FileCursor:      -1,
 		Hint:            strings.TrimSpace(req.Hint),
 		ConfirmLabel:    strings.TrimSpace(firstNonEmpty(req.ConfirmLabel, "确认")),
 		CancelLabel:     strings.TrimSpace(firstNonEmpty(req.CancelLabel, "取消")),
@@ -115,6 +117,8 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 		return s.pathPickerInlineNotice(surface, record, "path_picker_not_directory", "只能进入目录", "只能进入目录。")
 	}
 	if samePath(record.CurrentPath, resolved.path) {
+		record.DirectoryCursor = -1
+		record.FileCursor = -1
 		clearPathPickerStatus(record)
 		view, err := s.buildPathPickerView(surface, record)
 		if err != nil {
@@ -124,6 +128,8 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 	}
 	record.CurrentPath = resolved.path
 	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+	record.DirectoryCursor = -1
+	record.FileCursor = -1
 	clearPathPickerStatus(record)
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
@@ -155,6 +161,8 @@ func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, picker
 	}
 	record.CurrentPath = resolved.path
 	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+	record.DirectoryCursor = -1
+	record.FileCursor = -1
 	clearPathPickerStatus(record)
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
@@ -191,6 +199,35 @@ func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pi
 	view, err := s.buildPathPickerView(surface, record)
 	if err != nil {
 		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
+	}
+	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+}
+
+func (s *Service) handlePathPickerPage(surface *state.SurfaceConsoleRecord, pickerID, fieldName string, cursor int, actorUserID string) []eventcontract.Event {
+	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
+	if blocked != nil {
+		return blocked
+	}
+	entries, err := s.buildPathPickerEntries(surface, record)
+	if err != nil {
+		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
+	}
+	switch strings.TrimSpace(fieldName) {
+	case frontstagecontract.CardPathPickerDirectorySelectFieldName:
+		record.DirectoryCursor = normalizePathPickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
+	case frontstagecontract.CardPathPickerFileSelectFieldName:
+		if record.Mode != pathPickerModeFile {
+			return notice(surface, "path_picker_invalid_page_action", "当前翻页动作无效，请重新打开路径选择器。")
+		}
+		record.FileCursor = normalizePathPickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
+		record.SelectedPath = ""
+	default:
+		return notice(surface, "path_picker_invalid_page_action", "当前翻页动作无效，请重新打开路径选择器。")
+	}
+	clearPathPickerStatus(record)
+	view, err := s.buildPathPickerView(surface, record)
+	if err != nil {
+		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
 	}
 	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
 }
@@ -280,7 +317,21 @@ func (s *Service) buildPathPickerView(surface *state.SurfaceConsoleRecord, recor
 	if err != nil {
 		return control.FeishuPathPickerView{}, err
 	}
+	directoryCursor := record.DirectoryCursor
+	if directoryCursor < 0 {
+		directoryCursor = 0
+	}
+	directoryCursor = normalizePathPickerDropdownCursor(directoryCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
+	record.DirectoryCursor = directoryCursor
+	fileCursor := record.FileCursor
+	if fileCursor < 0 {
+		fileCursor = pathPickerEntryIndexByKind(entries, control.PathPickerEntryFile, view.SelectedPath)
+	}
+	fileCursor = normalizePathPickerDropdownCursor(fileCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
+	record.FileCursor = fileCursor
 	view.Entries = entries
+	view.DirectoryCursor = directoryCursor
+	view.FileCursor = fileCursor
 	if len(entries) == 0 && strings.TrimSpace(record.StageLabel) == "" && strings.TrimSpace(record.Question) == "" {
 		view.Hint = "当前目录为空。"
 	}

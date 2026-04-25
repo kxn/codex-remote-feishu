@@ -1,8 +1,10 @@
 package feishu
 
 import (
+	"strings"
 	"testing"
 
+	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -284,6 +286,167 @@ func TestDirectoryModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 	}
 }
 
+func TestPathPickerFileModePaginatesOversizedLanesAndKeepsFooter(t *testing.T) {
+	entries := make([]control.FeishuPathPickerEntry, 0, 260)
+	for i := 0; i < 120; i++ {
+		name := "dir-" + leftPad3(i)
+		entries = append(entries, control.FeishuPathPickerEntry{
+			Name:       name,
+			Label:      name + "-" + strings.Repeat("d", 80),
+			Kind:       control.PathPickerEntryDirectory,
+			ActionKind: control.PathPickerEntryActionEnter,
+		})
+	}
+	for i := 0; i < 140; i++ {
+		name := "file-" + leftPad3(i) + ".txt"
+		entries = append(entries, control.FeishuPathPickerEntry{
+			Name:       name,
+			Label:      name + "-" + strings.Repeat("f", 96),
+			Kind:       control.PathPickerEntryFile,
+			ActionKind: control.PathPickerEntryActionSelect,
+			Selected:   i == 96,
+		})
+	}
+
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:        "picker-1",
+		Mode:            control.PathPickerModeFile,
+		Title:           "选择文件",
+		RootPath:        "/root",
+		CurrentPath:     "/root",
+		SelectedPath:    "/root/file-096.txt",
+		DirectoryCursor: 88,
+		FileCursor:      96,
+		ConfirmLabel:    "发送",
+		CancelLabel:     "取消",
+		CanConfirm:      true,
+		Entries:         entries,
+	}, "life-large")
+
+	size, err := cardtransport.InteractiveMessageCardSize("选择文件", "", cardThemeInfo, elements, true)
+	if err != nil {
+		t.Fatalf("measure path picker card: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("expected paginated path picker to fit transport budget, got %d bytes", size)
+	}
+
+	var sawDirectoryPage, sawFilePage, sawConfirm bool
+	for _, action := range cardActionsFromElements(elements) {
+		value := cardValueMap(action)
+		switch value[cardActionPayloadKeyKind] {
+		case cardActionKindPathPickerPage:
+			switch value[cardActionPayloadKeyFieldName] {
+			case cardPathPickerDirectorySelectFieldName:
+				sawDirectoryPage = true
+			case cardPathPickerFileSelectFieldName:
+				sawFilePage = true
+			}
+		case cardActionKindPathPickerConfirm:
+			sawConfirm = true
+		}
+	}
+	if !sawDirectoryPage || !sawFilePage {
+		t.Fatalf("expected large file picker to render page callbacks for both selects, got %#v", elements)
+	}
+	if !sawConfirm || !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected large file picker to keep footer actions visible, got %#v", elements)
+	}
+	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+		t.Fatalf("expected large file picker to render pagination hint, got %#v", elements)
+	}
+}
+
+func TestPathPickerDirectoryModePaginatesOversizedLaneAndKeepsFixedOptions(t *testing.T) {
+	entries := make([]control.FeishuPathPickerEntry, 0, 180)
+	for i := 0; i < 180; i++ {
+		name := "dir-" + leftPad3(i)
+		entries = append(entries, control.FeishuPathPickerEntry{
+			Name:       name,
+			Label:      name + "-" + strings.Repeat("d", 92),
+			Kind:       control.PathPickerEntryDirectory,
+			ActionKind: control.PathPickerEntryActionEnter,
+		})
+	}
+
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:        "picker-1",
+		Mode:            control.PathPickerModeDirectory,
+		Title:           "选择目录",
+		RootPath:        "/root",
+		CurrentPath:     "/root/nested",
+		SelectedPath:    "/root/nested",
+		DirectoryCursor: 121,
+		ConfirmLabel:    "确认",
+		CancelLabel:     "取消",
+		CanGoUp:         true,
+		CanConfirm:      true,
+		Entries:         entries,
+	}, "life-dir-large")
+
+	size, err := cardtransport.InteractiveMessageCardSize("选择目录", "", cardThemeInfo, elements, true)
+	if err != nil {
+		t.Fatalf("measure directory path picker card: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("expected directory path picker to fit transport budget, got %d bytes", size)
+	}
+
+	options := selectStaticOptionValues(t, elements, cardPathPickerDirectorySelectFieldName)
+	if len(options) < 2 || options[0] != "." || options[1] != ".." {
+		t.Fatalf("expected paginated directory picker to keep fixed current/parent options, got %v", options)
+	}
+	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+		t.Fatalf("expected directory path picker to render pagination hint, got %#v", elements)
+	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected directory path picker to keep footer visible, got %#v", elements)
+	}
+}
+
+func TestPathPickerOwnerSubpageDirectoryPaginatesOversizedLaneAndKeepsFooter(t *testing.T) {
+	entries := make([]control.FeishuPathPickerEntry, 0, 180)
+	for i := 0; i < 180; i++ {
+		name := "dir-" + leftPad3(i)
+		entries = append(entries, control.FeishuPathPickerEntry{
+			Name:       name,
+			Label:      name + "-" + strings.Repeat("d", 88),
+			Kind:       control.PathPickerEntryDirectory,
+			ActionKind: control.PathPickerEntryActionEnter,
+		})
+	}
+
+	elements := pathPickerElements(control.FeishuPathPickerView{
+		PickerID:        "picker-1",
+		Mode:            control.PathPickerModeDirectory,
+		Title:           "选择目录",
+		StageLabel:      "步骤 2/2",
+		Question:        "选择工作目录",
+		RootPath:        "/root",
+		CurrentPath:     "/root",
+		SelectedPath:    "/root",
+		DirectoryCursor: 123,
+		ConfirmLabel:    "使用这个目录",
+		CancelLabel:     "返回",
+		CanConfirm:      true,
+		Entries:         entries,
+	}, "life-owner-large")
+
+	size, err := cardtransport.InteractiveMessageCardSize("选择目录", "", cardThemeInfo, elements, true)
+	if err != nil {
+		t.Fatalf("measure owner-subpage path picker card: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("expected owner-subpage path picker to fit transport budget, got %d bytes", size)
+	}
+	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+		t.Fatalf("expected owner-subpage path picker to render pagination hint, got %#v", elements)
+	}
+	if !containsRenderedTag(elements, "hr") {
+		t.Fatalf("expected owner-subpage path picker to keep footer visible, got %#v", elements)
+	}
+}
+
 func TestOwnerSubpageDirectoryPathPickerUsesStepHeaderLayout(t *testing.T) {
 	elements := pathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
@@ -401,12 +564,42 @@ func selectStaticInitialOption(t *testing.T, elements []map[string]any, fieldNam
 func findSelectStaticElement(t *testing.T, elements []map[string]any, fieldName string) map[string]any {
 	t.Helper()
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) != "select_static" || cardStringValue(element["name"]) != fieldName {
-			continue
+		switch cardStringValue(element["tag"]) {
+		case "select_static":
+			if cardStringValue(element["name"]) == fieldName {
+				return element
+			}
+		case "column_set":
+			columns, _ := element["columns"].([]map[string]any)
+			for _, column := range columns {
+				columnElements, _ := column["elements"].([]map[string]any)
+				if selectElement := findSelectStaticElementOptional(columnElements, fieldName); selectElement != nil {
+					return selectElement
+				}
+			}
 		}
-		return element
 	}
 	t.Fatalf("select_static %q not found in %#v", fieldName, elements)
+	return nil
+}
+
+func findSelectStaticElementOptional(elements []map[string]any, fieldName string) map[string]any {
+	for _, element := range elements {
+		switch cardStringValue(element["tag"]) {
+		case "select_static":
+			if cardStringValue(element["name"]) == fieldName {
+				return element
+			}
+		case "column_set":
+			columns, _ := element["columns"].([]map[string]any)
+			for _, column := range columns {
+				columnElements, _ := column["elements"].([]map[string]any)
+				if selectElement := findSelectStaticElementOptional(columnElements, fieldName); selectElement != nil {
+					return selectElement
+				}
+			}
+		}
+	}
 	return nil
 }
 

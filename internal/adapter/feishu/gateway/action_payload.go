@@ -64,6 +64,7 @@ const (
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerUp                = frontstagecontract.CardActionKindPathPickerUp
 	cardActionKindPathPickerSelect            = frontstagecontract.CardActionKindPathPickerSelect
+	cardActionKindPathPickerPage              = frontstagecontract.CardActionKindPathPickerPage
 	cardActionKindPathPickerConfirm           = frontstagecontract.CardActionKindPathPickerConfirm
 	cardActionKindPathPickerCancel            = frontstagecontract.CardActionKindPathPickerCancel
 	cardActionKindTargetPickerSelectMode      = frontstagecontract.CardActionKindTargetPickerSelectMode

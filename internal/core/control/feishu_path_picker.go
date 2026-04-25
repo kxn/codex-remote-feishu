@@ -64,31 +64,33 @@ type PathPickerResult struct {
 // FeishuPathPickerView is the UI-owned read model for the reusable Feishu
 // file/directory picker.
 type FeishuPathPickerView struct {
-	PickerID       string
-	MessageID      string
-	Mode           PathPickerMode
-	Title          string
-	StageLabel     string
-	Question       string
-	BodySections   []FeishuCardTextSection
-	NoticeSections []FeishuCardTextSection
-	Phase          frontstagecontract.Phase
-	ActionPolicy   frontstagecontract.ActionPolicy
-	Sealed         bool
-	RootPath       string
-	CurrentPath    string
-	SelectedPath   string
-	ConfirmLabel   string
-	CancelLabel    string
-	CanGoUp        bool
-	CanConfirm     bool
-	Hint           string
-	Terminal       bool
-	StatusTitle    string
-	StatusText     string
-	StatusSections []FeishuCardTextSection
-	StatusFooter   string
-	Entries        []FeishuPathPickerEntry
+	PickerID        string
+	MessageID       string
+	Mode            PathPickerMode
+	Title           string
+	StageLabel      string
+	Question        string
+	BodySections    []FeishuCardTextSection
+	NoticeSections  []FeishuCardTextSection
+	Phase           frontstagecontract.Phase
+	ActionPolicy    frontstagecontract.ActionPolicy
+	Sealed          bool
+	RootPath        string
+	CurrentPath     string
+	SelectedPath    string
+	DirectoryCursor int
+	FileCursor      int
+	ConfirmLabel    string
+	CancelLabel     string
+	CanGoUp         bool
+	CanConfirm      bool
+	Hint            string
+	Terminal        bool
+	StatusTitle     string
+	StatusText      string
+	StatusSections  []FeishuCardTextSection
+	StatusFooter    string
+	Entries         []FeishuPathPickerEntry
 }
 
 type FeishuPathPickerEntry struct {
