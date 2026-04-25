@@ -173,8 +173,11 @@ func TestAdminFeishuPermissionCheckReturnsMissingScopesAndGrantJSON(t *testing.T
 	if resp.Ready {
 		t.Fatalf("expected missing scopes, got ready response %#v", resp)
 	}
-	if resp.ConsoleURL != "https://open.feishu.cn/app/cli_xxx?lang=zh-CN" {
-		t.Fatalf("unexpected console url: %#v", resp)
+	if resp.App.ConsoleLinks.Auth != "https://open.feishu.cn/app/cli_xxx/auth" {
+		t.Fatalf("unexpected auth url: %#v", resp)
+	}
+	if resp.App.ConsoleLinks.Events != "https://open.feishu.cn/app/cli_xxx/event?tab=event" {
+		t.Fatalf("unexpected events url: %#v", resp)
 	}
 	if resp.LastCheckedAt == nil {
 		t.Fatalf("expected lastCheckedAt to be set: %#v", resp)
@@ -197,15 +200,7 @@ func TestAdminFeishuEventSubscriptionTestStartAndPass(t *testing.T) {
 	}}
 	gateway := &fakeAdminGatewayController{}
 	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
-	app.service.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		GatewayID:        "main",
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		MessageID:        "seed",
-		Text:             "hello",
-	})
+	app.bindFeishuAppWebTestRecipient("main", "user-1")
 
 	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/test-events", "")
 	if rec.Code != http.StatusOK {
@@ -221,8 +216,15 @@ func TestAdminFeishuEventSubscriptionTestStartAndPass(t *testing.T) {
 	if len(gateway.applied) != 1 {
 		t.Fatalf("expected one outgoing test prompt, got %#v", gateway.applied)
 	}
-	if gateway.applied[0].Kind != feishu.OperationSendText || !strings.Contains(gateway.applied[0].Text, defaultFeishuAppEventTestPhrase) {
+	if gateway.applied[0].Kind != feishu.OperationSendCard || gateway.applied[0].CardTitle != "事件订阅测试" {
 		t.Fatalf("unexpected prompt operation: %#v", gateway.applied[0])
+	}
+	cardPayload, err := json.Marshal(gateway.applied[0].CardElements)
+	if err != nil {
+		t.Fatalf("marshal event test card: %v", err)
+	}
+	if !strings.Contains(string(cardPayload), defaultFeishuAppEventTestPhrase) {
+		t.Fatalf("expected event test phrase in card, got %s", string(cardPayload))
 	}
 
 	app.HandleAction(context.Background(), control.Action{
@@ -239,7 +241,7 @@ func TestAdminFeishuEventSubscriptionTestStartAndPass(t *testing.T) {
 		t.Fatalf("expected success reply after passing event test, got %#v", gateway.applied)
 	}
 	reply := gateway.applied[1]
-	if reply.ReplyToMessageID != "msg-event-pass" || !strings.Contains(reply.Text, "事件订阅测试已通过") {
+	if reply.ReplyToMessageID != "msg-event-pass" || reply.Text != "测试成功，请回到配置页面继续下一步工作。" {
 		t.Fatalf("unexpected event test reply: %#v", reply)
 	}
 }
@@ -254,15 +256,7 @@ func TestAdminFeishuCallbackTestStartAndPass(t *testing.T) {
 	}}
 	gateway := &fakeAdminGatewayController{}
 	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
-	app.service.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		GatewayID:        "main",
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		MessageID:        "seed",
-		Text:             "hello",
-	})
+	app.bindFeishuAppWebTestRecipient("main", "user-1")
 
 	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/test-callback", "")
 	if rec.Code != http.StatusOK {
@@ -270,6 +264,13 @@ func TestAdminFeishuCallbackTestStartAndPass(t *testing.T) {
 	}
 	if len(gateway.applied) != 1 || gateway.applied[0].Kind != feishu.OperationSendCard {
 		t.Fatalf("expected one callback test card, got %#v", gateway.applied)
+	}
+	callbackPayload, err := json.Marshal(gateway.applied[0].CardElements)
+	if err != nil {
+		t.Fatalf("marshal callback test card: %v", err)
+	}
+	if !strings.Contains(string(callbackPayload), "点此测试回调") {
+		t.Fatalf("expected callback button in card, got %s", string(callbackPayload))
 	}
 
 	app.HandleAction(context.Background(), control.Action{
@@ -285,12 +286,12 @@ func TestAdminFeishuCallbackTestStartAndPass(t *testing.T) {
 		t.Fatalf("expected success reply after passing callback test, got %#v", gateway.applied)
 	}
 	reply := gateway.applied[1]
-	if reply.ReplyToMessageID != "msg-callback-pass" || !strings.Contains(reply.Text, "回调测试已通过") {
+	if reply.ReplyToMessageID != "msg-callback-pass" || reply.Text != "回调测试成功，请回到配置页面继续下一步工作。" {
 		t.Fatalf("unexpected callback test reply: %#v", reply)
 	}
 }
 
-func TestAdminFeishuTestStartFailsWithoutRecentSurface(t *testing.T) {
+func TestAdminFeishuTestStartFailsWithoutBoundRecipient(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
 		ID:        "main",
@@ -302,10 +303,10 @@ func TestAdminFeishuTestStartFailsWithoutRecentSurface(t *testing.T) {
 
 	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/test-events", "")
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("test-events without surface status = %d, want 409 body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("test-events without recipient status = %d, want 409 body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "feishu_app_test_target_unavailable") {
-		t.Fatalf("expected target unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "feishu_app_web_test_recipient_unavailable") {
+		t.Fatalf("expected recipient unavailable error, got %s", rec.Body.String())
 	}
 }
 

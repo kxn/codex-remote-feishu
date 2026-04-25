@@ -5,7 +5,9 @@ import { SetupRoute } from "./SetupRoute";
 import {
   makeApp,
   makeBootstrap,
+  makeFeishuManifest,
   makePermissionCheck,
+  makeRuntimeRequirementsDetect,
   makeVSCodeDetect,
 } from "../test/fixtures";
 import { installMockFetch } from "../test/http";
@@ -22,6 +24,9 @@ describe("SetupRoute", () => {
       "/g/demo/api/setup/bootstrap-state": {
         body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
       },
+      "/g/demo/api/setup/feishu/manifest": {
+        body: makeFeishuManifest(),
+      },
       "/g/demo/api/setup/feishu/apps": { body: { apps: [] } },
       "/g/demo/api/setup/feishu/onboarding/sessions": {
         status: 201,
@@ -32,6 +37,9 @@ describe("SetupRoute", () => {
             qrCodeDataUrl: "data:image/png;base64,abc",
           },
         },
+      },
+      "/g/demo/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
       },
       "/g/demo/api/setup/autostart/detect": {
         body: {
@@ -48,6 +56,11 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
+    expect(
+      await screen.findByRole("heading", {
+        name: "Codex Remote Feishu v1.7.0 安装程序",
+      }),
+    ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
     await waitFor(() => {
       expect(
@@ -66,6 +79,7 @@ describe("SetupRoute", () => {
 
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
       "/api/setup/feishu/onboarding/sessions": {
         status: 201,
         body: {
@@ -75,6 +89,9 @@ describe("SetupRoute", () => {
             qrCodeDataUrl: "data:image/png;base64,abc",
           },
         },
+      },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
       },
       "/api/setup/feishu/apps": (call) => {
         if (call.method === "POST") {
@@ -147,8 +164,8 @@ describe("SetupRoute", () => {
           gatewayId: "bot-manual",
           startedAt: "2026-04-25T08:12:00Z",
           expiresAt: "2026-04-25T08:22:00Z",
-          phrase: "事件订阅测试通过",
-          message: "测试提示已发往最近使用该机器人的飞书会话。",
+          phrase: "测试",
+          message: "事件订阅测试提示已发送。",
         },
       },
       "/api/setup/autostart/detect": {
@@ -168,7 +185,7 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "手动输入" }));
-    await user.type(screen.getByLabelText("机器人名称"), "团队机器人");
+    await user.type(screen.getByLabelText("机器人名称（可选）"), "团队机器人");
     await user.type(screen.getByLabelText("App ID"), "cli_manual");
     await user.type(screen.getByLabelText("App Secret"), "secret_manual");
     await user.click(screen.getByRole("button", { name: "验证并继续" }));
@@ -179,6 +196,7 @@ describe("SetupRoute", () => {
 
     await user.click(screen.getByRole("button", { name: "我已处理，重新检查" }));
     expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
+    expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
   });
 
   it("starts qr onboarding automatically, polls every 2 seconds, and advances to permissions", async () => {
@@ -187,6 +205,7 @@ describe("SetupRoute", () => {
 
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
       "/api/setup/feishu/apps": () => ({
         body: {
           apps: appsConfigured
@@ -242,6 +261,9 @@ describe("SetupRoute", () => {
           },
         };
       },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
+      },
       "/api/setup/feishu/apps/bot-qr/permission-check": {
         body: makePermissionCheck({
           app: makeApp({ id: "bot-qr", appId: "cli_qr" }),
@@ -272,11 +294,12 @@ describe("SetupRoute", () => {
     expect(await screen.findByText("当前还不能进入下一步，请先补齐缺失权限。")).toBeInTheDocument();
   });
 
-  it("shows the recent-surface fallback when event test target is unavailable", async () => {
+  it("shows the bound-recipient error when event test target is unavailable", async () => {
     window.history.replaceState({}, "", "/setup");
 
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
       "/api/setup/feishu/apps": {
         body: {
           apps: [
@@ -288,6 +311,9 @@ describe("SetupRoute", () => {
           ],
         },
       },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
+      },
       "/api/setup/feishu/apps/bot-1/permission-check": {
         body: makePermissionCheck({
           app: makeApp({ id: "bot-1" }),
@@ -298,8 +324,10 @@ describe("SetupRoute", () => {
         status: 409,
         body: {
           error: {
-            code: "feishu_app_test_target_unavailable",
-            message: "target unavailable",
+            code: "feishu_app_web_test_recipient_unavailable",
+            message: "recipient unavailable",
+            details:
+              "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
           },
         },
       },
@@ -323,7 +351,9 @@ describe("SetupRoute", () => {
       await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("请先在飞书里给机器人发送一条消息，再回到网页重试。"),
+      await screen.findByText(
+        "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+      ),
     ).toBeInTheDocument();
   });
 });

@@ -11,6 +11,7 @@ import { relativeLocalPath } from "../lib/paths";
 import type {
   AutostartDetectResponse,
   BootstrapState,
+  FeishuManifestResponse,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -87,6 +88,9 @@ export function SetupRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
+  const [manifest, setManifest] = useState<FeishuManifestResponse["manifest"] | null>(
+    null,
+  );
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedAppID, setSelectedAppID] = useState("");
   const [runtimeRequirements, setRuntimeRequirements] =
@@ -130,10 +134,9 @@ export function SetupRoute() {
     () => apps.find((app) => app.id === selectedAppID) ?? null,
     [apps, selectedAppID],
   );
+  const title = buildSetupPageTitle(bootstrap);
   const adminURL = relativeLocalPath(bootstrap?.admin.url || "/");
-  const consoleURL =
-    permissionResponse(permissionState)?.consoleURL ||
-    buildFeishuConsoleURL(activeApp?.appId);
+  const activeConsoleLinks = activeApp?.consoleLinks;
   const isReadOnlyApp = Boolean(activeApp?.readOnly);
   const currentStepIndex = setupSteps.findIndex((step) => step.id === currentStep);
   const setupComplete = vscodeDone || currentStep === "done";
@@ -153,8 +156,8 @@ export function SetupRoute() {
   };
 
   useEffect(() => {
-    document.title = "Codex Remote 安装程序";
-  }, []);
+    document.title = title;
+  }, [title]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,9 +286,17 @@ export function SetupRoute() {
       setLoading(true);
     }
     setLoadError("");
-    const [bootstrapState, appList, runtimeState, autostartState, vscodeState] =
+    const [
+      bootstrapState,
+      manifestState,
+      appList,
+      runtimeState,
+      autostartState,
+      vscodeState,
+    ] =
       await Promise.all([
         requestJSON<BootstrapState>("/api/setup/bootstrap-state"),
+        requestJSON<FeishuManifestResponse>("/api/setup/feishu/manifest"),
         requestJSON<FeishuAppsResponse>("/api/setup/feishu/apps"),
         requestJSON<RuntimeRequirementsDetectResponse>(
           "/api/setup/runtime-requirements/detect",
@@ -301,6 +312,7 @@ export function SetupRoute() {
       "";
 
     setBootstrap(bootstrapState);
+    setManifest(manifestState.manifest);
     setApps(appList.apps);
     setSelectedAppID(nextSelectedAppID);
     setRuntimeRequirements(runtimeState);
@@ -498,14 +510,23 @@ export function SetupRoute() {
       setState({
         status: "error",
         message:
-          error?.code === "feishu_app_test_target_unavailable"
-            ? "请先在飞书里给机器人发送一条消息，再回到网页重试。"
+          error?.code === "feishu_app_web_test_recipient_unavailable"
+            ? String(error.details || "当前机器人还没有可用的飞书测试接收者。")
             : "暂时没有把测试提示发送成功，请稍后重试。",
       });
       return;
     }
     const payload = response.data as FeishuAppTestStartResponse;
     setState({ status: "sent", message: payload.message });
+  }
+
+  async function clearInstallTest(appID: string, kind: "events" | "callback") {
+    await requestJSONAllowHTTPError<unknown>(
+      `/api/setup/feishu/apps/${encodeURIComponent(appID)}/install-tests/${encodeURIComponent(kind)}/clear`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   async function applyAutostartAndContinue() {
@@ -665,7 +686,7 @@ export function SetupRoute() {
           <div>
             <h4 style={{ margin: 0 }}>扫码创建</h4>
             <p className="support-copy">
-              选中后会立即显示二维码，并自动轮询扫码结果。
+              请使用飞书扫码完成创建，页面会自动轮询并继续下一步。
             </p>
             <div className="scan-frame">
               {onboardingSession?.qrCodeDataUrl ? (
@@ -746,22 +767,9 @@ export function SetupRoute() {
         ) : null}
         <div className="form-grid">
           <label className="field">
-            <span>机器人名称</span>
-            <input
-              aria-label="机器人名称"
-              disabled={isReadOnlyApp}
-              placeholder="例如：团队机器人"
-              value={manualForm.name}
-              onChange={(event) =>
-                setManualForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label className="field">
-            <span>App ID</span>
+            <span>
+              App ID <em className="field-required">*</em>
+            </span>
             <input
               aria-label="App ID"
               disabled={isReadOnlyApp}
@@ -775,8 +783,10 @@ export function SetupRoute() {
               }
             />
           </label>
-          <label className="field form-grid-span-2">
-            <span>App Secret</span>
+          <label className="field">
+            <span>
+              App Secret <em className="field-required">*</em>
+            </span>
             <input
               aria-label="App Secret"
               disabled={isReadOnlyApp}
@@ -786,6 +796,21 @@ export function SetupRoute() {
                 setManualForm((current) => ({
                   ...current,
                   appSecret: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="field form-grid-span-2">
+            <span>机器人名称（可选）</span>
+            <input
+              aria-label="机器人名称（可选）"
+              disabled={isReadOnlyApp}
+              placeholder="例如：团队机器人"
+              value={manualForm.name}
+              onChange={(event) =>
+                setManualForm((current) => ({
+                  ...current,
+                  name: event.target.value,
                 }))
               }
             />
@@ -891,7 +916,7 @@ export function SetupRoute() {
             </button>
             <a
               className="ghost-button"
-              href={permissionState.data.consoleURL || consoleURL}
+              href={permissionState.data.app.consoleLinks?.auth || activeConsoleLinks?.auth || "#"}
               rel="noreferrer"
               target="_blank"
             >
@@ -915,36 +940,37 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>事件订阅</h2>
-          <p>进入本页会自动向机器人发送测试提示。</p>
-        </div>
-        <div className="notice-banner warn">
-          请到机器人会话中按指引输入固定验证词，完成事件订阅测试。
+          <p>进入本页后，机器人会自动发出事件订阅测试提示。</p>
         </div>
         {eventTest.status === "sent" ? (
           <div className="notice-banner good">
-            {eventTest.message || "测试提示已发送到机器人会话。"}
+            {eventTest.message || "事件订阅测试提示已发送。"}
           </div>
         ) : null}
         {eventTest.status === "error" ? (
           <div className="notice-banner danger">{eventTest.message}</div>
         ) : null}
         <p className="support-copy">
-          如果你确认这一步已经完成，也可以直接继续下一步。
+          前往
+          {" "}
+          <a href={activeConsoleLinks?.events || "#"} rel="noreferrer" target="_blank">
+            飞书后台
+          </a>
+          {" "}
+          配置事件订阅。
         </p>
+        {renderRequirementTable(
+          ["事件", "用途"],
+          (manifest?.events || []).map((item) => [item.event, item.purpose || ""]),
+        )}
         <div className="button-row">
-          {eventTest.status === "error" ? (
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => activeApp?.id && void startTest(activeApp.id, "events")}
-            >
-              重新发送提示
-            </button>
-          ) : null}
           <button
             className="primary-button"
             type="button"
             onClick={() => {
+              if (activeApp?.id) {
+                void clearInstallTest(activeApp.id, "events");
+              }
               setEventsDone(true);
               setCurrentStep("callback");
             }}
@@ -961,38 +987,37 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>回调配置</h2>
-          <p>进入本页会自动向机器人发送回调测试卡片。</p>
-        </div>
-        <div className="notice-banner warn">
-          请到机器人会话中点击测试卡片按钮，确认回调可用。
+          <p>进入本页后，机器人会自动发出回调测试卡片。</p>
         </div>
         {callbackTest.status === "sent" ? (
           <div className="notice-banner good">
-            {callbackTest.message || "回调测试卡片已发送到机器人会话。"}
+            {callbackTest.message || "回调测试卡片已发送。"}
           </div>
         ) : null}
         {callbackTest.status === "error" ? (
           <div className="notice-banner danger">{callbackTest.message}</div>
         ) : null}
         <p className="support-copy">
-          如果你确认这一步已经完成，也可以直接继续下一步。
+          前往
+          {" "}
+          <a href={activeConsoleLinks?.callback || "#"} rel="noreferrer" target="_blank">
+            飞书后台
+          </a>
+          {" "}
+          配置回调。
         </p>
+        {renderRequirementTable(
+          ["回调", "用途"],
+          (manifest?.callbacks || []).map((item) => [item.callback, item.purpose || ""]),
+        )}
         <div className="button-row">
-          {callbackTest.status === "error" ? (
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() =>
-                activeApp?.id && void startTest(activeApp.id, "callback")
-              }
-            >
-              重新发送提示
-            </button>
-          ) : null}
           <button
             className="primary-button"
             type="button"
             onClick={() => {
+              if (activeApp?.id) {
+                void clearInstallTest(activeApp.id, "callback");
+              }
               setCallbackDone(true);
               setCurrentStep("menu");
             }}
@@ -1009,20 +1034,18 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>菜单确认</h2>
-          <p>请在飞书后台完成菜单配置后继续。</p>
+          <p>请在飞书后台完成菜单配置后继续下一步。</p>
         </div>
-        <div className="notice-banner warn">
-          如果尚未配置菜单，请先进入飞书后台完成设置。
-        </div>
-        <div className="button-row">
-          <a
-            className="ghost-button"
-            href={consoleURL}
-            rel="noreferrer"
-            target="_blank"
-          >
-            打开飞书后台菜单配置
+        <p className="support-copy">
+          前往
+          {" "}
+          <a href={activeConsoleLinks?.bot || "#"} rel="noreferrer" target="_blank">
+            飞书后台
           </a>
+          {" "}
+          完成菜单配置。
+        </p>
+        <div className="button-row">
           <button
             className="primary-button"
             type="button"
@@ -1267,7 +1290,7 @@ export function SetupRoute() {
     return (
       <div className="product-page">
         <header className="product-topbar">
-          <h1>Codex Remote 安装程序</h1>
+          <h1>{title}</h1>
         </header>
         <section className="panel">
           <div className="empty-state">
@@ -1283,7 +1306,7 @@ export function SetupRoute() {
     return (
       <div className="product-page">
         <header className="product-topbar">
-          <h1>Codex Remote 安装程序</h1>
+          <h1>{title}</h1>
         </header>
         <section className="panel">
           <div className="empty-state error">
@@ -1307,7 +1330,7 @@ export function SetupRoute() {
   return (
     <div className="product-page">
       <header className="product-topbar">
-        <h1>Codex Remote 安装程序</h1>
+        <h1>{title}</h1>
       </header>
       {notice ? (
         <div className="product-notice-slot">
@@ -1367,25 +1390,42 @@ function hasConnectedApp(app: FeishuAppSummary | null): boolean {
   return Boolean(app?.verifiedAt);
 }
 
-function buildFeishuConsoleURL(appID?: string): string {
-  if (!appID?.trim()) {
-    return "https://open.feishu.cn/app?lang=zh-CN";
-  }
-  return `https://open.feishu.cn/app/${appID.trim()}?lang=zh-CN`;
+function buildSetupPageTitle(bootstrap: BootstrapState | null): string {
+  const name = bootstrap?.product.name?.trim() || "Codex Remote Feishu";
+  const version = bootstrap?.product.version?.trim();
+  return version ? `${name} ${version} 安装程序` : `${name} 安装程序`;
+}
+
+function renderRequirementTable(headers: string[], rows: string[][]) {
+  return (
+    <div className="detail-table-wrap">
+      <table className="detail-table">
+        <thead>
+          <tr>
+            {headers.map((header) => (
+              <th key={header} scope="col">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${rowIndex}-${row[0] || "row"}`}>
+              {row.map((value, cellIndex) => (
+                <td key={`${rowIndex}-${cellIndex}`}>{value}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function permissionResponse(
-  state: PermissionState,
-): FeishuAppPermissionCheckResponse | null {
-  if (state.status === "ready" || state.status === "missing") {
-    return state.data;
-  }
-  return null;
 }
 
 function readAPIError(result: JSONResult<unknown>) {

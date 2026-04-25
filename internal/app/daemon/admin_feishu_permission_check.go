@@ -72,7 +72,6 @@ func (a *App) buildFeishuAppPermissionCheck(ctx context.Context, gatewayID strin
 		Ready:         len(missing) == 0,
 		MissingScopes: missing,
 		GrantJSON:     buildFeishuPermissionGrantJSON(missing),
-		ConsoleURL:    buildFeishuAppConsoleURL(summary.AppID),
 		LastCheckedAt: &now,
 	}, nil
 }
@@ -142,10 +141,16 @@ func buildFeishuPermissionGrantJSON(missing []feishuAppPermissionCheckItem) stri
 	return string(data)
 }
 
-func buildFeishuAppConsoleURL(appID string) string {
+func buildFeishuAppConsoleLinks(appID string) feishuAppConsoleLinks {
 	appID = strings.TrimSpace(appID)
 	if appID == "" {
-		return "https://open.feishu.cn/app?lang=zh-CN"
+		return feishuAppConsoleLinks{}
 	}
-	return "https://open.feishu.cn/app/" + appID + "?lang=zh-CN"
+	base := "https://open.feishu.cn/app/" + appID
+	return feishuAppConsoleLinks{
+		Auth:     base + "/auth",
+		Events:   base + "/event?tab=event",
+		Callback: base + "/event?tab=callback",
+		Bot:      base + "/bot",
+	}
 }

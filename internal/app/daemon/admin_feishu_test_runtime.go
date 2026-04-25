@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
 func errFeishuAppNotFound(gatewayID string) error {
@@ -21,8 +22,8 @@ func errFeishuAppRuntimeUnavailable(gatewayID string) error {
 	return fmt.Errorf("feishu_app_runtime_unavailable:%s", strings.TrimSpace(gatewayID))
 }
 
-func errFeishuAppTestTargetUnavailable(gatewayID string) error {
-	return fmt.Errorf("feishu_app_test_target_unavailable:%s", strings.TrimSpace(gatewayID))
+func errFeishuAppWebTestRecipientUnavailable(gatewayID string) error {
+	return fmt.Errorf("feishu_app_web_test_recipient_unavailable:%s", strings.TrimSpace(gatewayID))
 }
 
 func (a *App) handleFeishuAppTestEvents(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +32,21 @@ func (a *App) handleFeishuAppTestEvents(w http.ResponseWriter, r *http.Request) 
 
 func (a *App) handleFeishuAppTestCallback(w http.ResponseWriter, r *http.Request) {
 	a.handleFeishuAppTestStart(w, r, feishuAppTestKindCallback)
+}
+
+func (a *App) handleFeishuAppInstallTestClear(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	kind, ok := parseFeishuAppTestKind(r.PathValue("kind"))
+	if !ok {
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "invalid_feishu_app_test_kind",
+			Message: "unknown feishu app test kind",
+			Details: r.PathValue("kind"),
+		})
+		return
+	}
+	a.clearFeishuAppTest(gatewayID, kind)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *App) handleFeishuAppTestStart(w http.ResponseWriter, r *http.Request, kind feishuAppTestKind) {
@@ -50,11 +66,11 @@ func (a *App) handleFeishuAppTestStart(w http.ResponseWriter, r *http.Request, k
 				Message: "feishu app is not available at runtime",
 				Details: gatewayID,
 			})
-		case strings.HasPrefix(err.Error(), "feishu_app_test_target_unavailable:"):
+		case strings.HasPrefix(err.Error(), "feishu_app_web_test_recipient_unavailable:"):
 			writeAPIError(w, http.StatusConflict, apiError{
-				Code:    "feishu_app_test_target_unavailable",
-				Message: "no recent Feishu conversation is available for this app yet",
-				Details: "请先在飞书里给这个机器人发送一条消息，再回到网页重试。",
+				Code:    "feishu_app_web_test_recipient_unavailable",
+				Message: "the current feishu app does not have a bound web test recipient",
+				Details: "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
 			})
 		default:
 			writeAPIError(w, http.StatusBadGateway, apiError{
@@ -84,11 +100,11 @@ func (a *App) startFeishuAppTest(ctx context.Context, gatewayID string, kind fei
 		return feishuAppTestStartResponse{}, errFeishuAppRuntimeUnavailable(gatewayID)
 	}
 
-	target, ok := a.resolveFeishuAppTestDeliveryTarget(gatewayID)
+	recipient, ok := a.resolveFeishuAppWebTestRecipient(gatewayID)
 	if !ok {
-		return feishuAppTestStartResponse{}, errFeishuAppTestTargetUnavailable(gatewayID)
+		return feishuAppTestStartResponse{}, errFeishuAppWebTestRecipientUnavailable(gatewayID)
 	}
-	test := a.beginFeishuAppTest(gatewayID, kind, target.SurfaceSessionID)
+	test := a.beginFeishuAppTest(gatewayID, kind, recipient)
 
 	var (
 		ops     []feishu.Operation
@@ -96,11 +112,11 @@ func (a *App) startFeishuAppTest(ctx context.Context, gatewayID string, kind fei
 	)
 	switch kind {
 	case feishuAppTestKindCallback:
-		ops = []feishu.Operation{feishuAppCallbackTestOperation(target, a.daemonLifecycleID)}
-		message = "测试卡片已发往最近使用该机器人的飞书会话。"
+		ops = []feishu.Operation{feishuAppCallbackTestOperation(summary, recipient, a.daemonLifecycleID)}
+		message = "回调测试提示已发送。"
 	default:
-		ops = []feishu.Operation{feishuAppEventSubscriptionTestOperation(target, test.Phrase)}
-		message = "测试提示已发往最近使用该机器人的飞书会话。"
+		ops = []feishu.Operation{feishuAppEventSubscriptionTestOperation(summary, test)}
+		message = "事件订阅测试提示已发送。"
 	}
 
 	if err := a.applyFeishuOperations(ctx, ops); err != nil {
@@ -119,36 +135,72 @@ func (a *App) startFeishuAppTest(ctx context.Context, gatewayID string, kind fei
 	return resp, nil
 }
 
-func feishuAppEventSubscriptionTestOperation(target feishuAppTestDeliveryTarget, phrase string) feishu.Operation {
+func feishuAppEventSubscriptionTestOperation(app adminFeishuAppSummary, test feishuAppTestContext) feishu.Operation {
+	events := feishuEventRequirementLines(feishuapp.DefaultManifest().Events)
 	return feishu.Operation{
-		Kind:             feishu.OperationSendText,
-		GatewayID:        target.GatewayID,
-		SurfaceSessionID: target.SurfaceSessionID,
-		ChatID:           target.ChatID,
-		ReceiveID:        target.ReceiveID,
-		ReceiveIDType:    target.ReceiveIDType,
-		Text:             fmt.Sprintf("请直接回复“%s”完成事件订阅测试。如果没有收到回复，请回到飞书后台检查事件订阅配置。", strings.TrimSpace(phrase)),
+		Kind:          feishu.OperationSendCard,
+		GatewayID:     app.ID,
+		ReceiveID:     test.Recipient.ReceiveID,
+		ReceiveIDType: test.Recipient.ReceiveIDType,
+		CardTitle:     "事件订阅测试",
+		CardThemeKey:  "info",
+		CardElements: []map[string]any{
+			{
+				"tag":     "markdown",
+				"content": fmt.Sprintf("我们开始测试飞书事件订阅，请确保机器人在 [飞书后台](%s) 配置订阅方式为长连接，并添加以下事件：", strings.TrimSpace(app.ConsoleLinks.Events)),
+			},
+			{
+				"tag": "div",
+				"text": map[string]any{
+					"tag":     "plain_text",
+					"content": strings.Join(events, "\n"),
+				},
+			},
+			{
+				"tag": "div",
+				"text": map[string]any{
+					"tag": "plain_text",
+					"content": fmt.Sprintf(
+						"请在这里回复“%s”，保证我能收到消息。\n如果我没有回应，请去飞书后台确认增加事件配置以后是否发布了新版本。需要发布以后才会生效。",
+						strings.TrimSpace(test.Phrase),
+					),
+				},
+			},
+		},
 	}
 }
 
-func feishuAppCallbackTestOperation(target feishuAppTestDeliveryTarget, daemonLifecycleID string) feishu.Operation {
+func feishuAppCallbackTestOperation(app adminFeishuAppSummary, recipient feishuAppWebTestRecipient, daemonLifecycleID string) feishu.Operation {
+	callbacks := feishuCallbackRequirementLines(feishuapp.DefaultManifest().Callbacks)
 	value := frontstagecontract.ActionPayloadWithLifecycle(
 		frontstagecontract.ActionPayloadPageAction(string(control.ActionFeishuAppTestCallback), ""),
 		daemonLifecycleID,
 	)
 	return feishu.Operation{
-		Kind:             feishu.OperationSendCard,
-		GatewayID:        target.GatewayID,
-		SurfaceSessionID: target.SurfaceSessionID,
-		ChatID:           target.ChatID,
-		ReceiveID:        target.ReceiveID,
-		ReceiveIDType:    target.ReceiveIDType,
-		CardTitle:        "回调测试",
-		CardThemeKey:     "info",
+		Kind:          feishu.OperationSendCard,
+		GatewayID:     app.ID,
+		ReceiveID:     recipient.ReceiveID,
+		ReceiveIDType: recipient.ReceiveIDType,
+		CardTitle:     "回调测试",
+		CardThemeKey:  "info",
 		CardElements: []map[string]any{
 			{
 				"tag":     "markdown",
-				"content": "请点击下方按钮测试回调能力。如果点击后没有看到回复，请回到飞书后台检查回调配置。",
+				"content": fmt.Sprintf("我们开始测试飞书回调配置，请确保机器人在 [飞书后台](%s) 配置回调订阅方式为长连接，并添加以下回调：", strings.TrimSpace(app.ConsoleLinks.Callback)),
+			},
+			{
+				"tag": "div",
+				"text": map[string]any{
+					"tag":     "plain_text",
+					"content": strings.Join(callbacks, "\n"),
+				},
+			},
+			{
+				"tag": "div",
+				"text": map[string]any{
+					"tag":     "plain_text",
+					"content": "请点击下方按钮完成验证。\n如果没有响应，请去飞书后台确认增加回调配置以后是否发布了新版本。需要发布以后才会生效。",
+				},
 			},
 			{
 				"tag": "action",
@@ -168,7 +220,7 @@ func feishuAppCallbackTestOperation(target feishuAppTestDeliveryTarget, daemonLi
 	}
 }
 
-func (a *App) beginFeishuAppTest(gatewayID string, kind feishuAppTestKind, surfaceSessionID string) feishuAppTestContext {
+func (a *App) beginFeishuAppTest(gatewayID string, kind feishuAppTestKind, recipient feishuAppWebTestRecipient) feishuAppTestContext {
 	now := time.Now().UTC()
 	expiresAt := now.Add(defaultFeishuAppTestTTL)
 	id, err := randomHex(8)
@@ -176,14 +228,14 @@ func (a *App) beginFeishuAppTest(gatewayID string, kind feishuAppTestKind, surfa
 		id = strings.ReplaceAll(now.Format("20060102150405"), " ", "")
 	}
 	record := &feishuAppTestContext{
-		ID:               id,
-		GatewayID:        canonicalGatewayID(gatewayID),
-		Kind:             kind,
-		Phrase:           defaultFeishuAppEventTestPhrase,
-		SurfaceSessionID: strings.TrimSpace(surfaceSessionID),
-		Status:           feishuAppTestStatusPending,
-		StartedAt:        now,
-		ExpiresAt:        expiresAt,
+		ID:        id,
+		GatewayID: canonicalGatewayID(gatewayID),
+		Kind:      kind,
+		Phrase:    defaultFeishuAppEventTestPhrase,
+		Recipient: recipient,
+		Status:    feishuAppTestStatusPending,
+		StartedAt: now,
+		ExpiresAt: expiresAt,
 	}
 	if kind != feishuAppTestKindEventSubscription {
 		record.Phrase = ""
@@ -194,6 +246,8 @@ func (a *App) beginFeishuAppTest(gatewayID string, kind feishuAppTestKind, surfa
 	if a.feishuRuntime.tests == nil {
 		a.feishuRuntime.tests = map[string]*feishuAppTestContext{}
 	}
+	delete(a.feishuRuntime.tests, feishuAppTestKey(gatewayID, feishuAppTestKindEventSubscription))
+	delete(a.feishuRuntime.tests, feishuAppTestKey(gatewayID, feishuAppTestKindCallback))
 	a.feishuRuntime.tests[feishuAppTestKey(gatewayID, kind)] = record
 	return *record
 }
@@ -211,8 +265,58 @@ func (a *App) clearAllFeishuAppTests(gatewayID string) {
 	delete(a.feishuRuntime.tests, feishuAppTestKey(gatewayID, feishuAppTestKindCallback))
 }
 
+func (a *App) bindFeishuAppWebTestRecipient(gatewayID, actorUserID string) {
+	gatewayID = canonicalGatewayID(gatewayID)
+	actorUserID = strings.TrimSpace(actorUserID)
+	receiveID, receiveIDType := feishu.ResolveReceiveTarget("", actorUserID)
+	if gatewayID == "" || receiveID == "" || receiveIDType == "" {
+		return
+	}
+	recipient := feishuAppWebTestRecipient{
+		GatewayID:     gatewayID,
+		ActorUserID:   actorUserID,
+		ReceiveID:     receiveID,
+		ReceiveIDType: receiveIDType,
+		BoundAt:       time.Now().UTC(),
+	}
+	a.feishuRuntime.mu.Lock()
+	defer a.feishuRuntime.mu.Unlock()
+	if a.feishuRuntime.webTestRecipients == nil {
+		a.feishuRuntime.webTestRecipients = map[string]feishuAppWebTestRecipient{}
+	}
+	a.feishuRuntime.webTestRecipients[gatewayID] = recipient
+}
+
+func (a *App) clearFeishuAppWebTestRecipient(gatewayID string) {
+	a.feishuRuntime.mu.Lock()
+	defer a.feishuRuntime.mu.Unlock()
+	delete(a.feishuRuntime.webTestRecipients, canonicalGatewayID(gatewayID))
+}
+
+func (a *App) resolveFeishuAppWebTestRecipient(gatewayID string) (feishuAppWebTestRecipient, bool) {
+	a.feishuRuntime.mu.Lock()
+	defer a.feishuRuntime.mu.Unlock()
+	a.cleanupFeishuAppTestsLocked(time.Now().UTC())
+	recipient, ok := a.feishuRuntime.webTestRecipients[canonicalGatewayID(gatewayID)]
+	if !ok || recipient.ReceiveID == "" || recipient.ReceiveIDType == "" {
+		return feishuAppWebTestRecipient{}, false
+	}
+	return recipient, true
+}
+
 func feishuAppTestKey(gatewayID string, kind feishuAppTestKind) string {
 	return canonicalGatewayID(gatewayID) + "|" + strings.TrimSpace(string(kind))
+}
+
+func parseFeishuAppTestKind(value string) (feishuAppTestKind, bool) {
+	switch strings.TrimSpace(value) {
+	case "events", string(feishuAppTestKindEventSubscription):
+		return feishuAppTestKindEventSubscription, true
+	case string(feishuAppTestKindCallback):
+		return feishuAppTestKindCallback, true
+	default:
+		return "", false
+	}
 }
 
 func (a *App) cleanupFeishuAppTestsLocked(now time.Time) {
@@ -231,63 +335,22 @@ func (a *App) cleanupFeishuAppTestsLocked(now time.Time) {
 	}
 }
 
-func (a *App) resolveFeishuAppTestDeliveryTarget(gatewayID string) (feishuAppTestDeliveryTarget, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.resolveFeishuAppTestDeliveryTargetLocked(gatewayID)
-}
-
-func (a *App) resolveFeishuAppTestDeliveryTargetLocked(gatewayID string) (feishuAppTestDeliveryTarget, bool) {
-	gatewayID = canonicalGatewayID(gatewayID)
-	if gatewayID == "" {
-		return feishuAppTestDeliveryTarget{}, false
-	}
-	var (
-		best      feishuAppTestDeliveryTarget
-		bestAt    time.Time
-		bestFound bool
-	)
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil || canonicalGatewayID(surface.GatewayID) != gatewayID {
-			continue
-		}
-		receiveID, receiveIDType := feishu.ResolveReceiveTarget(surface.ChatID, surface.ActorUserID)
-		if receiveID == "" || receiveIDType == "" {
-			continue
-		}
-		candidate := feishuAppTestDeliveryTarget{
-			GatewayID:        gatewayID,
-			SurfaceSessionID: strings.TrimSpace(surface.SurfaceSessionID),
-			ChatID:           strings.TrimSpace(surface.ChatID),
-			ActorUserID:      strings.TrimSpace(surface.ActorUserID),
-			ReceiveID:        receiveID,
-			ReceiveIDType:    receiveIDType,
-		}
-		if !bestFound || surface.LastInboundAt.After(bestAt) {
-			best = candidate
-			bestAt = surface.LastInboundAt
-			bestFound = true
-		}
-	}
-	return best, bestFound
-}
-
 func (a *App) maybeHandleFeishuAppTestActionLocked(ctx context.Context, action control.Action) bool {
 	switch action.Kind {
 	case control.ActionTextMessage:
 		if strings.TrimSpace(action.Text) != defaultFeishuAppEventTestPhrase {
 			return false
 		}
-		message := "当前没有进行中的事件订阅测试，请回到网页重新发起。"
-		if a.markFeishuAppTestPassedLocked(action.GatewayID, feishuAppTestKindEventSubscription) {
-			message = "事件订阅测试已通过，请回到网页继续。"
+		message := "当前没有进行中的事件订阅测试，请回到配置页面重新发起。"
+		if a.markFeishuAppTestPassedLocked(action, feishuAppTestKindEventSubscription) {
+			message = "测试成功，请回到配置页面继续下一步工作。"
 		}
 		a.replyToFeishuAppTestActionLocked(ctx, action, message)
 		return true
 	case control.ActionFeishuAppTestCallback:
-		message := "当前没有进行中的回调测试，请回到网页重新发起。"
-		if a.markFeishuAppTestPassedLocked(action.GatewayID, feishuAppTestKindCallback) {
-			message = "回调测试已通过，请回到网页继续。"
+		message := "当前没有进行中的回调测试，请回到配置页面重新发起。"
+		if a.markFeishuAppTestPassedLocked(action, feishuAppTestKindCallback) {
+			message = "回调测试成功，请回到配置页面继续下一步工作。"
 		}
 		a.replyToFeishuAppTestActionLocked(ctx, action, message)
 		return true
@@ -296,16 +359,20 @@ func (a *App) maybeHandleFeishuAppTestActionLocked(ctx context.Context, action c
 	}
 }
 
-func (a *App) markFeishuAppTestPassedLocked(gatewayID string, kind feishuAppTestKind) bool {
+func (a *App) markFeishuAppTestPassedLocked(action control.Action, kind feishuAppTestKind) bool {
 	a.feishuRuntime.mu.Lock()
 	defer a.feishuRuntime.mu.Unlock()
 	a.cleanupFeishuAppTestsLocked(time.Now().UTC())
-	record := a.feishuRuntime.tests[feishuAppTestKey(gatewayID, kind)]
+	record := a.feishuRuntime.tests[feishuAppTestKey(action.GatewayID, kind)]
 	if record == nil || record.Status != feishuAppTestStatusPending {
 		return false
 	}
+	if strings.TrimSpace(record.Recipient.ActorUserID) != "" &&
+		strings.TrimSpace(record.Recipient.ActorUserID) != strings.TrimSpace(action.ActorUserID) {
+		return false
+	}
 	record.Status = feishuAppTestStatusPassed
-	delete(a.feishuRuntime.tests, feishuAppTestKey(gatewayID, kind))
+	delete(a.feishuRuntime.tests, feishuAppTestKey(action.GatewayID, kind))
 	return true
 }
 
@@ -327,7 +394,7 @@ func (a *App) replyToFeishuAppTestActionLocked(ctx context.Context, action contr
 }
 
 func (a *App) maybeSendFeishuAppVerifySuccessNotices(ctx context.Context, gatewayID string, setupFlow bool) {
-	target, ok := a.resolveFeishuAppTestDeliveryTarget(gatewayID)
+	recipient, ok := a.resolveFeishuAppWebTestRecipient(gatewayID)
 	if !ok {
 		return
 	}
@@ -337,27 +404,57 @@ func (a *App) maybeSendFeishuAppVerifySuccessNotices(ctx context.Context, gatewa
 	}
 	ops := []feishu.Operation{
 		{
-			Kind:             feishu.OperationSendText,
-			GatewayID:        target.GatewayID,
-			SurfaceSessionID: target.SurfaceSessionID,
-			ChatID:           target.ChatID,
-			ReceiveID:        target.ReceiveID,
-			ReceiveIDType:    target.ReceiveIDType,
-			Text:             "连接验证成功。",
+			Kind:          feishu.OperationSendText,
+			GatewayID:     recipient.GatewayID,
+			ReceiveID:     recipient.ReceiveID,
+			ReceiveIDType: recipient.ReceiveIDType,
+			Text:          "连接验证成功。",
 		},
 		{
-			Kind:             feishu.OperationSendText,
-			GatewayID:        target.GatewayID,
-			SurfaceSessionID: target.SurfaceSessionID,
-			ChatID:           target.ChatID,
-			ReceiveID:        target.ReceiveID,
-			ReceiveIDType:    target.ReceiveIDType,
-			Text:             secondLine,
+			Kind:          feishu.OperationSendText,
+			GatewayID:     recipient.GatewayID,
+			ReceiveID:     recipient.ReceiveID,
+			ReceiveIDType: recipient.ReceiveIDType,
+			Text:          secondLine,
 		},
 	}
 	if err := a.applyFeishuOperations(ctx, ops); err != nil {
 		log.Printf("feishu verify success notice failed: gateway=%s err=%v", gatewayID, err)
 	}
+}
+
+func feishuEventRequirementLines(values []feishuapp.EventRequirement) []string {
+	lines := make([]string, 0, len(values))
+	for _, value := range values {
+		event := strings.TrimSpace(value.Event)
+		purpose := strings.TrimSpace(value.Purpose)
+		if event == "" {
+			continue
+		}
+		if purpose == "" {
+			lines = append(lines, event)
+			continue
+		}
+		lines = append(lines, event+"："+purpose)
+	}
+	return lines
+}
+
+func feishuCallbackRequirementLines(values []feishuapp.CallbackRequirement) []string {
+	lines := make([]string, 0, len(values))
+	for _, value := range values {
+		callback := strings.TrimSpace(value.Callback)
+		purpose := strings.TrimSpace(value.Purpose)
+		if callback == "" {
+			continue
+		}
+		if purpose == "" {
+			lines = append(lines, callback)
+			continue
+		}
+		lines = append(lines, callback+"："+purpose)
+	}
+	return lines
 }
 
 func (a *App) applyFeishuOperations(ctx context.Context, operations []feishu.Operation) error {

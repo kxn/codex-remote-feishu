@@ -30,7 +30,6 @@ type feishuAppPermissionCheckResponse struct {
 	Ready         bool                           `json:"ready"`
 	MissingScopes []feishuAppPermissionCheckItem `json:"missingScopes,omitempty"`
 	GrantJSON     string                         `json:"grantJSON,omitempty"`
-	ConsoleURL    string                         `json:"consoleURL,omitempty"`
 	LastCheckedAt *time.Time                     `json:"lastCheckedAt,omitempty"`
 }
 
@@ -72,6 +71,7 @@ type adminFeishuAppSummary struct {
 	ID              string                       `json:"id"`
 	Name            string                       `json:"name,omitempty"`
 	AppID           string                       `json:"appId,omitempty"`
+	ConsoleLinks    feishuAppConsoleLinks        `json:"consoleLinks,omitempty"`
 	HasSecret       bool                         `json:"hasSecret"`
 	Enabled         bool                         `json:"enabled"`
 	VerifiedAt      *time.Time                   `json:"verifiedAt,omitempty"`
@@ -82,6 +82,13 @@ type adminFeishuAppSummary struct {
 	ReadOnlyReason  string                       `json:"readOnlyReason,omitempty"`
 	Status          *feishu.GatewayStatus        `json:"status,omitempty"`
 	RuntimeApply    *adminFeishuRuntimeApplyView `json:"runtimeApply,omitempty"`
+}
+
+type feishuAppConsoleLinks struct {
+	Auth     string `json:"auth,omitempty"`
+	Events   string `json:"events,omitempty"`
+	Callback string `json:"callback,omitempty"`
+	Bot      string `json:"bot,omitempty"`
 }
 
 type feishuAppMutationView struct {
@@ -101,27 +108,26 @@ const (
 	feishuAppTestStatusPassed  = "passed"
 	feishuAppTestStatusExpired = "expired"
 
-	defaultFeishuAppEventTestPhrase = "事件订阅测试通过"
+	defaultFeishuAppEventTestPhrase = "测试"
 	defaultFeishuAppTestTTL         = 10 * time.Minute
 	defaultFeishuAppTestSendTimeout = 10 * time.Second
 )
 
 type feishuAppTestContext struct {
-	ID               string
-	GatewayID        string
-	Kind             feishuAppTestKind
-	Phrase           string
-	SurfaceSessionID string
-	Status           string
-	StartedAt        time.Time
-	ExpiresAt        time.Time
+	ID        string
+	GatewayID string
+	Kind      feishuAppTestKind
+	Phrase    string
+	Recipient feishuAppWebTestRecipient
+	Status    string
+	StartedAt time.Time
+	ExpiresAt time.Time
 }
 
-type feishuAppTestDeliveryTarget struct {
-	GatewayID        string
-	SurfaceSessionID string
-	ChatID           string
-	ActorUserID      string
-	ReceiveID        string
-	ReceiveIDType    string
+type feishuAppWebTestRecipient struct {
+	GatewayID     string
+	ActorUserID   string
+	ReceiveID     string
+	ReceiveIDType string
+	BoundAt       time.Time
 }

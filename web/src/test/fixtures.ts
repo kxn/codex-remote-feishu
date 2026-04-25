@@ -38,6 +38,10 @@ export function makeBootstrap(
     phase: rest.phase ?? "ready",
     setupRequired: rest.setupRequired ?? true,
     sshSession: rest.sshSession ?? false,
+    product: {
+      name: "Codex Remote Feishu",
+      version: "v1.7.0",
+    },
     session: {
       authenticated: sessionOverrides?.authenticated ?? true,
       trustedLoopback: sessionOverrides?.trustedLoopback ?? true,
@@ -88,6 +92,12 @@ export function makeApp(
     id: "bot-1",
     name: "Main Bot",
     appId: "cli_main",
+    consoleLinks: {
+      auth: "https://open.feishu.cn/app/cli_main/auth",
+      events: "https://open.feishu.cn/app/cli_main/event?tab=event",
+      callback: "https://open.feishu.cn/app/cli_main/event?tab=callback",
+      bot: "https://open.feishu.cn/app/cli_main/bot",
+    },
     hasSecret: true,
     enabled: true,
     persisted: true,
@@ -221,12 +231,42 @@ export function makePermissionCheck(
     grantJSON: `{
   "scopes": {
     "tenant": [],
-    "user": []
+  "user": []
   }
 }`,
-    consoleURL: "https://open.feishu.cn/app/cli_main?lang=zh-CN",
     lastCheckedAt: "2026-04-25T08:00:00Z",
     ...overrides,
+  };
+}
+
+export function makeFeishuManifest() {
+  return {
+    manifest: {
+      events: [
+        {
+          event: "im.message.receive_v1",
+          purpose: "接收用户发给机器人的文本和图片消息",
+        },
+        {
+          event: "im.message.recalled_v1",
+          purpose: "处理用户撤回消息",
+        },
+        {
+          event: "im.message.reaction.created_v1",
+          purpose: "处理用户对消息的反馈动作",
+        },
+        {
+          event: "application.bot.menu_v6",
+          purpose: "处理机器人菜单点击",
+        },
+      ],
+      callbacks: [
+        {
+          callback: "card.action.trigger",
+          purpose: "处理卡片按钮和卡片交互回调",
+        },
+      ],
+    },
   };
 }
 

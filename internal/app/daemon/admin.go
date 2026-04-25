@@ -68,12 +68,18 @@ type bootstrapStatePayload struct {
 	Phase         string                  `json:"phase"`
 	SetupRequired bool                    `json:"setupRequired"`
 	SSHSession    bool                    `json:"sshSession"`
+	Product       bootstrapProductPayload `json:"product"`
 	Session       bootstrapSessionPayload `json:"session"`
 	Config        bootstrapConfigPayload  `json:"config"`
 	Relay         bootstrapRelayPayload   `json:"relay"`
 	Admin         bootstrapAdminPayload   `json:"admin"`
 	Feishu        bootstrapFeishuPayload  `json:"feishu"`
 	Gateways      []feishu.GatewayStatus  `json:"gateways,omitempty"`
+}
+
+type bootstrapProductPayload struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
 }
 
 type bootstrapSessionPayload struct {
@@ -182,6 +188,7 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/setup/feishu/apps/{id}/permission-check", a.requireSetup(a.handleFeishuAppPermissionCheck))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/test-events", a.requireSetup(a.handleFeishuAppTestEvents))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/test-callback", a.requireSetup(a.handleFeishuAppTestCallback))
+	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/install-tests/{kind}/clear", a.requireSetup(a.handleFeishuAppInstallTestClear))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/reconnect", a.requireSetup(a.handleFeishuAppReconnect))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/enable", a.requireSetup(a.handleFeishuAppEnable))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/disable", a.requireSetup(a.handleFeishuAppDisable))
@@ -526,6 +533,10 @@ func (a *App) bootstrapState(auth requestAuthState) (bootstrapStatePayload, erro
 		Phase:         bootstrapPhase(setupRequired, gateways),
 		SetupRequired: setupRequired,
 		SSHSession:    admin.sshSession,
+		Product: bootstrapProductPayload{
+			Name:    "Codex Remote Feishu",
+			Version: strings.TrimSpace(a.serverIdentity.Version),
+		},
 		Session: bootstrapSessionPayload{
 			Authenticated:   auth.Authenticated,
 			TrustedLoopback: auth.TrustedLoopback,

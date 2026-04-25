@@ -619,6 +619,11 @@ button {
   color: var(--text-soft);
 }
 
+.field-required {
+  font-style: normal;
+  color: var(--danger);
+}
+
 .field input,
 .code-textarea {
   width: 100%;
@@ -830,6 +835,40 @@ button {
   margin: 0.6rem 0 0;
   color: var(--text-soft);
   max-width: 46rem;
+}
+
+.detail-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(18, 34, 48, 0.08);
+  border-radius: 1.2rem;
+  background: var(--surface-strong);
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 32rem;
+}
+
+.detail-table th,
+.detail-table td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.detail-table thead th {
+  color: var(--text-strong);
+  background: rgba(18, 34, 48, 0.04);
+  font-weight: 600;
+}
+
+.detail-table tbody tr + tr td {
+  border-top: 1px solid rgba(18, 34, 48, 0.08);
+}
+
+.detail-table tbody td {
+  color: var(--text-soft);
 }
 
 .modal-backdrop {

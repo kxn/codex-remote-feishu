@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import packageInfo from "../../package.json";
 import {
   APIRequestError,
   type APIErrorShape,
@@ -16,6 +15,9 @@ import type {
   FeishuAppTestStartResponse,
   FeishuAppVerifyResponse,
   FeishuAppsResponse,
+  FeishuOnboardingCompleteResponse,
+  FeishuOnboardingSession,
+  FeishuOnboardingSessionResponse,
   ImageStagingCleanupResponse,
   ImageStagingStatusResponse,
   LogsStorageCleanupResponse,
@@ -73,6 +75,10 @@ export function AdminRoute() {
     appId: "",
     appSecret: "",
   });
+  const [connectMode, setConnectMode] = useState<"qr" | "manual">("qr");
+  const [onboardingSession, setOnboardingSession] =
+    useState<FeishuOnboardingSession | null>(null);
+  const [connectError, setConnectError] = useState("");
   const [autostart, setAutostart] = useState<AutostartDetectResponse | null>(
     null,
   );
@@ -100,7 +106,7 @@ export function AdminRoute() {
   const selectedPermission: PermissionSummaryState = selectedApp
     ? permissionChecks[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
-  const versionTitle = `Codex Remote v${packageInfo.version} 管理`;
+  const versionTitle = buildAdminPageTitle(bootstrap);
   const previewSummary = useMemo(() => {
     return Object.values(previewMap).reduce(
       (accumulator, item) => {
@@ -142,6 +148,40 @@ export function AdminRoute() {
       void loadPermissionCheck(app.id);
     }
   }, [apps, permissionChecks]);
+
+  useEffect(() => {
+    if (selectedRobotID === newRobotID) {
+      return;
+    }
+    setConnectError("");
+    setOnboardingSession(null);
+  }, [selectedRobotID]);
+
+  useEffect(() => {
+    if (selectedRobotID !== newRobotID || connectMode !== "qr") {
+      return;
+    }
+    if (actionBusy === "qr-start" || actionBusy === "qr-complete") {
+      return;
+    }
+    if (!onboardingSession) {
+      if (!connectError) {
+        void startQRCodeSession();
+      }
+      return;
+    }
+    if (onboardingSession.status === "ready" && !connectError) {
+      void completeQRCodeSession(onboardingSession.id);
+      return;
+    }
+    if (onboardingSession.status !== "pending") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void refreshQRCodeSession(onboardingSession.id);
+    }, 2_000);
+    return () => window.clearTimeout(timer);
+  }, [actionBusy, connectError, connectMode, onboardingSession, selectedRobotID]);
 
   async function loadAdminPage(options?: { preferredRobotID?: string }) {
     setLoading(true);
@@ -231,6 +271,67 @@ export function AdminRoute() {
     }));
   }
 
+  function changeConnectMode(nextMode: "qr" | "manual") {
+    setConnectMode(nextMode);
+    setConnectError("");
+    setOnboardingSession(null);
+  }
+
+  async function startQRCodeSession() {
+    setActionBusy("qr-start");
+    setConnectError("");
+    try {
+      const response = await sendJSON<FeishuOnboardingSessionResponse>(
+        "/api/admin/feishu/onboarding/sessions",
+        "POST",
+      );
+      setOnboardingSession(response.session);
+    } catch {
+      setConnectError("暂时无法开始扫码，请稍后重试。");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function refreshQRCodeSession(sessionID: string) {
+    try {
+      const response = await requestJSON<FeishuOnboardingSessionResponse>(
+        `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}`,
+      );
+      setOnboardingSession(response.session);
+      if (response.session.status === "pending") {
+        setConnectError("");
+      }
+    } catch {
+      setConnectError("扫码状态暂时没有刷新成功，请稍后重试。");
+    }
+  }
+
+  async function completeQRCodeSession(sessionID: string) {
+    setActionBusy("qr-complete");
+    try {
+      const response = await requestJSONAllowHTTPError<FeishuOnboardingCompleteResponse>(
+        `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}/complete`,
+        { method: "POST" },
+      );
+      setOnboardingSession(response.data.session);
+      if (!response.ok) {
+        setConnectError("扫码已经完成，但连接验证没有通过，请重新验证。");
+        return;
+      }
+      await loadAdminPage({ preferredRobotID: response.data.app.id });
+      setSelectedRobotID(response.data.app.id);
+      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
+      setConnectError("");
+      setOnboardingSession(null);
+      void loadPermissionCheck(response.data.app.id);
+    } catch {
+      setConnectError("扫码已经完成，但当前还不能继续，请稍后重试。");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function createRobot() {
     if (!newRobotForm.appId.trim() || !newRobotForm.appSecret.trim()) {
       setDetailNotice({
@@ -308,8 +409,8 @@ export function AdminRoute() {
       setDetailNotice({
         tone: "danger",
         message:
-          payload?.code === "feishu_app_test_target_unavailable"
-            ? "请先在飞书里给这个机器人发送一条消息，再回到网页重试。"
+          payload?.code === "feishu_app_web_test_recipient_unavailable"
+            ? String(payload.details || "当前机器人还没有可用的飞书测试接收者。")
             : kind === "events"
               ? "事件订阅测试没有发出，请稍后重试。"
               : "回调测试没有发出，请稍后重试。",
@@ -500,62 +601,162 @@ export function AdminRoute() {
         <section className="panel">
           <div className="step-stage-head">
             <h2>新增机器人</h2>
-            <p>完成连接验证后会自动进入权限检查。</p>
+            <p>选择扫码创建或手动输入，连接验证通过后会自动加入机器人列表。</p>
           </div>
-          <div className="form-grid">
-            <label className="field">
-              <span>机器人名称</span>
-              <input
-                aria-label="机器人名称"
-                placeholder="例如：运营机器人"
-                value={newRobotForm.name}
-                onChange={(event) =>
-                  setNewRobotForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>App ID</span>
-              <input
-                aria-label="App ID"
-                placeholder="请输入 App ID"
-                value={newRobotForm.appId}
-                onChange={(event) =>
-                  setNewRobotForm((current) => ({
-                    ...current,
-                    appId: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field form-grid-span-2">
-              <span>App Secret</span>
-              <input
-                aria-label="App Secret"
-                placeholder="请输入 App Secret"
-                value={newRobotForm.appSecret}
-                onChange={(event) =>
-                  setNewRobotForm((current) => ({
-                    ...current,
-                    appSecret: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          </div>
-          <div className="button-row">
+          <div className="choice-toggle">
             <button
-              className="primary-button"
+              className={connectMode === "qr" ? "primary-button" : "ghost-button"}
               type="button"
-              disabled={actionBusy === "create-robot"}
-              onClick={() => void createRobot()}
+              onClick={() => changeConnectMode("qr")}
             >
-              验证并保存
+              扫码创建
+            </button>
+            <button
+              className={
+                connectMode === "manual" ? "primary-button" : "ghost-button"
+              }
+              type="button"
+              onClick={() => changeConnectMode("manual")}
+            >
+              手动输入
             </button>
           </div>
+          {connectMode === "qr" ? (
+            <div className="panel">
+              <div className="scan-preview">
+                <div>
+                  <h4 style={{ margin: 0 }}>扫码创建</h4>
+                  <p className="support-copy">
+                    请使用飞书扫码完成创建，页面会自动轮询并继续下一步。
+                  </p>
+                  <div className="scan-frame">
+                    {onboardingSession?.qrCodeDataUrl ? (
+                      <img alt="飞书扫码创建二维码" src={onboardingSession.qrCodeDataUrl} />
+                    ) : (
+                      <span>二维码准备中</span>
+                    )}
+                  </div>
+                </div>
+                <div className="detail-stack">
+                  {onboardingSession?.status === "pending" ? (
+                    <div className="notice-banner warn">正在等待扫码结果...</div>
+                  ) : null}
+                  {onboardingSession?.status === "ready" && !connectError ? (
+                    <div className="notice-banner good">
+                      扫码成功，连接验证已通过，正在加入机器人列表...
+                    </div>
+                  ) : null}
+                  {onboardingSession?.status === "failed" ||
+                  onboardingSession?.status === "expired" ||
+                  connectError ? (
+                    <div className="notice-banner danger">
+                      {connectError || "当前扫码没有继续成功，请重新开始。"}
+                    </div>
+                  ) : null}
+                  <div className="button-row">
+                    {(connectError ||
+                      onboardingSession?.status === "failed" ||
+                      onboardingSession?.status === "expired") && (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={actionBusy === "qr-start"}
+                        onClick={() => {
+                          setOnboardingSession(null);
+                          setConnectError("");
+                        }}
+                      >
+                        重新扫码
+                      </button>
+                    )}
+                    {onboardingSession?.status === "ready" && connectError ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={actionBusy === "qr-complete"}
+                        onClick={() => {
+                          if (onboardingSession?.id) {
+                            setConnectError("");
+                            void completeQRCodeSession(onboardingSession.id);
+                          }
+                        }}
+                      >
+                        重新验证
+                      </button>
+                    ) : null}
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => changeConnectMode("manual")}
+                    >
+                      改用手动输入
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="panel">
+              <div className="form-grid">
+                <label className="field">
+                  <span>
+                    App ID <em className="field-required">*</em>
+                  </span>
+                  <input
+                    aria-label="App ID"
+                    placeholder="请输入 App ID"
+                    value={newRobotForm.appId}
+                    onChange={(event) =>
+                      setNewRobotForm((current) => ({
+                        ...current,
+                        appId: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    App Secret <em className="field-required">*</em>
+                  </span>
+                  <input
+                    aria-label="App Secret"
+                    placeholder="请输入 App Secret"
+                    value={newRobotForm.appSecret}
+                    onChange={(event) =>
+                      setNewRobotForm((current) => ({
+                        ...current,
+                        appSecret: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field form-grid-span-2">
+                  <span>机器人名称（可选）</span>
+                  <input
+                    aria-label="机器人名称（可选）"
+                    placeholder="例如：运营机器人"
+                    value={newRobotForm.name}
+                    onChange={(event) =>
+                      setNewRobotForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <div className="button-row">
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={actionBusy === "create-robot"}
+                  onClick={() => void createRobot()}
+                >
+                  验证并保存
+                </button>
+              </div>
+            </div>
+          )}
           {detailNotice ? (
             <div className={`notice-banner ${detailNotice.tone}`}>
               {detailNotice.message}
@@ -596,9 +797,7 @@ export function AdminRoute() {
         ) : null}
         {selectedPermission.status === "missing" ? (
           <>
-            <div className="notice-banner danger">
-              当前还需要补齐权限。
-            </div>
+            <div className="notice-banner danger">当前还需要补齐权限。</div>
             <div className="scope-list">
               {(selectedPermission.data.missingScopes || []).map((scope: { scope: string; scopeType?: string }) => (
                 <span
@@ -609,19 +808,22 @@ export function AdminRoute() {
                 </span>
               ))}
             </div>
-            <div className="button-row">
+            <p className="support-copy">
+              前往{" "}
               <a
-                className="ghost-button"
+                className="inline-link"
                 href={
-                  selectedPermission.data.consoleURL ||
-                  buildFeishuConsoleURL(selectedApp.appId)
+                  selectedPermission.data.app.consoleLinks?.auth ||
+                  selectedApp.consoleLinks?.auth ||
+                  "#"
                 }
                 rel="noreferrer"
                 target="_blank"
               >
                 打开飞书后台处理权限
               </a>
-            </div>
+              。
+            </p>
           </>
         ) : null}
         {selectedPermission.status === "error" ? (
@@ -943,11 +1145,10 @@ function readAPIError(response: { ok: boolean; data: unknown }) {
   return payload.error || null;
 }
 
-function buildFeishuConsoleURL(appID?: string) {
-  if (!appID?.trim()) {
-    return "https://open.feishu.cn/app?lang=zh-CN";
-  }
-  return `https://open.feishu.cn/app/${appID.trim()}?lang=zh-CN`;
+function buildAdminPageTitle(bootstrap: BootstrapState | null): string {
+  const name = bootstrap?.product.name?.trim() || "Codex Remote Feishu";
+  const version = bootstrap?.product.version?.trim();
+  return version ? `${name} ${version} 管理` : `${name} 管理`;
 }
 
 function describeConnectionState(app: FeishuAppSummary): string {

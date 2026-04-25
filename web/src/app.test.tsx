@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { App } from "./app";
 import {
   makeBootstrap,
+  makeFeishuManifest,
+  makeRuntimeRequirementsDetect,
   makeVSCodeDetect,
 } from "./test/fixtures";
 import { installMockFetch } from "./test/http";
@@ -14,6 +16,9 @@ describe("App", () => {
     installMockFetch({
       "/g/demo/api/setup/bootstrap-state": {
         body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
+      },
+      "/g/demo/api/setup/feishu/manifest": {
+        body: makeFeishuManifest(),
       },
       "/g/demo/api/setup/feishu/apps": {
         body: { apps: [] },
@@ -27,6 +32,9 @@ describe("App", () => {
             qrCodeDataUrl: "data:image/png;base64,abc",
           },
         },
+      },
+      "/g/demo/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
       },
       "/g/demo/api/setup/autostart/detect": {
         body: { platform: "linux", supported: true, status: "disabled", configured: false, enabled: false, canApply: true },

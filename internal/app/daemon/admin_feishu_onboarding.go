@@ -53,6 +53,7 @@ type feishuRegistrationPollResult struct {
 	Status       string
 	AppID        string
 	AppSecret    string
+	InstallerID  string
 	ErrorCode    string
 	ErrorMessage string
 	RetryAfter   time.Duration
@@ -74,6 +75,7 @@ type feishuOnboardingSession struct {
 	LastPolledAt       time.Time
 	AppID              string
 	AppSecret          string
+	InstallerID        string
 	DisplayName        string
 	ErrorCode          string
 	ErrorMessage       string
@@ -130,8 +132,13 @@ type registrationBeginResponse struct {
 }
 
 type registrationPollResponse struct {
-	ClientID         string `json:"client_id"`
-	ClientSecret     string `json:"client_secret"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	OpenID       string `json:"open_id"`
+	UserOpenID   string `json:"user_open_id"`
+	UserInfo     struct {
+		OpenID string `json:"open_id"`
+	} `json:"user_info"`
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
 }
@@ -206,10 +213,16 @@ func (c *liveFeishuSetupClient) PollRegistration(ctx context.Context, deviceCode
 		return feishuRegistrationPollResult{}, err
 	}
 	if strings.TrimSpace(pollResp.ClientID) != "" && strings.TrimSpace(pollResp.ClientSecret) != "" {
+		installerID := firstNonEmpty(
+			strings.TrimSpace(pollResp.OpenID),
+			strings.TrimSpace(pollResp.UserOpenID),
+			strings.TrimSpace(pollResp.UserInfo.OpenID),
+		)
 		return feishuRegistrationPollResult{
-			Status:    feishuOnboardingStatusReady,
-			AppID:     strings.TrimSpace(pollResp.ClientID),
-			AppSecret: strings.TrimSpace(pollResp.ClientSecret),
+			Status:      feishuOnboardingStatusReady,
+			AppID:       strings.TrimSpace(pollResp.ClientID),
+			AppSecret:   strings.TrimSpace(pollResp.ClientSecret),
+			InstallerID: strings.TrimSpace(installerID),
 		}, nil
 	}
 
@@ -507,6 +520,7 @@ func (a *App) refreshFeishuOnboardingSession(ctx context.Context, sessionID stri
 		session.Status = feishuOnboardingStatusReady
 		session.AppID = strings.TrimSpace(pollResult.AppID)
 		session.AppSecret = strings.TrimSpace(pollResult.AppSecret)
+		session.InstallerID = strings.TrimSpace(pollResult.InstallerID)
 		session.DisplayName = firstNonEmpty(displayName, session.AppID)
 		session.ErrorCode = ""
 		session.ErrorMessage = ""
@@ -842,6 +856,9 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 		return
 	}
 
+	if strings.TrimSpace(sessionState.InstallerID) != "" {
+		a.bindFeishuAppWebTestRecipient(gatewayID, sessionState.InstallerID)
+	}
 	response.Session = a.markOnboardingSessionCompleted(sessionID, gatewayID, summary, mutation, result)
 	a.maybeSendFeishuAppVerifySuccessNotices(r.Context(), gatewayID, strings.HasPrefix(r.URL.Path, "/api/setup/"))
 	writeJSON(w, http.StatusOK, response)

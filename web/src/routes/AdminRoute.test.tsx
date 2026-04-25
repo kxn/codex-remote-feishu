@@ -54,6 +54,11 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    expect(
+      await screen.findByRole("heading", {
+        name: "Codex Remote Feishu v1.7.0 管理",
+      }),
+    ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /新增机器人/ })).toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
@@ -122,6 +127,16 @@ describe("AdminRoute", () => {
 
     installMockFetch({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/onboarding/sessions": {
+        status: 201,
+        body: {
+          session: {
+            id: "session-admin-new",
+            status: "pending",
+            qrCodeDataUrl: "data:image/png;base64,abc",
+          },
+        },
+      },
       "/api/admin/feishu/apps": (call) => {
         if (call.method === "POST") {
           appsConfigured = true;
@@ -202,7 +217,9 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await user.click(await screen.findByRole("button", { name: /新增机器人/ }));
-    await user.type(screen.getByLabelText("机器人名称"), "运营机器人");
+    expect(await screen.findByRole("button", { name: "扫码创建" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "手动输入" }));
+    await user.type(screen.getByLabelText("机器人名称（可选）"), "运营机器人");
     await user.type(screen.getByLabelText("App ID"), "cli_new");
     await user.type(screen.getByLabelText("App Secret"), "secret_new");
     await user.click(screen.getByRole("button", { name: "验证并保存" }));
@@ -218,6 +235,16 @@ describe("AdminRoute", () => {
 
     installMockFetch({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/onboarding/sessions": {
+        status: 201,
+        body: {
+          session: {
+            id: "session-admin-delete",
+            status: "pending",
+            qrCodeDataUrl: "data:image/png;base64,abc",
+          },
+        },
+      },
       "/api/admin/feishu/apps": () => ({
         body: {
           apps: removed ? [] : [makeApp({ id: "bot-delete", name: "待删除机器人", appId: "cli_delete" })],
@@ -265,7 +292,7 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("机器人已删除。")).toBeInTheDocument();
   });
 
-  it("shows the recent-surface fallback when event test cannot find a target", async () => {
+  it("shows the bound-recipient error when event test cannot find a target", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
 
@@ -286,8 +313,10 @@ describe("AdminRoute", () => {
         status: 409,
         body: {
           error: {
-            code: "feishu_app_test_target_unavailable",
-            message: "target unavailable",
+            code: "feishu_app_web_test_recipient_unavailable",
+            message: "recipient unavailable",
+            details:
+              "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
           },
         },
       },
@@ -317,7 +346,9 @@ describe("AdminRoute", () => {
 
     await user.click(await screen.findByRole("button", { name: "测试事件订阅" }));
     expect(
-      await screen.findByText("请先在飞书里给这个机器人发送一条消息，再回到网页重试。"),
+      await screen.findByText(
+        "当前机器人还没有可用的飞书测试接收者。请优先使用扫码创建完成一次连接，或直接在飞书后台继续手动配置。",
+      ),
     ).toBeInTheDocument();
   });
 

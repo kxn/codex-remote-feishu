@@ -12,6 +12,10 @@ export interface BootstrapState {
   phase: string;
   setupRequired: boolean;
   sshSession: boolean;
+  product: {
+    name: string;
+    version?: string;
+  };
   session: {
     authenticated: boolean;
     trustedLoopback: boolean;
@@ -56,6 +60,12 @@ export interface FeishuAppSummary {
   id: string;
   name?: string;
   appId?: string;
+  consoleLinks?: {
+    auth?: string;
+    events?: string;
+    callback?: string;
+    bot?: string;
+  };
   hasSecret: boolean;
   enabled: boolean;
   verifiedAt?: string;
@@ -119,7 +129,6 @@ export interface FeishuAppPermissionCheckResponse {
   ready: boolean;
   missingScopes?: FeishuAppPermissionCheckItem[];
   grantJSON?: string;
-  consoleURL?: string;
   lastCheckedAt?: string;
 }
 
@@ -160,6 +169,19 @@ export interface FeishuOnboardingCompleteResponse {
   result: VerifyResult;
   session: FeishuOnboardingSession;
   guide?: FeishuOnboardingGuide;
+}
+
+export interface FeishuManifestResponse {
+  manifest: {
+    events: Array<{
+      event: string;
+      purpose?: string;
+    }>;
+    callbacks: Array<{
+      callback: string;
+      purpose?: string;
+    }>;
+  };
 }
 
 export interface VSCodeSettingsStatus {
