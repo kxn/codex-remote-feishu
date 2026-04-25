@@ -1214,10 +1214,18 @@ func TestCallbackCardResponseTrimsOversizedCardByWholeBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal callback response: %v", err)
 	}
-	if size > maxFeishuCardBytes {
-		t.Fatalf("expected callback response <= %d bytes, got %d", maxFeishuCardBytes, size)
+	if size > feishuCardTransportLimitBytes {
+		t.Fatalf("expected callback response <= %d bytes, got %d", feishuCardTransportLimitBytes, size)
 	}
-	bodyElements := mustBodyElementsFromCardData(t, response.Card.Data)
+	payload, ok := response.Card.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected callback payload map, got %T", response.Card.Data)
+	}
+	if !feishuInlineCallbackTransportFits(payload) {
+		callbackSize, sizeErr := feishuInlineCallbackTransportSize(payload)
+		t.Fatalf("expected callback payload to fit inline transport, got size=%d err=%v", callbackSize, sizeErr)
+	}
+	bodyElements := mustBodyElementsFromCardData(t, payload)
 	if got := markdownContent(bodyElements[len(bodyElements)-1]); got != oversizedCardMessage {
 		t.Fatalf("expected trailing truncation notice, got %#v", bodyElements[len(bodyElements)-1])
 	}
@@ -1276,12 +1284,20 @@ func TestApplySendCardTrimsOversizedCardByWholeBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
-	if len(createContent) > maxFeishuCardBytes {
-		t.Fatalf("expected send card payload <= %d bytes, got %d", maxFeishuCardBytes, len(createContent))
+	size, err := feishuInteractiveMessageContentTransportSize(createContent)
+	if err != nil {
+		t.Fatalf("measure send card transport size: %v", err)
+	}
+	if size > feishuCardTransportLimitBytes {
+		t.Fatalf("expected send card transport <= %d bytes, got %d", feishuCardTransportLimitBytes, size)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(createContent), &payload); err != nil {
 		t.Fatalf("send card payload is not valid json: %v", err)
+	}
+	if !feishuInteractiveMessageTransportFits(payload) {
+		transportSize, sizeErr := feishuInteractiveMessageTransportSize(payload)
+		t.Fatalf("expected send payload to fit interactive transport, got size=%d err=%v", transportSize, sizeErr)
 	}
 	bodyElements := mustBodyElementsFromCardData(t, payload)
 	if got := markdownContent(bodyElements[len(bodyElements)-1]); got != oversizedCardMessage {

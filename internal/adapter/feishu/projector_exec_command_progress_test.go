@@ -582,12 +582,12 @@ func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
 	assertRenderedCardPayloadBasicInvariants(t, payload)
-	size, err := jsonSize(payload)
+	size, err := feishuInteractiveMessageTransportSize(payload)
 	if err != nil {
-		t.Fatalf("marshal shared progress payload: %v", err)
+		t.Fatalf("measure shared progress transport payload: %v", err)
 	}
-	if size > maxFeishuCardBytes {
-		t.Fatalf("expected shared progress card <= %d bytes, got %d", maxFeishuCardBytes, size)
+	if size > feishuCardTransportLimitBytes {
+		t.Fatalf("expected shared progress transport <= %d bytes, got %d", feishuCardTransportLimitBytes, size)
 	}
 	if strings.Contains(op.CardBody, oversizedCardMessage) {
 		t.Fatalf("expected projector FIFO trimming to avoid gateway truncation marker, got %#v", op)

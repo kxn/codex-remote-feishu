@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	maxFeishuCardBytes   = 20000
 	oversizedCardMessage = "内容太多了，后面的内容已省略。"
 )
 
@@ -185,7 +184,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		}
 		return nil
 	case OperationSendCard:
-		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(*operation, operation.effectiveCardEnvelope()), maxFeishuCardBytes))
+		card, err := json.Marshal(trimCardPayloadForMessageTransport(renderOperationCard(*operation, operation.effectiveCardEnvelope())))
 		if err != nil {
 			return err
 		}
@@ -238,7 +237,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			messageID,
 			strings.TrimSpace(operation.CardTitle),
 		)
-		card, err := json.Marshal(trimCardPayloadToFit(renderOperationCard(*operation, operation.effectiveCardEnvelope()), maxFeishuCardBytes))
+		card, err := json.Marshal(trimCardPayloadForMessageTransport(renderOperationCard(*operation, operation.effectiveCardEnvelope())))
 		if err != nil {
 			return err
 		}
@@ -419,23 +418,11 @@ func sendTextPayload(operation Operation) (string, string, error) {
 }
 
 func trimCardPayloadForInlineCallback(payload map[string]any) map[string]any {
-	return trimCardPayloadWithMeasure(payload, func(candidate map[string]any) bool {
-		response := &larkcallback.CardActionTriggerResponse{
-			Card: &larkcallback.Card{
-				Type: "raw",
-				Data: candidate,
-			},
-		}
-		size, err := jsonSize(response)
-		return err == nil && size <= maxFeishuCardBytes
-	})
+	return trimCardPayloadWithMeasure(payload, feishuInlineCallbackTransportFits)
 }
 
-func trimCardPayloadToFit(payload map[string]any, maxBytes int) map[string]any {
-	return trimCardPayloadWithMeasure(payload, func(candidate map[string]any) bool {
-		size, err := jsonSize(candidate)
-		return err == nil && size <= maxBytes
-	})
+func trimCardPayloadForMessageTransport(payload map[string]any) map[string]any {
+	return trimCardPayloadWithMeasure(payload, feishuInteractiveMessageTransportFits)
 }
 
 func trimCardPayloadWithMeasure(payload map[string]any, fits func(map[string]any) bool) map[string]any {

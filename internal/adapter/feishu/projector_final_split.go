@@ -98,8 +98,7 @@ func finalReplyChunkFits(chunk finalReplyChunk) bool {
 		card:         finalReplyCardDocument(chunk.title, chunk.renderedBody, cardThemeFinal, chunk.elements),
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
-	size, err := jsonSize(payload)
-	return err == nil && size <= maxFeishuCardBytes
+	return feishuInteractiveMessageTransportFits(payload)
 }
 
 func explodeFinalReplyUnit(unit string) []string {

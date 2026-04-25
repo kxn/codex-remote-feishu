@@ -92,8 +92,7 @@ func execProgressCardFits(lines []execProgressRenderedLine) bool {
 		card:            rawCardDocument("工作中", "", cardThemeProgress, execProgressRenderedElements(lines)),
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
-	size, err := jsonSize(payload)
-	return err == nil && size <= maxFeishuCardBytes
+	return feishuInteractiveMessageTransportFits(payload)
 }
 
 func execProgressCardWindow(progress control.ExecCommandProgress, lines []execProgressRenderedLine) execProgressCardWindowState {

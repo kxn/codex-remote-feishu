@@ -1,7 +1,7 @@
 # Feishu Card API Constraints
 
 > Type: `general`
-> Updated: `2026-04-18`
+> Updated: `2026-04-25`
 > Summary: 固化当前仓库进行飞书卡片、消息卡片 patch、CardKit 流式更新设计时必须先考虑的平台硬约束、频控和降级基线。
 
 ## 1. 文档定位
@@ -168,12 +168,24 @@ CardKit 卡片实体本身也有生命周期限制：
 - CardKit `create` / `update` / `element content` 等接口的字段长度文档本身允许相当大的字符串
 - 但这些接口的错误码表又明确出现 `Card content exceeds limit`，并建议把卡片大小控制在 `30KB` 以内
 
-因此，当前仓库的保守基线不是按“字段理论长度”设计，而是按“实际卡片体积 30 KB 左右”做预算。
+因此，当前仓库的保守基线不是按“字段理论长度”设计，而是按“实际 transport 请求体 30 KB 左右”做预算。
+
+当前实现基线应明确区分两层：
+
+1. **外层 ceiling**
+   - 继续把 `30 KB` 视为消息卡片 transport 的硬天花板。
+2. **内层测量对象**
+   - 不再把 raw card JSON 字节数直接当作唯一预算。
+   - 普通消息 `create / reply / patch` 应测量真实序列化后的请求体，并以三者中最严格的 envelope 为准。
+   - 交互回调里的 inline replace 应测量 callback response 自身的序列化体积，而不是套用消息发送的 raw budget。
 
 换句话说：
 
 1. `3,000,000` 这类字段长度更像“请求字段格式允许多长”
-2. `30 KB` 更接近“卡片能稳定生成和渲染的实际体积边界”
+2. `30 KB` 更接近“卡片 transport 能稳定发送和渲染的实际体积边界”
+3. 同样的 raw card JSON，在消息发送 envelope 与 callback envelope 下占用的字节并不相同
+
+因此，不要再在 projector、gateway trim 和 callback replace 之间共享一条未经说明来源的 raw `20 KB` 常量。需要判断是否超限时，统一按目标 transport 的真实 envelope 计算，再与 `30 KB` ceiling 对比。
 
 在没有更强官方说明前，后续设计一律把 `30 KB` 视为实际运营上的硬天花板，而不是可轻易突破的建议值。
 

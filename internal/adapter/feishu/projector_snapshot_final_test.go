@@ -369,12 +369,12 @@ func TestProjectFinalAssistantBlockSplitsOversizedReplyAtProjectorLayer(t *testi
 		}
 		payload := renderOperationCard(op, op.effectiveCardEnvelope())
 		assertRenderedCardPayloadBasicInvariants(t, payload)
-		size, err := jsonSize(payload)
+		size, err := feishuInteractiveMessageTransportSize(payload)
 		if err != nil {
-			t.Fatalf("marshal chunk %d payload: %v", i, err)
+			t.Fatalf("measure chunk %d transport payload: %v", i, err)
 		}
-		if size > maxFeishuCardBytes {
-			t.Fatalf("expected chunk %d <= %d bytes, got %d", i, maxFeishuCardBytes, size)
+		if size > feishuCardTransportLimitBytes {
+			t.Fatalf("expected chunk %d transport <= %d bytes, got %d", i, feishuCardTransportLimitBytes, size)
 		}
 		if strings.Contains(op.CardBody, oversizedCardMessage) {
 			t.Fatalf("expected projector split to avoid gateway truncation marker on chunk %d, got %#v", i, op.CardBody)
@@ -409,12 +409,12 @@ func TestProjectFinalAssistantCodeBlockSplitsOversizedFenceSafely(t *testing.T) 
 		}
 		payload := renderOperationCard(op, op.effectiveCardEnvelope())
 		assertRenderedCardPayloadBasicInvariants(t, payload)
-		size, err := jsonSize(payload)
+		size, err := feishuInteractiveMessageTransportSize(payload)
 		if err != nil {
-			t.Fatalf("marshal chunk %d payload: %v", i, err)
+			t.Fatalf("measure chunk %d transport payload: %v", i, err)
 		}
-		if size > maxFeishuCardBytes {
-			t.Fatalf("expected fenced chunk %d <= %d bytes, got %d", i, maxFeishuCardBytes, size)
+		if size > feishuCardTransportLimitBytes {
+			t.Fatalf("expected fenced chunk %d transport <= %d bytes, got %d", i, feishuCardTransportLimitBytes, size)
 		}
 	}
 }
