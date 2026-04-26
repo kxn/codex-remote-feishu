@@ -26,6 +26,8 @@ func targetPickerEditingPageElements(view control.FeishuTargetPickerView, daemon
 		return targetPickerLocalDirectoryElements(view, daemonLifecycleID)
 	case control.FeishuTargetPickerPageGit:
 		return targetPickerGitURLElements(view, daemonLifecycleID)
+	case control.FeishuTargetPickerPageWorktree:
+		return targetPickerWorktreeElements(view, daemonLifecycleID)
 	default:
 		return targetPickerTargetPageElements(view, daemonLifecycleID)
 	}
@@ -50,7 +52,7 @@ func targetPickerComposeEditingElements(view control.FeishuTargetPickerView, dae
 		elements = append(elements, cardDividerElement())
 		elements = appendCardTextSections(elements, noticeSections)
 	}
-	if targetPickerUsesInlineGitForm(view) {
+	if targetPickerUsesInlineForm(view) {
 		return elements
 	}
 	return appendCardFooterButtonGroup(elements, targetPickerEditingFooterButtons(view, daemonLifecycleID))
@@ -97,10 +99,26 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 }
 
 func targetPickerWorkspaceLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
+	return targetPickerWorkspaceLaneWithLabel(
+		view,
+		"工作区",
+		firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
+	)
+}
+
+func targetPickerWorktreeWorkspaceLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
+	return targetPickerWorkspaceLaneWithLabel(
+		view,
+		"基准工作区",
+		firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择基准工作区"),
+	)
+}
+
+func targetPickerWorkspaceLaneWithLabel(view control.FeishuTargetPickerView, label, placeholder string) paginatedSelectFlowLane {
 	return paginatedSelectFlowLane{
 		Flow:          selectflow.TargetPickerWorkspaceFlow,
-		Label:         "工作区",
-		Placeholder:   firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
+		Label:         strings.TrimSpace(label),
+		Placeholder:   strings.TrimSpace(placeholder),
 		Cursor:        view.WorkspaceCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedWorkspaceKey),
 		Options:       targetPickerWorkspaceOptions(view.WorkspaceOptions),
@@ -145,6 +163,21 @@ func targetPickerPlanSingleLane(
 				daemonLifecycleID,
 				targetPickerCombinePageElements(pagePrefix, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page)),
 			)
+		},
+	)
+}
+
+func targetPickerPlanSingleLaneForm(
+	view control.FeishuTargetPickerView,
+	daemonLifecycleID string,
+	lane paginatedSelectFlowLane,
+	render func(page paginatedSelectPage) []map[string]any,
+) paginatedSelectPlan {
+	return planPaginatedSelectLane(
+		cardtransport.InteractiveCardTransportLimitBytes,
+		lane,
+		func(page paginatedSelectPage) (int, error) {
+			return targetPickerEditingCardSize(view, daemonLifecycleID, render(page))
 		},
 	)
 }

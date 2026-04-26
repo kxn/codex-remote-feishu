@@ -155,6 +155,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 			FeishuCommandWorkspaceNew,
 			FeishuCommandWorkspaceNewDir,
 			FeishuCommandWorkspaceNewGit,
+			FeishuCommandWorkspaceNewWorktree,
 			FeishuCommandWorkspaceDetach,
 			FeishuCommandList,
 			FeishuCommandUse,

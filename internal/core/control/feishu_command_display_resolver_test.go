@@ -25,7 +25,7 @@ func TestResolveFeishuCommandDisplayFamilyCarriesDefaultVariantIdentity(t *testi
 func TestResolveFeishuCommandDisplayGroupDefaultsToCodexNormalHelpProjection(t *testing.T) {
 	resolved := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSwitchTarget, false, CatalogContext{})
 	got := resolvedDisplayCommands(resolved)
-	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace detach"}
+	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace new worktree", "/workspace detach"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("default help switch_target commands = %#v, want %#v", got, want)
 	}

@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1290,6 +1291,146 @@ func TestTargetPickerAddWorkspaceGitSourceShowsDisabledHintWhenGitMissing(t *tes
 	}
 }
 
+func TestTargetPickerWorktreeConfirmDispatchesCreateCommand(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 51, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceRoot := createTargetPickerGitRepo(t)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "web",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     workspaceRoot,
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionWorkspaceNewWorktree,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if view.Page != control.FeishuTargetPickerPageWorktree || view.SelectedSource != control.FeishuTargetPickerSourceGitWorktree {
+		t.Fatalf("expected direct worktree page, got %#v", view)
+	}
+	if normalizeWorkspaceClaimKey(view.SelectedWorkspaceKey) != normalizeWorkspaceClaimKey(workspaceRoot) {
+		t.Fatalf("expected worktree page to default to current workspace, got %#v", view)
+	}
+
+	blocked := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if len(blocked) != 1 || blocked[0].TargetPickerView == nil {
+		t.Fatalf("expected worktree validation refresh, got %#v", blocked)
+	}
+	if got := blocked[0].TargetPickerView; got.Page != control.FeishuTargetPickerPageWorktree || got.CanConfirm {
+		t.Fatalf("expected worktree page to stay blocked, got %#v", got)
+	}
+	if got := blocked[0].TargetPickerView; len(got.Messages) == 0 && len(got.SourceMessages) == 0 {
+		t.Fatalf("expected worktree validation feedback, got %#v", got)
+	}
+
+	confirmEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+		RequestAnswers: map[string][]string{
+			control.FeishuTargetPickerWorktreeBranchFieldName:    {"feat/login"},
+			control.FeishuTargetPickerWorktreeDirectoryFieldName: {"web-login"},
+		},
+	})
+	if len(confirmEvents) != 2 || confirmEvents[0].TargetPickerView == nil || confirmEvents[1].DaemonCommand == nil {
+		t.Fatalf("expected processing card plus daemon command, got %#v", confirmEvents)
+	}
+	if got := confirmEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.StatusTitle != "正在创建 Worktree 工作区" {
+		t.Fatalf("expected worktree processing card, got %#v", got)
+	}
+	command := confirmEvents[1].DaemonCommand
+	if command.Kind != control.DaemonCommandGitWorkspaceWorktreeCreate || command.PickerID != view.PickerID {
+		t.Fatalf("unexpected worktree create daemon command: %#v", command)
+	}
+	if !testutil.SamePath(command.WorkspaceKey, workspaceRoot) || command.BranchName != "feat/login" || command.DirectoryName != "web-login" {
+		t.Fatalf("unexpected worktree create daemon command payload: %#v", command)
+	}
+
+	blockedInput := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "继续说话",
+	})
+	if len(blockedInput) != 1 || blockedInput[0].Notice == nil || blockedInput[0].Notice.Code != "target_picker_processing" {
+		t.Fatalf("expected ordinary input to be blocked during worktree create, got %#v", blockedInput)
+	}
+	if got := blockedInput[0].Notice.Text; got != "当前正在创建 Worktree 工作区，请等待完成或取消；如需查看状态，可继续使用 /status。" {
+		t.Fatalf("unexpected worktree processing blocker text: %q", got)
+	}
+}
+
+func TestTargetPickerWorktreeOnlyListsGitWorkspaces(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 51, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	gitWorkspace := createTargetPickerGitRepo(t)
+	plainWorkspace := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-git",
+		DisplayName:   "git",
+		WorkspaceRoot: gitWorkspace,
+		WorkspaceKey:  gitWorkspace,
+		ShortName:     "git",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-plain",
+		DisplayName:   "plain",
+		WorkspaceRoot: plainWorkspace,
+		WorkspaceKey:  plainWorkspace,
+		ShortName:     "plain",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     plainWorkspace,
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionWorkspaceNewWorktree,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if len(view.WorkspaceOptions) != 1 {
+		t.Fatalf("expected only git workspace option, got %#v", view.WorkspaceOptions)
+	}
+	if !testutil.SamePath(view.WorkspaceOptions[0].Value, gitWorkspace) {
+		t.Fatalf("expected git workspace option, got %#v", view.WorkspaceOptions)
+	}
+	if !testutil.SamePath(view.SelectedWorkspaceKey, gitWorkspace) {
+		t.Fatalf("expected worktree page to fall back to git workspace, got %#v", view)
+	}
+}
+
 func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 52, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1547,6 +1688,50 @@ func TestTargetPickerCancelGitImportProcessingSealsCardAndDispatchesCancel(t *te
 	}
 }
 
+func TestTargetPickerCancelWorktreeProcessingSealsCardAndDispatchesCancel(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 59, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	record := &activeTargetPickerRecord{
+		PickerID:             "picker-1",
+		OwnerUserID:          "user-1",
+		Source:               control.TargetPickerRequestSourceWorktree,
+		Stage:                control.FeishuTargetPickerStageProcessing,
+		PendingKind:          targetPickerPendingWorktreeCreate,
+		PendingWorkspaceKey:  "/data/dl/projects/repo-login",
+		SelectedWorkspaceKey: "/data/dl/projects/repo",
+		WorktreeBranchName:   "feat/login",
+		WorktreeFinalPath:    "/data/dl/projects/repo-login",
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
+	svc.RecordTargetPickerMessage("surface-1", record.PickerID, "om-card-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerCancel,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         record.PickerID,
+	})
+	if len(events) != 2 || events[0].TargetPickerView == nil || events[1].DaemonCommand == nil {
+		t.Fatalf("expected cancelled same-card result plus daemon cancel, got %#v", events)
+	}
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageCancelled || got.StatusTitle != "已取消创建" || got.MessageID != "om-card-1" {
+		t.Fatalf("expected cancelled worktree terminal card on original owner card, got %#v", got)
+	}
+	if got := events[1].DaemonCommand; got.Kind != control.DaemonCommandGitWorkspaceWorktreeCancel || got.PickerID != record.PickerID {
+		t.Fatalf("expected worktree cancel daemon command, got %#v", got)
+	}
+	if svc.activeTargetPicker(surface) != nil || svc.activeOwnerCardFlow(surface) != nil {
+		t.Fatalf("expected cancel to clear target picker runtime, got %#v", svc.SurfaceUIRuntime("surface-1"))
+	}
+}
+
 func openAddWorkspaceLocalDirectoryPage(t *testing.T, svc *Service, view *control.FeishuTargetPickerView) *control.FeishuTargetPickerView {
 	t.Helper()
 	_ = view
@@ -1567,6 +1752,38 @@ func openAddWorkspaceGitPage(t *testing.T, svc *Service, view *control.FeishuTar
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	}))
+}
+
+func createTargetPickerGitRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git unavailable in test environment")
+	}
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+		t.Fatalf("mkdir repo root: %v", err)
+	}
+	runTargetPickerGitCommand(t, repoRoot, "init", "-q")
+	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write repo file: %v", err)
+	}
+	runTargetPickerGitCommand(t, repoRoot, "add", "README.md")
+	runTargetPickerGitCommand(t, repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init")
+	runTargetPickerGitCommand(t, repoRoot, "branch", "-M", "main")
+	return repoRoot
+}
+
+func runTargetPickerGitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=Never",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
 }
 
 func slicesContain(values []string, want string) bool {

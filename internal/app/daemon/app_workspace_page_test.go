@@ -49,6 +49,13 @@ func TestHandleGatewayActionReplacesWorkspaceNavigationCardsInline(t *testing.T)
 			expectedTitle: "从 GIT URL 新建工作区",
 			requiresGit:   true,
 		},
+		{
+			name:          "workspace new worktree business card",
+			kind:          control.ActionWorkspaceNewWorktree,
+			text:          "/workspace new worktree",
+			expectedTitle: "从 Worktree 新建工作区",
+			requiresGit:   true,
+		},
 	}
 
 	for _, tt := range tests {

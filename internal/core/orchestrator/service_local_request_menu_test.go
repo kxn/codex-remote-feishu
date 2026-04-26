@@ -61,7 +61,7 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 		}
 	}
 	got := firstCommands(switchEntries)
-	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace detach"}
+	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace new worktree", "/workspace detach"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal help switch_target commands = %#v, want %#v", got, want)
 	}

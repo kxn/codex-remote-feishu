@@ -12,6 +12,8 @@ func targetPickerTitle(source control.TargetPickerRequestSource) string {
 		return "从目录新建工作区"
 	case control.TargetPickerRequestSourceGit:
 		return "从 GIT URL 新建工作区"
+	case control.TargetPickerRequestSourceWorktree:
+		return "从 Worktree 新建工作区"
 	case control.TargetPickerRequestSourceUse:
 		return "切换工作会话"
 	default:
@@ -157,7 +159,9 @@ func targetPickerThreadValue(threadID string) string {
 
 func targetPickerSupportsAddWorkspace(source control.TargetPickerRequestSource) bool {
 	switch source {
-	case control.TargetPickerRequestSourceDir, control.TargetPickerRequestSourceGit:
+	case control.TargetPickerRequestSourceDir,
+		control.TargetPickerRequestSourceGit,
+		control.TargetPickerRequestSourceWorktree:
 		return true
 	default:
 		return false
@@ -184,6 +188,17 @@ func targetPickerRequiresExistingWorkspace(source control.TargetPickerRequestSou
 	default:
 		return false
 	}
+}
+
+func targetPickerRequiresWorkspaceSelection(source control.TargetPickerRequestSource) bool {
+	if targetPickerRequiresExistingWorkspace(source) {
+		return true
+	}
+	return source == control.TargetPickerRequestSourceWorktree
+}
+
+func targetPickerUsesSessionSelection(source control.TargetPickerRequestSource) bool {
+	return targetPickerRequiresExistingWorkspace(source)
 }
 
 func normalizeTargetPickerMode(value string) control.FeishuTargetPickerMode {
@@ -240,7 +255,9 @@ func targetPickerModeUnavailableReason(hasExistingWorkspace bool) string {
 
 func normalizeTargetPickerSourceKind(value string) control.FeishuTargetPickerSourceKind {
 	switch control.FeishuTargetPickerSourceKind(strings.TrimSpace(value)) {
-	case control.FeishuTargetPickerSourceLocalDirectory, control.FeishuTargetPickerSourceGitURL:
+	case control.FeishuTargetPickerSourceLocalDirectory,
+		control.FeishuTargetPickerSourceGitURL,
+		control.FeishuTargetPickerSourceGitWorktree:
 		return control.FeishuTargetPickerSourceKind(strings.TrimSpace(value))
 	default:
 		return ""
@@ -274,6 +291,8 @@ func targetPickerDefaultSourceKind(source control.TargetPickerRequestSource) con
 		return control.FeishuTargetPickerSourceGitURL
 	case control.TargetPickerRequestSourceDir:
 		return control.FeishuTargetPickerSourceLocalDirectory
+	case control.TargetPickerRequestSourceWorktree:
+		return control.FeishuTargetPickerSourceGitWorktree
 	default:
 		return ""
 	}
@@ -283,7 +302,7 @@ func targetPickerAllowsNewThread(source control.TargetPickerRequestSource, allow
 	if !allowNewThread {
 		return false
 	}
-	return targetPickerRequiresExistingWorkspace(source)
+	return targetPickerUsesSessionSelection(source)
 }
 
 func targetPickerHasSourceOption(options []control.FeishuTargetPickerSourceOption, value control.FeishuTargetPickerSourceKind) bool {

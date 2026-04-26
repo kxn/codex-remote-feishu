@@ -45,6 +45,12 @@ func (s *Service) applyTargetPickerDraftAnswers(record *activeTargetPickerRecord
 	if value, ok := targetPickerAnswerValue(answers, control.FeishuTargetPickerGitDirectoryNameFieldName); ok {
 		record.GitDirectoryName = strings.TrimSpace(value)
 	}
+	if value, ok := targetPickerAnswerValue(answers, control.FeishuTargetPickerWorktreeBranchFieldName); ok {
+		record.WorktreeBranchName = strings.TrimSpace(value)
+	}
+	if value, ok := targetPickerAnswerValue(answers, control.FeishuTargetPickerWorktreeDirectoryFieldName); ok {
+		record.WorktreeDirectoryName = strings.TrimSpace(value)
+	}
 }
 
 func targetPickerAnswerValue(answers map[string][]string, key string) (string, bool) {

@@ -32,6 +32,7 @@ func BuildFeishuWorkspaceNewPageView(inMenu bool) FeishuPageView {
 			Entries: []CommandCatalogEntry{
 				workspacePageButtonEntry("从目录新建", "/workspace new dir"),
 				workspacePageButtonEntry("从 GIT URL 新建", "/workspace new git"),
+				workspacePageButtonEntry("从 Worktree 新建", "/workspace new worktree"),
 			},
 		}},
 		RelatedButtons: []CommandCatalogButton{{

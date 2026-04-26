@@ -42,6 +42,11 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceGit, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
+	case control.FeishuUIIntentShowWorkspaceNewWorktree:
+		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+		}
+		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowCommandMenu:
 		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText)}
 	case control.FeishuUIIntentShowHistory:

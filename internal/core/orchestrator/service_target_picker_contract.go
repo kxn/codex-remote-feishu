@@ -10,11 +10,22 @@ func targetPickerBodySections(
 	mode control.FeishuTargetPickerMode,
 	sourceKind control.FeishuTargetPickerSourceKind,
 	workspaceLabel, workspaceMeta, sessionLabel, sessionMeta string,
-	localDirectoryPath, gitRepoURL, gitParentDir, gitFinalPath string,
+	localDirectoryPath, gitRepoURL, gitParentDir, gitFinalPath, worktreeBranchName, worktreeFinalPath string,
 ) []control.FeishuCardTextSection {
 	_ = mode
-	_ = sourceKind
 	sections := make([]control.FeishuCardTextSection, 0, 6)
+	if sourceKind == control.FeishuTargetPickerSourceGitWorktree {
+		if section, ok := targetPickerSummarySection("基准工作区", workspaceLabel, workspaceMeta); ok {
+			sections = append(sections, section)
+		}
+		if section, ok := targetPickerSummarySection("新分支", worktreeBranchName, ""); ok {
+			sections = append(sections, section)
+		}
+		if section, ok := targetPickerSummarySection("目标路径", worktreeFinalPath, ""); ok {
+			sections = append(sections, section)
+		}
+		return cloneFeishuCardSections(sections)
+	}
 	if section, ok := targetPickerSummarySection("工作区", workspaceLabel, workspaceMeta); ok {
 		sections = append(sections, section)
 	}
@@ -94,6 +105,8 @@ func targetPickerSourceDisplayLabel(sourceKind control.FeishuTargetPickerSourceK
 		return "从已有目录"
 	case control.FeishuTargetPickerSourceGitURL:
 		return "从 Git URL"
+	case control.FeishuTargetPickerSourceGitWorktree:
+		return "从 Worktree"
 	default:
 		return ""
 	}

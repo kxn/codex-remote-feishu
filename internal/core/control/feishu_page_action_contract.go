@@ -58,6 +58,8 @@ func ActionKindForFeishuCommandID(commandID string) (ActionKind, bool) {
 		return ActionWorkspaceNewDir, true
 	case FeishuCommandWorkspaceNewGit:
 		return ActionWorkspaceNewGit, true
+	case FeishuCommandWorkspaceNewWorktree:
+		return ActionWorkspaceNewWorktree, true
 	case FeishuCommandWorkspaceDetach:
 		return ActionWorkspaceDetach, true
 	case FeishuCommandList:
@@ -104,6 +106,8 @@ func canonicalSlashForActionKind(kind ActionKind) string {
 		return "/workspace new dir"
 	case ActionWorkspaceNewGit:
 		return "/workspace new git"
+	case ActionWorkspaceNewWorktree:
+		return "/workspace new worktree"
 	case ActionWorkspaceDetach:
 		return "/workspace detach"
 	case ActionListInstances:

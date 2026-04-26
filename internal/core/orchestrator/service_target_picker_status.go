@@ -12,6 +12,8 @@ func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.F
 		return control.FeishuTargetPickerPageLocalDirectory
 	case control.TargetPickerRequestSourceGit:
 		return control.FeishuTargetPickerPageGit
+	case control.TargetPickerRequestSourceWorktree:
+		return control.FeishuTargetPickerPageWorktree
 	default:
 		return control.FeishuTargetPickerPageTarget
 	}
@@ -48,6 +50,8 @@ func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.F
 		switch record.PendingKind {
 		case targetPickerPendingGitImport:
 			return "Git/处理中"
+		case targetPickerPendingWorktreeCreate:
+			return "Worktree/处理中"
 		case targetPickerPendingUseThread:
 			return "目标/处理中"
 		case targetPickerPendingNewThread:
@@ -72,7 +76,12 @@ func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.F
 			return "目录"
 		case control.FeishuTargetPickerPageGit:
 			return "Git"
+		case control.FeishuTargetPickerPageWorktree:
+			return "Worktree"
 		default:
+			if source == control.FeishuTargetPickerSourceGitWorktree {
+				return "Worktree"
+			}
 			if source == control.FeishuTargetPickerSourceGitURL {
 				return "Git"
 			}
@@ -98,6 +107,8 @@ func targetPickerViewQuestion(record *activeTargetPickerRecord, page control.Fei
 		return "要接入哪个本地目录？"
 	case control.FeishuTargetPickerPageGit:
 		return "克隆哪个仓库，到哪里？"
+	case control.FeishuTargetPickerPageWorktree:
+		return "基于哪个 Git 工作区创建 worktree？"
 	default:
 		return "这次要做什么？"
 	}
@@ -135,6 +146,33 @@ func targetPickerLocalDirectoryProcessingStatus(path string) feishuCardStatusPay
 		Lines: []string{
 			"✅ 校验目录",
 			"🔄 接入工作区",
+			"⚪ 准备新会话",
+		},
+	})
+	return feishuCardStatusPayload{Sections: sections}
+}
+
+func targetPickerWorktreeCreateProcessingStatus(baseWorkspaceLabel, branchName, finalPath string) feishuCardStatusPayload {
+	lines := make([]string, 0, 3)
+	if baseWorkspaceLabel = strings.TrimSpace(baseWorkspaceLabel); baseWorkspaceLabel != "" {
+		lines = append(lines, "基准工作区："+baseWorkspaceLabel)
+	}
+	if branchName = strings.TrimSpace(branchName); branchName != "" {
+		lines = append(lines, "新分支："+branchName)
+	}
+	if finalPath = strings.TrimSpace(finalPath); finalPath != "" {
+		lines = append(lines, "目标路径："+finalPath)
+	}
+	sections := []control.FeishuCardTextSection{}
+	if len(lines) != 0 {
+		sections = append(sections, control.FeishuCardTextSection{Label: "对象", Lines: lines})
+	}
+	sections = append(sections, control.FeishuCardTextSection{
+		Label: "当前阶段",
+		Lines: []string{
+			"✅ 校验参数",
+			"🔄 创建 worktree",
+			"⚪ 接入工作区",
 			"⚪ 准备新会话",
 		},
 	})

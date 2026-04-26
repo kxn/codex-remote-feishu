@@ -64,35 +64,38 @@ type activeOwnerCardFlowRecord struct {
 }
 
 type activeTargetPickerRecord struct {
-	PickerID             string
-	OwnerUserID          string
-	Source               control.TargetPickerRequestSource
-	Stage                control.FeishuTargetPickerStage
-	StatusTitle          string
-	StatusText           string
-	StatusSections       []control.FeishuCardTextSection
-	StatusFooter         string
-	Messages             []control.FeishuTargetPickerMessage
-	PendingKind          targetPickerPendingKind
-	PendingWorkspaceKey  string
-	PendingThreadID      string
-	Page                 control.FeishuTargetPickerPage
-	BackCommandText      string
-	LockedWorkspaceKey   string
-	AllowNewThread       bool
-	SelectedMode         control.FeishuTargetPickerMode
-	SelectedSource       control.FeishuTargetPickerSourceKind
-	WorkspaceCursor      int
-	SessionCursor        int
-	SelectedWorkspaceKey string
-	SelectedSessionValue string
-	LocalDirectoryPath   string
-	GitParentDir         string
-	GitRepoURL           string
-	GitDirectoryName     string
-	GitFinalPath         string
-	CreatedAt            time.Time
-	ExpiresAt            time.Time
+	PickerID              string
+	OwnerUserID           string
+	Source                control.TargetPickerRequestSource
+	Stage                 control.FeishuTargetPickerStage
+	StatusTitle           string
+	StatusText            string
+	StatusSections        []control.FeishuCardTextSection
+	StatusFooter          string
+	Messages              []control.FeishuTargetPickerMessage
+	PendingKind           targetPickerPendingKind
+	PendingWorkspaceKey   string
+	PendingThreadID       string
+	Page                  control.FeishuTargetPickerPage
+	BackCommandText       string
+	LockedWorkspaceKey    string
+	AllowNewThread        bool
+	SelectedMode          control.FeishuTargetPickerMode
+	SelectedSource        control.FeishuTargetPickerSourceKind
+	WorkspaceCursor       int
+	SessionCursor         int
+	SelectedWorkspaceKey  string
+	SelectedSessionValue  string
+	LocalDirectoryPath    string
+	GitParentDir          string
+	GitRepoURL            string
+	GitDirectoryName      string
+	GitFinalPath          string
+	WorktreeBranchName    string
+	WorktreeDirectoryName string
+	WorktreeFinalPath     string
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
 }
 
 type activeThreadHistoryRecord struct {

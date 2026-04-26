@@ -586,6 +586,8 @@ func targetPickerDraftAnswersFromFormValue(values map[string]interface{}) map[st
 	for _, fieldName := range []string{
 		control.FeishuTargetPickerGitRepoURLFieldName,
 		control.FeishuTargetPickerGitDirectoryNameFieldName,
+		control.FeishuTargetPickerWorktreeBranchFieldName,
+		control.FeishuTargetPickerWorktreeDirectoryFieldName,
 	} {
 		if _, ok := values[fieldName]; !ok {
 			continue

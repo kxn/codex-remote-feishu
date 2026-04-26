@@ -50,6 +50,10 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 		return a.handleGitWorkspaceImportCommandLocked(command)
 	case control.DaemonCommandGitWorkspaceImportCancel:
 		return a.handleGitWorkspaceImportCancelCommandLocked(command)
+	case control.DaemonCommandGitWorkspaceWorktreeCreate:
+		return a.handleGitWorkspaceWorktreeCreateCommandLocked(command)
+	case control.DaemonCommandGitWorkspaceWorktreeCancel:
+		return a.handleGitWorkspaceWorktreeCancelCommandLocked(command)
 	default:
 		return nil
 	}

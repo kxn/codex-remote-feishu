@@ -272,10 +272,17 @@ func (s *Service) handleTargetPickerCancel(surface *state.SurfaceConsoleRecord, 
 	if blocked != nil {
 		return blocked
 	}
-	if record.Stage == control.FeishuTargetPickerStageProcessing && record.PendingKind == targetPickerPendingGitImport {
-		appendEvents := s.cancelTargetPickerGitImport(surface, record)
-		status := targetPickerGitImportCancelledStatus(record.PendingWorkspaceKey)
-		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消导入", "", status.Sections, status.Footer, false, appendEvents)
+	if record.Stage == control.FeishuTargetPickerStageProcessing {
+		switch record.PendingKind {
+		case targetPickerPendingGitImport:
+			appendEvents := s.cancelTargetPickerGitImport(surface, record)
+			status := targetPickerGitImportCancelledStatus(record.PendingWorkspaceKey)
+			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消导入", "", status.Sections, status.Footer, false, appendEvents)
+		case targetPickerPendingWorktreeCreate:
+			appendEvents := s.cancelTargetPickerWorktreeCreate(surface, record)
+			status := targetPickerWorktreeCreateCancelledStatus(record.PendingWorkspaceKey)
+			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消创建", "", status.Sections, status.Footer, false, appendEvents)
+		}
 	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageCancelled, "已取消", "当前选择流程已结束，工作目标保持不变。", true, nil)
 }
@@ -373,7 +380,7 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 	}
 	if !view.CanConfirm {
 		message := "请选择工作区和会话后再确认。"
-		if view.Page == control.FeishuTargetPickerPageLocalDirectory || view.Page == control.FeishuTargetPickerPageGit {
+		if view.Page == control.FeishuTargetPickerPageLocalDirectory || view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree {
 			switch view.SelectedSource {
 			case control.FeishuTargetPickerSourceLocalDirectory:
 				localState := s.buildTargetPickerLocalDirectoryState(surface, record)
@@ -384,6 +391,9 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 			case control.FeishuTargetPickerSourceGitURL:
 				gitState := s.buildTargetPickerGitImportState(record)
 				message = targetPickerGitImportValidationMessage(record, gitState.Messages)
+			case control.FeishuTargetPickerSourceGitWorktree:
+				worktreeState := s.buildTargetPickerWorktreeState(record)
+				message = targetPickerWorktreeValidationMessage(record, worktreeState.Messages)
 			default:
 				message = "请选择一个可用的工作区来源后再确认。"
 			}
@@ -422,6 +432,8 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 			return s.confirmTargetPickerLocalDirectory(surface, flow, record, view)
 		case control.FeishuTargetPickerSourceGitURL:
 			return s.confirmTargetPickerGitImport(surface, flow, record, view)
+		case control.FeishuTargetPickerSourceGitWorktree:
+			return s.confirmTargetPickerWorktree(surface, flow, record, view)
 		default:
 			return notice(surface, "target_picker_selection_missing", "请选择一个可用的工作区来源后再确认。")
 		}
@@ -537,6 +549,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		stage = control.FeishuTargetPickerStageEditing
 	}
 	workspaceEntries := s.targetPickerWorkspaceEntries(surface)
+	if record.Source == control.TargetPickerRequestSourceWorktree {
+		workspaceEntries = s.filterGitWorkspaceSelectionEntries(workspaceEntries)
+	}
 	mode := targetPickerDefaultMode(record.Source)
 	record.SelectedMode = mode
 
@@ -561,9 +576,12 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	}
 	record.SelectedWorkspaceKey = selectedWorkspace
 
-	sessionOptions := s.targetPickerSessionOptions(surface, selectedWorkspace, record.Source, record.AllowNewThread)
+	sessionOptions := []control.FeishuTargetPickerSessionOption(nil)
+	if targetPickerUsesSessionSelection(record.Source) {
+		sessionOptions = s.targetPickerSessionOptions(surface, selectedWorkspace, record.Source, record.AllowNewThread)
+	}
 	selectedSession := strings.TrimSpace(record.SelectedSessionValue)
-	if targetPickerRequiresExistingWorkspace(record.Source) {
+	if targetPickerUsesSessionSelection(record.Source) {
 		switch {
 		case selectedSession == targetPickerAutoSession:
 			selectedSession = s.defaultTargetPickerSessionValue(surface, selectedWorkspace, sessionOptions)
@@ -613,13 +631,17 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	hint := ""
 	messages := append([]control.FeishuTargetPickerMessage(nil), record.Messages...)
 	sourceMessages := []control.FeishuTargetPickerMessage(nil)
-	if targetPickerRequiresExistingWorkspace(record.Source) && !workspaceSelectionLocked && len(workspaceOptions) == 0 {
+	if targetPickerRequiresWorkspaceSelection(record.Source) && !workspaceSelectionLocked && len(workspaceOptions) == 0 {
+		text := "当前还没有可切换的工作区，请先从目录或 GIT URL 新建。"
+		if record.Source == control.TargetPickerRequestSourceWorktree {
+			text = "当前还没有可用的 Git 工作区，请先接入一个目录或导入一个仓库。"
+		}
 		messages = append(messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageWarning,
-			Text:  "当前还没有可切换的工作区，请先从目录或 GIT URL 新建。",
+			Text:  text,
 		})
 	}
-	if workspaceSelectionLocked && targetPickerOnlyNewThreadSessionOption(sessionOptions) {
+	if targetPickerUsesSessionSelection(record.Source) && workspaceSelectionLocked && targetPickerOnlyNewThreadSessionOption(sessionOptions) {
 		messages = append(messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageInfo,
 			Text:  "当前工作区没有可恢复会话，可直接新建会话。",
@@ -658,6 +680,13 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		sourceMessages = append(sourceMessages, gitState.Messages...)
 		canConfirm = gitState.CanConfirm
 		confirmLabel = "克隆并继续"
+	case control.FeishuTargetPickerPageWorktree:
+		worktreeState := s.buildTargetPickerWorktreeState(record)
+		worktreeFinalPath := strings.TrimSpace(firstNonEmpty(record.WorktreeFinalPath, worktreeState.FinalPath))
+		sourceMessages = append(sourceMessages, worktreeState.Messages...)
+		canConfirm = worktreeState.CanConfirm
+		confirmLabel = "创建并进入"
+		record.WorktreeFinalPath = worktreeFinalPath
 	default:
 		canConfirm = selectedWorkspace != "" && selectedSession != ""
 	}
@@ -667,10 +696,15 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	showSessionSelect := page == control.FeishuTargetPickerPageTarget
 	showSourceSelect := false
 	sourceUnavailableHint := targetPickerSourceUnavailableReason(sourceOptions, sourceKind)
-	canCancelProcessing := stage == control.FeishuTargetPickerStageProcessing && record.PendingKind == targetPickerPendingGitImport
+	canCancelProcessing := stage == control.FeishuTargetPickerStageProcessing &&
+		(record.PendingKind == targetPickerPendingGitImport || record.PendingKind == targetPickerPendingWorktreeCreate)
 	processingCancelLabel := ""
 	if canCancelProcessing {
-		processingCancelLabel = "取消导入"
+		if record.PendingKind == targetPickerPendingWorktreeCreate {
+			processingCancelLabel = "取消创建"
+		} else {
+			processingCancelLabel = "取消导入"
+		}
 	}
 	bodySections := targetPickerBodySections(
 		mode,
@@ -683,6 +717,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		record.GitRepoURL,
 		gitParentDir,
 		gitFinalPath,
+		strings.TrimSpace(record.WorktreeBranchName),
+		strings.TrimSpace(record.WorktreeFinalPath),
 	)
 	noticeSections := targetPickerStatusNoticeSections(record)
 	return control.NormalizeFeishuTargetPickerView(control.FeishuTargetPickerView{
@@ -740,6 +776,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		GitRepoURL:               gitRepoURL,
 		GitDirectoryName:         gitDirectoryName,
 		GitFinalPath:             gitFinalPath,
+		WorktreeBranchName:       strings.TrimSpace(record.WorktreeBranchName),
+		WorktreeDirectoryName:    strings.TrimSpace(record.WorktreeDirectoryName),
+		WorktreeFinalPath:        strings.TrimSpace(record.WorktreeFinalPath),
 		Messages:                 messages,
 		SourceMessages:           sourceMessages,
 	}), nil

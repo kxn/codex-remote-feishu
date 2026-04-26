@@ -1,43 +1,44 @@
 package control
 
 const (
-	FeishuCommandGroupCurrentWork  = "current_work"
-	FeishuCommandGroupSendSettings = "send_settings"
-	FeishuCommandGroupSwitchTarget = "switch_target"
-	FeishuCommandGroupCommonTools  = "common_tools"
-	FeishuCommandGroupMaintenance  = "maintenance"
-	FeishuCommandWorkspace         = "workspace"
-	FeishuCommandWorkspaceList     = "workspace_list"
-	FeishuCommandWorkspaceNew      = "workspace_new"
-	FeishuCommandWorkspaceNewDir   = "workspace_new_dir"
-	FeishuCommandWorkspaceNewGit   = "workspace_new_git"
-	FeishuCommandWorkspaceDetach   = "workspace_detach"
-	FeishuCommandList              = "list"
-	FeishuCommandStatus            = "status"
-	FeishuCommandUse               = "use"
-	FeishuCommandUseAll            = "useall"
-	FeishuCommandNew               = "new"
-	FeishuCommandHistory           = "history"
-	FeishuCommandSendFile          = "sendfile"
-	FeishuCommandFollow            = "follow"
-	FeishuCommandDetach            = "detach"
-	FeishuCommandStop              = "stop"
-	FeishuCommandCompact           = "compact"
-	FeishuCommandSteerAll          = "steerall"
-	FeishuCommandMode              = "mode"
-	FeishuCommandAutoWhip          = "autowhip"
-	FeishuCommandAutoContinue      = "autocontinue"
-	FeishuCommandModel             = "model"
-	FeishuCommandReasoning         = "reasoning"
-	FeishuCommandAccess            = "access"
-	FeishuCommandPlan              = "plan"
-	FeishuCommandVerbose           = "verbose"
-	FeishuCommandHelp              = "help"
-	FeishuCommandMenu              = "menu"
-	FeishuCommandDebug             = "debug"
-	FeishuCommandCron              = "cron"
-	FeishuCommandUpgrade           = "upgrade"
-	FeishuCommandVSCodeMigrate     = "vscode_migrate"
+	FeishuCommandGroupCurrentWork     = "current_work"
+	FeishuCommandGroupSendSettings    = "send_settings"
+	FeishuCommandGroupSwitchTarget    = "switch_target"
+	FeishuCommandGroupCommonTools     = "common_tools"
+	FeishuCommandGroupMaintenance     = "maintenance"
+	FeishuCommandWorkspace            = "workspace"
+	FeishuCommandWorkspaceList        = "workspace_list"
+	FeishuCommandWorkspaceNew         = "workspace_new"
+	FeishuCommandWorkspaceNewDir      = "workspace_new_dir"
+	FeishuCommandWorkspaceNewGit      = "workspace_new_git"
+	FeishuCommandWorkspaceNewWorktree = "workspace_new_worktree"
+	FeishuCommandWorkspaceDetach      = "workspace_detach"
+	FeishuCommandList                 = "list"
+	FeishuCommandStatus               = "status"
+	FeishuCommandUse                  = "use"
+	FeishuCommandUseAll               = "useall"
+	FeishuCommandNew                  = "new"
+	FeishuCommandHistory              = "history"
+	FeishuCommandSendFile             = "sendfile"
+	FeishuCommandFollow               = "follow"
+	FeishuCommandDetach               = "detach"
+	FeishuCommandStop                 = "stop"
+	FeishuCommandCompact              = "compact"
+	FeishuCommandSteerAll             = "steerall"
+	FeishuCommandMode                 = "mode"
+	FeishuCommandAutoWhip             = "autowhip"
+	FeishuCommandAutoContinue         = "autocontinue"
+	FeishuCommandModel                = "model"
+	FeishuCommandReasoning            = "reasoning"
+	FeishuCommandAccess               = "access"
+	FeishuCommandPlan                 = "plan"
+	FeishuCommandVerbose              = "verbose"
+	FeishuCommandHelp                 = "help"
+	FeishuCommandMenu                 = "menu"
+	FeishuCommandDebug                = "debug"
+	FeishuCommandCron                 = "cron"
+	FeishuCommandUpgrade              = "upgrade"
+	FeishuCommandVSCodeMigrate        = "vscode_migrate"
 )
 
 type FeishuCommandArgumentKind string
@@ -545,6 +546,26 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		menuExact: []feishuCommandMatch{
 			{alias: "workspace_new_git", action: Action{Kind: ActionWorkspaceNewGit}},
 			{alias: "workspacenewgit", action: Action{Kind: ActionWorkspaceNewGit}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandWorkspaceNewWorktree,
+			GroupID:          FeishuCommandGroupSwitchTarget,
+			Title:            "从 Worktree 新建",
+			CanonicalSlash:   "/workspace new worktree",
+			CanonicalMenuKey: "workspace_new_worktree",
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "基于一个已接入的 Git 工作区创建新的 worktree，并自动进入新会话。",
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textExact: []feishuCommandMatch{
+			{alias: "/workspace new worktree", action: Action{Kind: ActionWorkspaceNewWorktree}},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "workspace_new_worktree", action: Action{Kind: ActionWorkspaceNewWorktree}},
+			{alias: "workspacenewworktree", action: Action{Kind: ActionWorkspaceNewWorktree}},
 		},
 	},
 	{

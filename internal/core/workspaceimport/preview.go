@@ -135,19 +135,19 @@ func resolveParentDir(parentDir string) (string, error) {
 
 func resolveDirectoryName(repoURL, directoryName string) (string, error) {
 	if strings.TrimSpace(directoryName) != "" {
-		if err := validateDirectoryName(directoryName); err != nil {
+		if err := ValidateDirectoryName(directoryName); err != nil {
 			return "", &ImportError{Code: ImportErrorInvalidDirectoryName, Message: err.Error(), RepoURL: strings.TrimSpace(repoURL)}
 		}
 		return strings.TrimSpace(directoryName), nil
 	}
-	inferred := inferDirectoryName(repoURL)
+	inferred := InferDirectoryName(repoURL)
 	if inferred == "" {
 		return "", &ImportError{Code: ImportErrorInvalidURL, Message: "failed to infer directory name from repo url", RepoURL: strings.TrimSpace(repoURL)}
 	}
 	return inferred, nil
 }
 
-func validateDirectoryName(directoryName string) error {
+func ValidateDirectoryName(directoryName string) error {
 	name := strings.TrimSpace(directoryName)
 	switch name {
 	case "", ".", "..":
@@ -156,13 +156,13 @@ func validateDirectoryName(directoryName string) error {
 	if strings.ContainsAny(name, `/\`) {
 		return fmt.Errorf("directory name must not contain path separators")
 	}
-	if strings.TrimSpace(sanitizeDirectoryName(name)) != name {
+	if strings.TrimSpace(SanitizeDirectoryName(name)) != name {
 		return fmt.Errorf("directory name contains unsupported characters")
 	}
 	return nil
 }
 
-func inferDirectoryName(repoURL string) string {
+func InferDirectoryName(repoURL string) string {
 	value := strings.TrimSpace(repoURL)
 	value = strings.TrimSuffix(value, "/")
 	if value == "" {
@@ -178,10 +178,10 @@ func inferDirectoryName(repoURL string) string {
 		value = value[separator+1:]
 	}
 	value = strings.TrimSuffix(value, ".git")
-	return sanitizeDirectoryName(value)
+	return SanitizeDirectoryName(value)
 }
 
-func sanitizeDirectoryName(value string) string {
+func SanitizeDirectoryName(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimSuffix(value, ".git")
 	replacer := strings.NewReplacer(

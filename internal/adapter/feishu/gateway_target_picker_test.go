@@ -139,6 +139,46 @@ func TestParseCardActionTriggerEventBuildsTargetPickerConfirmAction(t *testing.T
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsTargetPickerSelectWorkspaceActionWithWorktreeDraftAnswers(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-select-worktree", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":      cardActionKindTargetPickerSelectWorkspace,
+					"picker_id": "picker-1",
+				},
+				FormValue: map[string]interface{}{
+					cardTargetPickerWorkspaceFieldName:                   []interface{}{"/data/dl/web"},
+					control.FeishuTargetPickerWorktreeBranchFieldName:    "feat/login",
+					control.FeishuTargetPickerWorktreeDirectoryFieldName: "web-login",
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-target-picker-select-worktree",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected target picker workspace action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerSelectWorkspace || action.WorkspaceKey != "/data/dl/web" {
+		t.Fatalf("unexpected target picker workspace action: %#v", action)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerWorktreeBranchFieldName]; len(got) != 1 || got[0] != "feat/login" {
+		t.Fatalf("unexpected worktree branch draft answers: %#v", action.RequestAnswers)
+	}
+	if got := action.RequestAnswers[control.FeishuTargetPickerWorktreeDirectoryFieldName]; len(got) != 1 || got[0] != "web-login" {
+		t.Fatalf("unexpected worktree directory draft answers: %#v", action.RequestAnswers)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-target-picker-open-path", "feishu:app-1:user:user-1")

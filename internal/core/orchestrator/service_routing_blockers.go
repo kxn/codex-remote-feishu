@@ -114,8 +114,16 @@ func (s *Service) blockActionForActiveTargetPicker(surface *state.SurfaceConsole
 		control.ActionTargetPickerCancel:
 		return nil
 	default:
-		return notice(surface, "target_picker_processing", "当前正在导入 Git 工作区，请等待完成或取消；如需查看状态，可继续使用 /status。")
+		return notice(surface, "target_picker_processing", s.targetPickerProcessingBlockedText(surface))
 	}
+}
+
+func (s *Service) targetPickerProcessingBlockedText(surface *state.SurfaceConsoleRecord) string {
+	record := s.activeTargetPicker(surface)
+	if record != nil && record.PendingKind == targetPickerPendingWorktreeCreate {
+		return "当前正在创建 Worktree 工作区，请等待完成或取消；如需查看状态，可继续使用 /status。"
+	}
+	return "当前正在导入 Git 工作区，请等待完成或取消；如需查看状态，可继续使用 /status。"
 }
 
 func (s *Service) blockNewThreadPreparation(surface *state.SurfaceConsoleRecord) []eventcontract.Event {

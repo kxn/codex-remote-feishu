@@ -11,10 +11,11 @@ import (
 type targetPickerPendingKind string
 
 const (
-	targetPickerPendingNone      targetPickerPendingKind = ""
-	targetPickerPendingUseThread targetPickerPendingKind = "use_thread"
-	targetPickerPendingNewThread targetPickerPendingKind = "new_thread"
-	targetPickerPendingGitImport targetPickerPendingKind = "git_import"
+	targetPickerPendingNone           targetPickerPendingKind = ""
+	targetPickerPendingUseThread      targetPickerPendingKind = "use_thread"
+	targetPickerPendingNewThread      targetPickerPendingKind = "new_thread"
+	targetPickerPendingGitImport      targetPickerPendingKind = "git_import"
+	targetPickerPendingWorktreeCreate targetPickerPendingKind = "worktree_create"
 )
 
 func (s *Service) clearTargetPickerRuntime(surface *state.SurfaceConsoleRecord) {
@@ -253,6 +254,8 @@ func targetPickerPendingStillRunning(surface *state.SurfaceConsoleRecord, record
 	case targetPickerPendingNewThread:
 		fallthrough
 	case targetPickerPendingGitImport:
+		fallthrough
+	case targetPickerPendingWorktreeCreate:
 		return surface.PendingHeadless.PrepareNewThread &&
 			normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
 	default:
@@ -265,7 +268,7 @@ func (s *Service) targetPickerHasBlockingProcessing(surface *state.SurfaceConsol
 	if record == nil || record.Stage != control.FeishuTargetPickerStageProcessing {
 		return false
 	}
-	return record.PendingKind == targetPickerPendingGitImport
+	return record.PendingKind == targetPickerPendingGitImport || record.PendingKind == targetPickerPendingWorktreeCreate
 }
 
 func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsoleRecord, events []eventcontract.Event, fallbackFailureText string) []eventcontract.Event {
@@ -292,6 +295,11 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 			status := targetPickerGitImportSuccessStatus(record.PendingWorkspaceKey)
 			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}
+	case targetPickerPendingWorktreeCreate:
+		if targetPickerNewThreadReady(surface, record.PendingWorkspaceKey) {
+			status := targetPickerWorktreeCreateSuccessStatus(record.PendingWorkspaceKey)
+			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
+		}
 	}
 	failureText := strings.TrimSpace(firstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
 	if failureText == "" && targetPickerPendingStillRunning(surface, record) {
@@ -303,6 +311,10 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 	if record.PendingKind == targetPickerPendingGitImport {
 		status := targetPickerGitImportPostCloneFailureStatus(record.PendingWorkspaceKey, failureText)
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
+	}
+	if record.PendingKind == targetPickerPendingWorktreeCreate {
+		status := targetPickerWorktreeCreatePostCreateFailureStatus(record.PendingWorkspaceKey, failureText)
+		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "创建失败", "", status.Sections, status.Footer, false, filtered)
 	}
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "切换失败", failureText, false, filtered)
 }

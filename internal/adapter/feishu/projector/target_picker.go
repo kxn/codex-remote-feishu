@@ -256,6 +256,22 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 	return nil
 }
 
+func targetPickerWorktreeElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	lane := targetPickerWorktreeWorkspaceLane(view)
+	plan := targetPickerPlanSingleLaneForm(view, daemonLifecycleID, lane, func(page paginatedSelectPage) []map[string]any {
+		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page))
+		if len(form) == 0 {
+			return nil
+		}
+		return []map[string]any{form}
+	})
+	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, plan.Page))
+	if len(form) == 0 {
+		return nil
+	}
+	return []map[string]any{form}
+}
+
 func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
 	elements := make([]map[string]any, 0, 5)
 	if row := targetPickerGitParentDirFormRow(view, daemonLifecycleID); len(row) != 0 {
@@ -273,7 +289,7 @@ func targetPickerGitURLFormElement(view control.FeishuTargetPickerView, daemonLi
 		"不填写时，将根据仓库地址自动生成",
 		strings.TrimSpace(view.GitDirectoryName),
 	))
-	if footer := targetPickerGitURLFormFooterElements(view, daemonLifecycleID); len(footer) != 0 {
+	if footer := targetPickerInlineFormFooterElements(view, daemonLifecycleID, "克隆并继续"); len(footer) != 0 {
 		elements = append(elements, footer...)
 	}
 	return map[string]any{
@@ -319,7 +335,39 @@ func targetPickerGitParentDirFormRow(view control.FeishuTargetPickerView, daemon
 	}
 }
 
-func targetPickerGitURLFormFooterElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+func targetPickerWorktreeFormElement(view control.FeishuTargetPickerView, daemonLifecycleID string, workspaceElements []map[string]any) map[string]any {
+	elements := make([]map[string]any, 0, len(workspaceElements)+6)
+	if intro := cardPlainTextBlockElement("从一个已接入的 Git 工作区派生新的并行工作区；创建成功后会自动接入并进入新会话。"); len(intro) != 0 {
+		elements = append(elements, intro)
+	}
+	elements = append(elements, workspaceElements...)
+	elements = append(elements, targetPickerInputElement(
+		control.FeishuTargetPickerWorktreeBranchFieldName,
+		"新分支名",
+		"例如 feat/login",
+		strings.TrimSpace(view.WorktreeBranchName),
+	))
+	elements = append(elements, targetPickerInputElement(
+		control.FeishuTargetPickerWorktreeDirectoryFieldName,
+		"本地目录名（可选）",
+		"不填写时按分支名自动生成",
+		strings.TrimSpace(view.WorktreeDirectoryName),
+	))
+	elements = append(elements, map[string]any{
+		"tag":     "markdown",
+		"content": targetPickerFieldMarkdown("目标目录", strings.TrimSpace(view.WorktreeFinalPath), "待生成"),
+	})
+	if footer := targetPickerInlineFormFooterElements(view, daemonLifecycleID, "创建并进入"); len(footer) != 0 {
+		elements = append(elements, footer...)
+	}
+	return map[string]any{
+		"tag":      "form",
+		"name":     "target_picker_worktree_form_" + strings.TrimSpace(view.PickerID),
+		"elements": elements,
+	}
+}
+
+func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, daemonLifecycleID string, defaultConfirmLabel string) []map[string]any {
 	buttons := []map[string]any{}
 	cancelButton := cardFormActionButtonElement(
 		"取消",
@@ -346,7 +394,7 @@ func targetPickerGitURLFormFooterElements(view control.FeishuTargetPickerView, d
 		}
 	}
 	confirmButton := cardFormActionButtonElement(
-		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "克隆并继续")),
+		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, defaultConfirmLabel)),
 		"primary",
 		stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID),
 		!view.CanConfirm,
@@ -400,8 +448,8 @@ func targetPickerInputElement(name, label, placeholder, value string) map[string
 	return input
 }
 
-func targetPickerUsesInlineGitForm(view control.FeishuTargetPickerView) bool {
-	return view.Page == control.FeishuTargetPickerPageGit
+func targetPickerUsesInlineForm(view control.FeishuTargetPickerView) bool {
+	return view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree
 }
 
 func targetPickerGitParentDirMarkdown(view control.FeishuTargetPickerView) string {

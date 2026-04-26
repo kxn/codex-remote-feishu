@@ -666,6 +666,87 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	}
 }
 
+func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *testing.T) {
+	elements := targetPickerElements(control.FeishuTargetPickerView{
+		PickerID:              "picker-1",
+		Title:                 "从 Worktree 新建工作区",
+		Page:                  control.FeishuTargetPickerPageWorktree,
+		SelectedMode:          control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:        control.FeishuTargetPickerSourceGitWorktree,
+		ConfirmLabel:          "创建并进入",
+		CanConfirm:            true,
+		WorkspaceCursor:       0,
+		SelectedWorkspaceKey:  "/data/dl/web",
+		WorkspacePlaceholder:  "选择基准工作区",
+		WorktreeBranchName:    "feat/login",
+		WorktreeDirectoryName: "web-login",
+		WorktreeFinalPath:     "/data/dl/web-login",
+		WorkspaceOptions: []control.FeishuTargetPickerWorkspaceOption{
+			{Value: "/data/dl/web", Label: "web", MetaText: "main"},
+		},
+	}, "life-worktree")
+
+	var form map[string]any
+	for _, element := range elements {
+		if cardStringValue(element["tag"]) == "form" {
+			form = element
+			break
+		}
+	}
+	if form == nil {
+		t.Fatalf("expected worktree branch to render form, got %#v", elements)
+	}
+	formElements, _ := form["elements"].([]map[string]any)
+	if len(formElements) < 6 {
+		t.Fatalf("expected worktree form to include intro, workspace select, inputs and footer, got %#v", form)
+	}
+	if formElements[0]["tag"] != "div" {
+		t.Fatalf("expected worktree form to start with intro block, got %#v", formElements)
+	}
+	var sawWorkspaceSelect bool
+	for _, element := range formElements {
+		if cardStringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerWorkspaceFieldName {
+			sawWorkspaceSelect = true
+			break
+		}
+	}
+	if !sawWorkspaceSelect {
+		t.Fatalf("expected worktree form to include workspace select, got %#v", formElements)
+	}
+	var sawBranchInput, sawDirInput bool
+	for _, element := range formElements {
+		switch element["name"] {
+		case control.FeishuTargetPickerWorktreeBranchFieldName:
+			sawBranchInput = true
+		case control.FeishuTargetPickerWorktreeDirectoryFieldName:
+			sawDirInput = true
+		}
+	}
+	if !sawBranchInput || !sawDirInput {
+		t.Fatalf("expected worktree form to include branch and directory inputs, got %#v", formElements)
+	}
+	if !containsMarkdownWithPrefix(formElements, "**目标目录**") {
+		t.Fatalf("expected worktree form to render final-path preview, got %#v", formElements)
+	}
+	footerButtons := cardElementButtons(t, formElements[len(formElements)-1])
+	if len(footerButtons) < 2 {
+		t.Fatalf("expected worktree form footer buttons, got %#v", formElements[len(formElements)-1])
+	}
+
+	var sawWorkspace, sawConfirm bool
+	for _, action := range cardActionsFromElements(formElements) {
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerSelectWorkspace:
+			sawWorkspace = true
+		case cardActionKindTargetPickerConfirm:
+			sawConfirm = true
+		}
+	}
+	if !sawWorkspace || !sawConfirm {
+		t.Fatalf("expected worktree form to render workspace select and confirm actions, got %#v", formElements)
+	}
+}
+
 func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

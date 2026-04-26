@@ -132,6 +132,53 @@ func TestInspectWorkspaceOutsideGitRepo(t *testing.T) {
 	}
 }
 
+func TestPreviewWorktreeInfersDirectoryNameFromBranch(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+
+	preview, err := PreviewWorktree(WorktreeCreateRequest{
+		BaseWorkspacePath: repoRoot,
+		BranchName:        "feat/worktree-preview",
+	})
+	if err != nil {
+		t.Fatalf("PreviewWorktree() error = %v", err)
+	}
+	if preview.BranchName != "feat/worktree-preview" {
+		t.Fatalf("BranchName = %q, want %q", preview.BranchName, "feat/worktree-preview")
+	}
+	if preview.DirectoryName != "feat-worktree-preview" {
+		t.Fatalf("DirectoryName = %q, want %q", preview.DirectoryName, "feat-worktree-preview")
+	}
+	if preview.ParentDir != filepath.Dir(repoRoot) {
+		t.Fatalf("ParentDir = %q, want %q", preview.ParentDir, filepath.Dir(repoRoot))
+	}
+	if preview.DestinationPath != filepath.Join(filepath.Dir(repoRoot), "feat-worktree-preview") {
+		t.Fatalf("DestinationPath = %q", preview.DestinationPath)
+	}
+}
+
+func TestPreviewWorktreeAcceptsLinkedWorktreeBase(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	worktreeRoot := filepath.Join(t.TempDir(), "feature-worktree")
+	runGitTestCommand(t, repoRoot, "worktree", "add", "-b", "feature/worktree", worktreeRoot, "HEAD")
+
+	preview, err := PreviewWorktree(WorktreeCreateRequest{
+		BaseWorkspacePath: worktreeRoot,
+		BranchName:        "feat/from-linked",
+		DirectoryName:     "feat-linked",
+	})
+	if err != nil {
+		t.Fatalf("PreviewWorktree(linked) error = %v", err)
+	}
+	if preview.BaseWorkspacePath != worktreeRoot {
+		t.Fatalf("BaseWorkspacePath = %q, want %q", preview.BaseWorkspacePath, worktreeRoot)
+	}
+	if preview.DestinationPath != filepath.Join(filepath.Dir(worktreeRoot), "feat-linked") {
+		t.Fatalf("DestinationPath = %q", preview.DestinationPath)
+	}
+}
+
 func ensureGitForTest(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {

@@ -233,6 +233,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentShowWorkspaceNew,
 		FeishuUIIntentShowWorkspaceNewDir,
 		FeishuUIIntentShowWorkspaceNewGit,
+		FeishuUIIntentShowWorkspaceNewWorktree,
 		FeishuUIIntentShowHistory,
 		FeishuUIIntentShowList,
 		FeishuUIIntentOpenSendFilePicker,

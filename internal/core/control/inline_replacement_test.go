@@ -62,6 +62,11 @@ func TestInlineCardReplacementPolicyActionSet(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "workspace new worktree handoff",
+			action: Action{Kind: ActionWorkspaceNewWorktree, Text: "/workspace new worktree"},
+			want:   true,
+		},
+		{
 			name:   "bare mode",
 			action: Action{Kind: ActionModeCommand, Text: "/mode"},
 			want:   true,

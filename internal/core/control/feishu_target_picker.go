@@ -15,6 +15,7 @@ const (
 	TargetPickerRequestSourceWorkspace TargetPickerRequestSource = "workspace"
 	TargetPickerRequestSourceDir       TargetPickerRequestSource = "workspace_new_dir"
 	TargetPickerRequestSourceGit       TargetPickerRequestSource = "workspace_new_git"
+	TargetPickerRequestSourceWorktree  TargetPickerRequestSource = "workspace_new_worktree"
 )
 
 type FeishuTargetPickerSessionKind string
@@ -36,6 +37,7 @@ type FeishuTargetPickerSourceKind string
 const (
 	FeishuTargetPickerSourceLocalDirectory FeishuTargetPickerSourceKind = "local_directory"
 	FeishuTargetPickerSourceGitURL         FeishuTargetPickerSourceKind = "git_url"
+	FeishuTargetPickerSourceGitWorktree    FeishuTargetPickerSourceKind = "git_worktree"
 )
 
 type FeishuTargetPickerPage string
@@ -46,6 +48,7 @@ const (
 	FeishuTargetPickerPageSource         FeishuTargetPickerPage = "source"
 	FeishuTargetPickerPageLocalDirectory FeishuTargetPickerPage = "local_directory"
 	FeishuTargetPickerPageGit            FeishuTargetPickerPage = "git"
+	FeishuTargetPickerPageWorktree       FeishuTargetPickerPage = "worktree"
 )
 
 type FeishuTargetPickerStage string
@@ -59,10 +62,12 @@ const (
 )
 
 const (
-	FeishuTargetPickerPathFieldLocalDirectory   = "local_directory"
-	FeishuTargetPickerPathFieldGitParentDir     = "git_parent_dir"
-	FeishuTargetPickerGitRepoURLFieldName       = "target_picker_git_repo_url"
-	FeishuTargetPickerGitDirectoryNameFieldName = "target_picker_git_directory_name"
+	FeishuTargetPickerPathFieldLocalDirectory    = "local_directory"
+	FeishuTargetPickerPathFieldGitParentDir      = "git_parent_dir"
+	FeishuTargetPickerGitRepoURLFieldName        = "target_picker_git_repo_url"
+	FeishuTargetPickerGitDirectoryNameFieldName  = "target_picker_git_directory_name"
+	FeishuTargetPickerWorktreeBranchFieldName    = "target_picker_worktree_branch_name"
+	FeishuTargetPickerWorktreeDirectoryFieldName = "target_picker_worktree_directory_name"
 )
 
 type FeishuTargetPickerMessageLevel string
@@ -134,6 +139,9 @@ type FeishuTargetPickerView struct {
 	GitRepoURL               string
 	GitDirectoryName         string
 	GitFinalPath             string
+	WorktreeBranchName       string
+	WorktreeDirectoryName    string
+	WorktreeFinalPath        string
 	Messages                 []FeishuTargetPickerMessage
 	SourceMessages           []FeishuTargetPickerMessage
 }

@@ -46,6 +46,7 @@ func projectFeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, inter
 			FeishuCommandWorkspaceNew,
 			FeishuCommandWorkspaceNewDir,
 			FeishuCommandWorkspaceNewGit,
+			FeishuCommandWorkspaceNewWorktree,
 			FeishuCommandWorkspaceDetach:
 			return FeishuCommandDefinition{}, false
 		}

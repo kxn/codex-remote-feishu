@@ -20,6 +20,7 @@ const (
 	ActionWorkspaceNew                ActionKind = "surface.command.workspace.new"
 	ActionWorkspaceNewDir             ActionKind = "surface.command.workspace.new_dir"
 	ActionWorkspaceNewGit             ActionKind = "surface.command.workspace.new_git"
+	ActionWorkspaceNewWorktree        ActionKind = "surface.command.workspace.new_worktree"
 	ActionWorkspaceDetach             ActionKind = "surface.command.workspace.detach"
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
@@ -579,18 +580,20 @@ type ExecCommandProgress struct {
 type DaemonCommandKind string
 
 const (
-	DaemonCommandStartHeadless            DaemonCommandKind = "headless.start"
-	DaemonCommandKillHeadless             DaemonCommandKind = "headless.kill"
-	DaemonCommandDebug                    DaemonCommandKind = "debug.command"
-	DaemonCommandCron                     DaemonCommandKind = "cron.command"
-	DaemonCommandUpgrade                  DaemonCommandKind = "upgrade.command"
-	DaemonCommandUpgradeOwnerFlow         DaemonCommandKind = "upgrade.owner_flow"
-	DaemonCommandVSCodeMigrateCommand     DaemonCommandKind = "vscode.migrate.command"
-	DaemonCommandVSCodeMigrate            DaemonCommandKind = "vscode.migrate"
-	DaemonCommandThreadHistoryRead        DaemonCommandKind = "thread.history.read"
-	DaemonCommandSendIMFile               DaemonCommandKind = "feishu.im_file.send"
-	DaemonCommandGitWorkspaceImport       DaemonCommandKind = "workspace.git_import"
-	DaemonCommandGitWorkspaceImportCancel DaemonCommandKind = "workspace.git_import.cancel"
+	DaemonCommandStartHeadless              DaemonCommandKind = "headless.start"
+	DaemonCommandKillHeadless               DaemonCommandKind = "headless.kill"
+	DaemonCommandDebug                      DaemonCommandKind = "debug.command"
+	DaemonCommandCron                       DaemonCommandKind = "cron.command"
+	DaemonCommandUpgrade                    DaemonCommandKind = "upgrade.command"
+	DaemonCommandUpgradeOwnerFlow           DaemonCommandKind = "upgrade.owner_flow"
+	DaemonCommandVSCodeMigrateCommand       DaemonCommandKind = "vscode.migrate.command"
+	DaemonCommandVSCodeMigrate              DaemonCommandKind = "vscode.migrate"
+	DaemonCommandThreadHistoryRead          DaemonCommandKind = "thread.history.read"
+	DaemonCommandSendIMFile                 DaemonCommandKind = "feishu.im_file.send"
+	DaemonCommandGitWorkspaceImport         DaemonCommandKind = "workspace.git_import"
+	DaemonCommandGitWorkspaceImportCancel   DaemonCommandKind = "workspace.git_import.cancel"
+	DaemonCommandGitWorkspaceWorktreeCreate DaemonCommandKind = "workspace.git_worktree.create"
+	DaemonCommandGitWorkspaceWorktreeCancel DaemonCommandKind = "workspace.git_worktree.cancel"
 )
 
 type DaemonCommand struct {
@@ -605,10 +608,12 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	WorkspaceKey     string
 	AutoRestore      bool
 	Text             string
 	LocalPath        string
 	RepoURL          string
 	RefName          string
+	BranchName       string
 	DirectoryName    string
 }

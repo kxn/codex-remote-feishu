@@ -66,6 +66,7 @@ func parseTargetPickerCardAction(
 			MessageID:        messageID,
 			PickerID:         pickerID,
 			WorkspaceKey:     workspaceKey,
+			RequestAnswers:   targetPickerDraftAnswersFromFormValue(event.Event.Action.FormValue),
 			Inbound:          meta,
 		}, true
 	case cardActionKindTargetPickerSelectSession:
