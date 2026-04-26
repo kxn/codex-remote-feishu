@@ -163,7 +163,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 4 {
+	if len(tools) != 5 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -180,6 +180,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	}
 	if !strings.Contains(seen[feishuSendIMImageToolName]["description"].(string), ".codex-remote/surface-context.json") {
 		t.Fatalf("image-send description missing workspace context rule: %#v", seen[feishuSendIMImageToolName])
+	}
+	if !strings.Contains(seen[feishuSendIMVideoToolName]["description"].(string), ".codex-remote/surface-context.json") {
+		t.Fatalf("video-send description missing workspace context rule: %#v", seen[feishuSendIMVideoToolName])
 	}
 	if !strings.Contains(seen[feishuReadDriveFileCommentsToolName]["description"].(string), "Pass the exact Feishu URL") {
 		t.Fatalf("drive-comment description missing comment workflow trigger: %#v", seen[feishuReadDriveFileCommentsToolName])
@@ -270,12 +273,42 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		t.Fatalf("unexpected image send result: %#v", sendPayload)
 	}
 
+	videoPath := filepath.Join(t.TempDir(), "demo.mp4")
+	if err := os.WriteFile(videoPath, []byte("fake-video"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
 		Method:          http.MethodPost,
 		Token:           app.toolRuntime.BearerToken,
 		SessionID:       sessionID,
 		ProtocolVersion: protocolVersion,
 		Body: toolMCPCallRequestBody(t, 6, "tools/call", map[string]any{
+			"name": feishuSendIMVideoToolName,
+			"arguments": map[string]any{
+				"surface_session_id": "surface-normal",
+				"path":               videoPath,
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send video tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.videoCalls) != 1 {
+		t.Fatalf("expected one video send call, got %#v", sender.videoCalls)
+	}
+	sendPayload = decodeToolMCPResponse(t, rec)
+	sendResult, _ = sendPayload["result"].(map[string]any)
+	sendStructured, _ = sendResult["structuredContent"].(map[string]any)
+	if sendStructured["surface_session_id"] != "surface-normal" || sendStructured["message_id"] != "msg-video" {
+		t.Fatalf("unexpected video send result: %#v", sendPayload)
+	}
+
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.BearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 7, "tools/call", map[string]any{
 			"name": feishuReadDriveFileCommentsToolName,
 			"arguments": map[string]any{
 				"surface_session_id": "surface-normal",

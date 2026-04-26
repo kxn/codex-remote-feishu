@@ -56,6 +56,7 @@ type gatewayRuntime interface {
 	Gateway
 	IMFileSender
 	IMImageSender
+	IMVideoSender
 	DriveFileCommentReader
 	Client() *lark.Client
 	SetStateHook(func(GatewayState, error))

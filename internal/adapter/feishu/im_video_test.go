@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"testing"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
-func TestSendIMFileUploadsThenCreatesFileMessage(t *testing.T) {
+func TestSendIMVideoUploadsThenCreatesMediaMessage(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	var (
 		uploadPath     string
@@ -22,10 +21,10 @@ func TestSendIMFileUploadsThenCreatesFileMessage(t *testing.T) {
 		createTargetTy string
 		createCtx      context.Context
 	)
-	gateway.uploadFilePathFn = func(ctx context.Context, path string) (string, string, error) {
+	gateway.uploadVideoPathFn = func(ctx context.Context, path string) (string, string, error) {
 		uploadCtx = ctx
 		uploadPath = path
-		return "file-key-1", "report.txt", nil
+		return "file-key-1", "demo.mp4", nil
 	}
 	gateway.createMessageFn = func(ctx context.Context, receiveIDType, receiveID, msgType, content string) (*larkim.CreateMessageResp, error) {
 		createCtx = ctx
@@ -40,78 +39,78 @@ func TestSendIMFileUploadsThenCreatesFileMessage(t *testing.T) {
 				Msg:  "ok",
 			},
 			Data: &larkim.CreateMessageRespData{
-				MessageId: stringRef("om-file-1"),
+				MessageId: stringRef("om-video-1"),
 			},
 		}, nil
 	}
 
-	result, err := gateway.SendIMFile(t.Context(), IMFileSendRequest{
+	result, err := gateway.SendIMVideo(t.Context(), IMVideoSendRequest{
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "oc_1",
-		Path:             "/tmp/report.txt",
+		Path:             "/tmp/demo.mp4",
 	})
 	if err != nil {
-		t.Fatalf("SendIMFile returned error: %v", err)
+		t.Fatalf("SendIMVideo returned error: %v", err)
 	}
-	if uploadPath != "/tmp/report.txt" {
-		t.Fatalf("unexpected uploaded file path: %q", uploadPath)
+	if uploadPath != "/tmp/demo.mp4" {
+		t.Fatalf("unexpected uploaded video path: %q", uploadPath)
 	}
-	if createTargetTy != "chat_id" || createTargetID != "oc_1" || createMsgType != "file" {
+	if createTargetTy != "chat_id" || createTargetID != "oc_1" || createMsgType != "media" {
 		t.Fatalf("unexpected create message target: type=%q id=%q msgType=%q", createTargetTy, createTargetID, createMsgType)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(createContent), &payload); err != nil {
-		t.Fatalf("file create content is not valid json: %v", err)
+		t.Fatalf("video create content is not valid json: %v", err)
 	}
 	if payload["file_key"] != "file-key-1" {
-		t.Fatalf("unexpected file create payload: %#v", payload)
+		t.Fatalf("unexpected video create payload: %#v", payload)
 	}
-	if result.FileKey != "file-key-1" || result.FileName != "report.txt" || result.MessageID != "om-file-1" {
+	if result.FileKey != "file-key-1" || result.VideoName != "demo.mp4" || result.MessageID != "om-video-1" {
 		t.Fatalf("unexpected send result: %#v", result)
 	}
-	if gateway.messages["om-file-1"] != "surface-1" {
-		t.Fatalf("expected created file message to be tracked for surface callbacks, got %#v", gateway.messages)
+	if gateway.messages["om-video-1"] != "surface-1" {
+		t.Fatalf("expected created video message to be tracked for surface callbacks, got %#v", gateway.messages)
 	}
 	assertContextHasDeadlineWithin(t, uploadCtx, sendIMFileTimeout)
 	assertContextHasDeadlineWithin(t, createCtx, sendIMFileTimeout)
 }
 
-func TestSendIMFileReturnsUploadFailure(t *testing.T) {
+func TestSendIMVideoReturnsUploadFailure(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.uploadFilePathFn = func(_ context.Context, _ string) (string, string, error) {
-		return "", "", errors.New("size exceeded")
+	gateway.uploadVideoPathFn = func(_ context.Context, _ string) (string, string, error) {
+		return "", "", errors.New("bad video")
 	}
 
-	_, err := gateway.SendIMFile(t.Context(), IMFileSendRequest{
+	_, err := gateway.SendIMVideo(t.Context(), IMVideoSendRequest{
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "oc_1",
-		Path:             "/tmp/report.txt",
+		Path:             "/tmp/demo.mp4",
 	})
-	var sendErr *IMFileSendError
-	if !errors.As(err, &sendErr) || sendErr.Code != IMFileSendErrorUploadFailed {
+	var sendErr *IMVideoSendError
+	if !errors.As(err, &sendErr) || sendErr.Code != IMVideoSendErrorUploadFailed {
 		t.Fatalf("expected upload failure, got %#v", err)
 	}
 }
 
-func TestSendIMFileReturnsSendFailure(t *testing.T) {
+func TestSendIMVideoReturnsSendFailure(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.uploadFilePathFn = func(_ context.Context, path string) (string, string, error) {
-		return "file-key-1", filepath.Base(path), nil
+	gateway.uploadVideoPathFn = func(_ context.Context, _ string) (string, string, error) {
+		return "file-key-1", "demo.mp4", nil
 	}
 	gateway.createMessageFn = func(_ context.Context, _, _, _, _ string) (*larkim.CreateMessageResp, error) {
 		return nil, errors.New("network error")
 	}
 
-	_, err := gateway.SendIMFile(t.Context(), IMFileSendRequest{
+	_, err := gateway.SendIMVideo(t.Context(), IMVideoSendRequest{
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
 		ChatID:           "oc_1",
-		Path:             "/tmp/report.txt",
+		Path:             "/tmp/demo.mp4",
 	})
-	var sendErr *IMFileSendError
-	if !errors.As(err, &sendErr) || sendErr.Code != IMFileSendErrorSendFailed {
+	var sendErr *IMVideoSendError
+	if !errors.As(err, &sendErr) || sendErr.Code != IMVideoSendErrorSendFailed {
 		t.Fatalf("expected send failure, got %#v", err)
 	}
 }

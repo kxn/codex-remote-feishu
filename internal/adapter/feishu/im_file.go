@@ -5,11 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
-
-	lark "github.com/larksuite/oapi-sdk-go/v3"
-	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 )
@@ -124,93 +120,4 @@ func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IM
 	result.FileName = fileName
 	result.MessageID = messageID
 	return result, nil
-}
-
-func (g *LiveGateway) uploadFilePath(ctx context.Context, path string) (string, string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: missing file path"),
-		}
-	}
-	fileName := strings.TrimSpace(filepath.Base(path))
-	if fileName == "" || fileName == "." {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: invalid file name"),
-		}
-	}
-	body, err := larkim.NewCreateFilePathReqBodyBuilder().
-		FileType(imFileTypeFromName(fileName)).
-		FileName(fileName).
-		FilePath(path).
-		Build()
-	if err != nil {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: %w", err),
-		}
-	}
-	resp, err := DoSDK(ctx, g.broker, CallSpec{
-		GatewayID:  g.config.GatewayID,
-		API:        "im.v1.file.create",
-		Class:      CallClassIMSend,
-		Priority:   CallPriorityInteractive,
-		Retry:      RetryRateLimitOnly,
-		Permission: PermissionCooldownOnly,
-	}, func(callCtx context.Context, client *lark.Client) (*larkim.CreateFileResp, error) {
-		resp, err := client.Im.V1.File.Create(callCtx, larkim.NewCreateFileReqBuilder().
-			Body(body).
-			Build())
-		if err != nil {
-			return resp, err
-		}
-		if !resp.Success() {
-			return resp, newAPIError("im.v1.file.create", resp.ApiResp, resp.CodeError)
-		}
-		return resp, nil
-	})
-	if err != nil {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: %w", err),
-		}
-	}
-	if resp.Data == nil {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: missing file key"),
-		}
-	}
-	fileKey := strings.TrimSpace(stringPtr(resp.Data.FileKey))
-	if fileKey == "" {
-		return "", "", &IMFileSendError{
-			Code: IMFileSendErrorUploadFailed,
-			Err:  fmt.Errorf("upload file failed: missing file key"),
-		}
-	}
-	return fileKey, fileName, nil
-}
-
-func imFileTypeFromName(fileName string) string {
-	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(strings.TrimSpace(fileName))), ".")
-	switch ext {
-	case "opus":
-		return larkim.FileTypeOpus
-	case "mp4":
-		return larkim.FileTypeMp4
-	case "pdf":
-		return larkim.FileTypePdf
-	case "doc", "docx", "docm", "dot", "dotx", "dotm", "wps":
-		return larkim.FileTypeDoc
-	case "xls", "xlsx", "xlsm", "xlt", "xltx", "xltm", "csv", "et":
-		return larkim.FileTypeXls
-	case "ppt", "pptx", "pptm", "pps", "ppsx", "ppsm", "pot", "potx", "potm", "dps", "dpt":
-		return larkim.FileTypePpt
-	default:
-		// Feishu file upload only accepts a small fixed enum; unsupported types
-		// such as .md/.json must fall back to the generic binary stream type.
-		return larkim.FileTypeStream
-	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -112,5 +113,23 @@ func TestSendIMImageReturnsSendFailure(t *testing.T) {
 	var sendErr *IMImageSendError
 	if !errors.As(err, &sendErr) || sendErr.Code != IMImageSendErrorSendFailed {
 		t.Fatalf("expected send failure, got %#v", err)
+	}
+}
+
+func assertContextHasDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {
+	t.Helper()
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected context deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		t.Fatalf("expected future deadline, got %s", deadline)
+	}
+	if remaining > max+time.Second {
+		t.Fatalf("expected deadline within %s, got remaining %s", max, remaining)
 	}
 }

@@ -23,9 +23,11 @@ import (
 type fakeToolSender struct {
 	fileSendFn    func(context.Context, feishu.IMFileSendRequest) (feishu.IMFileSendResult, error)
 	imageSendFn   func(context.Context, feishu.IMImageSendRequest) (feishu.IMImageSendResult, error)
+	videoSendFn   func(context.Context, feishu.IMVideoSendRequest) (feishu.IMVideoSendResult, error)
 	commentReadFn func(context.Context, feishu.DriveFileCommentReadRequest) (feishu.DriveFileCommentReadResult, error)
 	fileCalls     []feishu.IMFileSendRequest
 	imageCalls    []feishu.IMImageSendRequest
+	videoCalls    []feishu.IMVideoSendRequest
 	commentCalls  []feishu.DriveFileCommentReadRequest
 }
 
@@ -61,6 +63,20 @@ func (f *fakeToolSender) SendIMImage(ctx context.Context, req feishu.IMImageSend
 		ImageName:        filepath.Base(req.Path),
 		ImageKey:         "image-key",
 		MessageID:        "msg-image",
+	}, nil
+}
+
+func (f *fakeToolSender) SendIMVideo(ctx context.Context, req feishu.IMVideoSendRequest) (feishu.IMVideoSendResult, error) {
+	f.videoCalls = append(f.videoCalls, req)
+	if f.videoSendFn != nil {
+		return f.videoSendFn(ctx, req)
+	}
+	return feishu.IMVideoSendResult{
+		GatewayID:        req.GatewayID,
+		SurfaceSessionID: req.SurfaceSessionID,
+		VideoName:        filepath.Base(req.Path),
+		FileKey:          "video-key",
+		MessageID:        "msg-video",
 	}, nil
 }
 

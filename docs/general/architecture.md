@@ -341,7 +341,7 @@ normal 模式下的 workspace 排他接管
   -> 本地 Feishu MCP tool description 要求 Codex 先读取该文件
   -> tool call 显式带回 surface_session_id
   -> daemon local MCP tool service 校验 bearer token、解析 surface context 并执行 tools/list / tools/call
-  -> `feishu_send_im_image` / `feishu_send_im_file` 可继续用显式 `surface_session_id` 把本地图片或文件发送回当前 Feishu surface
+  -> `feishu_send_im_image` / `feishu_send_im_video` / `feishu_send_im_file` 可继续用显式 `surface_session_id` 把本地产物按图片 / 视频 / 文件语义发送回当前 Feishu surface
   -> generic tool result 先归模型消费；只有模型显式调用 delivery tool 时，产物才会变成用户可见消息
 ```
 

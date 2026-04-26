@@ -131,6 +131,35 @@ func (c *MultiGatewayController) SendIMImage(ctx context.Context, req IMImageSen
 	return result, nil
 }
 
+func (c *MultiGatewayController) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (IMVideoSendResult, error) {
+	result := IMVideoSendResult{
+		GatewayID:        normalizeGatewayID(req.GatewayID),
+		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
+	}
+
+	resolution := c.resolveGatewayTarget(eventcontract.TargetRef{
+		GatewayID:        req.GatewayID,
+		SurfaceSessionID: req.SurfaceSessionID,
+		SelectionPolicy:  eventcontract.GatewaySelectionAllowSoleGatewayFallback,
+		FailurePolicy:    eventcontract.GatewayFailureTypedError,
+	}, gatewayTargetRequireRuntime)
+	if !resolution.ok() {
+		return result, resolution.videoSendError()
+	}
+	req.GatewayID = resolution.GatewayID
+	result.GatewayID = resolution.GatewayID
+
+	result, err := resolution.Worker.runtime.SendIMVideo(ctx, req)
+	if err != nil {
+		c.updateWorkerError(resolution.GatewayID, err)
+		return result, err
+	}
+	if result.GatewayID == "" {
+		result.GatewayID = resolution.GatewayID
+	}
+	return result, nil
+}
+
 func (c *MultiGatewayController) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
 	result := DriveFileCommentReadResult{
 		GatewayID: strings.TrimSpace(req.GatewayID),

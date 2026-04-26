@@ -58,6 +58,13 @@ func (r gatewayTargetResolution) imageSendError() error {
 	}
 }
 
+func (r gatewayTargetResolution) videoSendError() error {
+	return &IMVideoSendError{
+		Code: IMVideoSendErrorGatewayNotRunning,
+		Err:  r.errorf("send video failed"),
+	}
+}
+
 func (r gatewayTargetResolution) driveFileCommentReadError() error {
 	return &DriveFileCommentReadError{
 		Code: DriveFileCommentReadErrorGatewayNotRunning,

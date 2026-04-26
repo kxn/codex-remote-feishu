@@ -66,6 +66,8 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 		result, apiErr = a.sendIMFileTool(ctx, arguments)
 	case feishuSendIMImageToolName:
 		result, apiErr = a.sendIMImageTool(ctx, arguments)
+	case feishuSendIMVideoToolName:
+		result, apiErr = a.sendIMVideoTool(ctx, arguments)
 	case feishuReadDriveFileCommentsToolName:
 		result, apiErr = a.readDriveFileCommentsTool(ctx, arguments)
 	default:

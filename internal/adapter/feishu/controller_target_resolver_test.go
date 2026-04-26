@@ -203,6 +203,51 @@ func TestMultiGatewayControllerSendIMImageReturnsTypedErrorWhenTargetIsAmbiguous
 	}
 }
 
+func TestMultiGatewayControllerSendIMVideoFallsBackToSoleGateway(t *testing.T) {
+	controller, runtimes, _ := startGatewayControllerForTest(t, []string{"app-1"}, false)
+
+	result, err := controller.SendIMVideo(context.Background(), IMVideoSendRequest{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "oc_1",
+		Path:             "/tmp/demo.mp4",
+	})
+	if err != nil {
+		t.Fatalf("SendIMVideo: %v", err)
+	}
+	if result.GatewayID != "app-1" {
+		t.Fatalf("unexpected result gateway: %#v", result)
+	}
+	if len(runtimes["app-1"].sendIMVideoCalls) != 1 {
+		t.Fatalf("unexpected send video calls: %#v", runtimes["app-1"].sendIMVideoCalls)
+	}
+	if got := runtimes["app-1"].sendIMVideoCalls[0].GatewayID; got != "app-1" {
+		t.Fatalf("expected resolved gateway id in runtime request, got %q", got)
+	}
+}
+
+func TestMultiGatewayControllerSendIMVideoReturnsTypedErrorWhenTargetIsAmbiguous(t *testing.T) {
+	controller, _, _ := startGatewayControllerForTest(t, []string{"app-1", "app-2"}, false)
+
+	_, err := controller.SendIMVideo(context.Background(), IMVideoSendRequest{
+		SurfaceSessionID: "surface-2",
+		ChatID:           "oc_2",
+		Path:             "/tmp/demo.mp4",
+	})
+	if err == nil {
+		t.Fatal("expected typed video send error")
+	}
+	var sendErr *IMVideoSendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("expected IMVideoSendError, got %T", err)
+	}
+	if sendErr.Code != IMVideoSendErrorGatewayNotRunning {
+		t.Fatalf("unexpected error code: %s", sendErr.Code)
+	}
+	if got := sendErr.Error(); got != "send video failed: missing gateway id" {
+		t.Fatalf("unexpected error text: %q", got)
+	}
+}
+
 func TestMultiGatewayControllerRewriteFinalBlockFallsBackToSurfaceGateway(t *testing.T) {
 	controller, _, previewers := startGatewayControllerForTest(t, []string{"app-1", "app-2"}, true)
 

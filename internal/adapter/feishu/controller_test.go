@@ -464,6 +464,8 @@ type fakeGatewayRuntime struct {
 	sendIMFileFn     func(context.Context, IMFileSendRequest) (IMFileSendResult, error)
 	sendIMImageCalls []IMImageSendRequest
 	sendIMImageFn    func(context.Context, IMImageSendRequest) (IMImageSendResult, error)
+	sendIMVideoCalls []IMVideoSendRequest
+	sendIMVideoFn    func(context.Context, IMVideoSendRequest) (IMVideoSendResult, error)
 	readCommentCalls []DriveFileCommentReadRequest
 	readCommentFn    func(context.Context, DriveFileCommentReadRequest) (DriveFileCommentReadResult, error)
 }
@@ -531,6 +533,23 @@ func (f *fakeGatewayRuntime) SendIMImage(ctx context.Context, req IMImageSendReq
 		SurfaceSessionID: req.SurfaceSessionID,
 		ImageName:        filepath.Base(req.Path),
 		ImageKey:         "image-key-" + f.gatewayID,
+		MessageID:        "msg-" + f.gatewayID,
+	}, nil
+}
+
+func (f *fakeGatewayRuntime) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (IMVideoSendResult, error) {
+	f.mu.Lock()
+	f.sendIMVideoCalls = append(f.sendIMVideoCalls, req)
+	fn := f.sendIMVideoFn
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, req)
+	}
+	return IMVideoSendResult{
+		GatewayID:        f.gatewayID,
+		SurfaceSessionID: req.SurfaceSessionID,
+		VideoName:        filepath.Base(req.Path),
+		FileKey:          "video-key-" + f.gatewayID,
 		MessageID:        "msg-" + f.gatewayID,
 	}, nil
 }
