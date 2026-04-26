@@ -25,6 +25,9 @@ const (
 	cardActionPayloadKeyActionKind            = frontstagecontract.CardActionPayloadKeyActionKind
 	cardActionPayloadKeyActionArg             = frontstagecontract.CardActionPayloadKeyActionArg
 	cardActionPayloadKeyActionArgPrefix       = frontstagecontract.CardActionPayloadKeyActionArgPrefix
+	cardActionPayloadKeyCatalogFamilyID       = frontstagecontract.CardActionPayloadKeyCatalogFamilyID
+	cardActionPayloadKeyCatalogVariantID      = frontstagecontract.CardActionPayloadKeyCatalogVariantID
+	cardActionPayloadKeyCatalogBackend        = frontstagecontract.CardActionPayloadKeyCatalogBackend
 	cardActionPayloadKeyFieldName             = frontstagecontract.CardActionPayloadKeyFieldName
 	cardActionPayloadKeyCursor                = frontstagecontract.CardActionPayloadKeyCursor
 	cardActionPayloadKeyPickerID              = frontstagecontract.CardActionPayloadKeyPickerID

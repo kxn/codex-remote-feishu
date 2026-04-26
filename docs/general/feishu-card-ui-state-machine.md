@@ -88,7 +88,7 @@
     [internal/adapter/feishu/projector/selection_structured.go](../../internal/adapter/feishu/projector/selection_structured.go)
     负责 selection view 的统一结构化投影入口：VS Code `/list` 按钮式 instance view、VS Code `/use` / `/useall` dropdown、normal button-based selection 与 kick-thread confirm 当前都直接消费 `FeishuSelectionView`；`projector.go` 不再保留单独的 selection fallback 分支
     [internal/adapter/feishu/projector/page_catalog.go](../../internal/adapter/feishu/projector/page_catalog.go)
-    负责把 `FeishuPageView` 投影成页面卡，并为按钮/表单写入 `page_action` / `page_submit` payload
+    负责把 `FeishuPageView` 投影成页面卡，并为按钮/表单写入 `page_action` / `page_submit` payload；当前 page callback 还会补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend` provenance，减少后续 variant page 对裸 `ActionKind` 的反推依赖
     [internal/adapter/feishu/projector/path_picker.go](../../internal/adapter/feishu/projector/path_picker.go)
     负责把 `FeishuPathPickerView` 投影成当前复用路径选择器卡片
 - `orchestrator`
@@ -190,6 +190,7 @@
 
 - callback payload schema 已收束到 [internal/core/frontstagecontract/callback_payload.go](../../internal/core/frontstagecontract/callback_payload.go)
 - projector、gateway、daemon owner-card producer 与 orchestrator owner-card producer 现在共用这份 schema 常量/构造 helper，不再继续各自扩一份裸字符串约定
+- `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`，旧 payload 仍保持兼容
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - adapter 内部这组 lane/read-model contract 现统一由 `internal/adapter/feishu/selectflow` 承接：`PaginatedSelectFlowDefinition` 拥有默认 `field_name`、payload value key 与共享 pagination hint；projector 与 gateway 通过同一份定义对齐 lane 字段、hint 和 callback recover 规则。
@@ -218,8 +219,8 @@
 | `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；命中当前 history owner-card flow 时同样先切 loading；gateway 继续兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `upgrade_owner_flow` | `picker_id`、`option_id` | `/upgrade latest` 与 `/upgrade codex` 共用的 daemon owner-card 显式动作；gateway 只解析 `picker_id` / `option_id`，daemon 再按 flow id 前缀路由到 release 或 Codex flow。release flow 当前使用 `check` / `confirm` / `cancel`，Codex flow 当前使用 `check` / `confirm`；两者都要求命中当前 active flow id，旧卡或他人卡片不会继续改写升级状态。首卡若没有现成 `message_id`，会先以 page `TrackingKey` append，待 gateway 分配 `message_id` 后再回写到对应 owner flow，后续 checking / confirm-ready / running / terminal 一律 patch 同一张卡 |
 | `plan_proposal` | `picker_id`、`option_id` | 提案计划卡的 owner-flow callback；`option_id` 当前只用 `execute` / `execute_new` / `cancel`。gateway 只负责按当前 active proposal id 解析回 `ActionPlanProposalDecision`；真正的 `PlanMode=off`、继续派发 follow-up turn，以及 seal 当前卡，仍由 orchestrator 决定 |
-| `page_action` | `action_kind`、`action_arg(可选)` | page 卡按钮的结构化动作；gateway 解析后直接写回 `Action.Kind`，并用 `BuildFeishuActionText` 生成 canonical `Action.Text` |
-| `page_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)` | page 卡表单提交；gateway 从 `form_value[field_name]`/`option` 取参数，按 `action_arg_prefix + 参数` 组装后写回 `Action.Text` |
+| `page_action` | `action_kind`、`action_arg(可选)`、`catalog_family_id(可选)`、`catalog_variant_id(可选)`、`catalog_backend(可选)` | page 卡按钮的结构化动作；gateway 解析后直接写回 `Action.Kind`，并用 `BuildFeishuActionText` 生成 canonical `Action.Text`；若 payload 携带 catalog provenance，也会同步写回 `Action.Catalog*` |
+| `page_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)`、`catalog_family_id(可选)`、`catalog_variant_id(可选)`、`catalog_backend(可选)` | page 卡表单提交；gateway 从 `form_value[field_name]`/`option` 取参数，按 `action_arg_prefix + 参数` 组装后写回 `Action.Text`；若 payload 携带 catalog provenance，也会同步写回 `Action.Catalog*` |
 | `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
 | `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
@@ -236,12 +237,17 @@
 
 - `page_submit`
   - 必须携带 `value.action_kind`，并按它直接回填 `Action.Kind`
+  - 若 payload 同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`，gateway 会直接把它们回填到 `Action.Catalog*`；缺失时继续兼容旧 payload，不阻断当前卡片
   - `field_name` 为空时默认读取 `command_args`
   - 命令表单当前同时兼容普通 `input` 与 `select_static`
   - `select_static` 命令字段当前只投影 `placeholder/options/initial_option`；组件级 `label` 不会下发，因为飞书会把它判成非法字段
   - 参数读取顺序为：`form_value[field_name] -> action.option -> action.options[0] -> input_value`
   - 若 payload 带 `action_arg_prefix`，gateway 会先拼前缀再拼表单值，最后用 `BuildFeishuActionText` 组装 canonical `Action.Text`
   - 该路径不再依赖 `command_text`，避免 page 卡回调退化成裸文本重解析
+- `page_action`
+  - 必须携带 `value.action_kind`，并按它直接回填 `Action.Kind`
+  - 若 payload 同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`，gateway 会直接把它们回填到 `Action.Catalog*`
+  - 若 payload 不带 catalog provenance，服务端仍会在进入产品状态机前按当前 surface context 做 best-effort provenance 补齐，保证旧卡兼容
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）

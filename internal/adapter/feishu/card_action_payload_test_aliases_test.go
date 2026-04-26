@@ -25,6 +25,9 @@ const (
 	cardActionPayloadKeyActionKind            = frontstagecontract.CardActionPayloadKeyActionKind
 	cardActionPayloadKeyActionArg             = frontstagecontract.CardActionPayloadKeyActionArg
 	cardActionPayloadKeyActionArgPrefix       = frontstagecontract.CardActionPayloadKeyActionArgPrefix
+	cardActionPayloadKeyCatalogFamilyID       = frontstagecontract.CardActionPayloadKeyCatalogFamilyID
+	cardActionPayloadKeyCatalogVariantID      = frontstagecontract.CardActionPayloadKeyCatalogVariantID
+	cardActionPayloadKeyCatalogBackend        = frontstagecontract.CardActionPayloadKeyCatalogBackend
 	cardActionPayloadKeyFieldName             = frontstagecontract.CardActionPayloadKeyFieldName
 	cardActionPayloadKeyCursor                = frontstagecontract.CardActionPayloadKeyCursor
 	cardActionPayloadKeyPickerID              = frontstagecontract.CardActionPayloadKeyPickerID
@@ -93,6 +96,7 @@ var (
 	actionPayloadUseThreadField         = frontstagecontract.ActionPayloadUseThreadField
 	actionPayloadKickThreadConfirm      = frontstagecontract.ActionPayloadKickThreadConfirm
 	actionPayloadPageAction             = frontstagecontract.ActionPayloadPageAction
+	actionPayloadWithCatalog            = frontstagecontract.ActionPayloadWithCatalog
 	actionPayloadUpgradeOwnerFlow       = frontstagecontract.ActionPayloadUpgradeOwnerFlow
 	actionPayloadVSCodeMigrateOwnerFlow = frontstagecontract.ActionPayloadVSCodeMigrateOwnerFlow
 	actionPayloadPageSubmit             = frontstagecontract.ActionPayloadPageSubmit

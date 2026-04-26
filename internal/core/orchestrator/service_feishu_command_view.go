@@ -32,10 +32,15 @@ func (s *Service) buildConfigCommandViewState(
 	}
 
 	view := control.FeishuCatalogView{
-		Config: s.applyCommandConfigCardState(&control.FeishuCatalogConfigView{CommandID: flow.CommandID}, cardState),
+		Config: s.applyCommandConfigCardState(&control.FeishuCatalogConfigView{
+			CommandID:        flow.CommandID,
+			CatalogFamilyID:  flow.CommandID,
+			CatalogVariantID: defaultCatalogVariantID(flow.CommandID),
+		}, cardState),
 	}
 
 	ctx := s.buildCatalogContext(surface)
+	view.Config.CatalogBackend = ctx.Backend
 	inst := s.root.Instances[ctx.InstanceID]
 	if flow.RequiresAttachment && ctx.AttachedKind == string(control.CatalogAttachedKindDetached) {
 		view.Config.RequiresAttachment = true
@@ -111,6 +116,15 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 	if strings.TrimSpace(cardState.FormDefaultValue) != "" {
 		base.FormDefaultValue = strings.TrimSpace(cardState.FormDefaultValue)
 	}
+	if strings.TrimSpace(cardState.CatalogFamilyID) != "" {
+		base.CatalogFamilyID = strings.TrimSpace(cardState.CatalogFamilyID)
+	}
+	if strings.TrimSpace(cardState.CatalogVariantID) != "" {
+		base.CatalogVariantID = strings.TrimSpace(cardState.CatalogVariantID)
+	}
+	if cardState.CatalogBackend != "" {
+		base.CatalogBackend = cardState.CatalogBackend
+	}
 	if strings.TrimSpace(cardState.StatusKind) != "" {
 		base.StatusKind = strings.TrimSpace(cardState.StatusKind)
 	}
@@ -121,6 +135,14 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 		base.Sealed = true
 	}
 	return base
+}
+
+func defaultCatalogVariantID(commandID string) string {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return ""
+	}
+	return commandID + ".default"
 }
 
 func (s *Service) commandPageFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) control.FeishuPageView {

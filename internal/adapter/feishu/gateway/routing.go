@@ -10,6 +10,7 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -284,6 +285,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
+			CatalogFamilyID:  strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID)),
+			CatalogVariantID: strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID)),
+			CatalogBackend:   agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend)))),
 			Inbound:          meta,
 		}, true
 	case cardActionKindUpgradeOwnerFlow:
@@ -366,6 +370,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
+			CatalogFamilyID:  strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID)),
+			CatalogVariantID: strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID)),
+			CatalogBackend:   agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend)))),
 			Inbound:          meta,
 		}, true
 	case cardActionKindSubmitRequestForm:

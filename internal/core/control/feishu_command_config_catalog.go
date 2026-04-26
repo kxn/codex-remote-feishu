@@ -26,9 +26,9 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "normal"),
@@ -41,9 +41,9 @@ func autoWhipPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuP
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "on"),
@@ -56,9 +56,9 @@ func autoContinuePageViewFromCommandConfigView(view FeishuCatalogConfigView) Fei
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "on"),
@@ -74,9 +74,9 @@ func reasoningPageViewFromCommandConfigView(view FeishuCatalogConfigView) Feishu
 		return BuildFeishuAttachmentRequiredPageView(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即应用",
 		Entries: []CommandCatalogEntry{{
 			Buttons: choiceButtonsFromOptions(def.Options, strings.TrimSpace(view.OverrideValue), ""),
@@ -92,9 +92,9 @@ func accessPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPag
 		return BuildFeishuAttachmentRequiredPageView(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即应用",
 		Entries: []CommandCatalogEntry{{
 			Buttons: choiceButtonsFromOptions(def.Options, strings.TrimSpace(view.OverrideValue), ""),
@@ -107,9 +107,9 @@ func planPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "on"),
@@ -125,7 +125,7 @@ func modelPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPage
 		return BuildFeishuAttachmentRequiredPageView(def, view)
 	}
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
 	sections := []CommandCatalogSection{{
 		Title: "常见模型",
@@ -143,7 +143,7 @@ func modelPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPage
 		Title:   "手动输入",
 		Entries: []CommandCatalogEntry{manualEntry},
 	})
-	return commandConfigPageView(def, bodySections, noticeSections, sections)
+	return commandConfigPageView(def, view, bodySections, noticeSections, sections)
 }
 
 func verbosePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
@@ -151,9 +151,9 @@ func verbosePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPa
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
-		return sealedCommandPageViewForDefinition(def, bodySections, noticeSections)
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, bodySections, noticeSections, []CommandCatalogSection{{
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "normal"),
@@ -161,9 +161,19 @@ func verbosePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPa
 	}})
 }
 
-func commandConfigPageView(def FeishuCommandDefinition, bodySections, noticeSections []FeishuCardTextSection, sections []CommandCatalogSection) FeishuPageView {
+func commandConfigPageView(def FeishuCommandDefinition, view FeishuCatalogConfigView, bodySections, noticeSections []FeishuCardTextSection, sections []CommandCatalogSection) FeishuPageView {
+	familyID := strings.TrimSpace(view.CatalogFamilyID)
+	if familyID == "" {
+		familyID = strings.TrimSpace(def.ID)
+	}
+	variantID := strings.TrimSpace(view.CatalogVariantID)
+	if variantID == "" {
+		variantID = defaultFeishuCommandDisplayVariantID(def.ID)
+	}
+	sections = stampCommandSectionsCatalogProvenance(sections, familyID, variantID, view.CatalogBackend)
 	return NormalizeFeishuPageView(FeishuPageView{
 		CommandID:       strings.TrimSpace(def.ID),
+		CatalogBackend:  view.CatalogBackend,
 		Title:           def.Title,
 		SummarySections: append([]FeishuCardTextSection(nil), bodySections...),
 		BodySections:    append([]FeishuCardTextSection(nil), bodySections...),
@@ -176,9 +186,10 @@ func commandConfigPageView(def FeishuCommandDefinition, bodySections, noticeSect
 	})
 }
 
-func sealedCommandPageViewForDefinition(def FeishuCommandDefinition, bodySections, noticeSections []FeishuCardTextSection) FeishuPageView {
+func sealedCommandPageViewForDefinition(def FeishuCommandDefinition, view FeishuCatalogConfigView, bodySections, noticeSections []FeishuCardTextSection) FeishuPageView {
 	return NormalizeFeishuPageView(FeishuPageView{
 		CommandID:       strings.TrimSpace(def.ID),
+		CatalogBackend:  view.CatalogBackend,
 		Title:           def.Title,
 		SummarySections: append([]FeishuCardTextSection(nil), bodySections...),
 		BodySections:    append([]FeishuCardTextSection(nil), bodySections...),

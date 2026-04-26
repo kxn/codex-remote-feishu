@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
 
 func BuildFeishuCommandMenuHomePageView() FeishuPageView {
 	return BuildFeishuCommandMenuHomePageViewForProductMode("")
@@ -13,11 +17,12 @@ func BuildFeishuCommandMenuHomePageViewForProductMode(productMode string) Feishu
 func BuildFeishuCommandMenuHomePageViewForContext(ctx CatalogContext) FeishuPageView {
 	ctx = NormalizeCatalogContext(ctx)
 	return FeishuPageView{
-		CommandID:    FeishuCommandMenu,
-		Title:        "命令菜单",
-		Interactive:  true,
-		DisplayStyle: CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  FeishuCommandBreadcrumbs("", ""),
+		CommandID:      FeishuCommandMenu,
+		CatalogBackend: ctx.Backend,
+		Title:          "命令菜单",
+		Interactive:    true,
+		DisplayStyle:   CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:    FeishuCommandBreadcrumbs("", ""),
 		Sections: []CommandCatalogSection{{
 			Title:   "",
 			Entries: buildFeishuCommandMenuGroupEntries(ctx.ProductMode),
@@ -63,14 +68,15 @@ func BuildFeishuCommandMenuGroupPageViewForContext(groupID string, ctx CatalogCo
 	}
 	entries := make([]CommandCatalogEntry, 0, 6)
 	for _, current := range ResolveFeishuCommandDisplayGroup(groupID, true, ctx) {
-		entries = append(entries, buildFeishuCommandMenuEntry(current.Definition))
+		entries = append(entries, buildFeishuCommandMenuEntryFromResolution(current, ctx.Backend))
 	}
 	return FeishuPageView{
-		CommandID:    FeishuCommandMenu,
-		Title:        "命令菜单",
-		Interactive:  true,
-		DisplayStyle: CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  FeishuCommandBreadcrumbs(groupID, ""),
+		CommandID:      FeishuCommandMenu,
+		CatalogBackend: ctx.Backend,
+		Title:          "命令菜单",
+		Interactive:    true,
+		DisplayStyle:   CommandCatalogDisplayCompactButtons,
+		Breadcrumbs:    FeishuCommandBreadcrumbs(groupID, ""),
 		Sections: []CommandCatalogSection{{
 			Title:   "",
 			Entries: entries,
@@ -86,8 +92,13 @@ func BuildFeishuCommandMenuGroupPageViewForContext(groupID string, ctx CatalogCo
 func BuildFeishuAttachmentRequiredPageView(def FeishuCommandDefinition, view FeishuCatalogConfigView) FeishuPageView {
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
+	sections := stampCommandSectionsCatalogProvenance([]CommandCatalogSection{{
+		Title:   "开始 / 继续工作",
+		Entries: buildFeishuRecoveryEntries(),
+	}}, strings.TrimSpace(view.CatalogFamilyID), strings.TrimSpace(view.CatalogVariantID), view.CatalogBackend)
 	return NormalizeFeishuPageView(FeishuPageView{
 		CommandID:       strings.TrimSpace(def.ID),
+		CatalogBackend:  view.CatalogBackend,
 		Title:           strings.TrimSpace(def.Title),
 		SummarySections: append([]FeishuCardTextSection(nil), bodySections...),
 		BodySections:    append([]FeishuCardTextSection(nil), bodySections...),
@@ -95,11 +106,8 @@ func BuildFeishuAttachmentRequiredPageView(def FeishuCommandDefinition, view Fei
 		Interactive:     true,
 		DisplayStyle:    CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:     FeishuCommandBreadcrumbs(def.GroupID, def.Title),
-		Sections: []CommandCatalogSection{{
-			Title:   "开始 / 继续工作",
-			Entries: buildFeishuRecoveryEntries(),
-		}},
-		RelatedButtons: FeishuCommandBackButtons(def.GroupID),
+		Sections:        sections,
+		RelatedButtons:  FeishuCommandBackButtons(def.GroupID),
 	})
 }
 
@@ -165,14 +173,28 @@ func buildFeishuRecoveryEntry(commandID string) CommandCatalogEntry {
 	if !ok {
 		return CommandCatalogEntry{}
 	}
-	return buildFeishuCommandMenuEntry(def)
+	return buildFeishuCommandCatalogEntryWithCatalog(def, def.ID, defaultFeishuCommandDisplayVariantID(def.ID), "", feishuCommandMenuButtonLabel(def))
 }
 
 func buildFeishuCommandMenuEntry(def FeishuCommandDefinition) CommandCatalogEntry {
-	return buildFeishuCommandCatalogEntry(def, feishuCommandMenuButtonLabel(def))
+	return buildFeishuCommandCatalogEntryWithCatalog(def, def.ID, defaultFeishuCommandDisplayVariantID(def.ID), agentproto.BackendCodex, feishuCommandMenuButtonLabel(def))
+}
+
+func buildFeishuCommandMenuEntryFromResolution(resolution FeishuCommandDisplayResolution, backend agentproto.Backend) CommandCatalogEntry {
+	return buildFeishuCommandCatalogEntryWithCatalog(
+		resolution.Definition,
+		resolution.FamilyID,
+		resolution.VariantID,
+		backend,
+		feishuCommandMenuButtonLabel(resolution.Definition),
+	)
 }
 
 func buildFeishuCommandCatalogEntry(def FeishuCommandDefinition, buttonLabel string) CommandCatalogEntry {
+	return buildFeishuCommandCatalogEntryWithCatalog(def, def.ID, defaultFeishuCommandDisplayVariantID(def.ID), agentproto.BackendCodex, buttonLabel)
+}
+
+func buildFeishuCommandCatalogEntryWithCatalog(def FeishuCommandDefinition, familyID, variantID string, backend agentproto.Backend, buttonLabel string) CommandCatalogEntry {
 	command := strings.TrimSpace(def.CanonicalSlash)
 	entry := CommandCatalogEntry{
 		Title:       strings.TrimSpace(def.Title),
@@ -184,12 +206,65 @@ func buildFeishuCommandCatalogEntry(def FeishuCommandDefinition, buttonLabel str
 	}
 	if buttonLabel = strings.TrimSpace(buttonLabel); buttonLabel != "" && command != "" {
 		entry.Buttons = append(entry.Buttons, CommandCatalogButton{
-			Label:       buttonLabel,
-			Kind:        CommandCatalogButtonAction,
-			CommandText: command,
+			Label:            buttonLabel,
+			Kind:             CommandCatalogButtonAction,
+			CommandText:      command,
+			CommandID:        strings.TrimSpace(def.ID),
+			CatalogFamilyID:  strings.TrimSpace(familyID),
+			CatalogVariantID: strings.TrimSpace(variantID),
+			CatalogBackend:   agentproto.NormalizeBackend(backend),
 		})
 	}
 	return entry
+}
+
+func stampCommandSectionsCatalogProvenance(sections []CommandCatalogSection, familyID, variantID string, backend agentproto.Backend) []CommandCatalogSection {
+	if familyID == "" && variantID == "" && backend == "" {
+		return sections
+	}
+	out := make([]CommandCatalogSection, 0, len(sections))
+	for _, section := range sections {
+		cloned := CommandCatalogSection{
+			Title:   strings.TrimSpace(section.Title),
+			Entries: make([]CommandCatalogEntry, 0, len(section.Entries)),
+		}
+		for _, entry := range section.Entries {
+			clonedEntry := entry
+			clonedEntry.Buttons = cloneCommandCatalogButtons(entry.Buttons)
+			for i := range clonedEntry.Buttons {
+				if clonedEntry.Buttons[i].CommandID == "" {
+					clonedEntry.Buttons[i].CommandID = familyID
+				}
+				if clonedEntry.Buttons[i].CatalogFamilyID == "" {
+					clonedEntry.Buttons[i].CatalogFamilyID = familyID
+				}
+				if clonedEntry.Buttons[i].CatalogVariantID == "" {
+					clonedEntry.Buttons[i].CatalogVariantID = variantID
+				}
+				if backend != "" {
+					clonedEntry.Buttons[i].CatalogBackend = backend
+				}
+			}
+			clonedEntry.Form = cloneCommandCatalogForm(entry.Form)
+			if clonedEntry.Form != nil {
+				if clonedEntry.Form.CommandID == "" {
+					clonedEntry.Form.CommandID = familyID
+				}
+				if clonedEntry.Form.CatalogFamilyID == "" {
+					clonedEntry.Form.CatalogFamilyID = familyID
+				}
+				if clonedEntry.Form.CatalogVariantID == "" {
+					clonedEntry.Form.CatalogVariantID = variantID
+				}
+				if backend != "" {
+					clonedEntry.Form.CatalogBackend = backend
+				}
+			}
+			cloned.Entries = append(cloned.Entries, clonedEntry)
+		}
+		out = append(out, cloned)
+	}
+	return out
 }
 
 func feishuCommandMenuButtonLabel(def FeishuCommandDefinition) string {

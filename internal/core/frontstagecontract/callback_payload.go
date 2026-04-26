@@ -25,6 +25,9 @@ const (
 	CardActionPayloadKeyActionKind            = "action_kind"
 	CardActionPayloadKeyActionArg             = "action_arg"
 	CardActionPayloadKeyActionArgPrefix       = "action_arg_prefix"
+	CardActionPayloadKeyCatalogFamilyID       = "catalog_family_id"
+	CardActionPayloadKeyCatalogVariantID      = "catalog_variant_id"
+	CardActionPayloadKeyCatalogBackend        = "catalog_backend"
 	CardActionPayloadKeyFieldName             = "field_name"
 	CardActionPayloadKeyCursor                = "cursor"
 	CardActionPayloadKeyPickerID              = "picker_id"
@@ -191,6 +194,22 @@ func ActionPayloadPageAction(actionKind, actionArg string) map[string]any {
 		payload[CardActionPayloadKeyActionArg] = strings.TrimSpace(actionArg)
 	}
 	return payload
+}
+
+func ActionPayloadWithCatalog(value map[string]any, familyID, variantID, backend string) map[string]any {
+	if len(value) == 0 {
+		return value
+	}
+	if familyID = strings.TrimSpace(familyID); familyID != "" {
+		value[CardActionPayloadKeyCatalogFamilyID] = familyID
+	}
+	if variantID = strings.TrimSpace(variantID); variantID != "" {
+		value[CardActionPayloadKeyCatalogVariantID] = variantID
+	}
+	if backend = strings.TrimSpace(backend); backend != "" {
+		value[CardActionPayloadKeyCatalogBackend] = backend
+	}
+	return value
 }
 
 func ActionPayloadUpgradeOwnerFlow(flowID, optionID string) map[string]any {

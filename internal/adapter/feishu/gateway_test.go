@@ -9,6 +9,7 @@ import (
 	"time"
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -881,8 +882,11 @@ func TestParseCardActionTriggerEventBuildsPageAction(t *testing.T) {
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":        "page_action",
-					"action_kind": string(control.ActionShowCommandHelp),
+					"kind":               "page_action",
+					"action_kind":        string(control.ActionShowCommandHelp),
+					"catalog_family_id":  control.FeishuCommandHelp,
+					"catalog_variant_id": "help.default",
+					"catalog_backend":    string(agentproto.BackendClaude),
 				},
 			},
 			Context: &larkcallback.Context{
@@ -899,6 +903,9 @@ func TestParseCardActionTriggerEventBuildsPageAction(t *testing.T) {
 	if action.Kind != control.ActionShowCommandHelp {
 		t.Fatalf("unexpected action kind: %#v", action)
 	}
+	if action.CatalogFamilyID != control.FeishuCommandHelp || action.CatalogVariantID != "help.default" || action.CatalogBackend != agentproto.BackendClaude {
+		t.Fatalf("unexpected action provenance: %#v", action)
+	}
 	if action.SurfaceSessionID != "feishu:app-1:user:user-1" || action.ChatID != "oc_1" || action.ActorUserID != "user-1" {
 		t.Fatalf("unexpected action routing: %#v", action)
 	}
@@ -913,9 +920,12 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromFormValue(t *testi
 			Operator: &larkcallback.Operator{UserID: &userID},
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
-					"kind":        "page_submit",
-					"action_kind": string(control.ActionModelCommand),
-					"field_name":  "command_args",
+					"kind":               "page_submit",
+					"action_kind":        string(control.ActionModelCommand),
+					"field_name":         "command_args",
+					"catalog_family_id":  control.FeishuCommandModel,
+					"catalog_variant_id": "model.default",
+					"catalog_backend":    string(agentproto.BackendClaude),
 				},
 				FormValue: map[string]interface{}{
 					"command_args": "gpt-5.4 high",
@@ -934,6 +944,9 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromFormValue(t *testi
 	}
 	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4 high" {
 		t.Fatalf("unexpected form submit action: %#v", action)
+	}
+	if action.CatalogFamilyID != control.FeishuCommandModel || action.CatalogVariantID != "model.default" || action.CatalogBackend != agentproto.BackendClaude {
+		t.Fatalf("unexpected form submit provenance: %#v", action)
 	}
 }
 

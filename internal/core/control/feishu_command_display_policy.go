@@ -76,7 +76,7 @@ func BuildFeishuCommandDisplayPageViewForContext(title, summary string, interact
 		for _, current := range resolved {
 			def := current.Definition
 			if interactive {
-				entries = append(entries, buildFeishuCommandCatalogEntry(def, catalogButtonLabel(def)))
+				entries = append(entries, buildFeishuCommandCatalogEntryWithCatalog(def, current.FamilyID, current.VariantID, ctx.Backend, catalogButtonLabel(def)))
 				continue
 			}
 			entries = append(entries, buildFeishuCommandCatalogEntry(def, ""))
@@ -90,9 +90,10 @@ func BuildFeishuCommandDisplayPageViewForContext(title, summary string, interact
 		})
 	}
 	view := FeishuPageView{
-		Title:       title,
-		Interactive: interactive,
-		Sections:    sections,
+		Title:          title,
+		CatalogBackend: ctx.Backend,
+		Interactive:    interactive,
+		Sections:       sections,
 	}
 	if lines := splitFeishuCommandPageSummaryLines(summary); len(lines) != 0 {
 		view.SummarySections = []FeishuCardTextSection{{Lines: lines}}

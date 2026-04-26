@@ -3,6 +3,7 @@ package control
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
@@ -11,6 +12,7 @@ import (
 type FeishuPageView struct {
 	PageID                        string
 	CommandID                     string
+	CatalogBackend                agentproto.Backend
 	Title                         string
 	MessageID                     string
 	TrackingKey                   string
@@ -72,6 +74,7 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 	return FeishuPageView{
 		PageID:                        strings.TrimSpace(view.PageID),
 		CommandID:                     commandID,
+		CatalogBackend:                agentproto.NormalizeBackend(view.CatalogBackend),
 		Title:                         title,
 		MessageID:                     strings.TrimSpace(view.MessageID),
 		TrackingKey:                   strings.TrimSpace(view.TrackingKey),
@@ -145,6 +148,7 @@ func FeishuPageViewFromCommandPageView(view FeishuPageView) FeishuPageView {
 	return NormalizeFeishuPageView(FeishuPageView{
 		PageID:                        strings.TrimSpace(view.CommandID),
 		CommandID:                     strings.TrimSpace(view.CommandID),
+		CatalogBackend:                agentproto.NormalizeBackend(view.CatalogBackend),
 		Title:                         strings.TrimSpace(view.Title),
 		MessageID:                     strings.TrimSpace(view.MessageID),
 		TrackingKey:                   strings.TrimSpace(view.TrackingKey),

@@ -119,6 +119,9 @@ type Action struct {
 	Request             *ActionRequestResponse
 	RequestControl      *ActionRequestControl
 	OwnerFlow           *ActionOwnerCardFlow
+	CatalogFamilyID     string
+	CatalogVariantID    string
+	CatalogBackend      agentproto.Backend
 	CommandID           string
 	ParentCommandText   string
 	InstanceID          string
@@ -390,14 +393,17 @@ type CommandCatalogBreadcrumb struct {
 }
 
 type CommandCatalogButton struct {
-	Label         string
-	Kind          CommandCatalogButtonKind
-	CommandText   string
-	CommandID     string
-	OpenURL       string
-	CallbackValue map[string]any
-	Style         string
-	Disabled      bool
+	Label            string
+	Kind             CommandCatalogButtonKind
+	CommandText      string
+	CommandID        string
+	CatalogFamilyID  string
+	CatalogVariantID string
+	CatalogBackend   agentproto.Backend
+	OpenURL          string
+	CallbackValue    map[string]any
+	Style            string
+	Disabled         bool
 }
 
 type CommandCatalogFormFieldOption struct {
@@ -415,10 +421,13 @@ type CommandCatalogFormField struct {
 }
 
 type CommandCatalogForm struct {
-	CommandID   string
-	CommandText string
-	SubmitLabel string
-	Field       CommandCatalogFormField
+	CommandID        string
+	CommandText      string
+	CatalogFamilyID  string
+	CatalogVariantID string
+	CatalogBackend   agentproto.Backend
+	SubmitLabel      string
+	Field            CommandCatalogFormField
 }
 
 type CommandCatalogEntry struct {

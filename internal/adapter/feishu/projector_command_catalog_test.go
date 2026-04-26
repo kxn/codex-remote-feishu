@@ -4,12 +4,14 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(control.FeishuPageView{
+		CatalogBackend:  agentproto.BackendClaude,
 		Title:           "使用模型",
 		SummarySections: summarySections("直接在卡片里输入模型名。"),
 		Interactive:     true,
@@ -19,9 +21,11 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 			Title: "手动输入",
 			Entries: []control.CommandCatalogEntry{{
 				Form: &control.CommandCatalogForm{
-					CommandID:   control.FeishuCommandModel,
-					CommandText: "/model",
-					SubmitLabel: "应用",
+					CommandID:        control.FeishuCommandModel,
+					CommandText:      "/model",
+					CatalogFamilyID:  control.FeishuCommandModel,
+					CatalogVariantID: "model.default",
+					SubmitLabel:      "应用",
 					Field: control.CommandCatalogFormField{
 						Name:        "command_args",
 						Kind:        control.CommandCatalogFormFieldText,
@@ -65,12 +69,14 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	}
 	value := cardButtonPayload(t, formElements[1])
 	assertPageSubmitPayload(t, value, control.ActionModelCommand, "", "command_args")
+	assertCatalogProvenancePayloadMatchesCommand(t, value, agentproto.BackendClaude, "/model")
 	if ops[0].CardElements[4]["tag"] != "hr" {
 		t.Fatalf("expected divider before related action row, got %#v", ops[0].CardElements)
 	}
 	relatedRow := cardElementButtons(t, ops[0].CardElements[5])
 	relatedValue := cardButtonPayload(t, relatedRow[0])
 	assertPageActionPayloadMatchesCommand(t, relatedValue, "/menu send_settings")
+	assertCatalogProvenancePayloadMatchesCommand(t, relatedValue, agentproto.BackendClaude, "/menu send_settings")
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected command catalog with form to use V2 in #120, got %#v", ops[0])
 	}
@@ -91,8 +97,10 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	}
 	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
 	assertPageSubmitPayload(t, renderedSubmitValue, control.ActionModelCommand, "", "command_args")
+	assertCatalogProvenancePayloadMatchesCommand(t, renderedSubmitValue, agentproto.BackendClaude, "/model")
 	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[5])
 	assertPageActionPayloadMatchesCommand(t, renderedRelatedValue, "/menu send_settings")
+	assertCatalogProvenancePayloadMatchesCommand(t, renderedRelatedValue, agentproto.BackendClaude, "/menu send_settings")
 }
 
 func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testing.T) {

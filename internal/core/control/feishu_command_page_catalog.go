@@ -108,7 +108,21 @@ func cloneCommandCatalogButtons(source []CommandCatalogButton) []CommandCatalogB
 	if len(source) == 0 {
 		return nil
 	}
-	return append([]CommandCatalogButton(nil), source...)
+	out := make([]CommandCatalogButton, 0, len(source))
+	for _, button := range source {
+		cloned := button
+		cloned.Label = strings.TrimSpace(button.Label)
+		cloned.CommandText = strings.TrimSpace(button.CommandText)
+		cloned.CommandID = strings.TrimSpace(button.CommandID)
+		cloned.CatalogFamilyID = strings.TrimSpace(button.CatalogFamilyID)
+		cloned.CatalogVariantID = strings.TrimSpace(button.CatalogVariantID)
+		if len(button.CallbackValue) != 0 {
+			cloned.CallbackValue = cloneActionPayload(button.CallbackValue)
+		}
+		cloned.Style = strings.TrimSpace(button.Style)
+		out = append(out, cloned)
+	}
+	return out
 }
 
 func cloneCommandCatalogSections(source []CommandCatalogSection) []CommandCatalogSection {
@@ -141,6 +155,10 @@ func cloneCommandCatalogForm(form *CommandCatalogForm) *CommandCatalogForm {
 		return nil
 	}
 	cloned := *form
+	cloned.CommandID = strings.TrimSpace(form.CommandID)
+	cloned.CommandText = strings.TrimSpace(form.CommandText)
+	cloned.CatalogFamilyID = strings.TrimSpace(form.CatalogFamilyID)
+	cloned.CatalogVariantID = strings.TrimSpace(form.CatalogVariantID)
 	cloned.Field = CommandCatalogFormField{
 		Name:         strings.TrimSpace(form.Field.Name),
 		Kind:         form.Field.Kind,
@@ -150,4 +168,15 @@ func cloneCommandCatalogForm(form *CommandCatalogForm) *CommandCatalogForm {
 		Options:      append([]CommandCatalogFormFieldOption(nil), form.Field.Options...),
 	}
 	return &cloned
+}
+
+func cloneActionPayload(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(value))
+	for key, current := range value {
+		out[key] = current
+	}
+	return out
 }

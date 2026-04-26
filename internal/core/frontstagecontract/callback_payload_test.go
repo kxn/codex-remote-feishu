@@ -47,6 +47,19 @@ func TestActionPayloadRequestControlOmitsEmptyOptionalFields(t *testing.T) {
 	}
 }
 
+func TestActionPayloadWithCatalogAddsStructuredProvenance(t *testing.T) {
+	payload := ActionPayloadWithCatalog(ActionPayloadPageAction("surface.command.model", ""), "model", "model.default", "claude")
+	if payload[CardActionPayloadKeyCatalogFamilyID] != "model" {
+		t.Fatalf("unexpected family payload: %#v", payload)
+	}
+	if payload[CardActionPayloadKeyCatalogVariantID] != "model.default" {
+		t.Fatalf("unexpected variant payload: %#v", payload)
+	}
+	if payload[CardActionPayloadKeyCatalogBackend] != "claude" {
+		t.Fatalf("unexpected backend payload: %#v", payload)
+	}
+}
+
 func TestActionPayloadWithLifecycleAddsLifecycleID(t *testing.T) {
 	payload := ActionPayloadNavigation(CardActionKindShowAllWorkspaces)
 	stamped := ActionPayloadWithLifecycle(payload, "life-1")

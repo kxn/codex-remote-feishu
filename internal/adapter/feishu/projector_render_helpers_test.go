@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -233,6 +234,23 @@ func assertPageSubmitPayload(t *testing.T, value map[string]any, actionKind cont
 	}
 	if got := strings.TrimSpace(stringAnyValue(value["field_name"])); got != strings.TrimSpace(fieldName) {
 		t.Fatalf("unexpected page_submit field_name: got %q want %q in %#v", got, fieldName, value)
+	}
+}
+
+func assertCatalogProvenancePayloadMatchesCommand(t *testing.T, value map[string]any, backend agentproto.Backend, commandText string) {
+	t.Helper()
+	resolved, ok := control.ResolveFeishuTextCommand(control.CatalogContext{Backend: backend}, commandText)
+	if !ok {
+		t.Fatalf("expected parseable command text %q", commandText)
+	}
+	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogFamilyID])); got != resolved.FamilyID {
+		t.Fatalf("unexpected catalog family: got %q want %q in %#v", got, resolved.FamilyID, value)
+	}
+	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogVariantID])); got != resolved.VariantID {
+		t.Fatalf("unexpected catalog variant: got %q want %q in %#v", got, resolved.VariantID, value)
+	}
+	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogBackend])); got != string(resolved.Backend) {
+		t.Fatalf("unexpected catalog backend: got %q want %q in %#v", got, resolved.Backend, value)
 	}
 }
 

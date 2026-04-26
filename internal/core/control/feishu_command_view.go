@@ -1,5 +1,7 @@
 package control
 
+import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+
 // FeishuCatalogView is the UI-owned view payload for interactive command menu
 // and config cards. It carries semantic state; the final Feishu card layout is
 // still projected separately during the transition.
@@ -15,6 +17,9 @@ type FeishuCatalogMenuView struct {
 }
 
 type FeishuCatalogConfigView struct {
+	CatalogFamilyID    string
+	CatalogVariantID   string
+	CatalogBackend     agentproto.Backend
 	CommandID          string
 	RequiresAttachment bool
 	CurrentValue       string
