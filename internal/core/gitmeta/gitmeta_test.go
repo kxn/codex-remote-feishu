@@ -2,7 +2,9 @@ package gitmeta
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,4 +47,138 @@ func TestFileHasExactTrimmedLine(t *testing.T) {
 	if FileHasExactTrimmedLine(path, "/not-found/") {
 		t.Fatal("unexpected match for absent line")
 	}
+}
+
+func TestInspectWorkspaceRegularRepo(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	info, err := InspectWorkspace(repoRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace() error = %v", err)
+	}
+	if !info.InRepo() {
+		t.Fatalf("expected git repo info, got %#v", info)
+	}
+	if info.RepoRoot != repoRoot {
+		t.Fatalf("RepoRoot = %q, want %q", info.RepoRoot, repoRoot)
+	}
+	if info.GitDir != filepath.Join(repoRoot, ".git") {
+		t.Fatalf("GitDir = %q, want %q", info.GitDir, filepath.Join(repoRoot, ".git"))
+	}
+	if info.LinkedWorktree {
+		t.Fatalf("expected regular repo, got linked worktree: %#v", info)
+	}
+	if info.Detached || info.Branch != "main" {
+		t.Fatalf("unexpected branch info: %#v", info)
+	}
+}
+
+func TestInspectWorkspaceLinkedWorktree(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	worktreeRoot := filepath.Join(t.TempDir(), "feature-worktree")
+	runGitTestCommand(t, repoRoot, "worktree", "add", "-b", "feature/worktree", worktreeRoot, "HEAD")
+
+	info, err := InspectWorkspace(worktreeRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(worktree) error = %v", err)
+	}
+	if !info.InRepo() {
+		t.Fatalf("expected linked worktree info, got %#v", info)
+	}
+	if info.RepoRoot != worktreeRoot {
+		t.Fatalf("RepoRoot = %q, want %q", info.RepoRoot, worktreeRoot)
+	}
+	if !info.LinkedWorktree {
+		t.Fatalf("expected linked worktree, got %#v", info)
+	}
+	if !strings.Contains(info.GitDir, filepath.ToSlash(filepath.Join(".git", "worktrees"))) &&
+		!strings.Contains(info.GitDir, string(filepath.Separator)+filepath.Join(".git", "worktrees")+string(filepath.Separator)) {
+		t.Fatalf("expected worktree gitdir, got %q", info.GitDir)
+	}
+	if info.Branch != "feature/worktree" || info.Detached {
+		t.Fatalf("unexpected branch info: %#v", info)
+	}
+}
+
+func TestInspectWorkspaceDetachedHeadFallback(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	shortHead := strings.TrimSpace(runGitOutput(t, repoRoot, "rev-parse", "--short", "HEAD"))
+	runGitTestCommand(t, repoRoot, "checkout", "--detach", "HEAD")
+
+	info, err := InspectWorkspace(repoRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(detached) error = %v", err)
+	}
+	if !info.Detached {
+		t.Fatalf("expected detached head info, got %#v", info)
+	}
+	if info.Branch != shortHead {
+		t.Fatalf("Branch = %q, want %q", info.Branch, shortHead)
+	}
+}
+
+func TestInspectWorkspaceOutsideGitRepo(t *testing.T) {
+	info, err := InspectWorkspace(t.TempDir(), InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(non-git) error = %v", err)
+	}
+	if info.InRepo() {
+		t.Fatalf("expected non-git result, got %#v", info)
+	}
+	if info.RepoRoot != "" || info.GitDir != "" || info.Branch != "" || info.Detached || info.LinkedWorktree {
+		t.Fatalf("unexpected non-git info: %#v", info)
+	}
+}
+
+func ensureGitForTest(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+}
+
+func createGitRepoForTest(t *testing.T) string {
+	t.Helper()
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+		t.Fatalf("mkdir repo root: %v", err)
+	}
+	runGitTestCommand(t, repoRoot, "init", "-q")
+	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write repo file: %v", err)
+	}
+	runGitTestCommand(t, repoRoot, "add", "README.md")
+	runGitTestCommand(t, repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init")
+	runGitTestCommand(t, repoRoot, "branch", "-M", "main")
+	return repoRoot
+}
+
+func runGitTestCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=Never",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=Never",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+	return string(output)
 }

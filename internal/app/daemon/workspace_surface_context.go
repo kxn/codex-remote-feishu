@@ -103,11 +103,11 @@ func removeWorkspaceSurfaceContext(workspaceRoot string) error {
 }
 
 func ensureWorkspaceContextGitExclude(workspaceRoot string) error {
-	repoRoot, gitDir, err := locateGitRepo(workspaceRoot)
-	if err != nil || repoRoot == "" || gitDir == "" {
+	info, err := gitmeta.LocateWorkspace(workspaceRoot)
+	if err != nil || !info.InRepo() {
 		return err
 	}
-	rel, err := filepath.Rel(repoRoot, workspaceRoot)
+	rel, err := filepath.Rel(info.RepoRoot, workspaceRoot)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func ensureWorkspaceContextGitExclude(workspaceRoot string) error {
 	if rel != "." && rel != "" {
 		pattern = "/" + rel + "/" + workspaceSurfaceContextDir + "/"
 	}
-	excludePath := filepath.Join(gitDir, "info", "exclude")
+	excludePath := filepath.Join(info.GitDir, "info", "exclude")
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
 		return err
 	}
@@ -130,28 +130,6 @@ func ensureWorkspaceContextGitExclude(workspaceRoot string) error {
 	defer f.Close()
 	_, err = f.WriteString(pattern + "\n")
 	return err
-}
-
-func locateGitRepo(workspaceRoot string) (repoRoot string, gitDir string, err error) {
-	current := state.NormalizeWorkspaceKey(workspaceRoot)
-	for current != "" && current != string(filepath.Separator) {
-		gitPath := filepath.Join(current, ".git")
-		info, statErr := os.Stat(gitPath)
-		if statErr == nil {
-			if info.IsDir() {
-				return current, gitPath, nil
-			}
-			if parsed, parseErr := gitmeta.ParseGitDirFile(gitPath); parseErr == nil && strings.TrimSpace(parsed) != "" {
-				return current, gitmeta.ResolveGitDirPath(current, parsed), nil
-			}
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
-		}
-		current = parent
-	}
-	return "", "", nil
 }
 
 func readWorkspaceSurfaceContext(path string) (workspaceSurfaceContextPayload, error) {
