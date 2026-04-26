@@ -23,6 +23,8 @@ func normalizeRequestType(value string) string {
 		return "permissions_request_approval"
 	case normalized == "mcp_server_elicitation", normalized == "mcpserverelicitation":
 		return "mcp_server_elicitation"
+	case normalized == "tool_callback", normalized == "toolcallback":
+		return "tool_callback"
 	default:
 		return normalized
 	}
@@ -30,7 +32,7 @@ func normalizeRequestType(value string) string {
 
 func requestPromptRenderable(requestType string) bool {
 	switch normalizeRequestType(requestType) {
-	case "approval", "request_user_input", "permissions_request_approval", "mcp_server_elicitation":
+	case "approval", "request_user_input", "permissions_request_approval", "mcp_server_elicitation", "tool_callback":
 		return true
 	default:
 		return false

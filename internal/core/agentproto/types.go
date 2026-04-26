@@ -239,6 +239,7 @@ const (
 	RequestTypeRequestUserInput           RequestType = "request_user_input"
 	RequestTypePermissionsRequestApproval RequestType = "permissions_request_approval"
 	RequestTypeMCPServerElicitation       RequestType = "mcp_server_elicitation"
+	RequestTypeToolCallback               RequestType = "tool_callback"
 )
 
 type RequestOption struct {
@@ -279,6 +280,13 @@ type MCPElicitationPrompt struct {
 	Meta            map[string]any `json:"meta,omitempty"`
 }
 
+type ToolCallbackPrompt struct {
+	CallID     string         `json:"callId,omitempty"`
+	ToolName   string         `json:"toolName,omitempty"`
+	Arguments  any            `json:"arguments,omitempty"`
+	RawPayload map[string]any `json:"rawPayload,omitempty"`
+}
+
 type RequestPrompt struct {
 	Type           RequestType               `json:"type,omitempty"`
 	RawType        string                    `json:"rawType,omitempty"`
@@ -291,6 +299,7 @@ type RequestPrompt struct {
 	Questions      []RequestQuestion         `json:"questions,omitempty"`
 	Permissions    *PermissionsRequestPrompt `json:"permissions,omitempty"`
 	MCPElicitation *MCPElicitationPrompt     `json:"mcpElicitation,omitempty"`
+	ToolCallback   *ToolCallbackPrompt       `json:"toolCallback,omitempty"`
 }
 
 type MCPToolCallProgress struct {

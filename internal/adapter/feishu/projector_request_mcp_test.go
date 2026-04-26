@@ -257,3 +257,31 @@ func TestProjectMCPElicitationURLPromptSealedStateDropsActions(t *testing.T) {
 		t.Fatalf("expected sealed url elicitation prompt to render waiting status, got %#v", ops[0].CardElements)
 	}
 }
+
+func TestProjectToolCallbackPromptStaysReadOnly(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", requestPromptEvent(control.FeishuRequestView{
+		RequestID:   "req-tool-1",
+		RequestType: "tool_callback",
+		Title:       "工具回调暂不支持",
+		Phase:       frontstagecontract.PhaseWaitingDispatch,
+		StatusText:  "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，等待 Codex 继续。",
+		Sections: []control.FeishuCardTextSection{
+			{Lines: []string{"当前工具请求客户端执行一段 dynamic tool callback。", "此 relay/headless 客户端暂不支持直接执行，系统已自动回报 unsupported 结果。"}},
+			{Label: "回调信息", Lines: []string{"工具：lookup_ticket", "Call ID：call-1"}},
+			{Label: "回调参数", Lines: []string{`{"ticket":"ABC-123"}`}},
+		},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if len(cardActionsFromElements(ops[0].CardElements)) != 0 {
+		t.Fatalf("expected tool callback prompt to remain read-only, got %#v", ops[0].CardElements)
+	}
+	if got := plainTextContent(ops[0].CardElements[0]); !containsAll(got, "当前工具请求客户端执行一段 dynamic tool callback。", "系统已自动回报 unsupported 结果。") {
+		t.Fatalf("unexpected tool callback intro section: %#v", ops[0].CardElements[0])
+	}
+	if got := markdownContent(ops[0].CardElements[len(ops[0].CardElements)-1]); !strings.Contains(got, "已自动上报 unsupported") {
+		t.Fatalf("expected tool callback status markdown, got %#v", ops[0].CardElements)
+	}
+}

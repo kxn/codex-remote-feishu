@@ -131,6 +131,71 @@ func TestObserveServerTopLevelToolRequestUserInputProducesQuestionMetadata(t *te
 	}
 }
 
+func TestObserveServerToolCallbackProducesDedicatedRequestPromptAndRoundTripsNumericRequestID(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	result, err := tr.ObserveServer([]byte(`{"id":7,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"lookup_ticket","arguments":{"ticket":"ABC-123","verbose":true}}}`))
+	if err != nil {
+		t.Fatalf("observe tool callback: %v", err)
+	}
+	if len(result.Events) != 1 {
+		t.Fatalf("expected one request started event, got %#v", result.Events)
+	}
+	event := result.Events[0]
+	if event.Kind != agentproto.EventRequestStarted || event.RequestID == "" {
+		t.Fatalf("unexpected tool callback event: %#v", event)
+	}
+	if event.Metadata["requestType"] != "tool_callback" || event.Metadata["tool"] != "lookup_ticket" || event.Metadata["callId"] != "call-1" {
+		t.Fatalf("unexpected tool callback metadata: %#v", event.Metadata)
+	}
+	if event.RequestPrompt == nil || event.RequestPrompt.Type != agentproto.RequestTypeToolCallback || event.RequestPrompt.RawType != "tool_callback" {
+		t.Fatalf("expected typed tool callback prompt, got %#v", event.RequestPrompt)
+	}
+	if event.RequestPrompt.ToolCallback == nil || event.RequestPrompt.ToolCallback.ToolName != "lookup_ticket" || event.RequestPrompt.ToolCallback.CallID != "call-1" {
+		t.Fatalf("expected typed tool callback payload, got %#v", event.RequestPrompt)
+	}
+	arguments, ok := event.Metadata["arguments"].(map[string]any)
+	if !ok || arguments["ticket"] != "ABC-123" || arguments["verbose"] != true {
+		t.Fatalf("unexpected tool callback arguments: %#v", event.Metadata["arguments"])
+	}
+
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		Kind: agentproto.CommandRequestRespond,
+		Request: agentproto.Request{
+			RequestID: event.RequestID,
+			Response: map[string]any{
+				"type": "structured",
+				"result": map[string]any{
+					"success": false,
+					"contentItems": []map[string]any{{
+						"type": "inputText",
+						"text": "unsupported",
+					}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate tool callback response: %v", err)
+	}
+	if len(payloads) != 1 {
+		t.Fatalf("expected one response payload, got %d", len(payloads))
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(payloads[0], &payload); err != nil {
+		t.Fatalf("unmarshal translated tool callback response: %v", err)
+	}
+	if got, ok := payload["id"].(float64); !ok || got != 7 {
+		t.Fatalf("expected numeric request id to round-trip, got %#v", payload["id"])
+	}
+	resultPayload, _ := payload["result"].(map[string]any)
+	structured, _ := resultPayload["result"].(map[string]any)
+	if structured["success"] != false {
+		t.Fatalf("expected structured unsupported payload, got %#v", payload["result"])
+	}
+}
+
 func TestObserveServerItemToolRequestUserInputWithNumericRequestIDRoundTripsResponseID(t *testing.T) {
 	tr := NewTranslator("inst-1")
 

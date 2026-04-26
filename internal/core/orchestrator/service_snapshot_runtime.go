@@ -281,6 +281,23 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 			continue
 		}
 		request.PendingDispatchCommandID = ""
+		if normalizeRequestType(request.RequestType) == "tool_callback" {
+			request.Phase = frontstagecontract.PhaseWaitingDispatch
+			bumpRequestCardRevision(request)
+			noticeText := "自动上报 unsupported 结果失败，当前 turn 可能仍在等待 callback。可使用 `/stop` 结束本轮，或等待本地 Codex 恢复后重试。"
+			return []eventcontract.Event{
+				s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, noticeText),
+				{
+					Kind:             eventcontract.KindNotice,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					SourceMessageID:  strings.TrimSpace(request.SourceMessageID),
+					Notice: &control.Notice{
+						Code: noticeCode,
+						Text: noticeText,
+					},
+				},
+			}
+		}
 		request.Phase = frontstagecontract.PhaseEditing
 		bumpRequestCardRevision(request)
 		noticeText := "请求提交失败，请在最新卡片上重试。"

@@ -153,6 +153,11 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		sections = buildMCPElicitationSections(event.RequestPrompt, event.Metadata)
 		questions = buildMCPElicitationQuestions(event.RequestPrompt, event.Metadata)
 		options = buildMCPElicitationOptions(event.RequestPrompt, event.Metadata, questions)
+	case "tool_callback":
+		if title == "需要处理请求" || title == "收到工具回调" {
+			title = "工具回调暂不支持"
+		}
+		sections = buildToolCallbackRequestSections(event.RequestPrompt, event.Metadata)
 	default:
 		sections = buildGenericRequestSections(metadataString(event.Metadata, "body"))
 	}
@@ -182,6 +187,9 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	surface.PendingRequests[event.RequestID] = record
 	if !requestPromptRenderable(requestType) {
 		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", requestType))
+	}
+	if requestType == "tool_callback" {
+		return s.autoDispatchUnsupportedToolCallback(surface, record, threadTitle)
 	}
 	return []eventcontract.Event{s.requestPromptEvent(surface, record, threadTitle)}
 }
@@ -526,6 +534,8 @@ func requestPromptPendingDispatchStatusText(request *state.RequestPromptRecord) 
 	switch normalizeRequestType(request.RequestType) {
 	case "mcp_server_elicitation":
 		return "已提交当前表单，等待 Codex 继续。"
+	case "tool_callback":
+		return "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，等待 Codex 继续。"
 	default:
 		return "已提交当前答案，等待 Codex 继续。"
 	}
@@ -596,6 +606,71 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		}
 	}
 	return control.NormalizeFeishuRequestView(view)
+}
+
+func toolCallbackUnsupportedResultText(request *state.RequestPromptRecord) string {
+	toolName := ""
+	callID := ""
+	if request != nil && request.Prompt != nil && request.Prompt.ToolCallback != nil {
+		toolName = strings.TrimSpace(request.Prompt.ToolCallback.ToolName)
+		callID = strings.TrimSpace(request.Prompt.ToolCallback.CallID)
+	}
+	switch {
+	case toolName != "" && callID != "":
+		return fmt.Sprintf("Dynamic tool callback is unsupported in this relay/headless client. Tool %q (call %q) was not executed.", toolName, callID)
+	case toolName != "":
+		return fmt.Sprintf("Dynamic tool callback is unsupported in this relay/headless client. Tool %q was not executed.", toolName)
+	case callID != "":
+		return fmt.Sprintf("Dynamic tool callback is unsupported in this relay/headless client. Call %q was not executed.", callID)
+	default:
+		return "Dynamic tool callback is unsupported in this relay/headless client and was not executed."
+	}
+}
+
+func buildUnsupportedToolCallbackResponse(request *state.RequestPromptRecord) map[string]any {
+	return map[string]any{
+		"type": "structured",
+		"result": map[string]any{
+			"success": false,
+			"contentItems": []map[string]any{{
+				"type": "inputText",
+				"text": toolCallbackUnsupportedResultText(request),
+			}},
+		},
+	}
+}
+
+func (s *Service) autoDispatchUnsupportedToolCallback(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, threadTitleHint string) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
+	request.Phase = frontstagecontract.PhaseWaitingDispatch
+	return []eventcontract.Event{
+		s.requestPromptEvent(surface, request, threadTitleHint),
+		{
+			Kind:             eventcontract.KindAgentCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Command: &agentproto.Command{
+				CommandID: request.PendingDispatchCommandID,
+				Kind:      agentproto.CommandRequestRespond,
+				Origin: agentproto.Origin{
+					Surface: surface.SurfaceSessionID,
+					UserID:  surface.ActorUserID,
+					ChatID:  surface.ChatID,
+				},
+				Target: agentproto.Target{
+					ThreadID:               request.ThreadID,
+					TurnID:                 request.TurnID,
+					UseActiveTurnIfOmitted: request.TurnID == "",
+				},
+				Request: agentproto.Request{
+					RequestID: request.RequestID,
+					Response:  buildUnsupportedToolCallbackResponse(request),
+				},
+			},
+		},
+	}
 }
 
 func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, threadTitleHint string) eventcontract.Event {

@@ -35,6 +35,14 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 		return append(elements, permissionsRequestPromptElements(prompt, daemonLifecycleID)...)
 	case "mcp_server_elicitation":
 		return append(elements, mcpElicitationPromptElements(prompt, daemonLifecycleID)...)
+	case "tool_callback":
+		if status := requestPromptStatusMarkdown(prompt); status != "" {
+			elements = append(elements, map[string]any{
+				"tag":     "markdown",
+				"content": status,
+			})
+		}
+		return elements
 	}
 	options := prompt.Options
 	if len(options) == 0 {

@@ -532,7 +532,7 @@
 | `item/permissions/requestApproval` | 部分遵循 | 请求面已补齐，权限子集与 scope 可回写；当前仍走通用 request 卡 |
 | `mcpServer/elicitation/request` | 部分遵循 | form/url request 已接入，但仍是产品适配 UI，不是 source-native surface 逐帧复刻 |
 | `item/tool/requestUserInput` | 严格遵循 | relay/Feishu/headless 已接；同时兼容官方页面/README 仍写的顶层 `tool/requestUserInput` alias |
-| dynamic tool call (`item/tool/call`) | 部分遵循 | 只接 item 生命周期，没接 client 回写 request |
+| dynamic tool call (`item/tool/call`) | 部分遵循 | relay / Feishu / headless 已接 `request.started -> 自动 unsupported 回写 -> request.resolved` 的最小 fail-closed 链路，但仍未实现真正的 client-side callback executor |
 | `review/start -> enteredReviewMode -> exitedReviewMode` | 未遵循/未实现 | relay/headless 无此能力 |
 | `command/exec*` | 未遵循/未实现 | 仅解析 turn 内 command item 的 output delta |
 | `account/*` auth state machine | 未遵循/未实现 | 完全未建模 |
@@ -569,7 +569,6 @@
 
 - `review/start`
 - command/file approvals
-- `dynamicToolCall -> item/tool/call`
 - `thread/status/changed`
 - `account/*`
 - `app/list/updated`
@@ -695,7 +694,7 @@
 | 线程运行时 / turn 派生通知：`thread/status/changed`、`turn/diff/updated`、`turn/plan/updated`、`model/rerouted`、`thread/tokenUsage/updated` | `允许做产品语义适配，但要守住协议不变量` | 透传 | 归一化成 canonical event | 用更自然 UI 展示 | 至少消费会影响路由/门禁的状态 | 最新 state snapshot、threadId/turnId 关联、`notLoaded` / `waitingOnApproval` / reroute 语义 |
 | item 生命周期 / 主流 delta：`item/*`、`item/mcpToolCall/progress` | `允许做产品语义适配，但要守住协议不变量` | 透传 | 标准化 `started/delta/completed` | 按 item kind 投影 UI | 无需主动发起，但要能理解 | `itemId` 连续性、`started -> delta* -> completed`、最终 `item/completed` 权威 |
 | request surfaces：command/file approval、`item/permissions/requestApproval`、`mcpServer/elicitation/request`、`item/tool/requestUserInput` | `允许做产品语义适配，但要守住协议不变量` | 透传真实 `requestId` / params | 统一 request abstraction 可以，但要保留 method / requestType / availableDecisions / scope / nullable `turnId` | 卡片可产品化，但 resolve 前后 gate 必须准确 | 必须能回写响应 | `requestId` 关联、pending/resolved、granted subset / action / unanswered 语义 |
-| dynamic tool call：`dynamicToolCall -> item/tool/call` | `允许做产品语义适配，但仅在决定支持时` | 透传 | 若 claim 支持，就必须补齐 client 回写 | UI 可隐藏底层 RPC 细节 | 需要真正回写 `contentItems` | `callId`、item lifecycle、success/result 不能丢 |
+| dynamic tool call：`dynamicToolCall -> item/tool/call` | `允许做产品语义适配，但仅在决定支持时` | 透传 | 当前已建模 request / resolve，并在 relay 路径自动回写 unsupported；若 claim full support，仍必须补齐真正 callback executor | 当前 UI 只做只读 fail-closed 提示，不暴露交互表单 | headless 当前同样自动回写 unsupported | `callId`、item lifecycle、success/result 不能丢 |
 | review / realtime / fs watch / windows / fuzzy search | `当前无需纳入产品面，后续按需求再决定` | 只要不破坏 native path | 不 claim 支持时可不建模 | 默认不产品化 | 暂不主动驱动 | 一旦 claim 支持，就要遵守 detached vs inline、`sessionId` / `watchId`、close/completed 终态 |
 | account / app / MCP OAuth / skills / plugin/marketplace 邻接面 | `只要求 wrapper / VS Code 透传不破坏` | 透传 | 可先不建模 | 默认不放进 chat 主交互 | 暂不主动驱动 | login completed、OAuth completed、list invalidation 等通知不能被误改语义 |
 | simple RPC：`thread/memoryMode/set`、`memory/reset`、`thread/inject_items`、`marketplace/add`、`mcpServer/tool/call` | `不属于本轮主状态机优先级` | 透传 | 后续如实现，单独设计 command 语义 | 不要硬塞进现有 turn/approval UI | 暂不支持 | 不和状态机 backlog 混淆 |
@@ -709,7 +708,7 @@
    - `thread/status/changed`
 2. 再补“官方多步状态机、且我们很可能迟早要产品化”的：
    - 更细粒度 approval / permissions / elicitation 决策 UI
-   - dynamic tool `item/tool/call`
+   - dynamic tool `item/tool/call` 的真正 callback executor
    - `review/start`
 3. 然后再看“明显偏 native/browser 客户端，但后续也许值得做”的：
    - `mcpServer/startupStatus/updated`

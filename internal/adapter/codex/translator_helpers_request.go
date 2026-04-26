@@ -108,6 +108,8 @@ func canonicalRequestType(method, rawType string) agentproto.RequestType {
 	switch strings.TrimSpace(method) {
 	case "tool/requestUserInput", "item/tool/requestUserInput":
 		return agentproto.RequestTypeRequestUserInput
+	case "item/tool/call":
+		return agentproto.RequestTypeToolCallback
 	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
 		return agentproto.RequestTypeApproval
 	case "item/permissions/requestApproval":
@@ -129,6 +131,8 @@ func canonicalRequestType(method, rawType string) agentproto.RequestType {
 		return agentproto.RequestTypePermissionsRequestApproval
 	case raw == "mcp_server_elicitation", raw == "mcpserverelicitation":
 		return agentproto.RequestTypeMCPServerElicitation
+	case raw == "tool_callback", raw == "toolcallback":
+		return agentproto.RequestTypeToolCallback
 	default:
 		return agentproto.RequestType(raw)
 	}
@@ -145,6 +149,8 @@ func defaultRequestRawType(method string, params map[string]any) string {
 	switch strings.TrimSpace(method) {
 	case "tool/requestUserInput", "item/tool/requestUserInput":
 		return "request_user_input"
+	case "item/tool/call":
+		return "tool_callback"
 	case "item/permissions/requestApproval":
 		return "permissions_request_approval"
 	case "mcpServer/elicitation/request":
@@ -176,6 +182,8 @@ func extractRequestPrompt(method string, message map[string]any) *agentproto.Req
 	switch strings.TrimSpace(method) {
 	case "tool/requestUserInput", "item/tool/requestUserInput":
 		return extractRequestUserInputPrompt(message)
+	case "item/tool/call":
+		return extractToolCallbackPrompt(message)
 	case "item/commandExecution/requestApproval":
 		return extractCommandExecutionRequestApprovalPrompt(message)
 	case "item/fileChange/requestApproval":
@@ -194,6 +202,9 @@ func extractGenericRequestPrompt(method string, message map[string]any) *agentpr
 	params := lookupMap(message, "params")
 	rawType := effectiveRawRequestType(method, request, params)
 	requestType := canonicalRequestType(method, rawType)
+	if requestType == agentproto.RequestTypeToolCallback {
+		return extractToolCallbackPromptFromPayload(request, params)
+	}
 	prompt := &agentproto.RequestPrompt{
 		Type:           requestType,
 		RawType:        normalizeRawRequestType(rawType),
@@ -206,6 +217,45 @@ func extractGenericRequestPrompt(method string, message map[string]any) *agentpr
 		Questions:      requestQuestionsFromMaps(extractRequestUserInputQuestions(request, params)),
 		Permissions:    nil,
 		MCPElicitation: nil,
+	}
+	if prompt.Title == "" {
+		prompt.Title = defaultRequestTitle(prompt.Type)
+	}
+	return prompt
+}
+
+func extractToolCallbackPrompt(message map[string]any) *agentproto.RequestPrompt {
+	return extractToolCallbackPromptFromPayload(extractRequestPayload(message), lookupMap(message, "params"))
+}
+
+func extractToolCallbackPromptFromPayload(request, params map[string]any) *agentproto.RequestPrompt {
+	rawPayload := cloneMap(params)
+	if len(rawPayload) == 0 {
+		rawPayload = cloneMap(request)
+	}
+	prompt := &agentproto.RequestPrompt{
+		Type:    agentproto.RequestTypeToolCallback,
+		RawType: "tool_callback",
+		ItemID:  extractRequestItemID(request, params),
+		Title: firstNonEmptyString(
+			lookupStringFromAny(request["title"]),
+			lookupStringFromAny(params["title"]),
+		),
+		ToolCallback: &agentproto.ToolCallbackPrompt{
+			CallID: firstNonEmptyString(
+				lookupStringFromAny(params["callId"]),
+				lookupStringFromAny(request["callId"]),
+			),
+			ToolName: firstNonEmptyString(
+				lookupStringFromAny(params["tool"]),
+				lookupStringFromAny(request["tool"]),
+			),
+			Arguments: cloneJSONValue(firstNonNil(
+				params["arguments"],
+				request["arguments"],
+			)),
+			RawPayload: cloneMap(rawPayload),
+		},
 	}
 	if prompt.Title == "" {
 		prompt.Title = defaultRequestTitle(prompt.Type)
@@ -451,6 +501,20 @@ func extractRequestMetadata(method string, message map[string]any, prompt *agent
 			metadata["meta"] = cloneMap(prompt.MCPElicitation.Meta)
 		}
 	}
+	if prompt.ToolCallback != nil {
+		if prompt.ToolCallback.CallID != "" {
+			metadata["callId"] = prompt.ToolCallback.CallID
+		}
+		if prompt.ToolCallback.ToolName != "" {
+			metadata["tool"] = prompt.ToolCallback.ToolName
+		}
+		if prompt.ToolCallback.Arguments != nil {
+			metadata["arguments"] = cloneJSONValue(prompt.ToolCallback.Arguments)
+		}
+		if len(prompt.ToolCallback.RawPayload) != 0 {
+			metadata["toolCallbackPayload"] = cloneMap(prompt.ToolCallback.RawPayload)
+		}
+	}
 	params := lookupMap(message, "params")
 	if value := strings.TrimSpace(lookupStringFromAny(params["cwd"])); value != "" {
 		metadata["cwd"] = value
@@ -599,6 +663,8 @@ func defaultRequestTitle(requestType agentproto.RequestType) string {
 		return "需要补充输入"
 	case agentproto.RequestTypePermissionsRequestApproval:
 		return "需要授予权限"
+	case agentproto.RequestTypeToolCallback:
+		return "收到工具回调"
 	default:
 		return "需要处理请求"
 	}
