@@ -59,8 +59,8 @@ func TestFeishuMenuGroupClassificationMatchesTaskModel(t *testing.T) {
 			t.Fatalf("group %q visible command ids mismatch:\n got: %#v\nwant: %#v", tc.groupID, visible, tc.want)
 		}
 	}
-	if totalVisible != 31 {
-		t.Fatalf("unexpected total visible command count: got %d, want 31", totalVisible)
+	if totalVisible != 32 {
+		t.Fatalf("unexpected total visible command count: got %d, want 32", totalVisible)
 	}
 }
 
