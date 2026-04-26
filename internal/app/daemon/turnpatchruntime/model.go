@@ -40,32 +40,32 @@ const (
 )
 
 type FlowRecord struct {
-	FlowID              string
-	RequestID           string
-	InstanceID          string
-	SurfaceSessionID    string
-	OwnerUserID         string
-	ThreadID            string
-	ThreadTitle         string
-	TurnID              string
-	RolloutDigest       string
-	MessageID           string
-	Revision            int
+	FlowID               string
+	RequestID            string
+	InstanceID           string
+	SurfaceSessionID     string
+	OwnerUserID          string
+	ThreadID             string
+	ThreadTitle          string
+	TurnID               string
+	RolloutDigest        string
+	MessageID            string
+	Revision             int
 	CurrentQuestionIndex int
-	Answers             map[string]string
-	Candidates          []Candidate
-	Stage               FlowStage
-	StatusText          string
-	ErrorText           string
-	PatchID             string
-	BackupPath          string
-	ReplacedCount       int
-	RemovedReasoning    int
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	ExpiresAt           time.Time
-	AppliedAt           time.Time
-	RolledBackAt        time.Time
+	Answers              map[string]string
+	Candidates           []Candidate
+	Stage                FlowStage
+	StatusText           string
+	ErrorText            string
+	PatchID              string
+	BackupPath           string
+	ReplacedCount        int
+	RemovedReasoning     int
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	ExpiresAt            time.Time
+	AppliedAt            time.Time
+	RolledBackAt         time.Time
 }
 
 type TransactionKind string
@@ -111,7 +111,7 @@ type Transaction struct {
 }
 
 type State struct {
-	Storage    *codexstate.TurnPatchStorage
+	Storage     *codexstate.TurnPatchStorage
 	ActiveFlows map[string]*FlowRecord
 	ActiveTx    map[string]*Transaction
 	NextFlowSeq int64

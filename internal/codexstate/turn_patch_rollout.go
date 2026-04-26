@@ -36,17 +36,17 @@ type rolloutTurnSnapshot struct {
 }
 
 type rolloutAssistantMessage struct {
-	messageKey         string
-	phase              string
-	text               string
-	eventLineIndex     int
-	responseLineIndex  int
-	taskCompleteIndex  int
-	isFinal            bool
-	duplicateDrift     bool
-	taskCompleteDrift  bool
-	responseOnly       bool
-	eventOnly          bool
+	messageKey        string
+	phase             string
+	text              string
+	eventLineIndex    int
+	responseLineIndex int
+	taskCompleteIndex int
+	isFinal           bool
+	duplicateDrift    bool
+	taskCompleteDrift bool
+	responseOnly      bool
+	eventOnly         bool
 }
 
 func readRolloutSnapshot(path string) (*rolloutSnapshot, error) {

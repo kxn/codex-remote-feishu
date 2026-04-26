@@ -240,12 +240,12 @@ func turnPatchRequestView(flow *turnpatchruntime.FlowRecord) control.FeishuReque
 		})
 	}
 	return control.NormalizeFeishuRequestView(control.FeishuRequestView{
-		RequestID:            strings.TrimSpace(flow.RequestID),
-		RequestType:          "request_user_input",
-		RequestRevision:      flow.Revision,
-		Title:                "修补当前会话",
-		ThreadID:             strings.TrimSpace(flow.ThreadID),
-		ThreadTitle:          strings.TrimSpace(flow.ThreadTitle),
+		RequestID:       strings.TrimSpace(flow.RequestID),
+		RequestType:     "request_user_input",
+		RequestRevision: flow.Revision,
+		Title:           "修补当前会话",
+		ThreadID:        strings.TrimSpace(flow.ThreadID),
+		ThreadTitle:     strings.TrimSpace(flow.ThreadTitle),
 		Sections: []control.FeishuCardTextSection{
 			commandCatalogTextSection(
 				"",
