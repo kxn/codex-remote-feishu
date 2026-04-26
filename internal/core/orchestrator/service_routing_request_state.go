@@ -136,6 +136,9 @@ func (s *Service) turnSurface(instanceID, threadID, turnID string) *state.Surfac
 			return surface
 		}
 	}
+	if surface, _ := s.reviewSessionSurface(instanceID, threadID); surface != nil {
+		return surface
+	}
 	return s.threadClaimSurface(threadID)
 }
 

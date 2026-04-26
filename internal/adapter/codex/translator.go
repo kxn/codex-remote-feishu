@@ -14,6 +14,8 @@ type Translator struct {
 	pendingTurnProblems        map[string]agentproto.ErrorInfo
 	pendingThreadCreate        map[string]pendingThreadCreate
 	pendingThreadResume        map[string]pendingThreadResume
+	pendingReviewStart         map[string]pendingReviewStart
+	pendingReviewThreads       map[string]pendingReviewThread
 	pendingThreadNameSet       map[string]pendingThreadNameSet
 	pendingChildRestartRestore map[string]pendingChildRestartRestore
 	pendingInternalThreadSet   map[string]bool
@@ -43,6 +45,16 @@ type pendingThreadCreate struct {
 type pendingThreadResume struct {
 	ThreadID string
 	Command  agentproto.Command
+}
+
+type pendingReviewStart struct {
+	ThreadID  string
+	Initiator agentproto.Initiator
+}
+
+type pendingReviewThread struct {
+	ParentThreadID string
+	Initiator      agentproto.Initiator
 }
 
 type pendingThreadNameSet struct {
@@ -82,6 +94,8 @@ func NewTranslator(instanceID string) *Translator {
 		pendingTurnProblems:        map[string]agentproto.ErrorInfo{},
 		pendingThreadCreate:        map[string]pendingThreadCreate{},
 		pendingThreadResume:        map[string]pendingThreadResume{},
+		pendingReviewStart:         map[string]pendingReviewStart{},
+		pendingReviewThreads:       map[string]pendingReviewThread{},
 		pendingThreadNameSet:       map[string]pendingThreadNameSet{},
 		pendingChildRestartRestore: map[string]pendingChildRestartRestore{},
 		pendingInternalThreadSet:   map[string]bool{},

@@ -73,6 +73,42 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			t.debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
 			return Result{Suppress: true}, nil
 		}
+		if pending, exists := t.pendingReviewStart[requestID]; exists {
+			delete(t.pendingReviewStart, requestID)
+			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
+				t.debugf("observe server review/start error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
+				return Result{
+					Suppress: true,
+					Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+						Code:             "review_start_failed",
+						Layer:            "server",
+						Stage:            "command_response",
+						Operation:        "review.start",
+						Message:          "Codex 拒绝了这次审阅启动请求。",
+						Details:          errMsg,
+						SurfaceSessionID: pending.Initiator.SurfaceSessionID,
+						ThreadID:         pending.ThreadID,
+						RequestID:        requestID,
+					})},
+				}, nil
+			}
+			turnID := lookupString(message, "result", "turn", "id")
+			reviewThreadID := lookupString(message, "result", "reviewThreadId")
+			if reviewThreadID == "" {
+				reviewThreadID = pending.ThreadID
+			}
+			if turnID != "" {
+				t.turnInitiators[turnID] = pending.Initiator
+			}
+			if strings.TrimSpace(reviewThreadID) != "" {
+				t.pendingReviewThreads[reviewThreadID] = pendingReviewThread{
+					ParentThreadID: pending.ThreadID,
+					Initiator:      pending.Initiator,
+				}
+			}
+			t.debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)
+			return Result{Suppress: true}, nil
+		}
 		if pending, exists := t.pendingThreadCreate[requestID]; exists {
 			delete(t.pendingThreadCreate, requestID)
 			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
@@ -281,6 +317,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				record := t.threadListRefresh.records[threadID]
 				patch := parseThreadRecord(message["result"])
 				record.ThreadID = choose(patch.ThreadID, record.ThreadID)
+				record.ForkedFromID = choose(patch.ForkedFromID, record.ForkedFromID)
+				if patch.Source != nil {
+					record.Source = agentproto.CloneThreadSourceRecord(patch.Source)
+				}
 				record.Name = choose(patch.Name, record.Name)
 				record.Preview = choose(patch.Preview, record.Preview)
 				record.CWD = choose(patch.CWD, record.CWD)

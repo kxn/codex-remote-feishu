@@ -599,6 +599,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
+		if forkedFromID := strings.TrimSpace(metadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
+			thread.ForkedFromID = forkedFromID
+		}
+		if source := threadSourceFromMetadata(event.Metadata); source != nil {
+			thread.Source = source
+		}
 		if event.TrafficClass != "" {
 			thread.TrafficClass = event.TrafficClass
 		}
@@ -683,6 +689,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if thread.ReasoningEffort != "" {
 				current.ExplicitReasoningEffort = thread.ReasoningEffort
 			}
+			if thread.ForkedFromID != "" {
+				current.ForkedFromID = thread.ForkedFromID
+			}
+			if thread.Source != nil {
+				current.Source = agentproto.CloneThreadSourceRecord(thread.Source)
+			}
 			if thread.PlanMode != "" {
 				current.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(thread.PlanMode))
 			}
@@ -733,6 +745,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		if event.ThreadID != "" {
 			s.touchThread(s.ensureThread(inst, event.ThreadID))
 		}
+		s.maybeActivateReviewSession(instanceID, event)
 		if trackActiveTurn {
 			if surface := s.surfaceForInitiator(instanceID, event); surface != nil {
 				surface.ActiveTurnOrigin = event.Initiator.Kind
@@ -771,6 +784,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			thread = s.ensureThread(inst, event.ThreadID)
 			s.touchThread(thread)
 		}
+		s.maybeCompleteReviewSessionTurn(instanceID, event)
 		surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 		if clearTrackedTurn && surface != nil {
 			surface.ActiveTurnOrigin = ""
@@ -827,12 +841,18 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		events = append(events, compactEvents...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventItemStarted:
+		if s.maybeApplyReviewLifecycleItem(instanceID, event) {
+			return s.filterEventsForSurfaceVisibility(preface)
+		}
 		s.trackItemStart(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemStarted(instanceID, event)...))
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemDelta(instanceID, event)...))
 	case agentproto.EventItemCompleted:
+		if s.maybeApplyReviewLifecycleItem(instanceID, event) {
+			return s.filterEventsForSurfaceVisibility(preface)
+		}
 		events := append(preface, s.handleProcessProgressItemCompleted(instanceID, event)...)
 		events = append(events, s.completeItem(instanceID, event)...)
 		return s.filterEventsForSurfaceVisibility(events)

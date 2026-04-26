@@ -169,6 +169,10 @@ func normalizeItemKind(raw string) string {
 		return "file_change"
 	case "contextCompaction", "context_compaction":
 		return "context_compaction"
+	case "enteredReviewMode", "entered_review_mode":
+		return "entered_review_mode"
+	case "exitedReviewMode", "exited_review_mode":
+		return "exited_review_mode"
 	case "imageGeneration", "image_generation", "imageGenerationCall", "image_generation_call":
 		return "image_generation"
 	case "mcpToolCall", "mcp_tool_call":
@@ -191,6 +195,13 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		metadata["text"] = text
 	}
 	switch itemKind {
+	case "entered_review_mode", "exited_review_mode":
+		if review := firstNonEmptyString(
+			lookupStringFromAny(item["review"]),
+			lookupString(item, "result", "review"),
+		); review != "" {
+			metadata["review"] = review
+		}
 	case "reasoning":
 		if summary := extractStringList(item["summary"]); len(summary) > 0 {
 			metadata["summary"] = summary

@@ -177,6 +177,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
+	reviewSession := s.activeReviewSession(surface)
 	detour, detourProblem := s.resolveDetourDirective(surface, inst, text)
 	if detourProblem != "" {
 		return notice(surface, "detour_invalid", detourProblem)
@@ -191,14 +192,16 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		if autoSteer := s.maybeAutoSteerReply(surface, sanitizedAction); autoSteer != nil {
 			return append(s.maybeSealPlanProposalForInput(surface), autoSteer...)
 		}
-		if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
-			return blocked
-		}
-		if blocked := s.unboundInputBlocked(surface); blocked != nil {
-			return blocked
-		}
-		if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
-			return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；请等待它落地后再继续发送。")
+		if reviewSession == nil {
+			if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
+				return blocked
+			}
+			if blocked := s.unboundInputBlocked(surface); blocked != nil {
+				return blocked
+			}
+			if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
+				return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；请等待它落地后再继续发送。")
+			}
 		}
 	}
 
@@ -222,7 +225,16 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		}
 	}
 	inputs = append(inputs, messageInputs...)
-	if !detour.Triggered && !createThread && threadID == "" {
+	if !detour.Triggered && reviewSession != nil {
+		threadID = strings.TrimSpace(reviewSession.ReviewThreadID)
+		cwd = reviewSessionCWD(inst, reviewSession)
+		createThread = false
+		if threadID == "" || strings.TrimSpace(cwd) == "" {
+			s.restoreStagedInputs(surface, stagedMessageIDs)
+			return notice(surface, "review_thread_not_ready", "当前审阅会话不可继续使用，请重新进入审阅。")
+		}
+	}
+	if !detour.Triggered && reviewSession == nil && !createThread && threadID == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
 		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；normal 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
@@ -251,6 +263,23 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			detour.ExecutionMode,
 			detour.SourceThreadID,
 			detour.SurfaceBindingPolicy,
+			false,
+		)...)
+	}
+	if reviewSession != nil {
+		return append(events, s.enqueueQueueItemWithTarget(
+			surface,
+			action.MessageID,
+			text,
+			stagedMessageIDs,
+			inputs,
+			threadID,
+			cwd,
+			routeMode,
+			surface.PromptOverride,
+			agentproto.PromptExecutionModeResumeExisting,
+			reviewSession.ParentThreadID,
+			agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
 			false,
 		)...)
 	}

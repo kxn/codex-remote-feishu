@@ -178,6 +178,9 @@ func (s *Service) shouldTrackInstanceActiveTurn(instanceID string, event agentpr
 	if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 		return true
 	}
+	if inst := s.root.Instances[instanceID]; inst != nil && threadIsReview(inst.Threads[event.ThreadID]) {
+		return true
+	}
 	binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID)
 	if binding == nil {
 		return false

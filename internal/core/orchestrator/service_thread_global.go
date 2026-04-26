@@ -290,6 +290,12 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if strings.TrimSpace(merged.CWD) == "" {
 		merged.CWD = strings.TrimSpace(secondary.CWD)
 	}
+	if strings.TrimSpace(merged.ForkedFromID) == "" {
+		merged.ForkedFromID = strings.TrimSpace(secondary.ForkedFromID)
+	}
+	if merged.Source == nil && secondary.Source != nil {
+		merged.Source = agentproto.CloneThreadSourceRecord(secondary.Source)
+	}
 	if strings.TrimSpace(merged.State) == "" && merged.RuntimeStatus == nil {
 		merged.State = threadLegacyState(secondary)
 	}
@@ -336,6 +342,7 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	threadCopy.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(thread.RuntimeStatus)
 	threadCopy.TokenUsage = agentproto.CloneThreadTokenUsage(thread.TokenUsage)
 	threadCopy.LastModelReroute = agentproto.CloneTurnModelReroute(thread.LastModelReroute)
+	threadCopy.Source = agentproto.CloneThreadSourceRecord(thread.Source)
 	if thread.UndeliveredReplay != nil {
 		replayCopy := *thread.UndeliveredReplay
 		threadCopy.UndeliveredReplay = &replayCopy

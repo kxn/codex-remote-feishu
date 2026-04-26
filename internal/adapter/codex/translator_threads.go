@@ -72,6 +72,11 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 			lookupStringFromAny(object["id"]),
 			lookupStringFromAny(object["threadId"]),
 		),
+		ForkedFromID: choose(
+			lookupStringFromAny(object["forkedFromId"]),
+			lookupStringFromAny(object["forked_from_id"]),
+		),
+		Source: parseThreadSource(firstNonNil(object["source"], object["sessionSource"])),
 		Name: choose(
 			lookupStringFromAny(object["name"]),
 			lookupStringFromAny(object["title"]),

@@ -2,8 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-04-26`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` 分别承接切换/目录/Git/Worktree 四张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `⁉️` / `🤷` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；细节见正文。
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` 分别承接切换/目录/Git/Worktree 四张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `⁉️` / `🤷` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；本轮还新增 `current thread patch` 事务：`/patch` 只对 normal-mode 当前 attached thread 的最新 completed assistant turn 打开前台修补卡，确认后会冻结同实例输入、重写 rollout、重启 child，并在成功后保留最近一次回滚入口；细节见正文。
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` 分别承接切换/目录/Git/Worktree 四张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；request gate 现在还补上了 `item/tool/call` 的最小 fail-closed 分支：relay / Feishu / headless 会展示只读 `tool_callback` 提示，并立即自动回写 unsupported 结构化结果，避免 tool 在中途 silent hang；同时 detached-branch 产品入口已经正式接上：普通文本里的 `⁉️` / `🤷` 会分别触发 `fork_ephemeral` / `start_ephemeral`，统一复用 `keep_surface_selection`，且不会再让 detour turn 污染当前 surface 默认 thread；review mode 的 detached review session 也已接入同一条远端状态机：review thread 会带显式 `source=review` / parent-thread 元数据，surface 会在不改绑当前选中 thread 的前提下记录 `ReviewSession` runtime，并把后续审阅文本继续路由到 review thread；本轮还新增 `current thread patch` 事务：`/patch` 只对 normal-mode 当前 attached thread 的最新 completed assistant turn 打开前台修补卡，确认后会冻结同实例输入、重写 rollout、重启 child，并在成功后保留最近一次回滚入口；细节见正文。
 
 ## 1. 文档定位
 
@@ -264,6 +263,33 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `E4 PausedForLocal` | `DispatchMode=paused_for_local` | 当前 surface 的远端派发被暂停；现有来源包括本地 VS Code 活动，以及 daemon 显式发起的 standalone Codex 升级或 current-thread patch 事务暂停 |
 | `E5 HandoffWait` | `DispatchMode=handoff_wait` | 本地刚结束，等待短窗口后恢复远端队列 |
 | `E6 Abandoning` | `Abandoning=true` | surface 已放弃接管，等待已有 turn 收尾后最终 detach |
+
+### 3.4 审阅态 overlay
+
+review mode 第一版当前不是新的 route state，而是挂在 surface 上的一层 detached review session overlay。
+
+| 代号 | 条件 | 当前实现语义 |
+| --- | --- | --- |
+| `V0 None` | `ReviewSession == nil` 或 `Phase != active` | 当前 surface 不在 review session 里 |
+| `V1 Active` | `ReviewSession.Phase=active`，且 `ParentThreadID`、`ReviewThreadID`、`AttachedInstanceID` 都非空 | 当前 surface 正处于 detached review session；普通文本默认续发到 review thread，但 surface 仍保持 parent thread 选择 |
+
+补充说明：
+
+1. `ReviewSession` 当前挂在 `SurfaceConsoleRecord`，字段包括：
+   1. `ParentThreadID`
+   2. `ReviewThreadID`
+   3. `ActiveTurnID`
+   4. `ThreadCWD`
+   5. `SourceMessageID`
+   6. `TargetLabel`
+   7. `LastReviewText`
+2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。
+3. 当前激活条件不是“点了某个前台按钮”，而是更底层的 runtime 事实：
+   1. 同一 attached instance 上已知某个 review thread
+   2. 该 review thread 的 `turn.started(remote_surface)` 命中了当前 surface
+   3. surface 当前没有把 `SelectedThreadID` 切走到别的普通 thread
+4. `V1 Active` 不会把 surface route 从 `pinned/follow/unbound/new_thread_ready` 改成新的 route 值；review session 只是额外改写“普通文本该发到哪个 execution thread”。
+5. 当前 review session 没有独立的 attach/list 暴露语义，也不会自动把 review thread 变成 surface 默认选中 thread；普通 attach/list 过滤仍属于后续收尾单处理。
 
 补充说明：
 
@@ -1099,6 +1125,18 @@ E3 Running
    3. detour 触发 emoji 只作为入口信号：服务端会先把它从实际 prompt 文本里剥掉，再把消息派发给上游
    4. detour 文本当前会显式绕过 reply auto-steer、implicit `/new` 准备态推进，以及 normal/vscode 的 unbound 输入门禁；运行时只把“当前选中 thread 的 cwd / prepared cwd / workspace root”当作临时会话的 base cwd，不会因此改写 surface 自己的 `SelectedThreadID` 或 `RouteMode`
    5. detour turn 收尾后，surface 仍保持原先的 route / selected thread；当前只会在同一 reply lane（或原本的顶层 append lane）追加一条 `detour_returned` notice，提示“临时会话已结束，已切回原会话。”
+23. detached review session 当前复用同一套“execution thread 与 surface selected thread 分离”的承接方式，但语义比 detour 更强：
+   1. review thread 必须先带 `source=review`，surface 才会在 `turn.started(remote_surface)` 时把它识别成 review session
+   2. 进入 review session 后，instance 级 `ActiveTurnID/ActiveThreadID` 会跟随 review thread，这保证 `/stop`、running 判定和 request gate 仍能命中真正的 review turn
+   3. surface 自己的 `SelectedThreadID` 仍保持 parent thread；因此 review turn 不会污染后续普通 attach/resume 默认目标
+   4. 当 review session 处于 `ActiveTurnID != ""` 时，它也属于 `surfaceHasLiveRemoteWork`；普通文本会先排队，直到当前 review turn 收尾
+   5. 当前 review session 后续普通文本会冻结成：
+      1. `PromptExecutionMode=resume_existing`
+      2. `Target.ThreadID=ReviewThreadID`
+      3. `Target.SourceThreadID=ParentThreadID`
+      4. `Target.SurfaceBindingPolicy=keep_surface_selection`
+   6. 若某个 request / item / final turn 输出来自 review thread，但当前没有普通 `pendingRemote/activeRemote` 绑定，surface 归属与 reply anchor 会回退到 `ReviewSession` runtime，而不是丢失到 thread claim 猜测
+   7. `entered_review_mode` / `exited_review_mode` 生命周期 item 当前不会直接投影成前台卡片；它们只负责把 `TargetLabel` / `LastReviewText` 写回 `ReviewSession` runtime，供后续前台子单消费
 
 ### 5.3 本地 VS Code 仲裁
 

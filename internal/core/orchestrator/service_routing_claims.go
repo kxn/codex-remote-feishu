@@ -505,6 +505,9 @@ func (s *Service) surfaceHasLiveRemoteWork(surface *state.SurfaceConsoleRecord) 
 			}
 		}
 	}
+	if review := s.activeReviewSession(surface); review != nil && strings.TrimSpace(review.ActiveTurnID) != "" {
+		return true
+	}
 	return len(surface.QueuedQueueItemIDs) != 0
 }
 

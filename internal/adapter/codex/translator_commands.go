@@ -12,6 +12,8 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 	switch command.Kind {
 	case agentproto.CommandPromptSend:
 		return t.translatePromptSend(command)
+	case agentproto.CommandReviewStart:
+		return t.translateReviewStart(command)
 	case agentproto.CommandThreadCompactStart:
 		threadID := strings.TrimSpace(command.Target.ThreadID)
 		if threadID == "" {

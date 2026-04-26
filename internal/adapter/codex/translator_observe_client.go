@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
@@ -21,6 +22,21 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			return t.observeClientThreadList(fmt.Sprint(requestID), params), nil
 		}
 		return Result{}, nil
+	case "review/start":
+		threadID, _ := params["threadId"].(string)
+		if requestID, ok := message["id"]; ok {
+			t.pendingReviewStart[fmt.Sprint(requestID)] = pendingReviewStart{
+				ThreadID:  strings.TrimSpace(threadID),
+				Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+			}
+		}
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventLocalInteractionObserved,
+			ThreadID:     strings.TrimSpace(threadID),
+			Action:       "review_start",
+			TrafficClass: agentproto.TrafficClassPrimary,
+			Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+		}}}, nil
 	case "thread/resume":
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)

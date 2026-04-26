@@ -4,6 +4,7 @@ import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 
 func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	threadRecord := parseThreadRecord(lookupAny(message, "params", "thread"))
+	t.applyPendingReviewThread(&threadRecord)
 	threadID := threadRecord.ThreadID
 	if threadID == "" {
 		threadID = lookupString(message, "params", "threadId")
@@ -33,21 +34,13 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		if cwd != "" {
 			t.knownThreadCWD[threadID] = cwd
 		}
-		return Result{Events: []agentproto.Event{{
-			Kind:          agentproto.EventThreadDiscovered,
-			ThreadID:      threadID,
-			CWD:           cwd,
-			Name:          name,
-			PlanMode:      threadRecord.PlanMode,
-			Status:        status,
-			Loaded:        loaded,
-			FocusSource:   "remote_created_thread",
-			TrafficClass:  agentproto.TrafficClassInternalHelper,
-			Initiator:     agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
-			RuntimeStatus: runtimeStatus,
-			Metadata:      map[string]any{"internalHelper": true},
-		}}}
+		event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
+		event.TrafficClass = agentproto.TrafficClassInternalHelper
+		event.Initiator = agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+		event.Metadata = mergeEventMetadata(event.Metadata, map[string]any{"internalHelper": true})
+		return Result{Events: []agentproto.Event{event}}
 	}
+	event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
 	t.currentThreadID = threadID
 	if t.pendingLocalNewThreadTurn && threadID != "" {
 		t.pendingLocalTurnByThread[threadID] = true
@@ -56,17 +49,51 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	if cwd != "" {
 		t.knownThreadCWD[threadID] = cwd
 	}
-	return Result{Events: []agentproto.Event{{
-		Kind:          agentproto.EventThreadDiscovered,
-		ThreadID:      threadID,
-		CWD:           cwd,
-		Name:          name,
-		PlanMode:      threadRecord.PlanMode,
-		Status:        status,
-		Loaded:        loaded,
-		FocusSource:   "remote_created_thread",
-		RuntimeStatus: runtimeStatus,
-	}}}
+	return Result{Events: []agentproto.Event{event}}
+}
+
+func buildThreadDiscoveredEvent(threadRecord agentproto.ThreadSnapshotRecord, threadID, cwd, name, status string, loaded bool, runtimeStatus *agentproto.ThreadRuntimeStatus) agentproto.Event {
+	event := agentproto.Event{
+		Kind:            agentproto.EventThreadDiscovered,
+		ThreadID:        threadID,
+		CWD:             cwd,
+		Name:            name,
+		Preview:         threadRecord.Preview,
+		Model:           threadRecord.Model,
+		ReasoningEffort: threadRecord.ReasoningEffort,
+		PlanMode:        threadRecord.PlanMode,
+		Status:          status,
+		Loaded:          loaded,
+		FocusSource:     "remote_created_thread",
+		RuntimeStatus:   runtimeStatus,
+	}
+	if threadRecord.ForkedFromID != "" || threadRecord.Source != nil {
+		event.Metadata = map[string]any{}
+		if threadRecord.ForkedFromID != "" {
+			event.Metadata["forkedFromId"] = threadRecord.ForkedFromID
+		}
+		if threadRecord.Source != nil {
+			event.Metadata["threadSource"] = agentproto.CloneThreadSourceRecord(threadRecord.Source)
+		}
+	}
+	return event
+}
+
+func mergeEventMetadata(left, right map[string]any) map[string]any {
+	switch {
+	case len(left) == 0 && len(right) == 0:
+		return nil
+	case len(left) == 0:
+		return cloneMap(right)
+	case len(right) == 0:
+		return left
+	default:
+		merged := cloneMap(left)
+		for key, value := range right {
+			merged[key] = value
+		}
+		return merged
+	}
 }
 
 func (t *Translator) observeThreadStatusChanged(message map[string]any) Result {

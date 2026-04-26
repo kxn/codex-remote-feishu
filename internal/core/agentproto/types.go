@@ -115,6 +115,8 @@ type Event struct {
 
 type ThreadSnapshotRecord struct {
 	ThreadID        string               `json:"threadId"`
+	ForkedFromID    string               `json:"forkedFromId,omitempty"`
+	Source          *ThreadSourceRecord  `json:"source,omitempty"`
 	Name            string               `json:"name,omitempty"`
 	Preview         string               `json:"preview,omitempty"`
 	CWD             string               `json:"cwd,omitempty"`
@@ -157,6 +159,7 @@ type CommandKind string
 
 const (
 	CommandPromptSend          CommandKind = "prompt.send"
+	CommandReviewStart         CommandKind = "review.start"
 	CommandThreadCompactStart  CommandKind = "thread.compact.start"
 	CommandTurnSteer           CommandKind = "turn.steer"
 	CommandTurnInterrupt       CommandKind = "turn.interrupt"
@@ -192,6 +195,7 @@ type Command struct {
 	Prompt    Prompt          `json:"prompt,omitempty"`
 	Overrides PromptOverrides `json:"overrides,omitempty"`
 	Request   Request         `json:"request,omitempty"`
+	Review    ReviewRequest   `json:"review,omitempty"`
 }
 
 type Origin struct {

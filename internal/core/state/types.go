@@ -178,6 +178,8 @@ type InstanceRecord struct {
 
 type ThreadRecord struct {
 	ThreadID                string
+	ForkedFromID            string
+	Source                  *agentproto.ThreadSourceRecord
 	Name                    string
 	Preview                 string
 	FirstUserMessage        string
@@ -256,6 +258,27 @@ type SurfaceConsoleRecord struct {
 	LastSelection        *SelectionAnnouncementRecord
 	AutoWhip             AutoWhipRuntimeRecord
 	AutoContinue         AutoContinueRuntimeRecord
+	ReviewSession        *ReviewSessionRecord
+}
+
+type ReviewSessionPhase string
+
+const (
+	ReviewSessionPhasePending ReviewSessionPhase = "pending"
+	ReviewSessionPhaseActive  ReviewSessionPhase = "active"
+)
+
+type ReviewSessionRecord struct {
+	Phase           ReviewSessionPhase
+	ParentThreadID  string
+	ReviewThreadID  string
+	ActiveTurnID    string
+	ThreadCWD       string
+	SourceMessageID string
+	TargetLabel     string
+	LastReviewText  string
+	StartedAt       time.Time
+	LastUpdatedAt   time.Time
 }
 
 type ExecCommandProgressEntryRecord struct {

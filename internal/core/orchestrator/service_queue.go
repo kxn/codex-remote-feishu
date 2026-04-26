@@ -52,6 +52,9 @@ func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (strin
 	}
 	binding := s.lookupRemoteTurn(instanceID, threadID, turnID)
 	if binding == nil {
+		if _, session := s.reviewSessionSurface(instanceID, threadID); session != nil {
+			return strings.TrimSpace(session.SourceMessageID), ""
+		}
 		return "", ""
 	}
 	return strings.TrimSpace(firstNonEmpty(binding.ReplyToMessageID, binding.SourceMessageID)),
