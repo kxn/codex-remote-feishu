@@ -3,7 +3,6 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -201,12 +200,13 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		} else if ok {
 			threadListAliasResponses = resolution.AliasResponses
 		}
-		if requestID == t.pendingThreadListRequestID {
-			delete(t.threadRefreshRecords, "")
-			t.pendingThreadListRequestID = ""
-			borrowed := t.pendingThreadListBorrowed
-			t.pendingThreadListBorrowed = false
-			t.threadRefreshOrder = nil
+		if t.threadListRefreshOwnsResponse(requestID) {
+			refresh := t.threadListRefresh
+			delete(refresh.records, "")
+			borrowed := refresh.ownerVisible
+			refresh.ownerRequestID = ""
+			refresh.ownerVisible = false
+			refresh.order = nil
 			threads := parseThreadList(message["result"])
 			t.debugf(
 				"observe server thread/list refresh: request=%s borrowed=%t threads=%d currentThread=%s",
@@ -216,7 +216,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				t.currentThreadID,
 			)
 			if len(threads) == 0 {
-				t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
+				refresh.records = map[string]agentproto.ThreadSnapshotRecord{}
 				return Result{
 					Suppress:         !borrowed,
 					OutboundToParent: threadListAliasResponses,
@@ -229,13 +229,13 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			var outbound [][]byte
 			for index, thread := range threads {
 				thread.ListOrder = index + 1
-				t.threadRefreshRecords[thread.ThreadID] = thread
-				t.threadRefreshOrder = append(t.threadRefreshOrder, thread.ThreadID)
+				refresh.records[thread.ThreadID] = thread
+				refresh.order = append(refresh.order, thread.ThreadID)
 				if !threadRefreshNeedsRead(thread) {
 					continue
 				}
 				readID := t.nextRequest("thread-read")
-				t.pendingThreadReads[readID] = thread.ThreadID
+				refresh.pendingReads[readID] = thread.ThreadID
 				payload := map[string]any{
 					"id":     readID,
 					"method": "thread/read",
@@ -256,7 +256,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 					borrowed,
 					len(threads),
 				)
-				result := t.finishThreadRefresh(!borrowed)
+				result := t.finishThreadListRefresh(!borrowed)
 				result.OutboundToParent = threadListAliasResponses
 				return result, nil
 			}
@@ -276,35 +276,37 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if len(threadListAliasResponses) != 0 {
 			return Result{OutboundToParent: threadListAliasResponses}, nil
 		}
-		if threadID, exists := t.pendingThreadReads[requestID]; exists {
-			record := t.threadRefreshRecords[threadID]
-			patch := parseThreadRecord(message["result"])
-			record.ThreadID = choose(patch.ThreadID, record.ThreadID)
-			record.Name = choose(patch.Name, record.Name)
-			record.Preview = choose(patch.Preview, record.Preview)
-			record.CWD = choose(patch.CWD, record.CWD)
-			record.PlanMode = choose(patch.PlanMode, record.PlanMode)
-			record.Loaded = record.Loaded || patch.Loaded
-			record.Archived = record.Archived || patch.Archived
-			record.State = choose(patch.State, record.State)
-			if patch.RuntimeStatus != nil {
-				record.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(patch.RuntimeStatus)
-				record.Loaded = patch.RuntimeStatus.IsLoaded()
-				record.State = choose(patch.RuntimeStatus.LegacyState(), record.State)
+		if t.threadListRefresh != nil {
+			if threadID, exists := t.threadListRefresh.pendingReads[requestID]; exists {
+				record := t.threadListRefresh.records[threadID]
+				patch := parseThreadRecord(message["result"])
+				record.ThreadID = choose(patch.ThreadID, record.ThreadID)
+				record.Name = choose(patch.Name, record.Name)
+				record.Preview = choose(patch.Preview, record.Preview)
+				record.CWD = choose(patch.CWD, record.CWD)
+				record.PlanMode = choose(patch.PlanMode, record.PlanMode)
+				record.Loaded = record.Loaded || patch.Loaded
+				record.Archived = record.Archived || patch.Archived
+				record.State = choose(patch.State, record.State)
+				if patch.RuntimeStatus != nil {
+					record.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(patch.RuntimeStatus)
+					record.Loaded = patch.RuntimeStatus.IsLoaded()
+					record.State = choose(patch.RuntimeStatus.LegacyState(), record.State)
+				}
+				t.threadListRefresh.records[threadID] = record
+				delete(t.threadListRefresh.pendingReads, requestID)
+				if len(t.threadListRefresh.pendingReads) == 0 {
+					result := t.finishThreadListRefresh(true)
+					t.debugf(
+						"observe server thread refresh completed: request=%s records=%d currentThread=%s",
+						requestID,
+						len(result.Events[0].Threads),
+						t.currentThreadID,
+					)
+					return result, nil
+				}
+				return Result{Suppress: true}, nil
 			}
-			t.threadRefreshRecords[threadID] = record
-			delete(t.pendingThreadReads, requestID)
-			if len(t.pendingThreadReads) == 0 {
-				result := t.finishThreadRefresh(true)
-				t.debugf(
-					"observe server thread refresh completed: request=%s records=%d currentThread=%s",
-					requestID,
-					len(result.Events[0].Threads),
-					t.currentThreadID,
-				)
-				return result, nil
-			}
-			return Result{Suppress: true}, nil
 		}
 		if pending, exists := t.pendingThreadHistoryReads[requestID]; exists {
 			delete(t.pendingThreadHistoryReads, requestID)
@@ -335,14 +337,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if problem.TurnID != "" {
 			t.pendingTurnProblems[problem.TurnID] = *problem
-			if t.pendingThreadListRequestID != "" || len(t.pendingThreadReads) > 0 {
+			if t.threadListRefreshActive() {
 				t.debugf(
 					"observe server error during thread refresh: thread=%s turn=%s code=%s pendingThreadList=%t pendingThreadReads=%d currentThread=%s",
 					problem.ThreadID,
 					problem.TurnID,
 					problem.Code,
-					t.pendingThreadListRequestID != "",
-					len(t.pendingThreadReads),
+					t.threadListRefreshWaitingForList(),
+					t.threadListRefreshPendingReadCount(),
 					t.currentThreadID,
 				)
 			}
@@ -772,42 +774,6 @@ func threadRefreshNeedsRead(record agentproto.ThreadSnapshotRecord) bool {
 		return true
 	}
 	return false
-}
-
-func (t *Translator) finishThreadRefresh(suppress bool) Result {
-	records := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
-	seen := map[string]bool{}
-	for _, originalThreadID := range t.threadRefreshOrder {
-		current, ok := t.threadRefreshRecords[originalThreadID]
-		if !ok || current.ThreadID == "" || seen[current.ThreadID] {
-			continue
-		}
-		records = append(records, current)
-		seen[current.ThreadID] = true
-	}
-	extras := make([]agentproto.ThreadSnapshotRecord, 0, len(t.threadRefreshRecords))
-	for _, current := range t.threadRefreshRecords {
-		if current.ThreadID == "" || seen[current.ThreadID] {
-			continue
-		}
-		extras = append(extras, current)
-	}
-	sort.Slice(extras, func(i, j int) bool {
-		if extras[i].ListOrder != extras[j].ListOrder {
-			return extras[i].ListOrder < extras[j].ListOrder
-		}
-		return strings.Compare(extras[i].ThreadID, extras[j].ThreadID) < 0
-	})
-	records = append(records, extras...)
-	t.threadRefreshRecords = map[string]agentproto.ThreadSnapshotRecord{}
-	t.threadRefreshOrder = nil
-	return Result{
-		Suppress: suppress,
-		Events: []agentproto.Event{{
-			Kind:    agentproto.EventThreadsSnapshot,
-			Threads: records,
-		}},
-	}
 }
 
 func parseCodexProblemEvent(message map[string]any) *agentproto.ErrorInfo {

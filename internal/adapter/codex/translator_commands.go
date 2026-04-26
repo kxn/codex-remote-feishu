@@ -92,26 +92,24 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 	case agentproto.CommandThreadsRefresh:
 		query := defaultThreadListQuery()
 		if owner, ok := t.threadListBroker.LookupOwner(query); ok {
-			t.pendingThreadListRequestID = owner.RequestID
-			t.pendingThreadListBorrowed = owner.Visible
+			t.beginThreadListRefresh(owner.RequestID, owner.Visible)
 			t.debugf(
 				"translate threads refresh: join inflight request=%s visible=%t currentThread=%s inflightReads=%d",
 				owner.RequestID,
 				owner.Visible,
 				t.currentThreadID,
-				len(t.pendingThreadReads),
+				t.threadListRefreshPendingReadCount(),
 			)
 			return nil, nil
 		}
 		requestID := t.nextRequest("threads-refresh")
-		t.pendingThreadListRequestID = requestID
-		t.pendingThreadListBorrowed = false
+		t.beginThreadListRefresh(requestID, false)
 		t.threadListBroker.RegisterNativeOwner(requestID, query)
 		t.debugf(
 			"translate threads refresh: request=%s currentThread=%s inflightReads=%d",
 			requestID,
 			t.currentThreadID,
-			len(t.pendingThreadReads),
+			t.threadListRefreshPendingReadCount(),
 		)
 		payload := map[string]any{
 			"id":     requestID,
