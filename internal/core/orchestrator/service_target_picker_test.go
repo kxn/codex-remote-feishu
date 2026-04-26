@@ -717,6 +717,63 @@ func TestTargetPickerListPrefersRealWorkspaceWhileExposeAddModeSwitch(t *testing
 	}
 }
 
+func TestTargetPickerListShowsRepoFamilyBranchMeta(t *testing.T) {
+	now := time.Date(2026, 4, 26, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	repoRoot := createTargetPickerGitRepo(t)
+	worktreeRoot := filepath.Join(t.TempDir(), "feature-worktree")
+	runTargetPickerGitCommand(t, repoRoot, "worktree", "add", "-b", "feature/auth", worktreeRoot, "HEAD")
+
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-main",
+		DisplayName:   "main",
+		WorkspaceRoot: repoRoot,
+		WorkspaceKey:  repoRoot,
+		ShortName:     filepath.Base(repoRoot),
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-main": {ThreadID: "thread-main", Name: "主线修复", CWD: repoRoot, Loaded: true, LastUsedAt: now.Add(-2 * time.Minute)},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-feature",
+		DisplayName:   "feature",
+		WorkspaceRoot: worktreeRoot,
+		WorkspaceKey:  worktreeRoot,
+		ShortName:     filepath.Base(worktreeRoot),
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-feature": {ThreadID: "thread-feature", Name: "特性开发", CWD: worktreeRoot, Loaded: true, LastUsedAt: now.Add(-1 * time.Minute)},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	mainOption, ok := targetPickerWorkspaceOption(view, repoRoot)
+	if !ok {
+		t.Fatalf("expected main repo workspace option, got %#v", view.WorkspaceOptions)
+	}
+	if mainOption.MetaText != "main" {
+		t.Fatalf("main repo meta = %q, want %q", mainOption.MetaText, "main")
+	}
+	featureOption, ok := targetPickerWorkspaceOption(view, worktreeRoot)
+	if !ok {
+		t.Fatalf("expected feature worktree option, got %#v", view.WorkspaceOptions)
+	}
+	if featureOption.MetaText != "feature/auth" {
+		t.Fatalf("feature worktree meta = %q, want %q", featureOption.MetaText, "feature/auth")
+	}
+
+	locked := singleTargetPickerEvent(t, svc.openLockedWorkspaceTargetPicker(svc.root.Surfaces["surface-1"], worktreeRoot, true))
+	if locked.SelectedWorkspaceMeta != "feature/auth" {
+		t.Fatalf("locked workspace meta = %q, want %q", locked.SelectedWorkspaceMeta, "feature/auth")
+	}
+}
+
 func TestTargetPickerListFallsBackToAddWorkspaceModeWhenNoWorkspaceExists(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

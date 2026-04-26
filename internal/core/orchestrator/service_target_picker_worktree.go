@@ -26,12 +26,7 @@ func (s *Service) filterGitWorkspaceSelectionEntries(entries []workspaceSelectio
 	}
 	filtered := make([]workspaceSelectionEntry, 0, len(entries))
 	for _, entry := range entries {
-		workspaceKey := normalizeWorkspaceClaimKey(entry.workspaceKey)
-		if workspaceKey == "" {
-			continue
-		}
-		info, err := gitmeta.InspectWorkspace(workspaceKey, gitmeta.InspectOptions{})
-		if err != nil || !info.InRepo() {
+		if !entry.gitInfo.InRepo() {
 			continue
 		}
 		filtered = append(filtered, entry)

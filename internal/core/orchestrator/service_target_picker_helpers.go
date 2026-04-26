@@ -21,10 +21,11 @@ func targetPickerTitle(source control.TargetPickerRequestSource) string {
 	}
 }
 
-func targetPickerWorkspaceMetaText(entry workspaceSelectionEntry, disambiguateWithPath bool) string {
-	_ = entry
-	_ = disambiguateWithPath
-	return ""
+func targetPickerWorkspaceMetaText(entry workspaceSelectionEntry, metaByKey map[string]string) string {
+	if len(metaByKey) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(metaByKey[normalizeWorkspaceClaimKey(entry.workspaceKey)])
 }
 
 func targetPickerLockedWorkspaceSummary(entries []workspaceSelectionEntry, workspaceKey string) (string, string) {
@@ -32,12 +33,13 @@ func targetPickerLockedWorkspaceSummary(entries []workspaceSelectionEntry, works
 	if workspaceKey == "" {
 		return "", ""
 	}
+	metaByKey := targetPickerWorkspaceMetaByKey(entries)
 	for _, entry := range entries {
 		if normalizeWorkspaceClaimKey(entry.workspaceKey) != workspaceKey {
 			continue
 		}
 		label := strings.TrimSpace(firstNonEmpty(entry.label, workspaceSelectionLabel(workspaceKey)))
-		return label, targetPickerWorkspaceMetaText(entry, false)
+		return label, targetPickerWorkspaceMetaText(entry, metaByKey)
 	}
 	return workspaceSelectionLabel(workspaceKey), ""
 }
@@ -367,21 +369,14 @@ func targetPickerWorkspaceOptions(entries []workspaceSelectionEntry) []control.F
 	if len(entries) == 0 {
 		return nil
 	}
-	labelCounts := map[string]int{}
-	for _, entry := range entries {
-		label := strings.TrimSpace(entry.label)
-		if label == "" {
-			continue
-		}
-		labelCounts[label]++
-	}
+	metaByKey := targetPickerWorkspaceMetaByKey(entries)
 	options := make([]control.FeishuTargetPickerWorkspaceOption, 0, len(entries))
 	for _, entry := range entries {
 		label := strings.TrimSpace(entry.label)
 		options = append(options, control.FeishuTargetPickerWorkspaceOption{
 			Value:           entry.workspaceKey,
 			Label:           label,
-			MetaText:        targetPickerWorkspaceMetaText(entry, labelCounts[label] > 1),
+			MetaText:        targetPickerWorkspaceMetaText(entry, metaByKey),
 			RecoverableOnly: entry.recoverableOnly,
 		})
 	}

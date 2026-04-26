@@ -37,6 +37,24 @@ func (info WorkspaceInfo) InRepo() bool {
 	return strings.TrimSpace(info.RepoRoot) != "" && strings.TrimSpace(info.GitDir) != ""
 }
 
+// RepoFamilyKey returns a stable family key shared by a regular repo and its
+// linked worktrees. Non-git workspaces return an empty key.
+func (info WorkspaceInfo) RepoFamilyKey() string {
+	gitDir := strings.TrimSpace(info.GitDir)
+	if gitDir == "" {
+		return ""
+	}
+	gitDir = filepath.Clean(gitDir)
+	if !info.LinkedWorktree {
+		return gitDir
+	}
+	worktreesDir := filepath.Dir(gitDir)
+	if strings.EqualFold(filepath.Base(worktreesDir), "worktrees") {
+		return filepath.Clean(filepath.Dir(worktreesDir))
+	}
+	return gitDir
+}
+
 type InspectOptions struct {
 	IncludeStatus bool
 	Timeout       time.Duration

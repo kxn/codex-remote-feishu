@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -316,6 +317,7 @@ type workspaceSelectionEntry struct {
 	workspaceKey      string
 	latestUsedAt      time.Time
 	label             string
+	gitInfo           gitmeta.WorkspaceInfo
 	ageText           string
 	hasVSCodeActivity bool
 	busy              bool

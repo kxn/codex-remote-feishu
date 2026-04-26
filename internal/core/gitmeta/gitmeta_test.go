@@ -101,6 +101,28 @@ func TestInspectWorkspaceLinkedWorktree(t *testing.T) {
 	}
 }
 
+func TestWorkspaceInfoRepoFamilyKeyMatchesLinkedWorktreeFamily(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	worktreeRoot := filepath.Join(t.TempDir(), "feature-worktree")
+	runGitTestCommand(t, repoRoot, "worktree", "add", "-b", "feature/worktree", worktreeRoot, "HEAD")
+
+	repoInfo, err := InspectWorkspace(repoRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(repo) error = %v", err)
+	}
+	worktreeInfo, err := InspectWorkspace(worktreeRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(worktree) error = %v", err)
+	}
+	if repoInfo.RepoFamilyKey() == "" {
+		t.Fatalf("expected repo family key, got %#v", repoInfo)
+	}
+	if repoInfo.RepoFamilyKey() != worktreeInfo.RepoFamilyKey() {
+		t.Fatalf("RepoFamilyKey mismatch: repo=%q worktree=%q", repoInfo.RepoFamilyKey(), worktreeInfo.RepoFamilyKey())
+	}
+}
+
 func TestInspectWorkspaceDetachedHeadFallback(t *testing.T) {
 	ensureGitForTest(t)
 	repoRoot := createGitRepoForTest(t)

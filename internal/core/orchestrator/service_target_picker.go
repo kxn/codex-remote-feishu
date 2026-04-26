@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -840,10 +841,15 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 		if busy || (!attachable && !recoverableOnly) {
 			continue
 		}
+		gitInfo := gitmeta.WorkspaceInfo{}
+		if !recoverableOnly {
+			gitInfo = inspectWorkspaceDisplayInfo(workspaceKey)
+		}
 		entries = append(entries, workspaceSelectionEntry{
 			workspaceKey:      workspaceKey,
 			latestUsedAt:      latestUsedAt,
 			label:             workspaceSelectionLabel(workspaceKey),
+			gitInfo:           gitInfo,
 			ageText:           ageText,
 			hasVSCodeActivity: hasVSCodeActivity,
 			busy:              busy,

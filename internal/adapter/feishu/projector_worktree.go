@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
+	"github.com/kxn/codex-remote-feishu/internal/displaypath"
 )
 
 const maxEmbeddedWorktreePaths = 3
@@ -33,7 +34,7 @@ func (p *Projector) formatFinalWorktreeSummaryLine(summary *control.FinalTurnSum
 	if !worktree.Dirty {
 		return "**工作区** " + formatNeutralTextTag("干净")
 	}
-	labels := shortestUniquePathSuffixes(worktree.Files)
+	labels := displaypath.ShortestUniqueSuffixes(worktree.Files)
 	limit := len(worktree.Files)
 	if limit > maxEmbeddedWorktreePaths {
 		limit = maxEmbeddedWorktreePaths
