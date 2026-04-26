@@ -9,6 +9,7 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -71,14 +72,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindUseThread:
-		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
-		if threadID == "" {
-			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
-			if fieldName == "" {
-				fieldName = cardSelectionThreadFieldName
-			}
-			threadID = pathPickerSelectedEntryName(event, fieldName)
-		}
+		threadID := selectflow.ThreadSelectionFlow.RecoverSelectedValue(value, event.Event.Action)
 		if threadID == "" {
 			return control.Action{}, false
 		}
@@ -407,10 +401,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 		}, true
 	case cardActionKindPathPickerEnter, cardActionKindPathPickerSelect:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		entryName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyEntryName))
-		if entryName == "" {
-			entryName = pathPickerSelectedEntryName(event, strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName)))
-		}
+		entryName := selectflow.RecoverCallbackValue(
+			value,
+			event.Event.Action,
+			strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName)),
+			cardActionPayloadKeyEntryName,
+		)
 		if pickerID == "" || entryName == "" {
 			return control.Action{}, false
 		}
@@ -500,17 +496,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 		if pickerID == "" {
 			return control.Action{}, false
 		}
-		turnID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTurnID))
-		if turnID == "" {
-			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
-			if fieldName == "" {
-				fieldName = cardThreadHistoryTurnFieldName
-			}
-			turnID = selectStaticFormValue(event.Event.Action.FormValue, fieldName)
-			if turnID == "" {
-				turnID = pathPickerSelectedEntryName(event, fieldName)
-			}
-		}
+		turnID := selectflow.RecoverCallbackValue(value, event.Event.Action, cardThreadHistoryTurnFieldName, cardActionPayloadKeyTurnID)
 		if turnID == "" {
 			return control.Action{}, false
 		}
@@ -531,7 +517,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 }
 
 func formStringValue(values map[string]interface{}, key string) string {
-	return selectStaticFormValue(values, key)
+	return selectflow.FormValue(values, key)
 }
 
 func commandFormArgumentValue(action *larkcallback.CallBackAction, fieldName string) string {
@@ -541,66 +527,10 @@ func commandFormArgumentValue(action *larkcallback.CallBackAction, fieldName str
 	if text := strings.TrimSpace(formStringValue(action.FormValue, fieldName)); text != "" {
 		return text
 	}
-	if option := strings.TrimSpace(action.Option); option != "" {
+	if option := selectflow.SelectedOptionValue(action); option != "" {
 		return option
-	}
-	for _, option := range action.Options {
-		if option = strings.TrimSpace(option); option != "" {
-			return option
-		}
 	}
 	return strings.TrimSpace(action.InputValue)
-}
-
-func pathPickerSelectedEntryName(event *larkcallback.CardActionTriggerEvent, fieldName string) string {
-	if event == nil || event.Event == nil || event.Event.Action == nil {
-		return ""
-	}
-	action := event.Event.Action
-	if option := strings.TrimSpace(action.Option); option != "" {
-		return option
-	}
-	for _, option := range action.Options {
-		if option = strings.TrimSpace(option); option != "" {
-			return option
-		}
-	}
-	if fieldName != "" {
-		return selectStaticFormValue(action.FormValue, fieldName)
-	}
-	return ""
-}
-
-func selectStaticFormValue(values map[string]interface{}, key string) string {
-	if len(values) == 0 || strings.TrimSpace(key) == "" {
-		return ""
-	}
-	raw, ok := values[key]
-	if !ok || raw == nil {
-		return ""
-	}
-	switch typed := raw.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case []string:
-		for _, item := range typed {
-			if item = strings.TrimSpace(item); item != "" {
-				return item
-			}
-		}
-	case []interface{}:
-		for _, item := range typed {
-			if item == nil {
-				continue
-			}
-			if text := strings.TrimSpace(fmt.Sprint(item)); text != "" {
-				return text
-			}
-		}
-	default:
-		return strings.TrimSpace(fmt.Sprint(raw))
-	}
-	return ""
 }
 
 func requestAnswersFromValue(values map[string]interface{}) map[string][]string {

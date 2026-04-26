@@ -2,12 +2,13 @@ package feishu
 
 import (
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 const (
-	targetPickerPaginationHint = "超出卡片大小，如未找到请翻页。"
-	pathPickerPaginationHint   = "超出卡片大小，如未找到请翻页。"
+	targetPickerPaginationHint = selectflow.DefaultPaginationHint
+	pathPickerPaginationHint   = selectflow.DefaultPaginationHint
 )
 
 func projectNoticeContent(notice control.Notice) (string, []map[string]any) {

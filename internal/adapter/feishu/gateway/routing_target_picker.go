@@ -5,6 +5,7 @@ import (
 
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -35,13 +36,7 @@ func parseTargetPickerCardAction(
 		}, true
 	case cardActionKindTargetPickerSelectSource:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		targetValue := selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSourceFieldName)
-		if targetValue == "" {
-			targetValue = pathPickerSelectedEntryName(event, cardTargetPickerSourceFieldName)
-		}
-		if targetValue == "" {
-			targetValue = strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
-		}
+		targetValue := selectflow.RecoverCallbackValue(value, event.Event.Action, cardTargetPickerSourceFieldName, cardActionPayloadKeyTargetValue)
 		if pickerID == "" || targetValue == "" {
 			return control.Action{}, false
 		}
@@ -58,10 +53,7 @@ func parseTargetPickerCardAction(
 		}, true
 	case cardActionKindTargetPickerSelectWorkspace:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		workspaceKey := selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerWorkspaceFieldName)
-		if workspaceKey == "" {
-			workspaceKey = pathPickerSelectedEntryName(event, cardTargetPickerWorkspaceFieldName)
-		}
+		workspaceKey := selectflow.TargetPickerWorkspaceFlow.RecoverSelectedValue(value, event.Event.Action)
 		if pickerID == "" || workspaceKey == "" {
 			return control.Action{}, false
 		}
@@ -78,10 +70,7 @@ func parseTargetPickerCardAction(
 		}, true
 	case cardActionKindTargetPickerSelectSession:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		targetValue := selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSessionFieldName)
-		if targetValue == "" {
-			targetValue = pathPickerSelectedEntryName(event, cardTargetPickerSessionFieldName)
-		}
+		targetValue := selectflow.TargetPickerSessionFlow.RecoverSelectedValue(value, event.Event.Action)
 		if pickerID == "" || targetValue == "" {
 			return control.Action{}, false
 		}
@@ -177,8 +166,8 @@ func parseTargetPickerCardAction(
 			ActorUserID:       operatorID,
 			MessageID:         messageID,
 			PickerID:          pickerID,
-			WorkspaceKey:      selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerWorkspaceFieldName),
-			TargetPickerValue: selectStaticFormValue(event.Event.Action.FormValue, cardTargetPickerSessionFieldName),
+			WorkspaceKey:      selectflow.TargetPickerWorkspaceFlow.RecoverSelectedValue(value, event.Event.Action),
+			TargetPickerValue: selectflow.TargetPickerSessionFlow.RecoverSelectedValue(value, event.Event.Action),
 			RequestAnswers:    targetPickerDraftAnswersFromFormValue(event.Event.Action.FormValue),
 			Inbound:           meta,
 		}, true

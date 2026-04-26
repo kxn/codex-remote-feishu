@@ -4,21 +4,9 @@ import (
 	"strings"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
-
-const targetPickerPaginationHint = "超出卡片大小，如未找到请翻页。"
-
-type targetPickerPaginatedLane struct {
-	PickerID      string
-	FieldName     string
-	Label         string
-	Placeholder   string
-	Cursor        int
-	SelectedValue string
-	Options       []map[string]any
-	SelectPayload map[string]any
-}
 
 func targetPickerEditingElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	return targetPickerComposeEditingElements(
@@ -108,66 +96,49 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 	}
 }
 
-func targetPickerWorkspaceLane(view control.FeishuTargetPickerView) targetPickerPaginatedLane {
-	return targetPickerPaginatedLane{
-		PickerID:      view.PickerID,
-		FieldName:     cardTargetPickerWorkspaceFieldName,
+func targetPickerWorkspaceLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
+	return paginatedSelectFlowLane{
+		Flow:          selectflow.TargetPickerWorkspaceFlow,
 		Label:         "工作区",
 		Placeholder:   firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
 		Cursor:        view.WorkspaceCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedWorkspaceKey),
 		Options:       targetPickerWorkspaceOptions(view.WorkspaceOptions),
 		SelectPayload: actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID),
+		PagePayload: func(cursor int) map[string]any {
+			return actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerWorkspaceFlow.FieldName, cursor)
+		},
 	}
 }
 
-func targetPickerSessionLane(view control.FeishuTargetPickerView) targetPickerPaginatedLane {
-	return targetPickerPaginatedLane{
-		PickerID:      view.PickerID,
-		FieldName:     cardTargetPickerSessionFieldName,
+func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
+	return paginatedSelectFlowLane{
+		Flow:          selectflow.TargetPickerSessionFlow,
 		Label:         "会话",
 		Placeholder:   firstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
 		Cursor:        view.SessionCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedSessionValue),
 		Options:       targetPickerSessionOptions(view.SessionOptions),
 		SelectPayload: actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID),
+		PagePayload: func(cursor int) map[string]any {
+			return actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerSessionFlow.FieldName, cursor)
+		},
 	}
 }
 
-func targetPickerLaneSpec(lane targetPickerPaginatedLane) paginatedSelectPageSpec {
-	return paginatedSelectPageSpec{
-		Cursor:           lane.Cursor,
-		CandidateOptions: lane.Options,
-		SelectedValue:    lane.SelectedValue,
-	}
-}
-
-func targetPickerPaginatedLaneElements(lane targetPickerPaginatedLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
-	elements := []map[string]any{{
-		"tag":     "markdown",
-		"content": "**" + strings.TrimSpace(lane.Label) + "**",
-	}}
-	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
-		Name:           lane.FieldName,
-		Placeholder:    lane.Placeholder,
-		SelectPayload:  stampActionValue(cloneCardMap(lane.SelectPayload), daemonLifecycleID),
-		PrevPayload:    stampActionValue(actionPayloadTargetPickerCursor(lane.PickerID, lane.FieldName, page.PrevCursor), daemonLifecycleID),
-		NextPayload:    stampActionValue(actionPayloadTargetPickerCursor(lane.PickerID, lane.FieldName, page.NextCursor), daemonLifecycleID),
-		Page:           page,
-		PaginationHint: targetPickerPaginationHint,
-	})...)
-	return elements
+func targetPickerPaginatedLaneElements(lane paginatedSelectFlowLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
+	return lane.renderElements(daemonLifecycleID, page)
 }
 
 func targetPickerPlanSingleLane(
 	view control.FeishuTargetPickerView,
 	daemonLifecycleID string,
 	pagePrefix []map[string]any,
-	lane targetPickerPaginatedLane,
+	lane paginatedSelectFlowLane,
 ) paginatedSelectPlan {
-	return planPaginatedSelectPage(
-		targetPickerLaneSpec(lane),
+	return planPaginatedSelectLane(
 		cardtransport.InteractiveCardTransportLimitBytes,
+		lane,
 		func(page paginatedSelectPage) (int, error) {
 			return targetPickerEditingCardSize(
 				view,
@@ -182,7 +153,7 @@ func targetPickerPlanDualLanes(
 	view control.FeishuTargetPickerView,
 	daemonLifecycleID string,
 	pagePrefix []map[string]any,
-	leftLane, rightLane targetPickerPaginatedLane,
+	leftLane, rightLane paginatedSelectFlowLane,
 ) (paginatedSelectPlan, paginatedSelectPlan) {
 	baseSize, err := targetPickerEditingCardSize(view, daemonLifecycleID, pagePrefix)
 	if err != nil {
@@ -194,12 +165,19 @@ func targetPickerPlanDualLanes(
 	leftFit := targetPickerLaneFit(view, daemonLifecycleID, pagePrefix, leftLane, baseSize)
 	rightFit := targetPickerLaneFit(view, daemonLifecycleID, pagePrefix, rightLane, baseSize)
 	leftPlan, rightPlan := planBorrowedDualSelectPages(available, 1, 2, leftFit, rightFit)
-	return targetPickerTightenDualLanePlans(
-		view,
-		daemonLifecycleID,
-		pagePrefix,
-		leftLane,
-		rightLane,
+	return tightenDualPaginatedSelectPlans(
+		cardtransport.InteractiveCardTransportLimitBytes,
+		func(leftPage, rightPage paginatedSelectPage) (int, error) {
+			return targetPickerEditingCardSize(
+				view,
+				daemonLifecycleID,
+				targetPickerCombinePageElements(
+					pagePrefix,
+					targetPickerPaginatedLaneElements(leftLane, daemonLifecycleID, leftPage),
+					targetPickerPaginatedLaneElements(rightLane, daemonLifecycleID, rightPage),
+				),
+			)
+		},
 		leftFit,
 		rightFit,
 		leftPlan,
@@ -211,11 +189,11 @@ func targetPickerLaneFit(
 	view control.FeishuTargetPickerView,
 	daemonLifecycleID string,
 	pagePrefix []map[string]any,
-	lane targetPickerPaginatedLane,
+	lane paginatedSelectFlowLane,
 	baseSize int,
 ) paginatedSelectFit {
 	return func(maxBytes int) paginatedSelectPlan {
-		return planPaginatedSelectPage(targetPickerLaneSpec(lane), maxBytes, func(page paginatedSelectPage) (int, error) {
+		return planPaginatedSelectLane(maxBytes, lane, func(page paginatedSelectPage) (int, error) {
 			size, err := targetPickerEditingCardSize(
 				view,
 				daemonLifecycleID,
@@ -227,84 +205,6 @@ func targetPickerLaneFit(
 			return maxInt(size-baseSize, 0), nil
 		})
 	}
-}
-
-func targetPickerTightenDualLanePlans(
-	view control.FeishuTargetPickerView,
-	daemonLifecycleID string,
-	pagePrefix []map[string]any,
-	leftLane, rightLane targetPickerPaginatedLane,
-	leftFit, rightFit paginatedSelectFit,
-	leftPlan, rightPlan paginatedSelectPlan,
-) (paginatedSelectPlan, paginatedSelectPlan) {
-	for i := 0; i < 64; i++ {
-		size, err := targetPickerEditingCardSize(
-			view,
-			daemonLifecycleID,
-			targetPickerCombinePageElements(
-				pagePrefix,
-				targetPickerPaginatedLaneElements(leftLane, daemonLifecycleID, leftPlan.Page),
-				targetPickerPaginatedLaneElements(rightLane, daemonLifecycleID, rightPlan.Page),
-			),
-		)
-		if err != nil || size <= cardtransport.InteractiveCardTransportLimitBytes {
-			return leftPlan, rightPlan
-		}
-
-		bestLeft, bestRight, bestSize, shrunk := leftPlan, rightPlan, size, false
-		if next, ok := targetPickerShrinkSelectPlan(leftPlan, leftFit); ok {
-			nextSize, nextErr := targetPickerEditingCardSize(
-				view,
-				daemonLifecycleID,
-				targetPickerCombinePageElements(
-					pagePrefix,
-					targetPickerPaginatedLaneElements(leftLane, daemonLifecycleID, next.Page),
-					targetPickerPaginatedLaneElements(rightLane, daemonLifecycleID, rightPlan.Page),
-				),
-			)
-			if nextErr == nil && nextSize < bestSize {
-				bestLeft = next
-				bestRight = rightPlan
-				bestSize = nextSize
-				shrunk = true
-			}
-		}
-		if next, ok := targetPickerShrinkSelectPlan(rightPlan, rightFit); ok {
-			nextSize, nextErr := targetPickerEditingCardSize(
-				view,
-				daemonLifecycleID,
-				targetPickerCombinePageElements(
-					pagePrefix,
-					targetPickerPaginatedLaneElements(leftLane, daemonLifecycleID, leftPlan.Page),
-					targetPickerPaginatedLaneElements(rightLane, daemonLifecycleID, next.Page),
-				),
-			)
-			if nextErr == nil && nextSize < bestSize {
-				bestLeft = leftPlan
-				bestRight = next
-				bestSize = nextSize
-				shrunk = true
-			}
-		}
-		if !shrunk {
-			return leftPlan, rightPlan
-		}
-		leftPlan, rightPlan = bestLeft, bestRight
-	}
-	return leftPlan, rightPlan
-}
-
-func targetPickerShrinkSelectPlan(current paginatedSelectPlan, fit paginatedSelectFit) (paginatedSelectPlan, bool) {
-	if fit == nil || current.Page.PageOptionCount <= 1 {
-		return paginatedSelectPlan{}, false
-	}
-	for budget := current.UsedBytes - 1; budget >= 0; budget-- {
-		next := fit(budget)
-		if next.Page.PageOptionCount < current.Page.PageOptionCount || next.UsedBytes < current.UsedBytes {
-			return next, true
-		}
-	}
-	return paginatedSelectPlan{}, false
 }
 
 func targetPickerEditingCardSize(view control.FeishuTargetPickerView, daemonLifecycleID string, pageElements []map[string]any) (int, error) {

@@ -4,10 +4,9 @@ import (
 	"strings"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
-
-const threadSelectionPaginationHint = "超出卡片大小，如未找到请翻页。"
 
 func paginatedThreadSelectionDropdownElements(
 	view control.FeishuThreadSelectionView,
@@ -55,46 +54,51 @@ func paginatedThreadSelectionDropdownElements(
 	if hiddenCount != 0 {
 		hiddenHint = firstNonEmpty(strings.TrimSpace(semantics.HiddenEntriesNotice), "已省略当前不可切换的会话。")
 	}
-	plan := planPaginatedSelectPage(
-		paginatedSelectPageSpec{
-			Cursor:           view.Cursor,
-			CandidateOptions: options,
-			SelectedValue:    selectedValue,
-		},
+	lane := threadSelectionLane(view.Mode, view.Cursor, selectedValue, options, allowCrossWorkspace)
+	plan := planPaginatedSelectLane(
 		cardtransport.InteractiveCardTransportLimitBytes,
+		lane,
 		func(page paginatedSelectPage) (int, error) {
 			return threadSelectionCardSize(
 				semantics,
-				threadSelectionDropdownElementsWithPage(view.Mode, daemonLifecycleID, page, allowCrossWorkspace, hiddenHint),
+				threadSelectionDropdownElementsWithPage(lane, daemonLifecycleID, page, hiddenHint),
 			)
 		},
 	)
 	return append(
 		elements,
-		threadSelectionDropdownElementsWithPage(view.Mode, daemonLifecycleID, plan.Page, allowCrossWorkspace, hiddenHint)...,
+		threadSelectionDropdownElementsWithPage(lane, daemonLifecycleID, plan.Page, hiddenHint)...,
 	)
 }
 
-func threadSelectionDropdownElementsWithPage(
+func threadSelectionLane(
 	mode control.FeishuThreadSelectionViewMode,
+	cursor int,
+	selectedValue string,
+	options []map[string]any,
+	allowCrossWorkspace bool,
+) paginatedSelectFlowLane {
+	return paginatedSelectFlowLane{
+		Flow:          selectflow.ThreadSelectionFlow,
+		Label:         "会话",
+		Placeholder:   "选择会话",
+		Cursor:        cursor,
+		SelectedValue: selectedValue,
+		Options:       options,
+		SelectPayload: actionPayloadUseThreadField(selectflow.ThreadSelectionFlow.FieldName, allowCrossWorkspace),
+		PagePayload: func(cursor int) map[string]any {
+			return actionPayloadThreadSelectionCursor(string(mode), cursor)
+		},
+	}
+}
+
+func threadSelectionDropdownElementsWithPage(
+	lane paginatedSelectFlowLane,
 	daemonLifecycleID string,
 	page paginatedSelectPage,
-	allowCrossWorkspace bool,
 	hiddenHint string,
 ) []map[string]any {
-	elements := []map[string]any{{
-		"tag":     "markdown",
-		"content": "**会话**",
-	}}
-	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
-		Name:           cardSelectionThreadFieldName,
-		Placeholder:    "选择会话",
-		SelectPayload:  stampActionValue(actionPayloadUseThreadField(cardSelectionThreadFieldName, allowCrossWorkspace), daemonLifecycleID),
-		PrevPayload:    stampActionValue(actionPayloadThreadSelectionCursor(string(mode), page.PrevCursor), daemonLifecycleID),
-		NextPayload:    stampActionValue(actionPayloadThreadSelectionCursor(string(mode), page.NextCursor), daemonLifecycleID),
-		Page:           page,
-		PaginationHint: threadSelectionPaginationHint,
-	})...)
+	elements := lane.renderElements(daemonLifecycleID, page)
 	if strings.TrimSpace(hiddenHint) != "" {
 		if block := cardPlainTextBlockElement(hiddenHint); len(block) != 0 {
 			elements = append(elements, block)

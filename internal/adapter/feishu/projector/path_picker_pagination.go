@@ -4,37 +4,24 @@ import (
 	"strings"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
-
-const pathPickerPaginationHint = "超出卡片大小，如未找到请翻页。"
-
-type pathPickerPaginatedLane struct {
-	PickerID      string
-	FieldName     string
-	Label         string
-	Placeholder   string
-	Cursor        int
-	SelectedValue string
-	FixedOptions  []map[string]any
-	Options       []map[string]any
-	SelectPayload map[string]any
-}
 
 func paginatedFileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	directoryLane := pathPickerDirectoryLane(view)
 	fileLane := pathPickerFileLane(view)
 
 	switch {
-	case pathPickerLaneVisible(directoryLane) && pathPickerLaneVisible(fileLane):
+	case directoryLane.visible() && fileLane.visible():
 		directoryPlan, filePlan := pathPickerPlanFileModeDualLanes(view, daemonLifecycleID, directoryLane, fileLane)
 		return pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &directoryPlan.Page, &filePlan.Page)
-	case pathPickerLaneVisible(directoryLane):
+	case directoryLane.visible():
 		directoryPlan := pathPickerPlanSingleLane(view, directoryLane, func(page paginatedSelectPage) []map[string]any {
 			return pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &page, nil)
 		})
 		return pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &directoryPlan.Page, nil)
-	case pathPickerLaneVisible(fileLane):
+	case fileLane.visible():
 		filePlan := pathPickerPlanSingleLane(view, fileLane, func(page paginatedSelectPage) []map[string]any {
 			return pathPickerFileModeElementsWithPages(view, daemonLifecycleID, nil, &page)
 		})
@@ -46,7 +33,7 @@ func paginatedFileModePathPickerElements(view control.FeishuPathPickerView, daem
 
 func paginatedDirectoryModePathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	directoryLane := pathPickerDirectoryLane(view)
-	if !pathPickerLaneVisible(directoryLane) {
+	if !directoryLane.visible() {
 		return pathPickerDirectoryModeElementsWithPage(view, daemonLifecycleID, nil)
 	}
 	plan := pathPickerPlanSingleLane(view, directoryLane, func(page paginatedSelectPage) []map[string]any {
@@ -57,7 +44,7 @@ func paginatedDirectoryModePathPickerElements(view control.FeishuPathPickerView,
 
 func paginatedOwnerSubpageDirectoryModePathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	directoryLane := pathPickerDirectoryLane(view)
-	if !pathPickerLaneVisible(directoryLane) {
+	if !directoryLane.visible() {
 		return pathPickerOwnerSubpageDirectoryModeElementsWithPage(view, daemonLifecycleID, nil)
 	}
 	plan := pathPickerPlanSingleLane(view, directoryLane, func(page paginatedSelectPage) []map[string]any {
@@ -66,7 +53,7 @@ func paginatedOwnerSubpageDirectoryModePathPickerElements(view control.FeishuPat
 	return pathPickerOwnerSubpageDirectoryModeElementsWithPage(view, daemonLifecycleID, &plan.Page)
 }
 
-func pathPickerDirectoryLane(view control.FeishuPathPickerView) pathPickerPaginatedLane {
+func pathPickerDirectoryLane(view control.FeishuPathPickerView) paginatedSelectFlowLane {
 	childOptions, _ := pathPickerSelectStaticOptions(view, control.PathPickerEntryDirectory)
 	fixedOptions := []map[string]any{currentDirectoryPathPickerOption(view.CurrentPath)}
 	if view.CanGoUp {
@@ -75,71 +62,49 @@ func pathPickerDirectoryLane(view control.FeishuPathPickerView) pathPickerPagina
 			"value": "..",
 		})
 	}
-	return pathPickerPaginatedLane{
-		PickerID:      view.PickerID,
-		FieldName:     cardPathPickerDirectorySelectFieldName,
+	return paginatedSelectFlowLane{
+		Flow:          selectflow.PathPickerDirectoryFlow,
 		Label:         "进入目录",
 		Placeholder:   ".. 返回上一级，或选择子目录",
 		Cursor:        view.DirectoryCursor,
 		SelectedValue: ".",
 		FixedOptions:  fixedOptions,
 		Options:       childOptions,
-		SelectPayload: pathPickerFieldActionPayload(cardActionKindPathPickerEnter, view.PickerID, cardPathPickerDirectorySelectFieldName),
+		SelectPayload: pathPickerFieldActionPayload(cardActionKindPathPickerEnter, view.PickerID, selectflow.PathPickerDirectoryFlow.FieldName),
+		PagePayload: func(cursor int) map[string]any {
+			return actionPayloadPathPickerCursor(view.PickerID, selectflow.PathPickerDirectoryFlow.FieldName, cursor)
+		},
 	}
 }
 
-func pathPickerFileLane(view control.FeishuPathPickerView) pathPickerPaginatedLane {
+func pathPickerFileLane(view control.FeishuPathPickerView) paginatedSelectFlowLane {
 	fileOptions, selectedOption := pathPickerSelectStaticOptions(view, control.PathPickerEntryFile)
-	return pathPickerPaginatedLane{
-		PickerID:      view.PickerID,
-		FieldName:     cardPathPickerFileSelectFieldName,
+	return paginatedSelectFlowLane{
+		Flow:          selectflow.PathPickerFileFlow,
 		Label:         "选择文件",
 		Placeholder:   "选择待发送文件",
 		Cursor:        view.FileCursor,
 		SelectedValue: selectedOption,
 		Options:       fileOptions,
-		SelectPayload: pathPickerFieldActionPayload(cardActionKindPathPickerSelect, view.PickerID, cardPathPickerFileSelectFieldName),
+		SelectPayload: pathPickerFieldActionPayload(cardActionKindPathPickerSelect, view.PickerID, selectflow.PathPickerFileFlow.FieldName),
+		PagePayload: func(cursor int) map[string]any {
+			return actionPayloadPathPickerCursor(view.PickerID, selectflow.PathPickerFileFlow.FieldName, cursor)
+		},
 	}
 }
 
-func pathPickerLaneVisible(lane pathPickerPaginatedLane) bool {
-	return len(lane.FixedOptions) != 0 || len(lane.Options) != 0
-}
-
-func pathPickerLaneSpec(lane pathPickerPaginatedLane) paginatedSelectPageSpec {
-	return paginatedSelectPageSpec{
-		Cursor:           lane.Cursor,
-		FixedOptions:     lane.FixedOptions,
-		CandidateOptions: lane.Options,
-		SelectedValue:    lane.SelectedValue,
-	}
-}
-
-func pathPickerPaginatedLaneElements(lane pathPickerPaginatedLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
-	elements := []map[string]any{{
-		"tag":     "markdown",
-		"content": "**" + strings.TrimSpace(lane.Label) + "**",
-	}}
-	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
-		Name:           lane.FieldName,
-		Placeholder:    lane.Placeholder,
-		SelectPayload:  stampActionValue(cloneCardMap(lane.SelectPayload), daemonLifecycleID),
-		PrevPayload:    stampActionValue(actionPayloadPathPickerCursor(lane.PickerID, lane.FieldName, page.PrevCursor), daemonLifecycleID),
-		NextPayload:    stampActionValue(actionPayloadPathPickerCursor(lane.PickerID, lane.FieldName, page.NextCursor), daemonLifecycleID),
-		Page:           page,
-		PaginationHint: pathPickerPaginationHint,
-	})...)
-	return elements
+func pathPickerPaginatedLaneElements(lane paginatedSelectFlowLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
+	return lane.renderElements(daemonLifecycleID, page)
 }
 
 func pathPickerPlanSingleLane(
 	view control.FeishuPathPickerView,
-	lane pathPickerPaginatedLane,
+	lane paginatedSelectFlowLane,
 	build func(page paginatedSelectPage) []map[string]any,
 ) paginatedSelectPlan {
-	return planPaginatedSelectPage(
-		pathPickerLaneSpec(lane),
+	return planPaginatedSelectLane(
 		cardtransport.InteractiveCardTransportLimitBytes,
+		lane,
 		func(page paginatedSelectPage) (int, error) {
 			return pathPickerCardSize(view, build(page))
 		},
@@ -149,7 +114,7 @@ func pathPickerPlanSingleLane(
 func pathPickerPlanFileModeDualLanes(
 	view control.FeishuPathPickerView,
 	daemonLifecycleID string,
-	leftLane, rightLane pathPickerPaginatedLane,
+	leftLane, rightLane paginatedSelectFlowLane,
 ) (paginatedSelectPlan, paginatedSelectPlan) {
 	baseSize, err := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, nil, nil))
 	if err != nil {
@@ -163,7 +128,7 @@ func pathPickerPlanFileModeDualLanes(
 
 	available := cardtransport.InteractiveCardTransportLimitBytes - baseSize
 	leftFit := func(maxBytes int) paginatedSelectPlan {
-		return planPaginatedSelectPage(pathPickerLaneSpec(leftLane), maxBytes, func(page paginatedSelectPage) (int, error) {
+		return planPaginatedSelectLane(maxBytes, leftLane, func(page paginatedSelectPage) (int, error) {
 			size, err := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &page, nil))
 			if err != nil {
 				return 0, err
@@ -172,7 +137,7 @@ func pathPickerPlanFileModeDualLanes(
 		})
 	}
 	rightFit := func(maxBytes int) paginatedSelectPlan {
-		return planPaginatedSelectPage(pathPickerLaneSpec(rightLane), maxBytes, func(page paginatedSelectPage) (int, error) {
+		return planPaginatedSelectLane(maxBytes, rightLane, func(page paginatedSelectPage) (int, error) {
 			size, err := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, nil, &page))
 			if err != nil {
 				return 0, err
@@ -182,54 +147,16 @@ func pathPickerPlanFileModeDualLanes(
 	}
 
 	leftPlan, rightPlan := planBorrowedDualSelectPages(available, 1, 2, leftFit, rightFit)
-	return pathPickerTightenFileModeDualPlans(view, daemonLifecycleID, leftLane, rightLane, leftFit, rightFit, leftPlan, rightPlan)
-}
-
-func pathPickerTightenFileModeDualPlans(
-	view control.FeishuPathPickerView,
-	daemonLifecycleID string,
-	leftLane, rightLane pathPickerPaginatedLane,
-	leftFit, rightFit paginatedSelectFit,
-	leftPlan, rightPlan paginatedSelectPlan,
-) (paginatedSelectPlan, paginatedSelectPlan) {
-	for i := 0; i < 64; i++ {
-		size, err := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &leftPlan.Page, &rightPlan.Page))
-		if err != nil || size <= cardtransport.InteractiveCardTransportLimitBytes {
-			return leftPlan, rightPlan
-		}
-
-		bestLeft, bestRight, bestSize, shrunk := leftPlan, rightPlan, size, false
-		if next, ok := pathPickerShrinkSelectPlan(leftPlan, leftFit); ok {
-			nextSize, nextErr := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &next.Page, &rightPlan.Page))
-			if nextErr == nil && nextSize < bestSize {
-				bestLeft, bestRight, bestSize, shrunk = next, rightPlan, nextSize, true
-			}
-		}
-		if next, ok := pathPickerShrinkSelectPlan(rightPlan, rightFit); ok {
-			nextSize, nextErr := pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &leftPlan.Page, &next.Page))
-			if nextErr == nil && nextSize < bestSize {
-				bestLeft, bestRight, bestSize, shrunk = leftPlan, next, nextSize, true
-			}
-		}
-		if !shrunk {
-			return leftPlan, rightPlan
-		}
-		leftPlan, rightPlan = bestLeft, bestRight
-	}
-	return leftPlan, rightPlan
-}
-
-func pathPickerShrinkSelectPlan(current paginatedSelectPlan, fit paginatedSelectFit) (paginatedSelectPlan, bool) {
-	if fit == nil {
-		return paginatedSelectPlan{}, false
-	}
-	for budget := current.UsedBytes - 1; budget >= 0; budget-- {
-		next := fit(budget)
-		if next.Page.PageOptionCount < current.Page.PageOptionCount || next.UsedBytes < current.UsedBytes {
-			return next, true
-		}
-	}
-	return paginatedSelectPlan{}, false
+	return tightenDualPaginatedSelectPlans(
+		cardtransport.InteractiveCardTransportLimitBytes,
+		func(leftPage, rightPage paginatedSelectPage) (int, error) {
+			return pathPickerCardSize(view, pathPickerFileModeElementsWithPages(view, daemonLifecycleID, &leftPage, &rightPage))
+		},
+		leftFit,
+		rightFit,
+		leftPlan,
+		rightPlan,
+	)
 }
 
 func pathPickerFileModeElementsWithPages(

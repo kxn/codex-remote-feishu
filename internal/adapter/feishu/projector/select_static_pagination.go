@@ -1,6 +1,10 @@
 package projector
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
+)
 
 type paginatedSelectPageSpec struct {
 	Cursor           int
@@ -41,6 +45,18 @@ type paginatedSelectRenderSpec struct {
 	NextPayload    map[string]any
 	Page           paginatedSelectPage
 	PaginationHint string
+}
+
+type paginatedSelectFlowLane struct {
+	Flow          selectflow.PaginatedSelectFlowDefinition
+	Label         string
+	Placeholder   string
+	Cursor        int
+	SelectedValue string
+	FixedOptions  []map[string]any
+	Options       []map[string]any
+	SelectPayload map[string]any
+	PagePayload   func(cursor int) map[string]any
 }
 
 func planPaginatedSelectPage(spec paginatedSelectPageSpec, maxBytes int, measure paginatedSelectMeasure) paginatedSelectPlan {
@@ -89,6 +105,59 @@ func planBorrowedDualSelectPages(totalBudget, leftWeight, rightWeight int, leftF
 	return leftPlan, rightPlan
 }
 
+func planPaginatedSelectLane(maxBytes int, lane paginatedSelectFlowLane, measure paginatedSelectMeasure) paginatedSelectPlan {
+	return planPaginatedSelectPage(lane.pageSpec(), maxBytes, measure)
+}
+
+func tightenDualPaginatedSelectPlans(
+	limit int,
+	measure func(leftPage, rightPage paginatedSelectPage) (int, error),
+	leftFit, rightFit paginatedSelectFit,
+	leftPlan, rightPlan paginatedSelectPlan,
+) (paginatedSelectPlan, paginatedSelectPlan) {
+	if measure == nil {
+		return leftPlan, rightPlan
+	}
+	for i := 0; i < 64; i++ {
+		size, err := measure(leftPlan.Page, rightPlan.Page)
+		if err != nil || size <= limit {
+			return leftPlan, rightPlan
+		}
+
+		bestLeft, bestRight, bestSize, shrunk := leftPlan, rightPlan, size, false
+		if next, ok := shrinkPaginatedSelectPlan(leftPlan, leftFit); ok {
+			nextSize, nextErr := measure(next.Page, rightPlan.Page)
+			if nextErr == nil && nextSize < bestSize {
+				bestLeft, bestRight, bestSize, shrunk = next, rightPlan, nextSize, true
+			}
+		}
+		if next, ok := shrinkPaginatedSelectPlan(rightPlan, rightFit); ok {
+			nextSize, nextErr := measure(leftPlan.Page, next.Page)
+			if nextErr == nil && nextSize < bestSize {
+				bestLeft, bestRight, bestSize, shrunk = leftPlan, next, nextSize, true
+			}
+		}
+		if !shrunk {
+			return leftPlan, rightPlan
+		}
+		leftPlan, rightPlan = bestLeft, bestRight
+	}
+	return leftPlan, rightPlan
+}
+
+func shrinkPaginatedSelectPlan(current paginatedSelectPlan, fit paginatedSelectFit) (paginatedSelectPlan, bool) {
+	if fit == nil {
+		return paginatedSelectPlan{}, false
+	}
+	for budget := current.UsedBytes - 1; budget >= 0; budget-- {
+		next := fit(budget)
+		if next.Page.PageOptionCount < current.Page.PageOptionCount || next.UsedBytes < current.UsedBytes {
+			return next, true
+		}
+	}
+	return paginatedSelectPlan{}, false
+}
+
 func renderPaginatedSelectElements(spec paginatedSelectRenderSpec) []map[string]any {
 	selectElement := selectStaticElement(
 		spec.Name,
@@ -119,6 +188,44 @@ func renderPaginatedSelectElements(spec paginatedSelectRenderSpec) []map[string]
 			elements = append(elements, block)
 		}
 	}
+	return elements
+}
+
+func (lane paginatedSelectFlowLane) visible() bool {
+	return len(lane.FixedOptions) != 0 || len(lane.Options) != 0
+}
+
+func (lane paginatedSelectFlowLane) pageSpec() paginatedSelectPageSpec {
+	return paginatedSelectPageSpec{
+		Cursor:           lane.Cursor,
+		FixedOptions:     lane.FixedOptions,
+		CandidateOptions: lane.Options,
+		SelectedValue:    lane.SelectedValue,
+	}
+}
+
+func (lane paginatedSelectFlowLane) renderElements(daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
+	elements := []map[string]any{{
+		"tag":     "markdown",
+		"content": "**" + strings.TrimSpace(lane.Label) + "**",
+	}}
+	var prevPayload map[string]any
+	if lane.PagePayload != nil {
+		prevPayload = lane.PagePayload(page.PrevCursor)
+	}
+	var nextPayload map[string]any
+	if lane.PagePayload != nil {
+		nextPayload = lane.PagePayload(page.NextCursor)
+	}
+	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
+		Name:           lane.Flow.FieldName,
+		Placeholder:    lane.Placeholder,
+		SelectPayload:  stampActionValue(cloneCardMap(lane.SelectPayload), daemonLifecycleID),
+		PrevPayload:    stampActionValue(prevPayload, daemonLifecycleID),
+		NextPayload:    stampActionValue(nextPayload, daemonLifecycleID),
+		Page:           page,
+		PaginationHint: lane.Flow.PaginationHint,
+	})...)
 	return elements
 }
 
