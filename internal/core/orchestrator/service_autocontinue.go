@@ -56,6 +56,16 @@ func autoContinueDelayText(delay time.Duration) string {
 	return formatAutoRetryDelay(delay)
 }
 
+func autoContinueEpisodeSelectedThreadID(episode *state.PendingAutoContinueEpisodeRecord) string {
+	if episode == nil {
+		return ""
+	}
+	if agentproto.EffectiveSurfaceBindingPolicy(episode.FrozenSurfaceBindingPolicy) == agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		return strings.TrimSpace(firstNonEmpty(episode.FrozenSourceThreadID, episode.ThreadID))
+	}
+	return strings.TrimSpace(episode.ThreadID)
+}
+
 func (s *Service) autoContinueStatusCardEvent(surface *state.SurfaceConsoleRecord, episode *state.PendingAutoContinueEpisodeRecord) eventcontract.Event {
 	if surface == nil || episode == nil {
 		return eventcontract.Event{}
@@ -153,7 +163,7 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 			ThreadID:                   strings.TrimSpace(firstNonEmpty(outcome.ThreadID, outcome.Item.FrozenThreadID)),
 			FrozenCWD:                  strings.TrimSpace(firstNonEmpty(outcome.Binding.ThreadCWD, outcome.Item.FrozenCWD)),
 			FrozenExecutionMode:        outcome.Item.FrozenExecutionMode,
-			FrozenSourceThreadID:       outcome.Item.FrozenSourceThreadID,
+			FrozenSourceThreadID:       strings.TrimSpace(firstNonEmpty(outcome.Binding.SourceThreadID, outcome.Item.FrozenSourceThreadID)),
 			FrozenSurfaceBindingPolicy: outcome.Item.FrozenSurfaceBindingPolicy,
 			FrozenRouteMode:            outcome.Item.RouteModeAtEnqueue,
 			FrozenOverride:             outcome.Item.FrozenOverride,
@@ -167,6 +177,9 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 	episode.LastTurnID = strings.TrimSpace(outcome.TurnID)
 	episode.LastProblem = cloneProblem(outcome.Problem)
 	episode.ThreadID = strings.TrimSpace(firstNonEmpty(outcome.ThreadID, episode.ThreadID))
+	if sourceThreadID := strings.TrimSpace(outcome.Binding.SourceThreadID); sourceThreadID != "" {
+		episode.FrozenSourceThreadID = sourceThreadID
+	}
 	if strings.TrimSpace(outcome.Binding.ThreadCWD) != "" {
 		episode.FrozenCWD = strings.TrimSpace(outcome.Binding.ThreadCWD)
 	}
@@ -221,7 +234,7 @@ func (s *Service) maybeDispatchPendingAutoContinue(surface *state.SurfaceConsole
 			return nil
 		}
 	default:
-		if strings.TrimSpace(episode.ThreadID) != "" && strings.TrimSpace(surface.SelectedThreadID) != strings.TrimSpace(episode.ThreadID) {
+		if expectedThreadID := autoContinueEpisodeSelectedThreadID(episode); expectedThreadID != "" && strings.TrimSpace(surface.SelectedThreadID) != expectedThreadID {
 			clearAutoContinueRuntime(surface)
 			return nil
 		}
@@ -278,7 +291,9 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 		AttemptTriggerKind:    string(episode.TriggerKind),
 		ReplyToMessageID:      episode.RootReplyToMessageID,
 		ReplyToMessagePreview: episode.RootReplyToMessagePreview,
-		ThreadID:              item.FrozenThreadID,
+		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
+		SourceThreadID:        strings.TrimSpace(firstNonEmpty(episode.FrozenSourceThreadID, item.FrozenSourceThreadID, item.FrozenThreadID)),
+		SurfaceBindingPolicy:  agentproto.EffectiveSurfaceBindingPolicy(item.FrozenSurfaceBindingPolicy),
 		ThreadCWD:             item.FrozenCWD,
 		Status:                string(item.Status),
 	}

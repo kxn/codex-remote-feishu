@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func TestRemoteRequestPromptCarriesTurnReplyAnchor(t *testing.T) {
@@ -62,5 +64,51 @@ func TestReplayFinalUsesStoredReplyAnchor(t *testing.T) {
 	}
 	if finalEvent == nil || finalEvent.SourceMessageID != "msg-1" {
 		t.Fatalf("expected replayed final block to keep source anchor, got %#v", events)
+	}
+}
+
+func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
+	now := time.Date(2026, 4, 26, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-main",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-main": {ThreadID: "thread-main", Name: "主线程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-main"})
+	surface := svc.root.Surfaces["surface-1"]
+	startDetachedBranchRemoteTurnForTest(t, svc, surface, "thread-main", "thread-detour", "msg-1", "顺手问个岔题", "turn-detour")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-detour",
+		TurnID:    "turn-detour",
+		RequestID: "req-detour-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+		Metadata: map[string]any{
+			"requestType": "approval",
+			"title":       "需要确认",
+		},
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected one request prompt event, got %#v", events)
+	}
+	if events[0].SourceMessageID != "msg-1" {
+		t.Fatalf("expected detached branch request prompt to keep reply anchor, got %#v", events[0])
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected detached branch request not to steal selection, got %q", surface.SelectedThreadID)
+	}
+	record := surface.PendingRequests["req-detour-1"]
+	if record == nil || record.SourceMessageID != "msg-1" || record.ThreadID != "thread-detour" {
+		t.Fatalf("expected detached branch request record to retain anchor and execution thread, got %#v", record)
 	}
 }

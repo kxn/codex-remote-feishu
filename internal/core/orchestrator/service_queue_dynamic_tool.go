@@ -6,7 +6,6 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func (s *Service) renderDynamicToolCallItem(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -15,16 +14,7 @@ func (s *Service) renderDynamicToolCallItem(instanceID string, event agentproto.
 	if surface == nil {
 		return nil
 	}
-	events := []eventcontract.Event{}
-	if surface.ActiveTurnOrigin != agentproto.InitiatorLocalUI {
-		routeMode := surface.RouteMode
-		if routeMode != state.RouteModeFollowLocal {
-			routeMode = state.RouteModePinned
-		}
-		if inst != nil {
-			events = append(events, s.bindSurfaceToThreadMode(surface, inst, event.ThreadID, routeMode)...)
-		}
-	}
+	events := s.maybeBindSurfaceForRemoteTurn(surface, inst, instanceID, event.ThreadID, event.TurnID)
 
 	imageItems := dynamicToolImageItemsFromMetadata(event.Metadata)
 	imageLinks := dynamicToolImageLinksFromMetadata(event.Metadata)

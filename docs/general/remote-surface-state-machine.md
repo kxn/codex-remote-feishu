@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-04-24`
-> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；同时 standalone Codex 升级事务现在只会挂起真正依赖 standalone Codex 的非发起 surface，VS Code surface / instance 不再被这条事务一起暂停或重启；细节见正文。
+> Updated: `2026-04-26`
+> Summary: 当前实现同步了 workspace-aware normal mode 与 vscode mode，并把 normal mode 的工作会话主展示改成 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list`、`/workspace new dir`、`/workspace new git` 分别承接切换/目录/Git 三张独立业务卡，`/list` `/use` `/useall` 只保留 alias；normal mode 的被动恢复入口（attach unbound、`selected_thread_lost`、`thread_claim_lost`）现在会统一回到“锁定当前工作区”的 target picker，不再回退旧 scoped selection prompt；VS Code `/list` / `/use` / `/useall` 则继续走结构化实例/线程卡，其中线程选择统一成当前实例内的 dropdown，并隐藏不可切换会话、改用 plain-text 提示说明。另一个新变化是把上游可重试失败自动继续从 `autowhip` 中拆成独立 `autocontinue` overlay：它拥有自己的 queue lane、reply anchor、tail-only 状态卡与 backoff，不再和“正常结束后继续催活”混用；同时 remote runtime 现在显式区分 source/main thread、execution thread 与 `keep_surface_selection` 策略，为后续 detached-branch 产品入口保留基座，而且不会再让 detour turn 污染当前 surface 默认 thread；细节见正文。
 
 ## 1. 文档定位
 
@@ -140,6 +140,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. queue item 会在入队时冻结 `PlanMode`，dispatch `turn/start` 时再把它落到 `PromptOverrides.PlanMode -> collaborationMode.mode=plan/default`。
    4. `/detach`、`/new`、`/use`、`/mode normal|vscode` 不会顺手清掉它；daemon 重启后，latent surface 会从 `surface resume state` 恢复之前的 `PlanMode`。
    5. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
+      对 `keep_surface_selection` 的 detached-branch turn，这张卡仍回原 surface，并按 source/main thread 判断是否 suppress，不会因为 execution thread 不同而被误吞。
    6. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
 9. `normal mode` 当前已经完成这一轮产品收窄：
    1. bare `/workspace` 是工作会话父页，固定展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`解除接管` 四个入口；bare `/workspace new` 是只含两条新建路径的子页。
@@ -376,6 +377,10 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    3. `/use` / `/follow` 等显式 route mutation
    4. 目标 thread 丢失或被强踢
    以上路径都会清掉当前 episode，只保留 `/autocontinue` 的 enable 开关
+8. 若某个 episode 来自 `keep_surface_selection` detour：
+   1. surface 当前选中的 thread 仍以 source/main thread 为准
+   2. 但真正的 retry 目标仍会继续打到 execution thread
+   3. 因此 detour 的 autoContinue 不会因为 `SelectedThreadID != executionThreadID` 被误清理
 
 ## 4. 当前已实现的不变量
 
@@ -982,40 +987,46 @@ E3 Running
 4. 若 queue item 来自 `R5`，turn.started 后 surface 必须切回 `pinned`，不会继续停在 `new_thread_ready`。
 5. instance 级 `ActiveTurnID/ActiveThreadID` 当前只跟踪“当前主交互面真正可中断的 turn”：
    1. local UI turn 会更新它
-   2. 命中当前 `pendingRemote/activeRemote` 绑定的 remote turn 也会更新它
+   2. 命中当前 `pendingRemote/activeRemote` 绑定、且 surface 策略是 `follow_execution_thread` 的 remote turn 也会更新它
    3. 未绑定的 unknown/helper side-turn 不会再覆盖或清空它
+   4. `keep_surface_selection` 的 detached-branch turn 不会把 execution thread 写进 `ActiveThreadID`，因此不会污染后续 attach/resume 默认目标
 6. `/stop` 当前会优先看当前 surface 的 `activeRemote` 绑定：
    1. 即使 instance 级 `ActiveTurnID` 暂时缺失，只要当前 surface 仍保留 active running remote binding，仍会对该主 turn 发 `turn.interrupt`
    2. 若已进入 retained-offline / transport degraded，则仍以 offline notice 为准，不会因为 retained binding 存在而伪造 interrupt
-7. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
-8. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。
-9. 显式 `/compact` 还会在当前 surface 建立一条 compact owner-card flow：
+7. `pendingRemote/activeRemote` 当前显式保留三类 runtime 事实：
+   1. execution thread
+   2. source/main thread
+   3. surface binding policy
+   这使 detour turn 可以在临时 thread 上跑完整轮 turn，同时 request / progress / image / final / interrupt 仍回原 surface，但不强制 surface 改绑到 execution thread
+8. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
+9. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。
+10. 显式 `/compact` 还会在当前 surface 建立一条 compact owner-card flow：
    1. 首卡由 orchestrator 直接 append 一张 patchable `FeishuPageView`
    2. 首次发送时靠 `TrackingKey` 回写 `message_id`
    3. 后续 running / terminal 都继续 patch 同一张卡
    4. 这条显式 owner-card 不受 verbosity 影响
-10. 只要 compact 仍在 pending/running，`dispatchNext` 就不会再把后续 queued 输入发给同一实例。
-11. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。
-12. compact pending/running 也属于 `surfaceHasLiveRemoteWork`：
+11. 只要 compact 仍在 pending/running，`dispatchNext` 就不会再把后续 queued 输入发给同一实例。
+12. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。
+13. compact pending/running 也属于 `surfaceHasLiveRemoteWork`：
    1. `/mode` 会直接拒绝
    2. `/detach` 会进入 delayed detach / abandoning
    3. `/use`、`/follow`、`/new` 这类 route mutation 会被挡住，不会在 compact 期间偷偷切走当前 thread
-13. remote turn 在 `turn.completed` 时，若当前 item 满足 autowhip 触发条件：
+14. remote turn 在 `turn.completed` 时，若当前 item 满足 autowhip 触发条件：
    1. surface 不会立刻同步 enqueue 新 item
    2. 只会把 surface 置入 `A2 Scheduled`
    3. 后续等 `Tick()` 到期后再真正 enqueue
-14. autowhip 当前只有一条触发通道：
+15. autowhip 当前只有一条触发通道：
    1. final assistant 文本**不包含**收工口令 `老板不要再打我了，真的没有事情干了`
-15. 若 final assistant 文本命中收工口令：
+16. 若 final assistant 文本命中收工口令：
    1. 当前 surface 会回到 `A1 EnabledIdle`
    2. 不会继续 schedule / dispatch autowhip
    3. 会补一条 `AutoWhip` notice：`Codex 已经把活干完了，老板放过他吧`
-16. `/stop` 命中 live remote work 时，会给当前 surface 打一次 `SuppressOnce`：
+17. `/stop` 命中 live remote work 时，会给当前 surface 打一次 `SuppressOnce`：
    1. 本轮 turn 收尾时不会触发 autowhip
    2. suppress 只消费一次，之后 autowhip 恢复正常评估
-17. 当前 backoff 固定为：
+18. 当前 backoff 固定为：
    1. `incomplete_stop`（文本未出现收工口令）: `3s -> 10s -> 30s`，最多 3 次
-18. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
+19. autowhip 当前不会伪造用户消息回显，也不会补 `THINKING` / `ThumbsUp` / `ThumbsDown` reaction；额外可见性只来自上面的 `AutoWhip` notice。
 19. remote turn 在 `turn.completed` 时，若当前 item 命中 `terminalCause=upstream_retryable_failure`，则 autoContinue 会接管收口：
    1. direct `turn_failed` notice 被抑制
    2. surface 进入 autoContinue overlay，而不是 autowhip overlay

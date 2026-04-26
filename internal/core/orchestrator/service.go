@@ -76,7 +76,14 @@ type remoteTurnBinding struct {
 	ReplyToMessageID      string
 	ReplyToMessagePreview string
 	CommandID             string
-	ThreadID              string
+	// #430 runtime carrier:
+	// - ThreadID tracks the actual execution thread used by the running turn.
+	// - SourceThreadID keeps the surface's main/source thread when detached branch
+	//   execution intentionally should not steal the current selection (#428 entry
+	//   will consume this later; do not delete as dead code).
+	ThreadID             string
+	SourceThreadID       string
+	SurfaceBindingPolicy agentproto.SurfaceBindingPolicy
 	ThreadCWD             string
 	TurnID                string
 	Status                string
@@ -794,18 +801,22 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		compactEvents := s.completeCompactTurn(instanceID, event)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
-			events = append(events, s.maybePresentCompletedPlanProposal(instanceID, event.ThreadID, event.TurnID)...)
+			events = append(events, s.maybePresentCompletedPlanProposal(instanceID, event.ThreadID, event.TurnID, nil)...)
 			events = append(events, compactEvents...)
 			if surface != nil {
 				events = append(events, s.finishSurfaceAfterWork(surface)...)
 			}
 			return s.filterEventsForSurfaceVisibility(events)
-		}
-		outcome := s.deriveRemoteTurnOutcome(instanceID, event, finalText, summary)
-		events = append(events, s.completeRemoteTurn(outcome)...)
-		events = append(events, s.maybePresentCompletedPlanProposal(instanceID, event.ThreadID, event.TurnID)...)
-		events = append(events, compactEvents...)
-		return s.filterEventsForSurfaceVisibility(events)
+			}
+			outcome := s.deriveRemoteTurnOutcome(instanceID, event, finalText, summary)
+			events = append(events, s.completeRemoteTurn(outcome)...)
+			var planBinding *remoteTurnBinding
+			if outcome != nil {
+				planBinding = outcome.Binding
+			}
+			events = append(events, s.maybePresentCompletedPlanProposal(instanceID, event.ThreadID, event.TurnID, planBinding)...)
+			events = append(events, compactEvents...)
+			return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventItemStarted:
 		s.trackItemStart(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemStarted(instanceID, event)...))

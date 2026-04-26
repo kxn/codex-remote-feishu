@@ -237,7 +237,14 @@ func (s *Service) takePendingPlanProposal(instanceID, threadID, turnID string) *
 	return pending
 }
 
-func (s *Service) shouldSuppressPlanProposal(surface *state.SurfaceConsoleRecord, instanceID, threadID string) bool {
+func planProposalSelectedThreadID(binding *remoteTurnBinding, threadID string) string {
+	if remoteBindingKeepsSurfaceSelection(binding) {
+		return remoteBindingSourceThreadID(binding)
+	}
+	return strings.TrimSpace(threadID)
+}
+
+func (s *Service) shouldSuppressPlanProposal(surface *state.SurfaceConsoleRecord, instanceID, threadID string, binding *remoteTurnBinding) bool {
 	if surface == nil || surface.Abandoning {
 		return true
 	}
@@ -250,7 +257,7 @@ func (s *Service) shouldSuppressPlanProposal(surface *state.SurfaceConsoleRecord
 	if countPendingDrafts(surface) != 0 || len(surface.QueuedQueueItemIDs) != 0 || strings.TrimSpace(surface.ActiveQueueItemID) != "" {
 		return true
 	}
-	if strings.TrimSpace(surface.SelectedThreadID) != "" && strings.TrimSpace(surface.SelectedThreadID) != strings.TrimSpace(threadID) {
+	if selectedThreadID := planProposalSelectedThreadID(binding, threadID); strings.TrimSpace(surface.SelectedThreadID) != "" && strings.TrimSpace(surface.SelectedThreadID) != selectedThreadID {
 		return true
 	}
 	switch surface.RouteMode {
@@ -261,13 +268,16 @@ func (s *Service) shouldSuppressPlanProposal(surface *state.SurfaceConsoleRecord
 	}
 }
 
-func (s *Service) maybePresentCompletedPlanProposal(instanceID, threadID, turnID string) []eventcontract.Event {
+func (s *Service) maybePresentCompletedPlanProposal(instanceID, threadID, turnID string, binding *remoteTurnBinding) []eventcontract.Event {
 	pending := s.takePendingPlanProposal(instanceID, threadID, turnID)
 	if pending == nil || strings.TrimSpace(pending.Text) == "" {
 		return nil
 	}
 	surface := s.turnSurface(instanceID, threadID, turnID)
-	if s.shouldSuppressPlanProposal(surface, instanceID, threadID) {
+	if surface == nil && binding != nil {
+		surface = s.root.Surfaces[binding.SurfaceSessionID]
+	}
+	if s.shouldSuppressPlanProposal(surface, instanceID, threadID, binding) {
 		return nil
 	}
 	inst := s.root.Instances[instanceID]

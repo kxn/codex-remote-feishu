@@ -332,6 +332,50 @@ func startRemoteTurnForAutoWhipTest(t *testing.T, svc *Service, messageID, text,
 	})
 }
 
+func startDetachedBranchRemoteTurnForTest(t *testing.T, svc *Service, surface *state.SurfaceConsoleRecord, sourceThreadID, executionThreadID, messageID, text, turnID string) []eventcontract.Event {
+	t.Helper()
+	if svc == nil || surface == nil {
+		t.Fatal("expected service and surface")
+	}
+	inst := svc.root.Instances[surface.AttachedInstanceID]
+	if inst == nil {
+		t.Fatal("expected attached instance")
+	}
+	cwd := strings.TrimSpace(inst.WorkspaceRoot)
+	if thread := inst.Threads[sourceThreadID]; thread != nil && strings.TrimSpace(thread.CWD) != "" {
+		cwd = strings.TrimSpace(thread.CWD)
+	}
+	item := &state.QueueItemRecord{
+		SurfaceSessionID:           surface.SurfaceSessionID,
+		SourceKind:                 state.QueueItemSourceUser,
+		SourceMessageID:            messageID,
+		SourceMessagePreview:       normalizeSourceMessagePreview(text),
+		SourceMessageIDs:           []string{messageID},
+		ReplyToMessageID:           messageID,
+		ReplyToMessagePreview:      normalizeSourceMessagePreview(text),
+		Inputs:                     []agentproto.Input{{Type: agentproto.InputText, Text: text}},
+		FrozenCWD:                  cwd,
+		FrozenExecutionMode:        agentproto.PromptExecutionModeForkEphemeral,
+		FrozenSourceThreadID:       sourceThreadID,
+		FrozenSurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		FrozenOverride:             state.ModelConfigRecord{},
+		FrozenPlanMode:             state.NormalizePlanModeSetting(surface.PlanMode),
+		RouteModeAtEnqueue:         surface.RouteMode,
+		Status:                     state.QueueItemQueued,
+	}
+	events := svc.enqueuePreparedQueueItem(surface, item, false)
+	if surface.ActiveQueueItemID == "" {
+		t.Fatalf("expected detached branch queue item to dispatch, got %#v", events)
+	}
+	started := svc.ApplyAgentEvent(inst.InstanceID, agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  executionThreadID,
+		TurnID:    turnID,
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	return append(events, started...)
+}
+
 func completeRemoteTurnWithFinalText(t *testing.T, svc *Service, turnID, status, errorMessage, finalText string, problem *agentproto.ErrorInfo) []eventcontract.Event {
 	t.Helper()
 	if strings.TrimSpace(finalText) != "" {

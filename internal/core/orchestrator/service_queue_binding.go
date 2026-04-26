@@ -27,6 +27,68 @@ func queuedItemMatchesTurn(item *state.QueueItemRecord, threadID string) bool {
 	return threadID == ""
 }
 
+func queuedItemSourceThreadID(item *state.QueueItemRecord) string {
+	if item == nil {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmpty(item.FrozenSourceThreadID, item.FrozenThreadID))
+}
+
+func queuedItemSurfaceBindingPolicy(item *state.QueueItemRecord) agentproto.SurfaceBindingPolicy {
+	if item == nil {
+		return agentproto.SurfaceBindingPolicyFollowExecutionThread
+	}
+	return agentproto.EffectiveSurfaceBindingPolicy(item.FrozenSurfaceBindingPolicy)
+}
+
+func remoteBindingExecutionThreadID(binding *remoteTurnBinding) string {
+	if binding == nil {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmpty(binding.ThreadID, binding.SourceThreadID))
+}
+
+func remoteBindingSourceThreadID(binding *remoteTurnBinding) string {
+	if binding == nil {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmpty(binding.SourceThreadID, binding.ThreadID))
+}
+
+func remoteBindingSurfaceBindingPolicy(binding *remoteTurnBinding) agentproto.SurfaceBindingPolicy {
+	if binding == nil {
+		return agentproto.SurfaceBindingPolicyFollowExecutionThread
+	}
+	return agentproto.EffectiveSurfaceBindingPolicy(binding.SurfaceBindingPolicy)
+}
+
+func remoteBindingKeepsSurfaceSelection(binding *remoteTurnBinding) bool {
+	return remoteBindingSurfaceBindingPolicy(binding) == agentproto.SurfaceBindingPolicyKeepSurfaceSelection
+}
+
+func remoteBindingSurfaceThreadID(binding *remoteTurnBinding) string {
+	if remoteBindingKeepsSurfaceSelection(binding) {
+		return remoteBindingSourceThreadID(binding)
+	}
+	return remoteBindingExecutionThreadID(binding)
+}
+
+func matchesRemoteBindingThread(binding *remoteTurnBinding, threadID string) bool {
+	if binding == nil {
+		return false
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return true
+	}
+	executionThreadID := remoteBindingExecutionThreadID(binding)
+	if executionThreadID == "" || executionThreadID == threadID {
+		return true
+	}
+	sourceThreadID := remoteBindingSourceThreadID(binding)
+	return sourceThreadID != "" && sourceThreadID == threadID
+}
+
 func (s *Service) pendingRemoteBinding(instanceID, threadID string) *remoteTurnBinding {
 	binding := s.turns.pendingRemote[instanceID]
 	if binding == nil {
@@ -56,6 +118,9 @@ func (s *Service) promotePendingRemote(instanceID string, initiator agentproto.I
 	delete(s.turns.pendingRemote, instanceID)
 	if threadID != "" {
 		binding.ThreadID = threadID
+		if remoteBindingSurfaceBindingPolicy(binding) == agentproto.SurfaceBindingPolicyFollowExecutionThread || strings.TrimSpace(binding.SourceThreadID) == "" {
+			binding.SourceThreadID = threadID
+		}
 	}
 	binding.TurnID = turnID
 	binding.Status = string(state.QueueItemRunning)
@@ -99,7 +164,7 @@ func (s *Service) activeRemoteBinding(instanceID, turnID string) *remoteTurnBind
 
 func (s *Service) lookupRemoteTurn(instanceID, threadID, turnID string) *remoteTurnBinding {
 	if binding := s.activeRemoteBinding(instanceID, turnID); binding != nil {
-		if threadID == "" || binding.ThreadID == "" || binding.ThreadID == threadID {
+		if matchesRemoteBindingThread(binding, threadID) {
 			return binding
 		}
 	}
@@ -113,7 +178,11 @@ func (s *Service) shouldTrackInstanceActiveTurn(instanceID string, event agentpr
 	if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 		return true
 	}
-	return s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID) != nil
+	binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID)
+	if binding == nil {
+		return false
+	}
+	return !remoteBindingKeepsSurfaceSelection(binding)
 }
 
 func shouldClearTrackedInstanceActiveTurn(inst *state.InstanceRecord, threadID, turnID string) bool {
@@ -186,7 +255,7 @@ func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) 
 			if inst != nil {
 				activeThreadID = inst.ActiveThreadID
 			}
-			return strings.TrimSpace(firstNonEmpty(binding.ThreadID, activeThreadID)), turnID, true
+			return strings.TrimSpace(firstNonEmpty(remoteBindingExecutionThreadID(binding), activeThreadID)), turnID, true
 		}
 	}
 	if inst == nil {

@@ -24,6 +24,28 @@ func defaultSurfaceBindingPolicy() agentproto.SurfaceBindingPolicy {
 	return agentproto.SurfaceBindingPolicyFollowExecutionThread
 }
 
+func (s *Service) maybeBindSurfaceForRemoteTurn(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, instanceID, threadID, turnID string) []eventcontract.Event {
+	if surface == nil || inst == nil || surface.ActiveTurnOrigin == agentproto.InitiatorLocalUI {
+		return nil
+	}
+	binding := s.lookupRemoteTurn(instanceID, threadID, turnID)
+	if remoteBindingKeepsSurfaceSelection(binding) {
+		return nil
+	}
+	targetThreadID := strings.TrimSpace(threadID)
+	if binding != nil {
+		targetThreadID = remoteBindingSurfaceThreadID(binding)
+	}
+	if targetThreadID == "" {
+		return nil
+	}
+	routeMode := surface.RouteMode
+	if routeMode != state.RouteModeFollowLocal {
+		routeMode = state.RouteModePinned
+	}
+	return s.bindSurfaceToThreadMode(surface, inst, targetThreadID, routeMode)
+}
+
 func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (string, string) {
 	if strings.TrimSpace(instanceID) == "" || strings.TrimSpace(threadID) == "" || strings.TrimSpace(turnID) == "" {
 		return "", ""
@@ -233,7 +255,9 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		SourceMessagePreview:  item.SourceMessagePreview,
 		ReplyToMessageID:      firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
 		ReplyToMessagePreview: firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
-		ThreadID:              item.FrozenThreadID,
+		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
+		SourceThreadID:        queuedItemSourceThreadID(item),
+		SurfaceBindingPolicy:  queuedItemSurfaceBindingPolicy(item),
 		ThreadCWD:             item.FrozenCWD,
 		Status:                string(item.Status),
 	}
@@ -312,12 +336,16 @@ func (s *Service) markRemoteTurnRunning(instanceID string, initiator agentproto.
 		QueueItemID: item.ID,
 		Status:      string(item.Status),
 	}, queueItemSourceMessageIDs(item))
-	if item.FrozenThreadID != "" {
+	if !remoteBindingKeepsSurfaceSelection(binding) {
 		routeMode := item.RouteModeAtEnqueue
 		if routeMode == "" || routeMode == state.RouteModeNewThreadReady {
 			routeMode = state.RouteModePinned
 		}
-		events = append(events, s.bindSurfaceToThreadMode(surface, inst, item.FrozenThreadID, routeMode)...)
+		targetThreadID := remoteBindingSurfaceThreadID(binding)
+		if targetThreadID == "" {
+			targetThreadID = strings.TrimSpace(item.FrozenThreadID)
+		}
+		events = append(events, s.bindSurfaceToThreadMode(surface, inst, targetThreadID, routeMode)...)
 	}
 	return events
 }
@@ -420,15 +448,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 	}
 	problem.SurfaceSessionID = surface.SurfaceSessionID
 	events := []eventcontract.Event{}
-	if surface.ActiveTurnOrigin != agentproto.InitiatorLocalUI {
-		routeMode := surface.RouteMode
-		if routeMode != state.RouteModeFollowLocal {
-			routeMode = state.RouteModePinned
-		}
-		if inst != nil {
-			events = append(events, s.bindSurfaceToThreadMode(surface, inst, event.ThreadID, routeMode)...)
-		}
-	}
+	events = append(events, s.maybeBindSurfaceForRemoteTurn(surface, inst, instanceID, event.ThreadID, event.TurnID)...)
 	if savedPath == "" && imageBase64 == "" {
 		notice := NoticeForProblem(problem)
 		return append(events, eventcontract.Event{
@@ -487,20 +507,12 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 	if replySourceMessageID == "" && inst != nil {
 		replySourceMessageID, replySourceMessagePreview = s.replyAnchorForTurn(inst.InstanceID, threadID, turnID)
 	}
-	events := []eventcontract.Event{}
-	if surface.ActiveTurnOrigin != agentproto.InitiatorLocalUI {
-		routeMode := surface.RouteMode
-		if routeMode != state.RouteModeFollowLocal {
-			routeMode = state.RouteModePinned
-		}
-		if inst != nil {
-			events = append(events, s.bindSurfaceToThreadMode(surface, inst, threadID, routeMode)...)
-		}
-	}
 	instanceKey := ""
 	if inst != nil {
 		instanceKey = inst.InstanceID
 	}
+	events := []eventcontract.Event{}
+	events = append(events, s.maybeBindSurfaceForRemoteTurn(surface, inst, instanceKey, threadID, turnID)...)
 	blocks := s.renderer.PlanAssistantBlocks(surface.SurfaceSessionID, instanceKey, threadID, turnID, itemID, text)
 	thread := (*state.ThreadRecord)(nil)
 	if inst != nil {

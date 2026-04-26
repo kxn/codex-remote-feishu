@@ -160,6 +160,78 @@ func TestTurnCompletedPresentsPlanProposalCard(t *testing.T) {
 	}
 }
 
+func TestDetachedBranchTurnCompletedPresentsPlanProposalWithoutStealingSelection(t *testing.T) {
+	now := time.Date(2026, 4, 26, 12, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := &state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-main",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-main": {ThreadID: "thread-main", Name: "主线程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	}
+	svc.UpsertInstance(inst)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	surface.PlanMode = state.PlanModeSettingOn
+	svc.bindSurfaceToThreadMode(surface, inst, "thread-main", state.RouteModePinned)
+	startDetachedBranchRemoteTurnForTest(t, svc, surface, "thread-main", "thread-detour", "msg-1", "顺手问个岔题", "turn-detour")
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemDelta,
+		ThreadID:  "thread-detour",
+		TurnID:    "turn-detour",
+		ItemID:    "item-plan",
+		ItemKind:  "plan",
+		Delta:     "第一步\n第二步",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-detour",
+		TurnID:    "turn-detour",
+		ItemID:    "item-plan",
+		ItemKind:  "plan",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-detour",
+		TurnID:    "turn-detour",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+
+	var page *control.FeishuPageView
+	for _, event := range events {
+		if event.ThreadSelection != nil {
+			t.Fatalf("expected detached branch plan proposal not to change selection, got %#v", events)
+		}
+		catalog, ok := eventCommandCatalog(event)
+		if !ok {
+			continue
+		}
+		page = catalog
+		break
+	}
+	if page == nil {
+		t.Fatalf("expected detached branch plan proposal card, got %#v", events)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected detached branch plan proposal to keep main selection, got %q", surface.SelectedThreadID)
+	}
+	if svc.activePlanProposal(surface) == nil {
+		t.Fatal("expected detached branch plan proposal runtime after presenting card")
+	}
+}
+
 func TestPlanProposalExecuteEnqueuesContinuationAndDisablesPlanMode(t *testing.T) {
 	now := time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

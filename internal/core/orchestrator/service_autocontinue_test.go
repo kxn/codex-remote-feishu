@@ -187,6 +187,80 @@ func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *tes
 	}
 }
 
+func TestDetachedBranchAutoContinueKeepsSurfaceSelectionButRetriesExecutionThread(t *testing.T) {
+	now := time.Date(2026, 4, 26, 12, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-main",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-main": {ThreadID: "thread-main", Name: "主线程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-main"})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+	startDetachedBranchRemoteTurnForTest(t, svc, surface, "thread-main", "thread-detour", "msg-1", "顺手问个岔题", "turn-detour")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnCompleted,
+		ThreadID:     "thread-detour",
+		TurnID:       "turn-detour",
+		Status:       "interrupted",
+		ErrorMessage: "upstream stream closed",
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+		Problem: &agentproto.ErrorInfo{
+			Code:      "responseStreamDisconnected",
+			Layer:     "codex",
+			Stage:     "runtime_error",
+			Message:   "upstream stream closed",
+			ThreadID:  "thread-detour",
+			TurnID:    "turn-detour",
+			Retryable: true,
+		},
+	})
+
+	episode := surface.AutoContinue.Episode
+	if episode == nil {
+		t.Fatal("expected detached branch autocontinue episode")
+	}
+	if episode.State != state.AutoContinueEpisodeRunning {
+		t.Fatalf("expected detached branch autocontinue to dispatch immediately, got %#v", episode)
+	}
+	if episode.ThreadID != "thread-detour" || episode.FrozenSourceThreadID != "thread-main" {
+		t.Fatalf("expected detached branch autocontinue to keep execution+source split, got %#v", episode)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected detached branch autocontinue not to steal current selection, got %q", surface.SelectedThreadID)
+	}
+	active := surface.QueueItems[surface.ActiveQueueItemID]
+	if active == nil {
+		t.Fatalf("expected detached branch autocontinue to create active queue item, got %#v", surface.QueueItems)
+	}
+	if active.FrozenThreadID != "thread-detour" || active.FrozenSourceThreadID != "thread-main" || active.FrozenSurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("expected detached branch autocontinue queue item to keep routing split, got %#v", active)
+	}
+	var sawPrompt bool
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			sawPrompt = true
+			if event.Command.Target.ThreadID != "thread-detour" || event.Command.Target.SourceThreadID != "thread-main" || event.Command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+				t.Fatalf("expected detached branch autocontinue prompt to retry on execution thread without rebinding surface, got %#v", event.Command.Target)
+			}
+		}
+	}
+	if !sawPrompt {
+		t.Fatalf("expected detached branch autocontinue prompt dispatch, got %#v", events)
+	}
+}
+
 func TestDetachClearsPendingAutoContinueEpisode(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 18, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
