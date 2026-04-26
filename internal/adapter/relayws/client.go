@@ -5,13 +5,13 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 
 	"github.com/gorilla/websocket"
@@ -119,14 +119,7 @@ func (e FatalError) Unwrap() error {
 }
 
 func normalizeRelayURL(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return raw
-	}
-	if parsed.Path == "" || parsed.Path == "/" {
-		parsed.Path = "/ws/agent"
-	}
-	return parsed.String()
+	return relayurl.NormalizeAgentURL(raw)
 }
 
 func (c *Client) Close() {

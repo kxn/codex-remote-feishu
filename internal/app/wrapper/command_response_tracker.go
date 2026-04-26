@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 )
 
 type commandResponseTracker struct {
@@ -102,14 +103,7 @@ func waitCommandResponse(ctx context.Context, ch <-chan *agentproto.ErrorInfo, t
 }
 
 func extractJSONRPCErrorMessage(message map[string]any) string {
-	if message == nil {
-		return ""
-	}
-	errorMap, _ := message["error"].(map[string]any)
-	return firstNonEmpty(
-		lookupStringFromMap(errorMap, "message"),
-		lookupStringFromMap(message, "error"),
-	)
+	return jsonrpcutil.ExtractErrorMessage(message)
 }
 
 func lookupStringFromRawFrame(line []byte, key string) string {

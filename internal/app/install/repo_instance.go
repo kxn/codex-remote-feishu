@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 )
 
 const (
@@ -405,7 +407,7 @@ func ensureRepoLocalGitExclude(repoRoot string) error {
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
 		return err
 	}
-	if fileHasExactLine(excludePath, repoLocalExcludeLine) {
+	if gitmeta.FileHasExactTrimmedLine(excludePath, repoLocalExcludeLine) {
 		return nil
 	}
 	f, err := os.OpenFile(excludePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -429,30 +431,12 @@ func gitDirForRepoRoot(repoRoot string) (string, error) {
 	if info.IsDir() {
 		return gitPath, nil
 	}
-	return parseGitDirFile(gitPath)
-}
-
-func parseGitDirFile(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	parsed, err := gitmeta.ParseGitDirFile(gitPath)
 	if err != nil {
 		return "", err
 	}
-	line := strings.TrimSpace(string(raw))
-	if !strings.HasPrefix(line, "gitdir:") {
+	if strings.TrimSpace(parsed) == "" {
 		return "", nil
 	}
-	return filepath.Clean(strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))), nil
-}
-
-func fileHasExactLine(path, expected string) bool {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.TrimSpace(line) == expected {
-			return true
-		}
-	}
-	return false
+	return gitmeta.ResolveGitDirPath(repoRoot, parsed), nil
 }

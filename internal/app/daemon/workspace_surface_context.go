@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"encoding/json"
 	"log"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -120,7 +120,7 @@ func ensureWorkspaceContextGitExclude(workspaceRoot string) error {
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
 		return err
 	}
-	if fileHasExactLine(excludePath, pattern) {
+	if gitmeta.FileHasExactTrimmedLine(excludePath, pattern) {
 		return nil
 	}
 	f, err := os.OpenFile(excludePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -141,11 +141,8 @@ func locateGitRepo(workspaceRoot string) (repoRoot string, gitDir string, err er
 			if info.IsDir() {
 				return current, gitPath, nil
 			}
-			if parsed, parseErr := parseGitDirFile(gitPath); parseErr == nil && strings.TrimSpace(parsed) != "" {
-				if !filepath.IsAbs(parsed) {
-					parsed = filepath.Join(current, parsed)
-				}
-				return current, filepath.Clean(parsed), nil
+			if parsed, parseErr := gitmeta.ParseGitDirFile(gitPath); parseErr == nil && strings.TrimSpace(parsed) != "" {
+				return current, gitmeta.ResolveGitDirPath(current, parsed), nil
 			}
 		}
 		parent := filepath.Dir(current)
@@ -155,33 +152,6 @@ func locateGitRepo(workspaceRoot string) (repoRoot string, gitDir string, err er
 		current = parent
 	}
 	return "", "", nil
-}
-
-func parseGitDirFile(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	line := strings.TrimSpace(string(raw))
-	if !strings.HasPrefix(line, "gitdir:") {
-		return "", nil
-	}
-	return strings.TrimSpace(strings.TrimPrefix(line, "gitdir:")), nil
-}
-
-func fileHasExactLine(path, expected string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == expected {
-			return true
-		}
-	}
-	return false
 }
 
 func readWorkspaceSurfaceContext(path string) (workspaceSurfaceContextPayload, error) {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 )
 
 func chooseAny(values ...any) any {
@@ -138,14 +139,7 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func extractJSONRPCErrorMessage(message map[string]any) string {
-	if message == nil {
-		return ""
-	}
-	errorMap, _ := message["error"].(map[string]any)
-	return firstNonEmptyString(
-		lookupStringFromAny(errorMap["message"]),
-		lookupStringFromAny(message["error"]),
-	)
+	return jsonrpcutil.ExtractErrorMessage(message)
 }
 
 func choose(values ...string) string {

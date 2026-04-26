@@ -15,6 +15,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 )
 
 type ProbeStatus string
@@ -383,13 +384,7 @@ func probeWelcome(ctx context.Context, relayURL string, hello agentproto.Hello) 
 }
 
 func normalizeRelayURL(raw string) string {
-	if strings.HasSuffix(raw, "/ws/agent") {
-		return raw
-	}
-	if strings.HasSuffix(raw, "/") {
-		return raw + "ws/agent"
-	}
-	return raw + "/ws/agent"
+	return relayurl.NormalizeAgentURL(raw)
 }
 
 func relayURLUsesLoopback(raw string) bool {

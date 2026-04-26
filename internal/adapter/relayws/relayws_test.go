@@ -99,6 +99,16 @@ func TestClientServerCommandAndEventFlow(t *testing.T) {
 	}
 }
 
+func TestNewClientNormalizesRelayURL(t *testing.T) {
+	client := NewClient("ws://relay.test?token=abc", agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{InstanceID: "inst-1"},
+	}, ClientCallbacks{})
+	if client.url != "ws://relay.test/ws/agent?token=abc" {
+		t.Fatalf("client url = %q", client.url)
+	}
+}
+
 func TestClientNextOutboundPrioritizesControlQueue(t *testing.T) {
 	client := newClientWithQueueSizes("ws://relay.test/ws/agent", agentproto.Hello{
 		Protocol: agentproto.WireProtocol,
