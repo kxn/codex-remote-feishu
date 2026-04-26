@@ -196,12 +196,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}, nil
 		}
 		var threadListAliasResponses [][]byte
-		if inflight, ok := t.takeThreadListInflightByOwner(requestID); ok {
-			aliasResponses, err := buildAliasedJSONRPCResponses(message, inflight.AliasRequestIDs)
-			if err != nil {
-				return Result{}, err
-			}
-			threadListAliasResponses = aliasResponses
+		if resolution, ok, err := t.threadListBroker.ResolveResponse(message); err != nil {
+			return Result{}, err
+		} else if ok {
+			threadListAliasResponses = resolution.AliasResponses
 		}
 		if requestID == t.pendingThreadListRequestID {
 			delete(t.threadRefreshRecords, "")

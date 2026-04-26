@@ -31,8 +31,7 @@ type Translator struct {
 	pendingThreadListRequestID string
 	pendingThreadListBorrowed  bool
 	pendingThreadReads         map[string]string
-	threadListInflight         map[string]*threadListInflight
-	threadListOwnerKeys        map[string]string
+	threadListBroker           *threadListBroker
 	threadRefreshRecords       map[string]agentproto.ThreadSnapshotRecord
 	threadRefreshOrder         []string
 	pendingThreadHistoryReads  map[string]pendingThreadHistoryRead
@@ -97,8 +96,7 @@ func NewTranslator(instanceID string) *Translator {
 		suppressedThreadStarted:    map[string]bool{},
 		turnStartByThread:          map[string]map[string]any{},
 		pendingThreadReads:         map[string]string{},
-		threadListInflight:         map[string]*threadListInflight{},
-		threadListOwnerKeys:        map[string]string{},
+		threadListBroker:           newThreadListBroker(),
 		threadRefreshRecords:       map[string]agentproto.ThreadSnapshotRecord{},
 		pendingThreadHistoryReads:  map[string]pendingThreadHistoryRead{},
 		pendingSuppressedResponse:  map[string]suppressedResponseContext{},

@@ -144,3 +144,25 @@ func configObservedEventsContainThreadPlan(events []agentproto.Event, threadID s
 	}
 	return false
 }
+
+func (t *Translator) observeClientThreadList(requestID string, params map[string]any) Result {
+	observation := t.threadListBroker.ObserveClientRequest(requestID, params)
+	if observation.OwnerRequestID == "" {
+		return Result{}
+	}
+	if observation.Suppress {
+		t.debugf(
+			"observe client thread/list joined inflight owner=%s alias=%s key=%s visible=%t aliases=%d",
+			observation.OwnerRequestID,
+			requestID,
+			observation.Key,
+			observation.OwnerVisible,
+			observation.AliasCount,
+		)
+		return Result{Suppress: true}
+	}
+	if observation.NewOwner {
+		t.debugf("observe client thread/list owner=%s key=%s", requestID, observation.Key)
+	}
+	return Result{}
+}

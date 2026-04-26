@@ -23,6 +23,41 @@ type threadListInflight struct {
 	AliasRequestIDs []string
 }
 
+type threadListBroker struct {
+	inflightByKey     map[string]*threadListInflight
+	ownerKeyByRequest map[string]string
+}
+
+type threadListBrokerClientObservation struct {
+	Query          threadListQuery
+	Key            string
+	OwnerRequestID string
+	OwnerVisible   bool
+	AliasCount     int
+	Suppress       bool
+	NewOwner       bool
+}
+
+type threadListBrokerOwner struct {
+	RequestID string
+	Visible   bool
+}
+
+type threadListBrokerResponseResolution struct {
+	Key               string
+	OwnerRequestID    string
+	OwnerVisible      bool
+	AliasRequestCount int
+	AliasResponses    [][]byte
+}
+
+func newThreadListBroker() *threadListBroker {
+	return &threadListBroker{
+		inflightByKey:     map[string]*threadListInflight{},
+		ownerKeyByRequest: map[string]string{},
+	}
+}
+
 func defaultThreadListQuery() threadListQuery {
 	return threadListQuery{
 		Limit:   50,
@@ -89,75 +124,109 @@ func normalizeThreadListStringSlice(source any) []string {
 	return values
 }
 
-func (t *Translator) observeClientThreadList(requestID string, params map[string]any) Result {
+func (b *threadListBroker) ObserveClientRequest(requestID string, params map[string]any) threadListBrokerClientObservation {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
-		return Result{}
+		return threadListBrokerClientObservation{}
 	}
 	query := normalizeThreadListQuery(params)
 	key := query.key()
-	if inflight := t.threadListInflight[key]; inflight != nil {
+	observation := threadListBrokerClientObservation{
+		Query: query,
+		Key:   key,
+	}
+	if inflight := b.inflightByKey[key]; inflight != nil {
+		observation.OwnerRequestID = inflight.OwnerRequestID
+		observation.OwnerVisible = inflight.OwnerVisible
 		if requestID == inflight.OwnerRequestID {
-			return Result{}
+			return observation
 		}
 		inflight.AliasRequestIDs = append(inflight.AliasRequestIDs, requestID)
-		t.debugf(
-			"observe client thread/list joined inflight owner=%s alias=%s key=%s visible=%t aliases=%d",
-			inflight.OwnerRequestID,
-			requestID,
-			key,
-			inflight.OwnerVisible,
-			len(inflight.AliasRequestIDs),
-		)
-		return Result{Suppress: true}
+		observation.Suppress = true
+		observation.AliasCount = len(inflight.AliasRequestIDs)
+		return observation
 	}
-	t.threadListInflight[key] = &threadListInflight{
+	b.inflightByKey[key] = &threadListInflight{
 		Key:            key,
 		OwnerRequestID: requestID,
 		OwnerVisible:   true,
 	}
-	t.threadListOwnerKeys[requestID] = key
-	t.debugf("observe client thread/list owner=%s key=%s", requestID, key)
-	return Result{}
+	b.ownerKeyByRequest[requestID] = key
+	observation.OwnerRequestID = requestID
+	observation.OwnerVisible = true
+	observation.NewOwner = true
+	return observation
 }
 
-func (t *Translator) joinThreadListInflight(query threadListQuery) (string, bool, bool) {
-	inflight := t.threadListInflight[query.key()]
+func (b *threadListBroker) LookupOwner(query threadListQuery) (threadListBrokerOwner, bool) {
+	inflight := b.inflightByKey[query.key()]
 	if inflight == nil {
-		return "", false, false
+		return threadListBrokerOwner{}, false
 	}
-	return inflight.OwnerRequestID, inflight.OwnerVisible, true
+	return threadListBrokerOwner{
+		RequestID: inflight.OwnerRequestID,
+		Visible:   inflight.OwnerVisible,
+	}, true
 }
 
-func (t *Translator) beginNativeThreadListInflight(requestID string, query threadListQuery) {
+func (b *threadListBroker) RegisterNativeOwner(requestID string, query threadListQuery) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return
 	}
 	key := query.key()
-	t.threadListInflight[key] = &threadListInflight{
+	b.inflightByKey[key] = &threadListInflight{
 		Key:            key,
 		OwnerRequestID: requestID,
 		OwnerVisible:   false,
 	}
-	t.threadListOwnerKeys[requestID] = key
+	b.ownerKeyByRequest[requestID] = key
 }
 
-func (t *Translator) takeThreadListInflightByOwner(requestID string) (*threadListInflight, bool) {
+func (b *threadListBroker) ResolveResponse(message map[string]any) (threadListBrokerResponseResolution, bool, error) {
+	requestID, ok := message["id"]
+	if !ok {
+		return threadListBrokerResponseResolution{}, false, nil
+	}
+	inflight, ok := b.takeInflightByOwner(fmt.Sprint(requestID))
+	if !ok {
+		return threadListBrokerResponseResolution{}, false, nil
+	}
+	aliasResponses, err := buildAliasedJSONRPCResponses(message, inflight.AliasRequestIDs)
+	if err != nil {
+		return threadListBrokerResponseResolution{}, false, err
+	}
+	return threadListBrokerResponseResolution{
+		Key:               inflight.Key,
+		OwnerRequestID:    inflight.OwnerRequestID,
+		OwnerVisible:      inflight.OwnerVisible,
+		AliasRequestCount: len(inflight.AliasRequestIDs),
+		AliasResponses:    aliasResponses,
+	}, true, nil
+}
+
+func (b *threadListBroker) InflightCount() int {
+	if b == nil {
+		return 0
+	}
+	return len(b.inflightByKey)
+}
+
+func (b *threadListBroker) takeInflightByOwner(requestID string) (*threadListInflight, bool) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return nil, false
 	}
-	key := t.threadListOwnerKeys[requestID]
+	key := b.ownerKeyByRequest[requestID]
 	if strings.TrimSpace(key) == "" {
 		return nil, false
 	}
-	delete(t.threadListOwnerKeys, requestID)
-	inflight := t.threadListInflight[key]
+	delete(b.ownerKeyByRequest, requestID)
+	inflight := b.inflightByKey[key]
 	if inflight == nil || inflight.OwnerRequestID != requestID {
 		return nil, false
 	}
-	delete(t.threadListInflight, key)
+	delete(b.inflightByKey, key)
 	return inflight, true
 }
 

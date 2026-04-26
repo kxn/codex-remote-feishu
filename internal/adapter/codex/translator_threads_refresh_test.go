@@ -171,7 +171,7 @@ func TestThreadListCoalescingKeepsDifferentSortKeysSeparate(t *testing.T) {
 		t.Fatalf("expected created_at thread/list to join native refresh request, got %#v", joined)
 	}
 
-	if len(tr.threadListInflight) != 2 {
-		t.Fatalf("expected separate inflight groups for created_at and updated_at, got %d", len(tr.threadListInflight))
+	if tr.threadListBroker.InflightCount() != 2 {
+		t.Fatalf("expected separate inflight groups for created_at and updated_at, got %d", tr.threadListBroker.InflightCount())
 	}
 }
