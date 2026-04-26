@@ -7,6 +7,7 @@ import "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 type FeishuRequestView struct {
 	RequestID            string
 	RequestType          string
+	SemanticKind         string
 	RequestRevision      int
 	Title                string
 	ThreadID             string
@@ -15,6 +16,7 @@ type FeishuRequestView struct {
 	Options              []RequestPromptOption
 	Questions            []RequestPromptQuestion
 	CurrentQuestionIndex int
+	HintText             string
 	Phase                frontstagecontract.Phase
 	ActionPolicy         frontstagecontract.ActionPolicy
 	StatusText           string

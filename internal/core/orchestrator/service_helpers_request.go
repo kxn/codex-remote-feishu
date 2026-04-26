@@ -166,9 +166,10 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 	return out
 }
 
-func buildApprovalRequestOptions(metadata map[string]any) []state.RequestPromptOptionRecord {
+func buildApprovalRequestOptions(semanticKind string, metadata map[string]any) []state.RequestPromptOptionRecord {
 	var options []state.RequestPromptOptionRecord
 	seen := map[string]bool{}
+	semanticKind = control.NormalizeRequestSemanticKind(semanticKind, "approval")
 	add := func(optionID, label, style string) {
 		optionID = control.NormalizeRequestOptionID(optionID)
 		if optionID == "" || seen[optionID] {
@@ -217,11 +218,11 @@ func buildApprovalRequestOptions(metadata map[string]any) []state.RequestPromptO
 	}
 	if len(upstreamOptions) == 0 {
 		add("accept", firstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
-		if approvalRequestSupportsSession(metadata) {
+		if approvalRequestSupportsSession(semanticKind) {
 			add("acceptForSession", "本会话允许", "default")
 		}
 		add("decline", firstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
-		if approvalRequestSupportsCancel(metadata) {
+		if approvalRequestSupportsCancel(semanticKind) {
 			add("cancel", "取消", "default")
 		}
 	}
@@ -343,34 +344,18 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 	return questions
 }
 
-func approvalRequestSupportsSession(metadata map[string]any) bool {
-	if len(metadataRequestOptions(metadata)) != 0 {
-		for _, option := range metadataRequestOptions(metadata) {
-			if control.NormalizeRequestOptionID(option.OptionID) == "acceptForSession" {
-				return true
-			}
-		}
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(metadataString(metadata, "requestKind"))) {
-	case "approval_command", "approval_file_change", "approval_network":
+func approvalRequestSupportsSession(semanticKind string) bool {
+	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
+	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
 		return true
 	default:
 		return false
 	}
 }
 
-func approvalRequestSupportsCancel(metadata map[string]any) bool {
-	if len(metadataRequestOptions(metadata)) != 0 {
-		for _, option := range metadataRequestOptions(metadata) {
-			if control.NormalizeRequestOptionID(option.OptionID) == "cancel" {
-				return true
-			}
-		}
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(metadataString(metadata, "requestKind"))) {
-	case "approval_command", "approval_file_change", "approval_network":
+func approvalRequestSupportsCancel(semanticKind string) bool {
+	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
+	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
 		return true
 	default:
 		return false
@@ -438,15 +423,23 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	if request == nil {
 		return "当前有待处理请求。"
 	}
-	switch normalizeRequestType(request.RequestType) {
-	case "request_user_input":
+	switch requestPromptSemanticKind(request) {
+	case control.RequestSemanticRequestUserInput:
 		return "当前有待回答问题。请先在卡片上点击选项、提交当前答案，或跳过可选题。"
-	case "approval":
+	case control.RequestSemanticApprovalCommand:
+		return "当前有待确认执行命令请求。请先处理这张确认卡片后再继续。"
+	case control.RequestSemanticApprovalFileChange:
+		return "当前有待确认文件修改请求。请先处理这张确认卡片后再继续。"
+	case control.RequestSemanticApprovalNetwork:
+		return "当前有待确认网络访问请求。请先处理这张确认卡片后再继续。"
+	case control.RequestSemanticApproval:
 		return "当前有待确认请求。请先点击卡片上的处理按钮后再继续。"
-	case "permissions_request_approval":
+	case control.RequestSemanticPermissionsRequestApproval:
 		return "当前有待授予权限请求。请先在卡片上选择“允许本次”、“本会话允许”或“拒绝”。"
-	case "mcp_server_elicitation":
+	case control.RequestSemanticMCPServerElicitation, control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL:
 		return "当前有待处理的 MCP 请求。请先在卡片上填写返回内容、提交当前答案，或取消请求。"
+	case control.RequestSemanticToolCallback:
+		return "当前有工具回调正在自动上报 unsupported 结果。请等待 Codex 继续，或使用 /stop 结束当前 turn。"
 	default:
 		return "当前有待处理请求。这个请求类型暂时不能在飞书端直接处理，请先回到本地处理或等待后续支持。"
 	}

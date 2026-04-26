@@ -28,23 +28,7 @@ func buildPermissionsRequestSections(prompt *agentproto.RequestPrompt, metadata 
 	}
 	permissions := promptPermissionsList(prompt, metadata)
 	if len(permissions) != 0 {
-		lines := make([]string, 0, len(permissions))
-		for _, permission := range permissions {
-			name := firstNonEmpty(
-				lookupStringFromAny(permission["title"]),
-				lookupStringFromAny(permission["name"]),
-				lookupStringFromAny(permission["permission"]),
-				lookupStringFromAny(permission["scope"]),
-			)
-			if code := firstNonEmpty(lookupStringFromAny(permission["name"]), lookupStringFromAny(permission["permission"])); code != "" && code != name {
-				name += " (`" + code + "`)"
-			}
-			if name == "" {
-				name = "(unknown)"
-			}
-			lines = append(lines, "- "+name)
-		}
-		sections = appendRequestPromptSection(sections, "申请权限", lines...)
+		sections = appendRequestPromptSection(sections, "申请权限", requestPermissionLines(permissions)...)
 	}
 	return sections
 }

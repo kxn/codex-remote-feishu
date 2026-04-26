@@ -26,16 +26,16 @@ func requestPromptSections(prompt control.FeishuRequestView) []control.FeishuCar
 func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
 	prompt = control.NormalizeFeishuRequestView(prompt)
 	elements := appendCardTextSections(nil, requestPromptSections(prompt))
-	switch normalizeRequestPromptType(prompt.RequestType) {
-	case "request_user_input":
+	switch requestPromptSemanticKind(prompt) {
+	case control.RequestSemanticRequestUserInput:
 		if len(prompt.Questions) != 0 {
 			return append(elements, requestUserInputPromptElements(prompt, daemonLifecycleID)...)
 		}
-	case "permissions_request_approval":
+	case control.RequestSemanticPermissionsRequestApproval:
 		return append(elements, permissionsRequestPromptElements(prompt, daemonLifecycleID)...)
-	case "mcp_server_elicitation":
+	case control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitation:
 		return append(elements, mcpElicitationPromptElements(prompt, daemonLifecycleID)...)
-	case "tool_callback":
+	case control.RequestSemanticToolCallback:
 		if status := requestPromptStatusMarkdown(prompt); status != "" {
 			elements = append(elements, map[string]any{
 				"tag":     "markdown",
@@ -62,17 +62,15 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 			actions = append(actions, button)
 		}
 	}
-	hint := "这个确认只影响当前这一次请求。"
-	if requestPromptContainsOption(options, "captureFeedback") {
-		hint = "如果想拒绝并补充处理意见，请点击“告诉 Codex 怎么改”后再发送下一条文字。"
-	}
 	if group := cardButtonGroupElement(actions); len(group) != 0 {
 		elements = append(elements, group)
 	}
-	elements = append(elements, map[string]any{
-		"tag":     "markdown",
-		"content": hint,
-	})
+	if hint := requestPromptHintMarkdown(prompt, defaultApprovalRequestHint(options)); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
 	if status := requestPromptStatusMarkdown(prompt); status != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
@@ -359,6 +357,20 @@ func requestPromptStatusMarkdown(prompt control.FeishuRequestView) string {
 	return strings.TrimSpace(prompt.StatusText)
 }
 
+func requestPromptHintMarkdown(prompt control.FeishuRequestView, fallback string) string {
+	if hint := strings.TrimSpace(prompt.HintText); hint != "" {
+		return hint
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func defaultApprovalRequestHint(options []control.RequestPromptOption) string {
+	if requestPromptContainsOption(options, "captureFeedback") {
+		return "如果想拒绝并补充处理意见，请点击“告诉 Codex 怎么改”后再发送下一条文字。"
+	}
+	return "这个确认只影响当前这一次请求。"
+}
+
 func requestPromptCancelFooterElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
 	if !frontstagecontract.AllowsCancelAction(prompt.ActionPolicy) {
 		return nil
@@ -422,4 +434,8 @@ func normalizeRequestPromptType(value string) string {
 	default:
 		return normalized
 	}
+}
+
+func requestPromptSemanticKind(prompt control.FeishuRequestView) string {
+	return control.NormalizeRequestSemanticKind(strings.TrimSpace(prompt.SemanticKind), strings.TrimSpace(prompt.RequestType))
 }

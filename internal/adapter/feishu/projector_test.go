@@ -817,11 +817,13 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 func TestProjectRequestPromptAsCard(t *testing.T) {
 	projector := NewProjector()
 	event := requestPromptEvent(control.FeishuRequestView{
-		RequestID:   "req-1",
-		RequestType: "approval",
-		Title:       "需要确认",
-		ThreadID:    "thread-1",
-		ThreadTitle: "droid · 修复登录流程",
+		RequestID:    "req-1",
+		RequestType:  "approval",
+		SemanticKind: control.RequestSemanticApprovalCommand,
+		Title:        "需要确认",
+		ThreadID:     "thread-1",
+		ThreadTitle:  "droid · 修复登录流程",
+		HintText:     "如果命令或参数不符合预期，请点击“告诉 Codex 怎么改”；如果只是当前不想执行，可以直接拒绝或取消。",
 		Sections: []control.FeishuCardTextSection{{
 			Lines: []string{"本地 Codex 想执行：", "```text", "git push", "```"},
 		}},
@@ -878,6 +880,9 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	if feedbackValue["request_option_id"] != "captureFeedback" {
 		t.Fatalf("unexpected feedback payload: %#v", feedbackValue)
 	}
+	if got := markdownContent(ops[0].CardElements[3]); !strings.Contains(got, "命令或参数不符合预期") {
+		t.Fatalf("expected approval prompt to render owner-provided hint, got %#v", ops[0].CardElements[3])
+	}
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected request prompt to use structured V2 send path, got %#v", ops[0])
 	}
@@ -902,6 +907,9 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	}
 	if renderedDeclineValue["request_option_id"] != "decline" || renderedFeedbackValue["request_option_id"] != "captureFeedback" {
 		t.Fatalf("unexpected rendered request decline/feedback payloads: %#v / %#v", renderedDeclineValue, renderedFeedbackValue)
+	}
+	if got := markdownContent(renderedElements[3]); !strings.Contains(got, "命令或参数不符合预期") {
+		t.Fatalf("expected rendered V2 approval prompt to keep owner-provided hint, got %#v", renderedElements[3])
 	}
 }
 

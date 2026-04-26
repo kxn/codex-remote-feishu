@@ -110,7 +110,8 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	if event.RequestPrompt != nil {
 		promptType = string(event.RequestPrompt.Type)
 	}
-	requestType := normalizeRequestType(firstNonEmpty(promptType, metadataString(event.Metadata, "requestType")))
+	definition, unsupportedText := buildRequestPromptPresentationDefinition(event.RequestPrompt, event.Metadata)
+	requestType := normalizeRequestType(firstNonEmpty(definition.RequestType, promptType, metadataString(event.Metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
 	}
@@ -120,64 +121,28 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		thread = inst.Threads[event.ThreadID]
 	}
 	threadTitle := displayThreadTitle(inst, thread, event.ThreadID)
-	title := firstNonEmpty(metadataString(event.Metadata, "title"), "需要处理请求")
-	options := []state.RequestPromptOptionRecord(nil)
-	questions := []state.RequestPromptQuestionRecord(nil)
-	sections := []state.RequestPromptTextSectionRecord(nil)
-	switch requestType {
-	case "approval":
-		if title == "需要处理请求" {
-			title = "需要确认"
-		}
-		sections = buildApprovalRequestSections(metadataString(event.Metadata, "body"))
-		options = buildApprovalRequestOptions(event.Metadata)
-	case "request_user_input":
-		if title == "需要处理请求" {
-			title = "需要补充输入"
-		}
-		sections = buildRequestUserInputSections(metadataString(event.Metadata, "body"))
-		questions = metadataRequestQuestions(event.Metadata)
-		if len(questions) == 0 {
-			return notice(surface, "request_unsupported", "收到缺少问题定义的 request_user_input 请求，当前无法在飞书端处理。")
-		}
-	case "permissions_request_approval":
-		if title == "需要处理请求" {
-			title = "需要授予权限"
-		}
-		sections = buildPermissionsRequestSections(event.RequestPrompt, event.Metadata)
-		options = buildPermissionsRequestOptions()
-	case "mcp_server_elicitation":
-		if title == "需要处理请求" {
-			title = "需要处理 MCP 请求"
-		}
-		sections = buildMCPElicitationSections(event.RequestPrompt, event.Metadata)
-		questions = buildMCPElicitationQuestions(event.RequestPrompt, event.Metadata)
-		options = buildMCPElicitationOptions(event.RequestPrompt, event.Metadata, questions)
-	case "tool_callback":
-		if title == "需要处理请求" || title == "收到工具回调" {
-			title = "工具回调暂不支持"
-		}
-		sections = buildToolCallbackRequestSections(event.RequestPrompt, event.Metadata)
-	default:
-		sections = buildGenericRequestSections(metadataString(event.Metadata, "body"))
+	if unsupportedText != "" {
+		return notice(surface, "request_unsupported", unsupportedText)
 	}
 	record := &state.RequestPromptRecord{
-		RequestID:   event.RequestID,
-		RequestType: requestType,
-		Prompt:      event.RequestPrompt,
-		InstanceID:  instanceID,
-		ThreadID:    event.ThreadID,
-		TurnID:      event.TurnID,
+		RequestID:    event.RequestID,
+		RequestType:  requestType,
+		SemanticKind: definition.SemanticKind,
+		Prompt:       event.RequestPrompt,
+		InstanceID:   instanceID,
+		ThreadID:     event.ThreadID,
+		TurnID:       event.TurnID,
 		SourceMessageID: func() string {
 			sourceMessageID, _ := s.replyAnchorForTurn(instanceID, event.ThreadID, event.TurnID)
 			return sourceMessageID
 		}(),
 		ItemID:               strings.TrimSpace(metadataString(event.Metadata, "itemId")),
-		Title:                title,
-		Sections:             sections,
-		Options:              options,
-		Questions:            questions,
+		Title:                definition.Title,
+		Sections:             definition.Sections,
+		Options:              definition.Options,
+		Questions:            definition.Questions,
 		CurrentQuestionIndex: 0,
+		HintText:             definition.HintText,
 		DraftAnswers:         map[string]string{},
 		SkippedQuestionIDs:   map[string]bool{},
 		CardRevision:         1,
@@ -531,11 +496,17 @@ func requestPromptPendingDispatchStatusText(request *state.RequestPromptRecord) 
 	if request == nil {
 		return "已提交当前请求，等待 Codex 继续。"
 	}
-	switch normalizeRequestType(request.RequestType) {
-	case "mcp_server_elicitation":
+	switch requestPromptSemanticKind(request) {
+	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork, control.RequestSemanticApproval:
+		return "已提交当前确认，等待 Codex 继续。"
+	case control.RequestSemanticPermissionsRequestApproval:
+		return "已提交授权决定，等待 Codex 继续。"
+	case control.RequestSemanticMCPServerElicitationForm:
 		return "已提交当前表单，等待 Codex 继续。"
-	case "tool_callback":
+	case control.RequestSemanticToolCallback:
 		return "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，等待 Codex 继续。"
+	case control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitation:
+		return "已提交当前请求，等待 Codex 继续。"
 	default:
 		return "已提交当前答案，等待 Codex 继续。"
 	}
@@ -589,6 +560,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 	view := control.FeishuRequestView{
 		RequestID:            record.RequestID,
 		RequestType:          record.RequestType,
+		SemanticKind:         requestPromptSemanticKind(record),
 		RequestRevision:      record.CardRevision,
 		Title:                record.Title,
 		ThreadID:             record.ThreadID,
@@ -597,6 +569,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		Options:              requestPromptOptionsToControl(record.Options),
 		Questions:            requestPromptQuestionsToControl(record.Questions, record.DraftAnswers, record.SkippedQuestionIDs),
 		CurrentQuestionIndex: normalizedRequestPromptCurrentQuestionIndex(record),
+		HintText:             strings.TrimSpace(record.HintText),
 		Phase:                record.Phase,
 	}
 	if strings.TrimSpace(record.PendingDispatchCommandID) != "" {

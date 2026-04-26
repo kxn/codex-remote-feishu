@@ -31,10 +31,12 @@ func permissionsRequestPromptElements(prompt control.FeishuRequestView, daemonLi
 	if row := cardButtonGroupElement(actions); len(row) != 0 {
 		elements = append(elements, row)
 	}
-	elements = append(elements, map[string]any{
-		"tag":     "markdown",
-		"content": "你可以选择仅授权当前这一次，或在当前会话内持续授权。",
-	})
+	if hint := requestPromptHintMarkdown(prompt, "你可以选择仅授权当前这一次，或在当前会话内持续授权。"); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
 	if status := requestPromptStatusMarkdown(prompt); status != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
@@ -46,6 +48,14 @@ func permissionsRequestPromptElements(prompt control.FeishuRequestView, daemonLi
 
 func mcpElicitationPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
 	prompt = control.NormalizeFeishuRequestView(prompt)
+	switch requestPromptSemanticKind(prompt) {
+	case control.RequestSemanticMCPServerElicitationURL:
+		return mcpElicitationChoiceElements(prompt, daemonLifecycleID)
+	case control.RequestSemanticMCPServerElicitation:
+		if len(prompt.Questions) == 0 {
+			return mcpElicitationChoiceElements(prompt, daemonLifecycleID)
+		}
+	}
 	if len(prompt.Questions) == 0 {
 		return mcpElicitationChoiceElements(prompt, daemonLifecycleID)
 	}
@@ -104,10 +114,12 @@ func mcpElicitationChoiceElements(prompt control.FeishuRequestView, daemonLifecy
 	if row := cardButtonGroupElement(actions); len(row) != 0 {
 		elements = append(elements, row)
 	}
-	elements = append(elements, map[string]any{
-		"tag":     "markdown",
-		"content": "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。",
-	})
+	if hint := requestPromptHintMarkdown(prompt, "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。"); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
 	if status := requestPromptStatusMarkdown(prompt); status != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",

@@ -85,6 +85,34 @@ func TestHandleUIEventsAddsAttentionToPayloadFirstRequest(t *testing.T) {
 	}
 }
 
+func TestHandleUIEventsUsesSemanticAttentionForApprovalCommand(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, serverIdentityForTest())
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
+
+	requestEvent := eventcontract.Event{
+		Kind:             eventcontract.KindRequest,
+		SurfaceSessionID: "surface-1",
+		RequestView: &control.FeishuRequestView{
+			RequestID:       "req-cmd-1",
+			RequestType:     "approval",
+			SemanticKind:    control.RequestSemanticApprovalCommand,
+			RequestRevision: 1,
+			Title:           "需要确认执行命令",
+			Options: []control.RequestPromptOption{{
+				OptionID: "accept",
+				Label:    "允许执行",
+			}},
+		},
+	}
+
+	app.handleUIEvents(context.Background(), []eventcontract.Event{requestEvent})
+
+	if len(gateway.operations) != 1 || gateway.operations[0].AttentionText != "需要你回来处理：请确认是否执行命令。" {
+		t.Fatalf("expected semantic approval attention text, got %#v", gateway.operations)
+	}
+}
+
 func TestHandleUIEventsRetriesRequestAttentionAfterAnchorDeliveryFailure(t *testing.T) {
 	gateway := &flakyGateway{failures: 1}
 	app := New(":0", ":0", gateway, serverIdentityForTest())

@@ -45,7 +45,7 @@ func (a *App) requestAttentionAnnotationCandidateLocked(event eventcontract.Even
 		return eventcontract.AttentionAnnotation{}, ""
 	}
 	request := requestPayload.View
-	text, ok := attentionRequestPingText(request.RequestType)
+	text, ok := attentionRequestPingText(request.SemanticKind, request.RequestType)
 	if !ok {
 		return eventcontract.AttentionAnnotation{}, ""
 	}
@@ -169,15 +169,21 @@ func (a *App) pruneAttentionRequestsLocked(cutoff time.Time) {
 	}
 }
 
-func attentionRequestPingText(requestType string) (string, bool) {
-	switch strings.TrimSpace(requestType) {
-	case "approval":
+func attentionRequestPingText(semanticKind, requestType string) (string, bool) {
+	switch control.NormalizeRequestSemanticKind(strings.TrimSpace(semanticKind), strings.TrimSpace(requestType)) {
+	case control.RequestSemanticApprovalCommand:
+		return "需要你回来处理：请确认是否执行命令。", true
+	case control.RequestSemanticApprovalFileChange:
+		return "需要你回来处理：请确认是否修改文件。", true
+	case control.RequestSemanticApprovalNetwork:
+		return "需要你回来处理：请确认是否允许网络访问。", true
+	case control.RequestSemanticApproval:
 		return "需要你回来处理：请确认这条请求。", true
-	case "request_user_input":
+	case control.RequestSemanticRequestUserInput:
 		return "需要你回来处理：请补充输入。", true
-	case "permissions_request_approval":
+	case control.RequestSemanticPermissionsRequestApproval:
 		return "需要你回来处理：请授予权限。", true
-	case "mcp_server_elicitation":
+	case control.RequestSemanticMCPServerElicitation, control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL:
 		return "需要你回来处理：请处理 MCP 请求。", true
 	default:
 		return "", false

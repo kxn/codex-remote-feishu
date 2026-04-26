@@ -9,28 +9,35 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func buildApprovalRequestSections(body string) []state.RequestPromptTextSectionRecord {
-	body = strings.TrimSpace(body)
-	if body == "" {
-		body = "本地 Codex 正在等待你的确认。"
-	}
-	return appendRequestPromptSection(nil, "", body)
+func buildApprovalRequestSections(body, fallback string) []state.RequestPromptTextSectionRecord {
+	return appendRequestPromptBodySection(nil, "", body, fallback)
 }
 
-func buildRequestUserInputSections(body string) []state.RequestPromptTextSectionRecord {
-	body = strings.TrimSpace(body)
-	if body == "" {
-		body = "本地 Codex 正在等待你补充参数或说明。"
-	}
-	return appendRequestPromptSection(nil, "", body)
+func buildRequestUserInputSections(body, fallback string) []state.RequestPromptTextSectionRecord {
+	return appendRequestPromptBodySection(nil, "", body, fallback)
 }
 
-func buildGenericRequestSections(body string) []state.RequestPromptTextSectionRecord {
+func buildGenericRequestSections(body, fallback string) []state.RequestPromptTextSectionRecord {
+	return appendRequestPromptBodySection(nil, "", body, fallback)
+}
+
+func appendRequestPromptBodySection(sections []state.RequestPromptTextSectionRecord, label, body, fallback string) []state.RequestPromptTextSectionRecord {
+	lines := requestPromptBodyLines(body, fallback)
+	if len(lines) == 0 {
+		return sections
+	}
+	return appendRequestPromptSection(sections, label, lines...)
+}
+
+func requestPromptBodyLines(body, fallback string) []string {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		body = "本地 Codex 正在等待处理新的交互请求。"
+		body = strings.TrimSpace(fallback)
 	}
-	return appendRequestPromptSection(nil, "", body)
+	if body == "" {
+		return nil
+	}
+	return strings.Split(body, "\n")
 }
 
 func buildToolCallbackRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {

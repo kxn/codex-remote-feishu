@@ -474,6 +474,7 @@ func (s RequestPromptTextSectionRecord) Normalized() RequestPromptTextSectionRec
 type RequestPromptRecord struct {
 	RequestID                string
 	RequestType              string
+	SemanticKind             string
 	Prompt                   *agentproto.RequestPrompt
 	InstanceID               string
 	ThreadID                 string
@@ -485,6 +486,7 @@ type RequestPromptRecord struct {
 	Options                  []RequestPromptOptionRecord
 	Questions                []RequestPromptQuestionRecord
 	CurrentQuestionIndex     int
+	HintText                 string
 	LocalKind                string
 	LocalMeta                map[string]string
 	DraftAnswers             map[string]string
