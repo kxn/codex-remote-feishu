@@ -51,9 +51,9 @@ type RelaySettings struct {
 }
 
 type AdminSettings struct {
-	ListenHost      string `json:"listenHost,omitempty"`
-	ListenPort      int    `json:"listenPort,omitempty"`
-	AutoOpenBrowser *bool  `json:"autoOpenBrowser,omitempty"`
+	ListenHost      string                  `json:"listenHost,omitempty"`
+	ListenPort      int                     `json:"listenPort,omitempty"`
+	AutoOpenBrowser *bool                   `json:"autoOpenBrowser,omitempty"`
 	Onboarding      AdminOnboardingSettings `json:"onboarding,omitempty"`
 }
 

@@ -87,10 +87,10 @@ func TestAdminEndpointsAllowLoopbackAndRedactSecret(t *testing.T) {
 	now := time.Now().UTC()
 	currentBinary, realBinary := seedStartupPlanBinaries(t)
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
+		ID:         "main",
+		Name:       "Main",
+		AppID:      "cli_xxx",
+		AppSecret:  "secret_xxx",
 		VerifiedAt: &now,
 	}}
 	cfg.Wrapper.CodexRealBinary = realBinary

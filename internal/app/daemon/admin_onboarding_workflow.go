@@ -39,23 +39,23 @@ const (
 )
 
 type onboardingWorkflowResponse struct {
-	Apps               []adminFeishuAppSummary          `json:"apps,omitempty"`
-	SelectedAppID      string                           `json:"selectedAppId,omitempty"`
-	CurrentStage       string                           `json:"currentStage"`
-	MachineState       string                           `json:"machineState"`
-	Completion         onboardingWorkflowCompletionView `json:"completion"`
-	RuntimeRequirements runtimeRequirementsResponse    `json:"runtimeRequirements"`
-	App                *onboardingWorkflowAppView       `json:"app,omitempty"`
-	Autostart          onboardingWorkflowMachineStepView `json:"autostart"`
-	VSCode             onboardingWorkflowMachineStepView `json:"vscode"`
-	Guide              onboardingWorkflowGuideView      `json:"guide,omitempty"`
-	Stages             []onboardingWorkflowStageView    `json:"stages,omitempty"`
+	Apps                []adminFeishuAppSummary           `json:"apps,omitempty"`
+	SelectedAppID       string                            `json:"selectedAppId,omitempty"`
+	CurrentStage        string                            `json:"currentStage"`
+	MachineState        string                            `json:"machineState"`
+	Completion          onboardingWorkflowCompletionView  `json:"completion"`
+	RuntimeRequirements runtimeRequirementsResponse       `json:"runtimeRequirements"`
+	App                 *onboardingWorkflowAppView        `json:"app,omitempty"`
+	Autostart           onboardingWorkflowMachineStepView `json:"autostart"`
+	VSCode              onboardingWorkflowMachineStepView `json:"vscode"`
+	Guide               onboardingWorkflowGuideView       `json:"guide,omitempty"`
+	Stages              []onboardingWorkflowStageView     `json:"stages,omitempty"`
 }
 
 type onboardingWorkflowCompletionView struct {
-	SetupRequired bool   `json:"setupRequired"`
-	CanComplete   bool   `json:"canComplete"`
-	Summary       string `json:"summary"`
+	SetupRequired  bool   `json:"setupRequired"`
+	CanComplete    bool   `json:"canComplete"`
+	Summary        string `json:"summary"`
 	BlockingReason string `json:"blockingReason,omitempty"`
 }
 
@@ -101,12 +101,12 @@ type onboardingWorkflowMachineStepView struct {
 }
 
 type onboardingWorkflowAppView struct {
-	App        adminFeishuAppSummary          `json:"app"`
-	Connection onboardingWorkflowStageView    `json:"connection"`
+	App        adminFeishuAppSummary            `json:"app"`
+	Connection onboardingWorkflowStageView      `json:"connection"`
 	Permission onboardingWorkflowPermissionView `json:"permission"`
-	Events     onboardingWorkflowAppStepView  `json:"events"`
-	Callback   onboardingWorkflowAppStepView  `json:"callback"`
-	Menu       onboardingWorkflowAppStepView  `json:"menu"`
+	Events     onboardingWorkflowAppStepView    `json:"events"`
+	Callback   onboardingWorkflowAppStepView    `json:"callback"`
+	Menu       onboardingWorkflowAppStepView    `json:"menu"`
 }
 
 func (a *App) handleOnboardingWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -310,13 +310,13 @@ func buildOnboardingAppStepStage(id, title string, confirmedAt *time.Time, ready
 	if !ready {
 		return onboardingWorkflowAppStepView{
 			onboardingWorkflowStageView: stageView(id, title, onboardingStageStatusBlocked, "请先完成基础接入。", false, true, nil),
-			ConfirmedAt:                confirmedAt,
+			ConfirmedAt:                 confirmedAt,
 		}
 	}
 	if confirmedAt != nil {
 		return onboardingWorkflowAppStepView{
 			onboardingWorkflowStageView: stageView(id, title, onboardingStageStatusComplete, "该项已经确认完成。", false, true, allowedActions),
-			ConfirmedAt:                confirmedAt,
+			ConfirmedAt:                 confirmedAt,
 		}
 	}
 	return onboardingWorkflowAppStepView{

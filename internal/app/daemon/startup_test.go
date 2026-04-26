@@ -75,10 +75,10 @@ func TestBuildStartupAccessPlanTreatsVerifiedAppAndRecordedDecisionsAsConfigured
 	cfg.Wrapper.CodexRealBinary = realBinary
 	now := time.Now().UTC()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
+		ID:         "main",
+		Name:       "Main",
+		AppID:      "cli_xxx",
+		AppSecret:  "secret_xxx",
 		VerifiedAt: &now,
 	}}
 	cfg.Admin.Onboarding.AutostartDecision = &config.OnboardingDecision{Value: onboardingDecisionDeferred, DecidedAt: &now}
