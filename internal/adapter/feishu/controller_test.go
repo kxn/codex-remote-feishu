@@ -282,6 +282,57 @@ func TestMultiGatewayControllerRoutesSendIMImageByGatewayID(t *testing.T) {
 	}
 }
 
+func TestMultiGatewayControllerRoutesDriveCommentReadByGatewayID(t *testing.T) {
+	controller := NewMultiGatewayController()
+	runtimes := map[string]*fakeGatewayRuntime{}
+	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
+		runtime := newFakeGatewayRuntime(cfg.GatewayID)
+		runtimes[cfg.GatewayID] = runtime
+		return runtime
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, gatewayID := range []string{"app-1", "app-2"} {
+		if err := controller.UpsertApp(ctx, GatewayAppConfig{
+			GatewayID: gatewayID,
+			AppID:     "cli_" + gatewayID,
+			AppSecret: "secret_" + gatewayID,
+			Enabled:   true,
+		}); err != nil {
+			t.Fatalf("UpsertApp(%s): %v", gatewayID, err)
+		}
+	}
+	go func() {
+		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
+	}()
+	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
+	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+
+	result, err := controller.ReadDriveFileComments(context.Background(), DriveFileCommentReadRequest{
+		GatewayID: "app-2",
+		FileToken: "file-token-1",
+		FileType:  "file",
+	})
+	if err != nil {
+		t.Fatalf("ReadDriveFileComments: %v", err)
+	}
+	if len(runtimes["app-1"].readCommentCalls) != 0 {
+		t.Fatalf("unexpected app-1 comment read calls: %#v", runtimes["app-1"].readCommentCalls)
+	}
+	if len(runtimes["app-2"].readCommentCalls) != 1 {
+		t.Fatalf("unexpected app-2 comment read calls: %#v", runtimes["app-2"].readCommentCalls)
+	}
+	got := runtimes["app-2"].readCommentCalls[0]
+	if got.FileToken != "file-token-1" || got.FileType != "file" {
+		t.Fatalf("unexpected read request: %#v", got)
+	}
+	if result.GatewayID != "app-2" || result.CommentCount != 1 || len(result.Comments) != 1 {
+		t.Fatalf("unexpected read result: %#v", result)
+	}
+}
+
 func TestMultiGatewayControllerUpsertRestartsWorker(t *testing.T) {
 	controller := NewMultiGatewayController()
 	var (
@@ -413,6 +464,8 @@ type fakeGatewayRuntime struct {
 	sendIMFileFn     func(context.Context, IMFileSendRequest) (IMFileSendResult, error)
 	sendIMImageCalls []IMImageSendRequest
 	sendIMImageFn    func(context.Context, IMImageSendRequest) (IMImageSendResult, error)
+	readCommentCalls []DriveFileCommentReadRequest
+	readCommentFn    func(context.Context, DriveFileCommentReadRequest) (DriveFileCommentReadResult, error)
 }
 
 func newFakeGatewayRuntime(gatewayID string) *fakeGatewayRuntime {
@@ -479,6 +532,34 @@ func (f *fakeGatewayRuntime) SendIMImage(ctx context.Context, req IMImageSendReq
 		ImageName:        filepath.Base(req.Path),
 		ImageKey:         "image-key-" + f.gatewayID,
 		MessageID:        "msg-" + f.gatewayID,
+	}, nil
+}
+
+func (f *fakeGatewayRuntime) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
+	f.mu.Lock()
+	f.readCommentCalls = append(f.readCommentCalls, req)
+	fn := f.readCommentFn
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, req)
+	}
+	return DriveFileCommentReadResult{
+		GatewayID:        f.gatewayID,
+		FileToken:        req.FileToken,
+		FileType:         req.FileType,
+		StatsScope:       "returned_comments_page",
+		CommentCount:     1,
+		ReplyCount:       0,
+		InteractionCount: 1,
+		Comments: []DriveFileCommentEntry{
+			{
+				CommentID: "comment-" + f.gatewayID,
+				UserID:    "ou_" + f.gatewayID,
+				Replies: []DriveFileCommentReplyItem{
+					{ReplyID: "reply-" + f.gatewayID, UserID: "ou_" + f.gatewayID, Text: "looks good"},
+				},
+			},
+		},
 	}, nil
 }
 

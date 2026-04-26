@@ -21,10 +21,12 @@ import (
 )
 
 type fakeToolSender struct {
-	fileSendFn  func(context.Context, feishu.IMFileSendRequest) (feishu.IMFileSendResult, error)
-	imageSendFn func(context.Context, feishu.IMImageSendRequest) (feishu.IMImageSendResult, error)
-	fileCalls   []feishu.IMFileSendRequest
-	imageCalls  []feishu.IMImageSendRequest
+	fileSendFn    func(context.Context, feishu.IMFileSendRequest) (feishu.IMFileSendResult, error)
+	imageSendFn   func(context.Context, feishu.IMImageSendRequest) (feishu.IMImageSendResult, error)
+	commentReadFn func(context.Context, feishu.DriveFileCommentReadRequest) (feishu.DriveFileCommentReadResult, error)
+	fileCalls     []feishu.IMFileSendRequest
+	imageCalls    []feishu.IMImageSendRequest
+	commentCalls  []feishu.DriveFileCommentReadRequest
 }
 
 type fakeToolFileSender struct {
@@ -59,6 +61,35 @@ func (f *fakeToolSender) SendIMImage(ctx context.Context, req feishu.IMImageSend
 		ImageName:        filepath.Base(req.Path),
 		ImageKey:         "image-key",
 		MessageID:        "msg-image",
+	}, nil
+}
+
+func (f *fakeToolSender) ReadDriveFileComments(ctx context.Context, req feishu.DriveFileCommentReadRequest) (feishu.DriveFileCommentReadResult, error) {
+	f.commentCalls = append(f.commentCalls, req)
+	if f.commentReadFn != nil {
+		return f.commentReadFn(ctx, req)
+	}
+	return feishu.DriveFileCommentReadResult{
+		GatewayID:        req.GatewayID,
+		FileToken:        req.FileToken,
+		FileType:         req.FileType,
+		StatsScope:       "returned_comments_page",
+		CommentCount:     1,
+		ReplyCount:       0,
+		InteractionCount: 1,
+		Comments: []feishu.DriveFileCommentEntry{
+			{
+				CommentID: "comment-1",
+				UserID:    "ou_user_1",
+				Replies: []feishu.DriveFileCommentReplyItem{
+					{
+						ReplyID: "reply-1",
+						UserID:  "ou_user_1",
+						Text:    "please update the summary",
+					},
+				},
+			},
+		},
 	}, nil
 }
 
@@ -550,5 +581,110 @@ func TestSendIMImageToolMapsUploadAndSendFailures(t *testing.T) {
 				t.Fatalf("expected %s, got %#v", tc.wantCode, toolErr)
 			}
 		})
+	}
+}
+
+func TestReadDriveFileCommentsToolRoutesByResolvedSurface(t *testing.T) {
+	sender := &fakeToolSender{}
+	app, _ := newToolServiceTestApp(t, sender)
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer func() {
+		_ = app.Shutdown(context.Background())
+	}()
+
+	workspaceOne := t.TempDir()
+	workspaceTwo := t.TempDir()
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceOne,
+		WorkspaceKey:  workspaceOne,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		WorkspaceRoot: workspaceTwo,
+		WorkspaceKey:  workspaceTwo,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-2",
+		GatewayID:        "app-2",
+		ChatID:           "chat-2",
+		ActorUserID:      "user-2",
+		InstanceID:       "inst-2",
+	})
+
+	result, toolErr := app.readDriveFileCommentsTool(context.Background(), map[string]any{
+		"surface_session_id": "surface-2",
+		"file_token":         "file-token-1",
+		"file_type":          "file",
+	})
+	if toolErr != nil {
+		t.Fatalf("readDriveFileCommentsTool() error = %#v", toolErr)
+	}
+	if len(sender.commentCalls) != 1 {
+		t.Fatalf("expected one comment read call, got %#v", sender.commentCalls)
+	}
+	if sender.commentCalls[0].GatewayID != "app-2" || sender.commentCalls[0].FileToken != "file-token-1" || sender.commentCalls[0].FileType != "file" {
+		t.Fatalf("unexpected routed comment read call: %#v", sender.commentCalls[0])
+	}
+	typed, ok := result.(driveFileCommentsToolResult)
+	if !ok {
+		t.Fatalf("unexpected tool result type: %#v", result)
+	}
+	if typed.SurfaceSessionID != "surface-2" || typed.CommentCount != 1 || len(typed.Comments) != 1 {
+		t.Fatalf("unexpected read result: %#v", typed)
+	}
+}
+
+func TestReadDriveFileCommentsToolRejectsInvalidInputAndDetachedSurface(t *testing.T) {
+	sender := &fakeToolSender{}
+	app, _ := newToolServiceTestApp(t, sender)
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer func() {
+		_ = app.Shutdown(context.Background())
+	}()
+
+	_, toolErr := app.readDriveFileCommentsTool(context.Background(), map[string]any{
+		"surface_session_id": "surface-1",
+		"file_token":         "file-token-1",
+		"file_type":          "wiki",
+	})
+	if toolErr == nil || toolErr.Code != "unsupported_file_type" {
+		t.Fatalf("expected unsupported file type rejection, got %#v", toolErr)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-detached",
+		GatewayID:        "app-1",
+		ChatID:           "chat-detached",
+		ActorUserID:      "user-detached",
+		Text:             "hello",
+	})
+	_, toolErr = app.readDriveFileCommentsTool(context.Background(), map[string]any{
+		"surface_session_id": "surface-detached",
+		"file_token":         "file-token-1",
+		"file_type":          "file",
+	})
+	if toolErr == nil || toolErr.Code != "surface_not_attached" {
+		t.Fatalf("expected detached surface rejection, got %#v", toolErr)
 	}
 }

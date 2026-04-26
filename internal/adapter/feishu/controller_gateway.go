@@ -131,6 +131,35 @@ func (c *MultiGatewayController) SendIMImage(ctx context.Context, req IMImageSen
 	return result, nil
 }
 
+func (c *MultiGatewayController) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
+	result := DriveFileCommentReadResult{
+		GatewayID: strings.TrimSpace(req.GatewayID),
+		FileToken: strings.TrimSpace(req.FileToken),
+		FileType:  strings.TrimSpace(req.FileType),
+	}
+
+	resolution := c.resolveGatewayTarget(eventcontract.TargetRef{
+		GatewayID:       req.GatewayID,
+		SelectionPolicy: eventcontract.GatewaySelectionAllowSoleGatewayFallback,
+		FailurePolicy:   eventcontract.GatewayFailureTypedError,
+	}, gatewayTargetRequireRuntime)
+	if !resolution.ok() {
+		return result, resolution.driveFileCommentReadError()
+	}
+	req.GatewayID = resolution.GatewayID
+	result.GatewayID = resolution.GatewayID
+
+	result, err := resolution.Worker.runtime.ReadDriveFileComments(ctx, req)
+	if err != nil {
+		c.updateWorkerError(resolution.GatewayID, err)
+		return result, err
+	}
+	if result.GatewayID == "" {
+		result.GatewayID = resolution.GatewayID
+	}
+	return result, nil
+}
+
 func (c *MultiGatewayController) ClearGrantedPermissionBlocks(gatewayID string, scopes []AppScopeStatus) {
 	gatewayID = normalizeGatewayID(gatewayID)
 	if gatewayID == "" {

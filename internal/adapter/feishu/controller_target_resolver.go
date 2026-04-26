@@ -58,6 +58,13 @@ func (r gatewayTargetResolution) imageSendError() error {
 	}
 }
 
+func (r gatewayTargetResolution) driveFileCommentReadError() error {
+	return &DriveFileCommentReadError{
+		Code: DriveFileCommentReadErrorGatewayNotRunning,
+		Err:  r.errorf("read drive comments failed"),
+	}
+}
+
 func (c *MultiGatewayController) resolveGatewayTarget(target eventcontract.TargetRef, requirement gatewayTargetRequirement) gatewayTargetResolution {
 	target = target.Normalized()
 	gatewayID := target.GatewayID

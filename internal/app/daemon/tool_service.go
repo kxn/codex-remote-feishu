@@ -19,10 +19,12 @@ import (
 const feishuSurfaceResolverToolName = "feishu_resolve_surface_context"
 const feishuSendIMFileToolName = "feishu_send_im_file"
 const feishuSendIMImageToolName = "feishu_send_im_image"
+const feishuReadDriveFileCommentsToolName = "feishu_read_drive_file_comments"
 
 const feishuSurfaceResolverDescription = "Resolve the current Feishu remote surface context. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. If the file is missing, invalid, or you are not in normal remote workspace mode, do not guess."
 const feishuSendIMFileDescription = "Send a local file to the current Feishu remote surface as an IM file attachment. Use this when the artifact should be delivered as a downloadable file, or when inline image display is not appropriate. For screenshots and other user-facing images, prefer feishu_send_im_image so the image renders directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local file path and do not guess a surface, chat, or remote URL."
 const feishuSendIMImageDescription = "Send a local image to the current Feishu remote surface as an inline IM image message. Use this proactively when you created or saved a screenshot, visual diff, rendered preview, chart, mockup, or another image artifact that would directly help the current conversation. Prefer this tool over feishu_send_im_file for PNG, JPEG, GIF, WebP, or BMP images because the image will render directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local image path and do not guess a surface, chat, or remote URL."
+const feishuReadDriveFileCommentsDescription = "Read comments from a Feishu Drive file that already exists and whose file_token/file_type are already known. Use this when the user asks you to check comments on a previously uploaded markdown, document, slide, sheet, or file in Feishu Drive, for example after they say they left comments for you to review. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found so the request uses the correct Feishu app context. This V1 tool only supports direct Drive file_token + file_type input; do not guess from wiki links or raw doc URLs."
 
 type toolDefinition struct {
 	Name        string         `json:"name"`
@@ -111,6 +113,11 @@ func toolDefinitions() []toolDefinition {
 				"required":             []string{"surface_session_id", "path"},
 				"additionalProperties": false,
 			},
+		},
+		{
+			Name:        feishuReadDriveFileCommentsToolName,
+			Description: feishuReadDriveFileCommentsDescription,
+			InputSchema: driveFileCommentsToolInputSchema(),
 		},
 	}
 }

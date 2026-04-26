@@ -56,7 +56,7 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 	}
 
 	var (
-		result map[string]any
+		result any
 		apiErr *toolError
 	)
 	switch strings.TrimSpace(toolName) {
@@ -66,6 +66,8 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 		result, apiErr = a.sendIMFileTool(ctx, arguments)
 	case feishuSendIMImageToolName:
 		result, apiErr = a.sendIMImageTool(ctx, arguments)
+	case feishuReadDriveFileCommentsToolName:
+		result, apiErr = a.readDriveFileCommentsTool(ctx, arguments)
 	default:
 		return nil, &jsonrpc.Error{
 			Code:    jsonrpc.CodeMethodNotFound,

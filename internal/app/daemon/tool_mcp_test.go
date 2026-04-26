@@ -163,7 +163,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 3 {
+	if len(tools) != 4 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -180,6 +180,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	}
 	if !strings.Contains(seen[feishuSendIMImageToolName]["description"].(string), ".codex-remote/surface-context.json") {
 		t.Fatalf("image-send description missing workspace context rule: %#v", seen[feishuSendIMImageToolName])
+	}
+	if !strings.Contains(seen[feishuReadDriveFileCommentsToolName]["description"].(string), "previously uploaded markdown") {
+		t.Fatalf("drive-comment description missing comment workflow trigger: %#v", seen[feishuReadDriveFileCommentsToolName])
 	}
 
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
@@ -265,6 +268,33 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	sendStructured, _ = sendResult["structuredContent"].(map[string]any)
 	if sendStructured["surface_session_id"] != "surface-normal" || sendStructured["message_id"] != "msg-image" {
 		t.Fatalf("unexpected image send result: %#v", sendPayload)
+	}
+
+	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.BearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 6, "tools/call", map[string]any{
+			"name": feishuReadDriveFileCommentsToolName,
+			"arguments": map[string]any{
+				"surface_session_id": "surface-normal",
+				"file_token":         "file-token-1",
+				"file_type":          "file",
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read comments tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.commentCalls) != 1 {
+		t.Fatalf("expected one drive comment read call, got %#v", sender.commentCalls)
+	}
+	readPayload := decodeToolMCPResponse(t, rec)
+	readResult, _ := readPayload["result"].(map[string]any)
+	readStructured, _ := readResult["structuredContent"].(map[string]any)
+	if readStructured["surface_session_id"] != "surface-normal" || readStructured["comment_count"] != float64(1) {
+		t.Fatalf("unexpected read comments result: %#v", readPayload)
 	}
 }
 
