@@ -395,10 +395,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	switch action.Kind {
 	case control.ActionListInstances:
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			events = s.openTargetPicker(surface, control.TargetPickerRequestSourceList, "", "", "", false)
+			events = s.openTargetPickerForAction(surface, action, "", "", "", false)
 			break
 		}
-		events = s.presentInstanceSelection(surface)
+		events = s.presentInstanceSelectionWithAction(surface, action, false)
 	case control.ActionWorkspaceDetach:
 		s.clearWorkspacePageRuntime(surface)
 		events = s.detach(surface)

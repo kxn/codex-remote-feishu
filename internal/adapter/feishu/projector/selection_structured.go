@@ -15,7 +15,7 @@ func SelectionViewStructuredProjection(
 	switch {
 	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread && selectionViewUsesDirectThreadPicker(view.Thread.Mode):
 		return firstNonEmpty(strings.TrimSpace(semantics.Title), "选择会话"),
-			threadSelectionDropdownElements(*view.Thread, semantics, daemonLifecycleID),
+			threadSelectionDropdownElements(view, semantics, daemonLifecycleID),
 			true
 	default:
 		model, ok := selectionRenderModelFromView(view, ctx)
@@ -75,6 +75,6 @@ func selectionViewUsesDirectThreadPicker(mode control.FeishuThreadSelectionViewM
 	}
 }
 
-func threadSelectionDropdownElements(view control.FeishuThreadSelectionView, semantics control.FeishuSelectionSemantics, daemonLifecycleID string) []map[string]any {
+func threadSelectionDropdownElements(view control.FeishuSelectionView, semantics control.FeishuSelectionSemantics, daemonLifecycleID string) []map[string]any {
 	return paginatedThreadSelectionDropdownElements(view, semantics, daemonLifecycleID)
 }

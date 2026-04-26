@@ -122,9 +122,9 @@ func targetPickerWorkspaceLaneWithLabel(view control.FeishuTargetPickerView, lab
 		Cursor:        view.WorkspaceCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedWorkspaceKey),
 		Options:       targetPickerWorkspaceOptions(view.WorkspaceOptions),
-		SelectPayload: actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID),
+		SelectPayload: targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectWorkspace, view.PickerID)),
 		PagePayload: func(cursor int) map[string]any {
-			return actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerWorkspaceFlow.FieldName, cursor)
+			return targetPickerPayload(view, actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerWorkspaceFlow.FieldName, cursor))
 		},
 	}
 }
@@ -137,9 +137,9 @@ func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelec
 		Cursor:        view.SessionCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedSessionValue),
 		Options:       targetPickerSessionOptions(view.SessionOptions),
-		SelectPayload: actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID),
+		SelectPayload: targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerSelectSession, view.PickerID)),
 		PagePayload: func(cursor int) map[string]any {
-			return actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerSessionFlow.FieldName, cursor)
+			return targetPickerPayload(view, actionPayloadTargetPickerCursor(view.PickerID, selectflow.TargetPickerSessionFlow.FieldName, cursor))
 		},
 	}
 }

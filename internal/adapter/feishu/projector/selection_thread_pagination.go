@@ -9,10 +9,11 @@ import (
 )
 
 func paginatedThreadSelectionDropdownElements(
-	view control.FeishuThreadSelectionView,
+	selectionView control.FeishuSelectionView,
 	semantics control.FeishuSelectionSemantics,
 	daemonLifecycleID string,
 ) []map[string]any {
+	view := *selectionView.Thread
 	elements := selectionViewStructuredContextElements(semantics)
 
 	options := make([]map[string]any, 0, len(view.Entries))
@@ -54,7 +55,7 @@ func paginatedThreadSelectionDropdownElements(
 	if hiddenCount != 0 {
 		hiddenHint = firstNonEmpty(strings.TrimSpace(semantics.HiddenEntriesNotice), "已省略当前不可切换的会话。")
 	}
-	lane := threadSelectionLane(view.Mode, view.Cursor, selectedValue, options, allowCrossWorkspace)
+	lane := threadSelectionLane(selectionView, view.Mode, view.Cursor, selectedValue, options, allowCrossWorkspace)
 	plan := planPaginatedSelectLane(
 		cardtransport.InteractiveCardTransportLimitBytes,
 		lane,
@@ -72,6 +73,7 @@ func paginatedThreadSelectionDropdownElements(
 }
 
 func threadSelectionLane(
+	selectionView control.FeishuSelectionView,
 	mode control.FeishuThreadSelectionViewMode,
 	cursor int,
 	selectedValue string,
@@ -85,9 +87,19 @@ func threadSelectionLane(
 		Cursor:        cursor,
 		SelectedValue: selectedValue,
 		Options:       options,
-		SelectPayload: actionPayloadUseThreadField(selectflow.ThreadSelectionFlow.FieldName, allowCrossWorkspace),
+		SelectPayload: actionPayloadWithCatalog(
+			actionPayloadUseThreadField(selectflow.ThreadSelectionFlow.FieldName, allowCrossWorkspace),
+			selectionView.CatalogFamilyID,
+			selectionView.CatalogVariantID,
+			string(selectionView.CatalogBackend),
+		),
 		PagePayload: func(cursor int) map[string]any {
-			return actionPayloadThreadSelectionCursor(string(mode), cursor)
+			return actionPayloadWithCatalog(
+				actionPayloadThreadSelectionCursor(string(mode), cursor),
+				selectionView.CatalogFamilyID,
+				selectionView.CatalogVariantID,
+				string(selectionView.CatalogBackend),
+			)
 		},
 	}
 }

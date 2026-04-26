@@ -1,5 +1,7 @@
 package control
 
+import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+
 type FeishuThreadSelectionViewMode string
 
 const (
@@ -16,11 +18,14 @@ const (
 // FeishuSelectionView is the UI-owned selection view payload used by the
 // Feishu adapter for workspace/thread selection cards.
 type FeishuSelectionView struct {
-	PromptKind SelectionPromptKind
-	Instance   *FeishuInstanceSelectionView
-	Workspace  *FeishuWorkspaceSelectionView
-	Thread     *FeishuThreadSelectionView
-	KickThread *FeishuKickThreadSelectionView
+	PromptKind       SelectionPromptKind
+	CatalogFamilyID  string
+	CatalogVariantID string
+	CatalogBackend   agentproto.Backend
+	Instance         *FeishuInstanceSelectionView
+	Workspace        *FeishuWorkspaceSelectionView
+	Thread           *FeishuThreadSelectionView
+	KickThread       *FeishuKickThreadSelectionView
 }
 
 type FeishuInstanceSelectionView struct {

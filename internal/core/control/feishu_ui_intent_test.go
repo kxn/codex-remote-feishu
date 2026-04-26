@@ -76,6 +76,17 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want: &FeishuUIIntent{Kind: FeishuUIIntentShowList, SourceMessageID: "om-card-1", Inline: true},
 		},
 		{
+			name: "workspace session provenance wins over legacy action kind",
+			action: Action{
+				Kind:             ActionShowThreads,
+				CatalogFamilyID:  FeishuCommandUseAll,
+				CatalogVariantID: "useall.codex.normal",
+				MessageID:        "om-card-3",
+				Inbound:          &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreads, SourceMessageID: "om-card-3", Inline: true},
+		},
+		{
 			name: "send file handoff",
 			action: Action{
 				Kind:      ActionSendFile,

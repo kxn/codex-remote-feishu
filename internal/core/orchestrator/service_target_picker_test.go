@@ -10,12 +10,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
+
+func TestWorkspaceSessionCatalogProvenanceDrivesTargetPickerOpen(t *testing.T) {
+	now := time.Date(2026, 4, 14, 14, 59, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-web",
+		DisplayName:   "web",
+		WorkspaceRoot: "/data/dl/web",
+		WorkspaceKey:  "/data/dl/web",
+		ShortName:     "web",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-web": {ThreadID: "thread-web", Name: "整理样式", CWD: "/data/dl/web", LastUsedAt: now.Add(-1 * time.Minute)},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		CatalogFamilyID:  control.FeishuCommandUseAll,
+		CatalogVariantID: "useall.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
+	}))
+	if view.Source != control.TargetPickerRequestSourceUseAll {
+		t.Fatalf("expected catalog family to drive target picker source, got %#v", view)
+	}
+	if view.CatalogFamilyID != control.FeishuCommandUseAll || view.CatalogVariantID != "useall.codex.normal" || view.CatalogBackend != agentproto.BackendCodex {
+		t.Fatalf("expected target picker view to retain catalog provenance, got %#v", view)
+	}
+}
 
 func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 0, 0, 0, time.UTC)

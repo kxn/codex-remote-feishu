@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -26,6 +27,9 @@ type targetPickerOpenOptions struct {
 	Inline                bool
 	LockedWorkspaceKey    string
 	AllowNewThread        bool
+	CatalogFamilyID       string
+	CatalogVariantID      string
+	CatalogBackend        agentproto.Backend
 }
 
 func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
@@ -34,6 +38,27 @@ func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source c
 		BackCommandText:       backCommandText,
 		SourceMessageID:       sourceMessageID,
 		Inline:                inline,
+	})
+}
+
+func (s *Service) openTargetPickerForAction(surface *state.SurfaceConsoleRecord, action control.Action, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
+	source := control.TargetPickerRequestSourceList
+	if flow, ok := control.ResolveFeishuWorkspaceSessionFlowFromAction(action); ok && flow.TargetPicker != "" {
+		source = flow.TargetPicker
+	}
+	return s.openTargetPickerWithSourceForAction(surface, source, action, preferredWorkspaceKey, backCommandText, sourceMessageID, inline)
+}
+
+func (s *Service) openTargetPickerWithSourceForAction(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, action control.Action, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
+	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
+	return s.openTargetPickerWithOptions(surface, source, targetPickerOpenOptions{
+		PreferredWorkspaceKey: preferredWorkspaceKey,
+		BackCommandText:       backCommandText,
+		SourceMessageID:       sourceMessageID,
+		Inline:                inline,
+		CatalogFamilyID:       familyID,
+		CatalogVariantID:      variantID,
+		CatalogBackend:        backend,
 	})
 }
 
@@ -95,6 +120,9 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		PickerID:             s.pickers.nextTargetPickerToken(),
 		OwnerUserID:          strings.TrimSpace(firstNonEmpty(surface.ActorUserID)),
 		Source:               source,
+		CatalogFamilyID:      strings.TrimSpace(opts.CatalogFamilyID),
+		CatalogVariantID:     strings.TrimSpace(opts.CatalogVariantID),
+		CatalogBackend:       agentproto.NormalizeBackend(opts.CatalogBackend),
 		Stage:                control.FeishuTargetPickerStageEditing,
 		Page:                 targetPickerDefaultPage(source),
 		BackCommandText:      strings.TrimSpace(opts.BackCommandText),
@@ -726,6 +754,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		PickerID:                 record.PickerID,
 		Title:                    targetPickerTitle(record.Source),
 		Source:                   record.Source,
+		CatalogFamilyID:          strings.TrimSpace(record.CatalogFamilyID),
+		CatalogVariantID:         strings.TrimSpace(record.CatalogVariantID),
+		CatalogBackend:           agentproto.NormalizeBackend(record.CatalogBackend),
 		Stage:                    stage,
 		Page:                     page,
 		StageLabel:               targetPickerViewStageLabel(record, page, mode, sourceKind),
@@ -783,6 +814,11 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Messages:                 messages,
 		SourceMessages:           sourceMessages,
 	}), nil
+}
+
+func (s *Service) catalogProvenanceForAction(surface *state.SurfaceConsoleRecord, action control.Action) (string, string, agentproto.Backend) {
+	action = s.enrichCatalogAction(surface, action)
+	return strings.TrimSpace(action.CatalogFamilyID), strings.TrimSpace(action.CatalogVariantID), agentproto.NormalizeBackend(action.CatalogBackend)
 }
 
 func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleRecord) []workspaceSelectionEntry {

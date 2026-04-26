@@ -17,7 +17,12 @@ func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) 
 }
 
 func (s *Service) presentInstanceSelectionWithInline(surface *state.SurfaceConsoleRecord, inline bool) []eventcontract.Event {
+	return s.presentInstanceSelectionWithAction(surface, control.Action{}, inline)
+}
+
+func (s *Service) presentInstanceSelectionWithAction(surface *state.SurfaceConsoleRecord, action control.Action, inline bool) []eventcontract.Event {
 	_ = inline
+	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
 	instances := make([]*state.InstanceRecord, 0, len(s.root.Instances))
 	for _, inst := range s.root.Instances {
 		if inst.Online && isVSCodeInstance(inst) {
@@ -88,7 +93,10 @@ func (s *Service) presentInstanceSelectionWithInline(surface *state.SurfaceConso
 	appendEntries(unavailable)
 
 	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptAttachInstance,
+		PromptKind:       control.SelectionPromptAttachInstance,
+		CatalogFamilyID:  familyID,
+		CatalogVariantID: variantID,
+		CatalogBackend:   backend,
 		Instance: &control.FeishuInstanceSelectionView{
 			Current: current,
 			Entries: entries,

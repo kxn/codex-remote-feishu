@@ -3,38 +3,59 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 type selectionRenderModel struct {
-	Kind         control.SelectionPromptKind
-	Layout       string
-	ViewMode     string
-	Title        string
-	Hint         string
-	ContextTitle string
-	ContextText  string
-	ContextKey   string
-	Page         int
-	TotalPages   int
-	ReturnPage   int
-	Options      []control.SelectionOption
+	Kind             control.SelectionPromptKind
+	Layout           string
+	ViewMode         string
+	Title            string
+	Hint             string
+	ContextTitle     string
+	ContextText      string
+	ContextKey       string
+	Page             int
+	TotalPages       int
+	ReturnPage       int
+	CatalogFamilyID  string
+	CatalogVariantID string
+	CatalogBackend   agentproto.Backend
+	Options          []control.SelectionOption
 }
 
 func selectionRenderModelFromView(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) (selectionRenderModel, bool) {
 	semantics := control.DeriveFeishuSelectionSemantics(view)
+	var model selectionRenderModel
+	var ok bool
 	switch {
 	case view.Instance != nil && view.PromptKind == control.SelectionPromptAttachInstance:
-		return instanceSelectionRenderModelFromView(*view.Instance, ctx, semantics), true
+		model, ok = instanceSelectionRenderModelFromView(*view.Instance, ctx, semantics), true
 	case view.Workspace != nil && view.PromptKind == control.SelectionPromptAttachWorkspace:
-		return workspaceSelectionRenderModelFromView(*view.Workspace, ctx, semantics), true
+		model, ok = workspaceSelectionRenderModelFromView(*view.Workspace, ctx, semantics), true
 	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread:
-		return threadSelectionRenderModelFromView(*view.Thread, semantics), true
+		model, ok = threadSelectionRenderModelFromView(*view.Thread, semantics), true
 	case view.KickThread != nil && view.PromptKind == control.SelectionPromptKickThread:
-		return kickThreadSelectionRenderModelFromView(*view.KickThread, semantics), true
+		model, ok = kickThreadSelectionRenderModelFromView(*view.KickThread, semantics), true
 	default:
 		return selectionRenderModel{}, false
 	}
+	model.CatalogFamilyID = strings.TrimSpace(view.CatalogFamilyID)
+	model.CatalogVariantID = strings.TrimSpace(view.CatalogVariantID)
+	model.CatalogBackend = view.CatalogBackend
+	if ctx != nil {
+		if model.CatalogFamilyID == "" {
+			model.CatalogFamilyID = strings.TrimSpace(ctx.CatalogFamilyID)
+		}
+		if model.CatalogVariantID == "" {
+			model.CatalogVariantID = strings.TrimSpace(ctx.CatalogVariantID)
+		}
+		if model.CatalogBackend == "" {
+			model.CatalogBackend = ctx.CatalogBackend
+		}
+	}
+	return model, ok
 }
 
 func instanceSelectionRenderModelFromView(view control.FeishuInstanceSelectionView, _ *control.FeishuUISelectionContext, semantics control.FeishuSelectionSemantics) selectionRenderModel {

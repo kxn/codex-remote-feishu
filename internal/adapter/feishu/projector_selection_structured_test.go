@@ -12,7 +12,10 @@ import (
 func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 	projector := NewProjector()
 	view := control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptAttachInstance,
+		PromptKind:       control.SelectionPromptAttachInstance,
+		CatalogFamilyID:  control.FeishuCommandList,
+		CatalogVariantID: "list.codex.vscode",
+		CatalogBackend:   "codex",
 		Instance: &control.FeishuInstanceSelectionView{
 			Current: &control.FeishuInstanceSelectionCurrent{
 				InstanceID:  "inst-current",
@@ -68,6 +71,11 @@ func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 			if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
 				t.Fatalf("expected stamped daemon lifecycle on instance button, got %#v", value)
 			}
+			if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandList ||
+				value[cardActionPayloadKeyCatalogVariantID] != "list.codex.vscode" ||
+				value[cardActionPayloadKeyCatalogBackend] != "codex" {
+				t.Fatalf("expected instance button to carry catalog provenance, got %#v", value)
+			}
 		}
 	}
 	if !containsString(buttonLabels, "切换 · web") || !containsString(buttonLabels, "不可接管 · ops") {
@@ -78,7 +86,10 @@ func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 	projector := NewProjector()
 	view := control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptUseThread,
+		PromptKind:       control.SelectionPromptUseThread,
+		CatalogFamilyID:  control.FeishuCommandUseAll,
+		CatalogVariantID: "useall.codex.vscode",
+		CatalogBackend:   "codex",
 		Thread: &control.FeishuThreadSelectionView{
 			Mode: control.FeishuThreadSelectionVSCodeRecent,
 			CurrentInstance: &control.FeishuThreadSelectionInstanceContext{
@@ -138,6 +149,11 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 		value[cardActionPayloadKeyDaemonLifecycleID] != "life-2" {
 		t.Fatalf("unexpected dropdown callback payload: %#v", value)
 	}
+	if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
+		value[cardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
+		value[cardActionPayloadKeyCatalogBackend] != "codex" {
+		t.Fatalf("expected dropdown callback payload to carry catalog provenance: %#v", value)
+	}
 	var optionValues []string
 	switch typed := selectElement["options"].(type) {
 	case []map[string]any:
@@ -169,7 +185,10 @@ func TestProjectVSCodeThreadSelectionViewPaginatesLargeDropdown(t *testing.T) {
 		})
 	}
 	view := control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptUseThread,
+		PromptKind:       control.SelectionPromptUseThread,
+		CatalogFamilyID:  control.FeishuCommandUseAll,
+		CatalogVariantID: "useall.codex.vscode",
+		CatalogBackend:   "codex",
 		Thread: &control.FeishuThreadSelectionView{
 			Mode:   control.FeishuThreadSelectionVSCodeAll,
 			Cursor: 60,
@@ -235,6 +254,11 @@ func TestProjectVSCodeThreadSelectionViewPaginatesLargeDropdown(t *testing.T) {
 		value[cardActionPayloadKeyFieldName] != cardSelectionThreadFieldName ||
 		value[cardActionPayloadKeyDaemonLifecycleID] != "life-3" {
 		t.Fatalf("unexpected dropdown callback payload: %#v", value)
+	}
+	if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
+		value[cardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
+		value[cardActionPayloadKeyCatalogBackend] != "codex" {
+		t.Fatalf("expected dropdown callback payload to carry catalog provenance: %#v", value)
 	}
 	if !strings.Contains(renderedV2CardText(t, ops[0]), "超出卡片大小，如未找到请翻页。") {
 		t.Fatalf("expected pagination hint in rendered card, got %q", renderedV2CardText(t, ops[0]))

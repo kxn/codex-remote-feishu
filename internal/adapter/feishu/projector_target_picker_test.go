@@ -19,6 +19,9 @@ func TestProjectTargetPickerStampsDaemonLifecycleID(t *testing.T) {
 		TargetPickerView: &control.FeishuTargetPickerView{
 			PickerID:             "picker-1",
 			Title:                "选择工作区与会话",
+			CatalogFamilyID:      control.FeishuCommandUse,
+			CatalogVariantID:     "use.codex.normal",
+			CatalogBackend:       "codex",
 			WorkspacePlaceholder: "选择工作区",
 			SessionPlaceholder:   "选择会话",
 			SelectedWorkspaceKey: "/data/dl/web",
@@ -46,6 +49,11 @@ func TestProjectTargetPickerStampsDaemonLifecycleID(t *testing.T) {
 		value := cardValueMap(action)
 		if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
 			t.Fatalf("expected daemon lifecycle on target picker action, got %#v", value)
+		}
+		if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUse ||
+			value[cardActionPayloadKeyCatalogVariantID] != "use.codex.normal" ||
+			value[cardActionPayloadKeyCatalogBackend] != "codex" {
+			t.Fatalf("expected target picker action to carry catalog provenance, got %#v", value)
 		}
 	}
 }

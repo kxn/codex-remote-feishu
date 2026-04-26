@@ -1,5 +1,7 @@
 package control
 
+import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+
 // FeishuUIDTOwner identifies which layer currently owns the DTO shape exposed
 // to the Feishu adapter. Some UI events still intentionally cross the boundary
 // as Feishu-facing DTOs instead of neutral read models.
@@ -58,15 +60,18 @@ type FeishuUISurfaceContext struct {
 // FeishuUISelectionContext describes the stable query/policy inputs that back a
 // selection prompt while the rendered DTO itself remains Feishu-facing.
 type FeishuUISelectionContext struct {
-	DTOOwner     FeishuUIDTOwner
-	Surface      FeishuUISurfaceContext
-	PromptKind   SelectionPromptKind
-	ViewMode     string
-	Layout       string
-	Title        string
-	ContextTitle string
-	ContextText  string
-	ContextKey   string
+	DTOOwner         FeishuUIDTOwner
+	Surface          FeishuUISurfaceContext
+	PromptKind       SelectionPromptKind
+	CatalogFamilyID  string
+	CatalogVariantID string
+	CatalogBackend   agentproto.Backend
+	ViewMode         string
+	Layout           string
+	Title            string
+	ContextTitle     string
+	ContextText      string
+	ContextKey       string
 }
 
 // FeishuUIPageContext describes the stable query/policy inputs for the
@@ -111,6 +116,9 @@ type FeishuUITargetPickerContext struct {
 	Surface                  FeishuUISurfaceContext
 	PickerID                 string
 	Source                   TargetPickerRequestSource
+	CatalogFamilyID          string
+	CatalogVariantID         string
+	CatalogBackend           agentproto.Backend
 	Title                    string
 	Page                     FeishuTargetPickerPage
 	WorkspaceSelectionLocked bool

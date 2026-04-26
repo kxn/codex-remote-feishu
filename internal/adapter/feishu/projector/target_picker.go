@@ -36,7 +36,7 @@ func targetPickerStageElements(view control.FeishuTargetPickerView, daemonLifecy
 		cardCallbackButtonElement(
 			strings.TrimSpace(firstNonEmpty(view.ProcessingCancelLabel, "取消")),
 			"default",
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID),
+			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID),
 			false,
 			"",
 		),
@@ -138,7 +138,7 @@ func targetPickerModeChoiceItems(view control.FeishuTargetPickerView, daemonLife
 		items = append(items, targetPickerChoiceItem{
 			Label:    label,
 			MetaText: metaText,
-			Payload:  stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectMode, view.PickerID, string(option.Value)), daemonLifecycleID),
+			Payload:  stampActionValue(targetPickerPayload(view, actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectMode, view.PickerID, string(option.Value))), daemonLifecycleID),
 			Selected: option.Selected,
 			Disabled: !available,
 		})
@@ -161,7 +161,7 @@ func targetPickerSourceChoiceItems(view control.FeishuTargetPickerView, daemonLi
 		items = append(items, targetPickerChoiceItem{
 			Label:    label,
 			MetaText: metaText,
-			Payload:  stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectSource, view.PickerID, value), daemonLifecycleID),
+			Payload:  stampActionValue(targetPickerPayload(view, actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectSource, view.PickerID, value)), daemonLifecycleID),
 			Selected: option.Value == view.SelectedSource,
 			Disabled: !option.Available,
 		})
@@ -198,7 +198,7 @@ func targetPickerChoicePageElements(items []targetPickerChoiceItem) []map[string
 
 func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	buttons := []map[string]any{
-		cardCallbackButtonElement("取消", "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID), false, ""),
+		cardCallbackButtonElement("取消", "default", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID), false, ""),
 	}
 	if view.CanGoBack {
 		if back := targetPickerBackButtonElement(view, daemonLifecycleID); len(back) != 0 {
@@ -208,7 +208,7 @@ func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemo
 	if view.Page == control.FeishuTargetPickerPageMode || view.Page == control.FeishuTargetPickerPageSource {
 		return buttons
 	}
-	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID), !view.CanConfirm, "fill"))
+	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), !view.CanConfirm, "fill"))
 	return buttons
 }
 
@@ -227,7 +227,7 @@ func targetPickerBackButtonElement(view control.FeishuTargetPickerView, daemonLi
 			"",
 		)
 	}
-	return cardCallbackButtonElement(label, "default", stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID), daemonLifecycleID), false, "")
+	return cardCallbackButtonElement(label, "default", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID)), daemonLifecycleID), false, "")
 }
 
 func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -303,7 +303,7 @@ func targetPickerGitParentDirFormRow(view control.FeishuTargetPickerView, daemon
 	openPathButton := cardFormActionButtonElement(
 		"选择目录",
 		"default",
-		stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldGitParentDir), daemonLifecycleID),
+		stampActionValue(targetPickerPayload(view, actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldGitParentDir)), daemonLifecycleID),
 		false,
 		"",
 	)
@@ -372,7 +372,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 	cancelButton := cardFormActionButtonElement(
 		"取消",
 		"default",
-		stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID),
+		stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID),
 		false,
 		"",
 	)
@@ -384,7 +384,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 		backButton := cardFormActionButtonElement(
 			strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步")),
 			"default",
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID), daemonLifecycleID),
+			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID)), daemonLifecycleID),
 			false,
 			"",
 		)
@@ -396,7 +396,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 	confirmButton := cardFormActionButtonElement(
 		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, defaultConfirmLabel)),
 		"primary",
-		stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID), daemonLifecycleID),
+		stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID),
 		!view.CanConfirm,
 		"",
 	)
@@ -419,11 +419,15 @@ func targetPickerInlineGitFormTerminalButtons(view control.FeishuTargetPickerVie
 		cardCallbackButtonElement(
 			"取消",
 			"default",
-			stampActionValue(actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID), daemonLifecycleID),
+			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID),
 			false,
 			"",
 		),
 	}
+}
+
+func targetPickerPayload(view control.FeishuTargetPickerView, payload map[string]any) map[string]any {
+	return actionPayloadWithCatalog(payload, view.CatalogFamilyID, view.CatalogVariantID, string(view.CatalogBackend))
 }
 
 func targetPickerInputElement(name, label, placeholder, value string) map[string]any {

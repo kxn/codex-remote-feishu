@@ -3,6 +3,7 @@ package control
 import (
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
@@ -85,6 +86,9 @@ type FeishuTargetPickerView struct {
 	MessageID                string
 	Title                    string
 	Source                   TargetPickerRequestSource
+	CatalogFamilyID          string
+	CatalogVariantID         string
+	CatalogBackend           agentproto.Backend
 	Stage                    FeishuTargetPickerStage
 	Page                     FeishuTargetPickerPage
 	StageLabel               string

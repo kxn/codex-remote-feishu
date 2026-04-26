@@ -72,15 +72,18 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 func (s *Service) buildFeishuSelectionContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuSelectionView) *control.FeishuUISelectionContext {
 	semantics := control.DeriveFeishuSelectionSemantics(view)
 	context := &control.FeishuUISelectionContext{
-		DTOOwner:     control.FeishuUIDTOwnerSelection,
-		Surface:      s.buildFeishuUISurfaceContext(surface),
-		PromptKind:   semantics.PromptKind,
-		ViewMode:     strings.TrimSpace(semantics.ViewMode),
-		Layout:       strings.TrimSpace(semantics.Layout),
-		Title:        strings.TrimSpace(semantics.Title),
-		ContextTitle: strings.TrimSpace(semantics.ContextTitle),
-		ContextText:  strings.TrimSpace(semantics.ContextText),
-		ContextKey:   strings.TrimSpace(semantics.ContextKey),
+		DTOOwner:         control.FeishuUIDTOwnerSelection,
+		Surface:          s.buildFeishuUISurfaceContext(surface),
+		PromptKind:       semantics.PromptKind,
+		CatalogFamilyID:  strings.TrimSpace(view.CatalogFamilyID),
+		CatalogVariantID: strings.TrimSpace(view.CatalogVariantID),
+		CatalogBackend:   view.CatalogBackend,
+		ViewMode:         strings.TrimSpace(semantics.ViewMode),
+		Layout:           strings.TrimSpace(semantics.Layout),
+		Title:            strings.TrimSpace(semantics.Title),
+		ContextTitle:     strings.TrimSpace(semantics.ContextTitle),
+		ContextText:      strings.TrimSpace(semantics.ContextText),
+		ContextKey:       strings.TrimSpace(semantics.ContextKey),
 	}
 	return context
 }
@@ -126,6 +129,9 @@ func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceC
 		Surface:                  s.buildFeishuUISurfaceContext(surface),
 		PickerID:                 strings.TrimSpace(view.PickerID),
 		Source:                   view.Source,
+		CatalogFamilyID:          strings.TrimSpace(view.CatalogFamilyID),
+		CatalogVariantID:         strings.TrimSpace(view.CatalogVariantID),
+		CatalogBackend:           view.CatalogBackend,
 		Title:                    strings.TrimSpace(view.Title),
 		Page:                     view.Page,
 		WorkspaceSelectionLocked: view.WorkspaceSelectionLocked,

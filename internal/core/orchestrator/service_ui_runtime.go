@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -67,6 +68,9 @@ type activeTargetPickerRecord struct {
 	PickerID              string
 	OwnerUserID           string
 	Source                control.TargetPickerRequestSource
+	CatalogFamilyID       string
+	CatalogVariantID      string
+	CatalogBackend        agentproto.Backend
 	Stage                 control.FeishuTargetPickerStage
 	StatusTitle           string
 	StatusText            string

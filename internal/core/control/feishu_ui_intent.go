@@ -76,6 +76,16 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 	if intent, ok := FeishuConfigFlowIntentFromAction(action); ok {
 		return intent, true
 	}
+	if flow, ok := ResolveFeishuWorkspaceSessionFlowFromAction(action); ok && flow.IntentKind != "" {
+		switch flow.IntentKind {
+		case FeishuUIIntentShowList:
+			return &FeishuUIIntent{Kind: FeishuUIIntentShowList, RawText: action.Text, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+		case FeishuUIIntentShowThreads:
+			return &FeishuUIIntent{Kind: FeishuUIIntentShowThreads, ViewMode: action.ViewMode, Page: action.Page, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+		case FeishuUIIntentShowAllThreads:
+			return &FeishuUIIntent{Kind: FeishuUIIntentShowAllThreads, ViewMode: action.ViewMode, Page: action.Page, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+		}
+	}
 	switch action.Kind {
 	case ActionWorkspaceRoot:
 		if isBareInlineCommand(action.Text, "/workspace") || strings.TrimSpace(action.Text) == "" {

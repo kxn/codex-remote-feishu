@@ -14,22 +14,26 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	if showAll {
 		mode = threadSelectionDisplayAll
 	}
-	return s.presentThreadSelectionModeAtCursor(surface, mode, 1, 0)
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, 1, 0)
 }
 
 func (s *Service) presentAllThreadWorkspaces(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursor(surface, threadSelectionDisplayAllExpanded, 1, 0)
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, threadSelectionDisplayAllExpanded, 1, 0)
 }
 
 func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursor(surface, threadSelectionDisplayScopedAll, 1, 0)
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, threadSelectionDisplayScopedAll, 1, 0)
 }
 
 func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
-	return s.presentWorkspaceThreadSelectionPage(surface, workspaceKey, 1, 1)
+	return s.presentWorkspaceThreadSelectionPageWithAction(surface, control.Action{}, workspaceKey, 1, 1)
 }
 
 func (s *Service) presentWorkspaceThreadSelectionPage(surface *state.SurfaceConsoleRecord, workspaceKey string, page, returnPage int) []eventcontract.Event {
+	return s.presentWorkspaceThreadSelectionPageWithAction(surface, control.Action{}, workspaceKey, page, returnPage)
+}
+
+func (s *Service) presentWorkspaceThreadSelectionPageWithAction(surface *state.SurfaceConsoleRecord, action control.Action, workspaceKey string, page, returnPage int) []eventcontract.Event {
 	model, events := s.buildWorkspaceThreadSelectionModel(surface, workspaceKey, page, returnPage)
 	if len(events) != 0 {
 		return events
@@ -37,9 +41,13 @@ func (s *Service) presentWorkspaceThreadSelectionPage(surface *state.SurfaceCons
 	if model == nil {
 		return nil
 	}
+	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
 	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptUseThread,
-		Thread:     model,
+		PromptKind:       control.SelectionPromptUseThread,
+		CatalogFamilyID:  familyID,
+		CatalogVariantID: variantID,
+		CatalogBackend:   backend,
+		Thread:           model,
 	})}
 }
 
@@ -87,10 +95,14 @@ func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConso
 }
 
 func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page int) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursor(surface, mode, page, 0)
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, page, 0)
 }
 
 func (s *Service) presentThreadSelectionModeAtCursor(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page, cursor int) []eventcontract.Event {
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, page, cursor)
+}
+
+func (s *Service) presentThreadSelectionModeAtCursorWithAction(surface *state.SurfaceConsoleRecord, action control.Action, mode threadSelectionDisplayMode, page, cursor int) []eventcontract.Event {
 	model, events := s.buildThreadSelectionModelAtCursor(surface, mode, page, cursor)
 	if len(events) != 0 {
 		return events
@@ -98,9 +110,13 @@ func (s *Service) presentThreadSelectionModeAtCursor(surface *state.SurfaceConso
 	if model == nil {
 		return nil
 	}
+	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
 	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptUseThread,
-		Thread:     model,
+		PromptKind:       control.SelectionPromptUseThread,
+		CatalogFamilyID:  familyID,
+		CatalogVariantID: variantID,
+		CatalogBackend:   backend,
+		Thread:           model,
 	})}
 }
 
@@ -219,11 +235,15 @@ func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsol
 }
 
 func (s *Service) handleThreadSelectionPage(surface *state.SurfaceConsoleRecord, viewMode string, cursor int) []eventcontract.Event {
+	return s.handleThreadSelectionPageWithAction(surface, control.Action{}, viewMode, cursor)
+}
+
+func (s *Service) handleThreadSelectionPageWithAction(surface *state.SurfaceConsoleRecord, action control.Action, viewMode string, cursor int) []eventcontract.Event {
 	mode, ok := threadSelectionDisplayModeFromViewMode(viewMode)
 	if !ok {
 		return notice(surface, "thread_selection_page_invalid", "当前会话列表已过期，请重新发送 /use 或 /useall。")
 	}
-	return s.presentThreadSelectionModeAtCursor(surface, mode, 1, cursor)
+	return s.presentThreadSelectionModeAtCursorWithAction(surface, action, mode, 1, cursor)
 }
 
 func threadSelectionDisplayModeFromViewMode(viewMode string) (threadSelectionDisplayMode, bool) {

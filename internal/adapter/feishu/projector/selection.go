@@ -270,6 +270,7 @@ func selectionOptionButton(prompt selectionRenderModel, option control.Selection
 	if len(value) == 0 {
 		value = actionPayloadUseThread(option.OptionID, false)
 	}
+	value = actionPayloadWithCatalog(value, prompt.CatalogFamilyID, prompt.CatalogVariantID, string(prompt.CatalogBackend))
 	stampActionValue(value, daemonLifecycleID)
 	disabled := option.Disabled
 	buttonType := "default"
@@ -334,6 +335,7 @@ func selectionPromptPageButton(prompt selectionRenderModel, daemonLifecycleID st
 	default:
 		return nil
 	}
+	value = actionPayloadWithCatalog(value, prompt.CatalogFamilyID, prompt.CatalogVariantID, string(prompt.CatalogBackend))
 	stampActionValue(value, daemonLifecycleID)
 	return cardCallbackButtonElement(label, "default", value, false, "fill")
 }
