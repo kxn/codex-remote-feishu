@@ -246,14 +246,14 @@ func newRemoteSetupTestApp(t *testing.T, home string) (*App, string) {
 		t.Fatalf("WriteAppConfig: %v", err)
 	}
 
-	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	binaryPath := filepath.Join(home, "bin", executableName("codex-remote"))
 	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(binary dir): %v", err)
 	}
 	if err := os.WriteFile(binaryPath, []byte("wrapper-binary"), 0o755); err != nil {
 		t.Fatalf("WriteFile(binary): %v", err)
 	}
-	realBinaryPath := filepath.Join(home, "bin", "codex-real")
+	realBinaryPath := filepath.Join(home, "bin", executableName("codex-real"))
 	if err := os.WriteFile(realBinaryPath, []byte("real-binary"), 0o755); err != nil {
 		t.Fatalf("WriteFile(real binary): %v", err)
 	}

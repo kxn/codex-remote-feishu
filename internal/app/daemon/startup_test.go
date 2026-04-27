@@ -106,11 +106,11 @@ func seedStartupPlanBinaries(t *testing.T) (string, string) {
 	t.Helper()
 
 	dir := t.TempDir()
-	currentBinary := filepath.Join(dir, "codex-remote")
+	currentBinary := filepath.Join(dir, executableName("codex-remote"))
 	if err := os.WriteFile(currentBinary, []byte("wrapper"), 0o755); err != nil {
 		t.Fatalf("write current binary: %v", err)
 	}
-	realBinary := filepath.Join(dir, "codex-real")
+	realBinary := filepath.Join(dir, executableName("codex-real"))
 	if err := os.WriteFile(realBinary, []byte("real"), 0o755); err != nil {
 		t.Fatalf("write real binary: %v", err)
 	}
