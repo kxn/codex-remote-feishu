@@ -226,7 +226,7 @@ jobs:
       - name: Build artifacts
         if: ${{ steps.version.outputs.run_packaging == 'true' }}
         env:
-          CODEX_REMOTE_BUILD_FLAVOR: shipping
+          CODEX_REMOTE_BUILD_FLAVOR: ${{ steps.version.outputs.track == 'alpha' && 'alpha' || 'shipping' }}
         run: bash scripts/release/build-artifacts.sh "${{ steps.version.outputs.version }}"
 
       - name: Smoke test WebSetup release installer

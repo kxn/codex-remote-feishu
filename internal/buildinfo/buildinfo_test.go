@@ -33,6 +33,27 @@ func TestCapabilityPolicyForShipping(t *testing.T) {
 	}
 }
 
+func TestCapabilityPolicyForAlpha(t *testing.T) {
+	policy := CapabilityPolicyForFlavor(FlavorAlpha)
+	if policy.Flavor != FlavorAlpha {
+		t.Fatalf("Flavor = %q, want %q", policy.Flavor, FlavorAlpha)
+	}
+	if !policy.AllowDevUpgrade {
+		t.Fatal("alpha policy should allow dev upgrade")
+	}
+	if policy.AllowLocalUpgrade {
+		t.Fatal("alpha policy should not allow local upgrade")
+	}
+	if policy.DefaultPprofEnabled {
+		t.Fatal("alpha policy should keep pprof disabled by default")
+	}
+	for _, track := range []string{"alpha", "beta", "production"} {
+		if !policy.AllowsReleaseTrack(track) {
+			t.Fatalf("alpha policy should allow %q, got %#v", track, policy.AllowedReleaseTracks)
+		}
+	}
+}
+
 func TestCapabilityPolicyForDev(t *testing.T) {
 	policy := CapabilityPolicyForFlavor(FlavorDev)
 	if policy.Flavor != FlavorDev {

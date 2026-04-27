@@ -6,6 +6,7 @@ type Flavor string
 
 const (
 	FlavorDev      Flavor = "dev"
+	FlavorAlpha    Flavor = "alpha"
 	FlavorShipping Flavor = "shipping"
 )
 
@@ -26,6 +27,8 @@ func ParseFlavor(value string) Flavor {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case string(FlavorShipping):
 		return FlavorShipping
+	case string(FlavorAlpha):
+		return FlavorAlpha
 	case string(FlavorDev):
 		return FlavorDev
 	default:
@@ -48,6 +51,13 @@ func CapabilityPolicyForFlavor(flavor Flavor) CapabilityPolicy {
 			Flavor:               FlavorShipping,
 			AllowedReleaseTracks: []string{"beta", "production"},
 			AllowDevUpgrade:      false,
+			AllowLocalUpgrade:    false,
+		}
+	case FlavorAlpha:
+		return CapabilityPolicy{
+			Flavor:               FlavorAlpha,
+			AllowedReleaseTracks: []string{"alpha", "beta", "production"},
+			AllowDevUpgrade:      true,
 			AllowLocalUpgrade:    false,
 		}
 	default:

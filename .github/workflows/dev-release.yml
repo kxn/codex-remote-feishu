@@ -61,7 +61,7 @@ jobs:
 
       - name: Build artifacts
         env:
-          CODEX_REMOTE_BUILD_FLAVOR: shipping
+          CODEX_REMOTE_BUILD_FLAVOR: dev
           CODEX_REMOTE_PACKAGE_VERSION_LABEL: dev
         run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}"
 

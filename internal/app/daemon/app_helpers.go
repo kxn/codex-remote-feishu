@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -41,6 +42,7 @@ func formatStatusSnapshotBinary(identity agentproto.ServerIdentity) string {
 	if fingerprint != "" {
 		parts = append(parts, fingerprint)
 	}
+	parts = append(parts, "flavor:"+string(buildinfo.CurrentFlavor()))
 	return strings.Join(parts, " / ")
 }
 

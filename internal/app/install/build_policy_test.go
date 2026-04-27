@@ -22,6 +22,11 @@ func TestInferReleaseTrackUsesBuildFlavorFallback(t *testing.T) {
 		t.Fatalf("shipping repo inferReleaseTrack = %q, want production", got)
 	}
 
+	withBuildFlavorForInstallTest(t, buildinfo.FlavorAlpha)
+	if got := inferReleaseTrack("", string(InstallSourceRepo)); got != ReleaseTrackAlpha {
+		t.Fatalf("alpha repo inferReleaseTrack = %q, want alpha", got)
+	}
+
 	withBuildFlavorForInstallTest(t, buildinfo.FlavorDev)
 	if got := inferReleaseTrack("", string(InstallSourceRepo)); got != ReleaseTrackAlpha {
 		t.Fatalf("dev repo inferReleaseTrack = %q, want alpha", got)
@@ -70,5 +75,27 @@ func TestBootstrapDevFlavorEnablesPprofByDefault(t *testing.T) {
 	cfg := loadAppConfigForTest(t, state.ConfigPath)
 	if cfg.Debug.Pprof == nil || !cfg.Debug.Pprof.Enabled {
 		t.Fatalf("expected dev bootstrap to enable pprof by default, got %#v", cfg.Debug.Pprof)
+	}
+}
+
+func TestBootstrapAlphaFlavorKeepsPprofDisabledByDefault(t *testing.T) {
+	withBuildFlavorForInstallTest(t, buildinfo.FlavorAlpha)
+
+	baseDir := t.TempDir()
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary-bin")
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:    baseDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	cfg := loadAppConfigForTest(t, state.ConfigPath)
+	if cfg.Debug.Pprof == nil {
+		t.Fatal("expected pprof settings to be provisioned for instance ports")
+	}
+	if cfg.Debug.Pprof.Enabled {
+		t.Fatalf("expected alpha bootstrap to keep pprof disabled, got %#v", cfg.Debug.Pprof)
 	}
 }

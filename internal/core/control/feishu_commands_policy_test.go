@@ -42,6 +42,39 @@ func TestUpgradeDefinitionRespectsShippingPolicy(t *testing.T) {
 	}
 }
 
+func TestUpgradeDefinitionRespectsAlphaPolicy(t *testing.T) {
+	withBuildFlavorForControlTest(t, buildinfo.FlavorAlpha)
+
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandUpgrade)
+	if !ok {
+		t.Fatal("expected upgrade definition")
+	}
+	if !strings.Contains(strings.Join(def.Examples, " "), "/upgrade dev") {
+		t.Fatalf("alpha upgrade examples should include dev upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(strings.Join(def.Examples, " "), "/upgrade local") {
+		t.Fatalf("alpha upgrade examples should hide local upgrade: %#v", def.Examples)
+	}
+	if strings.Contains(def.ArgumentFormNote, "local") {
+		t.Fatalf("alpha upgrade form note should hide local upgrade: %q", def.ArgumentFormNote)
+	}
+	foundDev := false
+	foundAlphaTrack := false
+	for _, option := range def.Options {
+		switch option.CommandText {
+		case "/upgrade dev":
+			foundDev = true
+		case "/upgrade local":
+			t.Fatalf("alpha upgrade options should hide local upgrade: %#v", def.Options)
+		case "/upgrade track alpha":
+			foundAlphaTrack = true
+		}
+	}
+	if !foundDev || !foundAlphaTrack {
+		t.Fatalf("alpha upgrade options missing expected entries: %#v", def.Options)
+	}
+}
+
 func TestHelpCatalogReflectsShippingUpgradePolicy(t *testing.T) {
 	withBuildFlavorForControlTest(t, buildinfo.FlavorShipping)
 

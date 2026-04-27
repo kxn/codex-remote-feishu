@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-21`
-> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
+> Updated: `2026-04-27`
+> Summary: 补充全局 stable/beta/master 实例与 workspace 绑定模型，并同步 build flavor（shipping/alpha/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
 
 ## 1. 范围
 
@@ -141,9 +141,11 @@ Windows PowerShell:
 当前构建元数据额外引入了 `build flavor`，用于和 release track 解耦：
 
 - `shipping`
-  - release workflow 的默认构建 flavor
+  - beta / production release workflow 的构建 flavor
+- `alpha`
+  - alpha release workflow 的构建 flavor
 - `dev`
-  - 源码仓库本地构建的默认 flavor
+  - 源码仓库本地构建与 `dev-latest` workflow 的默认 flavor
 
 当前由统一策略决定“这个构建能暴露什么能力”，而不是把能力边界硬编码在 track 逻辑里。
 
@@ -152,10 +154,17 @@ Windows PowerShell:
 - shipping
   - 允许切换的 release track 只有 `beta`、`production`
   - 新安装默认/回退 track 收敛到 `production`
+  - 不暴露滚动开发构建升级入口（`/upgrade dev`）
+  - 不暴露本地 binary 升级入口（`/upgrade local`）
+  - `pprof` 保留但默认关闭
+- alpha
+  - 允许 track：`alpha`、`beta`、`production`
+  - 暴露滚动开发构建升级入口（`/upgrade dev`）
   - 不暴露本地 binary 升级入口（`/upgrade local`）
   - `pprof` 保留但默认关闭
 - dev
   - 允许 track：`alpha`、`beta`、`production`
+  - 暴露滚动开发构建升级入口（`/upgrade dev`）
   - 保留本地 binary 升级入口（`/upgrade local`）
   - `pprof` 默认开启
 
@@ -164,7 +173,7 @@ Windows PowerShell:
 - `production|beta|alpha` 仍然只表示 GitHub semver release track。
 - `/upgrade dev` 是单独的“滚动开发构建源”命令，不属于 `track` 子空间。
 - `dev-latest` 由固定 GitHub prerelease + `dev-latest.json` manifest 提供，客户端按 manifest 解析当前平台资产并做 checksum 校验。
-- 当前 `dev-latest` workflow 产出的 binary 使用 `shipping` flavor；也就是说它是“最新 master 的公开测试构建”，不是源码仓库本地 `dev` flavor 的替代品。
+- 当前 `dev-latest` workflow 产出的 binary 使用 `dev` flavor；它和源码仓库直接构建出的默认能力边界保持一致。
 
 `/upgrade track`、帮助文案和卡片入口都会读取这套策略。`/upgrade dev` 则始终是显式命令入口，不跟随 track 按钮一起大面积曝光。
 

@@ -94,6 +94,51 @@ func TestUpgradeDevRejectedInShippingFlavor(t *testing.T) {
 	waitForUpgradeNoticeBody(t, gateway, "当前构建不支持 `/upgrade dev`")
 }
 
+func TestBuildUpgradeStatusCatalogExposesAlphaPolicyOptions(t *testing.T) {
+	withBuildFlavorForDaemonTest(t, buildinfo.FlavorAlpha)
+
+	catalog := buildUpgradeRootPageView(install.InstallState{
+		CurrentTrack:   install.ReleaseTrackAlpha,
+		CurrentVersion: "v1.0.0-alpha.1",
+	}, false, "", "", "")
+	assertCatalogUsesPlainTextContracts(t, &catalog)
+	buttons := catalog.Sections[0].Entries[0].Buttons
+	if got := len(buttons); got != 3 {
+		t.Fatalf("alpha quick buttons = %d, want 3", got)
+	}
+	foundLatest := false
+	foundDev := false
+	for _, button := range buttons {
+		switch button.CommandText {
+		case "/upgrade latest":
+			foundLatest = true
+		case "/upgrade dev":
+			foundDev = true
+		case "/upgrade local":
+			t.Fatalf("alpha root catalog should hide local upgrade, got %#v", buttons)
+		}
+	}
+	if !foundLatest || !foundDev {
+		t.Fatalf("alpha root catalog missing expected buttons, got %#v", buttons)
+	}
+}
+
+func TestUpgradeLocalRejectedInAlphaFlavor(t *testing.T) {
+	withBuildFlavorForDaemonTest(t, buildinfo.FlavorAlpha)
+
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUpgradeCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/upgrade local",
+	})
+
+	waitForUpgradeNoticeBody(t, gateway, "当前构建不支持 `/upgrade local`")
+}
+
 func waitForUpgradeNoticeBody(t *testing.T, gateway *lifecycleGateway, needle string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
