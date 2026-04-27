@@ -100,7 +100,7 @@ func TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback(t *testing.T) {
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
-	bundleCodex := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-26.422.30944-linux-x64", "bin", "linux-x86_64", executableName("codex"))
+	bundleCodex := testVSCodeBundleEntrypoint(home, ".vscode-server", "26.422.30944-linux-x64")
 	writeExecutableFile(t, bundleCodex, "bundle-codex")
 
 	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
