@@ -29,6 +29,9 @@ func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operatio
 			}
 			return operations
 		}
+		if !finalCardHasFileChanges(event) {
+			return operations
+		}
 		for i := range operations {
 			if operations[i].Kind != feishu.OperationSendCard && operations[i].Kind != feishu.OperationUpdateCard {
 				continue
@@ -51,6 +54,11 @@ func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operatio
 		addReviewCardTitlePrefix(&operations[i])
 	}
 	return operations
+}
+
+func finalCardHasFileChanges(event eventcontract.Event) bool {
+	summary := event.FileChangeSummary
+	return summary != nil && (summary.FileCount > 0 || len(summary.Files) > 0)
 }
 
 func addReviewCardTitlePrefix(operation *feishu.Operation) {

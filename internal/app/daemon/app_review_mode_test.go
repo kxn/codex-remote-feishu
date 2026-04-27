@@ -45,7 +45,7 @@ func newReviewModeAppForTest(t *testing.T) (*App, *messageIDAssigningGateway) {
 	return app, gateway
 }
 
-func TestDeliverUIEventAddsReviewEntryButtonToNormalFinalCard(t *testing.T) {
+func TestDeliverUIEventDoesNotAddReviewEntryButtonToNormalFinalCardWithoutFileChanges(t *testing.T) {
 	app, gateway := newReviewModeAppForTest(t)
 
 	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
@@ -73,8 +73,46 @@ func TestDeliverUIEventAddsReviewEntryButtonToNormalFinalCard(t *testing.T) {
 	if ops[0].CardTitle != "✅ 最后答复" {
 		t.Fatalf("unexpected normal final title: %#v", ops[0])
 	}
+	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+		t.Fatalf("did not expect review entry button without file changes, got %#v", ops[0].CardElements)
+	}
+}
+
+func TestDeliverUIEventAddsReviewEntryButtonWhenFinalCardIncludesFileChanges(t *testing.T) {
+	app, gateway := newReviewModeAppForTest(t)
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:             eventcontract.KindBlockCommitted,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "msg-1",
+		Block: &render.Block{
+			Kind:       render.BlockAssistantMarkdown,
+			InstanceID: "inst-1",
+			ThreadID:   "thread-main",
+			TurnID:     "turn-main-1",
+			ItemID:     "item-main-1",
+			Text:       "已经处理完成。",
+			Final:      true,
+		},
+		FileChangeSummary: &control.FileChangeSummary{
+			FileCount:    1,
+			AddedLines:   1,
+			RemovedLines: 0,
+			Files: []control.FileChangeSummaryEntry{
+				{Path: "docs/guide.md", AddedLines: 1},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver final block with file changes: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one final card, got %#v", ops)
+	}
 	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
-		t.Fatalf("expected review entry button, got %#v", ops[0].CardElements)
+		t.Fatalf("expected review entry button with file changes, got %#v", ops[0].CardElements)
 	}
 }
 
