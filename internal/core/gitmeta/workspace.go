@@ -80,7 +80,7 @@ func InspectWorkspace(path string, opts InspectOptions) (WorkspaceInfo, error) {
 	if commandDir == "" {
 		commandDir = info.RepoRoot
 	}
-	branch, detached, err := inspectBranch(commandDir, timeout)
+	branch, detached, err := inspectBranch(commandDir, info.GitDir, timeout)
 	if err != nil {
 		return info, err
 	}
@@ -190,7 +190,7 @@ func locateWorkspace(path string) (WorkspaceInfo, error) {
 	return info, nil
 }
 
-func inspectBranch(cwd string, timeout time.Duration) (string, bool, error) {
+func inspectBranch(cwd, gitDir string, timeout time.Duration) (string, bool, error) {
 	output, symbolicErr := runGit(cwd, timeout, "symbolic-ref", "--short", "HEAD")
 	if branch := strings.TrimSpace(output); symbolicErr == nil && branch != "" {
 		return branch, false, nil
@@ -199,10 +199,42 @@ func inspectBranch(cwd string, timeout time.Duration) (string, bool, error) {
 	if branch := strings.TrimSpace(output); headErr == nil && branch != "" {
 		return branch, true, nil
 	}
+	if branch, detached, ok, err := inspectBranchFromHeadFile(gitDir); ok {
+		return branch, detached, err
+	}
 	if headErr != nil {
 		return "", false, headErr
 	}
 	return "", false, symbolicErr
+}
+
+func inspectBranchFromHeadFile(gitDir string) (string, bool, bool, error) {
+	gitDir = strings.TrimSpace(gitDir)
+	if gitDir == "" {
+		return "", false, false, nil
+	}
+	headPath := filepath.Join(gitDir, "HEAD")
+	body, err := os.ReadFile(headPath)
+	if err != nil {
+		return "", false, false, err
+	}
+	line := strings.TrimSpace(string(body))
+	if line == "" {
+		return "", false, false, nil
+	}
+	if strings.HasPrefix(line, "ref:") {
+		ref := strings.TrimSpace(strings.TrimPrefix(line, "ref:"))
+		if ref == "" {
+			return "", false, false, nil
+		}
+		ref = strings.TrimPrefix(ref, "refs/heads/")
+		return ref, false, true, nil
+	}
+	shortHead := line
+	if len(shortHead) > 7 {
+		shortHead = shortHead[:7]
+	}
+	return shortHead, true, true, nil
 }
 
 func runGit(cwd string, timeout time.Duration, args ...string) (string, error) {

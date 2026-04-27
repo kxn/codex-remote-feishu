@@ -158,6 +158,28 @@ func TestInspectWorkspaceOutsideGitRepo(t *testing.T) {
 	}
 }
 
+func TestInspectWorkspaceUnbornHeadRepo(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createUnbornGitRepoForTest(t)
+
+	info, err := InspectWorkspace(repoRoot, InspectOptions{IncludeStatus: true})
+	if err != nil {
+		t.Fatalf("InspectWorkspace(unborn) error = %v", err)
+	}
+	if !info.InRepo() {
+		t.Fatalf("expected git repo info, got %#v", info)
+	}
+	if info.Detached {
+		t.Fatalf("expected unborn branch to stay attached, got %#v", info)
+	}
+	if info.Branch != unbornBranchNameForTest(t, repoRoot) {
+		t.Fatalf("Branch = %q, want %q", info.Branch, unbornBranchNameForTest(t, repoRoot))
+	}
+	if info.Status.Dirty {
+		t.Fatalf("expected unborn repo to be clean, got %#v", info.Status)
+	}
+}
+
 func TestPreviewWorktreeInfersDirectoryNameFromBranch(t *testing.T) {
 	ensureGitForTest(t)
 	repoRoot := createGitRepoForTest(t)
@@ -226,6 +248,29 @@ func createGitRepoForTest(t *testing.T) string {
 	runGitTestCommand(t, repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init")
 	runGitTestCommand(t, repoRoot, "branch", "-M", "main")
 	return repoRoot
+}
+
+func createUnbornGitRepoForTest(t *testing.T) string {
+	t.Helper()
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+		t.Fatalf("mkdir repo root: %v", err)
+	}
+	runGitTestCommand(t, repoRoot, "init", "-q")
+	return repoRoot
+}
+
+func unbornBranchNameForTest(t *testing.T, repoRoot string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(repoRoot, ".git", "HEAD"))
+	if err != nil {
+		t.Fatalf("read HEAD: %v", err)
+	}
+	line := strings.TrimSpace(string(body))
+	if !strings.HasPrefix(line, "ref:") {
+		t.Fatalf("unexpected HEAD content: %q", line)
+	}
+	return strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(line, "ref:")), "refs/heads/")
 }
 
 func runGitTestCommand(t *testing.T, dir string, args ...string) {
