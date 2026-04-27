@@ -19,6 +19,7 @@ const (
 	FeishuCommandUseAll               = "useall"
 	FeishuCommandNew                  = "new"
 	FeishuCommandHistory              = "history"
+	FeishuCommandReview               = "review"
 	FeishuCommandSendFile             = "sendfile"
 	FeishuCommandFollow               = "follow"
 	FeishuCommandDetach               = "detach"
@@ -261,6 +262,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "history", action: Action{Kind: ActionShowHistory, Text: "/history"}},
 		},
 	},
+	reviewCommandSpec(),
 	sendFileCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{

@@ -25,6 +25,7 @@ const (
 	ActionShowCommandHelp             ActionKind = "surface.command.help"
 	ActionShowCommandMenu             ActionKind = "surface.command.menu"
 	ActionShowHistory                 ActionKind = "surface.command.history"
+	ActionReviewCommand               ActionKind = "surface.command.review"
 	ActionDebugCommand                ActionKind = "surface.command.debug"
 	ActionCronCommand                 ActionKind = "surface.command.cron"
 	ActionUpgradeCommand              ActionKind = "surface.command.upgrade"

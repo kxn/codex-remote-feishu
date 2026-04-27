@@ -1,6 +1,9 @@
 package orchestrator
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,15 +13,16 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func newReviewSessionService(t *testing.T) (*Service, *state.SurfaceConsoleRecord) {
+func newReviewSessionService(t *testing.T) (*Service, *state.SurfaceConsoleRecord, string) {
 	t.Helper()
 	now := time.Date(2026, 4, 26, 15, 0, 0, 0, time.UTC)
+	repoRoot := initReviewSessionRepo(t)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-1",
 		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
+		WorkspaceRoot:           repoRoot,
+		WorkspaceKey:            repoRoot,
 		ShortName:               "droid",
 		Online:                  true,
 		ObservedFocusedThreadID: "thread-main",
@@ -26,13 +30,13 @@ func newReviewSessionService(t *testing.T) (*Service, *state.SurfaceConsoleRecor
 			"thread-main": {
 				ThreadID: "thread-main",
 				Name:     "主线程",
-				CWD:      "/data/dl/droid",
+				CWD:      repoRoot,
 				Loaded:   true,
 			},
 			"thread-review": {
 				ThreadID:     "thread-review",
 				Name:         "审阅线程",
-				CWD:          "/data/dl/droid",
+				CWD:          repoRoot,
 				Loaded:       true,
 				ForkedFromID: "thread-main",
 				Source: &agentproto.ThreadSourceRecord{
@@ -55,7 +59,40 @@ func newReviewSessionService(t *testing.T) (*Service, *state.SurfaceConsoleRecor
 		SurfaceSessionID: "surface-1",
 		ThreadID:         "thread-main",
 	})
-	return svc, svc.root.Surfaces["surface-1"]
+	return svc, svc.root.Surfaces["surface-1"], repoRoot
+}
+
+func initReviewSessionRepo(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+	root := t.TempDir()
+	runReviewSessionGit(t, root, "init")
+	runReviewSessionGit(t, root, "config", "user.email", "review-session-tests@example.com")
+	runReviewSessionGit(t, root, "config", "user.name", "Review Session Tests")
+	return root
+}
+
+func runReviewSessionGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+}
+
+func writeReviewSessionRepoFile(t *testing.T, root, relativePath, content string) {
+	t.Helper()
+	fullPath := filepath.Join(root, relativePath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(fullPath), err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", fullPath, err)
+	}
 }
 
 func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.SurfaceConsoleRecord, sourceMessageID, turnID string) {
@@ -83,7 +120,7 @@ func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.Sur
 }
 
 func TestReviewSessionTurnStartActivatesWithoutStealingSelection(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
 
@@ -104,7 +141,7 @@ func TestReviewSessionTurnStartActivatesWithoutStealingSelection(t *testing.T) {
 }
 
 func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
@@ -147,7 +184,7 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 }
 
 func TestReviewSessionLifecycleAndReplyAnchorFallback(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
 
 	entered := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -209,7 +246,7 @@ func TestReviewSessionLifecycleAndReplyAnchorFallback(t *testing.T) {
 }
 
 func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:           state.ReviewSessionPhasePending,
 		SourceMessageID: "msg-review-start",
@@ -264,7 +301,8 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 }
 
 func TestStartReviewFromFinalCardBuildsDetachedReviewCommand(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, repoRoot := newReviewSessionService(t)
+	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
 	finalBlock := render.Block{
 		Kind:       render.BlockAssistantMarkdown,
 		InstanceID: "inst-1",
@@ -301,8 +339,55 @@ func TestStartReviewFromFinalCardBuildsDetachedReviewCommand(t *testing.T) {
 	}
 }
 
+func TestStartReviewCommandBuildsDetachedReviewCommandFromCurrentThread(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-1",
+		Text:             "/review uncommitted",
+	})
+
+	if len(events) != 2 {
+		t.Fatalf("expected notice + review start command, got %#v", events)
+	}
+	if events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected review start command, got %#v", events)
+	}
+	command := events[1].Command
+	if command.Target.ThreadID != "thread-main" {
+		t.Fatalf("unexpected review start target: %#v", command.Target)
+	}
+	if command.Review.Delivery != agentproto.ReviewDeliveryDetached || command.Review.Target.Kind != agentproto.ReviewTargetKindUncommittedChanges {
+		t.Fatalf("unexpected review request: %#v", command.Review)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhasePending || surface.ReviewSession.ParentThreadID != "thread-main" || surface.ReviewSession.SourceMessageID != "msg-review-1" {
+		t.Fatalf("unexpected pending review session: %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartReviewCommandRejectsCleanRepo(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-1",
+		Text:             "/review uncommitted",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "review_repo_clean" {
+		t.Fatalf("expected clean-repo notice, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("did not expect review session for clean repo, got %#v", surface.ReviewSession)
+	}
+}
+
 func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:          state.ReviewSessionPhaseActive,
 		ParentThreadID: "thread-main",
@@ -336,7 +421,7 @@ func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T
 }
 
 func TestDiscardReviewSessionClearsRuntime(t *testing.T) {
-	svc, surface := newReviewSessionService(t)
+	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:          state.ReviewSessionPhaseActive,
 		ParentThreadID: "thread-main",

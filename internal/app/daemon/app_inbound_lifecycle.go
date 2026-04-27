@@ -190,10 +190,12 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "设置下一条消息推理强度", "/reasoning"
 	case control.ActionAccessCommand:
 		return "设置下一条消息执行权限", "/access"
+	case control.ActionReviewCommand:
+		return "Review 待提交内容", "/review uncommitted"
 	case control.ActionRespondRequest:
 		return "响应授权请求", ""
 	case control.ActionReviewStart:
-		return "进入审阅", ""
+		return "Review 待提交内容", ""
 	case control.ActionReviewDiscard:
 		return "放弃审阅", ""
 	case control.ActionReviewApply:

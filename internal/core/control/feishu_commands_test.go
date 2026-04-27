@@ -257,6 +257,38 @@ func TestParseFeishuTextActionRecognizesHistoryCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
+	action, ok := ParseFeishuTextAction("/review uncommitted")
+	if !ok {
+		t.Fatal("expected /review uncommitted to be parsed")
+	}
+	if action.Kind != ActionReviewCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionReviewCommand)
+	}
+	if action.Text != "/review uncommitted" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/review uncommitted")
+	}
+	if action.CommandID != FeishuCommandReview {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandReview)
+	}
+}
+
+func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
+	action, ok := ParseFeishuMenuAction("review_uncommitted")
+	if !ok {
+		t.Fatal("expected review_uncommitted to be parsed")
+	}
+	if action.Kind != ActionReviewCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionReviewCommand)
+	}
+	if action.Text != "/review uncommitted" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/review uncommitted")
+	}
+	if action.CommandID != FeishuCommandReview {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandReview)
+	}
+}
+
 func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
 	cases := []struct {
 		name    string

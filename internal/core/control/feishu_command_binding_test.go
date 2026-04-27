@@ -56,6 +56,12 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantFamily: FeishuCommandPatch,
 			wantKind:   FeishuCommandBindingOwnerEntry,
 		},
+		{
+			name:       "review owner entry",
+			action:     Action{Kind: ActionReviewCommand, Text: "/review uncommitted"},
+			wantFamily: FeishuCommandReview,
+			wantKind:   FeishuCommandBindingOwnerEntry,
+		},
 	}
 
 	for _, tt := range tests {

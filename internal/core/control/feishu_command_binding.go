@@ -87,6 +87,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 		FeishuCommandWorkspaceDetach,
 		FeishuCommandCompact,
 		FeishuCommandSteerAll,
+		FeishuCommandReview,
 		FeishuCommandPatch,
 	} {
 		bindings[familyID] = FeishuCommandBinding{

@@ -29,7 +29,7 @@ func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operatio
 			}
 			return operations
 		}
-		if !finalCardHasFileChanges(event) {
+		if !a.service.CanOfferUncommittedReviewForFinalBlock(event.SurfaceSessionID, *event.Block) {
 			return operations
 		}
 		for i := range operations {
@@ -54,11 +54,6 @@ func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operatio
 		addReviewCardTitlePrefix(&operations[i])
 	}
 	return operations
-}
-
-func finalCardHasFileChanges(event eventcontract.Event) bool {
-	summary := event.FileChangeSummary
-	return summary != nil && (summary.FileCount > 0 || len(summary.Files) > 0)
 }
 
 func addReviewCardTitlePrefix(operation *feishu.Operation) {
@@ -91,7 +86,7 @@ func appendFooterButtons(operation *feishu.Operation, buttons []map[string]any) 
 
 func reviewEntryButton(daemonLifecycleID string) map[string]any {
 	return cardCallbackButton(
-		"进入审阅",
+		"Review 待提交内容",
 		"primary",
 		stampActionPayload(frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewStart), ""), daemonLifecycleID),
 	)
