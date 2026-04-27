@@ -208,6 +208,61 @@ func TestReviewSessionLifecycleAndReplyAnchorFallback(t *testing.T) {
 	}
 }
 
+func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership(t *testing.T) {
+	svc, surface := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:           state.ReviewSessionPhasePending,
+		SourceMessageID: "msg-review-start",
+	}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-enter",
+		ItemKind:  "entered_review_mode",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"review": "未提交变更"},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected entered review lifecycle item to stay internal, got %#v", events)
+	}
+	session := surface.ReviewSession
+	if session == nil || session.Phase != state.ReviewSessionPhaseActive {
+		t.Fatalf("expected lifecycle item to activate pending review session, got %#v", session)
+	}
+	if session.ParentThreadID != "thread-main" || session.ReviewThreadID != "thread-review" || session.ActiveTurnID != "turn-review-1" {
+		t.Fatalf("unexpected activated review session runtime: %#v", session)
+	}
+	if session.TargetLabel != "未提交变更" {
+		t.Fatalf("expected review target label to persist, got %#v", session)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	replyEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-2",
+		Text:             "这里继续看一下",
+	})
+	if len(replyEvents) != 3 || replyEvents[2].Command == nil {
+		t.Fatalf("expected review reply command after lifecycle activation, got %#v", replyEvents)
+	}
+	command := replyEvents[2].Command
+	if command.Target.ThreadID != "thread-review" ||
+		command.Target.SourceThreadID != "thread-main" ||
+		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("unexpected review reply command target: %#v", command.Target)
+	}
+}
+
 func TestStartReviewFromFinalCardBuildsDetachedReviewCommand(t *testing.T) {
 	svc, surface := newReviewSessionService(t)
 	finalBlock := render.Block{

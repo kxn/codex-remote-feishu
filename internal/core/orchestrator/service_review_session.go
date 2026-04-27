@@ -86,6 +86,46 @@ func threadSourceParentThreadID(source *agentproto.ThreadSourceRecord) string {
 	return strings.TrimSpace(source.ParentThreadID)
 }
 
+func reviewThreadParentThreadID(thread *state.ThreadRecord, session *state.ReviewSessionRecord) string {
+	if thread != nil {
+		if parentThreadID := strings.TrimSpace(firstNonEmpty(thread.ForkedFromID, threadSourceParentThreadID(thread.Source))); parentThreadID != "" {
+			return parentThreadID
+		}
+	}
+	if session == nil {
+		return ""
+	}
+	return strings.TrimSpace(session.ParentThreadID)
+}
+
+func (s *Service) activateReviewSessionRecord(surface *state.SurfaceConsoleRecord, thread *state.ThreadRecord, event agentproto.Event) *state.ReviewSessionRecord {
+	if surface == nil {
+		return nil
+	}
+	if surface.ReviewSession == nil {
+		surface.ReviewSession = &state.ReviewSessionRecord{}
+	}
+	session := surface.ReviewSession
+	if session.StartedAt.IsZero() {
+		session.StartedAt = s.now()
+	}
+	session.Phase = state.ReviewSessionPhaseActive
+	if parentThreadID := reviewThreadParentThreadID(thread, session); parentThreadID != "" {
+		session.ParentThreadID = parentThreadID
+	}
+	if reviewThreadID := strings.TrimSpace(event.ThreadID); reviewThreadID != "" {
+		session.ReviewThreadID = reviewThreadID
+	}
+	if turnID := strings.TrimSpace(event.TurnID); turnID != "" {
+		session.ActiveTurnID = turnID
+	}
+	if thread != nil {
+		session.ThreadCWD = firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(session.ThreadCWD))
+	}
+	session.LastUpdatedAt = s.now()
+	return session
+}
+
 func threadSourceFromMetadata(metadata map[string]any) *agentproto.ThreadSourceRecord {
 	if len(metadata) == 0 {
 		return nil
@@ -127,28 +167,10 @@ func (s *Service) maybeActivateReviewSession(instanceID string, event agentproto
 	if surface == nil {
 		return
 	}
-	parentThreadID := strings.TrimSpace(firstNonEmpty(thread.ForkedFromID, threadSourceParentThreadID(thread.Source)))
-	if parentThreadID == "" {
-		if existing := surface.ReviewSession; existing != nil {
-			parentThreadID = strings.TrimSpace(existing.ParentThreadID)
-		}
-	}
-	if parentThreadID == "" {
+	if reviewThreadParentThreadID(thread, surface.ReviewSession) == "" {
 		return
 	}
-	if surface.ReviewSession == nil {
-		surface.ReviewSession = &state.ReviewSessionRecord{}
-	}
-	session := surface.ReviewSession
-	if session.StartedAt.IsZero() {
-		session.StartedAt = s.now()
-	}
-	session.Phase = state.ReviewSessionPhaseActive
-	session.ParentThreadID = parentThreadID
-	session.ReviewThreadID = strings.TrimSpace(event.ThreadID)
-	session.ActiveTurnID = strings.TrimSpace(event.TurnID)
-	session.ThreadCWD = firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(session.ThreadCWD))
-	session.LastUpdatedAt = s.now()
+	s.activateReviewSessionRecord(surface, thread, event)
 }
 
 func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentproto.Event) {
@@ -168,6 +190,10 @@ func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentpr
 	default:
 		return false
 	}
+	var thread *state.ThreadRecord
+	if inst := s.root.Instances[instanceID]; inst != nil {
+		thread = inst.Threads[strings.TrimSpace(event.ThreadID)]
+	}
 	surface, session := s.reviewSessionSurface(instanceID, event.ThreadID)
 	if surface == nil && event.Initiator.Kind == agentproto.InitiatorRemoteSurface {
 		surface = s.root.Surfaces[event.Initiator.SurfaceSessionID]
@@ -175,19 +201,7 @@ func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentpr
 	if surface == nil {
 		return true
 	}
-	if surface.ReviewSession == nil {
-		surface.ReviewSession = &state.ReviewSessionRecord{}
-	}
-	session = surface.ReviewSession
-	if session.Phase == "" {
-		session.Phase = state.ReviewSessionPhaseActive
-	}
-	if session.ReviewThreadID == "" {
-		session.ReviewThreadID = strings.TrimSpace(event.ThreadID)
-	}
-	if session.ActiveTurnID == "" {
-		session.ActiveTurnID = strings.TrimSpace(event.TurnID)
-	}
+	session = s.activateReviewSessionRecord(surface, thread, event)
 	if review := strings.TrimSpace(metadataString(event.Metadata, "review")); review != "" {
 		if event.ItemKind == "entered_review_mode" {
 			session.TargetLabel = review
@@ -195,6 +209,5 @@ func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentpr
 			session.LastReviewText = review
 		}
 	}
-	session.LastUpdatedAt = s.now()
 	return true
 }
