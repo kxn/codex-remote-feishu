@@ -34,14 +34,14 @@ func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, 
 	return s.pageEvent(surface, control.FeishuPageViewFromCommandPageView(page))
 }
 
-func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw string) eventcontract.Event {
+func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string) eventcontract.Event {
 	groupID := parseCommandMenuView(raw)
 	if commandID, ok := control.ResolveFeishuCommandMenuGroupRootCommandID(control.CatalogContext{
 		ProductMode: string(s.normalizeSurfaceProductMode(surface)),
 	}, groupID); ok {
 		switch commandID {
 		case control.FeishuCommandWorkspace:
-			return s.workspacePageEvent(surface, commandID, true)
+			return s.workspacePageEvent(surface, commandID, true, sourceMessageID)
 		}
 	}
 	view := s.buildCommandMenuView(surface, raw)
@@ -51,6 +51,9 @@ func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw string)
 		phase = commandLauncherPhaseGroup
 	}
 	if flow := s.ensureCommandLauncherFlow(surface, groupID, phase); flow != nil {
+		if messageID := strings.TrimSpace(sourceMessageID); messageID != "" {
+			flow.MessageID = messageID
+		}
 		page.TrackingKey = strings.TrimSpace(flow.FlowID)
 	}
 	return s.pageEvent(surface, page)

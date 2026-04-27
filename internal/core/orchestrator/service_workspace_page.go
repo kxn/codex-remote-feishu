@@ -53,10 +53,20 @@ func (s *Service) workspacePageTriggeredFromMenu(surface *state.SurfaceConsoleRe
 	if sourceMessageID == "" {
 		return false
 	}
+	record := s.activeWorkspacePage(surface)
+	if record != nil {
+		if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(s.now()) {
+			s.clearWorkspacePageRuntime(surface)
+			return false
+		}
+		if strings.TrimSpace(record.MessageID) == sourceMessageID {
+			return record.FromMenu
+		}
+	}
 	return s.activeCommandLauncherMessageID(surface) == sourceMessageID
 }
 
-func (s *Service) workspacePageEvent(surface *state.SurfaceConsoleRecord, commandID string, fromMenu bool) eventcontract.Event {
+func (s *Service) workspacePageEvent(surface *state.SurfaceConsoleRecord, commandID string, fromMenu bool, sourceMessageID string) eventcontract.Event {
 	if surface != nil {
 		s.clearThreadHistoryRuntime(surface)
 		s.clearTargetPickerRuntime(surface)
@@ -68,10 +78,16 @@ func (s *Service) workspacePageEvent(surface *state.SurfaceConsoleRecord, comman
 	}
 	flowID := s.pickers.nextLauncherFlowToken()
 	flow := newOwnerCardFlowRecord(ownerCardFlowKindWorkspacePage, flowID, ownerUserID, s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)
+	sourceMessageID = strings.TrimSpace(sourceMessageID)
+	if sourceMessageID != "" {
+		flow.MessageID = sourceMessageID
+	}
 	page := &activeWorkspacePageRecord{
 		FlowID:      flowID,
 		CommandID:   strings.TrimSpace(commandID),
 		OwnerUserID: ownerUserID,
+		MessageID:   sourceMessageID,
+		FromMenu:    fromMenu,
 		CreatedAt:   s.now(),
 		ExpiresAt:   s.now().Add(defaultTargetPickerTTL),
 	}

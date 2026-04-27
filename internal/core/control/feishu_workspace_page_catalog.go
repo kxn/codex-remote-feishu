@@ -14,6 +14,7 @@ func BuildFeishuWorkspaceRootPageView(inMenu bool) FeishuPageView {
 				workspacePageButtonEntry("切换", "/workspace list"),
 				workspacePageButtonEntry("从目录新建", "/workspace new dir"),
 				workspacePageButtonEntry("从 GIT URL 新建", "/workspace new git"),
+				workspacePageButtonEntry("从 Worktree 新建", "/workspace new worktree"),
 				workspacePageButtonEntry("解除接管", "/workspace detach"),
 			},
 		}},

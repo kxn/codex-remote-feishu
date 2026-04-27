@@ -21,12 +21,12 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
 		}
-		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspace, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID))}
+		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspace, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceNew:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
 		}
-		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspaceNew, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID))}
+		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspaceNew, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceList:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
@@ -48,7 +48,7 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowCommandMenu:
-		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText)}
+		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText, intent.SourceMessageID)}
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentShowList:

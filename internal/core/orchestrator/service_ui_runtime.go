@@ -126,6 +126,7 @@ type activeWorkspacePageRecord struct {
 	CommandID   string
 	OwnerUserID string
 	MessageID   string
+	FromMenu    bool
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
 }

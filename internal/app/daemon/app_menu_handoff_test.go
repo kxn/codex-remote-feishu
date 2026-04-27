@@ -53,6 +53,86 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 	}
 }
 
+func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 27, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	menuResult := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-root-1",
+		Text:             "/menu",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if menuResult == nil || menuResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected menu root replacement result, got %#v", menuResult)
+	}
+
+	workspaceResult := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionWorkspaceRoot,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-root-1",
+		Text:             "/workspace",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if workspaceResult == nil || workspaceResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected workspace root replacement result, got %#v", workspaceResult)
+	}
+	if !operationHasActionValue(*workspaceResult.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) {
+		t.Fatalf("expected workspace root opened from menu to keep menu back action, got %#v", workspaceResult.ReplaceCurrentCard.CardElements)
+	}
+
+	targetPickerResult := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionWorkspaceNewDir,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-root-1",
+		Text:             "/workspace new dir",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if targetPickerResult == nil || targetPickerResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected target picker replacement result, got %#v", targetPickerResult)
+	}
+
+	hasWorkspaceBack := false
+	hasPickerBack := false
+	for _, button := range operationCardButtons(*targetPickerResult.ReplaceCurrentCard) {
+		value := cardButtonPayload(button)
+		switch value["kind"] {
+		case "page_action":
+			if value["action_kind"] == string(control.ActionWorkspaceRoot) {
+				hasWorkspaceBack = true
+			}
+		case "target_picker_back":
+			hasPickerBack = true
+		}
+	}
+	if !hasWorkspaceBack {
+		t.Fatalf("expected workspace create card to keep page-level back action, got %#v", targetPickerResult.ReplaceCurrentCard.CardElements)
+	}
+	if hasPickerBack {
+		t.Fatalf("did not expect workspace create card to fall back to target-picker back, got %#v", targetPickerResult.ReplaceCurrentCard.CardElements)
+	}
+}
+
 func TestHandleGatewayActionReplacesMenuCardForListHandoffInVSCodeMode(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

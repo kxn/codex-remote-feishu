@@ -230,7 +230,7 @@ func TestMenuActionNormalSwitchTargetGroupUsesUnifiedPickerEntry(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstButtonLabels(catalog.Sections[0].Entries)
-	want := []string{"切换", "从目录新建", "从 GIT URL 新建", "解除接管"}
+	want := []string{"切换", "从目录新建", "从 GIT URL 新建", "从 Worktree 新建", "解除接管"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal switch_target button labels = %#v, want %#v", got, want)
 	}
