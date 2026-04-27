@@ -245,6 +245,7 @@
   - 若 payload 同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`，gateway 会直接把它们回填到 `Action.Catalog*`；缺失时继续兼容旧 payload，不阻断当前卡片
   - `field_name` 为空时默认读取 `command_args`
   - 命令表单当前同时兼容普通 `input` 与 `select_static`
+  - 对带文本输入的 page form，提交按钮当前默认保持可点；参数格式、环境前置条件或业务校验失败统一在提交后由服务端回写到当前卡片，而不是要求前端先禁用按钮
   - `select_static` 命令字段当前只投影 `placeholder/options/initial_option`；组件级 `label` 不会下发，因为飞书会把它判成非法字段
   - 参数读取顺序为：`form_value[field_name] -> action.option -> action.options[0] -> input_value`
   - 若 payload 带 `action_arg_prefix`，gateway 会先拼前缀再拼表单值，最后用 `BuildFeishuActionText` 组装 canonical `Action.Text`
@@ -257,6 +258,7 @@
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）
   - 当前不再额外携带 `request_option_id`
+  - 对需要手填的 request / MCP 表单，`提交` 按钮当前也默认保持可点；缺字段、格式错误或 dispatch 前校验失败时，服务端会刷新同卡状态，而不是要求前端做实时禁用
   - 表单按钮文案当前统一为 `提交`
   - 这一步只提交当前题：
     - 若仍有未完成题，orchestrator 会保存草稿、递增 `request_revision`、把当前卡 inline replace 到下一题

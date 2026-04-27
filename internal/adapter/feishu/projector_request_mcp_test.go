@@ -196,6 +196,9 @@ func TestProjectMCPElicitationFormPromptRendersCurrentFormFieldAsSingleStepForm(
 	if len(rowRightElements) != 1 || rowRightElements[0]["tag"] != "button" || cardButtonLabel(t, rowRightElements[0]) != "提交" {
 		t.Fatalf("unexpected compact mcp submit row: %#v", formElements[0])
 	}
+	if rowRightElements[0]["disabled"] == true {
+		t.Fatalf("expected mcp form submit button to stay clickable for submit-time validation, got %#v", rowRightElements[0])
+	}
 	saveValue := renderedButtonCallbackValue(t, rowRightElements[0])
 	if saveValue["kind"] != "submit_request_form" || saveValue["request_option_id"] != nil || saveValue["request_revision"] != 6 {
 		t.Fatalf("unexpected compact mcp submit payload: %#v", saveValue)

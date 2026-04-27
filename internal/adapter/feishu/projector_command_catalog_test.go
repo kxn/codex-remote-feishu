@@ -67,6 +67,9 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if formElements[1]["action_type"] != nil || formElements[1]["form_action_type"] != "submit" {
 		t.Fatalf("expected V2 form submit button, got %#v", formElements[1])
 	}
+	if formElements[1]["disabled"] == true {
+		t.Fatalf("expected command form submit button to stay clickable for submit-time validation, got %#v", formElements[1])
+	}
 	value := cardButtonPayload(t, formElements[1])
 	assertPageSubmitPayload(t, value, control.ActionModelCommand, "", "command_args")
 	assertCatalogProvenancePayloadMatchesCommand(t, value, agentproto.BackendClaude, "/model")
@@ -94,6 +97,9 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	}
 	if renderedFormElements[1]["action_type"] != nil || renderedFormElements[1]["form_action_type"] != "submit" {
 		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
+	}
+	if renderedFormElements[1]["disabled"] == true {
+		t.Fatalf("expected rendered command form submit button to stay clickable for submit-time validation, got %#v", renderedFormElements[1])
 	}
 	renderedSubmitValue := renderedButtonCallbackValue(t, renderedFormElements[1])
 	assertPageSubmitPayload(t, renderedSubmitValue, control.ActionModelCommand, "", "command_args")

@@ -72,6 +72,8 @@ func cardOpenURLButtonElement(label, buttonType, openURL string, disabled bool, 
 }
 
 func cardFormSubmitButtonElement(label string, value map[string]any) map[string]any {
+	// Feishu does not provide a reliable live-validation loop for text inputs, so
+	// generic form submits stay clickable and let the server reject invalid drafts.
 	button := cardFormActionButtonElement(label, "primary", value, false, "")
 	if len(button) == 0 {
 		return nil
