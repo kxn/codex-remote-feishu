@@ -78,7 +78,7 @@ func TestResolveCurrentDaemonTargetInfoDefaultInstance(t *testing.T) {
 	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", executableName(runtime.GOOS)) {
 		t.Fatalf("LocalUpgradeArtifact = %q", info.LocalUpgradeArtifact)
 	}
-	if !strings.HasSuffix(info.ServiceUnitPath, "/.config/systemd/user/codex-remote.service") {
+	if !strings.HasSuffix(filepath.ToSlash(info.ServiceUnitPath), "/.config/systemd/user/codex-remote.service") {
 		t.Fatalf("unexpected service unit path: %q", info.ServiceUnitPath)
 	}
 }
@@ -133,7 +133,7 @@ func TestResolveCurrentDaemonTargetInfoNamedInstance(t *testing.T) {
 	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", executableName(runtime.GOOS)) {
 		t.Fatalf("LocalUpgradeArtifact = %q", info.LocalUpgradeArtifact)
 	}
-	if !strings.HasSuffix(info.ServiceUnitPath, "/.config/systemd/user/codex-remote-beta.service") {
+	if !strings.HasSuffix(filepath.ToSlash(info.ServiceUnitPath), "/.config/systemd/user/codex-remote-beta.service") {
 		t.Fatalf("unexpected service unit path: %q", info.ServiceUnitPath)
 	}
 }

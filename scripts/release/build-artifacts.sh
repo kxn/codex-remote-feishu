@@ -240,6 +240,7 @@ fi
 
 rm -rf "${output_dir}"
 mkdir -p "${output_dir}"
+output_dir="$(cd "${output_dir}" && pwd)"
 work_root="${output_dir}/.build-work"
 log_root="${output_dir}/.build-logs"
 mkdir -p "${work_root}" "${log_root}"
