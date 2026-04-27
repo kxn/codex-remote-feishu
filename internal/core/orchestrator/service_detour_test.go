@@ -47,14 +47,14 @@ func newDetachedBranchService(t *testing.T) (*Service, *state.SurfaceConsoleReco
 	return svc, surface
 }
 
-func TestTextDetourForkEnqueuesForkEphemeralAndStripsEmoji(t *testing.T) {
+func TestTextDetourForkEnqueuesForkEphemeralAndStripsTriggerText(t *testing.T) {
 	svc, surface := newDetachedBranchService(t)
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		MessageID:        "msg-1",
-		Text:             "⁉️ 顺手问个岔题",
+		Text:             "[什么？] 顺手问个岔题",
 	})
 
 	if len(events) != 3 {
@@ -82,47 +82,6 @@ func TestTextDetourForkEnqueuesForkEphemeralAndStripsEmoji(t *testing.T) {
 	}
 }
 
-func TestTextDetourForkAcceptsFeishuTextAlias(t *testing.T) {
-	for _, raw := range []string{"[什么？] 顺手问个岔题", "[什么?] 顺手问个岔题"} {
-		t.Run(raw, func(t *testing.T) {
-			svc, surface := newDetachedBranchService(t)
-
-			events := svc.ApplySurfaceAction(control.Action{
-				Kind:             control.ActionTextMessage,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				MessageID:        "msg-1",
-				Text:             raw,
-				Inputs: []agentproto.Input{
-					{Type: agentproto.InputText, Text: raw},
-				},
-			})
-
-			if len(events) != 3 {
-				t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-			}
-			if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-				t.Fatalf("expected prompt send command, got %#v", events)
-			}
-			command := events[2].Command
-			if command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral ||
-				command.Target.SourceThreadID != "thread-main" ||
-				command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
-				t.Fatalf("unexpected detour target: %#v", command.Target)
-			}
-			if len(command.Prompt.Inputs) != 1 || command.Prompt.Inputs[0].Text != "顺手问个岔题" {
-				t.Fatalf("expected stripped detour prompt, got %#v", command.Prompt.Inputs)
-			}
-			item := surface.QueueItems[surface.ActiveQueueItemID]
-			if item == nil || item.SourceMessagePreview != normalizeSourceMessagePreview("顺手问个岔题") {
-				t.Fatalf("expected sanitized source preview, got %#v", item)
-			}
-			if len(item.Inputs) != 1 || item.Inputs[0].Text != "顺手问个岔题" {
-				t.Fatalf("expected sanitized queued inputs, got %#v", item.Inputs)
-			}
-		})
-	}
-}
-
 func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 	svc, surface := newDetourTextService(t)
 	surface.RouteMode = state.RouteModeUnbound
@@ -132,7 +91,7 @@ func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 		Kind:             control.ActionTextMessage,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		MessageID:        "msg-1",
-		Text:             "🤷 临时问一句",
+		Text:             "[耸肩摊手] 临时问一句",
 	})
 
 	if len(events) != 3 {
@@ -156,14 +115,14 @@ func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 	}
 }
 
-func TestTextDetourRejectsAmbiguousEmoji(t *testing.T) {
+func TestTextDetourRejectsAmbiguousTriggerText(t *testing.T) {
 	svc, surface := newDetachedBranchService(t)
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		MessageID:        "msg-1",
-		Text:             "⁉️ 🤷 到底用哪个",
+		Text:             "[什么？] [耸肩摊手] 到底用哪个",
 	})
 
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Text != detourAmbiguousTriggerText {
@@ -184,10 +143,10 @@ func TestDetourTextSkipsReplyAutoSteer(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		MessageID:        "msg-reply-1",
 		TargetMessageID:  "msg-active",
-		Text:             "⁉️ 请重点看最后一段",
+		Text:             "[什么？] 请重点看最后一段",
 		Inputs: []agentproto.Input{
 			{Type: agentproto.InputText, Text: "<被引用内容>\n原始消息\n</被引用内容>"},
-			{Type: agentproto.InputText, Text: "⁉️ 请重点看最后一段"},
+			{Type: agentproto.InputText, Text: "[什么？] 请重点看最后一段"},
 		},
 		SteerInputs: []agentproto.Input{
 			{Type: agentproto.InputText, Text: "请重点看最后一段"},

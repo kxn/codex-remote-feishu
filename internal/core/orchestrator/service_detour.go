@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	detourTriggerForkEmoji  = "⁉️"
-	detourTriggerBlankEmoji = "🤷"
+	detourTriggerForkText  = "[什么？]"
+	detourTriggerBlankText = "[耸肩摊手]"
 
 	detourForkLabel  = "临时会话 · 分支"
 	detourBlankLabel = "临时会话 · 空白"
@@ -20,11 +20,6 @@ const (
 	detourForkRequiresThreadText = "当前没有可分支的会话，请先 /use 选择一个会话。"
 	detourEmptyPromptText        = "请在 detour 标记之外补充消息内容。"
 	detourReturnNoticeText       = "临时会话已结束，已切回原会话。"
-)
-
-var (
-	detourForkTriggerAliases  = []string{"[什么？]", "[什么?]"}
-	detourBlankTriggerAliases []string
 )
 
 type detourDirective struct {
@@ -36,9 +31,9 @@ type detourDirective struct {
 }
 
 func (s *Service) resolveDetourDirective(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, text string) (detourDirective, string) {
-	text = normalizeDetourTriggerText(strings.TrimSpace(text))
-	hasFork := strings.Contains(text, detourTriggerForkEmoji)
-	hasBlank := strings.Contains(text, detourTriggerBlankEmoji)
+	text = strings.TrimSpace(text)
+	hasFork := strings.Contains(text, detourTriggerForkText)
+	hasBlank := strings.Contains(text, detourTriggerBlankText)
 	if !hasFork && !hasBlank {
 		return detourDirective{CleanText: text}, ""
 	}
@@ -63,27 +58,9 @@ func (s *Service) resolveDetourDirective(surface *state.SurfaceConsoleRecord, in
 	return directive, ""
 }
 
-func normalizeDetourTriggerText(text string) string {
-	if strings.TrimSpace(text) == "" {
-		return text
-	}
-	return replaceDetourTriggerAliases(text)
-}
-
-func replaceDetourTriggerAliases(text string) string {
-	for _, alias := range detourForkTriggerAliases {
-		text = strings.ReplaceAll(text, alias, detourTriggerForkEmoji)
-	}
-	for _, alias := range detourBlankTriggerAliases {
-		text = strings.ReplaceAll(text, alias, detourTriggerBlankEmoji)
-	}
-	return text
-}
-
 func stripDetourTriggers(text string) string {
-	text = normalizeDetourTriggerText(text)
-	text = strings.ReplaceAll(text, detourTriggerForkEmoji, "")
-	text = strings.ReplaceAll(text, detourTriggerBlankEmoji, "")
+	text = strings.ReplaceAll(text, detourTriggerForkText, "")
+	text = strings.ReplaceAll(text, detourTriggerBlankText, "")
 	return strings.TrimSpace(text)
 }
 
