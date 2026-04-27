@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -65,7 +66,11 @@ func (a *App) buildRuntimeRequirementsResponse() (runtimeRequirementsResponse, e
 func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, currentBinary string) (runtimeRequirementsResponse, error) {
 	codexRealBinary, source := resolvedCodexRealBinarySetting(loaded)
 	lookupMode := codexBinaryLookupMode(codexRealBinary)
-	resolvedRealBinary, resolveErr := resolveExecutablePath(codexRealBinary)
+	effectiveRealBinary, resolveErr := wrapper.ResolveNormalCodexBinaryPreview(codexRealBinary)
+	resolvedRealBinary := ""
+	if resolveErr == nil && strings.TrimSpace(effectiveRealBinary) != "" {
+		resolvedRealBinary, resolveErr = resolveExecutablePath(effectiveRealBinary)
+	}
 
 	checks := make([]runtimeRequirementCheck, 0, 4)
 	ready := true

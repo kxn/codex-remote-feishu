@@ -93,6 +93,43 @@ func TestAdminRuntimeRequirementsWarnWhenCodexComesFromPATH(t *testing.T) {
 	}
 }
 
+func TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
+
+	binaryPath := filepath.Join(home, executableName("codex-remote"))
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+	bundleCodex := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-26.422.30944-linux-x64", "bin", "linux-x86_64", executableName("codex"))
+	writeExecutableFile(t, bundleCodex, "bundle-codex")
+
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/runtime-requirements/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var payload runtimeRequirementsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if !payload.Ready {
+		t.Fatalf("expected runtime requirements to remain ready with bundle fallback, got %#v", payload)
+	}
+	if !testutil.SamePath(payload.ResolvedCodexRealBinary, bundleCodex) {
+		t.Fatalf("resolved codex real binary = %q, want %q", payload.ResolvedCodexRealBinary, bundleCodex)
+	}
+	if payload.LookupMode != "path_search" {
+		t.Fatalf("lookup mode = %q, want path_search", payload.LookupMode)
+	}
+	if got := checkStatusByID(payload.Checks, "real_codex_binary"); got != runtimeRequirementStatusPass {
+		t.Fatalf("real_codex_binary status = %q, want pass", got)
+	}
+	if got := checkStatusByID(payload.Checks, "lookup_mode"); got != runtimeRequirementStatusWarn {
+		t.Fatalf("lookup_mode status = %q, want warn", got)
+	}
+}
+
 func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -102,6 +102,31 @@ func TestBuildStartupAccessPlanTreatsVerifiedAppAndRecordedDecisionsAsConfigured
 	}
 }
 
+func TestBuildStartupAccessPlanTreatsVerifiedLegacyAppAsConfiguredWithoutMachineDecisions(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	currentBinary, realBinary := seedStartupPlanBinaries(t)
+	cfg.Wrapper.CodexRealBinary = realBinary
+	now := time.Now().UTC()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:         "main",
+		Name:       "Main",
+		AppID:      "cli_xxx",
+		AppSecret:  "secret_xxx",
+		VerifiedAt: &now,
+	}}
+	services := config.ServicesConfig{
+		RelayHost:    "127.0.0.1",
+		RelayPort:    "9500",
+		RelayAPIHost: "127.0.0.1",
+		RelayAPIPort: "9501",
+	}
+	plan := buildStartupAccessPlan(config.LoadedAppConfig{Config: cfg}, services, currentBinary, map[string]string{})
+
+	if plan.SetupRequired {
+		t.Fatal("did not expect setup required for legacy verified config")
+	}
+}
+
 func seedStartupPlanBinaries(t *testing.T) (string, string) {
 	t.Helper()
 

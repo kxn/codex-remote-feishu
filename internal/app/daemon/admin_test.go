@@ -162,6 +162,53 @@ func TestAdminEndpointsAllowLoopbackAndRedactSecret(t *testing.T) {
 	}
 }
 
+func TestAdminBootstrapStateTreatsLegacyVerifiedConfigAsReady(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	now := time.Now().UTC()
+	currentBinary, realBinary := seedStartupPlanBinaries(t)
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:         "main",
+		Name:       "Main",
+		AppID:      "cli_xxx",
+		AppSecret:  "secret_xxx",
+		VerifiedAt: &now,
+	}}
+	cfg.Wrapper.CodexRealBinary = realBinary
+	services := config.ServicesConfig{
+		RelayHost:    "127.0.0.1",
+		RelayPort:    "9500",
+		RelayAPIHost: "127.0.0.1",
+		RelayAPIPort: "9501",
+	}
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		LoadConfig: func() (config.LoadedAppConfig, error) {
+			return config.LoadedAppConfig{Path: "/tmp/config.json", Config: cfg}, nil
+		},
+		Services:        services,
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://localhost:9501/admin/",
+		SetupURL:        "http://localhost:9501/setup",
+	})
+	app.headlessRuntime.BinaryPath = currentBinary
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/bootstrap-state", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bootstrap state status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var bootstrap bootstrapStatePayload
+	if err := json.NewDecoder(rec.Body).Decode(&bootstrap); err != nil {
+		t.Fatalf("decode bootstrap: %v", err)
+	}
+	if bootstrap.SetupRequired {
+		t.Fatalf("expected legacy verified config to remain ready, got %#v", bootstrap)
+	}
+}
+
 func TestAdminAndSetupRoutesRejectUnauthorizedRemoteRequests(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	services := config.ServicesConfig{

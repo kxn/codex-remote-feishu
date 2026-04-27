@@ -70,7 +70,7 @@ func requiresSetup(appConfig config.AppConfig, services config.ServicesConfig, c
 	if !hasSetupUsableApp(appConfig, services) {
 		return true
 	}
-	return !adminOnboardingMachineDecisionsComplete(appConfig.Admin.Onboarding)
+	return false
 }
 
 func configuredRuntimeAppCount(appConfig config.AppConfig, services config.ServicesConfig) int {

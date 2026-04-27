@@ -184,9 +184,7 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	}
 
 	canComplete := runtimeReqs.Ready &&
-		connection.Status == onboardingStageStatusComplete &&
-		machineDecisionSatisfied(autostartStage.Status) &&
-		machineDecisionSatisfied(vscodeStage.Status)
+		connection.Status == onboardingStageStatusComplete
 
 	manualPending := countPendingStages(eventsStage.Status, callbackStage.Status, menuStage.Status) > 0
 	machinePending := !machineDecisionSatisfied(autostartStage.Status) || !machineDecisionSatisfied(vscodeStage.Status)
@@ -211,7 +209,7 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	}
 
 	guide := buildOnboardingGuide(currentStage, connection, permission, eventsStage, callbackStage, menuStage, autostartStage, vscodeStage, canComplete)
-	completion := buildOnboardingCompletion(canComplete, currentStage, runtimeReqs.Ready, connection, permission, autostartStage, vscodeStage)
+	completion := buildOnboardingCompletion(canComplete, currentStage, runtimeReqs.Ready, connection, permission)
 
 	response := onboardingWorkflowResponse{
 		Apps:                apps,
@@ -437,8 +435,6 @@ func buildOnboardingCompletion(
 	runtimeReady bool,
 	connection onboardingWorkflowStageView,
 	permission onboardingWorkflowPermissionView,
-	autostart onboardingWorkflowMachineStepView,
-	vscode onboardingWorkflowMachineStepView,
 ) onboardingWorkflowCompletionView {
 	if canComplete {
 		return onboardingWorkflowCompletionView{
@@ -447,7 +443,7 @@ func buildOnboardingCompletion(
 			Summary:       "当前 setup 已可完成，你也可以先继续处理建议补齐项。",
 		}
 	}
-	blockingReason := blockingReasonForCompletion(runtimeReady, connection, permission, autostart, vscode)
+	blockingReason := blockingReasonForCompletion(runtimeReady, connection, permission)
 	return onboardingWorkflowCompletionView{
 		SetupRequired:  true,
 		CanComplete:    false,
@@ -460,18 +456,12 @@ func blockingReasonForCompletion(
 	runtimeReady bool,
 	connection onboardingWorkflowStageView,
 	permission onboardingWorkflowPermissionView,
-	autostart onboardingWorkflowMachineStepView,
-	vscode onboardingWorkflowMachineStepView,
 ) string {
 	switch {
 	case !runtimeReady:
 		return "基础运行环境还没有通过。"
 	case connection.Status != onboardingStageStatusComplete:
 		return "还没有完成飞书连接验证。"
-	case !machineDecisionSatisfied(autostart.Status):
-		return "还没有完成自动启动决策。"
-	case !machineDecisionSatisfied(vscode.Status):
-		return "还没有完成 VS Code 集成决策。"
 	default:
 		return ""
 	}
