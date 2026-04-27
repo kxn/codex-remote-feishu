@@ -85,6 +85,16 @@ func TestFeishuCommandVisibleInMenuStagePolicy(t *testing.T) {
 		t.Fatal("new should be hidden in vscode stage")
 	}
 
+	if FeishuCommandVisibleInMenuStage(FeishuCommandPatch, string(FeishuCommandMenuStageDetached)) {
+		t.Fatal("patch should be hidden in detached stage")
+	}
+	if !FeishuCommandVisibleInMenuStage(FeishuCommandPatch, string(FeishuCommandMenuStageNormalWorking)) {
+		t.Fatal("patch should be visible in normal stage")
+	}
+	if FeishuCommandVisibleInMenuStage(FeishuCommandPatch, string(FeishuCommandMenuStageVSCodeWorking)) {
+		t.Fatal("patch should be hidden in vscode stage")
+	}
+
 	if !FeishuCommandVisibleInMenuStage(FeishuCommandStatus, "unknown-stage") {
 		t.Fatal("status should remain visible for unknown stage")
 	}

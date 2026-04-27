@@ -60,6 +60,50 @@ func TestResolveFeishuCommandDisplayGroupSupportsMenuStageProjection(t *testing.
 	}
 }
 
+func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing.T) {
+	normal := ResolveFeishuCommandDisplayProfile("normal")
+	if got, want := normal.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
+		FeishuCommandWorkspace,
+		FeishuCommandWorkspaceList,
+		FeishuCommandWorkspaceNew,
+		FeishuCommandWorkspaceNewDir,
+		FeishuCommandWorkspaceNewGit,
+		FeishuCommandWorkspaceNewWorktree,
+		FeishuCommandWorkspaceDetach,
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("normal visible switch_target families = %#v, want %#v", got, want)
+	}
+
+	vscode := ResolveFeishuCommandDisplayProfile("vscode")
+	if got, want := vscode.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
+		FeishuCommandList,
+		FeishuCommandUse,
+		FeishuCommandUseAll,
+		FeishuCommandDetach,
+		FeishuCommandFollow,
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("vscode visible switch_target families = %#v, want %#v", got, want)
+	}
+	if !vscode.IncludesFamily(FeishuCommandVSCodeMigrate) {
+		t.Fatal("expected vscode profile to include vscode migrate")
+	}
+	if normal.IncludesFamily(FeishuCommandVSCodeMigrate) {
+		t.Fatal("expected normal profile to hide vscode migrate")
+	}
+}
+
+func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {
+	normal := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "normal"})
+	if got := commandTextForMenuHomeEntry(normal, "工作会话"); got != "/workspace" {
+		t.Fatalf("normal switch_target home command = %q, want /workspace", got)
+	}
+
+	vscode := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "vscode"})
+	if got := commandTextForMenuHomeEntry(vscode, "工作会话"); got != "/menu switch_target" {
+		t.Fatalf("vscode switch_target home command = %q, want /menu switch_target", got)
+	}
+}
+
 func resolvedDisplayCommands(values []FeishuCommandDisplayResolution) []string {
 	commands := make([]string, 0, len(values))
 	for _, value := range values {
@@ -68,4 +112,19 @@ func resolvedDisplayCommands(values []FeishuCommandDisplayResolution) []string {
 		}
 	}
 	return commands
+}
+
+func commandTextForMenuHomeEntry(page FeishuPageView, title string) string {
+	for _, section := range page.Sections {
+		for _, entry := range section.Entries {
+			if strings.TrimSpace(entry.Title) != title {
+				continue
+			}
+			if len(entry.Buttons) == 0 {
+				return ""
+			}
+			return strings.TrimSpace(entry.Buttons[0].CommandText)
+		}
+	}
+	return ""
 }

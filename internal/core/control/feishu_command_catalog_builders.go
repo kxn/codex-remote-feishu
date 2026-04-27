@@ -162,6 +162,9 @@ func buildFeishuCommandMenuGroupEntries(ctx CatalogContext) []CommandCatalogEntr
 	ctx = NormalizeCatalogContext(ctx)
 	entries := make([]CommandCatalogEntry, 0, len(FeishuCommandGroups()))
 	for _, group := range FeishuCommandGroups() {
+		if !feishuCommandMenuGroupVisibleInContext(group.ID, ctx) {
+			continue
+		}
 		commandText := FeishuCommandMenuCommandText(group.ID)
 		if commandID, ok := ResolveFeishuCommandMenuGroupRootCommandID(ctx, group.ID); ok {
 			if def, ok := FeishuCommandDefinitionByID(commandID); ok {
@@ -179,6 +182,13 @@ func buildFeishuCommandMenuGroupEntries(ctx CatalogContext) []CommandCatalogEntr
 		})
 	}
 	return entries
+}
+
+func feishuCommandMenuGroupVisibleInContext(groupID string, ctx CatalogContext) bool {
+	if _, ok := ResolveFeishuCommandMenuGroupRootCommandID(ctx, groupID); ok {
+		return true
+	}
+	return len(ResolveFeishuCommandDisplayGroup(groupID, true, ctx)) > 0
 }
 
 func buildFeishuCommandMenuGroupRootPageView(commandID string) (FeishuPageView, bool) {

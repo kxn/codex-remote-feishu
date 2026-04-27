@@ -30,36 +30,19 @@ func FeishuCommandDefinitionForDisplayContext(def FeishuCommandDefinition, inter
 
 func projectFeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, interactive bool, ctx CatalogContext) (FeishuCommandDefinition, bool) {
 	ctx = NormalizeCatalogContext(ctx)
+	profile := ResolveFeishuCommandDisplayProfile(ctx.ProductMode)
+	if !profile.IncludesFamily(def.ID) {
+		return FeishuCommandDefinition{}, false
+	}
 	if interactive {
-		if !def.ShowInMenu || !FeishuCommandVisibleInMenuStage(def.ID, ctx.MenuStage) {
+		if !def.ShowInMenu || !profile.MenuVisibleInStage(def.ID, ctx.MenuStage) {
 			return FeishuCommandDefinition{}, false
 		}
 	} else if !def.ShowInHelp {
 		return FeishuCommandDefinition{}, false
 	}
 
-	projected := cloneFeishuCommandDefinition(def)
-	if ctx.ProductMode != "normal" {
-		switch strings.TrimSpace(projected.ID) {
-		case FeishuCommandWorkspace,
-			FeishuCommandWorkspaceList,
-			FeishuCommandWorkspaceNew,
-			FeishuCommandWorkspaceNewDir,
-			FeishuCommandWorkspaceNewGit,
-			FeishuCommandWorkspaceNewWorktree,
-			FeishuCommandWorkspaceDetach:
-			return FeishuCommandDefinition{}, false
-		}
-		return projected, true
-	}
-
-	switch strings.TrimSpace(projected.ID) {
-	case FeishuCommandList, FeishuCommandUse, FeishuCommandUseAll, FeishuCommandDetach, FeishuCommandFollow:
-		return FeishuCommandDefinition{}, false
-	case FeishuCommandVSCodeMigrate:
-		return FeishuCommandDefinition{}, false
-	}
-	return projected, true
+	return cloneFeishuCommandDefinition(def), true
 }
 
 func BuildFeishuCommandDisplayPageView(title, summary string, interactive bool, productMode, menuStage string) FeishuPageView {

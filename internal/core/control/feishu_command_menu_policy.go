@@ -22,12 +22,23 @@ func NormalizeFeishuCommandMenuStage(stage string) FeishuCommandMenuStage {
 }
 
 func FeishuCommandVisibleInMenuStage(commandID, stage string) bool {
-	switch strings.TrimSpace(commandID) {
-	case FeishuCommandFollow:
-		return NormalizeFeishuCommandMenuStage(stage) == FeishuCommandMenuStageVSCodeWorking
-	case FeishuCommandNew, FeishuCommandPatch:
-		return NormalizeFeishuCommandMenuStage(stage) == FeishuCommandMenuStageNormalWorking
-	default:
-		return true
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return false
 	}
+	visible := false
+	for _, profile := range feishuCommandDisplayProfiles {
+		family, ok := profile.FamilyProfile(commandID)
+		if !ok {
+			continue
+		}
+		visible = true
+		if family.MenuVisibleInStage(stage) {
+			return true
+		}
+	}
+	if visible {
+		return false
+	}
+	return true
 }
