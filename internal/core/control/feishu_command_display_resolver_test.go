@@ -60,6 +60,43 @@ func TestResolveFeishuCommandDisplayGroupSupportsMenuStageProjection(t *testing.
 	}
 }
 
+func TestResolveFeishuCommandDisplayFamilySupportsMenuStageProjection(t *testing.T) {
+	tests := []struct {
+		name        string
+		familyID    string
+		productMode string
+		menuStage   string
+		wantVisible bool
+	}{
+		{name: "follow hidden when detached", familyID: FeishuCommandFollow, productMode: "vscode", menuStage: string(FeishuCommandMenuStageDetached), wantVisible: false},
+		{name: "follow hidden in normal mode", familyID: FeishuCommandFollow, productMode: "normal", menuStage: string(FeishuCommandMenuStageNormalWorking), wantVisible: false},
+		{name: "follow visible in vscode working", familyID: FeishuCommandFollow, productMode: "vscode", menuStage: string(FeishuCommandMenuStageVSCodeWorking), wantVisible: true},
+		{name: "new hidden when detached", familyID: FeishuCommandNew, productMode: "normal", menuStage: string(FeishuCommandMenuStageDetached), wantVisible: false},
+		{name: "new visible in normal working", familyID: FeishuCommandNew, productMode: "normal", menuStage: string(FeishuCommandMenuStageNormalWorking), wantVisible: true},
+		{name: "new hidden in vscode working", familyID: FeishuCommandNew, productMode: "vscode", menuStage: string(FeishuCommandMenuStageVSCodeWorking), wantVisible: false},
+		{name: "patch hidden when detached", familyID: FeishuCommandPatch, productMode: "normal", menuStage: string(FeishuCommandMenuStageDetached), wantVisible: false},
+		{name: "patch visible in normal working", familyID: FeishuCommandPatch, productMode: "normal", menuStage: string(FeishuCommandMenuStageNormalWorking), wantVisible: true},
+		{name: "patch hidden in vscode working", familyID: FeishuCommandPatch, productMode: "vscode", menuStage: string(FeishuCommandMenuStageVSCodeWorking), wantVisible: false},
+		{name: "status stays visible for unknown stage", familyID: FeishuCommandStatus, productMode: "normal", menuStage: "unknown-stage", wantVisible: true},
+		{name: "follow stays hidden for unknown stage", familyID: FeishuCommandFollow, productMode: "vscode", menuStage: "unknown-stage", wantVisible: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, ok := ResolveFeishuCommandDisplayFamily(tt.familyID, true, CatalogContext{
+				ProductMode: tt.productMode,
+				MenuStage:   tt.menuStage,
+			})
+			if ok != tt.wantVisible {
+				t.Fatalf("ResolveFeishuCommandDisplayFamily(%q, true, %+v) visible = %v, want %v", tt.familyID, CatalogContext{
+					ProductMode: tt.productMode,
+					MenuStage:   tt.menuStage,
+				}, ok, tt.wantVisible)
+			}
+		})
+	}
+}
+
 func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing.T) {
 	normal := ResolveFeishuCommandDisplayProfile("normal")
 	if got, want := normal.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{

@@ -395,7 +395,7 @@ MCP request 卡片当前新增的可视语义：
 
 ### 5.2 当前被视为 pure navigation 的动作
 
-`control.InlineCardReplacementPolicy(...)` 当前等价覆盖的 pure navigation 动作是：
+当前命中 `ResolveFeishuFrontstageActionContract(...).CurrentCardMode=inline_view` 的 pure navigation 动作是：
 
 - `ActionShowCommandMenu`
 - bare `/mode`
@@ -506,7 +506,7 @@ MCP request 卡片当前新增的可视语义：
 
 下面这些动作即使来自卡片，也不会同步 replace 当前卡：
 
-- `path_picker_confirm` / `path_picker_cancel`；它们虽然也先走 `FeishuUIIntent`，但不进入 `InlineCardReplacementPolicy` allow-list，gateway 会立即 ack 并异步处理；当前默认终态会 sealed 回当前 picker 卡，target picker owner-flow 子步骤会 patch 回原 owner card，独立 `/sendfile` picker 的 cancel / 启动前失败 / 启动成功终态也会 patch 回当前 picker 卡。真正仍保持独立 append-only 的只剩 freshness/ownership 拒绝，或 consumer 主动返回新的 follow-up 可见项
+- `path_picker_confirm` / `path_picker_cancel`；它们虽然也先走 `FeishuUIIntent`，但不命中 `CurrentCardMode=inline_view` 的动作集合，gateway 会立即 ack 并异步处理；当前默认终态会 sealed 回当前 picker 卡，target picker owner-flow 子步骤会 patch 回原 owner card，独立 `/sendfile` picker 的 cancel / 启动前失败 / 启动成功终态也会 patch 回当前 picker 卡。真正仍保持独立 append-only 的只剩 freshness/ownership 拒绝，或 consumer 主动返回新的 follow-up 可见项
 - attach 这类真正改变产品状态且不属于当前菜单原卡规则的动作
 - 纯文本 slash 的 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`；它们不会把普通文本入口升级成 replace
 - request 的最终 dispatch 结果，以及 notice-only 的 request invalid / request expired 处理结果

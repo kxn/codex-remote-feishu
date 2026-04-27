@@ -1,8 +1,8 @@
 # 跨层事件契约激进重构方案
 
-> Type: `inprogress`
-> Updated: `2026-04-23`
-> Summary: 激进迁移已完成终态收口：生产链路移除 `control.UIEvent` 与 `eventcontractcompat`，统一以 `eventcontract.Event` 贯通 orchestrator/daemon/adapter，并固化终局 guard。
+> Type: `implemented`
+> Updated: `2026-04-27`
+> Summary: 激进迁移已完成终态收口，文档生命周期同步迁入 implemented 并固化当前终局状态。
 
 ## 背景
 

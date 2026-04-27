@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-26`
-> Summary: 更新文档索引并纳入第三批 app-server backlog 产品方向草案，以及 `codex-session-patcher` 调研、当前 thread patch V1 PRD 与技术计划。
+> Updated: `2026-04-27`
+> Summary: 同步文档索引，补入已完成的跨层事件契约重构设计文档生命周期迁移。
 
 ## 1. 适用范围
 
@@ -144,6 +144,7 @@
 - [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
 - [shared-exploration-progress-card-design.md](./implemented/shared-exploration-progress-card-design.md)
 - [authenticated-external-access-foundation-design.md](./implemented/authenticated-external-access-foundation-design.md)
+- [cross-layer-event-contract-redesign.md](./implemented/cross-layer-event-contract-redesign.md)
 - [thread-description-unification-plan.md](./implemented/thread-description-unification-plan.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
@@ -151,7 +152,6 @@
 
 - [claude-backend-integration-plan.md](./inprogress/claude-backend-integration-plan.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
-- [cross-layer-event-contract-redesign.md](./inprogress/cross-layer-event-contract-redesign.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [turn-diff-frozen-preview-design.md](./implemented/turn-diff-frozen-preview-design.md)

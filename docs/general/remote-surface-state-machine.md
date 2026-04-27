@@ -1511,7 +1511,7 @@ retained-offline overlay 额外规则：
    11. `ActionHistoryPage`
    12. `ActionHistoryDetail`
    13. bare `ActionModeCommand` / `ActionAutoWhipCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
-2. 这些动作只要命中 `InlineCardReplacementPolicy(...)`、来源卡片带有当前 daemon 的 lifecycle 标识、且首个 `UIEvent` 显式标记 `InlineReplaceCurrentCard`，就会先走原地替换；若同一动作后面还带异步命令（当前就是 `/history` 的 `thread.history.read`），daemon 仍会继续执行后续事件，不会因为同步 replace 而提前终止。
+2. 这些动作只要命中 `ResolveFeishuFrontstageActionContract(action).CurrentCardMode=inline_view`、来源卡片带有当前 daemon 的 lifecycle 标识、且首个 `UIEvent` 显式标记 `InlineReplaceCurrentCard`，就会先走原地替换；若同一动作后面还带异步命令（当前就是 `/history` 的 `thread.history.read`），daemon 仍会继续执行后续事件，不会因为同步 replace 而提前终止。
 3. `/help` 这类静态目录卡、apply 终态、request prompt 终态，以及 bare `/upgrade` / `/debug` 的状态卡与 upgrade 重启后结果 notice 等仍然沿用 append-only 消息语义，不在这轮同步回包范围内；当前例外是 `/upgrade latest` 一旦进入 daemon owner-card 流，会在同一张升级卡上继续 patch 到 confirm/running/restarting。
 
 ## 8. 当前死状态审计结论

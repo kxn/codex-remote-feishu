@@ -54,17 +54,6 @@ type FeishuFrontstageActionContract struct {
 	FollowupPolicy            FeishuFollowupPolicy
 }
 
-// FeishuUIInlineReplacePolicy remains as a compatibility view for tests and
-// legacy callers that still consume the inline-specific policy shape.
-type FeishuUIInlineReplacePolicy struct {
-	Owner                   string
-	ReplaceCurrentCard      bool
-	RequiresDaemonFreshness bool
-	DaemonFreshness         string
-	RequiresViewSession     bool
-	ViewSessionStrategy     string
-}
-
 func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageActionContract {
 	binding, hasBinding := ResolveFeishuCommandBindingFromAction(action)
 	contract := FeishuFrontstageActionContract{
@@ -127,21 +116,6 @@ func SupportsFeishuSynchronousCurrentCardReplacement(action Action) bool {
 	return ActionTargetsCurrentFeishuCard(action)
 }
 
-func InlineCardReplacementPolicy(action Action) (FeishuUIInlineReplacePolicy, bool) {
-	contract := ResolveFeishuFrontstageActionContract(action)
-	if contract.CurrentCardMode != FeishuFrontstageCurrentCardInlineView {
-		return FeishuUIInlineReplacePolicy{}, false
-	}
-	return FeishuUIInlineReplacePolicy{
-		Owner:                   FeishuUIInlineReplaceOwnerController,
-		ReplaceCurrentCard:      true,
-		RequiresDaemonFreshness: contract.RequiresDaemonFreshness,
-		DaemonFreshness:         contract.DaemonFreshness,
-		RequiresViewSession:     contract.RequiresViewSession,
-		ViewSessionStrategy:     contract.ViewSessionStrategy,
-	}, true
-}
-
 func AllowsInlineCardReplacement(action Action) bool {
 	contract := ResolveFeishuFrontstageActionContract(action)
 	if contract.CurrentCardMode != FeishuFrontstageCurrentCardInlineView {
@@ -177,10 +151,6 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 		return firstResultCardReplaceableAction(action)
 	}
 }
-
-func AllowsBareCommandContinuation(Action) bool { return false }
-
-func AllowsCommandSubmissionAnchorReplacement(Action) bool { return false }
 
 func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 	if binding, ok := ResolveFeishuCommandBindingFromAction(action); ok {
