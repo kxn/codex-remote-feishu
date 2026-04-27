@@ -63,7 +63,7 @@ func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
 				AttemptCount:               3,
 				ConsecutiveDryFailureCount: 2,
 				PendingDueAt:               now.Add(5 * time.Second),
-				TriggerKind:                state.AutoContinueTriggerKindUpstreamRetryableFailure,
+				TriggerKind:                state.AutoContinueTriggerKindEligibleFailure,
 			},
 		},
 	}
@@ -77,12 +77,12 @@ func TestSurfaceSnapshotIncludesAutoContinueSummary(t *testing.T) {
 		!snapshot.AutoContinue.PendingDueAt.Equal(now.Add(5*time.Second)) ||
 		snapshot.AutoContinue.AttemptCount != 3 ||
 		snapshot.AutoContinue.ConsecutiveDryFailureCount != 2 ||
-		snapshot.AutoContinue.TriggerKind != string(state.AutoContinueTriggerKindUpstreamRetryableFailure) {
+		snapshot.AutoContinue.TriggerKind != string(state.AutoContinueTriggerKindEligibleFailure) {
 		t.Fatalf("unexpected autocontinue snapshot: %#v", snapshot.AutoContinue)
 	}
 }
 
-func TestAutoContinueDispatchesRetryableFailureImmediately(t *testing.T) {
+func TestAutoContinueDispatchesAutoContinueEligibleFailureImmediately(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -97,11 +97,11 @@ func TestAutoContinueDispatchesRetryableFailureImmediately(t *testing.T) {
 		Message:   "upstream stream closed",
 		ThreadID:  "thread-1",
 		TurnID:    "turn-1",
-		Retryable: true,
+		Retryable: false,
 	})
 
 	if surface.AutoWhip.PendingReason != "" {
-		t.Fatalf("expected retryable failure to stay out of autowhip runtime, got %#v", surface.AutoWhip)
+		t.Fatalf("expected autocontinue-eligible failure to stay out of autowhip runtime, got %#v", surface.AutoWhip)
 	}
 	episode := surface.AutoContinue.Episode
 	if episode == nil {
@@ -139,7 +139,7 @@ func TestAutoContinueDispatchesRetryableFailureImmediately(t *testing.T) {
 	}
 }
 
-func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *testing.T) {
+func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithAutoContinueEligibleProblem(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -168,7 +168,7 @@ func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithRetryableProblem(t *tes
 			Layer:     "codex",
 			Stage:     "runtime_error",
 			Message:   "stream disconnected before completion",
-			Retryable: true,
+			Retryable: false,
 		},
 	})
 	if episode := surface.AutoContinue.Episode; episode != nil {

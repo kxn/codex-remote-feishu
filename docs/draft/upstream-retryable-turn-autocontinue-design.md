@@ -1,8 +1,8 @@
 # 上游可重试失败 AutoContinue 设计（草稿）
 
 > Type: `draft`
-> Updated: `2026-04-24`
-> Summary: 固化 turn 因上游推理异常中断后的 `AutoContinue` 方案，明确它与 `autowhip` 的拆分边界，并记录当前讨论对 `/stop`、Codex 内部 retry 与错误归因的判断。
+> Updated: `2026-04-27`
+> Summary: 固化 turn 因上游推理异常中断后的 `AutoContinue` 方案，明确它与 `autowhip` 的拆分边界，并记录当前讨论对 `/stop`、Codex 内部 retry 与错误归因的判断；当前实现已经把触发 owner 收到 orchestrator 本地 codex/gateway error-family policy，不再直接依赖 upstream `problem.Retryable`。
 
 ## 0. 文档定位
 
@@ -208,7 +208,7 @@
 工作方式：
 
 1. 用户显式开启；
-2. turn 终态被分类为 `upstream_retryable_failure` 时，系统按该模式自己的节奏 enqueue 一条恢复输入；
+2. turn 终态被分类为 `autocontinue_eligible_failure` 时，系统按该模式自己的节奏 enqueue 一条恢复输入；
 3. 恢复输入沿用原 queue item 的 route、thread、cwd、frozen override 与 reply anchor；
 4. 只在 turn 真正结束后触发，不对 running turn 内的中途 error 直接动作。
 
@@ -222,7 +222,7 @@
 
 1. `completed`
 2. `user_interrupted`
-3. `upstream_retryable_failure`
+3. `autocontinue_eligible_failure`
 4. `nonretryable_failure`
 5. `transport_lost`
 
@@ -230,7 +230,7 @@
 
 1. 如果终态 `status == completed`，直接判 `completed`
 2. 否则如果当前 turn 已记录 `interrupt_requested`，判 `user_interrupted`
-3. 否则如果 `problem.Retryable == true`，且来源属于 Codex 上游推理侧，判 `upstream_retryable_failure`
+3. 否则如果 `problem` 命中 orchestrator 本地 codex/gateway error-family policy，判 `autocontinue_eligible_failure`
 4. 否则如果是 relay / wrapper / instance transport 断链，判 `transport_lost`
 5. 其他都落 `nonretryable_failure`
 
@@ -689,7 +689,7 @@ v1 暂不纳入：
 
 - `completed`
 - `user_interrupted`
-- `upstream_retryable_failure`
+- `autocontinue_eligible_failure`
 - `startup_failed`
 - `nonretryable_failure`
 - `transport_lost`

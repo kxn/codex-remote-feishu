@@ -12,12 +12,12 @@ import (
 type terminalCause string
 
 const (
-	terminalCauseCompleted                terminalCause = "completed"
-	terminalCauseUserInterrupted          terminalCause = "user_interrupted"
-	terminalCauseUpstreamRetryableFailure terminalCause = "upstream_retryable_failure"
-	terminalCauseStartupFailed            terminalCause = "startup_failed"
-	terminalCauseNonRetryableFailure      terminalCause = "nonretryable_failure"
-	terminalCauseTransportLost            terminalCause = "transport_lost"
+	terminalCauseCompleted            terminalCause = "completed"
+	terminalCauseUserInterrupted      terminalCause = "user_interrupted"
+	terminalCauseAutoContinueEligible terminalCause = "autocontinue_eligible_failure"
+	terminalCauseStartupFailed        terminalCause = "startup_failed"
+	terminalCauseNonRetryableFailure  terminalCause = "nonretryable_failure"
+	terminalCauseTransportLost        terminalCause = "transport_lost"
 )
 
 type remoteTurnOutcome struct {
@@ -60,18 +60,6 @@ func remoteTurnStartAccepted(origin agentproto.TurnCompletionOrigin) bool {
 	}
 }
 
-func isUpstreamRetryableProblem(problem *agentproto.ErrorInfo) bool {
-	if problem == nil || !problem.Retryable {
-		return false
-	}
-	switch strings.TrimSpace(problem.Layer) {
-	case "", "codex", "gateway":
-		return true
-	default:
-		return false
-	}
-}
-
 func isTransportLostProblem(problem *agentproto.ErrorInfo) bool {
 	if problem == nil {
 		return false
@@ -97,8 +85,8 @@ func classifyRemoteTurnTerminalCause(outcome *remoteTurnOutcome) terminalCause {
 	if !outcome.StartAccepted {
 		return terminalCauseStartupFailed
 	}
-	if isUpstreamRetryableProblem(outcome.Problem) {
-		return terminalCauseUpstreamRetryableFailure
+	if isAutoContinueEligibleProblem(outcome.Problem) {
+		return terminalCauseAutoContinueEligible
 	}
 	if isTransportLostProblem(outcome.Problem) {
 		return terminalCauseTransportLost

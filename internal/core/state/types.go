@@ -134,7 +134,7 @@ const (
 type AutoContinueTriggerKind string
 
 const (
-	AutoContinueTriggerKindUpstreamRetryableFailure AutoContinueTriggerKind = "upstream_retryable_failure"
+	AutoContinueTriggerKindEligibleFailure AutoContinueTriggerKind = "autocontinue_eligible_failure"
 )
 
 type SurfaceMessageKind string

@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-24`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron` 与共享过程卡的产品语义。
+> Updated: `2026-04-27`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron` 与共享过程卡的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
 
 ## 1. 文档定位
 
@@ -586,7 +586,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 1. turn 已真正开始执行
 2. turn 最终没有成功完成
-3. 终态被统一分类为 `upstream_retryable_failure`
+3. 终态被统一分类为 `autocontinue_eligible_failure`
 
 它不会误触发的场景：
 
@@ -605,13 +605,14 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 当前调度方式：
 
-- `turn.completed` 命中 `upstream_retryable_failure` 时，直接由 autoContinue 接管收口，不再落回 `autowhip`
+- `turn.completed` 命中 `autocontinue_eligible_failure` 时，直接由 autoContinue 接管收口，不再落回 `autowhip`
 - autoContinue 优先级高于普通 queued 消息，但用户新消息和已排队消息仍然保留在队列里
 - autoContinue 状态卡会 reply 到原始用户消息；只要它仍是当前时间线尾卡，就继续 patch 同一张卡
 - 一旦后面出现新的消息，旧 autoContinue 状态卡就冻结；后续状态改为 append 新卡
 - autoContinue 状态卡只承载“正在自动继续 / 已失败 / 已停止”这类状态，不会抢走后续业务输出的 reply anchor
 - `/detach`、`/new`、`/use`、`/follow`、thread 丢失或被强踢，都会清掉当前 pending autoContinue episode，只保留 enable 开关
 - 若某次 autoContinue attempt 已经产生过任何输出，之后再次失败时会把 dry-failure 计数重置回“第一次立即重试”
+- 这类资格当前由 orchestrator 本地 error-family policy 判定：只接受 layer 属于 `""/codex/gateway` 且 code 命中 `responseStreamDisconnected`、`responseTooManyFailedAttempts`、`serverOverloaded`、`other` 的问题；不再直接跟随 upstream `willRetry`
 
 ### 5.6 待确认请求优先级
 

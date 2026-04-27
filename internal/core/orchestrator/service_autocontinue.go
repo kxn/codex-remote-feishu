@@ -144,7 +144,7 @@ func autoContinueStatusMessageID(surface *state.SurfaceConsoleRecord, episode *s
 }
 
 func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutcome) []eventcontract.Event {
-	if outcome == nil || outcome.Surface == nil || outcome.Item == nil || outcome.Cause != terminalCauseUpstreamRetryableFailure {
+	if outcome == nil || outcome.Surface == nil || outcome.Item == nil || outcome.Cause != terminalCauseAutoContinueEligible {
 		return nil
 	}
 	surface := outcome.Surface
@@ -170,7 +170,7 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 			FrozenPlanMode:             outcome.Item.FrozenPlanMode,
 			RootReplyToMessageID:       strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
 			RootReplyToMessagePreview:  strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
-			TriggerKind:                state.AutoContinueTriggerKindUpstreamRetryableFailure,
+			TriggerKind:                state.AutoContinueTriggerKindEligibleFailure,
 		}
 		surface.AutoContinue.Episode = episode
 	}

@@ -405,7 +405,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	case outcome.Binding.AutoContinueEpisodeID != "" && outcome.Cause == terminalCauseUserInterrupted:
 		events = append(events, s.cancelAutoContinueEpisode(surface)...)
 		handledByAutoContinueCard = true
-	case outcome.Binding.AutoContinueEpisodeID != "" && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseUpstreamRetryableFailure:
+	case outcome.Binding.AutoContinueEpisodeID != "" && outcome.Cause != terminalCauseCompleted && outcome.Cause != terminalCauseAutoContinueEligible:
 		if episode := activeAutoContinueEpisode(surface); episode != nil && strings.TrimSpace(episode.EpisodeID) == strings.TrimSpace(outcome.Binding.AutoContinueEpisodeID) {
 			if outcome.AnyOutputSeen {
 				episode.NoticeMessageID = ""
@@ -416,7 +416,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 			events = append(events, s.autoContinueFailureEvent(surface, episode))
 			handledByAutoContinueCard = true
 		}
-	case outcome.Cause == terminalCauseUpstreamRetryableFailure:
+	case outcome.Cause == terminalCauseAutoContinueEligible:
 		autoContinueEvents := s.maybeScheduleAutoContinueAfterOutcome(outcome)
 		events = append(events, autoContinueEvents...)
 		handledByAutoContinueCard = len(autoContinueEvents) != 0
