@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
-	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -74,17 +73,8 @@ func buildTrackSummaryLines(stateValue install.InstallState) []string {
 }
 
 func buildUpgradeRootButtons(showCodexUpgrade bool) []control.CommandCatalogButton {
-	policy := buildinfo.CurrentCapabilityPolicy()
-	buttons := []control.CommandCatalogButton{
-		runCommandButton("查看 Track", "/upgrade track", "", false),
-		runCommandButton("检查/继续升级", "/upgrade latest", "primary", false),
-	}
-	if policy.AllowDevUpgrade {
-		buttons = append(buttons, runCommandButton("开发构建", "/upgrade dev", "", false))
-	}
-	if policy.AllowLocalUpgrade {
-		buttons = append(buttons, runCommandButton("本地升级", "/upgrade local", "", false))
-	}
+	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandUpgrade)
+	buttons := directSubcommandButtons(def, def.CanonicalSlash, "/upgrade latest", "")
 	if showCodexUpgrade {
 		buttons = append(buttons, runCommandButton("Codex 升级", "/upgrade codex", "", false))
 	}
@@ -92,18 +82,9 @@ func buildUpgradeRootButtons(showCodexUpgrade bool) []control.CommandCatalogButt
 }
 
 func buildUpgradeTrackButtons(currentTrack string) []control.CommandCatalogButton {
-	policy := buildinfo.CurrentCapabilityPolicy()
-	buttons := make([]control.CommandCatalogButton, 0, len(policy.AllowedReleaseTracks))
 	disabledCommand := "/upgrade track " + strings.ToLower(strings.TrimSpace(currentTrack))
-	for _, track := range policy.AllowedReleaseTracks {
-		track = strings.ToLower(strings.TrimSpace(track))
-		if track == "" {
-			continue
-		}
-		commandText := "/upgrade track " + track
-		buttons = append(buttons, runCommandButton(track, commandText, "", commandText == disabledCommand))
-	}
-	return buttons
+	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandUpgrade)
+	return directSubcommandButtons(def, "/upgrade track", "", disabledCommand)
 }
 
 func directSubcommandButtons(def control.FeishuCommandDefinition, prefix, primaryCommand, disabledCommand string) []control.CommandCatalogButton {

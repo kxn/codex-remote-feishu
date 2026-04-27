@@ -10,13 +10,13 @@ func BuildFeishuWorkspaceRootPageView(inMenu bool) FeishuPageView {
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作会话"),
 		Sections: []CommandCatalogSection{{
-			Entries: []CommandCatalogEntry{
-				workspacePageButtonEntry("切换", "/workspace list"),
-				workspacePageButtonEntry("从目录新建", "/workspace new dir"),
-				workspacePageButtonEntry("从 GIT URL 新建", "/workspace new git"),
-				workspacePageButtonEntry("从 Worktree 新建", "/workspace new worktree"),
-				workspacePageButtonEntry("解除接管", "/workspace detach"),
-			},
+			Entries: workspacePageEntries(
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceList, Label: "切换"},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewDir},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewGit},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewWorktree},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceDetach},
+			),
 		}},
 		RelatedButtons: workspaceRootRelatedButtons(inMenu),
 	})
@@ -30,25 +30,47 @@ func BuildFeishuWorkspaceNewPageView(inMenu bool) FeishuPageView {
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
 		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作会话", "新建工作区"),
 		Sections: []CommandCatalogSection{{
-			Entries: []CommandCatalogEntry{
-				workspacePageButtonEntry("从目录新建", "/workspace new dir"),
-				workspacePageButtonEntry("从 GIT URL 新建", "/workspace new git"),
-				workspacePageButtonEntry("从 Worktree 新建", "/workspace new worktree"),
-			},
+			Entries: workspacePageEntries(
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewDir},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewGit},
+				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewWorktree},
+			),
 		}},
 		RelatedButtons: []CommandCatalogButton{{
 			Label:       "返回上一层",
 			Kind:        CommandCatalogButtonAction,
-			CommandText: "/workspace",
+			CommandText: workspacePageCommandText(FeishuCommandWorkspace),
 		}},
 	})
 }
 
-func workspacePageButtonEntry(label, commandText string) CommandCatalogEntry {
+type workspacePageEntrySpec struct {
+	CommandID string
+	Label     string
+}
+
+func workspacePageEntries(specs ...workspacePageEntrySpec) []CommandCatalogEntry {
+	entries := make([]CommandCatalogEntry, 0, len(specs))
+	for _, spec := range specs {
+		if entry, ok := workspacePageButtonEntry(spec.CommandID, spec.Label); ok {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
+}
+
+func workspacePageButtonEntry(commandID, label string) (CommandCatalogEntry, bool) {
+	def, ok := FeishuCommandDefinitionByID(commandID)
+	if !ok {
+		return CommandCatalogEntry{}, false
+	}
 	label = strings.TrimSpace(label)
-	commandText = strings.TrimSpace(commandText)
+	if label == "" {
+		label = strings.TrimSpace(def.Title)
+	}
+	commandText := strings.TrimSpace(def.CanonicalSlash)
 	if label == "" || commandText == "" {
-		return CommandCatalogEntry{}
+		return CommandCatalogEntry{}, false
 	}
 	return CommandCatalogEntry{
 		Title: label,
@@ -56,8 +78,17 @@ func workspacePageButtonEntry(label, commandText string) CommandCatalogEntry {
 			Label:       label,
 			Kind:        CommandCatalogButtonAction,
 			CommandText: commandText,
+			CommandID:   strings.TrimSpace(def.ID),
 		}},
+	}, true
+}
+
+func workspacePageCommandText(commandID string) string {
+	def, ok := FeishuCommandDefinitionByID(commandID)
+	if !ok {
+		return ""
 	}
+	return strings.TrimSpace(def.CanonicalSlash)
 }
 
 func workspacePageBreadcrumbs(inMenu bool, labels ...string) []CommandCatalogBreadcrumb {
@@ -82,6 +113,6 @@ func workspaceRootRelatedButtons(inMenu bool) []CommandCatalogButton {
 	return []CommandCatalogButton{{
 		Label:       "返回上一层",
 		Kind:        CommandCatalogButtonAction,
-		CommandText: "/menu",
+		CommandText: FeishuCommandMenuCommandText(""),
 	}}
 }

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,60 @@ func TestBuildUpgradeStatusCatalogExposesAlphaPolicyOptions(t *testing.T) {
 	}
 }
 
+func TestBuildUpgradeRootButtonsMirrorRuntimeDefinition(t *testing.T) {
+	testCases := []struct {
+		name   string
+		flavor buildinfo.Flavor
+	}{
+		{name: "shipping", flavor: buildinfo.FlavorShipping},
+		{name: "alpha", flavor: buildinfo.FlavorAlpha},
+		{name: "dev", flavor: buildinfo.FlavorDev},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			withBuildFlavorForDaemonTest(t, tc.flavor)
+
+			def, ok := control.FeishuCommandDefinitionByID(control.FeishuCommandUpgrade)
+			if !ok {
+				t.Fatal("missing upgrade command definition")
+			}
+			got := buttonCommandTexts(buildUpgradeRootButtons(false))
+			want := directCommandOptionTexts(def, def.CanonicalSlash)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("upgrade root buttons = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+func TestBuildUpgradeTrackButtonsMirrorRuntimeDefinition(t *testing.T) {
+	testCases := []struct {
+		name   string
+		flavor buildinfo.Flavor
+	}{
+		{name: "shipping", flavor: buildinfo.FlavorShipping},
+		{name: "alpha", flavor: buildinfo.FlavorAlpha},
+		{name: "dev", flavor: buildinfo.FlavorDev},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			withBuildFlavorForDaemonTest(t, tc.flavor)
+
+			def, ok := control.FeishuCommandDefinitionByID(control.FeishuCommandUpgrade)
+			if !ok {
+				t.Fatal("missing upgrade command definition")
+			}
+			got := buttonCommandTexts(buildUpgradeTrackButtons("beta"))
+			want := directCommandOptionTexts(def, "/upgrade track")
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("upgrade track buttons = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
 func TestUpgradeLocalRejectedInAlphaFlavor(t *testing.T) {
 	withBuildFlavorForDaemonTest(t, buildinfo.FlavorAlpha)
 
@@ -162,4 +217,38 @@ func assertUpgradeStateTrack(t *testing.T, statePath string, want install.Releas
 	if stateValue.CurrentTrack != want {
 		t.Fatalf("CurrentTrack = %q, want %q", stateValue.CurrentTrack, want)
 	}
+}
+
+func buttonCommandTexts(buttons []control.CommandCatalogButton) []string {
+	commands := make([]string, 0, len(buttons))
+	for _, button := range buttons {
+		commands = append(commands, strings.TrimSpace(button.CommandText))
+	}
+	return commands
+}
+
+func directCommandOptionTexts(def control.FeishuCommandDefinition, prefix string) []string {
+	prefixFields := strings.Fields(strings.ToLower(strings.TrimSpace(prefix)))
+	if len(prefixFields) == 0 {
+		return nil
+	}
+	commands := make([]string, 0, len(def.Options))
+	for _, option := range def.Options {
+		commandText := strings.TrimSpace(option.CommandText)
+		fields := strings.Fields(strings.ToLower(commandText))
+		if len(fields) != len(prefixFields)+1 {
+			continue
+		}
+		match := true
+		for i, field := range prefixFields {
+			if fields[i] != field {
+				match = false
+				break
+			}
+		}
+		if match {
+			commands = append(commands, commandText)
+		}
+	}
+	return commands
 }
