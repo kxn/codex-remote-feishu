@@ -310,6 +310,14 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "review start stays append-only to preserve source final card",
+			action: Action{
+				Kind:    ActionReviewStart,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
 			name: "bare upgrade root page can replace stamped command card",
 			action: Action{
 				Kind:    ActionUpgradeCommand,

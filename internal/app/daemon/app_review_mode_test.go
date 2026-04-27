@@ -190,11 +190,12 @@ func TestHandleGatewayActionStartsDetachedReviewFromFinalCard(t *testing.T) {
 		},
 	})
 
-	if result == nil || result.ReplaceCurrentCard == nil || result.ReplaceCurrentCard.CardTitle != "正在进入审阅" {
-		t.Fatalf("expected inline entering-review card, got %#v", result)
+	if result != nil {
+		t.Fatalf("expected review start to keep source final card and stay append-only, got %#v", result)
 	}
-	if len(gateway.snapshotOperations()) != 0 {
-		t.Fatalf("expected no appended gateway operations, got %#v", gateway.snapshotOperations())
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "正在进入审阅" {
+		t.Fatalf("expected one appended entering-review notice card, got %#v", ops)
 	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart || sent[0].Target.ThreadID != "thread-main" {
 		t.Fatalf("unexpected review start command: %#v", sent)
