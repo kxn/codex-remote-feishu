@@ -111,7 +111,7 @@
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
 | `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
-| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、按已选目录执行接入、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 只做“已有工作区 + 已有会话”切换，不再暴露 `新建会话`；`/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
+| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、按已选目录执行接入、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 只做“已有工作区 + 已有会话”切换，不再暴露 `新建会话`；`/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；其中 Git/worktree 这两条依赖 Feishu 文本输入的 inline form 不再靠禁用按钮做前置校验，而是允许提交后由服务端原卡回写阻塞原因。Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` / `path_picker_page` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回、文件选择与下拉翻页；命中当前 active picker 时直接原地替换当前卡。复用路径选择器 projector 当前统一渲染成紧凑 `select_static`：目录模式提供“进入目录”下拉，文件模式提供“进入目录 + 选择文件”双下拉，target-picker owner-subpage 也复用同一目录 lane；当下拉候选过长时，projector 会按 Feishu transport byte budget 动态分页，并保证底部 footer 仍可见。目录 lane 的 `.` / `..` 属于固定项，不消耗 `cursor`；真实目录项里普通目录排在前，`.` 开头目录排在后。目录翻页保留当前目录；文件翻页会清空不可见文件选择并禁用 confirm，避免 invisible confirm |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；当前默认不再把“确认/取消成功”外发成新的主结果卡，而是优先在当前 picker 卡内 sealed 收口。若 consumer 返回新的可投影主卡，则交由 follow-up event 承接；target picker owner-flow 子步骤会把当前 path picker 卡换回主 owner card，独立 `/sendfile` picker 则会把 cancel、启动前失败与启动成功终态继续 patch 在当前 picker 卡上。只有旧卡 / 过期 / 非本人点击这类 freshness/ownership 拒绝仍保留为显式独立提示，不直接改写当前活跃 picker 卡 |
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把 owner-card runtime v1 中的当前 history flow 同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回同一张 history owner card，loading/error 不再整块覆盖主区，而是保留摘要/业务区并把反馈放进 notice 区 |
@@ -285,6 +285,7 @@
 - `target_picker_open_path_picker` / `target_picker_confirm`
   - `Git URL` 分支当前会把 `form_value` 里的 `target_picker_git_repo_url` 与 `target_picker_git_directory_name` 解析成 `request_answers`
   - `open_path_picker` 与 `confirm` 都会携带这份草稿，服务端据此回填 active target picker record
+  - `Git URL` 与 `Worktree` 这两类 inline form 当前都按“submit-time validation”处理：`克隆并继续` / `创建并进入` 保持可点，缺少 repo、branch、基准工作区，或预览/环境校验失败时，服务端会把具体阻塞原因 patch 回同一张 owner card，而不是要求前端先把按钮禁掉
   - 这样即使用户在 Git 主卡和 path picker 子步骤之间来回切换，仓库地址与目录名草稿也不会丢失，而且不会进入 `PendingRequest`
 
 `request_user_input` 卡片当前额外的可视语义：
@@ -491,8 +492,9 @@ MCP request 卡片当前新增的可视语义：
   - `/sendfile` 启动成功后，真实文件消息会直接出现在聊天流里作为成功结果；不再额外补一张成功确认卡。只有后台异步失败才补轻量 notice
   - `target_picker_cancel` 当前会直接把这张 owner card 封成 terminal 状态；普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，Worktree processing 态为 `已取消创建`，并会分别 best-effort 停止 clone / prepare 或 `git worktree add`
   - target picker 的 processing / terminal 阶段当前也不再把整张卡覆写成纯状态块；`模式 / 来源 / 工作区 / 会话 / 目录 / 仓库 / 落地目录 / 目标路径` 等业务上下文会继续保留在业务区，状态推进与终态结果统一进入 notice 区
-  - `从目录新建` 与 `从 GIT URL 新建` 的主按钮当前都会前置阻塞已知必败条件；只有目录 / repo / 落地父目录预览都可执行时，主按钮才会启用；若旧卡或强制 confirm 绕过禁用态，服务端也会回具体阻塞原因而不是笼统提示“请先补全”
-  - 若当前机器缺少 `git`，`从 GIT URL 新建` 仍可直接打开，但 `克隆并继续` 会禁用，并额外显示不可用说明
+  - `从目录新建` 的主按钮当前仍会前置阻塞已知必败条件；只有目录可接入时，`接入并继续` 才会启用
+  - `从 GIT URL 新建` 与 `从 Worktree 新建` 因依赖 Feishu 文本输入，当前不再把 `克隆并继续` / `创建并进入` 的可点击性绑定到 live preview；按钮保持可点，提交后再由服务端做 repo / branch / 目录名 / 基准工作区 / 最终路径 / 环境检查，并把阻塞原因保留在同卡提示区
+  - 若当前机器缺少 `git`，`从 GIT URL 新建` 与 `从 Worktree 新建` 仍可直接打开；相关不可用说明会先显示在卡面上，用户点击确认后若仍不可执行，服务端会继续把错误留在同一张卡片里
   - `/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` confirm 成功时，不再 append 一张新的主结果卡；当前 owner card 会直接进入 processing，并在后续 headless / daemon 结果到达时继续 `message.patch` 到同卡终态
   - Git import / worktree processing 期间，卡内只保留结构化阶段、最近状态摘要与 `取消导入` / `取消创建`；阶段块标题当前固定为 `当前阶段`，并用 `✅ / 🔄 / ⚪` 这类 emoji 标记当前推进位置；普通输入会被显式拒绝，提示用户等待完成、取消，或使用 `/status`
   - 若这些路径在准备阶段失败，失败态也会封回同一张 owner card，而不是再额外发一张 notice 卡作为主承载

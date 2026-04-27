@@ -1552,6 +1552,9 @@ func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing
 	if gitSource.CanConfirm {
 		t.Fatalf("expected git import confirm to stay disabled until required fields are complete, got %#v", gitSource)
 	}
+	if !gitSource.ConfirmValidatesOnSubmit {
+		t.Fatalf("expected git import page to validate on submit, got %#v", gitSource)
+	}
 
 	invalid := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTargetPickerConfirm,
@@ -1566,6 +1569,9 @@ func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing
 	}))
 	if invalid.CanConfirm {
 		t.Fatalf("expected invalid submit to keep confirm disabled after inline validation, got %#v", invalid)
+	}
+	if !invalid.ConfirmValidatesOnSubmit {
+		t.Fatalf("expected invalid git submit to stay on submit-time validation path, got %#v", invalid)
 	}
 	if invalid.GitRepoURL != "https://github.com/kxn/codex-remote-feishu.git" || invalid.GitDirectoryName != "test1122" {
 		t.Fatalf("expected invalid submit to preserve draft answers on main card, got %#v", invalid)

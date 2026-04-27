@@ -571,20 +571,21 @@ func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
 
 func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
-		PickerID:         "picker-1",
-		Title:            "选择工作区与会话",
-		Page:             control.FeishuTargetPickerPageGit,
-		SelectedMode:     control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:   control.FeishuTargetPickerSourceGitURL,
-		ShowModeSwitch:   true,
-		ShowSourceSelect: true,
-		CanGoBack:        true,
-		ConfirmLabel:     "克隆并继续",
-		CanConfirm:       true,
-		GitParentDir:     "/data/dl",
-		GitRepoURL:       "https://github.com/kxn/codex-remote-feishu.git",
-		GitDirectoryName: "crf",
-		GitFinalPath:     "/data/dl/crf",
+		PickerID:                 "picker-1",
+		Title:                    "选择工作区与会话",
+		Page:                     control.FeishuTargetPickerPageGit,
+		SelectedMode:             control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:           control.FeishuTargetPickerSourceGitURL,
+		ShowModeSwitch:           true,
+		ShowSourceSelect:         true,
+		CanGoBack:                true,
+		ConfirmLabel:             "克隆并继续",
+		CanConfirm:               false,
+		ConfirmValidatesOnSubmit: true,
+		GitParentDir:             "/data/dl",
+		GitRepoURL:               "https://github.com/kxn/codex-remote-feishu.git",
+		GitDirectoryName:         "crf",
+		GitFinalPath:             "/data/dl/crf",
 		ModeOptions: []control.FeishuTargetPickerModeOption{
 			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
 			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
@@ -643,6 +644,9 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	if footerButtons[0]["name"] != "target_picker_cancel" || footerButtons[1]["name"] != "target_picker_back" || footerButtons[2]["name"] != "target_picker_confirm" {
 		t.Fatalf("expected git form footer to keep cancel/back/confirm order, got %#v", footerButtons)
 	}
+	if footerButtons[2]["disabled"] == true {
+		t.Fatalf("expected git form confirm button to stay clickable for submit-time validation, got %#v", footerButtons[2])
+	}
 	if containsMarkdownWithPrefix(elements, "**最终路径**") {
 		t.Fatalf("did not expect git card to render final-path preview, got %#v", elements)
 	}
@@ -676,19 +680,20 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 
 func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
-		PickerID:              "picker-1",
-		Title:                 "从 Worktree 新建工作区",
-		Page:                  control.FeishuTargetPickerPageWorktree,
-		SelectedMode:          control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:        control.FeishuTargetPickerSourceGitWorktree,
-		ConfirmLabel:          "创建并进入",
-		CanConfirm:            true,
-		WorkspaceCursor:       0,
-		SelectedWorkspaceKey:  "/data/dl/web",
-		WorkspacePlaceholder:  "选择基准工作区",
-		WorktreeBranchName:    "feat/login",
-		WorktreeDirectoryName: "web-login",
-		WorktreeFinalPath:     "/data/dl/web-login",
+		PickerID:                 "picker-1",
+		Title:                    "从 Worktree 新建工作区",
+		Page:                     control.FeishuTargetPickerPageWorktree,
+		SelectedMode:             control.FeishuTargetPickerModeAddWorkspace,
+		SelectedSource:           control.FeishuTargetPickerSourceGitWorktree,
+		ConfirmLabel:             "创建并进入",
+		CanConfirm:               false,
+		ConfirmValidatesOnSubmit: true,
+		WorkspaceCursor:          0,
+		SelectedWorkspaceKey:     "/data/dl/web",
+		WorkspacePlaceholder:     "选择基准工作区",
+		WorktreeBranchName:       "feat/login",
+		WorktreeDirectoryName:    "web-login",
+		WorktreeFinalPath:        "/data/dl/web-login",
 		WorkspaceOptions: []control.FeishuTargetPickerWorkspaceOption{
 			{Value: "/data/dl/web", Label: "web", MetaText: "main"},
 		},
@@ -739,6 +744,9 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 	footerButtons := cardElementButtons(t, formElements[len(formElements)-1])
 	if len(footerButtons) < 2 {
 		t.Fatalf("expected worktree form footer buttons, got %#v", formElements[len(formElements)-1])
+	}
+	if footerButtons[len(footerButtons)-1]["disabled"] == true {
+		t.Fatalf("expected worktree form confirm button to stay clickable for submit-time validation, got %#v", footerButtons[len(footerButtons)-1])
 	}
 
 	var sawWorkspace, sawConfirm bool

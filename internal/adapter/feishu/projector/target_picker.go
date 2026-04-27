@@ -208,7 +208,7 @@ func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemo
 	if view.Page == control.FeishuTargetPickerPageMode || view.Page == control.FeishuTargetPickerPageSource {
 		return buttons
 	}
-	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), !view.CanConfirm, "fill"))
+	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), targetPickerConfirmDisabled(view), "fill"))
 	return buttons
 }
 
@@ -397,7 +397,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, defaultConfirmLabel)),
 		"primary",
 		stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID),
-		!view.CanConfirm,
+		targetPickerConfirmDisabled(view),
 		"",
 	)
 	if len(confirmButton) != 0 {
@@ -454,6 +454,13 @@ func targetPickerInputElement(name, label, placeholder, value string) map[string
 
 func targetPickerUsesInlineForm(view control.FeishuTargetPickerView) bool {
 	return view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree
+}
+
+func targetPickerConfirmDisabled(view control.FeishuTargetPickerView) bool {
+	if view.ConfirmValidatesOnSubmit {
+		return false
+	}
+	return !view.CanConfirm
 }
 
 func targetPickerGitParentDirMarkdown(view control.FeishuTargetPickerView) string {

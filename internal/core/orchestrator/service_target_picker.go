@@ -677,6 +677,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		})
 	}
 	confirmLabel := "确认切换"
+	confirmValidatesOnSubmit := false
 	canConfirm := false
 	backCommandText := strings.TrimSpace(record.BackCommandText)
 	canGoBack := stage == control.FeishuTargetPickerStageEditing && (backCommandText != "" || targetPickerCanGoBack(page, record.Source))
@@ -707,12 +708,14 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		}
 		gitFinalPath = strings.TrimSpace(firstNonEmpty(record.GitFinalPath, gitState.FinalPath))
 		sourceMessages = append(sourceMessages, gitState.Messages...)
+		confirmValidatesOnSubmit = true
 		canConfirm = gitState.CanConfirm
 		confirmLabel = "克隆并继续"
 	case control.FeishuTargetPickerPageWorktree:
 		worktreeState := s.buildTargetPickerWorktreeState(record)
 		worktreeFinalPath := strings.TrimSpace(firstNonEmpty(record.WorktreeFinalPath, worktreeState.FinalPath))
 		sourceMessages = append(sourceMessages, worktreeState.Messages...)
+		confirmValidatesOnSubmit = true
 		canConfirm = worktreeState.CanConfirm
 		confirmLabel = "创建并进入"
 		record.WorktreeFinalPath = worktreeFinalPath
@@ -794,6 +797,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		SelectedSessionLabel:     selectedSessionLabel,
 		SelectedSessionMeta:      selectedSessionMeta,
 		ConfirmLabel:             confirmLabel,
+		ConfirmValidatesOnSubmit: confirmValidatesOnSubmit,
 		CanConfirm:               canConfirm,
 		Hint:                     hint,
 		ModeOptions:              modeOptions,

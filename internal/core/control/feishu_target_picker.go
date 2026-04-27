@@ -129,6 +129,9 @@ type FeishuTargetPickerView struct {
 	SelectedSessionLabel     string
 	SelectedSessionMeta      string
 	ConfirmLabel             string
+	// ConfirmValidatesOnSubmit keeps the confirm button clickable when the
+	// current page depends on Feishu form inputs that cannot be live-validated.
+	ConfirmValidatesOnSubmit bool
 	CanConfirm               bool
 	Hint                     string
 	ModeOptions              []FeishuTargetPickerModeOption
