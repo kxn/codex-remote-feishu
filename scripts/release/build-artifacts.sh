@@ -10,6 +10,7 @@ usage: scripts/release/build-artifacts.sh <version> [output_dir] [options]
 
 options:
   --platform <goos/goarch>   build only the selected platform; may be repeated
+  --jobs <count>             build up to <count> platforms concurrently
   --current-platform-only    build only the current host platform
   --skip-admin-ui-build      reuse the existing admin UI dist instead of rebuilding it
   -h, --help                 show this help
@@ -83,15 +84,113 @@ resolve_package_version_label() {
   printf '%s\n' "${version#v}"
 }
 
+resolve_build_jobs() {
+  local platform_count="$1"
+  local requested="${build_jobs:-}"
+  local resolved=""
+  if [[ -z "${requested}" && -n "${CODEX_REMOTE_BUILD_JOBS:-}" ]]; then
+    requested="${CODEX_REMOTE_BUILD_JOBS}"
+  fi
+  if [[ -n "${requested}" ]]; then
+    resolved="${requested}"
+  else
+    if command -v nproc >/dev/null 2>&1; then
+      resolved="$(nproc)"
+    elif command -v getconf >/dev/null 2>&1; then
+      resolved="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
+    else
+      resolved="1"
+    fi
+  fi
+  if ! [[ "${resolved}" =~ ^[0-9]+$ ]] || (( resolved < 1 )); then
+    echo "invalid build job count: ${resolved}" >&2
+    exit 1
+  fi
+  if (( resolved > platform_count )); then
+    resolved="${platform_count}"
+  fi
+  printf '%s\n' "${resolved}"
+}
+
+build_platform_archive() {
+  local goos="$1"
+  local goarch="$2"
+  local package_name="codex-remote-feishu_${package_version_label}_${goos}_${goarch}"
+  local work_dir="${work_root}/${goos}-${goarch}"
+  local staging_dir="${work_dir}/${package_name}"
+  local archive_path=""
+  local extension=""
+
+  echo "building ${goos}/${goarch}"
+  rm -rf "${work_dir}"
+  mkdir -p "${staging_dir}"
+
+  if [[ "${goos}" == "windows" ]]; then
+    extension=".exe"
+  fi
+
+  CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
+    bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
+  bash "${ROOT_DIR}/scripts/managedshim/prepare-vscode-shim-embed.sh" "${goos}" "${goarch}"
+  bash "${ROOT_DIR}/scripts/upgradeshim/prepare-upgrade-shim-embed.sh" "${goos}" "${goarch}"
+
+  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+    go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \
+    -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
+
+  cp README.md QUICKSTART.md CHANGELOG.md "${staging_dir}/"
+  cp -R deploy "${staging_dir}/"
+
+  if [[ "${goos}" == "windows" ]]; then
+    archive_path="${output_dir}/${package_name}.zip"
+    (
+      cd "${work_dir}"
+      zip -qr "${archive_path}" "${package_name}"
+    )
+  else
+    archive_path="${output_dir}/${package_name}.tar.gz"
+    tar -C "${work_dir}" -czf "${archive_path}" "${package_name}"
+  fi
+
+  rm -rf "${work_dir}"
+  echo "finished ${goos}/${goarch}: ${archive_path}"
+}
+
+flush_platform_batch() {
+  local failed=0
+  local index=""
+  for index in "${!batch_pids[@]}"; do
+    local pid="${batch_pids[$index]}"
+    local platform="${batch_platforms[$index]}"
+    local log_path="${batch_logs[$index]}"
+    if ! wait "${pid}"; then
+      failed=1
+      echo "platform build failed: ${platform}" >&2
+      cat "${log_path}" >&2 || true
+      continue
+    fi
+    cat "${log_path}"
+  done
+  batch_pids=()
+  batch_platforms=()
+  batch_logs=()
+  return "${failed}"
+}
+
 version=""
 output_dir="dist"
 skip_admin_ui_build=0
 requested_platforms=()
+build_jobs=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform)
       requested_platforms+=("$(normalize_platform "${2:-}")")
+      shift 2
+      ;;
+    --jobs)
+      build_jobs="${2:-}"
       shift 2
       ;;
     --current-platform-only)
@@ -141,6 +240,9 @@ fi
 
 rm -rf "${output_dir}"
 mkdir -p "${output_dir}"
+work_root="${output_dir}/.build-work"
+log_root="${output_dir}/.build-logs"
+mkdir -p "${work_root}" "${log_root}"
 
 default_platforms=(
   "linux amd64"
@@ -150,7 +252,6 @@ default_platforms=(
   "windows amd64"
 )
 
-archives=()
 platforms=()
 
 if [[ "${#requested_platforms[@]}" -gt 0 ]]; then
@@ -162,43 +263,30 @@ else
   platforms=("${default_platforms[@]}")
 fi
 
+build_jobs="$(resolve_build_jobs "${#platforms[@]}")"
+batch_pids=()
+batch_platforms=()
+batch_logs=()
+
 for platform in "${platforms[@]}"; do
   read -r goos goarch <<<"${platform}"
-  package_name="codex-remote-feishu_${package_version_label}_${goos}_${goarch}"
-  staging_dir="${output_dir}/${package_name}"
-  mkdir -p "${staging_dir}"
-
-  extension=""
-  if [[ "${goos}" == "windows" ]]; then
-    extension=".exe"
+  platform_name="${goos}/${goarch}"
+  log_path="${log_root}/${goos}-${goarch}.log"
+  (
+    set -euo pipefail
+    build_platform_archive "${goos}" "${goarch}"
+  ) >"${log_path}" 2>&1 &
+  batch_pids+=("$!")
+  batch_platforms+=("${platform_name}")
+  batch_logs+=("${log_path}")
+  if (( ${#batch_pids[@]} >= build_jobs )); then
+    flush_platform_batch
   fi
-
-  CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
-    bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh" "${goos}" "${goarch}"
-  bash "${ROOT_DIR}/scripts/managedshim/prepare-vscode-shim-embed.sh" "${goos}" "${goarch}"
-  bash "${ROOT_DIR}/scripts/upgradeshim/prepare-upgrade-shim-embed.sh" "${goos}" "${goarch}"
-
-  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-    go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \
-    -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
-
-  cp README.md QUICKSTART.md CHANGELOG.md "${staging_dir}/"
-  cp -R deploy "${staging_dir}/"
-
-  if [[ "${goos}" == "windows" ]]; then
-    archive_path="${output_dir}/${package_name}.zip"
-    (
-      cd "${output_dir}"
-      zip -qr "$(basename "${archive_path}")" "$(basename "${staging_dir}")"
-    )
-  else
-    archive_path="${output_dir}/${package_name}.tar.gz"
-    tar -C "${output_dir}" -czf "${archive_path}" "$(basename "${staging_dir}")"
-  fi
-
-  archives+=("${archive_path}")
-  rm -rf "${staging_dir}"
 done
+
+if (( ${#batch_pids[@]} > 0 )); then
+  flush_platform_batch
+fi
 
 cp install-release.sh "${output_dir}/codex-remote-feishu-install.sh"
 cp install-release.ps1 "${output_dir}/codex-remote-feishu-install.ps1"
@@ -220,3 +308,5 @@ fi
   fi
   ${checksum_cmd} "${checksum_files[@]}" > checksums.txt
 )
+
+rm -rf "${work_root}" "${log_root}"

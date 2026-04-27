@@ -79,12 +79,6 @@ jobs:
         run: |
           go build ./cmd/...
 
-      - name: Validate release packaging
-        env:
-          CODEX_REMOTE_BUILD_FLAVOR: shipping
-          CODEX_REMOTE_PACKAGE_VERSION_LABEL: ci
-        run: bash scripts/release/build-artifacts.sh v0.0.0-ci.0 dist-ci --skip-admin-ui-build
-
       - name: Test
         run: go test ./...
 
@@ -117,14 +111,78 @@ jobs:
       - name: Test
         run: go test ./...
 
+  release-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build web
+        working-directory: web
+        run: npm run build
+
+      - name: Resolve artifact metadata
+        id: artifact_meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            short_commit="${GITHUB_SHA::12}"
+            echo "version=dev-${short_commit}" >> "${GITHUB_OUTPUT}"
+            echo "package_label=dev" >> "${GITHUB_OUTPUT}"
+            echo "build_flavor=dev" >> "${GITHUB_OUTPUT}"
+          else
+            echo "version=v0.0.0-ci.0" >> "${GITHUB_OUTPUT}"
+            echo "package_label=ci" >> "${GITHUB_OUTPUT}"
+            echo "build_flavor=shipping" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build release artifacts
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: ${{ steps.artifact_meta.outputs.build_flavor }}
+          CODEX_REMOTE_PACKAGE_VERSION_LABEL: ${{ steps.artifact_meta.outputs.package_label }}
+        run: |
+          bash scripts/release/build-artifacts.sh \
+            "${{ steps.artifact_meta.outputs.version }}" \
+            dist-ci \
+            --jobs 5 \
+            --skip-admin-ui-build
+
+      - name: Upload dev release artifacts
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-dist
+          path: dist-ci/*
+          if-no-files-found: error
+          compression-level: 0
+
   publish-dev-release:
     needs:
       - quality-linux
       - go-platform
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      - release-artifacts
+    if: ${{ github.event_name == 'push' }}
     permissions:
       contents: write
     uses: ./.github/workflows/dev-release.yml
     with:
       ref: ${{ github.sha }}
+      artifact_name: dev-release-dist
     secrets: inherit

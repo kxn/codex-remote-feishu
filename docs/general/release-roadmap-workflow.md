@@ -1,7 +1,7 @@
 # Release Roadmap Workflow
 
 > Type: `general`
-> Updated: `2026-04-15`
+> Updated: `2026-04-27`
 > Summary: 定义 `master` 单主干、短命 `release/*` 封版分支、固定 `dev-latest` 滚动 prerelease，以及 milestone / release tracker / 显式 production 版本号驱动的发版闸门。
 
 ## 1. 当前基线
@@ -11,7 +11,7 @@
 - 日常开发长期只保留 `master` 这一个主干。
 - `release/x.y` 只在正式版封版窗口短期存在，用于 beta/RC 验证和 release blocker 修复；正式版发完后尽快删除。
 - 对外稳定语义继续是 `production` / `beta`。
-- 高频“最新 master 成功构建”不再持续新增 `alpha.N`，而是收敛到固定一条 `dev-latest` prerelease。
+- 高频“最新 push 成功构建”不再持续新增 `alpha.N`，而是收敛到固定一条 `dev-latest` prerelease。
 
 这意味着：
 
@@ -127,9 +127,9 @@ readiness 通过的条件是：
 - 发版动作结束后，无论成功还是失败，都切回开始前的分支或 ref
 - 不要把仓库停留在临时发布分支，除非用户明确要求保留在那里
 
-### 5.4 平时给内部试最新 master
+### 5.4 平时给内部试最新开发构建
 
-内部 / 自测要跟最新 master 成功构建时，不再新建一串 `alpha.N` GitHub Release，而是更新固定的：
+内部 / 自测要跟最新 push 成功构建时，不再新建一串 `alpha.N` GitHub Release，而是更新固定的：
 
 - tag: `dev-latest`
 - release: `dev-latest`（prerelease）
@@ -142,10 +142,10 @@ readiness 通过的条件是：
 
 客户端会读取固定的 `dev-latest.json` manifest，再解析当前平台的公开 release asset 并完成升级；目标机器不需要 `gh login`。
 
-当前推荐实现里，这条 `dev-latest` 更新链路直接挂在 `master` 的 CI 成功收尾上：
+当前实现里，这条 `dev-latest` 更新链路直接挂在受支持 push 分支（`master` / `main` / `release/**`）的 CI 成功收尾上：
 
 - 只有当前一次 CI 的全部 job 都通过，才会进入 dev feed 更新
-- dev feed 更新只负责构建并覆盖 `dev-latest` 资产
+- dev feed 更新会复用同一次 CI 已打好的发布产物并覆盖 `dev-latest` 资产
 - 不重复跑正式 release 才需要的 smoke / 发布校验链路
 
 ### 5.5 发布说明放在哪里

@@ -173,7 +173,7 @@ Windows PowerShell:
 - `production|beta|alpha` 仍然只表示 GitHub semver release track。
 - `/upgrade dev` 是单独的“滚动开发构建源”命令，不属于 `track` 子空间。
 - `dev-latest` 由固定 GitHub prerelease + `dev-latest.json` manifest 提供，客户端按 manifest 解析当前平台资产并做 checksum 校验。
-- 当前 `dev-latest` workflow 产出的 binary 使用 `dev` flavor；它和源码仓库直接构建出的默认能力边界保持一致。
+- 当前 `dev-latest` workflow 产出的 binary 使用 `dev` flavor；它和源码仓库直接构建出的默认能力边界保持一致，但产物来源仍是受支持 push 分支成功构建后的公开测试构建。
 
 `/upgrade track`、帮助文案和卡片入口都会读取这套策略。`/upgrade dev` 则始终是显式命令入口，不跟随 track 按钮一起大面积曝光。
 

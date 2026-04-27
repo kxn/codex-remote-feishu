@@ -6,20 +6,35 @@ PACKAGE_DIR="${ROOT_DIR}/internal/upgradeshim/embed"
 ASSET_DIR="${PACKAGE_DIR}/assets"
 GOOS_VALUE="${1:-${GOOS:-$(go env GOOS)}}"
 GOARCH_VALUE="${2:-${GOARCH:-$(go env GOARCH)}}"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+
+checksum_cmd=(sha256sum)
+if ! command -v "${checksum_cmd[0]}" >/dev/null 2>&1; then
+  checksum_cmd=(shasum -a 256)
+fi
+
+checksum_first_field() {
+  "${checksum_cmd[@]}" "$1" | awk '{print $1}'
+}
 
 asset_name="upgrade-shim-${GOOS_VALUE}-${GOARCH_VALUE}"
 generated_go="${PACKAGE_DIR}/upgrade_shim_${GOOS_VALUE}_${GOARCH_VALUE}_embed.go"
 compressed_path="${ASSET_DIR}/${asset_name}.zst"
 
 source_digest="$(
-  find "${ROOT_DIR}/cmd/upgrade-shim" "${ROOT_DIR}/internal/app/upgradeshim" "${ROOT_DIR}/internal/upgradeshim" \
-    -type f -name '*.go' \
-    ! -path "${ROOT_DIR}/internal/upgradeshim/embed/*" \
-    -print0 |
-    sort -z |
-    xargs -0 sha256sum |
-    sha256sum |
-    awk '{print $1}'
+  {
+    printf 'goversion=%s\n' "$(go env GOVERSION)"
+    printf 'script=%s\n' "$(checksum_first_field "${SCRIPT_PATH}")"
+    while IFS= read -r -d '' file; do
+      printf '%s  %s\n' "$(checksum_first_field "${file}")" "${file}"
+    done < <(
+      find "${ROOT_DIR}/cmd/upgrade-shim" "${ROOT_DIR}/internal/app/upgradeshim" "${ROOT_DIR}/internal/upgradeshim" \
+        -type f -name '*.go' \
+        ! -path "${ROOT_DIR}/internal/upgradeshim/embed/*" \
+        -print0 |
+        sort -z
+    )
+  } | "${checksum_cmd[@]}" | awk '{print $1}'
 )"
 
 if [[ -f "${generated_go}" && -f "${compressed_path}" ]] && grep -Fq "SourceDigest: \"${source_digest}\"" "${generated_go}"; then
@@ -46,9 +61,7 @@ fi
 CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
   go build -trimpath -ldflags "-s -w" -o "${binary_path}" ./cmd/upgrade-shim
 
-binary_sha256="$(
-  sha256sum "${binary_path}" | awk '{print $1}'
-)"
+binary_sha256="$(checksum_first_field "${binary_path}")"
 
 mkdir -p "${ASSET_DIR}"
 zstd -19 -q -f -o "${compressed_path}" "${binary_path}"

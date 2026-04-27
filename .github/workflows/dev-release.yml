@@ -8,9 +8,18 @@ on:
         required: false
         default: master
         type: string
+      artifact_name:
+        description: Optional prebuilt artifact name from the caller workflow
+        required: false
+        default: ""
+        type: string
   workflow_call:
     inputs:
       ref:
+        required: false
+        default: ""
+        type: string
+      artifact_name:
         required: false
         default: ""
         type: string
@@ -20,7 +29,7 @@ permissions:
 
 concurrency:
   group: dev-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -42,6 +51,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.source.outputs.ref }}
 
+      - name: Setup Node.js
+        if: ${{ inputs.artifact_name == '' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -59,11 +76,29 @@ jobs:
           echo "built_at=${built_at}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
+      - name: Install web dependencies
+        if: ${{ inputs.artifact_name == '' }}
+        working-directory: web
+        run: npm ci
+
+      - name: Build web
+        if: ${{ inputs.artifact_name == '' }}
+        working-directory: web
+        run: npm run build
+
+      - name: Download prebuilt artifacts
+        if: ${{ inputs.artifact_name != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: dist
+
       - name: Build artifacts
+        if: ${{ inputs.artifact_name == '' }}
         env:
           CODEX_REMOTE_BUILD_FLAVOR: dev
           CODEX_REMOTE_PACKAGE_VERSION_LABEL: dev
-        run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}"
+        run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}" dist --jobs 5 --skip-admin-ui-build
 
       - name: Build dev manifest
         env:
