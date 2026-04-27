@@ -332,6 +332,7 @@ type PendingInputState struct {
 type Notice struct {
 	Code             string
 	Title            string
+	DetourLabel      string
 	Text             string
 	ThemeKey         string
 	Sections         []FeishuCardTextSection
@@ -569,6 +570,7 @@ type ExecCommandProgress struct {
 	ThreadID     string
 	TurnID       string
 	ItemID       string
+	DetourLabel  string
 	MessageID    string
 	CardStartSeq int
 	Verbosity    string

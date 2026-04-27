@@ -140,15 +140,16 @@ func cloneProblem(problem *agentproto.ErrorInfo) *agentproto.ErrorInfo {
 
 func (s *Service) remoteTurnFailureEvent(outcome *remoteTurnOutcome) eventcontract.Event {
 	notice := &control.Notice{
-		Code: "turn_failed",
-		Text: firstNonEmpty(strings.TrimSpace(outcome.ErrorMessage), "当前 turn 失败。"),
+		Code:        "turn_failed",
+		DetourLabel: remoteBindingDetourLabel(outcome.Binding),
+		Text:        firstNonEmpty(strings.TrimSpace(outcome.ErrorMessage), "当前 turn 失败。"),
 	}
 	if outcome.Problem != nil {
 		problemNotice := NoticeForProblem(*outcome.Problem)
 		problemNotice.Code = "turn_failed"
+		problemNotice.DetourLabel = remoteBindingDetourLabel(outcome.Binding)
 		notice = &problemNotice
 	}
-	prependDetourNoticeSections(notice, remoteBindingDetourLabel(outcome.Binding))
 	event := eventcontract.Event{
 		Kind:             eventcontract.KindNotice,
 		SurfaceSessionID: outcome.Surface.SurfaceSessionID,

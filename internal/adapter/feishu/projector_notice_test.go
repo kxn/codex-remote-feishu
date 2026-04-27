@@ -63,3 +63,22 @@ func TestProjectGlobalRuntimeNoticeIgnoresReplyAnchor(t *testing.T) {
 		t.Fatalf("expected global runtime notice to stay top-level, got %#v", ops[0])
 	}
 }
+
+func TestProjectNoticePromotesDetourLabelToHeaderSubtitle(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindNotice,
+		Notice: &control.Notice{
+			Code:        "turn_failed",
+			DetourLabel: "临时会话 · 分支",
+			Text:        "当前 turn 失败。",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	header := renderedV2CardHeader(t, ops[0])
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected detour subtitle on notice card, got %#v", header)
+	}
+}

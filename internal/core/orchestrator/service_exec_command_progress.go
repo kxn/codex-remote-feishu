@@ -316,6 +316,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 		return nil
 	}
 	snapshot.Final = final
+	snapshot.DetourLabel = remoteBindingDetourLabel(s.lookupRemoteTurn(progress.InstanceID, threadID, turnID))
 	outbound := eventcontract.Event{
 		Kind:                eventcontract.KindExecCommandProgress,
 		SurfaceSessionID:    surface.SurfaceSessionID,

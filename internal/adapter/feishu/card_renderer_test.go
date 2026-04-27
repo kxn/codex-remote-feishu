@@ -34,6 +34,25 @@ func TestRenderOperationCardV2EnvelopeFromOperationFields(t *testing.T) {
 	}
 }
 
+func TestRenderOperationCardV2EnvelopeIncludesSubtitle(t *testing.T) {
+	payload := renderOperationCard(Operation{
+		Kind:            OperationSendCard,
+		CardTitle:       "✅ 最后答复",
+		CardSubtitle:    "**临时会话 · 分支**",
+		CardSubtitleTag: cardTextTagLarkMarkdown,
+		CardThemeKey:    cardThemeFinal,
+	}, cardEnvelopeV2)
+	assertRenderedCardPayloadBasicInvariants(t, payload)
+
+	header, _ := payload["header"].(map[string]any)
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected subtitle content in rendered header, got %#v", payload)
+	}
+	if got := headerTextTag(header, "subtitle"); got != cardTextTagLarkMarkdown {
+		t.Fatalf("expected markdown subtitle tag, got %#v", payload)
+	}
+}
+
 func TestRenderOperationCardV2EnvelopeCanEnableSharedCardUpdates(t *testing.T) {
 	payload := renderOperationCard(Operation{
 		Kind:            OperationUpdateCard,

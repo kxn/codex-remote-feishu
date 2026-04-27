@@ -19,6 +19,7 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 		PlanUpdate: &control.PlanUpdate{
 			ThreadID:    "thread-1",
 			TurnID:      "turn-1",
+			DetourLabel: "临时会话 · 分支",
 			Explanation: "先把协议和去重打通。",
 			Steps: []control.PlanUpdateStep{
 				{Step: "接入结构化 plan", Status: agentproto.TurnPlanStepStatusCompleted},
@@ -33,6 +34,10 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 	op := ops[0]
 	if op.CardTitle != "当前计划" || op.ReplyToMessageID != "" {
 		t.Fatalf("unexpected plan update card envelope: %#v", op)
+	}
+	header := renderedV2CardHeader(t, op)
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected detour subtitle on plan update card, got %#v", header)
 	}
 	if op.CardThemeKey != cardThemePlan {
 		t.Fatalf("expected plan card theme key %q, got %#v", cardThemePlan, op.CardThemeKey)

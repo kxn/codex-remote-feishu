@@ -702,7 +702,7 @@ func TestParseMessageEventQuotesInteractiveFinalMessage(t *testing.T) {
 		CardThemeKey: cardThemeFinal,
 		CardElements: []map[string]any{cardPlainTextBlockElement("补充说明：继续看 trace")},
 		cardEnvelope: cardEnvelopeV2,
-		card:         finalReplyCardDocument("✅ 最后答复：先看日志", "第一段说明\n\n第二段说明", cardThemeFinal, []map[string]any{cardPlainTextBlockElement("补充说明：继续看 trace")}),
+		card:         finalReplyCardDocument("✅ 最后答复：先看日志", "", "第一段说明\n\n第二段说明", cardThemeFinal, []map[string]any{cardPlainTextBlockElement("补充说明：继续看 trace")}),
 	}, cardEnvelopeV2)
 	rawPayload, err := json.Marshal(payload)
 	if err != nil {

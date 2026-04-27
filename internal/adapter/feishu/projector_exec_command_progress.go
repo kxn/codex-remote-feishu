@@ -42,7 +42,7 @@ func (p *Projector) projectExecCommandProgress(chatID string, event eventcontrac
 		op.Kind = OperationSendCard
 		op = applyReplyLaneToNewOperation(event, op)
 	}
-	return []Operation{op}
+	return []Operation{applyDetourHeaderToOperation(op, progress.DetourLabel)}
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {

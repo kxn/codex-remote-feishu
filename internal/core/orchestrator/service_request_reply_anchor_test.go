@@ -104,7 +104,7 @@ func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
 	if events[0].SourceMessageID != "msg-1" {
 		t.Fatalf("expected detached branch request prompt to keep reply anchor, got %#v", events[0])
 	}
-	if events[0].RequestView == nil || len(events[0].RequestView.Sections) == 0 || len(events[0].RequestView.Sections[0].Lines) == 0 || events[0].RequestView.Sections[0].Lines[0] != detourForkLabel {
+	if events[0].RequestView == nil || events[0].RequestView.DetourLabel != detourForkLabel {
 		t.Fatalf("expected detached branch request prompt to carry detour label, got %#v", events[0].RequestView)
 	}
 	if surface.SelectedThreadID != "thread-main" {

@@ -5,13 +5,18 @@ import "strings"
 type cardEnvelopeVersion string
 
 const (
-	cardEnvelopeV2 cardEnvelopeVersion = "v2"
+	cardEnvelopeV2          cardEnvelopeVersion = "v2"
+	cardTextTagPlainText                        = "plain_text"
+	cardTextTagLarkMarkdown                     = "lark_md"
 )
 
 type cardDocument struct {
-	Title      string
-	ThemeKey   string
-	Components []cardComponent
+	Title       string
+	TitleTag    string
+	Subtitle    string
+	SubtitleTag string
+	ThemeKey    string
+	Components  []cardComponent
 }
 
 type cardComponent interface {
@@ -27,10 +32,20 @@ type cardRawComponent struct {
 }
 
 func newCardDocument(title, themeKey string, components ...cardComponent) *cardDocument {
+	return newCardDocumentWithHeader(title, cardTextTagPlainText, "", "", themeKey, components...)
+}
+
+func newCardDocumentWithHeader(title, titleTag, subtitle, subtitleTag, themeKey string, components ...cardComponent) *cardDocument {
 	doc := &cardDocument{
-		Title:      strings.TrimSpace(title),
-		ThemeKey:   strings.TrimSpace(themeKey),
-		Components: make([]cardComponent, 0, len(components)),
+		Title:       strings.TrimSpace(title),
+		TitleTag:    normalizeCardTextTag(titleTag, cardTextTagPlainText),
+		Subtitle:    strings.TrimSpace(subtitle),
+		SubtitleTag: normalizeCardTextTag(subtitleTag, cardTextTagLarkMarkdown),
+		ThemeKey:    strings.TrimSpace(themeKey),
+		Components:  make([]cardComponent, 0, len(components)),
+	}
+	if doc.Subtitle == "" {
+		doc.SubtitleTag = ""
 	}
 	for _, component := range components {
 		if component == nil {
@@ -42,6 +57,10 @@ func newCardDocument(title, themeKey string, components ...cardComponent) *cardD
 }
 
 func rawCardDocument(title, body, themeKey string, extraElements []map[string]any) *cardDocument {
+	return rawCardDocumentWithHeader(title, cardTextTagPlainText, "", "", body, themeKey, extraElements)
+}
+
+func rawCardDocumentWithHeader(title, titleTag, subtitle, subtitleTag, body, themeKey string, extraElements []map[string]any) *cardDocument {
 	components := make([]cardComponent, 0, len(extraElements)+1)
 	if strings.TrimSpace(body) != "" {
 		components = append(components, cardMarkdownComponent{Content: body})
@@ -49,7 +68,7 @@ func rawCardDocument(title, body, themeKey string, extraElements []map[string]an
 	for _, element := range extraElements {
 		components = append(components, newRawCardComponent(element))
 	}
-	return newCardDocument(title, themeKey, components...)
+	return newCardDocumentWithHeader(title, titleTag, subtitle, subtitleTag, themeKey, components...)
 }
 
 func newRawCardComponent(data map[string]any) cardComponent {
@@ -75,7 +94,15 @@ func (c cardRawComponent) renderCardComponent(_ cardEnvelopeVersion) map[string]
 func renderOperationCard(operation Operation, version cardEnvelopeVersion) map[string]any {
 	doc := operation.card
 	if doc == nil {
-		doc = rawCardDocument(operation.CardTitle, operation.CardBody, operation.CardThemeKey, operation.CardElements)
+		doc = rawCardDocumentWithHeader(
+			operation.CardTitle,
+			firstNonEmpty(strings.TrimSpace(operation.CardTitleTag), cardTextTagPlainText),
+			operation.CardSubtitle,
+			firstNonEmpty(strings.TrimSpace(operation.CardSubtitleTag), cardTextTagLarkMarkdown),
+			operation.CardBody,
+			operation.CardThemeKey,
+			operation.CardElements,
+		)
 	}
 	doc = withAttentionCardDocument(doc, operation.AttentionText, operation.AttentionUserID)
 	if doc == nil {
@@ -106,9 +133,15 @@ func renderCardDocument(doc *cardDocument, version cardEnvelopeVersion, updateMu
 	header := map[string]any{
 		"template": cardTemplate(doc.ThemeKey, doc.Title),
 		"title": map[string]any{
-			"tag":     "plain_text",
+			"tag":     normalizeCardTextTag(doc.TitleTag, cardTextTagPlainText),
 			"content": doc.Title,
 		},
+	}
+	if strings.TrimSpace(doc.Subtitle) != "" {
+		header["subtitle"] = map[string]any{
+			"tag":     normalizeCardTextTag(doc.SubtitleTag, cardTextTagLarkMarkdown),
+			"content": doc.Subtitle,
+		}
 	}
 	_ = version
 	config := map[string]any{
@@ -264,7 +297,16 @@ func withAttentionCardDocument(doc *cardDocument, attentionText, mentionUserID s
 	components := make([]cardComponent, 0, len(doc.Components)+1)
 	components = append(components, cardMarkdownComponent{Content: attention})
 	components = append(components, doc.Components...)
-	return newCardDocument(doc.Title, doc.ThemeKey, components...)
+	return newCardDocumentWithHeader(doc.Title, doc.TitleTag, doc.Subtitle, doc.SubtitleTag, doc.ThemeKey, components...)
+}
+
+func normalizeCardTextTag(tag, fallback string) string {
+	switch strings.TrimSpace(tag) {
+	case cardTextTagPlainText, cardTextTagLarkMarkdown:
+		return strings.TrimSpace(tag)
+	default:
+		return strings.TrimSpace(fallback)
+	}
 }
 
 func renderCardAttentionMarkdown(attentionText, mentionUserID string) string {

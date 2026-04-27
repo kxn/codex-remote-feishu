@@ -92,3 +92,23 @@ func TestProjectRequestUserInputPromptKeepsMarkdownMetacharactersInsidePlainText
 		t.Fatalf("expected rendered V2 card to keep plain_text question block, got %#v", rendered)
 	}
 }
+
+func TestProjectRequestPromptPromotesDetourLabelToHeaderSubtitle(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", requestPromptEvent(control.FeishuRequestView{
+		RequestID:   "req-detour",
+		RequestType: "approval",
+		Title:       "需要确认",
+		DetourLabel: "临时会话 · 分支",
+		Options: []control.RequestPromptOption{
+			{OptionID: "accept", Label: "允许执行", Style: "primary"},
+		},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	header := renderedV2CardHeader(t, ops[0])
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected detour subtitle on request card, got %#v", header)
+	}
+}

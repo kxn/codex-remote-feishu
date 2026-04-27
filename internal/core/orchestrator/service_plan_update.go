@@ -58,6 +58,7 @@ func planUpdateFromSnapshot(threadID, turnID string, snapshot *agentproto.TurnPl
 	update := &control.PlanUpdate{
 		ThreadID:    threadID,
 		TurnID:      turnID,
+		DetourLabel: "",
 		Explanation: snapshot.Explanation,
 	}
 	if len(snapshot.Steps) > 0 {
@@ -95,6 +96,7 @@ func (s *Service) applyTurnPlanUpdate(instanceID string, event agentproto.Event)
 	if update == nil {
 		return nil
 	}
+	update.DetourLabel = remoteBindingDetourLabel(s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID))
 	sourceMessageID, _ := s.replyAnchorForTurn(instanceID, event.ThreadID, event.TurnID)
 	outbound := eventcontract.Event{
 		Kind:             eventcontract.KindPlanUpdate,

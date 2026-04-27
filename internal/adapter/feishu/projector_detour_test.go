@@ -28,13 +28,12 @@ func TestFinalReplyCardRendersDetourLabel(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("expected one final reply card, got %#v", ops)
 	}
-	if len(ops[0].CardElements) == 0 {
-		t.Fatalf("expected detour label element, got %#v", ops[0])
+	header := renderedV2CardHeader(t, ops[0])
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected detour subtitle in final card header, got %#v", header)
 	}
-	first := ops[0].CardElements[0]
-	textValue, _ := first["text"].(map[string]any)
-	if first["tag"] != "div" || textValue["content"] != "临时会话 · 分支" {
-		t.Fatalf("expected detour label at top of final card, got %#v", ops[0].CardElements)
+	if got := headerTextTag(header, "subtitle"); got != cardTextTagLarkMarkdown {
+		t.Fatalf("expected detour subtitle to use markdown header text, got %#v", header)
 	}
 }
 

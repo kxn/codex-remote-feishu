@@ -1,6 +1,10 @@
 package control
 
-import "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+)
 
 // FeishuRequestView is the UI-owned request payload used by the Feishu adapter
 // for approval / request_user_input / permissions / elicitation cards.
@@ -10,6 +14,7 @@ type FeishuRequestView struct {
 	SemanticKind         string
 	RequestRevision      int
 	Title                string
+	DetourLabel          string
 	ThreadID             string
 	ThreadTitle          string
 	Sections             []FeishuCardTextSection
@@ -32,6 +37,12 @@ func NormalizeFeishuRequestView(view FeishuRequestView) FeishuRequestView {
 	view.Phase = frame.Phase
 	view.ActionPolicy = frame.ActionPolicy
 	view.Sealed = frontstagecontract.SealedForPhase(frame.Phase)
+	view.Title = strings.TrimSpace(view.Title)
+	view.DetourLabel = strings.TrimSpace(view.DetourLabel)
+	view.ThreadID = strings.TrimSpace(view.ThreadID)
+	view.ThreadTitle = strings.TrimSpace(view.ThreadTitle)
+	view.HintText = strings.TrimSpace(view.HintText)
+	view.StatusText = strings.TrimSpace(view.StatusText)
 	return view
 }
 

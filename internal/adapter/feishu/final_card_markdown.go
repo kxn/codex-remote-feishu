@@ -2,7 +2,7 @@ package feishu
 
 import "strings"
 
-func finalReplyCardDocument(title, body, themeKey string, extraElements []map[string]any) *cardDocument {
+func finalReplyCardDocument(title, subtitle, body, themeKey string, extraElements []map[string]any) *cardDocument {
 	components := make([]cardComponent, 0, len(extraElements)+1)
 	if strings.TrimSpace(body) != "" {
 		components = append(components, cardMarkdownComponent{Content: body})
@@ -10,7 +10,7 @@ func finalReplyCardDocument(title, body, themeKey string, extraElements []map[st
 	for _, element := range extraElements {
 		components = append(components, newRawCardComponent(element))
 	}
-	return newCardDocument(title, themeKey, components...)
+	return newCardDocumentWithHeader(title, cardTextTagPlainText, subtitle, cardTextTagLarkMarkdown, themeKey, components...)
 }
 
 func renderFinalCardMarkdown(text string) string {

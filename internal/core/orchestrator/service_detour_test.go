@@ -270,7 +270,7 @@ func TestDetachedBranchTerminalTurnEmitsReturnNoticeForFailureAndInterrupt(t *te
 					foundReturn = event.Notice.Text == detourReturnNoticeText
 				case "turn_failed":
 					foundFailure = true
-					if len(event.Notice.Sections) == 0 || len(event.Notice.Sections[0].Lines) == 0 || event.Notice.Sections[0].Lines[0] != detourForkLabel {
+					if event.Notice.DetourLabel != detourForkLabel {
 						t.Fatalf("expected failure notice to keep detour badge, got %#v", event.Notice)
 					}
 				}

@@ -78,24 +78,27 @@ func execProgressOmittedHistoryLine() execProgressRenderedLine {
 	}
 }
 
-func execProgressCardFits(lines []execProgressRenderedLine) bool {
+func execProgressCardFits(lines []execProgressRenderedLine, subtitle string) bool {
 	if len(lines) == 0 {
 		return true
 	}
 	op := Operation{
 		Kind:            OperationSendCard,
 		CardTitle:       "工作中",
+		CardSubtitle:    subtitle,
+		CardSubtitleTag: cardTextTagLarkMarkdown,
 		CardThemeKey:    cardThemeProgress,
 		CardElements:    execProgressRenderedElements(lines),
 		CardUpdateMulti: true,
 		cardEnvelope:    cardEnvelopeV2,
-		card:            rawCardDocument("工作中", "", cardThemeProgress, execProgressRenderedElements(lines)),
+		card:            rawCardDocumentWithHeader("工作中", cardTextTagPlainText, subtitle, cardTextTagLarkMarkdown, "", cardThemeProgress, execProgressRenderedElements(lines)),
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
 	return feishuInteractiveMessageTransportFits(payload)
 }
 
 func execProgressCardWindow(progress control.ExecCommandProgress, lines []execProgressRenderedLine) execProgressCardWindowState {
+	subtitle := detourHeaderSubtitle(progress.DetourLabel)
 	startSeq := normalizeExecProgressCardStartSeq(progress, lines)
 	persistent := make([]execProgressRenderedLine, 0, len(lines))
 	transient := make([]execProgressRenderedLine, 0, 1)
@@ -107,7 +110,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 		persistent = append(persistent, line)
 	}
 	if len(persistent) == 0 {
-		if len(transient) == 0 || !execProgressCardFits(transient) {
+		if len(transient) == 0 || !execProgressCardFits(transient, subtitle) {
 			return execProgressCardWindowState{}
 		}
 		return execProgressCardWindowState{
@@ -127,7 +130,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 		}
 	}
 	for windowIndex < len(persistent) {
-		window, ok := buildExecProgressCardWindow(persistent, transient, windowIndex)
+		window, ok := buildExecProgressCardWindow(persistent, transient, windowIndex, subtitle)
 		if ok {
 			return window
 		}
@@ -135,7 +138,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 	}
 	lastLine := persistent[len(persistent)-1]
 	fallbackLines := []execProgressRenderedLine{lastLine}
-	if execProgressCardFits(fallbackLines) {
+	if execProgressCardFits(fallbackLines, subtitle) {
 		return execProgressCardWindowState{
 			StartSeq: lastLine.Seq,
 			EndSeq:   lastLine.Seq,
@@ -145,7 +148,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 	return execProgressCardWindowState{}
 }
 
-func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLine, windowIndex int) (execProgressCardWindowState, bool) {
+func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLine, windowIndex int, subtitle string) (execProgressCardWindowState, bool) {
 	if windowIndex >= len(persistent) {
 		return execProgressCardWindowState{}, false
 	}
@@ -156,7 +159,7 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 	lines := append([]execProgressRenderedLine(nil), base...)
 	if len(transient) != 0 {
 		lines = append(lines, transient...)
-		if execProgressCardFits(lines) {
+		if execProgressCardFits(lines, subtitle) {
 			return execProgressCardWindowState{
 				StartSeq: persistent[windowIndex].Seq,
 				EndSeq:   persistent[len(persistent)-1].Seq,
@@ -164,7 +167,7 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 			}, true
 		}
 	}
-	if !execProgressCardFits(base) {
+	if !execProgressCardFits(base, subtitle) {
 		return execProgressCardWindowState{}, false
 	}
 	return execProgressCardWindowState{

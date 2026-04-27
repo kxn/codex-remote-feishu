@@ -23,9 +23,10 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om-source-1",
 		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID: "thread-1",
-			TurnID:   "turn-1",
-			ItemID:   "cmd-1",
+			ThreadID:    "thread-1",
+			TurnID:      "turn-1",
+			ItemID:      "cmd-1",
+			DetourLabel: "临时会话 · 分支",
 			Commands: []string{
 				`/bin/bash -lc "npm test"`,
 				`bash -lc 'go test ./...'`,
@@ -41,6 +42,10 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 	}
 	if op.CardTitle != "工作中" {
 		t.Fatalf("expected generic processing title, got %#v", op)
+	}
+	header := renderedV2CardHeader(t, op)
+	if got := headerTextContent(header, "subtitle"); got != "**临时会话 · 分支**" {
+		t.Fatalf("expected detour subtitle on progress card, got %#v", header)
 	}
 	expectedFirst := "**执行**：" + markdownCodeSpan("npm test")
 	expectedSecond := "**执行**：" + markdownCodeSpan("go test ./...")

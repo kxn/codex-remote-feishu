@@ -31,6 +31,26 @@ func cardTextContent(element map[string]any) string {
 	return plainTextContent(element)
 }
 
+func renderedV2CardHeader(t *testing.T, operation Operation) map[string]any {
+	t.Helper()
+	payload := renderOperationCard(operation, cardEnvelopeV2)
+	header, ok := payload["header"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rendered card header, got %#v", payload)
+	}
+	return header
+}
+
+func headerTextTag(header map[string]any, key string) string {
+	text, _ := header[key].(map[string]any)
+	return cardStringValue(text["tag"])
+}
+
+func headerTextContent(header map[string]any, key string) string {
+	text, _ := header[key].(map[string]any)
+	return cardStringValue(text["content"])
+}
+
 func lastButtonLabel(elements []map[string]any) string {
 	for i := len(elements) - 1; i >= 0; i-- {
 		if cardStringValue(elements[i]["tag"]) != "button" {

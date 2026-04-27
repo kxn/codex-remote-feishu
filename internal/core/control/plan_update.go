@@ -10,6 +10,7 @@ type PlanUpdateStep struct {
 type PlanUpdate struct {
 	ThreadID    string
 	TurnID      string
+	DetourLabel string
 	Explanation string
 	Steps       []PlanUpdateStep
 }

@@ -93,7 +93,6 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 	interactive := len(buttons) != 0 && !sealed
 	bodySections := []control.FeishuCardTextSection(nil)
 	if proposal != nil {
-		bodySections = prependDetourCardSections(bodySections, proposal.DetourLabel)
 		bodySections = append(bodySections, control.FeishuCardTextSection{
 			Label: "提案内容",
 			Lines: splitPlanProposalLines(proposal.PlanText),
@@ -102,6 +101,7 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 	view := control.FeishuPageView{
 		CommandID:                     control.FeishuCommandPlan,
 		Title:                         "提案计划",
+		DetourLabel:                   strings.TrimSpace(firstNonEmpty(proposalDetourLabel(proposal))),
 		MessageID:                     planProposalMessageID(flow, inlineMessageID),
 		TrackingKey:                   planProposalTrackingKey(flow),
 		ThemeKey:                      firstNonEmpty(strings.TrimSpace(theme), "plan"),
@@ -122,6 +122,13 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 		}}
 	}
 	return control.FeishuPageViewFromCommandPageView(view)
+}
+
+func proposalDetourLabel(proposal *activePlanProposalRecord) string {
+	if proposal == nil {
+		return ""
+	}
+	return proposal.DetourLabel
 }
 
 func planProposalEvent(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, proposal *activePlanProposalRecord, inlineMessageID, statusText, theme string, buttons []control.CommandCatalogButton, sealed bool, inlineReplace bool) eventcontract.Event {

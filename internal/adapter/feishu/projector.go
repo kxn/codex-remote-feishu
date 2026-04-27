@@ -42,6 +42,9 @@ type Operation struct {
 	ImagePath            string
 	ImageBase64          string
 	CardTitle            string
+	CardTitleTag         string
+	CardSubtitle         string
+	CardSubtitleTag      string
 	CardBody             string
 	CardThemeKey         string
 	CardElements         []map[string]any
@@ -139,7 +142,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, body, theme, elements),
 		}
-		return []Operation{applyReplyLaneToNewOperation(event, operation)}
+		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.Notice.DetourLabel)}
 	case eventcontract.PlanUpdatePayload:
 		title := "当前计划"
 		elements := projectorpkg.PlanUpdateElements(payload.PlanUpdate)
@@ -155,7 +158,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemePlan, elements),
 		}
-		return []Operation{applyReplyLaneToNewOperation(event, operation)}
+		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.PlanUpdate.DetourLabel)}
 	case eventcontract.SelectionPayload:
 		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		if !ok {
@@ -207,7 +210,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if operation.Kind == OperationSendCard {
 			operation = applyReplyLaneToNewOperation(event, operation)
 		}
-		return []Operation{operation}
+		return []Operation{applyDetourHeaderToOperation(operation, pageView.DetourLabel)}
 	case eventcontract.RequestPayload:
 		title := strings.TrimSpace(payload.View.Title)
 		if title == "" {
@@ -226,7 +229,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeApproval, elements),
 		}
-		return []Operation{applyReplyLaneToNewOperation(event, operation)}
+		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.View.DetourLabel)}
 	case eventcontract.TimelineTextPayload:
 		text := strings.TrimSpace(payload.TimelineText.Text)
 		if text == "" {
@@ -412,9 +415,9 @@ func (p *Projector) projectBlock(gatewayID, surfaceSessionID, chatID, sourceMess
 	if block.Kind == render.BlockAssistantCode {
 		body = fenced(block.Language, block.Text)
 	}
-	elements := p.finalBlockExtraElements(block.DetourLabel, summary, turnDiffPreview, finalSummary)
+	elements := p.finalBlockExtraElements(summary, turnDiffPreview, finalSummary)
 	title := finalCardTitle(sourceMessagePreview)
-	return projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, body, elements)
+	return projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, detourHeaderSubtitle(block.DetourLabel), body, elements)
 }
 
 func finalCardTitle(sourceMessagePreview string) string {
@@ -437,14 +440,14 @@ func truncateFinalTitlePreview(text string) string {
 	return truncateFinalTitleCharacters(text, 10)
 }
 
-func projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, rawBody string, primaryElements []map[string]any) []Operation {
+func projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, subtitle, rawBody string, primaryElements []map[string]any) []Operation {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		title = "✅ 最后答复"
 	}
-	chunks := splitFinalReplyBodies(rawBody, title, primaryElements)
+	chunks := splitFinalReplyBodies(rawBody, title, subtitle, primaryElements)
 	if len(chunks) == 0 {
-		chunks = []finalReplyChunk{newFinalReplyChunk(title, rawBody, primaryElements)}
+		chunks = []finalReplyChunk{newFinalReplyChunk(title, subtitle, rawBody, primaryElements)}
 	}
 	ops := make([]Operation, 0, len(chunks))
 	for i, chunk := range chunks {
@@ -455,11 +458,13 @@ func projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID
 			ChatID:           chatID,
 			ReplyToMessageID: sourceMessageID,
 			CardTitle:        chunk.title,
+			CardSubtitle:     chunk.subtitle,
+			CardSubtitleTag:  cardTextTagLarkMarkdown,
 			CardBody:         chunk.renderedBody,
 			CardThemeKey:     cardThemeFinal,
 			CardElements:     chunk.elements,
 			cardEnvelope:     cardEnvelopeV2,
-			card:             finalReplyCardDocument(chunk.title, chunk.renderedBody, cardThemeFinal, chunk.elements),
+			card:             finalReplyCardDocument(chunk.title, chunk.subtitle, chunk.renderedBody, cardThemeFinal, chunk.elements),
 		}
 		if i == 0 {
 			op.finalSourceBody = chunk.sourceBody
@@ -571,11 +576,8 @@ func fenced(language, text string) string {
 	return "```" + language + "\n" + text + "\n```"
 }
 
-func (p *Projector) finalBlockExtraElements(detourLabel string, summary *control.FileChangeSummary, turnDiffPreview *control.TurnDiffPreview, finalSummary *control.FinalTurnSummary) []map[string]any {
+func (p *Projector) finalBlockExtraElements(summary *control.FileChangeSummary, turnDiffPreview *control.TurnDiffPreview, finalSummary *control.FinalTurnSummary) []map[string]any {
 	var elements []map[string]any
-	if label := strings.TrimSpace(detourLabel); label != "" {
-		elements = append(elements, cardPlainTextBlockElement(label))
-	}
 	if summary != nil && summary.FileCount > 0 && len(summary.Files) > 0 {
 		summaryLine := fmt.Sprintf(
 			"**本次修改** %d 个文件  %s",

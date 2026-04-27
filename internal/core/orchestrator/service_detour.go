@@ -143,48 +143,6 @@ func remoteBindingDetourLabel(binding *remoteTurnBinding) string {
 	return detourLabelForExecutionMode(binding.ExecutionMode)
 }
 
-func prependDetourCardSections(sections []control.FeishuCardTextSection, label string) []control.FeishuCardTextSection {
-	label = strings.TrimSpace(label)
-	if label == "" {
-		out := make([]control.FeishuCardTextSection, 0, len(sections))
-		for _, section := range sections {
-			normalized := section.Normalized()
-			if normalized.Label == "" && len(normalized.Lines) == 0 {
-				continue
-			}
-			out = append(out, normalized)
-		}
-		return out
-	}
-	out := make([]control.FeishuCardTextSection, 0, len(sections)+1)
-	out = append(out, control.FeishuCardTextSection{Lines: []string{label}}.Normalized())
-	for _, section := range sections {
-		normalized := section.Normalized()
-		if normalized.Label == "" && len(normalized.Lines) == 0 {
-			continue
-		}
-		out = append(out, normalized)
-	}
-	return out
-}
-
-func prependDetourNoticeSections(notice *control.Notice, label string) {
-	if notice == nil {
-		return
-	}
-	sections := prependDetourCardSections(notice.Sections, label)
-	if len(sections) == 0 {
-		return
-	}
-	if len(notice.Sections) == 0 {
-		if text := strings.TrimSpace(notice.Text); text != "" {
-			sections = append(sections, control.FeishuCardTextSection{Lines: []string{text}}.Normalized())
-			notice.Text = ""
-		}
-	}
-	notice.Sections = sections
-}
-
 func (s *Service) requestDetourLabel(record *state.RequestPromptRecord) string {
 	if record == nil {
 		return ""
@@ -217,8 +175,9 @@ func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcon
 	return []eventcontract.Event{surfaceEventFromPayload(
 		outcome.Surface,
 		eventcontract.NoticePayload{Notice: control.Notice{
-			Code: "detour_returned",
-			Text: detourReturnNoticeText,
+			Code:        "detour_returned",
+			DetourLabel: remoteBindingDetourLabel(outcome.Binding),
+			Text:        detourReturnNoticeText,
 		}},
 		meta,
 	)}
