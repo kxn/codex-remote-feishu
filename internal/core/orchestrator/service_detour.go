@@ -22,6 +22,11 @@ const (
 	detourReturnNoticeText       = "临时会话已结束，已切回原会话。"
 )
 
+var (
+	detourForkTriggerAliases  = []string{"[什么？]", "[什么?]"}
+	detourBlankTriggerAliases []string
+)
+
 type detourDirective struct {
 	Triggered            bool
 	CleanText            string
@@ -31,7 +36,7 @@ type detourDirective struct {
 }
 
 func (s *Service) resolveDetourDirective(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, text string) (detourDirective, string) {
-	text = strings.TrimSpace(text)
+	text = normalizeDetourTriggerText(strings.TrimSpace(text))
 	hasFork := strings.Contains(text, detourTriggerForkEmoji)
 	hasBlank := strings.Contains(text, detourTriggerBlankEmoji)
 	if !hasFork && !hasBlank {
@@ -58,7 +63,25 @@ func (s *Service) resolveDetourDirective(surface *state.SurfaceConsoleRecord, in
 	return directive, ""
 }
 
+func normalizeDetourTriggerText(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return text
+	}
+	return replaceDetourTriggerAliases(text)
+}
+
+func replaceDetourTriggerAliases(text string) string {
+	for _, alias := range detourForkTriggerAliases {
+		text = strings.ReplaceAll(text, alias, detourTriggerForkEmoji)
+	}
+	for _, alias := range detourBlankTriggerAliases {
+		text = strings.ReplaceAll(text, alias, detourTriggerBlankEmoji)
+	}
+	return text
+}
+
 func stripDetourTriggers(text string) string {
+	text = normalizeDetourTriggerText(text)
 	text = strings.ReplaceAll(text, detourTriggerForkEmoji, "")
 	text = strings.ReplaceAll(text, detourTriggerBlankEmoji, "")
 	return strings.TrimSpace(text)

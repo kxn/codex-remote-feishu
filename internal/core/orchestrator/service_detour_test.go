@@ -82,6 +82,47 @@ func TestTextDetourForkEnqueuesForkEphemeralAndStripsEmoji(t *testing.T) {
 	}
 }
 
+func TestTextDetourForkAcceptsFeishuTextAlias(t *testing.T) {
+	for _, raw := range []string{"[什么？] 顺手问个岔题", "[什么?] 顺手问个岔题"} {
+		t.Run(raw, func(t *testing.T) {
+			svc, surface := newDetachedBranchService(t)
+
+			events := svc.ApplySurfaceAction(control.Action{
+				Kind:             control.ActionTextMessage,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				MessageID:        "msg-1",
+				Text:             raw,
+				Inputs: []agentproto.Input{
+					{Type: agentproto.InputText, Text: raw},
+				},
+			})
+
+			if len(events) != 3 {
+				t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
+			}
+			if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
+				t.Fatalf("expected prompt send command, got %#v", events)
+			}
+			command := events[2].Command
+			if command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral ||
+				command.Target.SourceThreadID != "thread-main" ||
+				command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+				t.Fatalf("unexpected detour target: %#v", command.Target)
+			}
+			if len(command.Prompt.Inputs) != 1 || command.Prompt.Inputs[0].Text != "顺手问个岔题" {
+				t.Fatalf("expected stripped detour prompt, got %#v", command.Prompt.Inputs)
+			}
+			item := surface.QueueItems[surface.ActiveQueueItemID]
+			if item == nil || item.SourceMessagePreview != normalizeSourceMessagePreview("顺手问个岔题") {
+				t.Fatalf("expected sanitized source preview, got %#v", item)
+			}
+			if len(item.Inputs) != 1 || item.Inputs[0].Text != "顺手问个岔题" {
+				t.Fatalf("expected sanitized queued inputs, got %#v", item.Inputs)
+			}
+		})
+	}
+}
+
 func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 	svc, surface := newDetourTextService(t)
 	surface.RouteMode = state.RouteModeUnbound
