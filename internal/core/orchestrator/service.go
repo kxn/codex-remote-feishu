@@ -391,6 +391,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, *intent))
 	}
+	if blocked := s.commandStrategyBlocked(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	s.applyCommandLauncherDisposition(surface, action)
 	if events, ok := s.boundDaemonCommandEvents(surface, action); ok {
 		return s.filterEventsForSurfaceVisibility(events)
@@ -771,7 +774,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := pendingTurnTextValue(s.progress.pendingTurnText, instanceID, event.ThreadID, event.TurnID)
-		finalizeTurnOutput := shouldFinalizeTurnOutput(event)
+		finalizeTurnOutput := shouldMaterializeFinalTurnOutput(event, finalText)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
 		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)
 		finalRenderTurnSummary := (*control.FinalTurnSummary)(nil)
@@ -848,7 +851,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	}
 }
 
-func shouldFinalizeTurnOutput(event agentproto.Event) bool {
+func turnCompletedSuccessfully(event agentproto.Event) bool {
 	if event.Status != "completed" {
 		return false
 	}
@@ -856,6 +859,20 @@ func shouldFinalizeTurnOutput(event agentproto.Event) bool {
 		return false
 	}
 	return event.Problem == nil
+}
+
+func shouldMaterializeFinalTurnOutput(event agentproto.Event, finalText string) bool {
+	finalText = strings.TrimSpace(finalText)
+	if turnCompletedSuccessfully(event) {
+		return true
+	}
+	if finalText == "" {
+		return false
+	}
+	if strings.TrimSpace(event.Status) == "completed" {
+		return true
+	}
+	return strings.TrimSpace(event.Status) == "failed"
 }
 
 // Tick is the orchestrator's deadline driver.

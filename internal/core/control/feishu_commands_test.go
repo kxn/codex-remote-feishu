@@ -605,24 +605,24 @@ func TestFeishuCommandHelpCatalogUsesCanonicalCommandsOnly(t *testing.T) {
 }
 
 func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing.T) {
-	page := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupSwitchTarget, CatalogContext{
+	page := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupSendSettings, CatalogContext{
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
 	for _, section := range page.Sections {
 		for _, entry := range section.Entries {
-			if len(entry.Buttons) == 0 || len(entry.Commands) == 0 || entry.Commands[0] != "/workspace list" {
+			if len(entry.Buttons) == 0 || len(entry.Commands) == 0 || entry.Commands[0] != "/model" {
 				continue
 			}
 			button := entry.Buttons[0]
-			if button.CommandID != FeishuCommandWorkspaceList {
-				t.Fatalf("command id = %q, want %q", button.CommandID, FeishuCommandWorkspaceList)
+			if button.CommandID != FeishuCommandModel {
+				t.Fatalf("command id = %q, want %q", button.CommandID, FeishuCommandModel)
 			}
-			if button.CatalogFamilyID != FeishuCommandWorkspaceList {
-				t.Fatalf("catalog family id = %q, want %q", button.CatalogFamilyID, FeishuCommandWorkspaceList)
+			if button.CatalogFamilyID != FeishuCommandModel {
+				t.Fatalf("catalog family id = %q, want %q", button.CatalogFamilyID, FeishuCommandModel)
 			}
-			if button.CatalogVariantID != "workspace_list.claude.normal" {
-				t.Fatalf("catalog variant id = %q, want %q", button.CatalogVariantID, "workspace_list.claude.normal")
+			if button.CatalogVariantID != "model.claude.normal" {
+				t.Fatalf("catalog variant id = %q, want %q", button.CatalogVariantID, "model.claude.normal")
 			}
 			if button.CatalogBackend != agentproto.BackendClaude {
 				t.Fatalf("catalog backend = %q, want %q", button.CatalogBackend, agentproto.BackendClaude)
@@ -630,7 +630,7 @@ func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing
 			return
 		}
 	}
-	t.Fatalf("expected contextual /workspace list menu entry, got %#v", page.Sections)
+	t.Fatalf("expected contextual /model menu entry, got %#v", page.Sections)
 }
 
 func TestParseFeishuTextActionRecognizesMenuSubcommands(t *testing.T) {

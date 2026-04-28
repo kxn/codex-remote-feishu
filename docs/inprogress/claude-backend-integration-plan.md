@@ -433,6 +433,26 @@ Claude：
 
 都在 Claude adapter 内部分开处理
 
+#### `#494` 当前收口合同（2026-04-28）
+
+这轮先把 provider-specific reply contract 固定到 canonical request carrier 上，而不改 Codex 既有 payload 外形：
+
+1. canonical request 额外携带：
+   - `bridgeKind`
+   - `semanticKind`
+   - `interruptOnDecline`
+2. Claude `can_use_tool`
+   - 归类为 `approval_can_use_tool`
+   - `bridgeKind=can_use_tool`
+3. MCP elicitation
+   - 继续沿用当前 `action/content/_meta` canonical payload
+   - 但显式标成 `bridgeKind=elicitation`
+4. Claude plan confirmation
+   - 归类为 `plan_confirmation`
+   - `bridgeKind=plan_confirmation`
+   - reject/decline 必须同时带 `interruptOnDecline=true`
+5. Codex translator 继续只消费既有 approval / user-input / elicitation result shape，不因 Claude contract 字段而改现有 reply 语义。
+
 #### 非回归要求
 
 1. 现有 approval / request_user_input / permission approval 行为在 Codex 下不变。
@@ -725,6 +745,32 @@ Claude runtime 分三块：
    - 可以允许 pending-state approximation，但只能在 command catalog 中显式声明
 4. plan/question 这类 Claude 原生交互工具
    - 走 request bridge 适配，不算 approximation，也不暴露成新的上层 canonical 能力
+
+### 7.6 `#494` A2 pre-MVP 命令策略矩阵（2026-04-28）
+
+当前代码基线已经把 Claude normal-mode 下的命令 contract 固定成下面这组 pre-MVP 规则：
+
+| family / 入口 | Claude 策略 | help/menu 可见性 | 当前是否允许直接派发 | 说明 |
+| --- | --- | --- | --- | --- |
+| `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 属于 A2 pre-MVP 已批准的 native 或纯本地产品入口。 |
+| `/workspace detach` | native | hidden | allow | 仍允许本地解除接管，但不作为 Claude 主展示入口。 |
+| `/compact` | passthrough | hidden | reject for now | 只保留成后续 runtime host 的 passthrough 候选；在 `#495` 前不直接执行。 |
+| `/new` `/workspace*` `/list` `/use` `/useall` | approximation | hidden | reject for now | 后续若要开放，必须依赖 session catalog / routing contract，不得偷跑成 family-only fallback。 |
+| `/steerall` | reject | hidden | reject | Claude 当前不支持 same-turn steer；必须显式拒绝，不能伪装成 interrupt+new turn。 |
+| `/plan` `/sendfile` `/review` `/patch` `/follow` `/detach` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude pre-MVP 范围内。 |
+
+### 7.7 `#494` final-output 终态合同（2026-04-28）
+
+为避免 Claude runtime 在 error / completion 边界上再次留下歧义，这轮先固定 turn final-output materialization 规则：
+
+1. `completed` 且无 error/problem：
+   - 正常 materialize final output。
+2. `completed` 但已存在完整 assistant text，且随后附带 error/problem：
+   - 仍要 materialize final output。
+3. `failed` 且已存在完整 assistant text：
+   - 仍要 materialize final output，同时保留失败 notice / queue failed 语义。
+4. `interrupted`
+   - 不得把缓冲文本标成 final output；只能按 non-final flush。
 
 ## 8. 分阶段实施
 

@@ -7,6 +7,8 @@ const (
 	RequestSemanticApprovalCommand            = "approval_command"
 	RequestSemanticApprovalFileChange         = "approval_file_change"
 	RequestSemanticApprovalNetwork            = "approval_network"
+	RequestSemanticApprovalCanUseTool         = "approval_can_use_tool"
+	RequestSemanticPlanConfirmation           = "plan_confirmation"
 	RequestSemanticRequestUserInput           = "request_user_input"
 	RequestSemanticPermissionsRequestApproval = "permissions_request_approval"
 	RequestSemanticMCPServerElicitation       = "mcp_server_elicitation"
@@ -25,6 +27,10 @@ func NormalizeRequestSemanticKind(value, requestType string) string {
 		return RequestSemanticApprovalFileChange
 	case RequestSemanticApprovalNetwork:
 		return RequestSemanticApprovalNetwork
+	case RequestSemanticApprovalCanUseTool, "can_use_tool", "approvalcanusetool":
+		return RequestSemanticApprovalCanUseTool
+	case RequestSemanticPlanConfirmation, "approvalplanconfirmation", "exitplanmode", "planconfirmation":
+		return RequestSemanticPlanConfirmation
 	case RequestSemanticRequestUserInput, "requestuserinput":
 		return RequestSemanticRequestUserInput
 	case RequestSemanticPermissionsRequestApproval, "permissionsrequestapproval":

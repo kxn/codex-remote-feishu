@@ -690,6 +690,7 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 	if surface == nil || request == nil || response == nil {
 		return nil
 	}
+	bridge := control.ResolveRequestBridgeContract(request.SemanticKind, request.RequestType)
 	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
 	request.Phase = frontstagecontract.PhaseWaitingDispatch
 	bumpRequestCardRevision(request)
@@ -715,8 +716,11 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 				UseActiveTurnIfOmitted: request.TurnID == "",
 			},
 			Request: agentproto.Request{
-				RequestID: request.RequestID,
-				Response:  response,
+				RequestID:          request.RequestID,
+				Response:           response,
+				BridgeKind:         string(bridge.Kind),
+				SemanticKind:       control.NormalizeRequestSemanticKind(request.SemanticKind, request.RequestType),
+				InterruptOnDecline: control.RequestBridgeShouldInterruptOnDecline(bridge, response),
 			},
 		},
 	})

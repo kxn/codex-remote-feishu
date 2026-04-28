@@ -129,7 +129,7 @@ func (s *Service) completeCompactTurn(instanceID string, event agentproto.Event)
 	}
 	events := []eventcontract.Event{}
 	if !binding.CompletionSeen {
-		if shouldFinalizeTurnOutput(event) {
+		if turnCompletedSuccessfully(event) {
 			events = append(events, s.emitCompactOwnerCompleted(surface, binding)...)
 		} else {
 			detail := strings.TrimSpace(event.ErrorMessage)

@@ -44,6 +44,16 @@ func buildRequestPromptPresentationDefinition(prompt *agentproto.RequestPrompt, 
 		definition.Sections = buildApprovalNetworkRequestSections(prompt, metadata)
 		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+	case control.RequestSemanticApprovalCanUseTool:
+		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认工具调用", "需要处理请求", "需要确认")
+		definition.Sections = buildApprovalCanUseToolRequestSections(prompt, metadata)
+		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+	case control.RequestSemanticPlanConfirmation:
+		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认计划", "需要处理请求", "需要确认")
+		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "当前计划需要你确认后才能继续。")
+		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
 	case control.RequestSemanticRequestUserInput:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要补充输入", "需要处理请求")
 		definition.Sections = buildRequestUserInputSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你补充参数或说明。")
@@ -87,6 +97,10 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 		return control.RequestSemanticApprovalFileChange
 	case control.RequestSemanticApprovalNetwork:
 		return control.RequestSemanticApprovalNetwork
+	case control.RequestSemanticApprovalCanUseTool:
+		return control.RequestSemanticApprovalCanUseTool
+	case control.RequestSemanticPlanConfirmation:
+		return control.RequestSemanticPlanConfirmation
 	case control.RequestSemanticRequestUserInput:
 		return control.RequestSemanticRequestUserInput
 	case control.RequestSemanticPermissionsRequestApproval:
@@ -100,19 +114,23 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 	}
 	switch requestType {
 	case "approval":
-		switch strings.ToLower(strings.TrimSpace(firstNonEmpty(
+		switch normalizeRequestSemanticToken(firstNonEmpty(
 			rawKind,
 			metadataString(metadata, "requestMethod"),
-		))) {
-		case control.RequestSemanticApprovalCommand, "item/commandexecution/requestapproval":
+		)) {
+		case normalizeRequestSemanticToken(control.RequestSemanticApprovalCommand), "itemcommandexecutionrequestapproval":
 			if len(requestMetadataMap(metadata["networkApprovalContext"])) != 0 {
 				return control.RequestSemanticApprovalNetwork
 			}
 			return control.RequestSemanticApprovalCommand
-		case control.RequestSemanticApprovalFileChange, "item/filechange/requestapproval":
+		case normalizeRequestSemanticToken(control.RequestSemanticApprovalFileChange), "itemfilechangerequestapproval":
 			return control.RequestSemanticApprovalFileChange
-		case control.RequestSemanticApprovalNetwork:
+		case normalizeRequestSemanticToken(control.RequestSemanticApprovalNetwork):
 			return control.RequestSemanticApprovalNetwork
+		case normalizeRequestSemanticToken(control.RequestSemanticApprovalCanUseTool), "controlrequestcanusetool":
+			return control.RequestSemanticApprovalCanUseTool
+		case normalizeRequestSemanticToken(control.RequestSemanticPlanConfirmation), "toolexitplanmode", "controlrequestexitplanmode":
+			return control.RequestSemanticPlanConfirmation
 		}
 		if len(requestMetadataMap(metadata["networkApprovalContext"])) != 0 {
 			return control.RequestSemanticApprovalNetwork
@@ -142,6 +160,15 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 	default:
 		return control.NormalizeRequestSemanticKind("", requestType)
 	}
+}
+
+func normalizeRequestSemanticToken(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "/", "")
+	value = strings.ReplaceAll(value, "_", "")
+	value = strings.ReplaceAll(value, "-", "")
+	value = strings.ReplaceAll(value, ".", "")
+	return value
 }
 
 func buildApprovalCommandRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
@@ -178,6 +205,20 @@ func buildApprovalNetworkRequestSections(prompt *agentproto.RequestPrompt, metad
 	}
 	if len(lines) != 0 {
 		sections = appendRequestPromptSection(sections, "网络目标", lines...)
+	}
+	return sections
+}
+
+func buildApprovalCanUseToolRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := buildApprovalCommandRequestSections(prompt, metadata)
+	if toolName := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "toolName"), metadataString(metadata, "tool_name"))); toolName != "" {
+		sections = appendRequestPromptSection(sections, "工具", toolName)
+	}
+	if blockedPath := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "blockedPath"), metadataString(metadata, "blocked_path"))); blockedPath != "" {
+		sections = appendRequestPromptSection(sections, "受限路径", blockedPath)
+	}
+	if suggestions := requestPermissionLines(metadataRequestMapList(metadata["permissionSuggestions"])); len(suggestions) != 0 {
+		sections = appendRequestPromptSection(sections, "建议权限", suggestions...)
 	}
 	return sections
 }
@@ -251,6 +292,16 @@ func approvalRequestHintText(semanticKind string, options []state.RequestPromptO
 			return "如果联网目标或访问方式不符合预期，请点击“告诉 Codex 怎么改”；如果不允许联网，直接拒绝即可。"
 		}
 		return "请确认这次网络访问是否可以继续。"
+	case control.RequestSemanticApprovalCanUseTool:
+		if captureFeedback {
+			return "如果工具调用范围或权限建议不符合预期，请点击“告诉 Codex 怎么改”；如果不允许本次工具调用，直接拒绝即可。"
+		}
+		return "允许后会继续当前工具调用；拒绝只会拒绝这次工具调用。"
+	case control.RequestSemanticPlanConfirmation:
+		if captureFeedback {
+			return "批准会继续执行当前计划；拒绝会停止当前 turn。如需修改计划，请点击“告诉 Codex 怎么改”。"
+		}
+		return "批准会继续执行当前计划；拒绝会停止当前 turn。"
 	default:
 		if captureFeedback {
 			return "如果想拒绝并补充处理意见，请点击“告诉 Codex 怎么改”后再发送下一条文字。"

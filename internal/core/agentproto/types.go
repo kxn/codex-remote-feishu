@@ -240,8 +240,11 @@ type PromptOverrides struct {
 }
 
 type Request struct {
-	RequestID string         `json:"requestId,omitempty"`
-	Response  map[string]any `json:"response,omitempty"`
+	RequestID          string         `json:"requestId,omitempty"`
+	Response           map[string]any `json:"response,omitempty"`
+	BridgeKind         string         `json:"bridgeKind,omitempty"`
+	SemanticKind       string         `json:"semanticKind,omitempty"`
+	InterruptOnDecline bool           `json:"interruptOnDecline,omitempty"`
 }
 
 type RequestType string

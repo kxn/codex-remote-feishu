@@ -34,6 +34,10 @@ func projectFeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, inter
 	if !profile.IncludesFamily(def.ID) {
 		return FeishuCommandDefinition{}, false
 	}
+	strategy, ok := ResolveFeishuCommandStrategy(ctx, def.ID)
+	if !ok || !strategy.Visible {
+		return FeishuCommandDefinition{}, false
+	}
 	if interactive {
 		if !def.ShowInMenu || !profile.MenuVisibleInStage(def.ID, ctx.MenuStage) {
 			return FeishuCommandDefinition{}, false

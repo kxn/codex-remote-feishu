@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 func TestResolveFeishuCommandDisplayFamilyCarriesContextualVariantIdentity(t *testing.T) {
@@ -57,6 +59,33 @@ func TestResolveFeishuCommandDisplayGroupSupportsMenuStageProjection(t *testing.
 	})
 	if got, want := resolvedDisplayCommands(vscodeWorking), []string{"/stop", "/compact", "/steerall", "/status"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("vscode working menu commands = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *testing.T) {
+	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
+	})
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/status"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("claude current_work menu commands = %#v, want %#v", got, want)
+	}
+
+	sendSettings := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSendSettings, false, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	if got, want := resolvedDisplayCommands(sendSettings), []string{"/reasoning", "/model", "/access", "/verbose"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("claude send_settings help commands = %#v, want %#v", got, want)
+	}
+
+	maintenance := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupMaintenance, false, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	if got, want := resolvedDisplayCommands(maintenance), []string{"/mode", "/upgrade", "/debug", "/help", "/menu"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("claude maintenance help commands = %#v, want %#v", got, want)
 	}
 }
 
