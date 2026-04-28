@@ -9,7 +9,6 @@ import (
 
 	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -125,12 +124,14 @@ func (a *App) runTurnPatchApplyTransaction(txID string) {
 	tx.UpdatedAt = time.Now().UTC()
 	a.mu.Unlock()
 
-	command, err := a.newRelayChildCodexRestartCommand(tx.InstanceID)
-	if err != nil {
+	restartCtx, cancel := context.WithTimeout(context.Background(), childRestartOutcomeTimeout)
+	defer cancel()
+	if err := a.restartRelayChildCodexAndWait(restartCtx, tx.InstanceID); err != nil {
 		a.mu.Lock()
 		tx = a.activeTurnPatchTransactionByIDLocked(txID)
 		if tx != nil {
-			a.startTurnPatchApplyRecoveryLocked(tx, "无法发送 child restart："+err.Error())
+			tx.UpdatedAt = time.Now().UTC()
+			a.startTurnPatchApplyRecoveryLocked(tx, err.Error())
 		}
 		a.mu.Unlock()
 		return
@@ -139,23 +140,10 @@ func (a *App) runTurnPatchApplyTransaction(txID string) {
 	a.mu.Lock()
 	tx = a.activeTurnPatchTransactionByIDLocked(txID)
 	if tx != nil {
-		tx.RestartCommandID = command.CommandID
-		tx.RestartDeadline = time.Now().UTC().Add(turnPatchRestartTimeout)
-		tx.UpdatedAt = time.Now().UTC()
+		events := a.finishTurnPatchApplySuccessLocked(tx)
+		a.handleUIEventsLocked(context.Background(), events)
 	}
 	a.mu.Unlock()
-
-	if err := a.sendRelayChildRestartCommand(tx.InstanceID, command); err != nil {
-		a.mu.Lock()
-		tx = a.activeTurnPatchTransactionByIDLocked(txID)
-		if tx != nil && strings.TrimSpace(tx.RestartCommandID) == strings.TrimSpace(command.CommandID) {
-			tx.RestartCommandID = ""
-			tx.RestartDeadline = time.Time{}
-			tx.UpdatedAt = time.Now().UTC()
-			a.startTurnPatchApplyRecoveryLocked(tx, "无法发送 child restart："+err.Error())
-		}
-		a.mu.Unlock()
-	}
 }
 
 func (a *App) runTurnPatchRollbackTransaction(txID string) {
@@ -177,35 +165,20 @@ func (a *App) runTurnPatchRollbackTransaction(txID string) {
 		return
 	}
 
-	command, err := a.newRelayChildCodexRestartCommand(tx.InstanceID)
-	if err != nil {
-		a.mu.Lock()
-		events := a.finishTurnPatchFailureLocked(
-			tx,
-			"当前会话回滚失败",
-			append(turnPatchRollbackFailureLines(nil), "原始内容已写回磁盘，但 child restart 失败："+err.Error())...,
-		)
-		a.handleUIEventsLocked(context.Background(), events)
-		a.mu.Unlock()
-		return
-	}
-
 	a.mu.Lock()
 	tx = a.activeTurnPatchTransactionByIDLocked(txID)
 	if tx != nil {
 		tx.Stage = turnpatchruntime.TransactionStageRollbackRestart
-		tx.RestartCommandID = command.CommandID
-		tx.RestartDeadline = time.Now().UTC().Add(turnPatchRestartTimeout)
 		tx.UpdatedAt = time.Now().UTC()
 	}
 	a.mu.Unlock()
 
-	if err := a.sendRelayChildRestartCommand(tx.InstanceID, command); err != nil {
+	restartCtx, cancel := context.WithTimeout(context.Background(), childRestartOutcomeTimeout)
+	defer cancel()
+	if err := a.restartRelayChildCodexAndWait(restartCtx, tx.InstanceID); err != nil {
 		a.mu.Lock()
 		tx = a.activeTurnPatchTransactionByIDLocked(txID)
-		if tx != nil && strings.TrimSpace(tx.RestartCommandID) == strings.TrimSpace(command.CommandID) {
-			tx.RestartCommandID = ""
-			tx.RestartDeadline = time.Time{}
+		if tx != nil {
 			tx.UpdatedAt = time.Now().UTC()
 			events := a.finishTurnPatchFailureLocked(
 				tx,
@@ -215,7 +188,16 @@ func (a *App) runTurnPatchRollbackTransaction(txID string) {
 			a.handleUIEventsLocked(context.Background(), events)
 		}
 		a.mu.Unlock()
+		return
 	}
+
+	a.mu.Lock()
+	tx = a.activeTurnPatchTransactionByIDLocked(txID)
+	if tx != nil {
+		events := a.finishTurnPatchRollbackSuccessLocked(tx)
+		a.handleUIEventsLocked(context.Background(), events)
+	}
+	a.mu.Unlock()
 }
 
 func (a *App) runTurnPatchApplyRecoveryTransaction(txID, reason string) {
@@ -241,36 +223,20 @@ func (a *App) runTurnPatchApplyRecoveryTransaction(txID, reason string) {
 		return
 	}
 
-	command, err := a.newRelayChildCodexRestartCommand(tx.InstanceID)
-	if err != nil {
-		a.mu.Lock()
-		events := a.finishTurnPatchFailureLocked(
-			tx,
-			"当前会话修补失败",
-			"修补没有生效，磁盘内容已恢复到修补前状态。",
-			"但恢复运行态时再次发送 child restart 失败："+err.Error(),
-		)
-		a.handleUIEventsLocked(context.Background(), events)
-		a.mu.Unlock()
-		return
-	}
-
 	a.mu.Lock()
 	tx = a.activeTurnPatchTransactionByIDLocked(txID)
 	if tx != nil {
 		tx.Stage = turnpatchruntime.TransactionStageApplyRecoveryRestart
-		tx.RestartCommandID = command.CommandID
-		tx.RestartDeadline = time.Now().UTC().Add(turnPatchRestartTimeout)
 		tx.UpdatedAt = time.Now().UTC()
 	}
 	a.mu.Unlock()
 
-	if err := a.sendRelayChildRestartCommand(tx.InstanceID, command); err != nil {
+	restartCtx, cancel := context.WithTimeout(context.Background(), childRestartOutcomeTimeout)
+	defer cancel()
+	if err := a.restartRelayChildCodexAndWait(restartCtx, tx.InstanceID); err != nil {
 		a.mu.Lock()
 		tx = a.activeTurnPatchTransactionByIDLocked(txID)
-		if tx != nil && strings.TrimSpace(tx.RestartCommandID) == strings.TrimSpace(command.CommandID) {
-			tx.RestartCommandID = ""
-			tx.RestartDeadline = time.Time{}
+		if tx != nil {
 			tx.UpdatedAt = time.Now().UTC()
 			events := a.finishTurnPatchFailureLocked(
 				tx,
@@ -281,91 +247,25 @@ func (a *App) runTurnPatchApplyRecoveryTransaction(txID, reason string) {
 			a.handleUIEventsLocked(context.Background(), events)
 		}
 		a.mu.Unlock()
+		return
 	}
+
+	a.mu.Lock()
+	tx = a.activeTurnPatchTransactionByIDLocked(txID)
+	if tx != nil {
+		events := a.finishTurnPatchFailureLocked(tx, "当前会话修补失败", "修补没有生效，已自动恢复到修补前状态。")
+		a.handleUIEventsLocked(context.Background(), events)
+	}
+	a.mu.Unlock()
 }
 
 func (a *App) startTurnPatchApplyRecoveryLocked(tx *turnpatchruntime.Transaction, reason string) {
 	if tx == nil {
 		return
 	}
-	tx.RestartCommandID = ""
-	tx.RestartDeadline = time.Time{}
 	tx.Stage = turnpatchruntime.TransactionStageApplyRecoveryRollback
 	tx.UpdatedAt = time.Now().UTC()
 	go a.runTurnPatchApplyRecoveryTransaction(tx.ID, strings.TrimSpace(firstNonEmpty(reason, "child restart 失败。")))
-}
-
-func (a *App) handleTurnPatchCommandAckLocked(_ context.Context, instanceID string, ack agentproto.CommandAck) ([]eventcontract.Event, bool) {
-	tx := a.turnPatchRuntime.ActiveTx[strings.TrimSpace(instanceID)]
-	if tx == nil || strings.TrimSpace(tx.RestartCommandID) == "" || strings.TrimSpace(tx.RestartCommandID) != strings.TrimSpace(ack.CommandID) {
-		return nil, false
-	}
-	tx.RestartCommandID = ""
-	tx.RestartDeadline = time.Time{}
-	tx.UpdatedAt = time.Now().UTC()
-	if ack.Accepted {
-		switch tx.Stage {
-		case turnpatchruntime.TransactionStageApplyingRestart:
-			return a.finishTurnPatchApplySuccessLocked(tx), true
-		case turnpatchruntime.TransactionStageApplyRecoveryRestart:
-			return a.finishTurnPatchFailureLocked(tx, "当前会话修补失败", "修补没有生效，已自动恢复到修补前状态。"), true
-		case turnpatchruntime.TransactionStageRollbackRestart:
-			return a.finishTurnPatchRollbackSuccessLocked(tx), true
-		default:
-			return nil, true
-		}
-	}
-	switch tx.Stage {
-	case turnpatchruntime.TransactionStageApplyingRestart:
-		a.startTurnPatchApplyRecoveryLocked(tx, firstNonEmpty(strings.TrimSpace(ack.Error), "本地 Codex 拒绝了 child restart。"))
-		return nil, true
-	case turnpatchruntime.TransactionStageApplyRecoveryRestart:
-		return a.finishTurnPatchFailureLocked(
-			tx,
-			"当前会话修补失败",
-			"修补没有生效，磁盘内容已恢复到修补前状态。",
-			"但恢复运行态时本地 Codex 再次拒绝了 child restart："+firstNonEmpty(strings.TrimSpace(ack.Error), "unknown"),
-		), true
-	case turnpatchruntime.TransactionStageRollbackRestart:
-		return a.finishTurnPatchFailureLocked(
-			tx,
-			"当前会话回滚失败",
-			"原始内容已写回磁盘。",
-			"但恢复运行态时本地 Codex 拒绝了 child restart："+firstNonEmpty(strings.TrimSpace(ack.Error), "unknown"),
-		), true
-	default:
-		return nil, true
-	}
-}
-
-func (a *App) maybeHandleTurnPatchRestartTimeoutLocked(now time.Time) []eventcontract.Event {
-	var events []eventcontract.Event
-	for _, tx := range a.turnPatchRuntime.ActiveTx {
-		if tx == nil || strings.TrimSpace(tx.RestartCommandID) == "" || tx.RestartDeadline.IsZero() || now.Before(tx.RestartDeadline) {
-			continue
-		}
-		tx.RestartCommandID = ""
-		tx.RestartDeadline = time.Time{}
-		tx.UpdatedAt = now
-		switch tx.Stage {
-		case turnpatchruntime.TransactionStageApplyingRestart:
-			a.startTurnPatchApplyRecoveryLocked(tx, "等待 child restart 恢复修补后上下文超时。")
-		case turnpatchruntime.TransactionStageApplyRecoveryRestart:
-			events = append(events, a.finishTurnPatchFailureLocked(
-				tx,
-				"当前会话修补失败",
-				"修补没有生效，磁盘内容已恢复到修补前状态。",
-				"但恢复运行态时等待 child restart 超时，请手动检查实例。",
-			)...)
-		case turnpatchruntime.TransactionStageRollbackRestart:
-			events = append(events, a.finishTurnPatchFailureLocked(
-				tx,
-				"当前会话回滚失败",
-				"原始内容已写回磁盘，但等待 child restart 恢复运行态超时，请手动检查实例。",
-			)...)
-		}
-	}
-	return events
 }
 
 func (a *App) finishTurnPatchApplySuccessLocked(tx *turnpatchruntime.Transaction) []eventcontract.Event {

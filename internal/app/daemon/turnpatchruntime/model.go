@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 type CandidateKind string
@@ -86,12 +85,6 @@ const (
 	TransactionStageRollbackRestart       TransactionStage = "rollback_restart"
 )
 
-type RestartResult struct {
-	Accepted bool
-	Error    string
-	Problem  *agentproto.ErrorInfo
-}
-
 type Transaction struct {
 	ID               string
 	FlowID           string
@@ -103,8 +96,6 @@ type Transaction struct {
 	ThreadID         string
 	PatchID          string
 	Stage            TransactionStage
-	RestartCommandID string
-	RestartDeadline  time.Time
 	PausedSurfaceIDs map[string]bool
 	StartedAt        time.Time
 	UpdatedAt        time.Time

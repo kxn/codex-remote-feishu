@@ -214,6 +214,9 @@ func TestTurnPatchApplySuccessWritesRolloutAndRestartsChild(t *testing.T) {
 		CommandID: restart.CommandID,
 		Accepted:  true,
 	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{
+		agentproto.NewChildRestartUpdatedEvent(restart.CommandID, "thread-1", agentproto.ChildRestartStatusSucceeded, nil),
+	})
 
 	waitForTurnPatchCondition(t, func() bool {
 		return app.turnPatchRuntime.ActiveTx["inst-1"] == nil
@@ -254,6 +257,9 @@ func TestTurnPatchApplyAcceptsImmediateRestartAck(t *testing.T) {
 		app.onCommandAck(context.Background(), "inst-1", agentproto.CommandAck{
 			CommandID: command.CommandID,
 			Accepted:  true,
+		})
+		app.onEvents(context.Background(), "inst-1", []agentproto.Event{
+			agentproto.NewChildRestartUpdatedEvent(command.CommandID, "thread-1", agentproto.ChildRestartStatusSucceeded, nil),
 		})
 		return nil
 	}
@@ -380,6 +386,9 @@ func TestTurnPatchApplyRestartRejectAutoRollsBack(t *testing.T) {
 	app.onCommandAck(context.Background(), "inst-1", agentproto.CommandAck{
 		CommandID: secondRestart.CommandID,
 		Accepted:  true,
+	})
+	app.onEvents(context.Background(), "inst-1", []agentproto.Event{
+		agentproto.NewChildRestartUpdatedEvent(secondRestart.CommandID, "thread-1", agentproto.ChildRestartStatusSucceeded, nil),
 	})
 
 	waitForTurnPatchCondition(t, func() bool {

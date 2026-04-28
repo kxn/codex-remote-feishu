@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -19,6 +20,7 @@ type childSession struct {
 	stdin       io.WriteCloser
 	stdout      io.Reader
 	stderr      io.Reader
+	generation  int64
 	waitErr     chan error
 	cancel      context.CancelFunc
 	ioCancel    context.CancelFunc
@@ -64,16 +66,20 @@ func (a *App) launchChildSession(ctx context.Context, rawLogger *debuglog.RawLog
 	}, nil
 }
 
-func startChildSessionIO(ctx context.Context, session *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
+func startChildSessionIO(ctx context.Context, session *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	if session == nil {
 		return
+	}
+	session.generation = generation
+	if activeGeneration != nil {
+		atomic.StoreInt64(activeGeneration, generation)
 	}
 	ioCtx, ioCancel := context.WithCancel(ctx)
 	session.ioCancel = ioCancel
 	writeCtx, writeCancel := context.WithCancel(ioCtx)
 	session.writeCancel = writeCancel
 	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem)
-	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, translator, client, commandResponses, errCh, debugf, rawLogger, reportProblem)
+	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, translator, client, commandResponses, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem)
 	go streamCopy(session.stderr, parentStderr, errCh)
 }
 
@@ -101,7 +107,7 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	}
 }
 
-func (a *App) restartChildSession(ctx context.Context, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+func (a *App) restartChildSession(ctx context.Context, commandID string, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
 	next, err := a.launchChildSession(ctx, rawLogger, reportProblem)
 	if err != nil {
 		return nil, agentproto.ErrorInfo{
@@ -114,52 +120,55 @@ func (a *App) restartChildSession(ctx context.Context, current *childSession, pa
 		}
 	}
 	stopChildSession(current, a.debugf)
-	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.translator, client, commandResponses, errCh, a.debugf, rawLogger, reportProblem)
-	if err := a.restoreChildSessionContext(ctx, writeCh, commandResponses); err != nil {
+	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.translator, client, commandResponses, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
+	if err := a.restoreChildSessionContext(ctx, commandID, writeCh, client, reportProblem); err != nil {
 		return next, err
 	}
 	return next, nil
 }
 
-func (a *App) restoreChildSessionContext(ctx context.Context, writeCh chan []byte, commandResponses *commandResponseTracker) error {
-	frame, requestID, ok, err := a.translator.BuildChildRestartRestoreFrame()
+func (a *App) restoreChildSessionContext(ctx context.Context, commandID string, writeCh chan []byte, client *relayws.Client, reportProblem func(agentproto.ErrorInfo)) error {
+	frame, requestID, ok, err := a.translator.BuildChildRestartRestoreFrame(commandID)
 	if err != nil {
-		return agentproto.ErrorInfo{
+		emitChildRestartOutcome(client, commandID, "", agentproto.ChildRestartStatusFailed, &agentproto.ErrorInfo{
 			Code:      "child_restart_restore_build_failed",
 			Layer:     "wrapper",
 			Stage:     "restart_child_restore_build",
 			Operation: string(agentproto.CommandProcessChildRestart),
 			Message:   "wrapper 无法构造重启后的 thread 恢复请求。",
 			Details:   err.Error(),
-		}
-	}
-	if !ok {
+			CommandID: commandID,
+		}, reportProblem)
 		return nil
 	}
-	waitCh := commandResponses.Register(requestID, agentproto.ErrorInfo{
-		Code:      "child_restart_restore_failed",
-		Layer:     "wrapper",
-		Stage:     "restart_child_restore_response",
-		Operation: string(agentproto.CommandProcessChildRestart),
-		Message:   "重启后的 Codex 子进程未能恢复先前 thread 上下文。",
-	}, true)
+	if !ok {
+		emitChildRestartOutcome(client, commandID, "", agentproto.ChildRestartStatusSucceeded, nil, reportProblem)
+		return nil
+	}
 	select {
 	case writeCh <- frame:
+		return nil
 	case <-ctx.Done():
-		commandResponses.Cancel(requestID)
 		a.translator.CancelChildRestartRestore(requestID)
 		return ctx.Err()
 	}
-	if err := waitCommandResponse(ctx, waitCh, wrapperChildRestoreTimeout, agentproto.ErrorInfo{
-		Code:      "child_restart_restore_timeout",
-		Layer:     "wrapper",
-		Stage:     "restart_child_restore_response",
-		Operation: string(agentproto.CommandProcessChildRestart),
-		Message:   "等待重启后的 Codex 子进程恢复 thread 上下文时超时。",
-	}); err != nil {
-		commandResponses.Cancel(requestID)
-		a.translator.CancelChildRestartRestore(requestID)
-		return err
+}
+
+func emitChildRestartOutcome(client *relayws.Client, commandID, threadID string, status agentproto.ChildRestartStatus, problem *agentproto.ErrorInfo, reportProblem func(agentproto.ErrorInfo)) {
+	if client == nil {
+		return
 	}
-	return nil
+	event := agentproto.NewChildRestartUpdatedEvent(commandID, threadID, status, problem)
+	if err := client.SendEvents([]agentproto.Event{event}); err != nil && reportProblem != nil {
+		reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:      "relay_send_restart_outcome_failed",
+			Layer:     "wrapper",
+			Stage:     "forward_server_events",
+			Operation: string(agentproto.CommandProcessChildRestart),
+			Message:   "wrapper 无法把 child restart outcome 发送到 relay。",
+			CommandID: commandID,
+			ThreadID:  threadID,
+			Retryable: true,
+		}))
+	}
 }

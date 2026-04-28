@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync/atomic"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
@@ -81,7 +82,7 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 	}
 }
 
-func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
+func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(childStdout)
 	coalescer := newRelayEventCoalescer(nil, 0, 0)
 	sendRelayEvents := func(events []agentproto.Event) {
@@ -109,6 +110,15 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 			logRawFrame(rawLogger, "codex.stdout", "in", line, "", "")
 			if debugf != nil {
 				debugf("stdout from codex: %s", summarizeFrame(line))
+			}
+			if activeGeneration != nil {
+				currentGeneration := atomic.LoadInt64(activeGeneration)
+				if currentGeneration != generation {
+					if debugf != nil {
+						debugf("stdout from stale child ignored: generation=%d active=%d frame=%s", generation, currentGeneration, summarizeFrame(line))
+					}
+					continue
+				}
 			}
 			_, suppressCommandResponse := commandResponses.Resolve(line)
 			result, parseErr := translator.ObserveServer(line)

@@ -176,7 +176,10 @@ func (a *App) runStandaloneCodexUpgrade(tx *codexupgraderuntime.Transaction, onC
 	}
 	if runErr == nil {
 		for _, instanceID := range tx.RestartInstanceIDs {
-			if err := a.restartRelayChildCodex(instanceID); err != nil {
+			restartCtx, restartCancel := context.WithTimeout(ctx, childRestartOutcomeTimeout)
+			err := a.restartRelayChildCodexAndWait(restartCtx, instanceID)
+			restartCancel()
+			if err != nil {
 				runErr = fmt.Errorf("restart child codex for %s: %w", instanceID, err)
 				break
 			}

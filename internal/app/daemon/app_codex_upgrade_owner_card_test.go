@@ -268,10 +268,9 @@ func TestCodexUpgradeOwnerFlowTerminalStaysOnInitiatorSurface(t *testing.T) {
 	attachStandaloneCodexTestSurface(app, "surface-init", "chat-init", "user-init", "inst-1")
 	attachStandaloneCodexTestSurface(app, "surface-other", "chat-other", "user-other", "inst-1")
 	var sent []agentproto.Command
-	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+	stubSuccessfulChildRestartTransport(app, func(_ string, command agentproto.Command) {
 		sent = append(sent, command)
-		return nil
-	}
+	})
 
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionUpgradeCommand,

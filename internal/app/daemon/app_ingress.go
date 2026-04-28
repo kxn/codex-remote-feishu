@@ -561,6 +561,9 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 			a.handleUIEventsLocked(ctx, historyEvents)
 			continue
 		}
+		if event.Kind == agentproto.EventProcessChildRestartUpdated {
+			a.noteChildRestartOutcomeEventLocked(instanceID, event)
+		}
 		if event.Kind == agentproto.EventTurnCompleted {
 			a.traceTurnLifecycle(instanceID, event)
 		}
@@ -691,12 +694,9 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 	if a.noteManagedRefreshAckLocked(instanceID, ack) {
 		return
 	}
+	a.noteChildRestartCommandAckLocked(ctx, instanceID, ack)
 	if historyEvents, handled := a.handleThreadHistoryCommandAckLocked(instanceID, ack); handled {
 		a.handleUIEventsLocked(ctx, historyEvents)
-		return
-	}
-	if patchEvents, handled := a.handleTurnPatchCommandAckLocked(ctx, instanceID, ack); handled {
-		a.handleUIEventsLocked(ctx, patchEvents)
 		return
 	}
 	if ack.Accepted {
@@ -720,9 +720,21 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
 		a.noteManagedHeadlessDisconnectedLocked(instanceID)
+		a.failChildRestartWaitersForInstanceLocked(instanceID, agentproto.ErrorInfo{
+			Layer:     "daemon",
+			Stage:     "instance_disconnect",
+			Operation: string(agentproto.CommandProcessChildRestart),
+			Message:   "relay instance disconnected while waiting child restart outcome。",
+		})
 		return
 	}
 	uiEvents := a.service.ApplyInstanceDisconnected(instanceID)
+	a.failChildRestartWaitersForInstanceLocked(instanceID, agentproto.ErrorInfo{
+		Layer:     "daemon",
+		Stage:     "instance_disconnect",
+		Operation: string(agentproto.CommandProcessChildRestart),
+		Message:   "relay instance disconnected while waiting child restart outcome。",
+	})
 	a.noteManagedHeadlessDisconnectedLocked(instanceID)
 	log.Printf(
 		"relay instance disconnected: id=%s workspace=%s display=%s source=%s managed=%t pid=%d",
@@ -762,7 +774,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	}
 	uiEvents := a.service.Tick(now)
 	uiEvents = append(uiEvents, a.maybeFlushUpgradeResultLocked(now)...)
-	uiEvents = append(uiEvents, a.maybeHandleTurnPatchRestartTimeoutLocked(now)...)
 	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
 	a.handleUIEventsLocked(ctx, uiEvents)
 	a.syncManagedHeadlessLocked(now)

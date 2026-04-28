@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -26,7 +27,6 @@ type App struct {
 
 const (
 	steerCommandResponseTimeout = 5 * time.Second
-	wrapperChildRestoreTimeout  = 5 * time.Second
 	wrapperChildStopGrace       = 2 * time.Second
 	wrapperChildWaitTimeout     = 5 * time.Second
 )
@@ -213,6 +213,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	errCh := make(chan error, 8)
 	problems := &problemReporter{}
 	commandResponses := newCommandResponseTracker()
+	var activeChildGeneration int64 = 1
 	shutdownCh := make(chan shutdownRequest, 1)
 	restartCh := make(chan restartRequest, 1)
 	hostExitCh := make(chan struct{}, 1)
@@ -388,7 +389,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return 1, err
 	}
-	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.translator, client, commandResponses, errCh, a.debugf, rawLogger, problems.Emit)
+	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.translator, client, commandResponses, &activeChildGeneration, 1, errCh, a.debugf, rawLogger, problems.Emit)
 
 	go func() {
 		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, func() bool { return connectedOnce }); err != nil && err != context.Canceled {
@@ -427,7 +428,8 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			return 0, nil
 		case request := <-restartCh:
 			a.debugf("wrapper child restart requested by daemon: command=%s", request.CommandID)
-			nextChild, err := a.restartChildSession(ctx, activeChild, stdout, stderr, writeCh, client, commandResponses, errCh, rawLogger, problems.Emit)
+			nextGeneration := atomic.LoadInt64(&activeChildGeneration) + 1
+			nextChild, err := a.restartChildSession(ctx, request.CommandID, activeChild, stdout, stderr, writeCh, client, commandResponses, &activeChildGeneration, nextGeneration, errCh, rawLogger, problems.Emit)
 			if nextChild != nil {
 				activeChild = nextChild
 			}

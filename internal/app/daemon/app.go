@@ -117,6 +117,7 @@ type App struct {
 	vscodeCompatibility         vscodeCompatibilityCacheState
 	managedHeadlessRuntime      headlessruntime.State
 	pendingThreadHistoryReads   map[string]pendingThreadHistoryRead
+	childRestartWaiters         map[string]*childRestartWaiter
 	gitWorkspaceImports         map[string]*gitWorkspaceImportRuntime
 	gitWorkspaceWorktrees       map[string]*gitWorkspaceWorktreeRuntime
 	startHeadless               func(relayruntime.HeadlessLaunchOptions) (int, error)
@@ -183,6 +184,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
 		surfaceResumeRuntime:        newSurfaceResumeRuntimeState(),
+		childRestartWaiters:         map[string]*childRestartWaiter{},
 		codexUpgradeRuntime:         codexupgraderuntime.NewState(),
 		upgradeRuntime:              upgraderuntime.NewState(),
 		turnPatchRuntime:            turnpatchruntime.NewState(),

@@ -63,7 +63,24 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			delete(t.pendingChildRestartRestore, requestID)
 			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
 				t.debugf("observe server child restart restore error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
-				return Result{Suppress: true}, nil
+				return Result{
+					Suppress: true,
+					Events: []agentproto.Event{agentproto.NewChildRestartUpdatedEvent(
+						pending.CommandID,
+						pending.ThreadID,
+						agentproto.ChildRestartStatusFailed,
+						&agentproto.ErrorInfo{
+							Code:      "child_restart_restore_failed",
+							Layer:     "wrapper",
+							Stage:     "restart_child_restore_response",
+							Operation: string(agentproto.CommandProcessChildRestart),
+							Message:   "重启后的 Codex 子进程未能恢复先前 thread 上下文。",
+							Details:   errMsg,
+							CommandID: pending.CommandID,
+							ThreadID:  pending.ThreadID,
+						},
+					)},
+				}, nil
 			}
 			t.currentThreadID = pending.ThreadID
 			if pending.CWD != "" {
@@ -71,7 +88,15 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			t.suppressedThreadStarted[pending.ThreadID] = true
 			t.debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
-			return Result{Suppress: true}, nil
+			return Result{
+				Suppress: true,
+				Events: []agentproto.Event{agentproto.NewChildRestartUpdatedEvent(
+					pending.CommandID,
+					pending.ThreadID,
+					agentproto.ChildRestartStatusSucceeded,
+					nil,
+				)},
+			}, nil
 		}
 		if pending, exists := t.pendingReviewStart[requestID]; exists {
 			delete(t.pendingReviewStart, requestID)

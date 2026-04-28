@@ -3,11 +3,13 @@ package codex
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 func TestBuildChildRestartRestoreFrameReturnsNilWithoutFocusedThread(t *testing.T) {
 	tr := NewTranslator("inst-1")
-	frame, requestID, ok, err := tr.BuildChildRestartRestoreFrame()
+	frame, requestID, ok, err := tr.BuildChildRestartRestoreFrame("cmd-restart-1")
 	if err != nil {
 		t.Fatalf("BuildChildRestartRestoreFrame: %v", err)
 	}
@@ -22,7 +24,7 @@ func TestBuildChildRestartRestoreFrameSuppressesRestoreResponseAndThreadStarted(
 		t.Fatalf("seed thread/resume: %v", err)
 	}
 
-	frame, requestID, ok, err := tr.BuildChildRestartRestoreFrame()
+	frame, requestID, ok, err := tr.BuildChildRestartRestoreFrame("cmd-restart-1")
 	if err != nil {
 		t.Fatalf("BuildChildRestartRestoreFrame: %v", err)
 	}
@@ -46,8 +48,11 @@ func TestBuildChildRestartRestoreFrameSuppressesRestoreResponseAndThreadStarted(
 	if err != nil {
 		t.Fatalf("observe restore result: %v", err)
 	}
-	if !result.Suppress || len(result.Events) != 0 || len(result.OutboundToCodex) != 0 {
+	if !result.Suppress || len(result.Events) != 1 || len(result.OutboundToCodex) != 0 {
 		t.Fatalf("expected restore response to be suppressed, got %#v", result)
+	}
+	if result.Events[0].Kind != agentproto.EventProcessChildRestartUpdated || result.Events[0].CommandID != "cmd-restart-1" || result.Events[0].Status != string(agentproto.ChildRestartStatusSucceeded) {
+		t.Fatalf("unexpected restore success event: %#v", result.Events[0])
 	}
 
 	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","cwd":"/tmp/project","name":"修复登录流程"}}}`))
@@ -71,7 +76,7 @@ func TestCancelChildRestartRestoreDropsPendingRequest(t *testing.T) {
 		t.Fatalf("seed thread/resume: %v", err)
 	}
 
-	_, requestID, ok, err := tr.BuildChildRestartRestoreFrame()
+	_, requestID, ok, err := tr.BuildChildRestartRestoreFrame("cmd-restart-1")
 	if err != nil {
 		t.Fatalf("BuildChildRestartRestoreFrame: %v", err)
 	}
@@ -86,5 +91,34 @@ func TestCancelChildRestartRestoreDropsPendingRequest(t *testing.T) {
 
 	if _, exists := tr.pendingChildRestartRestore[requestID]; exists {
 		t.Fatalf("expected pending restore request %q to be cleared", requestID)
+	}
+}
+
+func TestBuildChildRestartRestoreFrameEmitsFailureEventOnRestoreError(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {
+		t.Fatalf("seed thread/resume: %v", err)
+	}
+
+	_, requestID, ok, err := tr.BuildChildRestartRestoreFrame("cmd-restart-1")
+	if err != nil {
+		t.Fatalf("BuildChildRestartRestoreFrame: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected restore frame")
+	}
+
+	result, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `","error":{"message":"restore failed"}}`))
+	if err != nil {
+		t.Fatalf("observe restore error: %v", err)
+	}
+	if !result.Suppress || len(result.Events) != 1 {
+		t.Fatalf("expected suppressed restore error event, got %#v", result)
+	}
+	if result.Events[0].Kind != agentproto.EventProcessChildRestartUpdated || result.Events[0].Status != string(agentproto.ChildRestartStatusFailed) {
+		t.Fatalf("unexpected restore failure event: %#v", result.Events[0])
+	}
+	if result.Events[0].Problem == nil || result.Events[0].Problem.CommandID != "cmd-restart-1" {
+		t.Fatalf("expected failure problem with command id, got %#v", result.Events[0])
 	}
 }

@@ -92,10 +92,9 @@ func TestStandaloneCodexUpgradeQueuesOtherSurfaceInputUntilFinish(t *testing.T) 
 	attachStandaloneCodexTestSurface(app, "surface-other", "chat-other", "user-other", "inst-1")
 
 	var sent []agentproto.Command
-	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+	stubSuccessfulChildRestartTransport(app, func(_ string, command agentproto.Command) {
 		sent = append(sent, command)
-		return nil
-	}
+	})
 
 	done := make(chan error, 1)
 	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
@@ -184,10 +183,9 @@ func TestStandaloneCodexUpgradeBlocksInitiatorInput(t *testing.T) {
 	attachStandaloneCodexTestSurface(app, "surface-init", "chat-init", "user-init", "inst-1")
 
 	var sent []agentproto.Command
-	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+	stubSuccessfulChildRestartTransport(app, func(_ string, command agentproto.Command) {
 		sent = append(sent, command)
-		return nil
-	}
+	})
 
 	done := make(chan error, 1)
 	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
@@ -307,11 +305,10 @@ func TestStandaloneCodexUpgradeRestartsOnlyAffectedInstances(t *testing.T) {
 
 	var targets []string
 	var commands []agentproto.Command
-	app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
+	stubSuccessfulChildRestartTransport(app, func(instanceID string, command agentproto.Command) {
 		targets = append(targets, instanceID)
 		commands = append(commands, command)
-		return nil
-	}
+	})
 
 	done := make(chan error, 1)
 	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
@@ -380,7 +377,7 @@ func TestStandaloneCodexUpgradePausesOnlyAffectedSurfaces(t *testing.T) {
 	attachStandaloneCodexTestSurfaceWithMode(app, "surface-init", "chat-init", "user-init", "inst-headless", state.ProductModeNormal)
 	attachStandaloneCodexTestSurfaceWithMode(app, "surface-normal", "chat-normal", "user-normal", "inst-headless", state.ProductModeNormal)
 	attachStandaloneCodexTestSurfaceWithMode(app, "surface-vscode", "chat-vscode", "user-vscode", "inst-vscode", state.ProductModeVSCode)
-	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
+	stubSuccessfulChildRestartTransport(app, nil)
 
 	done := make(chan error, 1)
 	if err := app.startStandaloneCodexUpgrade(context.Background(), codexUpgradeStartRequest{
@@ -474,6 +471,25 @@ func newStandaloneCodexUpgradeTestApp(t *testing.T) (*App, string) {
 		}, nil
 	}
 	return app, packageJSONPath
+}
+
+func stubSuccessfulChildRestartTransport(app *App, observe func(instanceID string, command agentproto.Command)) {
+	app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
+		if observe != nil {
+			observe(instanceID, command)
+		}
+		if command.Kind != agentproto.CommandProcessChildRestart {
+			return nil
+		}
+		app.onCommandAck(context.Background(), instanceID, agentproto.CommandAck{
+			CommandID: command.CommandID,
+			Accepted:  true,
+		})
+		app.onEvents(context.Background(), instanceID, []agentproto.Event{
+			agentproto.NewChildRestartUpdatedEvent(command.CommandID, "", agentproto.ChildRestartStatusSucceeded, nil),
+		})
+		return nil
+	}
 }
 
 func writeStandaloneCodexFixture(t *testing.T, root, version string) (string, string) {

@@ -15,7 +15,6 @@ import (
 
 const (
 	turnPatchFlowTTL         = 15 * time.Minute
-	turnPatchRestartTimeout  = 30 * time.Second
 	turnPatchFlowIDPrefix    = "turn-patch-flow-"
 	turnPatchRequestIDPrefix = "turn-patch-req-"
 )

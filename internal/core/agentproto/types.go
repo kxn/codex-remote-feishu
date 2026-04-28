@@ -40,6 +40,7 @@ const (
 	EventThreadDiscovered           EventKind = "thread.discovered"
 	EventThreadFocused              EventKind = "thread.focused"
 	EventThreadRuntimeStatusUpdated EventKind = "thread.runtime_status.updated"
+	EventProcessChildRestartUpdated EventKind = "process.child.restart.updated"
 	EventConfigObserved             EventKind = "config.observed"
 	EventLocalInteractionObserved   EventKind = "local.interaction.observed"
 	EventThreadTokenUsageUpdated    EventKind = "thread.token_usage.updated"
@@ -54,6 +55,13 @@ const (
 	EventRequestStarted             EventKind = "request.started"
 	EventRequestResolved            EventKind = "request.resolved"
 	EventSystemError                EventKind = "system.error"
+)
+
+type ChildRestartStatus string
+
+const (
+	ChildRestartStatusSucceeded ChildRestartStatus = "succeeded"
+	ChildRestartStatusFailed    ChildRestartStatus = "failed"
 )
 
 type FileChangeKind string
