@@ -35,6 +35,27 @@ func TestBuildCatalogContextDefaultsToCodexDetached(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogContextUsesDetachedSurfaceBackend(t *testing.T) {
+	now := time.Date(2026, 4, 27, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].Backend = agentproto.BackendClaude
+
+	ctx := svc.buildCatalogContext(svc.root.Surfaces["surface-1"])
+	if ctx.Backend != agentproto.BackendClaude {
+		t.Fatalf("Backend = %q, want %q", ctx.Backend, agentproto.BackendClaude)
+	}
+	if ctx.ProductMode != string(state.ProductModeNormal) {
+		t.Fatalf("ProductMode = %q, want %q", ctx.ProductMode, state.ProductModeNormal)
+	}
+	if !ctx.Capabilities.RequestRespond || !ctx.Capabilities.SessionCatalog || !ctx.Capabilities.ResumeByThreadID {
+		t.Fatalf("expected claude fallback capabilities, got %#v", ctx.Capabilities)
+	}
+	if ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.TurnSteer || ctx.Capabilities.VSCodeMode {
+		t.Fatalf("unexpected codex-only capabilities on detached claude context: %#v", ctx.Capabilities)
+	}
+}
+
 func TestBuildCatalogContextUsesAttachedInstanceRuntimeSeam(t *testing.T) {
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

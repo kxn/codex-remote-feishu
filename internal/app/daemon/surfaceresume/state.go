@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
 )
@@ -23,6 +24,7 @@ type Entry struct {
 	ChatID             string    `json:"chatID,omitempty"`
 	ActorUserID        string    `json:"actorUserID,omitempty"`
 	ProductMode        string    `json:"productMode,omitempty"`
+	Backend            string    `json:"backend,omitempty"`
 	Verbosity          string    `json:"verbosity,omitempty"`
 	PlanMode           string    `json:"planMode,omitempty"`
 	ResumeInstanceID   string    `json:"resumeInstanceID,omitempty"`
@@ -200,6 +202,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
+	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), agentproto.Backend(strings.TrimSpace(entry.Backend))))
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
@@ -230,6 +233,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ChatID) == strings.TrimSpace(right.ChatID) &&
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
+		agentproto.NormalizeBackend(agentproto.Backend(left.Backend)) == agentproto.NormalizeBackend(agentproto.Backend(right.Backend)) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&

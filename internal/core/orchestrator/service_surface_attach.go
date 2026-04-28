@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -67,6 +68,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")...)
 	}
 
+	surface.Backend = state.EffectiveInstanceBackend(inst)
 	surface.AttachedInstanceID = inst.InstanceID
 	s.surfaceCurrentWorkspaceKey(surface)
 	surface.PendingHeadless = nil
@@ -130,8 +132,16 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		return notice(surface, "instance_not_found", "实例不存在。")
 	}
 	productMode := s.normalizeSurfaceProductMode(surface)
+	surfaceBackend := s.surfaceBackend(surface)
+	instanceBackend := state.EffectiveInstanceBackend(inst)
 	workspaceKey := instanceWorkspaceClaimKey(inst)
 	switchingInstance := surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID
+	if productMode == state.ProductModeVSCode && (instanceBackend != agentproto.BackendCodex || !isVSCodeInstance(inst)) {
+		return notice(surface, "mode_backend_mismatch", "当前处于 vscode 模式，只能接管 Codex VS Code 实例。请先选择 VS Code 实例，或切回 `/mode codex` / `/mode claude`。")
+	}
+	if productMode == state.ProductModeNormal && instanceBackend != surfaceBackend {
+		return notice(surface, "mode_backend_mismatch", fmt.Sprintf("当前处于 %s 模式，不能直接接管 %s backend。请先 `/mode %s`。", s.surfaceModeAlias(surface), instanceBackend, instanceBackend))
+	}
 	if switchingInstance && productMode != state.ProductModeVSCode {
 		return notice(surface, "attach_requires_detach", "当前会话已接管其他工作区，请先 /detach。")
 	}
@@ -178,6 +188,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
 	}
 	s.surfaceCurrentWorkspaceKey(surface)
+	surface.Backend = instanceBackend
 	surface.AttachedInstanceID = instanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""

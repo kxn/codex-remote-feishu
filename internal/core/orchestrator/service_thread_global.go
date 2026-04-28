@@ -161,6 +161,64 @@ func (s *Service) mergedThreadView(surface *state.SurfaceConsoleRecord, threadID
 	return s.persistedThreadView(surface, threadID)
 }
 
+func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord, threadID string, backend agentproto.Backend, includePersisted bool) *mergedThreadView {
+	threadID = strings.TrimSpace(threadID)
+	backend = agentproto.NormalizeBackend(backend)
+	if threadID == "" {
+		return nil
+	}
+	view := &mergedThreadView{ThreadID: threadID}
+	found := false
+	currentInstanceID := ""
+	if surface != nil {
+		currentInstanceID = strings.TrimSpace(surface.AttachedInstanceID)
+	}
+	for _, inst := range s.Instances() {
+		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
+			continue
+		}
+		thread := inst.Threads[threadID]
+		if !ordinaryThreadVisible(thread) || !threadBelongsToInstanceWorkspace(inst, thread) {
+			continue
+		}
+		found = true
+		if shouldPromoteMergedThread(view.Inst, view.Thread, inst, thread) {
+			view.Inst = inst
+			view.Thread = thread
+		}
+		if inst.InstanceID == currentInstanceID {
+			view.CurrentVisible = true
+		}
+		if inst.Online && betterVisibleThreadInstance(surface, view.AnyVisibleInst, inst, thread) {
+			view.AnyVisibleInst = inst
+		}
+		owner := s.instanceClaimSurface(inst.InstanceID)
+		if inst.Online && (owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
+			betterVisibleThreadInstance(surface, view.FreeVisibleInst, inst, thread) {
+			view.FreeVisibleInst = inst
+		}
+	}
+	if includePersisted && backend == agentproto.BackendCodex && s.catalog.persistedThreads != nil {
+		thread, err := s.catalog.persistedThreads.ThreadByID(threadID)
+		if err == nil && ordinaryThreadVisible(thread) {
+			found = true
+			if view.Inst == nil {
+				view.Inst = syntheticPersistedThreadInstance(thread)
+				view.Thread = cloneThreadRecord(thread)
+			} else {
+				view.Thread = mergeThreadMetadata(view.Thread, thread)
+			}
+		}
+	}
+	if !found {
+		return nil
+	}
+	if owner := s.threadClaimSurface(view.ThreadID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
+		view.BusyOwner = owner
+	}
+	return view
+}
+
 func (s *Service) mergePersistedRecentThreads(viewsByID map[string]*mergedThreadView) {
 	if s == nil || s.catalog.persistedThreads == nil {
 		return
@@ -671,13 +729,15 @@ func (s *Service) resolveHeadlessRestoreTargetFromView(surface *state.SurfaceCon
 	}
 }
 
-func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceConsoleRecord, view *mergedThreadView, preferredInstanceID string) (*state.InstanceRecord, string) {
+func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceConsoleRecord, view *mergedThreadView, preferredInstanceID string, backend agentproto.Backend) (*state.InstanceRecord, string) {
 	if view == nil {
 		return nil, "thread_not_found"
 	}
+	backend = agentproto.NormalizeBackend(backend)
 	preferredInstanceID = strings.TrimSpace(preferredInstanceID)
 	if preferredInstanceID != "" {
 		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online &&
+			state.EffectiveInstanceBackend(inst) == backend &&
 			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) {
 			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 				return nil, "thread_busy"
@@ -691,10 +751,10 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	if view.BusyOwner != nil {
 		return nil, "thread_busy"
 	}
-	if view.FreeVisibleInst != nil {
+	if view.FreeVisibleInst != nil && state.EffectiveInstanceBackend(view.FreeVisibleInst) == backend {
 		return view.FreeVisibleInst, ""
 	}
-	if view.AnyVisibleInst != nil {
+	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend {
 		return nil, "workspace_instance_busy"
 	}
 	return nil, "thread_not_found"

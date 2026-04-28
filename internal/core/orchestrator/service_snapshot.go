@@ -13,6 +13,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ActorUserID:      surface.ActorUserID,
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
+		Backend:          s.surfaceBackend(surface),
 		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),

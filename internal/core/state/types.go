@@ -228,6 +228,7 @@ type SurfaceConsoleRecord struct {
 	ChatID               string
 	ActorUserID          string
 	ProductMode          ProductMode
+	Backend              agentproto.Backend
 	Verbosity            SurfaceVerbosity
 	PlanMode             PlanModeSetting
 	ClaimedWorkspaceKey  string

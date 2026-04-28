@@ -201,7 +201,11 @@ func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *
 	if workspaceKey == "" || s.root == nil || len(s.root.WorkspaceDefaults) == 0 {
 		return state.ModelConfigRecord{}, false
 	}
-	defaults, ok := s.root.WorkspaceDefaults[workspaceKey]
+	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, s.surfaceWorkspaceDefaultsBackend(surface, inst))
+	if defaultsKey == "" {
+		return state.ModelConfigRecord{}, false
+	}
+	defaults, ok := s.root.WorkspaceDefaults[defaultsKey]
 	defaults = compactModelConfig(defaults)
 	if !ok || modelConfigRecordEmpty(defaults) {
 		return state.ModelConfigRecord{}, false
@@ -209,22 +213,23 @@ func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *
 	return defaults, true
 }
 
-func (s *Service) updateWorkspaceDefaults(workspaceKey string, apply func(*state.ModelConfigRecord)) {
+func (s *Service) updateWorkspaceDefaults(workspaceKey string, backend agentproto.Backend, apply func(*state.ModelConfigRecord)) {
 	workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
-	if workspaceKey == "" || apply == nil || s.root == nil {
+	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, backend)
+	if defaultsKey == "" || apply == nil || s.root == nil {
 		return
 	}
 	if s.root.WorkspaceDefaults == nil {
 		s.root.WorkspaceDefaults = map[string]state.ModelConfigRecord{}
 	}
-	current := compactModelConfig(s.root.WorkspaceDefaults[workspaceKey])
+	current := compactModelConfig(s.root.WorkspaceDefaults[defaultsKey])
 	apply(&current)
 	current = compactModelConfig(current)
 	if modelConfigRecordEmpty(current) {
-		delete(s.root.WorkspaceDefaults, workspaceKey)
+		delete(s.root.WorkspaceDefaults, defaultsKey)
 		return
 	}
-	s.root.WorkspaceDefaults[workspaceKey] = current
+	s.root.WorkspaceDefaults[defaultsKey] = current
 }
 
 func (s *Service) backfillLegacyWorkspaceDefaults(inst *state.InstanceRecord) {
@@ -239,7 +244,7 @@ func (s *Service) backfillLegacyWorkspaceDefaults(inst *state.InstanceRecord) {
 	if len(candidates) == 0 {
 		return
 	}
-	s.updateWorkspaceDefaults(workspaceKey, func(current *state.ModelConfigRecord) {
+	s.updateWorkspaceDefaults(workspaceKey, state.EffectiveInstanceBackend(inst), func(current *state.ModelConfigRecord) {
 		for _, candidate := range candidates {
 			if current.Model == "" && candidate.Model != "" {
 				current.Model = candidate.Model

@@ -233,6 +233,29 @@ func TestSurfaceResumeStoreDefaultsLegacyMissingVerbosityToNormal(t *testing.T) 
 	}
 }
 
+func TestSurfaceResumeStoreDefaultsLegacyMissingBackendToCodex(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\"\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write legacy surface resume state: %v", err)
+	}
+
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load legacy store: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected legacy surface resume entry after reload")
+	}
+	if entry.Backend != "codex" {
+		t.Fatalf("expected missing backend to normalize to codex, got %#v", entry)
+	}
+}
+
 func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *testing.T) {
 	t.Parallel()
 
@@ -304,6 +327,46 @@ func TestDaemonPersistsSurfaceModeAcrossRestart(t *testing.T) {
 	}
 	if restarted.service.SurfaceGatewayID("surface-1") != "app-1" || restarted.service.SurfaceChatID("surface-1") != "chat-1" || restarted.service.SurfaceActorUserID("surface-1") != "user-1" {
 		t.Fatalf("unexpected restored routing: gateway=%q chat=%q actor=%q", restarted.service.SurfaceGatewayID("surface-1"), restarted.service.SurfaceChatID("surface-1"), restarted.service.SurfaceActorUserID("surface-1"))
+	}
+}
+
+func TestDaemonPersistsSurfaceBackendAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionModeCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode claude",
+	})
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.ProductMode != "normal" || entry.Backend != "claude" {
+		t.Fatalf("expected persisted claude surface mode, got %#v", entry)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	snapshot := restarted.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected latent surface to materialize from resume state")
+	}
+	if snapshot.ProductMode != "normal" || snapshot.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected claude backend after restart, got %#v", snapshot)
+	}
+	if snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected restarted surface to stay detached, got %#v", snapshot)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
@@ -460,6 +461,22 @@ func (s *Service) workspaceOnlineInstances(workspaceKey string) []*state.Instanc
 	return instances
 }
 
+func (s *Service) workspaceOnlineInstancesForBackend(workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
+	backend = agentproto.NormalizeBackend(backend)
+	instances := s.workspaceOnlineInstances(workspaceKey)
+	if len(instances) == 0 {
+		return nil
+	}
+	filtered := make([]*state.InstanceRecord, 0, len(instances))
+	for _, inst := range instances {
+		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
+			continue
+		}
+		filtered = append(filtered, inst)
+	}
+	return filtered
+}
+
 func (s *Service) sortWorkspaceAttachInstances(surface *state.SurfaceConsoleRecord, workspaceKey string, instances []*state.InstanceRecord) {
 	sort.Slice(instances, func(i, j int) bool {
 		left := instances[i]
@@ -523,6 +540,14 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 
 func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
 	instances := s.workspaceOnlineInstances(workspaceKey)
+	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		instances = s.workspaceOnlineInstancesForBackend(workspaceKey, s.surfaceBackend(surface))
+	}
+	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
+}
+
+func (s *Service) resolveWorkspaceAttachInstanceForBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) *state.InstanceRecord {
+	instances := s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
 }
 

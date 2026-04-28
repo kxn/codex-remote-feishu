@@ -389,6 +389,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		}
 		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式恢复。请切到 `/mode vscode` 后再试。")...)
 	}
+	surface.Backend = agentproto.BackendCodex
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,
 		ThreadID:         view.ThreadID,

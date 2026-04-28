@@ -34,7 +34,7 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 		if workspaceKey == "" || isVSCodeInstance(inst) {
 			return
 		}
-		s.updateWorkspaceDefaults(workspaceKey, func(current *state.ModelConfigRecord) {
+		s.updateWorkspaceDefaults(workspaceKey, state.EffectiveInstanceBackend(inst), func(current *state.ModelConfigRecord) {
 			if model != "" {
 				current.Model = model
 			}
@@ -70,7 +70,7 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 			})
 		}
 		if access != "" && workspaceKey != "" && !isVSCodeInstance(inst) {
-			s.updateWorkspaceDefaults(workspaceKey, func(current *state.ModelConfigRecord) {
+			s.updateWorkspaceDefaults(workspaceKey, state.EffectiveInstanceBackend(inst), func(current *state.ModelConfigRecord) {
 				current.AccessMode = access
 			})
 		}

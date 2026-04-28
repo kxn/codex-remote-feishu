@@ -91,7 +91,8 @@ func (s *Service) resolveConfigFlowValue(
 ) string {
 	switch key {
 	case control.FeishuConfigFlowValueSurfaceProductMode:
-		return control.NormalizeCatalogContext(ctx).ProductMode
+		normalized := control.NormalizeCatalogContext(ctx)
+		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
 	case control.FeishuConfigFlowValueSurfaceAutoWhip:
 		if surface != nil && surface.AutoWhip.Enabled {
 			return "on"

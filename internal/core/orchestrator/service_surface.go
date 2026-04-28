@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -16,6 +17,7 @@ type SurfaceResumeAttempt struct {
 	InstanceID   string
 	ThreadID     string
 	WorkspaceKey string
+	Backend      agentproto.Backend
 }
 
 type HeadlessRestoreStatus string
@@ -119,6 +121,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		ChatID:           action.ChatID,
 		ActorUserID:      action.ActorUserID,
 		ProductMode:      state.ProductModeNormal,
+		Backend:          agentproto.BackendCodex,
 		Verbosity:        state.SurfaceVerbosityNormal,
 		RouteMode:        state.RouteModeUnbound,
 		DispatchMode:     state.DispatchModeNormal,

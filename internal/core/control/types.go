@@ -181,6 +181,7 @@ type Snapshot struct {
 	SurfaceSessionID string
 	ActorUserID      string
 	ProductMode      string
+	Backend          agentproto.Backend
 	WorkspaceKey     string
 	Attachment       AttachmentSummary
 	PendingHeadless  PendingHeadlessSummary

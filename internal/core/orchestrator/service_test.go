@@ -1615,6 +1615,9 @@ func TestModeCommandSwitchesDetachedSurface(t *testing.T) {
 	if surface.ProductMode != state.ProductModeVSCode {
 		t.Fatalf("expected product mode vscode, got %q", surface.ProductMode)
 	}
+	if surface.Backend != agentproto.BackendCodex {
+		t.Fatalf("expected vscode mode to force codex backend, got %q", surface.Backend)
+	}
 	if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
 		t.Fatalf("expected detached unbound surface after mode switch, got %#v", surface)
 	}

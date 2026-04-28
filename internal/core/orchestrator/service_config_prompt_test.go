@@ -93,7 +93,7 @@ func TestObserveConfigVSCodeDoesNotPersistWorkspaceDefaults(t *testing.T) {
 		AccessMode:      agentproto.AccessModeConfirm,
 	})
 
-	if defaults := svc.root.WorkspaceDefaults["/data/dl/droid"]; defaults != (state.ModelConfigRecord{}) {
+	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", agentproto.BackendCodex)]; defaults != (state.ModelConfigRecord{}) {
 		t.Fatalf("expected vscode config observation not to persist workspace defaults, got %#v", defaults)
 	}
 
@@ -249,7 +249,7 @@ func TestUpsertInstanceBackfillsLegacyCWDDefaultsIntoWorkspaceDefaults(t *testin
 		},
 	})
 
-	defaults := svc.root.WorkspaceDefaults[workspaceKey]
+	defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendCodex)]
 	if defaults.Model != "gpt-5.4" || defaults.ReasoningEffort != "high" || defaults.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("expected legacy defaults backfilled into workspace defaults, got %#v", defaults)
 	}
@@ -264,6 +264,51 @@ func TestUpsertInstanceBackfillsLegacyCWDDefaultsIntoWorkspaceDefaults(t *testin
 	}
 	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeConfirm || snapshot.NextPrompt.EffectiveAccessModeSource != "workspace_default" {
 		t.Fatalf("expected migrated workspace access default in snapshot, got %#v", snapshot.NextPrompt)
+	}
+}
+
+func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
+	now := time.Date(2026, 4, 28, 6, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/droid"
+	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendCodex)] = state.ModelConfigRecord{
+		Model:           "gpt-5.4",
+		ReasoningEffort: "high",
+	}
+	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendClaude)] = state.ModelConfigRecord{
+		Model:           "claude-sonnet",
+		ReasoningEffort: "medium",
+	}
+	inst := &state.InstanceRecord{
+		InstanceID:    "inst-claude",
+		WorkspaceRoot: workspaceKey,
+		WorkspaceKey:  workspaceKey,
+		Backend:       agentproto.BackendClaude,
+	}
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Backend = agentproto.BackendClaude
+
+	defaults, ok := svc.resolveWorkspaceDefaults(inst, surface, workspaceKey)
+	if !ok {
+		t.Fatal("expected claude workspace defaults")
+	}
+	if defaults.Model != "claude-sonnet" || defaults.ReasoningEffort != "medium" {
+		t.Fatalf("expected claude-scoped workspace defaults, got %#v", defaults)
+	}
+
+	surface.Backend = agentproto.BackendCodex
+	defaults, ok = svc.resolveWorkspaceDefaults(&state.InstanceRecord{
+		InstanceID:    "inst-codex",
+		WorkspaceRoot: workspaceKey,
+		WorkspaceKey:  workspaceKey,
+		Backend:       agentproto.BackendCodex,
+	}, surface, workspaceKey)
+	if !ok {
+		t.Fatal("expected codex workspace defaults")
+	}
+	if defaults.Model != "gpt-5.4" || defaults.ReasoningEffort != "high" {
+		t.Fatalf("expected codex-scoped workspace defaults, got %#v", defaults)
 	}
 }
 

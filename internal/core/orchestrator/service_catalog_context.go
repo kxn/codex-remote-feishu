@@ -25,11 +25,12 @@ func (s *Service) buildCatalogContextWithInstance(surface *state.SurfaceConsoleR
 	}
 	productMode := state.ProductModeNormal
 	workspaceKey := ""
+	backend := agentproto.BackendCodex
 	if surface != nil {
 		productMode = s.normalizeSurfaceProductMode(surface)
 		workspaceKey = state.ResolveWorkspaceKey(s.surfaceCurrentWorkspaceKey(surface))
+		backend = s.surfaceBackend(surface)
 	}
-	backend := agentproto.BackendCodex
 	capabilities := agentproto.DefaultCapabilitiesForBackend(backend)
 	instanceID := ""
 	if inst != nil {

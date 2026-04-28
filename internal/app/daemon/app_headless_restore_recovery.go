@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -43,6 +44,7 @@ func (a *App) syncHeadlessRestoreStateLocked() {
 
 func surfaceResumeEntrySupportsHeadlessRestore(entry surfaceresume.Entry) bool {
 	return state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeNormal &&
+		agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendCodex &&
 		entry.ResumeHeadless &&
 		strings.TrimSpace(entry.ResumeThreadID) != ""
 }

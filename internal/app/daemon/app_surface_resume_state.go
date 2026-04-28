@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -77,6 +78,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			entry.ChatID,
 			entry.ActorUserID,
 			state.ProductMode(entry.ProductMode),
+			agentproto.Backend(entry.Backend),
 			state.SurfaceVerbosity(entry.Verbosity),
 			state.PlanModeSetting(entry.PlanMode),
 		)
@@ -243,6 +245,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		ChatID:           strings.TrimSpace(surface.ChatID),
 		ActorUserID:      strings.TrimSpace(surface.ActorUserID),
 		ProductMode:      string(state.NormalizeProductMode(surface.ProductMode)),
+		Backend:          string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
 		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
 		PlanMode:         string(state.NormalizePlanModeSetting(surface.PlanMode)),
 	}
@@ -339,7 +342,8 @@ func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before
 		if before == nil || after == nil {
 			return false
 		}
-		return !strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode))
+		return !strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode)) ||
+			agentproto.NormalizeBackend(before.Backend) != agentproto.NormalizeBackend(after.Backend)
 	default:
 		return false
 	}
@@ -411,6 +415,7 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 			InstanceID:   recovery.Entry.ResumeInstanceID,
 			ThreadID:     recovery.Entry.ResumeThreadID,
 			WorkspaceKey: workspaceKey,
+			Backend:      agentproto.Backend(recovery.Entry.Backend),
 		}, allowMissingTargetFailure)
 		switch result.Status {
 		case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:

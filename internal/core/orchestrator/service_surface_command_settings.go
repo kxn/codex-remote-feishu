@@ -25,14 +25,30 @@ func clearAutoContinueRuntime(surface *state.SurfaceConsoleRecord) {
 	surface.AutoContinue = state.AutoContinueRuntimeRecord{Enabled: enabled}
 }
 
-func parseProductMode(value string) (state.ProductMode, bool) {
+type surfaceModeSelection struct {
+	ProductMode state.ProductMode
+	Backend     agentproto.Backend
+}
+
+func parseSurfaceModeSelection(value string) (surfaceModeSelection, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "normal":
-		return state.ProductModeNormal, true
+	case "normal", "codex":
+		return surfaceModeSelection{
+			ProductMode: state.ProductModeNormal,
+			Backend:     agentproto.BackendCodex,
+		}, true
+	case "claude":
+		return surfaceModeSelection{
+			ProductMode: state.ProductModeNormal,
+			Backend:     agentproto.BackendClaude,
+		}, true
 	case "vscode", "vs-code", "vs_code":
-		return state.ProductModeVSCode, true
+		return surfaceModeSelection{
+			ProductMode: state.ProductModeVSCode,
+			Backend:     agentproto.BackendCodex,
+		}, true
 	default:
-		return "", false
+		return surfaceModeSelection{}, false
 	}
 }
 
@@ -99,7 +115,9 @@ func (s *Service) inlineCommandCardEvents(surface *state.SurfaceConsoleRecord, a
 }
 
 func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	current := s.normalizeSurfaceProductMode(surface)
+	currentMode := s.normalizeSurfaceProductMode(surface)
+	currentBackend := s.surfaceBackend(surface)
+	currentAlias := state.SurfaceModeAlias(currentMode, currentBackend)
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
@@ -107,27 +125,28 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode normal；/mode vscode。",
+			StatusText:       "用法：/mode 查看当前状态；/mode normal|codex|claude|vscode。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	target, ok := parseProductMode(parts[1])
+	target, ok := parseSurfaceModeSelection(parts[1])
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode normal；/mode vscode。",
+			StatusText:       "用法：/mode 查看当前状态；/mode normal|codex|claude|vscode。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	if target == current {
+	targetAlias := state.SurfaceModeAlias(target.ProductMode, target.Backend)
+	if target.ProductMode == currentMode && target.Backend == currentBackend {
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
 				StatusKind: "info",
-				StatusText: fmt.Sprintf("当前已处于 %s 模式。", target),
+				StatusText: fmt.Sprintf("当前已处于 %s 模式。", currentAlias),
 			})
 		}
-		return notice(surface, "surface_mode_current", fmt.Sprintf("当前已处于 %s 模式。", target))
+		return notice(surface, "surface_mode_current", fmt.Sprintf("当前已处于 %s 模式。", currentAlias))
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
@@ -157,16 +176,17 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			},
 		})
 	}
-	surface.ProductMode = target
+	surface.ProductMode = target.ProductMode
+	surface.Backend = state.NormalizeSurfaceBackend(target.ProductMode, target.Backend)
 	if commandCardOwnsInlineResult(action) {
-		statusText := fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", target)
+		statusText := fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", targetAlias)
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: statusText,
 		}, events...)
 	}
-	return append(events, notice(surface, "surface_mode_switched", fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", target))...)
+	return append(events, notice(surface, "surface_mode_switched", fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", targetAlias))...)
 }
 
 func (s *Service) handleAutoWhipCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -479,9 +480,13 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 
 	failureCode := ""
 	threadID := strings.TrimSpace(attempt.ThreadID)
+	targetBackend := s.surfaceBackend(surface)
+	if strings.TrimSpace(string(attempt.Backend)) != "" {
+		targetBackend = agentproto.NormalizeBackend(attempt.Backend)
+	}
 	if threadID != "" {
-		view := s.mergedThreadView(surface, threadID)
-		if inst, code := s.resolveSurfaceResumeVisibleInstance(surface, view, strings.TrimSpace(attempt.InstanceID)); inst != nil {
+		view := s.mergedThreadViewForBackend(surface, threadID, targetBackend, targetBackend == agentproto.BackendCodex)
+		if inst, code := s.resolveSurfaceResumeVisibleInstance(surface, view, strings.TrimSpace(attempt.InstanceID), targetBackend); inst != nil {
 			return s.attachSurfaceToKnownThread(surface, inst, view, attachSurfaceToKnownThreadSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
 		} else if code != "" {
 			failureCode = code
@@ -496,10 +501,10 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 		if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_busy"}
 		}
-		if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
+		if inst := s.resolveWorkspaceAttachInstanceForBackend(surface, workspaceKey, targetBackend); inst != nil {
 			return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
 		}
-		if len(s.workspaceOnlineInstances(workspaceKey)) == 0 {
+		if len(s.workspaceOnlineInstancesForBackend(workspaceKey, targetBackend)) == 0 {
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
@@ -534,7 +539,7 @@ func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]ev
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 	inst := s.root.Instances[instanceID]
-	if inst == nil || !inst.Online || !isVSCodeInstance(inst) {
+	if inst == nil || !inst.Online || !isVSCodeInstance(inst) || state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 	}
 	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
@@ -548,7 +553,7 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	if threadID == "" {
 		return nil
 	}
-	view := s.mergedThreadView(surface, threadID)
+	view := s.mergedThreadViewForBackend(surface, threadID, agentproto.BackendCodex, true)
 	if view == nil {
 		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD)
 	}
