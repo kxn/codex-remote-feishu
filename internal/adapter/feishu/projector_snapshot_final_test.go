@@ -1492,12 +1492,12 @@ func TestProjectSnapshotDoesNotTreatPreviewAsRecentReply(t *testing.T) {
 		Kind: eventcontract.KindSnapshot,
 		Snapshot: &control.Snapshot{
 			Attachment: control.AttachmentSummary{
-				InstanceID:            "inst-1",
-				DisplayName:           "droid",
-				SelectedThreadID:      "thread-1",
-				SelectedThreadTitle:   "修复登录流程",
-				SelectedThreadPreview: "用户自己的首条消息预览",
-				RouteMode:             "pinned",
+				InstanceID:                    "inst-1",
+				DisplayName:                   "droid",
+				SelectedThreadID:              "thread-1",
+				SelectedThreadTitle:           "修复登录流程",
+				SelectedThreadLastUserMessage: "用户自己的首条消息预览",
+				RouteMode:                     "pinned",
 			},
 			NextPrompt: control.PromptRouteSummary{
 				ThreadID:                 "thread-1",
@@ -1514,7 +1514,7 @@ func TestProjectSnapshotDoesNotTreatPreviewAsRecentReply(t *testing.T) {
 	}
 	rendered := renderedV2CardText(t, ops[0])
 	if strings.Contains(rendered, "最近回复：") {
-		t.Fatalf("expected snapshot not to render recent reply from preview only, got %q", rendered)
+		t.Fatalf("expected snapshot not to render recent reply without assistant message, got %q", rendered)
 	}
 }
 

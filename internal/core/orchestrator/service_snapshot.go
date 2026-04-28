@@ -39,30 +39,33 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		selectedTitle := ""
 		selectedFirstUserMessage := ""
 		selectedLastUserMessage := ""
+		selectedLastAssistantMessage := ""
 		selectedModelReroute := (*agentproto.TurnModelReroute)(nil)
 		selectedAgeText := ""
 		if selected != nil {
 			selectedTitle = displayThreadTitle(inst, selected, surface.SelectedThreadID)
 			selectedFirstUserMessage = threadFirstUserSnippet(selected, 64)
 			selectedLastUserMessage = threadLastUserSnippet(selected, 64)
+			selectedLastAssistantMessage = threadLastAssistantSnippet(selected, 64)
 			selectedModelReroute = agentproto.CloneTurnModelReroute(selected.LastModelReroute)
 			selectedAgeText = humanizeRelativeTime(s.now(), selected.LastUsedAt)
 		}
 		snapshot.Attachment = control.AttachmentSummary{
-			InstanceID:                     inst.InstanceID,
-			ObjectType:                     snapshotAttachmentObjectType(s.normalizeSurfaceProductMode(surface), inst),
-			DisplayName:                    inst.DisplayName,
-			Source:                         inst.Source,
-			Managed:                        inst.Managed,
-			PID:                            inst.PID,
-			SelectedThreadID:               surface.SelectedThreadID,
-			SelectedThreadTitle:            selectedTitle,
-			SelectedThreadFirstUserMessage: selectedFirstUserMessage,
-			SelectedThreadLastUserMessage:  selectedLastUserMessage,
-			SelectedThreadModelReroute:     selectedModelReroute,
-			SelectedThreadAgeText:          selectedAgeText,
-			RouteMode:                      string(surface.RouteMode),
-			Abandoning:                     surface.Abandoning,
+			InstanceID:                         inst.InstanceID,
+			ObjectType:                         snapshotAttachmentObjectType(s.normalizeSurfaceProductMode(surface), inst),
+			DisplayName:                        inst.DisplayName,
+			Source:                             inst.Source,
+			Managed:                            inst.Managed,
+			PID:                                inst.PID,
+			SelectedThreadID:                   surface.SelectedThreadID,
+			SelectedThreadTitle:                selectedTitle,
+			SelectedThreadFirstUserMessage:     selectedFirstUserMessage,
+			SelectedThreadLastUserMessage:      selectedLastUserMessage,
+			SelectedThreadLastAssistantMessage: selectedLastAssistantMessage,
+			SelectedThreadModelReroute:         selectedModelReroute,
+			SelectedThreadAgeText:              selectedAgeText,
+			RouteMode:                          string(surface.RouteMode),
+			Abandoning:                         surface.Abandoning,
 		}
 		snapshot.Dispatch = snapshotDispatchSummary(surface, inst)
 		snapshot.NextPrompt = s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})

@@ -13,18 +13,14 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
 )
 
-func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMode, title string) eventcontract.Event {
-	selection := &control.ThreadSelectionChanged{
-		ThreadID:  threadID,
-		RouteMode: routeMode,
-		Title:     title,
-	}
-	notice := threadSelectionNotice(*selection)
+func threadSelectionEvent(surface *state.SurfaceConsoleRecord, selection control.ThreadSelectionChanged) eventcontract.Event {
+	selectionCopy := selection
+	notice := threadSelectionNotice(selectionCopy)
 	return surfaceEventFromPayload(
 		surface,
 		eventcontract.NoticePayload{
 			Notice:          *notice,
-			ThreadSelection: selection,
+			ThreadSelection: &selectionCopy,
 		},
 		eventcontract.EventMeta{},
 	)

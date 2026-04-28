@@ -58,12 +58,24 @@ func (s *Service) threadSelectionEvents(surface *state.SurfaceConsoleRecord, thr
 		surface.LastSelection.Title = title
 		return nil
 	}
+	selection := control.ThreadSelectionChanged{
+		ThreadID:  threadID,
+		RouteMode: routeMode,
+		Title:     title,
+	}
+	if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {
+		if thread := inst.Threads[threadID]; threadVisible(thread) {
+			selection.FirstUserMessage = threadFirstUserSnippet(thread, 64)
+			selection.LastUserMessage = threadLastUserSnippet(thread, 64)
+			selection.LastAssistantMessage = threadLastAssistantSnippet(thread, 64)
+		}
+	}
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  threadID,
 		RouteMode: routeMode,
 		Title:     title,
 	}
-	return []eventcontract.Event{threadSelectionEvent(surface, threadID, routeMode, title)}
+	return []eventcontract.Event{threadSelectionEvent(surface, selection)}
 }
 
 func notice(surface *state.SurfaceConsoleRecord, code, text string) []eventcontract.Event {

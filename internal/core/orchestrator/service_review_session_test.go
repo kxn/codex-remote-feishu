@@ -174,13 +174,25 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 		Text:             "这里需要再看一下边界情况",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
+	var command *agentproto.Command
+	var queueOn, queueOff, accepted bool
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.QueueOn {
+			queueOn = true
+		}
+		if event.PendingInput != nil && event.PendingInput.QueueOff {
+			queueOff = true
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+		if event.Command != nil {
+			command = event.Command
+		}
 	}
-	if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
+	if !queueOn || !queueOff || !accepted || command == nil || command.Kind != agentproto.CommandPromptSend {
+		t.Fatalf("expected queue-on, accepted notice, queue-off, and prompt command, got %#v", events)
 	}
-	command := events[2].Command
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.ExecutionMode != agentproto.PromptExecutionModeResumeExisting ||
 		command.Target.SourceThreadID != "thread-main" ||
@@ -305,10 +317,25 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 		MessageID:        "msg-review-2",
 		Text:             "这里继续看一下",
 	})
-	if len(replyEvents) != 3 || replyEvents[2].Command == nil {
+	var command *agentproto.Command
+	var queueOn, queueOff, accepted bool
+	for _, event := range replyEvents {
+		if event.PendingInput != nil && event.PendingInput.QueueOn {
+			queueOn = true
+		}
+		if event.PendingInput != nil && event.PendingInput.QueueOff {
+			queueOff = true
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+		if event.Command != nil {
+			command = event.Command
+		}
+	}
+	if !queueOn || !queueOff || !accepted || command == nil {
 		t.Fatalf("expected review reply command after lifecycle activation, got %#v", replyEvents)
 	}
-	command := replyEvents[2].Command
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {

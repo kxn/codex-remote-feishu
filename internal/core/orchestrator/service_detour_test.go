@@ -57,13 +57,25 @@ func TestTextDetourForkEnqueuesForkEphemeralAndStripsTriggerText(t *testing.T) {
 		Text:             "[什么？] 顺手问个岔题",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
+	var command *agentproto.Command
+	var queueOn, queueOff, accepted bool
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.QueueOn {
+			queueOn = true
+		}
+		if event.PendingInput != nil && event.PendingInput.QueueOff {
+			queueOff = true
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+		if event.Command != nil {
+			command = event.Command
+		}
 	}
-	if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
+	if !queueOn || !queueOff || !accepted || command == nil || command.Kind != agentproto.CommandPromptSend {
+		t.Fatalf("expected queue-on, accepted notice, queue-off, and prompt command, got %#v", events)
 	}
-	command := events[2].Command
 	if command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.ThreadID != "" ||
@@ -94,13 +106,25 @@ func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 		Text:             "[耸肩摊手] 临时问一句",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
+	var command *agentproto.Command
+	var queueOn, queueOff, accepted bool
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.QueueOn {
+			queueOn = true
+		}
+		if event.PendingInput != nil && event.PendingInput.QueueOff {
+			queueOff = true
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+		if event.Command != nil {
+			command = event.Command
+		}
 	}
-	if events[2].Command == nil {
-		t.Fatalf("expected prompt send command, got %#v", events)
+	if !queueOn || !queueOff || !accepted || command == nil {
+		t.Fatalf("expected queue-on, accepted notice, queue-off, and prompt command, got %#v", events)
 	}
-	command := events[2].Command
 	if command.Target.ExecutionMode != agentproto.PromptExecutionModeStartEphemeral ||
 		command.Target.SourceThreadID != "" ||
 		command.Target.ThreadID != "" ||
@@ -153,8 +177,20 @@ func TestDetourTextSkipsReplyAutoSteer(t *testing.T) {
 		},
 	})
 
-	if len(events) != 1 || events[0].PendingInput == nil || !events[0].PendingInput.QueueOn {
-		t.Fatalf("expected ordinary queued detour input, got %#v", events)
+	var queueOn, accepted bool
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.QueueOn {
+			queueOn = true
+		}
+		if event.Notice != nil && event.Notice.Code == remoteTurnAcceptedNoticeCode {
+			accepted = true
+		}
+		if event.Command != nil {
+			t.Fatalf("expected queued detour input without immediate dispatch, got %#v", events)
+		}
+	}
+	if !queueOn || !accepted {
+		t.Fatalf("expected queued detour input plus accepted notice, got %#v", events)
 	}
 	surface := svc.root.Surfaces["surface-1"]
 	if len(surface.QueuedQueueItemIDs) != 1 {

@@ -93,16 +93,41 @@ func TestThreadSelectionEventsDoNotTreatPreviewAsRecentReply(t *testing.T) {
 	now := time.Date(2026, 4, 21, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID:             "thread-1",
+				Name:                 "修复登录流程",
+				LastUserMessage:      "用户自己的首条消息预览",
+				LastAssistantMessage: "",
+			},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
 	surface := svc.root.Surfaces["surface-1"]
 
-	events := svc.threadSelectionEvents(surface, "thread-1", string(state.RouteModePinned), "droid · 修复登录流程", "用户自己的首条消息预览")
+	events := svc.threadSelectionEvents(surface, "thread-1", string(state.RouteModePinned), "droid · 修复登录流程")
 	if len(events) != 1 || events[0].Notice == nil {
 		t.Fatalf("expected one notice-family event, got %#v", events)
 	}
-	if len(events[0].Notice.Sections) != 1 {
-		t.Fatalf("expected only title section when no real assistant reply exists, got %#v", events[0].Notice.Sections)
+	for _, section := range events[0].Notice.Sections {
+		if section.Label == "最近回复" {
+			t.Fatalf("expected no recent-reply section without assistant message, got %#v", events[0].Notice.Sections)
+		}
 	}
-	if events[0].Notice.Sections[0].Label != "当前输入目标" {
-		t.Fatalf("unexpected title section: %#v", events[0].Notice.Sections[0])
+	if len(events[0].Notice.Sections) < 2 {
+		t.Fatalf("expected title and recent-user sections, got %#v", events[0].Notice.Sections)
 	}
 }
