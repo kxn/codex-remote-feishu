@@ -21,7 +21,7 @@ func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader
 	}
 
 	a.debugf("headless bootstrap: sending initialize: %s", summarizeFrame(initializeFrame))
-	if err := writeCodexFrame(childStdin, initializeFrame, a.debugf, rawLogger, reportProblem); err != nil {
+	if err := writeChildFrame(childStdin, initializeFrame, a.debugf, rawLogger, reportProblem); err != nil {
 		return nil, err
 	}
 
@@ -42,7 +42,7 @@ func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader
 					return nil, err
 				}
 				a.debugf("headless bootstrap: initialize acknowledged, sending initialized")
-				if err := writeCodexFrame(childStdin, initializedFrame, a.debugf, rawLogger, reportProblem); err != nil {
+				if err := writeChildFrame(childStdin, initializedFrame, a.debugf, rawLogger, reportProblem); err != nil {
 					return nil, err
 				}
 				return io.MultiReader(bytes.NewReader(replay.Bytes()), reader), nil

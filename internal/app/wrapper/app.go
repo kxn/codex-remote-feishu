@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -21,8 +20,8 @@ import (
 )
 
 type App struct {
-	config     Config
-	translator *codex.Translator
+	config  Config
+	runtime backendRuntime
 }
 
 const (
@@ -140,7 +139,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceRoot:        workspaceRoot,
 		WorkspaceKey:         state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:            shortName,
-		Backend:              agentproto.BackendCodex,
+		Backend:              agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
 		Source:               source,
 		Managed:              managed,
 		Lifetime:             string(lifetime),
@@ -161,16 +160,15 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 
 func New(cfg Config) *App {
 	cfg.Backend = agentproto.NormalizeBackend(cfg.Backend)
-	translator := codex.NewTranslator(cfg.InstanceID)
+	runtime := newBackendRuntime(cfg)
 	if cfg.DebugRelayFlow {
-		translator.SetDebugLogger(func(format string, args ...any) {
-			log.Printf("relay flow translator: "+format, args...)
-		})
+		if debuggable, ok := runtime.(runtimeDebugLogger); ok {
+			debuggable.SetDebugLogger(func(format string, args ...any) {
+				log.Printf("relay flow translator: "+format, args...)
+			})
+		}
 	}
-	return &App{
-		config:     cfg,
-		translator: translator,
-	}
+	return &App{config: cfg, runtime: runtime}
 }
 
 func (a *App) debugf(format string, args ...any) {
@@ -213,6 +211,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	errCh := make(chan error, 8)
 	problems := &problemReporter{}
 	commandResponses := newCommandResponseTracker()
+	turnTracker := newRuntimeTurnTracker()
 	var activeChildGeneration int64 = 1
 	shutdownCh := make(chan shutdownRequest, 1)
 	restartCh := make(chan restartRequest, 1)
@@ -228,6 +227,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	}
 
 	var client *relayws.Client
+	var activeChild *childSession
 	connectedOnce := false
 	client = relayws.NewClient(a.config.RelayServerURL, agentproto.Hello{
 		Protocol: agentproto.WireProtocol,
@@ -237,7 +237,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			WorkspaceRoot:    a.config.WorkspaceRoot,
 			WorkspaceKey:     a.config.WorkspaceKey,
 			ShortName:        a.config.ShortName,
-			Backend:          agentproto.NormalizeBackend(a.config.Backend),
+			Backend:          a.runtime.Backend(),
 			Source:           a.config.Source,
 			Managed:          a.config.Managed,
 			Version:          a.config.Version,
@@ -246,7 +246,8 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			BinaryPath:       a.config.BinaryPath,
 			PID:              os.Getpid(),
 		},
-		Capabilities: agentproto.DefaultCapabilitiesForBackend(a.config.Backend),
+		Capabilities:         a.runtime.Capabilities(),
+		CapabilitiesDeclared: true,
 	}, relayws.ClientCallbacks{
 		OnWelcome: func(_ context.Context, welcome agentproto.Welcome) error {
 			a.debugf("relay welcome: connectedOnce=%t server=%s", connectedOnce, relayWelcomeSummary(welcome))
@@ -279,6 +280,16 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			}
 			if command.Kind == agentproto.CommandProcessChildRestart {
 				a.debugf("relay child restart command received: command=%s", command.CommandID)
+				if activeChild == nil {
+					return agentproto.ErrorInfo{
+						Code:      "child_restart_not_supported",
+						Layer:     "wrapper",
+						Stage:     "restart_child_launch",
+						Operation: string(agentproto.CommandProcessChildRestart),
+						Message:   "当前 backend 没有可重启的 provider child。",
+						CommandID: command.CommandID,
+					}
+				}
 				request := restartRequest{
 					CommandID: command.CommandID,
 					ResultCh:  make(chan error, 1),
@@ -305,15 +316,18 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				firstNonEmpty(command.Origin.Surface, command.Origin.ChatID),
 				len(command.Prompt.Inputs),
 			)
-			outbound, err := a.translator.TranslateCommand(command)
+			outbound, err := a.runtime.TranslateCommand(command)
 			if err != nil {
 				a.debugf("relay command translation failed: command=%s err=%v", command.CommandID, err)
+				if problem, ok := err.(agentproto.ErrorInfo); ok {
+					return problem.Normalize()
+				}
 				return agentproto.ErrorInfo{
 					Code:             "translate_command_failed",
 					Layer:            "wrapper",
 					Stage:            "translate_command",
 					Operation:        string(command.Kind),
-					Message:          "wrapper 无法把 relay 命令转换成 Codex 请求。",
+					Message:          "wrapper 无法把 relay 命令转换成当前 backend 的 provider 请求。",
 					Details:          err.Error(),
 					SurfaceSessionID: command.Origin.Surface,
 					CommandID:        command.CommandID,
@@ -360,6 +374,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					return ctx.Err()
 				}
 			}
+			turnTracker.ObserveCommand(command)
 			if command.Kind == agentproto.CommandTurnSteer {
 				err := waitCommandResponse(ctx, waitCh, steerCommandResponseTimeout, agentproto.ErrorInfo{
 					Code:             "steer_response_timeout",
@@ -385,11 +400,11 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	problems.SetClient(client)
 	client.SetRawLogger(rawLogger)
 
-	activeChild, err := a.launchChildSession(ctx, rawLogger, problems.Emit)
+	activeChild, err = a.runtime.Launch(ctx, a, rawLogger, problems.Emit)
 	if err != nil {
 		return 1, err
 	}
-	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.translator, client, commandResponses, &activeChildGeneration, 1, errCh, a.debugf, rawLogger, problems.Emit)
+	startChildSessionIO(ctx, activeChild, stdout, stderr, writeCh, a.runtime, client, commandResponses, turnTracker, &activeChildGeneration, 1, errCh, a.debugf, rawLogger, problems.Emit)
 
 	go func() {
 		if err := runRelayClient(ctx, a.config.RelayServerURL, client, manager, func() bool { return connectedOnce }); err != nil && err != context.Canceled {
@@ -397,7 +412,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		}
 	}()
 
-	go stdinLoop(ctx, stdin, writeCh, a.translator, client, errCh, a.debugf, rawLogger, problems.Emit)
+	if activeChild != nil {
+		go stdinLoop(ctx, stdin, writeCh, a.runtime, client, errCh, a.debugf, rawLogger, problems.Emit)
+	}
 
 	for {
 		var waitErrCh <-chan error
@@ -406,7 +423,8 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		}
 		select {
 		case err := <-waitErrCh:
-			client.Close()
+			emitRuntimeExitReconciliation(client, turnTracker, err, problems.Emit)
+			drainAndCloseRelayClient(client, problems.Emit)
 			if err == nil {
 				return 0, nil
 			}
@@ -415,7 +433,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			}
 			return 1, err
 		case err := <-errCh:
-			client.Close()
+			drainAndCloseRelayClient(client, problems.Emit)
 			stopChildSession(activeChild, a.debugf)
 			if err == nil || err == context.Canceled {
 				return 0, nil
@@ -424,12 +442,12 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		case request := <-shutdownCh:
 			a.debugf("wrapper shutdown requested by daemon: command=%s", request.CommandID)
 			stopChildSession(activeChild, a.debugf)
-			client.Close()
+			drainAndCloseRelayClient(client, problems.Emit)
 			return 0, nil
 		case request := <-restartCh:
 			a.debugf("wrapper child restart requested by daemon: command=%s", request.CommandID)
 			nextGeneration := atomic.LoadInt64(&activeChildGeneration) + 1
-			nextChild, err := a.restartChildSession(ctx, request.CommandID, activeChild, stdout, stderr, writeCh, client, commandResponses, &activeChildGeneration, nextGeneration, errCh, rawLogger, problems.Emit)
+			nextChild, err := a.restartChildSession(ctx, request.CommandID, activeChild, stdout, stderr, writeCh, client, commandResponses, turnTracker, &activeChildGeneration, nextGeneration, errCh, rawLogger, problems.Emit)
 			if nextChild != nil {
 				activeChild = nextChild
 			}
@@ -438,10 +456,10 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		case <-hostExitCh:
 			a.debugf("wrapper shutdown requested by host exit: lifetime=%s parentPid=%d", a.config.Lifetime, a.config.ParentPID)
 			stopChildSession(activeChild, a.debugf)
-			client.Close()
+			drainAndCloseRelayClient(client, problems.Emit)
 			return 0, nil
 		case <-ctx.Done():
-			client.Close()
+			drainAndCloseRelayClient(client, problems.Emit)
 			stopChildSession(activeChild, a.debugf)
 			return 0, ctx.Err()
 		}
@@ -453,4 +471,23 @@ func (a *App) openRawLogger() (*debuglog.RawLogger, error) {
 		return nil, nil
 	}
 	return debuglog.OpenRaw(a.config.RawLogPath, "wrapper", a.config.InstanceID, os.Getpid())
+}
+
+func drainAndCloseRelayClient(client *relayws.Client, reportProblem func(agentproto.ErrorInfo)) {
+	if client == nil {
+		return
+	}
+	drainCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.WaitForOutboundIdle(drainCtx); err != nil && reportProblem != nil {
+		reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:      "relay_drain_before_close_failed",
+			Layer:     "wrapper",
+			Stage:     "shutdown",
+			Operation: "relay.ws",
+			Message:   "wrapper 在关闭 relay client 前等待 outbox 排空时失败。",
+			Retryable: true,
+		}))
+	}
+	client.Close()
 }

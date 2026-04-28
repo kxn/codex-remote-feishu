@@ -48,12 +48,13 @@ func (s *Service) buildCatalogContextWithInstance(surface *state.SurfaceConsoleR
 		}
 	}
 	return control.NormalizeCatalogContext(control.CatalogContext{
-		Backend:      backend,
-		ProductMode:  string(productMode),
-		MenuStage:    string(s.commandMenuStage(surface)),
-		AttachedKind: attachedKind,
-		WorkspaceKey: workspaceKey,
-		InstanceID:   instanceID,
-		Capabilities: capabilities,
+		Backend:              backend,
+		ProductMode:          string(productMode),
+		MenuStage:            string(s.commandMenuStage(surface)),
+		AttachedKind:         attachedKind,
+		WorkspaceKey:         workspaceKey,
+		InstanceID:           instanceID,
+		Capabilities:         capabilities,
+		CapabilitiesDeclared: inst != nil && inst.CapabilitiesDeclared,
 	})
 }

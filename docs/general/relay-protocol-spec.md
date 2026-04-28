@@ -116,6 +116,7 @@ wrapper 建立连接后首先发送：
       "binaryPath": "<wrapper-binary-path>",
       "pid": 12345
     },
+    "capabilitiesDeclared": true,
     "capabilities": {
       "threadsRefresh": true
     }
@@ -128,6 +129,8 @@ wrapper 建立连接后首先发送：
 - 普通 wrapper 连接使用默认 `probe=false`
 - runtime manager 的兼容性探测连接使用 `probe=true`
 - `probe=true` 的连接只用于版本/可达性检查，`relayd` 不得把它注册成可见实例，也不得触发普通实例初始化动作
+- `capabilitiesDeclared=true` 表示该实例显式声明了完整 capability matrix，`relayd` / daemon 必须按上报值原样消费，不能再按 backend 默认值补齐
+- 旧实例若未上报 `capabilitiesDeclared`，仍按 legacy fallback 处理：在缺失 capability 位上按 backend 默认值补齐
 
 ### 3.4 `welcome`
 

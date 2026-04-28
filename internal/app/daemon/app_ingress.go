@@ -468,6 +468,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	inst.Backend = backend
 	inst.Source = firstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
 	inst.Capabilities = capabilities
+	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared
 	inst.Managed = hello.Instance.Managed
 	inst.PID = hello.Instance.PID
 	inst.Online = true

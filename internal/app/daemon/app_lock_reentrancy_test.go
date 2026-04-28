@@ -143,6 +143,38 @@ func TestOnHelloWithoutThreadsRefreshSkipsStartupRefreshAndSettlesRound(t *testi
 	}
 }
 
+func TestOnHelloRespectsExplicitClaudeCapabilityAdvertisement(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-claude-explicit",
+			DisplayName:   "workspace",
+			WorkspaceRoot: "/tmp/workspace",
+			WorkspaceKey:  "/tmp/workspace",
+			ShortName:     "workspace",
+			Backend:       agentproto.BackendClaude,
+			Source:        "headless",
+			Managed:       true,
+			PID:           1234,
+		},
+		CapabilitiesDeclared: true,
+		Capabilities:         agentproto.Capabilities{},
+	})
+
+	inst := app.service.Instance("inst-claude-explicit")
+	if inst == nil {
+		t.Fatal("expected instance after hello")
+	}
+	if !inst.CapabilitiesDeclared {
+		t.Fatalf("expected explicit capability advertisement to be preserved, got %#v", inst)
+	}
+	caps := state.EffectiveInstanceCapabilities(inst)
+	if caps.ThreadsRefresh || caps.RequestRespond || caps.SessionCatalog || caps.ResumeByThreadID || caps.RequiresCWDForResume || caps.VSCodeMode {
+		t.Fatalf("expected explicit zero capabilities to stay zero, got %#v", caps)
+	}
+}
+
 func TestHandleCronHelloReleasesAppLockDuringPromptSend(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	sender := &reentrantAppLockRelaySender{app: app}

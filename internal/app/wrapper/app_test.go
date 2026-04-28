@@ -817,6 +817,7 @@ func TestWrapperFailsBeforeStartingChildWhenRelayBootstrapFails(t *testing.T) {
 func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, match func([]agentproto.Event) bool, stdout, stderr *bytes.Buffer, done <-chan error) {
 	t.Helper()
 	deadline := time.After(timeout)
+	var exitErr error
 	for {
 		select {
 		case events := <-eventsCh:
@@ -824,8 +825,12 @@ func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time
 				return
 			}
 		case err := <-done:
-			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+			exitErr = err
+			done = nil
 		case <-deadline:
+			if done == nil {
+				t.Fatalf("timed out waiting for matching event after wrapper exit: %v\nstdout:\n%s\nstderr:\n%s", exitErr, stdout.String(), stderr.String())
+			}
 			t.Fatalf("timed out waiting for matching event\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 		}
 	}
@@ -855,6 +860,7 @@ func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, tim
 		return true
 	}
 	deadline := time.After(timeout)
+	var exitErr error
 	for {
 		if allSeen() {
 			return
@@ -869,8 +875,12 @@ func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, tim
 				}
 			}
 		case err := <-done:
-			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+			exitErr = err
+			done = nil
 		case <-deadline:
+			if done == nil {
+				t.Fatalf("timed out waiting for observed events after wrapper exit: %v\nstdout:\n%s\nstderr:\n%s", exitErr, stdout.String(), stderr.String())
+			}
 			t.Fatalf("timed out waiting for observed events\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 		}
 	}
@@ -879,6 +889,7 @@ func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, tim
 func waitForAck(t *testing.T, ackCh <-chan agentproto.CommandAck, timeout time.Duration, match func(agentproto.CommandAck) bool, stdout, stderr *bytes.Buffer, done <-chan error) {
 	t.Helper()
 	deadline := time.After(timeout)
+	var exitErr error
 	for {
 		select {
 		case ack := <-ackCh:
@@ -886,8 +897,12 @@ func waitForAck(t *testing.T, ackCh <-chan agentproto.CommandAck, timeout time.D
 				return
 			}
 		case err := <-done:
-			t.Fatalf("wrapper exited early: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+			exitErr = err
+			done = nil
 		case <-deadline:
+			if done == nil {
+				t.Fatalf("timed out waiting for matching ack after wrapper exit: %v\nstdout:\n%s\nstderr:\n%s", exitErr, stdout.String(), stderr.String())
+			}
 			t.Fatalf("timed out waiting for matching ack\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 		}
 	}

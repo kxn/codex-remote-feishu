@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-27`
-> Summary: 同步文档索引，补入已完成的跨层事件契约重构设计文档生命周期迁移。
+> Updated: `2026-04-28`
+> Summary: 同步 Claude 黑盒与集成基线文档索引，反映当前 pre-MVP 研究文档的最新状态。
 
 ## 1. 适用范围
 
@@ -162,7 +162,9 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [backend-aware-command-catalog-design.md](./draft/backend-aware-command-catalog-design.md)
 - [app-server-third-batch-product-directions.md](./draft/app-server-third-batch-product-directions.md)
+- [claude-cli-blackbox-findings-2026-04-28.md](./draft/claude-cli-blackbox-findings-2026-04-28.md)
 - [codex-session-patcher-research-2026-04.md](./draft/codex-session-patcher-research-2026-04.md)
+- [claude-cli-blackbox-test-plan.md](./draft/claude-cli-blackbox-test-plan.md)
 - [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)

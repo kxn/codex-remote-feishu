@@ -15,13 +15,14 @@ const (
 )
 
 type CatalogContext struct {
-	Backend      agentproto.Backend
-	ProductMode  string
-	MenuStage    string
-	AttachedKind string
-	WorkspaceKey string
-	InstanceID   string
-	Capabilities agentproto.Capabilities
+	Backend              agentproto.Backend
+	ProductMode          string
+	MenuStage            string
+	AttachedKind         string
+	WorkspaceKey         string
+	InstanceID           string
+	Capabilities         agentproto.Capabilities
+	CapabilitiesDeclared bool
 }
 
 func NormalizeCatalogAttachedKind(value string) CatalogAttachedKind {
@@ -64,13 +65,18 @@ func NormalizeCatalogContext(ctx CatalogContext) CatalogContext {
 			}
 		}
 	}
+	caps := agentproto.EffectiveCapabilitiesForBackend(backend, ctx.Capabilities)
+	if ctx.CapabilitiesDeclared {
+		caps = ctx.Capabilities
+	}
 	return CatalogContext{
-		Backend:      backend,
-		ProductMode:  productMode,
-		MenuStage:    string(menuStage),
-		AttachedKind: string(attachedKind),
-		WorkspaceKey: workspaceKey,
-		InstanceID:   instanceID,
-		Capabilities: agentproto.EffectiveCapabilitiesForBackend(backend, ctx.Capabilities),
+		Backend:              backend,
+		ProductMode:          productMode,
+		MenuStage:            string(menuStage),
+		AttachedKind:         string(attachedKind),
+		WorkspaceKey:         workspaceKey,
+		InstanceID:           instanceID,
+		Capabilities:         caps,
+		CapabilitiesDeclared: ctx.CapabilitiesDeclared,
 	}
 }

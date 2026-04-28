@@ -166,6 +166,7 @@ type InstanceRecord struct {
 	Backend                 agentproto.Backend
 	Source                  string
 	Capabilities            agentproto.Capabilities
+	CapabilitiesDeclared    bool
 	Managed                 bool
 	PID                     int
 	Online                  bool

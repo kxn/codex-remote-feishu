@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
@@ -27,7 +26,7 @@ type childSession struct {
 	writeCancel context.CancelFunc
 }
 
-func (a *App) launchChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
 	childCtx, childCancel := context.WithCancel(ctx)
 	childArgs, childEnv := a.buildCodexChildLaunch(a.config.Args)
 	cmd := execlaunch.CommandContext(childCtx, a.config.CodexRealBinary, childArgs...)
@@ -66,7 +65,7 @@ func (a *App) launchChildSession(ctx context.Context, rawLogger *debuglog.RawLog
 	}, nil
 }
 
-func startChildSessionIO(ctx context.Context, session *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
+func startChildSessionIO(ctx context.Context, session *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, runtime backendRuntime, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	if session == nil {
 		return
 	}
@@ -79,7 +78,7 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 	writeCtx, writeCancel := context.WithCancel(ioCtx)
 	session.writeCancel = writeCancel
 	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem)
-	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, translator, client, commandResponses, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem)
+	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem)
 	go streamCopy(session.stderr, parentStderr, errCh)
 }
 
@@ -107,8 +106,8 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	}
 }
 
-func (a *App) restartChildSession(ctx context.Context, commandID string, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
-	next, err := a.launchChildSession(ctx, rawLogger, reportProblem)
+func (a *App) restartChildSession(ctx context.Context, commandID string, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	next, err := a.runtime.Launch(ctx, a, rawLogger, reportProblem)
 	if err != nil {
 		return nil, agentproto.ErrorInfo{
 			Code:      "child_restart_launch_failed",
@@ -119,8 +118,18 @@ func (a *App) restartChildSession(ctx context.Context, commandID string, current
 			Details:   err.Error(),
 		}
 	}
+	if next == nil {
+		return nil, agentproto.ErrorInfo{
+			Code:      "child_restart_launch_failed",
+			Layer:     "wrapper",
+			Stage:     "restart_child_launch",
+			Operation: string(agentproto.CommandProcessChildRestart),
+			Message:   "wrapper 无法为当前 backend 启动新的 provider child。",
+			CommandID: commandID,
+		}
+	}
 	stopChildSession(current, a.debugf)
-	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.translator, client, commandResponses, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
+	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
 	if err := a.restoreChildSessionContext(ctx, commandID, writeCh, client, reportProblem); err != nil {
 		return next, err
 	}
@@ -128,7 +137,7 @@ func (a *App) restartChildSession(ctx context.Context, commandID string, current
 }
 
 func (a *App) restoreChildSessionContext(ctx context.Context, commandID string, writeCh chan []byte, client *relayws.Client, reportProblem func(agentproto.ErrorInfo)) error {
-	frame, requestID, ok, err := a.translator.BuildChildRestartRestoreFrame(commandID)
+	frame, requestID, ok, err := a.runtime.BuildChildRestartRestoreFrame(commandID)
 	if err != nil {
 		emitChildRestartOutcome(client, commandID, "", agentproto.ChildRestartStatusFailed, &agentproto.ErrorInfo{
 			Code:      "child_restart_restore_build_failed",
@@ -149,7 +158,7 @@ func (a *App) restoreChildSessionContext(ctx context.Context, commandID string, 
 	case writeCh <- frame:
 		return nil
 	case <-ctx.Done():
-		a.translator.CancelChildRestartRestore(requestID)
+		a.runtime.CancelChildRestartRestore(requestID)
 		return ctx.Err()
 	}
 }

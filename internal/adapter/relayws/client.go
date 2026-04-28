@@ -41,6 +41,7 @@ type Client struct {
 	controlOutbox []queuedEnvelope
 	dataOutbox    []queuedEnvelope
 	outboundReady chan struct{}
+	outboundState outboundState
 
 	rawLogger *debuglog.RawLogger
 }
@@ -48,6 +49,12 @@ type Client struct {
 type queuedEnvelope struct {
 	envelope agentproto.Envelope
 	epoch    uint64
+}
+
+type outboundState struct {
+	mu      sync.Mutex
+	pending int
+	idleCh  chan struct{}
 }
 
 const (
@@ -69,7 +76,7 @@ func newClientWithQueueSizes(url string, hello agentproto.Hello, callbacks Clien
 	if dataCapacity <= 0 {
 		dataCapacity = defaultDataOutboxCapacity
 	}
-	return &Client{
+	client := &Client{
 		url:           normalizeRelayURL(url),
 		hello:         hello,
 		callbacks:     callbacks,
@@ -78,6 +85,8 @@ func newClientWithQueueSizes(url string, hello agentproto.Hello, callbacks Clien
 		dataMax:       dataCapacity,
 		outboundReady: make(chan struct{}, 1),
 	}
+	close(client.outboundState.ensureIdleLocked())
+	return client
 }
 
 func (c *Client) Run(ctx context.Context) error {
@@ -167,6 +176,23 @@ func (c *Client) SendCommandAck(ack agentproto.CommandAck) error {
 	}, errors.New("relay client control outbox full"))
 }
 
+func (c *Client) WaitForOutboundIdle(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	for {
+		idleCh := c.outboundState.currentIdleCh()
+		select {
+		case <-idleCh:
+			return nil
+		case <-c.closed:
+			return context.Canceled
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope, fullErr error) error {
 	c.outboxMu.Lock()
 	defer c.outboxMu.Unlock()
@@ -179,6 +205,7 @@ func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope,
 	if max > 0 && len(*outbox) >= max {
 		return fullErr
 	}
+	c.outboundState.markEnqueued()
 	*outbox = append(*outbox, item)
 	select {
 	case c.outboundReady <- struct{}{}:
@@ -230,18 +257,22 @@ func (c *Client) RunOnce(ctx context.Context) error {
 				return
 			}
 			if !matchesConnectionEpoch(item.epoch, connectionEpoch) {
+				c.outboundState.markProcessed()
 				continue
 			}
 			payload, err := agentproto.MarshalEnvelope(item.envelope)
 			if err != nil {
+				c.outboundState.markProcessed()
 				writeErr <- err
 				return
 			}
 			c.logRaw("out", payload, item.envelope.Type, envelopeInstanceID(item.envelope, c.hello.Instance.InstanceID), envelopeCommandID(item.envelope))
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+				c.outboundState.markProcessed()
 				writeErr <- err
 				return
 			}
+			c.outboundState.markProcessed()
 		}
 	}()
 
@@ -427,6 +458,49 @@ func firstNonEmptyRelayString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s *outboundState) ensureIdleLocked() chan struct{} {
+	if s.idleCh == nil {
+		s.idleCh = make(chan struct{})
+	}
+	return s.idleCh
+}
+
+func (s *outboundState) currentIdleCh() chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ensureIdleLocked()
+}
+
+func (s *outboundState) markEnqueued() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idleCh := s.ensureIdleLocked()
+	if s.pending == 0 {
+		select {
+		case <-idleCh:
+			s.idleCh = make(chan struct{})
+		default:
+		}
+	}
+	s.pending++
+}
+
+func (s *outboundState) markProcessed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending > 0 {
+		s.pending--
+	}
+	if s.pending == 0 {
+		idleCh := s.ensureIdleLocked()
+		select {
+		case <-idleCh:
+		default:
+			close(idleCh)
+		}
+	}
 }
 
 func (c *Client) logRaw(direction string, payload []byte, envelopeType agentproto.EnvelopeType, instanceID, commandID string) {

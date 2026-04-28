@@ -69,5 +69,8 @@ func EffectiveHelloBackend(hello Hello) Backend {
 }
 
 func EffectiveHelloCapabilities(hello Hello) Capabilities {
+	if hello.CapabilitiesDeclared {
+		return hello.Capabilities
+	}
 	return EffectiveCapabilitiesForBackend(hello.Instance.Backend, hello.Capabilities)
 }

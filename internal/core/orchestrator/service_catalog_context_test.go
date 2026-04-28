@@ -96,3 +96,28 @@ func TestBuildCatalogContextUsesAttachedInstanceRuntimeSeam(t *testing.T) {
 		t.Fatalf("unexpected codex-only capabilities on claude context: %#v", ctx.Capabilities)
 	}
 }
+
+func TestBuildCatalogContextUsesExplicitAttachedInstanceCapabilities(t *testing.T) {
+	now := time.Date(2026, 4, 27, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:           "inst-claude-skeleton",
+		WorkspaceRoot:        "/data/dl/repo",
+		WorkspaceKey:         "/data/dl/repo",
+		Backend:              agentproto.BackendClaude,
+		CapabilitiesDeclared: true,
+		Capabilities:         agentproto.Capabilities{},
+		Online:               true,
+		Threads:              map[string]*state.ThreadRecord{},
+	})
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-claude-skeleton"
+
+	ctx := svc.buildCatalogContext(svc.root.Surfaces["surface-1"])
+	if ctx.Backend != agentproto.BackendClaude {
+		t.Fatalf("Backend = %q, want %q", ctx.Backend, agentproto.BackendClaude)
+	}
+	if ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.TurnSteer || ctx.Capabilities.RequestRespond || ctx.Capabilities.SessionCatalog || ctx.Capabilities.ResumeByThreadID || ctx.Capabilities.RequiresCWDForResume || ctx.Capabilities.VSCodeMode {
+		t.Fatalf("expected explicit attached capabilities to stay zero, got %#v", ctx.Capabilities)
+	}
+}

@@ -7,20 +7,27 @@ import (
 )
 
 type MockCodex struct {
-	nextThreadID      int
-	nextTurnID        int
-	nextItemID        int
-	Threads           map[string]*Thread
-	FocusedThreadID   string
-	ActiveTurn        *Turn
-	AutoComplete      bool
-	EmitItemDeltas    bool
-	OmitFinalText     bool
-	RequireInitialize bool
-	InitializeSeen    bool
-	Initialized       bool
-	LastTurnStart     map[string]any
-	Responder         func(turn TurnStart) string
+	nextThreadID           int
+	nextTurnID             int
+	nextItemID             int
+	Threads                map[string]*Thread
+	FocusedThreadID        string
+	ActiveTurn             *Turn
+	AutoComplete           bool
+	EmitItemDeltas         bool
+	OmitFinalText          bool
+	RequireInitialize      bool
+	InitializeSeen         bool
+	Initialized            bool
+	ExitAfterFinalOutput   bool
+	ExitAfterInterrupt     bool
+	ExitAfterOutputCode    int
+	ExitAfterInterruptCode int
+	LastTurnStart          map[string]any
+	Responder              func(turn TurnStart) string
+
+	scheduledExit     bool
+	scheduledExitCode int
 }
 
 type Thread struct {
@@ -224,6 +231,10 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 		}
 		if m.AutoComplete {
 			outputs = append(outputs, m.completeTurnFrames(threadID, turnID, itemID, response)...)
+			if m.ExitAfterFinalOutput {
+				outputs = stripTrailingTurnCompleted(outputs)
+				m.scheduleExit(m.ExitAfterOutputCode)
+			}
 			m.ActiveTurn = nil
 		}
 		return outputs, nil
@@ -236,6 +247,12 @@ func (m *MockCodex) HandleRemoteCommand(raw []byte) ([][]byte, error) {
 		}
 		turn := m.ActiveTurn
 		m.ActiveTurn = nil
+		if m.ExitAfterInterrupt {
+			m.scheduleExit(m.ExitAfterInterruptCode)
+			return [][]byte{
+				mustJSON(map[string]any{"id": id, "result": map[string]any{}}),
+			}, nil
+		}
 		return [][]byte{
 			mustJSON(map[string]any{"id": id, "result": map[string]any{}}),
 			mustJSON(map[string]any{"method": "turn/completed", "params": map[string]any{
@@ -481,4 +498,34 @@ func (m *MockCodex) completeTurnFrames(threadID, turnID, itemID, text string) []
 		}}),
 	)
 	return outputs
+}
+
+func (m *MockCodex) scheduleExit(code int) {
+	m.scheduledExit = true
+	m.scheduledExitCode = code
+}
+
+func (m *MockCodex) ConsumeScheduledExit() (bool, int) {
+	if !m.scheduledExit {
+		return false, 0
+	}
+	code := m.scheduledExitCode
+	m.scheduledExit = false
+	m.scheduledExitCode = 0
+	return true, code
+}
+
+func stripTrailingTurnCompleted(outputs [][]byte) [][]byte {
+	if len(outputs) == 0 {
+		return outputs
+	}
+	last := outputs[len(outputs)-1]
+	var message map[string]any
+	if err := json.Unmarshal(last, &message); err != nil {
+		return outputs
+	}
+	if method, _ := message["method"].(string); method != "turn/completed" {
+		return outputs
+	}
+	return outputs[:len(outputs)-1]
 }

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 )
 
@@ -37,10 +36,14 @@ func (r *blockingReader) Close() {
 }
 
 func TestRestoreChildSessionContextClearsPendingStateOnCancelBeforeQueue(t *testing.T) {
-	app := &App{
-		translator: codex.NewTranslator("inst-1"),
+	app := New(Config{
+		InstanceID: "inst-1",
+	})
+	runtime, ok := app.runtime.(*codexBackendRuntime)
+	if !ok {
+		t.Fatalf("expected codex runtime, got %T", app.runtime)
 	}
-	if _, err := app.translator.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {
+	if _, err := runtime.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {
 		t.Fatalf("seed thread/resume: %v", err)
 	}
 
@@ -68,12 +71,16 @@ func TestRestoreChildSessionContextClearsPendingStateOnCancelBeforeQueue(t *test
 
 func TestStdoutLoopIgnoresClosedPipeAfterSessionCancel(t *testing.T) {
 	reader := newBlockingReader(errors.New("read |0: file already closed"))
+	runtime, ok := newBackendRuntime(Config{InstanceID: "inst-1"}).(*codexBackendRuntime)
+	if !ok {
+		t.Fatal("expected codex runtime")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	done := make(chan struct{})
 
 	go func() {
-		stdoutLoop(ctx, reader, io.Discard, make(chan []byte, 1), codex.NewTranslator("inst-1"), nil, newCommandResponseTracker(), nil, 0, errCh, nil, nil, nil)
+		stdoutLoop(ctx, reader, io.Discard, make(chan []byte, 1), runtime, nil, newCommandResponseTracker(), newRuntimeTurnTracker(), nil, 0, errCh, nil, nil, nil)
 		close(done)
 	}()
 

@@ -9,13 +9,12 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 )
 
-func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
+func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, runtime backendRuntime, client *relayws.Client, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(stdin)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -25,9 +24,9 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 			if debugf != nil {
 				debugf("stdin from parent: %s", summarizeFrame(line))
 			}
-			if result, parseErr := translator.ObserveClient(line); parseErr == nil {
-				if debugf != nil && (len(result.Events) > 0 || len(result.OutboundToCodex) > 0 || result.Suppress) {
-					debugf("stdin observe result: events=%s followups=%d suppress=%t", summarizeEventKinds(result.Events), len(result.OutboundToCodex), result.Suppress)
+			if result, parseErr := runtime.ObserveClient(line); parseErr == nil {
+				if debugf != nil && (len(result.Events) > 0 || len(result.OutboundToChild) > 0 || result.Suppress) {
+					debugf("stdin observe result: events=%s followups=%d suppress=%t", summarizeEventKinds(result.Events), len(result.OutboundToChild), result.Suppress)
 				}
 				if sendErr := client.SendEvents(result.Events); sendErr != nil {
 					log.Printf("relay send client events failed: %v", sendErr)
@@ -62,7 +61,7 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 				select {
 				case writeCh <- line:
 					if debugf != nil {
-						debugf("stdin forwarded to codex: %s", summarizeFrame(line))
+						debugf("stdin forwarded to child: %s", summarizeFrame(line))
 					}
 				case <-ctx.Done():
 					return
@@ -82,7 +81,7 @@ func stdinLoop(ctx context.Context, stdin io.Reader, writeCh chan<- []byte, tran
 	}
 }
 
-func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, translator *codex.Translator, client *relayws.Client, commandResponses *commandResponseTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
+func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writer, writeCh chan<- []byte, runtime backendRuntime, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {
 	reader := bufio.NewReader(childStdout)
 	coalescer := newRelayEventCoalescer(nil, 0, 0)
 	sendRelayEvents := func(events []agentproto.Event) {
@@ -109,7 +108,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 		if len(line) > 0 {
 			logRawFrame(rawLogger, "codex.stdout", "in", line, "", "")
 			if debugf != nil {
-				debugf("stdout from codex: %s", summarizeFrame(line))
+				debugf("stdout from child: %s", summarizeFrame(line))
 			}
 			if activeGeneration != nil {
 				currentGeneration := atomic.LoadInt64(activeGeneration)
@@ -121,23 +120,24 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 				}
 			}
 			_, suppressCommandResponse := commandResponses.Resolve(line)
-			result, parseErr := translator.ObserveServer(line)
+			result, parseErr := runtime.ObserveServer(line)
 			if parseErr == nil {
 				if debugf != nil {
 					debugf(
 						"stdout observe result: events=%s followups=%d frames=%s suppress=%t",
 						summarizeEventKinds(result.Events),
-						len(result.OutboundToCodex),
-						summarizeFrames(result.OutboundToCodex),
+						len(result.OutboundToChild),
+						summarizeFrames(result.OutboundToChild),
 						result.Suppress,
 					)
 				}
+				turnTracker.ObserveEvents(result.Events)
 				sendRelayEvents(coalescer.Push(result.Events))
-				for _, followup := range result.OutboundToCodex {
+				for _, followup := range result.OutboundToChild {
 					select {
 					case writeCh <- followup:
 						if debugf != nil {
-							debugf("stdout queued followup to codex: %s", summarizeFrame(followup))
+							debugf("stdout queued followup to child: %s", summarizeFrame(followup))
 						}
 					case <-ctx.Done():
 						return
@@ -232,7 +232,7 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 			if len(line) == 0 {
 				continue
 			}
-			if err := writeCodexFrame(childStdin, line, debugf, rawLogger, reportProblem); err != nil {
+			if err := writeChildFrame(childStdin, line, debugf, rawLogger, reportProblem); err != nil {
 				errCh <- err
 				return
 			}
@@ -240,12 +240,12 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 	}
 }
 
-func writeCodexFrame(childStdin io.Writer, line []byte, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
+func writeChildFrame(childStdin io.Writer, line []byte, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
 	if len(line) == 0 {
 		return nil
 	}
 	if debugf != nil {
-		debugf("write to codex: %s", summarizeFrame(line))
+		debugf("write to child: %s", summarizeFrame(line))
 	}
 	logRawFrame(rawLogger, "codex.stdin", "out", line, "", "")
 	if _, err := childStdin.Write(line); err != nil {

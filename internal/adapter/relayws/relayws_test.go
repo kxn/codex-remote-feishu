@@ -99,6 +99,63 @@ func TestClientServerCommandAndEventFlow(t *testing.T) {
 	}
 }
 
+func TestClientWaitForOutboundIdleDrainsQueuedEvents(t *testing.T) {
+	helloCh := make(chan agentproto.Hello, 1)
+	eventsCh := make(chan []agentproto.Event, 1)
+	server := NewServer(ServerCallbacks{
+		OnHello: func(_ context.Context, _ ConnectionMeta, hello agentproto.Hello) {
+			helloCh <- hello
+		},
+		OnEvents: func(_ context.Context, _ ConnectionMeta, _ string, events []agentproto.Event) {
+			eventsCh <- events
+		},
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+	client := NewClient(wsURL, agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{
+			InstanceID: "inst-idle",
+		},
+	}, ClientCallbacks{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = client.Run(ctx)
+	}()
+	defer client.Close()
+
+	select {
+	case <-helloCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for hello")
+	}
+
+	if err := client.SendEvents([]agentproto.Event{{Kind: agentproto.EventTurnCompleted, ThreadID: "thread-1", TurnID: "turn-1", Status: "completed"}}); err != nil {
+		t.Fatalf("SendEvents: %v", err)
+	}
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer drainCancel()
+	if err := client.WaitForOutboundIdle(drainCtx); err != nil {
+		t.Fatalf("WaitForOutboundIdle: %v", err)
+	}
+
+	select {
+	case events := <-eventsCh:
+		if len(events) != 1 || events[0].Kind != agentproto.EventTurnCompleted {
+			t.Fatalf("unexpected drained events: %#v", events)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for drained events")
+	}
+}
+
 func TestNewClientNormalizesRelayURL(t *testing.T) {
 	client := NewClient("ws://relay.test?token=abc", agentproto.Hello{
 		Protocol: agentproto.WireProtocol,

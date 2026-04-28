@@ -13,6 +13,9 @@ func EffectiveInstanceCapabilities(inst *InstanceRecord) agentproto.Capabilities
 	if inst == nil {
 		return agentproto.Capabilities{}
 	}
+	if inst.CapabilitiesDeclared {
+		return inst.Capabilities
+	}
 	return agentproto.EffectiveCapabilitiesForBackend(inst.Backend, inst.Capabilities)
 }
 
