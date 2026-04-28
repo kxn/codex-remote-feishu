@@ -89,6 +89,8 @@ export type OnboardingFlowController = {
   retryQRCodeVerification: () => void;
   submitManualConnect: () => Promise<void>;
   refreshWorkflowFocus: () => Promise<void>;
+  recheckPermissionStage: () => Promise<void>;
+  skipPermissionStage: () => Promise<void>;
   startTest: (appID: string, kind: "events" | "callback") => Promise<void>;
   confirmAppStep: (step: "events" | "callback" | "menu") => Promise<void>;
   recordMachineDecision: (

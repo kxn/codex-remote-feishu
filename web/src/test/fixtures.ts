@@ -261,10 +261,10 @@ export function makeOnboardingWorkflow(
       id: "permission",
       title: "权限检查",
       status: "pending",
-      summary: "当前还缺少建议补齐的权限，请处理后重新检查。",
+      summary: "当前还缺少建议补齐的权限。你可以补齐后继续，或者先跳过这一步。",
       optional: true,
       blocking: false,
-      allowedActions: ["open_auth", "recheck"],
+      allowedActions: ["open_auth", "recheck", "force_skip"],
     }),
     missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
     grantJSON: `{

@@ -88,7 +88,7 @@ describe("AdminRoute", () => {
             }),
             permission: {
               status: "pending",
-              summary: "当前还缺少建议补齐的权限，请处理后重新检查。",
+              summary: "当前还缺少建议补齐的权限。你可以补齐后继续，或者先跳过这一步。",
               missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
             },
           },
@@ -109,8 +109,11 @@ describe("AdminRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
     expect(
-      await screen.findByText("这一步现在是建议补齐项，不会单独决定流程是否可完成。"),
+      await screen.findByText(
+        "如果当前企业权限暂时申请不到，你也可以先跳过这一步，后面再回来补齐。",
+      ),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "强制跳过这一步" })).toBeInTheDocument();
     expect(screen.getByText("drive:drive")).toBeInTheDocument();
     expect(calls.some((call) => call.path.includes("/permission-check"))).toBe(false);
   });

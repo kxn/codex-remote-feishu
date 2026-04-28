@@ -32,10 +32,11 @@ const (
 	onboardingMachineStateUsableWithPendingItems = "usable_with_pending_items"
 	onboardingMachineStateCompleted              = "completed"
 
-	onboardingDecisionAutostartEnabled = "enabled"
-	onboardingDecisionDeferred         = "deferred"
-	onboardingDecisionVSCodeManaged    = "managed_shim"
-	onboardingDecisionVSCodeRemoteOnly = "remote_only"
+	onboardingDecisionAutostartEnabled  = "enabled"
+	onboardingDecisionDeferred          = "deferred"
+	onboardingDecisionVSCodeManaged     = "managed_shim"
+	onboardingDecisionVSCodeRemoteOnly  = "remote_only"
+	onboardingDecisionPermissionSkipped = "skipped"
 )
 
 type onboardingWorkflowResponse struct {
@@ -137,13 +138,13 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	}
 
 	selectedAppID, selectedApp := selectOnboardingApp(apps, preferredAppID)
+	appState := onboardingAppState(loaded.Config, selectedAppID)
 	connection := buildOnboardingConnectionStage(selectedApp)
 	permission := buildBlockedOnboardingPermissionStage("请先完成连接验证。")
 	if connection.Status == onboardingStageStatusComplete && selectedApp != nil {
-		permission = a.buildOnboardingPermissionStage(selectedAppID)
+		permission = a.buildOnboardingPermissionStage(selectedAppID, appState)
 	}
 
-	appState := onboardingAppState(loaded.Config, selectedAppID)
 	eventsStage := buildOnboardingAppStepStage(
 		onboardingStageEvents,
 		"事件订阅",
@@ -277,9 +278,14 @@ func buildOnboardingConnectionStage(app *adminFeishuAppSummary) onboardingWorkfl
 	return stageView(onboardingStageConnect, "飞书连接", onboardingStageStatusBlocked, "当前飞书应用信息还不完整。", true, false, []string{"submit_manual"})
 }
 
-func (a *App) buildOnboardingPermissionStage(gatewayID string) onboardingWorkflowPermissionView {
+func (a *App) buildOnboardingPermissionStage(gatewayID string, state config.FeishuAppOnboardingState) onboardingWorkflowPermissionView {
 	resp, err := a.buildFeishuAppPermissionCheck(context.Background(), gatewayID)
 	if err != nil {
+		if onboardingPermissionSkipped(state.PermissionDecision) {
+			return onboardingWorkflowPermissionView{
+				onboardingWorkflowStageView: stageView(onboardingStagePermission, "权限检查", onboardingStageStatusDeferred, "你已选择先跳过这一步，后续仍可回到这里重新检查。", false, true, []string{"open_auth", "recheck"}),
+			}
+		}
 		return onboardingWorkflowPermissionView{
 			onboardingWorkflowStageView: stageView(onboardingStagePermission, "权限检查", onboardingStageStatusPending, "暂时无法读取权限状态，请稍后重试。", false, true, []string{"recheck"}),
 		}
@@ -290,8 +296,16 @@ func (a *App) buildOnboardingPermissionStage(gatewayID string) onboardingWorkflo
 			LastCheckedAt:               resp.LastCheckedAt,
 		}
 	}
+	if onboardingPermissionSkipped(state.PermissionDecision) {
+		return onboardingWorkflowPermissionView{
+			onboardingWorkflowStageView: stageView(onboardingStagePermission, "权限检查", onboardingStageStatusDeferred, "你已选择先跳过这一步，后续仍可回到这里重新检查。", false, true, []string{"open_auth", "recheck"}),
+			MissingScopes:               resp.MissingScopes,
+			GrantJSON:                   resp.GrantJSON,
+			LastCheckedAt:               resp.LastCheckedAt,
+		}
+	}
 	return onboardingWorkflowPermissionView{
-		onboardingWorkflowStageView: stageView(onboardingStagePermission, "权限检查", onboardingStageStatusPending, "当前还缺少建议补齐的权限，请处理后重新检查。", false, true, []string{"open_auth", "recheck"}),
+		onboardingWorkflowStageView: stageView(onboardingStagePermission, "权限检查", onboardingStageStatusPending, "当前还缺少建议补齐的权限。你可以补齐后继续，或者先跳过这一步。", false, true, []string{"open_auth", "recheck", "force_skip"}),
 		MissingScopes:               resp.MissingScopes,
 		GrantJSON:                   resp.GrantJSON,
 		LastCheckedAt:               resp.LastCheckedAt,
@@ -522,6 +536,10 @@ func onboardingDecisionViewFromConfig(decision *config.OnboardingDecision) *onbo
 		Value:     strings.TrimSpace(decision.Value),
 		DecidedAt: decision.DecidedAt,
 	}
+}
+
+func onboardingPermissionSkipped(decision *config.OnboardingDecision) bool {
+	return decision != nil && strings.TrimSpace(decision.Value) == onboardingDecisionPermissionSkipped
 }
 
 func onboardingAppState(cfg config.AppConfig, gatewayID string) config.FeishuAppOnboardingState {

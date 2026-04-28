@@ -482,6 +482,52 @@ export function useOnboardingFlowController({
     });
   }
 
+  async function recheckPermissionStage() {
+    if (!activeApp?.id) {
+      await refreshWorkflowFocus();
+      return;
+    }
+    setActionBusy("permission-recheck");
+    try {
+      if (permissionStage?.status === "deferred") {
+        await requestVoid(
+          `${apiBasePath}/feishu/apps/${encodeURIComponent(activeApp.id)}/onboarding-permission/reset`,
+          { method: "POST" },
+        );
+      }
+      await refreshWorkflowFocus();
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能重新检查权限，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function skipPermissionStage() {
+    if (!activeApp?.id) {
+      return;
+    }
+    setActionBusy("permission-force-skip");
+    try {
+      await requestVoid(
+        `${apiBasePath}/feishu/apps/${encodeURIComponent(activeApp.id)}/onboarding-permission/skip`,
+        { method: "POST" },
+      );
+      await refreshWorkflowFocus();
+      setNotice({
+        tone: "warn",
+        message:
+          mode === "setup"
+            ? "已跳过这一步，你可以继续后面的设置。"
+            : "已跳过这一步，后续仍可回到这里重新检查权限。",
+      });
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能跳过这一步，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function startTest(appID: string, kind: "events" | "callback") {
     const setState = kind === "events" ? setEventTest : setCallbackTest;
     setState({ status: "sending", message: "" });
@@ -750,6 +796,8 @@ export function useOnboardingFlowController({
     retryQRCodeVerification,
     submitManualConnect,
     refreshWorkflowFocus,
+    recheckPermissionStage,
+    skipPermissionStage,
     startTest,
     confirmAppStep,
     recordMachineDecision,

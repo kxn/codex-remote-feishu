@@ -169,13 +169,107 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
     expect(
-      await screen.findByText("这一步现在是建议补齐项，不会单独决定 setup 是否可完成。"),
+      await screen.findByText(
+        "如果当前企业权限暂时申请不到，你也可以先跳过这一步，后面再回来补齐。",
+      ),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查并继续" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "强制跳过这一步" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "重新检查" }));
+    await user.click(screen.getByRole("button", { name: "检查并继续" }));
     expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
     expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
     expect(calls.some((call) => call.path.includes("/permission-check"))).toBe(false);
+  });
+
+  it("supports force-skipping the permission step and resetting it on recheck", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    let workflowReads = 0;
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/setup/onboarding/workflow": () => {
+        workflowReads += 1;
+        switch (workflowReads) {
+          case 1:
+            return {
+              body: makeOnboardingWorkflow({
+                currentStage: "permission",
+              }),
+            };
+          case 2:
+            return {
+              body: makeOnboardingWorkflow({
+                currentStage: "events",
+                app: {
+                  permission: {
+                    status: "deferred",
+                    summary: "你已选择先跳过这一步，后续仍可回到这里重新检查。",
+                    allowedActions: ["open_auth", "recheck"],
+                  },
+                },
+                guide: {
+                  remainingManualActions: [
+                    "完成一次事件订阅联调。",
+                    "完成一次回调联调。",
+                    "确认飞书应用菜单已经配置。",
+                  ],
+                },
+              }),
+            };
+          default:
+            return {
+              body: makeOnboardingWorkflow({
+                currentStage: "permission",
+              }),
+            };
+        }
+      },
+      "/api/setup/feishu/apps/bot-1/onboarding-permission/skip": {
+        status: 200,
+        body: {},
+      },
+      "/api/setup/feishu/apps/bot-1/onboarding-permission/reset": {
+        status: 200,
+        body: {},
+      },
+      "/api/setup/feishu/apps/bot-1/test-events": {
+        body: {
+          gatewayId: "bot-1",
+          startedAt: "2026-04-25T08:12:00Z",
+          expiresAt: "2026-04-25T08:22:00Z",
+          phrase: "测试",
+          message: "事件订阅测试提示已发送。",
+        },
+      },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "强制跳过这一步" }));
+
+    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
+    expect(await screen.findByText("已跳过这一步，你可以继续后面的设置。")).toBeInTheDocument();
+    expect(
+      calls.some((call) => call.path === "/api/setup/feishu/apps/bot-1/onboarding-permission/skip"),
+    ).toBe(true);
+
+    const rail = screen.getByText("设置流程").closest("aside");
+    expect(rail).not.toBeNull();
+    await user.click(
+      within(rail as HTMLElement).getByRole("button", {
+        name: /权限检查/,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "重新检查" }));
+
+    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+    expect(
+      calls.some((call) => call.path === "/api/setup/feishu/apps/bot-1/onboarding-permission/reset"),
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "检查并继续" })).toBeInTheDocument();
   });
 
   it("starts qr onboarding automatically, polls, and advances according to refreshed workflow", async () => {

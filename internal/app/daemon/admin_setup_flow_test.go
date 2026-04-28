@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -235,6 +237,96 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsAndManualSteps(t *testing.
 	}
 	if payload.App == nil || payload.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu step = %#v, want complete", payload.App)
+	}
+}
+
+func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
+	oldListScopes := listFeishuAppScopes
+	listFeishuAppScopes = func(context.Context, feishu.LiveGatewayConfig) ([]feishu.AppScopeStatus, error) {
+		return []feishu.AppScopeStatus{
+			{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},
+			{ScopeName: "im:message:send_as_bot", ScopeType: "tenant", GrantStatus: 1},
+		}, nil
+	}
+	t.Cleanup(func() {
+		listFeishuAppScopes = oldListScopes
+	})
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	app, token := newRemoteSetupTestApp(t, home)
+	cookie := exchangeSetupSessionCookie(t, app, token)
+
+	req := performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps", `{"id":"main","name":"Main Bot","appId":"cli_xxx","appSecret":"secret_xxx"}`, cookie)
+	rec := performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/verify", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload onboardingWorkflowResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode workflow before skip: %v", err)
+	}
+	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusPending {
+		t.Fatalf("permission before skip = %#v, want pending", payload.App)
+	}
+	if payload.CurrentStage != onboardingStagePermission {
+		t.Fatalf("current stage before skip = %q, want permission", payload.CurrentStage)
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-permission/skip", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("permission skip status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow after skip status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode workflow after skip: %v", err)
+	}
+	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusDeferred {
+		t.Fatalf("permission after skip = %#v, want deferred", payload.App)
+	}
+	if payload.CurrentStage != onboardingStageEvents {
+		t.Fatalf("current stage after skip = %q, want events", payload.CurrentStage)
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-permission/reset", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("permission reset status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow after reset status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode workflow after reset: %v", err)
+	}
+	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusPending {
+		t.Fatalf("permission after reset = %#v, want pending", payload.App)
+	}
+	if payload.CurrentStage != onboardingStagePermission {
+		t.Fatalf("current stage after reset = %q, want permission", payload.CurrentStage)
 	}
 }
 

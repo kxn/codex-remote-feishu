@@ -190,6 +190,12 @@ function PermissionStagePanel({
   }
 
   const showWarning = permissionStage.status !== "complete";
+  const permissionHint =
+    permissionStage.status === "complete"
+      ? "当前基础权限已经齐全。"
+      : permissionStage.status === "deferred"
+        ? "你已选择先跳过这一步，后续仍可回到这里重新检查。"
+        : "如果当前企业权限暂时申请不到，你也可以先跳过这一步，后面再回来补齐。";
 
   return (
     <section className="step-section">
@@ -198,11 +204,7 @@ function PermissionStagePanel({
         <p>{permissionStage.summary}</p>
       </div>
       <div className={`notice-banner ${showWarning ? "warn" : "good"}`}>
-        {permissionStage.status === "complete"
-          ? "当前基础权限已经齐全。"
-          : controller.mode === "setup"
-            ? "这一步现在是建议补齐项，不会单独决定 setup 是否可完成。"
-            : "这一步现在是建议补齐项，不会单独决定流程是否可完成。"}
+        {permissionHint}
       </div>
       {(permissionStage.missingScopes || []).length > 0 ? (
         <div className="scope-list">
@@ -254,11 +256,24 @@ function PermissionStagePanel({
         <button
           className="secondary-button"
           type="button"
-          disabled={!stageAllowsAction(permissionStage, "recheck")}
-          onClick={() => void controller.refreshWorkflowFocus()}
+          disabled={
+            !stageAllowsAction(permissionStage, "recheck") ||
+            controller.actionBusy === "permission-recheck"
+          }
+          onClick={() => void controller.recheckPermissionStage()}
         >
-          重新检查
+          {permissionStage.status === "pending" ? "检查并继续" : "重新检查"}
         </button>
+        {stageAllowsAction(permissionStage, "force_skip") ? (
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={controller.actionBusy === "permission-force-skip"}
+            onClick={() => void controller.skipPermissionStage()}
+          >
+            强制跳过这一步
+          </button>
+        ) : null}
       </div>
     </section>
   );
