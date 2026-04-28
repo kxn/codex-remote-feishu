@@ -118,6 +118,8 @@ func TestOnHelloWithoutThreadsRefreshSkipsStartupRefreshAndSettlesRound(t *testi
 			Managed:       true,
 			PID:           1234,
 		},
+		CapabilitiesDeclared: true,
+		Capabilities:         agentproto.Capabilities{},
 	})
 
 	if len(commands) != 0 {

@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-28`
-> Summary: 合并此前三份 Claude 设计文档后，吸收 2026-04-28 本机真实 Claude CLI 黑盒结论，补齐 `#497` live transport native -> canonical 映射矩阵，并同步当前 pre-MVP 子单的真实顺序与闭包状态。
+> Summary: 合并此前三份 Claude 设计文档后，吸收 2026-04-28 本机真实 Claude CLI 黑盒结论，并同步 `#495/#497/#498` 已实现后的当前 pre-MVP 收尾状态与 `#496` 决策门位置。
 
 ## 1. 文档定位
 
@@ -476,7 +476,7 @@ provider runtime 要明确分两条平面：
 7. capability 语义必须拆开
    - `SessionCatalog=true` 表示 backend 拥有 provider-local catalog/history plane
    - `ThreadsRefresh=true` 表示 runtime host 已经能把 canonical `threads.refresh` 正确桥接到这条 plane，并返回 `threads.snapshot`
-   - 所以 Claude 可以先真实地声明 `SessionCatalog=true`，但在 `#498` 真正接完 host bridge 前，不应提前宣称 `ThreadsRefresh=true`
+   - 因此在 `#498` host bridge 落地后，Claude 应真实声明 `SessionCatalog=true` 与 `ThreadsRefresh=true`；bridge 落地前则只能先宣称 `SessionCatalog=true`
 8. 本单第一版的 ownership 边界
    - pending fork materialization（fork 后直到第一条消息前 `session_id` 为空）是真实现象，但不进入 `#498` 第一版实现闭包
    - startup auto-recovery / hidden resume 也不要求在 `#498` 第一版落地
@@ -790,7 +790,7 @@ MVP 目标值：
 1. 这个矩阵只声明 canonical/native capability
 2. 不包含业务层 approximation
 3. 不包含 raw passthrough
-4. 在当前代码基线里，Claude 默认 capability 仍只应宣称 `sessionCatalog=true`，不应在 `#498` host bridge 落地前提前宣称 `threadsRefresh=true`
+4. `#498` 落地后的当前代码基线里，Claude 默认 capability 应真实宣称 `sessionCatalog=true` 与 `threadsRefresh=true`；这两个 bit 仍然不能在未接 host bridge 时被提前混为一谈
 
 ### 7.3 Claude runtime 内部设计
 
@@ -1118,10 +1118,9 @@ Claude runtime 分三块：
 
 当前阶段：
 
-- Claude pre-MVP 的剩余 research 已全部收口到位
-- `#495` 已完成并验证
-- 当前 first-ready worker 已切换为 `#497`
-- visible MVP (`#496`) 仍明确不启动
+- Claude pre-MVP 的技术基座实现已推进到 `#498` 收尾阶段
+- `#495`、`#497`、`#498` 均已完成本地实现并通过验证
+- 下一步不再进入新的技术基座实现，而是停在 visible MVP (`#496`) 的产品决策门
 
 已完成：
 
@@ -1143,28 +1142,36 @@ Claude runtime 分三块：
    - Claude skeleton shutdown ack 已收口
    - runtime-exit reconciliation 已稳定送达 relay
    - capability truthfulness 已通过 `capabilitiesDeclared` 闭合
+9. `#497` 已完成并验证：
+   - Claude live transport semantic mapper 已把 `stream-json` 主链路归一化到 canonical `turn/item/request/final-output`
+   - request / final-output / runtime-exit reconciliation 的主链已闭合
+10. `#498` 已完成并验证：
+   - Claude provider-local session catalog / history / resume plane 已落地
+   - `threads.refresh` / `thread.history.read` 已桥接到本地 transcript/meta scan
+   - Claude 默认 capability 已真实提升到 `SessionCatalog=true` + `ThreadsRefresh=true`
 
 还差的关键收口项：
 
-1. `#497`
-   - research closure 已足够
-   - 现在已可进入 real implementation
-2. `#498`
-   - research closure 已足够
-   - 第一版不再吸收 pending fork materialization / startup auto-recovery
+1. `#498`
+   - 独立 verifier
+   - parent roll-up
+   - commit / push / finish / close
+2. `#496`
+   - 仍保持为 visible MVP 的产品决策门
+   - 在 `#498` 稳定关闭前后都不自动进入实现
 
 下一步：
 
-1. 以 `#497` 作为 first-ready worker 进入实现
-2. `#497` 完成后，再进入 `#498`
-3. `#496` 继续作为 MVP 决策门，在上述两张单关闭前不启动
+1. 完成 `#498` 的 verifier、parent roll-up 与关单收尾
+2. 停在 `#496`，讨论 visible 入口、第一批命令与飞书展现方式
+3. 在 `#496` 的产品决策明确前，不继续打开新的 Claude MVP 实现单
 
 恢复步骤：
 
 1. 先读本文第 4.5、6.4.1、7.4、12.1 节
 2. 再读 `docs/draft/claude-cli-blackbox-findings-2026-04-28.md`
-3. 若继续 `#497`，优先对照 `BB-06` / `BB-08` / `BB-09` 的 `assistant.tool_use + control_request + user.tool_result + result` 四段式样本
-4. 若继续 `#498`，回到本节与第 6.3.1 节，按 transcript/meta plane 而不是 live stream 思路实现
+3. 若继续 `#498` close-out，优先检查 verifier 结果、父单 `#185` 回卷状态与 publish 状态
+4. 若转入 `#496` 决策门，回到本文第 13 节先讨论产品范围，不直接开工编码
 
 ### 12.2 2026-04-28 回卷审计结论
 
@@ -1317,18 +1324,14 @@ Claude runtime 分三块：
 
 1. `#492` 已完成，state partition 不再是待办。
 2. `#493/#494` 已完成，不再作为后续执行顺序里的待办。
-3. 当前剩余 research 已全部收口，真正的 implementation 顺序改为 `#495 -> #497 -> #498`：
-   - `#495`：runtime host / Claude dark-launch skeleton / reconciliation，作为 first-ready worker 先落地
-   - `#497`：live transport semantic mapper，依赖 `#495` 的 host 落点
-   - `#498`：session catalog / history / resume plane，依赖 `#495` 的 host bridge，但不再有额外 research blocker
-4. 上述三张单稳定后，明确停在 `#496` 这个 MVP 决策门，先讨论 visible 入口、第一批命令和飞书展现方式，再开做最小可见 dev MVP。
+3. `#495 -> #497 -> #498` 这条 pre-MVP 技术基座顺序现已全部落地完成。
+4. 当前明确停在 `#496` 这个 MVP 决策门，先讨论 visible 入口、第一批命令和飞书展现方式，再开做最小可见 dev MVP。
 5. 等 dev MVP 跑通，再决定哪些命令从 hidden / reject 升级成一等本地能力。
 
 补充解释：
 
-1. 当前工作区虽然已经出现 `#495` 局部 prework，但它现在不再只是“实验残片”；在 research 完成后，它对应的 issue 已经可以稳定回到 first-ready worker。
-2. `#497/#498` 现在的阻塞不再是协议未知，而是等待 `#495` 先给出稳定 host seam。
-3. `#498` 的收口还额外澄清了一点：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词；这正是 `#495 -> #498` 需要显式桥接的一段 seam。
-4. 因此当前真正下一步不再是“继续做调研”，而是进入 `#495` 的 seam-only 实现。
+1. 当前工作区里最关键的 pre-MVP 技术不确定性已经不再停留在 `#495/#497/#498`。
+2. `#498` 的收口额外证明了一点：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词，但在 host bridge 落地后这两个 capability 都应真实声明。
+3. 因此当前真正下一步不再是“继续做调研”或“继续补技术基座”，而是回到 `#496` 的产品决策。
 
 如果一定要优先拿可见 MVP，最低也应按 `B1 -> B2` 走，不建议从当前 `master` 直接跳到 `B2`。

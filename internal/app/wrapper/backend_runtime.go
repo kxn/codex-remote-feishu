@@ -16,13 +16,18 @@ type runtimeObserveResult struct {
 	Suppress         bool
 }
 
+type runtimeCommandResult struct {
+	Events          []agentproto.Event
+	OutboundToChild [][]byte
+}
+
 type backendRuntime interface {
 	Backend() agentproto.Backend
 	Capabilities() agentproto.Capabilities
 	Launch(context.Context, *App, *debuglog.RawLogger, func(agentproto.ErrorInfo)) (*childSession, error)
 	ObserveClient([]byte) (runtimeObserveResult, error)
 	ObserveServer([]byte) (runtimeObserveResult, error)
-	TranslateCommand(agentproto.Command) ([][]byte, error)
+	TranslateCommand(agentproto.Command) (runtimeCommandResult, error)
 	BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error)
 	CancelChildRestartRestore(string)
 }
@@ -34,7 +39,10 @@ type runtimeDebugLogger interface {
 func newBackendRuntime(cfg Config) backendRuntime {
 	switch agentproto.NormalizeBackend(cfg.Backend) {
 	case agentproto.BackendClaude:
-		return &claudeBackendRuntime{translator: claude.NewTranslator(cfg.InstanceID)}
+		return &claudeBackendRuntime{
+			translator:    claude.NewTranslator(cfg.InstanceID),
+			workspaceRoot: cfg.WorkspaceRoot,
+		}
 	default:
 		return &codexBackendRuntime{translator: codex.NewTranslator(cfg.InstanceID)}
 	}
@@ -84,8 +92,12 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 	}, nil
 }
 
-func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) ([][]byte, error) {
-	return r.translator.TranslateCommand(command)
+func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	outbound, err := r.translator.TranslateCommand(command)
+	if err != nil {
+		return runtimeCommandResult{}, err
+	}
+	return runtimeCommandResult{OutboundToChild: outbound}, nil
 }
 
 func (r *codexBackendRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {
@@ -101,7 +113,8 @@ func (r *codexBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
 }
 
 type claudeBackendRuntime struct {
-	translator *claude.Translator
+	translator    *claude.Translator
+	workspaceRoot string
 }
 
 func (r *claudeBackendRuntime) Backend() agentproto.Backend {
@@ -144,8 +157,18 @@ func (r *claudeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult,
 	}, nil
 }
 
-func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) ([][]byte, error) {
-	return r.translator.TranslateCommand(command)
+func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	if events, handled, err := claude.HandleLocalCommand(command, r.workspaceRoot, r.translator.RuntimeStateSnapshot()); handled {
+		if err != nil {
+			return runtimeCommandResult{}, err
+		}
+		return runtimeCommandResult{Events: events}, nil
+	}
+	outbound, err := r.translator.TranslateCommand(command)
+	if err != nil {
+		return runtimeCommandResult{}, err
+	}
+	return runtimeCommandResult{OutboundToChild: outbound}, nil
 }
 
 func (r *claudeBackendRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {

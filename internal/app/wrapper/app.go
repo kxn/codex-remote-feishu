@@ -316,7 +316,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				firstNonEmpty(command.Origin.Surface, command.Origin.ChatID),
 				len(command.Prompt.Inputs),
 			)
-			outbound, err := a.runtime.TranslateCommand(command)
+			result, err := a.runtime.TranslateCommand(command)
 			if err != nil {
 				a.debugf("relay command translation failed: command=%s err=%v", command.CommandID, err)
 				if problem, ok := err.(agentproto.ErrorInfo); ok {
@@ -335,11 +335,17 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					TurnID:           command.Target.TurnID,
 				}
 			}
-			a.debugf("relay command translated: command=%s outbound=%d frames=%s", command.CommandID, len(outbound), summarizeFrames(outbound))
+			a.debugf(
+				"relay command translated: command=%s events=%s outbound=%d frames=%s",
+				command.CommandID,
+				summarizeEventKinds(result.Events),
+				len(result.OutboundToChild),
+				summarizeFrames(result.OutboundToChild),
+			)
 			var waitCh <-chan *agentproto.ErrorInfo
 			requestID := ""
-			if command.Kind == agentproto.CommandTurnSteer && len(outbound) > 0 {
-				requestID = lookupStringFromRawFrame(outbound[0], "id")
+			if command.Kind == agentproto.CommandTurnSteer && len(result.OutboundToChild) > 0 {
+				requestID = lookupStringFromRawFrame(result.OutboundToChild[0], "id")
 				if strings.TrimSpace(requestID) == "" {
 					return agentproto.ErrorInfo{
 						Code:             "missing_command_request_id",
@@ -365,7 +371,24 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					TurnID:           command.Target.TurnID,
 				}, true)
 			}
-			for _, line := range outbound {
+			turnTracker.ObserveEvents(result.Events)
+			if len(result.Events) != 0 {
+				if sendErr := client.SendEvents(result.Events); sendErr != nil {
+					return agentproto.ErrorInfoFromError(sendErr, agentproto.ErrorInfo{
+						Code:             "relay_send_local_command_events_failed",
+						Layer:            "wrapper",
+						Stage:            "translate_command",
+						Operation:        string(command.Kind),
+						Message:          "wrapper 无法把 Claude 本地 catalog/history 事件发送到 relay。",
+						Retryable:        true,
+						SurfaceSessionID: command.Origin.Surface,
+						CommandID:        command.CommandID,
+						ThreadID:         command.Target.ThreadID,
+						TurnID:           command.Target.TurnID,
+					})
+				}
+			}
+			for _, line := range result.OutboundToChild {
 				select {
 				case writeCh <- line:
 					a.debugf("relay command queued for codex: command=%s frame=%s", command.CommandID, summarizeFrame(line))

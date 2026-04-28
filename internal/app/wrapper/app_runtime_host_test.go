@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	claudeadapter "github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
@@ -74,11 +75,11 @@ func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
 	if hello.Instance.Backend != agentproto.BackendClaude {
 		t.Fatalf("wrapper hello backend = %q, want %q", hello.Instance.Backend, agentproto.BackendClaude)
 	}
-	if hello.Capabilities.ThreadsRefresh || hello.Capabilities.TurnSteer || hello.Capabilities.SessionCatalog || hello.Capabilities.ResumeByThreadID || hello.Capabilities.RequiresCWDForResume || hello.Capabilities.VSCodeMode {
-		t.Fatalf("claude backend unexpectedly advertised extra capabilities: %#v", hello.Capabilities)
+	if !hello.Capabilities.ThreadsRefresh || !hello.Capabilities.RequestRespond || !hello.Capabilities.SessionCatalog || !hello.Capabilities.ResumeByThreadID || !hello.Capabilities.RequiresCWDForResume {
+		t.Fatalf("claude backend should advertise catalog/history capabilities: %#v", hello.Capabilities)
 	}
-	if !hello.Capabilities.RequestRespond {
-		t.Fatalf("claude backend should advertise request.respond support: %#v", hello.Capabilities)
+	if hello.Capabilities.TurnSteer || hello.Capabilities.VSCodeMode {
+		t.Fatalf("claude backend unexpectedly advertised unsupported capabilities: %#v", hello.Capabilities)
 	}
 
 	if err := server.SendCommand("inst-claude-skeleton", agentproto.Command{
@@ -98,6 +99,106 @@ func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for claude skeleton shutdown")
+	}
+}
+
+func TestWrapperClaudeThreadsRefreshUsesLocalSessionCatalog(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-refresh")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []string{
+		`{"type":"system","cwd":"` + workspaceRoot + `","session_id":"mock-claude-session-1","model":"mimo-v2.5-pro"}`,
+		`{"type":"session-title","title":"Refresh session"}`,
+		`{"type":"user","message":{"role":"user","content":"refresh prompt"}}`,
+	})
+
+	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-claude-refresh",
+		Kind:      agentproto.CommandThreadsRefresh,
+	}); err != nil {
+		t.Fatalf("send threads.refresh: %v", err)
+	}
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-claude-refresh" && ack.Accepted
+	}, stdout, stderr, done)
+
+	var snapshotEvent *agentproto.Event
+	waitForEvent(t, eventsCh, 10*time.Second, func(events []agentproto.Event) bool {
+		for i := range events {
+			if events[i].Kind == agentproto.EventThreadsSnapshot {
+				snapshotEvent = &events[i]
+				return true
+			}
+		}
+		return false
+	}, stdout, stderr, done)
+	if snapshotEvent == nil || len(snapshotEvent.Threads) != 1 {
+		t.Fatalf("expected one Claude session snapshot, got %#v", snapshotEvent)
+	}
+	thread := snapshotEvent.Threads[0]
+	if thread.ThreadID != "mock-claude-session-1" || thread.Name != "Refresh session" || thread.Preview != "refresh prompt" || thread.CWD != workspaceRoot || thread.RuntimeStatus == nil {
+		t.Fatalf("unexpected Claude refresh snapshot: %#v", thread)
+	}
+}
+
+func TestWrapperClaudeThreadHistoryReadUsesLocalTranscriptHistory(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-history")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []string{
+		`{"type":"system","timestamp":"2026-04-28T11:00:00Z","cwd":"` + workspaceRoot + `","session_id":"mock-claude-session-1","model":"mimo-v2.5-pro"}`,
+		`{"type":"user","timestamp":"2026-04-28T11:01:00Z","promptId":"prompt-1","message":{"role":"user","content":"first input"}}`,
+		`{"type":"assistant","timestamp":"2026-04-28T11:01:05Z","promptId":"prompt-1","message":{"role":"assistant","content":[{"type":"text","text":"first answer"}]}}`,
+		`{"type":"user","timestamp":"2026-04-28T11:02:00Z","promptId":"prompt-2","message":{"role":"user","content":"second input"}}`,
+		`{"type":"assistant","timestamp":"2026-04-28T11:02:05Z","promptId":"prompt-2","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool-1","name":"Bash","input":{"command":"printf hi"}}]}}`,
+	})
+
+	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-claude-history",
+		Kind:      agentproto.CommandThreadHistoryRead,
+		Target:    agentproto.Target{ThreadID: "mock-claude-session-1"},
+	}); err != nil {
+		t.Fatalf("send thread.history.read: %v", err)
+	}
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-claude-history" && ack.Accepted
+	}, stdout, stderr, done)
+
+	var historyEvent *agentproto.Event
+	waitForEvent(t, eventsCh, 10*time.Second, func(events []agentproto.Event) bool {
+		for i := range events {
+			if events[i].Kind == agentproto.EventThreadHistoryRead {
+				historyEvent = &events[i]
+				return true
+			}
+		}
+		return false
+	}, stdout, stderr, done)
+	if historyEvent == nil || historyEvent.CommandID != "cmd-claude-history" || historyEvent.ThreadHistory == nil {
+		t.Fatalf("expected Claude history event, got %#v", historyEvent)
+	}
+	history := historyEvent.ThreadHistory
+	if history.Thread.ThreadID != "mock-claude-session-1" || len(history.Turns) != 2 {
+		t.Fatalf("unexpected history payload: %#v", history)
+	}
+	if history.Turns[0].TurnID != "prompt-1" || history.Turns[1].TurnID != "prompt-2" {
+		t.Fatalf("unexpected grouped turn ids: %#v", history.Turns)
+	}
+	if len(history.Turns[0].Items) != 2 || history.Turns[0].Items[0].Kind != "user_message" || history.Turns[0].Items[1].Kind != "agent_message" {
+		t.Fatalf("unexpected first history turn: %#v", history.Turns[0])
+	}
+	if len(history.Turns[1].Items) != 2 || history.Turns[1].Items[1].Kind != "command_execution" {
+		t.Fatalf("unexpected second history turn: %#v", history.Turns[1])
 	}
 }
 
@@ -433,6 +534,11 @@ func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-ch
 func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
 	t.Helper()
 	repoRoot := wrapperTestRepoRoot(t)
+	return startWrapperClaudeRuntimeTestAppForWorkspace(t, scenario, repoRoot)
+}
+
+func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, workspaceRoot string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+	t.Helper()
 	t.Setenv("CLAUDE_BIN", installMockClaudeHelper(t, scenario))
 
 	helloCh := make(chan agentproto.Hello, 1)
@@ -473,9 +579,9 @@ func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.S
 		RelayServerURL:   "ws" + strings.TrimPrefix(httpServer.URL, "http"),
 		InstanceID:       "inst-claude-runtime",
 		DisplayName:      "claude-runtime",
-		WorkspaceRoot:    repoRoot,
-		WorkspaceKey:     repoRoot,
-		ShortName:        filepath.Base(repoRoot),
+		WorkspaceRoot:    workspaceRoot,
+		WorkspaceKey:     workspaceRoot,
+		ShortName:        filepath.Base(workspaceRoot),
 		Backend:          agentproto.BackendClaude,
 		Version:          "test",
 		BuildFingerprint: "fp-test",
@@ -492,6 +598,20 @@ func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.S
 
 	waitForHello(t, helloCh, "inst-claude-runtime")
 	return server, eventsCh, ackCh, &stdout, &stderr, done
+}
+
+func writeWrapperClaudeSessionFile(t *testing.T, configDir, workspaceRoot, sessionID string, lines []string) string {
+	t.Helper()
+	projectDir := filepath.Join(configDir, "projects", claudeadapter.SanitizeProjectDirName(workspaceRoot))
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+	filePath := filepath.Join(projectDir, sessionID+".jsonl")
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	return filePath
 }
 
 func wrapperTestRepoRoot(t *testing.T) string {

@@ -22,7 +22,11 @@ func DefaultCapabilitiesForBackend(backend Backend) Capabilities {
 	switch NormalizeBackend(backend) {
 	case BackendClaude:
 		return Capabilities{
-			RequestRespond: true,
+			ThreadsRefresh:       true,
+			RequestRespond:       true,
+			SessionCatalog:       true,
+			ResumeByThreadID:     true,
+			RequiresCWDForResume: true,
 		}
 	default:
 		return Capabilities{

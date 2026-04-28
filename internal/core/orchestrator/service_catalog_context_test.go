@@ -51,8 +51,11 @@ func TestBuildCatalogContextUsesDetachedSurfaceBackend(t *testing.T) {
 	if !ctx.Capabilities.RequestRespond {
 		t.Fatalf("expected claude fallback capabilities, got %#v", ctx.Capabilities)
 	}
-	if ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.TurnSteer || ctx.Capabilities.SessionCatalog || ctx.Capabilities.ResumeByThreadID || ctx.Capabilities.RequiresCWDForResume || ctx.Capabilities.VSCodeMode {
-		t.Fatalf("unexpected codex-only capabilities on detached claude context: %#v", ctx.Capabilities)
+	if !ctx.Capabilities.ThreadsRefresh || !ctx.Capabilities.SessionCatalog || !ctx.Capabilities.ResumeByThreadID || !ctx.Capabilities.RequiresCWDForResume {
+		t.Fatalf("expected claude catalog/history capabilities on detached context: %#v", ctx.Capabilities)
+	}
+	if ctx.Capabilities.TurnSteer || ctx.Capabilities.VSCodeMode {
+		t.Fatalf("unexpected unsupported capabilities on detached claude context: %#v", ctx.Capabilities)
 	}
 }
 
@@ -92,8 +95,11 @@ func TestBuildCatalogContextUsesAttachedInstanceRuntimeSeam(t *testing.T) {
 	if !ctx.Capabilities.RequestRespond {
 		t.Fatalf("expected claude effective capabilities, got %#v", ctx.Capabilities)
 	}
-	if ctx.Capabilities.TurnSteer || ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.SessionCatalog || ctx.Capabilities.ResumeByThreadID || ctx.Capabilities.RequiresCWDForResume || ctx.Capabilities.VSCodeMode {
-		t.Fatalf("unexpected codex-only capabilities on claude context: %#v", ctx.Capabilities)
+	if !ctx.Capabilities.ThreadsRefresh || !ctx.Capabilities.SessionCatalog || !ctx.Capabilities.ResumeByThreadID || !ctx.Capabilities.RequiresCWDForResume {
+		t.Fatalf("expected claude catalog/history capabilities on attached context: %#v", ctx.Capabilities)
+	}
+	if ctx.Capabilities.TurnSteer || ctx.Capabilities.VSCodeMode {
+		t.Fatalf("unexpected unsupported capabilities on claude context: %#v", ctx.Capabilities)
 	}
 }
 
