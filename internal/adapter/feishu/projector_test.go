@@ -564,7 +564,7 @@ func TestProjectBuiltinCommandHelpCatalogPreservesPlaceholdersAndHidesKillInstan
 		"命令：/reasoning",
 		"命令：/access",
 		"命令：/autocontinue",
-		"命令：/use",
+		"命令：/workspace list",
 		"命令：/menu",
 	) {
 		t.Fatalf("unexpected builtin help catalog body: %q", body)

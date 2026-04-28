@@ -42,10 +42,24 @@ func ApplyCatalogProvenanceToAction(action Action, familyID, variantID string, b
 func ResolveFeishuActionCatalog(ctx CatalogContext, action Action) (ResolvedCommand, bool) {
 	ctx = NormalizeCatalogContext(ctx)
 	if strings.TrimSpace(action.CatalogFamilyID) != "" || strings.TrimSpace(action.CatalogVariantID) != "" {
+		backend := firstNonZeroBackend(action.CatalogBackend, ctx.Backend)
+		variantID := strings.TrimSpace(action.CatalogVariantID)
+		if familyID := strings.TrimSpace(action.CatalogFamilyID); familyID != "" &&
+			(variantID == "" || variantID == defaultFeishuCommandDisplayVariantID(familyID)) {
+			variantID = feishuCommandVariantIDForContext(action.CatalogFamilyID, CatalogContext{
+				Backend:      backend,
+				ProductMode:  ctx.ProductMode,
+				MenuStage:    ctx.MenuStage,
+				AttachedKind: ctx.AttachedKind,
+				WorkspaceKey: ctx.WorkspaceKey,
+				InstanceID:   ctx.InstanceID,
+				Capabilities: ctx.Capabilities,
+			})
+		}
 		return NormalizeResolvedCommand(ResolvedCommand{
 			FamilyID:  action.CatalogFamilyID,
-			VariantID: action.CatalogVariantID,
-			Backend:   firstNonZeroBackend(action.CatalogBackend, ctx.Backend),
+			VariantID: variantID,
+			Backend:   backend,
 			Action:    action,
 		}), true
 	}
@@ -73,7 +87,7 @@ func resolvedCommandFromCommandID(ctx CatalogContext, commandID string, action A
 	if !ok {
 		return ResolvedCommand{}, false
 	}
-	action = ApplyCatalogProvenanceToAction(action, commandID, defaultFeishuCommandDisplayVariantID(commandID), ctx.Backend)
+	action = ApplyCatalogProvenanceToAction(action, commandID, feishuCommandVariantIDForContext(commandID, ctx), ctx.Backend)
 	return resolvedFeishuCommandFromSpec(ctx, spec, action), true
 }
 

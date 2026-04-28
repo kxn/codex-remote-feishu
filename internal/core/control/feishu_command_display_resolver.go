@@ -71,6 +71,7 @@ func resolveFeishuCommandDisplayFamily(family FeishuCommandDisplayFamily, intera
 }
 
 func resolveFeishuCommandDisplayVariant(variant FeishuCommandDisplayVariant, interactive bool, ctx CatalogContext) (FeishuCommandDisplayResolution, bool) {
+	ctx = NormalizeCatalogContext(ctx)
 	def, ok := FeishuCommandDefinitionByID(variant.CommandID)
 	if !ok {
 		return FeishuCommandDisplayResolution{}, false
@@ -79,9 +80,13 @@ func resolveFeishuCommandDisplayVariant(variant FeishuCommandDisplayVariant, int
 	if !ok {
 		return FeishuCommandDisplayResolution{}, false
 	}
+	variantID := strings.TrimSpace(variant.VariantID)
+	if variantID == "" || variantID == defaultFeishuCommandDisplayVariantID(variant.FamilyID) {
+		variantID = feishuCommandVariantIDForContext(variant.FamilyID, ctx)
+	}
 	return FeishuCommandDisplayResolution{
 		FamilyID:   strings.TrimSpace(variant.FamilyID),
-		VariantID:  strings.TrimSpace(variant.VariantID),
+		VariantID:  variantID,
 		Definition: projected,
 	}, true
 }

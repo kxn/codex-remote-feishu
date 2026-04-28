@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestResolveFeishuCommandDisplayFamilyCarriesDefaultVariantIdentity(t *testing.T) {
+func TestResolveFeishuCommandDisplayFamilyCarriesContextualVariantIdentity(t *testing.T) {
 	resolved, ok := ResolveFeishuCommandDisplayFamily(FeishuCommandMode, false, CatalogContext{})
 	if !ok {
 		t.Fatal("expected mode family to resolve")
@@ -14,8 +14,8 @@ func TestResolveFeishuCommandDisplayFamilyCarriesDefaultVariantIdentity(t *testi
 	if resolved.FamilyID != FeishuCommandMode {
 		t.Fatalf("FamilyID = %q, want %q", resolved.FamilyID, FeishuCommandMode)
 	}
-	if resolved.VariantID != defaultFeishuCommandDisplayVariantID(FeishuCommandMode) {
-		t.Fatalf("VariantID = %q, want %q", resolved.VariantID, defaultFeishuCommandDisplayVariantID(FeishuCommandMode))
+	if resolved.VariantID != "mode.codex.normal" {
+		t.Fatalf("VariantID = %q, want %q", resolved.VariantID, "mode.codex.normal")
 	}
 	if resolved.Definition.ID != FeishuCommandMode {
 		t.Fatalf("Definition.ID = %q, want %q", resolved.Definition.ID, FeishuCommandMode)

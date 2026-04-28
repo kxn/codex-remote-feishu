@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
@@ -588,7 +590,7 @@ func TestFeishuCommandHelpCatalogUsesCanonicalCommandsOnly(t *testing.T) {
 			}
 		}
 	}
-	for _, canonical := range []string{"/use", "/access", "/reasoning", "/menu"} {
+	for _, canonical := range []string{"/workspace list", "/access", "/reasoning", "/menu"} {
 		found := false
 		for _, command := range commands {
 			if command == canonical {
@@ -600,6 +602,35 @@ func TestFeishuCommandHelpCatalogUsesCanonicalCommandsOnly(t *testing.T) {
 			t.Fatalf("help catalog missing canonical command %q: %#v", canonical, commands)
 		}
 	}
+}
+
+func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing.T) {
+	page := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupSwitchTarget, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	for _, section := range page.Sections {
+		for _, entry := range section.Entries {
+			if len(entry.Buttons) == 0 || len(entry.Commands) == 0 || entry.Commands[0] != "/workspace list" {
+				continue
+			}
+			button := entry.Buttons[0]
+			if button.CommandID != FeishuCommandWorkspaceList {
+				t.Fatalf("command id = %q, want %q", button.CommandID, FeishuCommandWorkspaceList)
+			}
+			if button.CatalogFamilyID != FeishuCommandWorkspaceList {
+				t.Fatalf("catalog family id = %q, want %q", button.CatalogFamilyID, FeishuCommandWorkspaceList)
+			}
+			if button.CatalogVariantID != "workspace_list.claude.normal" {
+				t.Fatalf("catalog variant id = %q, want %q", button.CatalogVariantID, "workspace_list.claude.normal")
+			}
+			if button.CatalogBackend != agentproto.BackendClaude {
+				t.Fatalf("catalog backend = %q, want %q", button.CatalogBackend, agentproto.BackendClaude)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected contextual /workspace list menu entry, got %#v", page.Sections)
 }
 
 func TestParseFeishuTextActionRecognizesMenuSubcommands(t *testing.T) {

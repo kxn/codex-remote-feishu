@@ -39,6 +39,9 @@ func (s *Service) buildConfigCommandViewState(
 	if view.Config.CatalogBackend == "" {
 		view.Config.CatalogBackend = ctx.Backend
 	}
+	if strings.TrimSpace(view.Config.CatalogFamilyID) != "" && (strings.TrimSpace(view.Config.CatalogVariantID) == "" || view.Config.CatalogVariantID == flow.DefaultVariantID()) {
+		view.Config.CatalogVariantID = control.FeishuCommandVariantIDForContext(view.Config.CatalogFamilyID, ctx)
+	}
 	inst := s.root.Instances[ctx.InstanceID]
 	if flow.RequiresAttachment && ctx.AttachedKind == string(control.CatalogAttachedKindDetached) {
 		view.Config.RequiresAttachment = true

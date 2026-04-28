@@ -72,6 +72,14 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 	),
 }
 
+func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuCommandDisplayProfile {
+	normalized := NormalizeCatalogContext(ctx)
+	if profile, ok := feishuCommandDisplayProfiles[normalized.ProductMode]; ok {
+		return profile
+	}
+	return feishuCommandDisplayProfiles["normal"]
+}
+
 func ResolveFeishuCommandDisplayProfile(productMode string) FeishuCommandDisplayProfile {
 	normalized := normalizeFeishuCommandProductMode(productMode)
 	if profile, ok := feishuCommandDisplayProfiles[normalized]; ok {

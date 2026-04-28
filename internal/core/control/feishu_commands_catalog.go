@@ -54,19 +54,19 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 }
 
 func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) FeishuPageView {
+	return BuildFeishuCommandStaticPageViewForContext(title, summary, interactive, CatalogContext{})
+}
+
+func BuildFeishuCommandStaticPageViewForContext(title, summary string, interactive bool, ctx CatalogContext) FeishuPageView {
+	ctx = NormalizeCatalogContext(ctx)
 	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))
 	for _, group := range feishuCommandGroups {
-		defs := FeishuCommandDefinitionsForGroup(group.ID)
-		entries := make([]CommandCatalogEntry, 0, len(defs))
-		for _, def := range defs {
+		resolved := ResolveFeishuCommandDisplayGroup(group.ID, interactive, ctx)
+		entries := make([]CommandCatalogEntry, 0, len(resolved))
+		for _, current := range resolved {
+			def := current.Definition
 			if interactive {
-				if !def.ShowInMenu {
-					continue
-				}
-				entries = append(entries, buildFeishuCommandCatalogEntry(def, catalogButtonLabel(def)))
-				continue
-			}
-			if !def.ShowInHelp {
+				entries = append(entries, buildFeishuCommandMenuEntryFromResolution(current, ctx.Backend))
 				continue
 			}
 			entries = append(entries, buildFeishuCommandCatalogEntry(def, ""))
@@ -80,9 +80,10 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 		})
 	}
 	view := FeishuPageView{
-		Title:       title,
-		Interactive: interactive,
-		Sections:    sections,
+		Title:          title,
+		CatalogBackend: ctx.Backend,
+		Interactive:    interactive,
+		Sections:       sections,
 	}
 	if lines := splitFeishuCommandPageSummaryLines(summary); len(lines) != 0 {
 		view.SummarySections = []FeishuCardTextSection{{Lines: lines}}
@@ -91,18 +92,20 @@ func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) F
 }
 
 func FeishuCommandHelpPageView() FeishuPageView {
-	return BuildFeishuCommandStaticPageView(
+	return BuildFeishuCommandStaticPageViewForContext(
 		"命令帮助",
 		"以下是当前主展示的 canonical slash command。",
 		false,
+		CatalogContext{},
 	)
 }
 
 func FeishuCommandMenuPageView() FeishuPageView {
-	return BuildFeishuCommandStaticPageView(
+	return BuildFeishuCommandStaticPageViewForContext(
 		"命令目录",
 		"这是同源的静态命令目录。真正的 `/menu` 首页会在 service 层按当前阶段动态重排。",
 		true,
+		CatalogContext{},
 	)
 }
 

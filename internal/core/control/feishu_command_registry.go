@@ -103,7 +103,7 @@ func resolvedFeishuCommandFromSpec(ctx CatalogContext, spec feishuCommandSpec, a
 	commandID := strings.TrimSpace(spec.definition.ID)
 	return NormalizeResolvedCommand(ResolvedCommand{
 		FamilyID:  commandID,
-		VariantID: defaultFeishuCommandDisplayVariantID(commandID),
+		VariantID: feishuCommandVariantIDForContext(commandID, ctx),
 		Backend:   ctx.Backend,
 		Action:    action,
 	})

@@ -30,7 +30,7 @@ func FeishuCommandDefinitionForDisplayContext(def FeishuCommandDefinition, inter
 
 func projectFeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, interactive bool, ctx CatalogContext) (FeishuCommandDefinition, bool) {
 	ctx = NormalizeCatalogContext(ctx)
-	profile := ResolveFeishuCommandDisplayProfile(ctx.ProductMode)
+	profile := ResolveFeishuCommandDisplayProfileForContext(ctx)
 	if !profile.IncludesFamily(def.ID) {
 		return FeishuCommandDefinition{}, false
 	}

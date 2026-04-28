@@ -7,7 +7,11 @@ func ParseFeishuTextAction(text string) (Action, bool) {
 	if !ok {
 		return Action{}, false
 	}
-	return resolved.Action, true
+	action := resolved.Action
+	action.CatalogFamilyID = ""
+	action.CatalogVariantID = ""
+	action.CatalogBackend = ""
+	return action, true
 }
 
 func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand, bool) {
@@ -51,7 +55,11 @@ func ParseFeishuMenuAction(eventKey string) (Action, bool) {
 	if !ok {
 		return Action{}, false
 	}
-	return resolved.Action, true
+	action := resolved.Action
+	action.CatalogFamilyID = ""
+	action.CatalogVariantID = ""
+	action.CatalogBackend = ""
+	return action, true
 }
 
 func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {
