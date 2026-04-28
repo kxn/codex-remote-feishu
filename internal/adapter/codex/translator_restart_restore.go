@@ -14,8 +14,8 @@ func (t *Translator) BuildChildRestartRestoreFrame(commandID string) ([]byte, st
 	requestID := t.nextRequest("child-restart-restore")
 	t.pendingChildRestartRestore[requestID] = pendingChildRestartRestore{
 		CommandID: strings.TrimSpace(commandID),
-		ThreadID: threadID,
-		CWD:      cwd,
+		ThreadID:  threadID,
+		CWD:       cwd,
 	}
 	payload := map[string]any{
 		"id":     requestID,

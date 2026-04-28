@@ -64,8 +64,8 @@ type pendingThreadNameSet struct {
 
 type pendingChildRestartRestore struct {
 	CommandID string
-	ThreadID string
-	CWD      string
+	ThreadID  string
+	CWD       string
 }
 
 type pendingThreadHistoryRead struct {
