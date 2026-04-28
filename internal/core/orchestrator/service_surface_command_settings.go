@@ -118,6 +118,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	currentMode := s.normalizeSurfaceProductMode(surface)
 	currentBackend := s.surfaceBackend(surface)
 	currentAlias := state.SurfaceModeAlias(currentMode, currentBackend)
+	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
@@ -178,6 +179,22 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	surface.ProductMode = target.ProductMode
 	surface.Backend = state.NormalizeSurfaceBackend(target.ProductMode, target.Backend)
+	if currentWorkspaceKey != "" && target.ProductMode == state.ProductModeNormal {
+		surface.ClaimedWorkspaceKey = currentWorkspaceKey
+	}
+	if target.ProductMode == state.ProductModeNormal && target.Backend == agentproto.BackendClaude && currentWorkspaceKey != "" {
+		resumeEvents := s.resumeWorkspaceAfterClaudeModeSwitch(surface, currentWorkspaceKey)
+		if commandCardOwnsInlineResult(action) {
+			statusText := fmt.Sprintf("已切换到 %s 模式。正在准备当前工作区。", targetAlias)
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				Sealed:     true,
+				StatusKind: "success",
+				StatusText: statusText,
+			}, append([]eventcontract.Event{}, resumeEvents...)...)
+		}
+		events = append(events, notice(surface, "surface_mode_switched", fmt.Sprintf("已切换到 %s 模式。正在准备当前工作区。", targetAlias))...)
+		return append(events, resumeEvents...)
+	}
 	if commandCardOwnsInlineResult(action) {
 		statusText := fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", targetAlias)
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -187,6 +204,17 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 		}, events...)
 	}
 	return append(events, notice(surface, "surface_mode_switched", fmt.Sprintf("已切换到 %s 模式。当前没有接管中的目标。", targetAlias))...)
+}
+
+func (s *Service) resumeWorkspaceAfterClaudeModeSwitch(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if surface == nil || workspaceKey == "" {
+		return nil
+	}
+	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
+		return s.attachWorkspace(surface, workspaceKey)
+	}
+	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, false)
 }
 
 func (s *Service) handleAutoWhipCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

@@ -220,8 +220,12 @@ func (s *Service) presentWorkspaceSelectionPage(surface *state.SurfaceConsoleRec
 
 func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleRecord, page int) (*control.FeishuWorkspaceSelectionView, []eventcontract.Event) {
 	grouped := map[string][]*state.InstanceRecord{}
+	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
+			continue
+		}
+		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
@@ -246,8 +250,8 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 			recoverableWorkspaces[workspaceKey] = usedAt
 		}
 	}
-	s.mergeWorkspaceSelectionRecencyFromOnlineThreads(recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
-	s.mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
+	s.mergeWorkspaceSelectionRecencyFromOnlineThreads(surface, recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
+	s.mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(surface, recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
 
 	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
 	entries := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
@@ -570,12 +574,16 @@ func workspaceSelectionLabel(workspaceKey string) string {
 	return workspaceKey
 }
 
-func (s *Service) mergeWorkspaceSelectionRecencyFromOnlineThreads(latest map[string]time.Time, seen map[string]bool, visible map[string]struct{}) {
+func (s *Service) mergeWorkspaceSelectionRecencyFromOnlineThreads(surface *state.SurfaceConsoleRecord, latest map[string]time.Time, seen map[string]bool, visible map[string]struct{}) {
 	if s == nil {
 		return
 	}
+	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
+			continue
+		}
+		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
 		for _, thread := range ordinaryVisibleThreads(inst) {
@@ -584,8 +592,11 @@ func (s *Service) mergeWorkspaceSelectionRecencyFromOnlineThreads(latest map[str
 	}
 }
 
-func (s *Service) mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(latest map[string]time.Time, seen map[string]bool, visible map[string]struct{}) {
+func (s *Service) mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(surface *state.SurfaceConsoleRecord, latest map[string]time.Time, seen map[string]bool, visible map[string]struct{}) {
 	if s == nil || s.catalog.persistedThreads == nil {
+		return
+	}
+	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend && backend != agentproto.BackendCodex {
 		return
 	}
 	for workspaceKey, usedAt := range s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit) {

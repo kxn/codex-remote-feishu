@@ -44,11 +44,15 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 	viewsByID := map[string]*mergedThreadView{}
 	instances := s.Instances()
 	currentInstanceID := ""
+	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
 	if surface != nil {
 		currentInstanceID = strings.TrimSpace(surface.AttachedInstanceID)
 	}
 	for _, inst := range instances {
 		if inst == nil {
+			continue
+		}
+		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
 		owner := s.instanceClaimSurface(inst.InstanceID)
@@ -80,7 +84,7 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			}
 		}
 	}
-	s.mergePersistedRecentThreads(viewsByID)
+	s.mergePersistedRecentThreadsForBackend(viewsByID, targetBackend, filterByBackend)
 
 	views := make([]*mergedThreadView, 0, len(viewsByID))
 	for _, view := range viewsByID {
@@ -124,8 +128,12 @@ func (s *Service) normalModeListWorkspaceSet(surface *state.SurfaceConsoleRecord
 
 func (s *Service) normalModeListWorkspaceSetWithViews(surface *state.SurfaceConsoleRecord, views []*mergedThreadView) map[string]struct{} {
 	workspaces := map[string]struct{}{}
+	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
+			continue
+		}
+		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
@@ -152,6 +160,9 @@ func (s *Service) mergedThreadView(surface *state.SurfaceConsoleRecord, threadID
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil
+	}
+	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend {
+		return s.mergedThreadViewForBackend(surface, threadID, backend, backend == agentproto.BackendCodex)
 	}
 	for _, view := range s.mergedThreadViews(surface) {
 		if view != nil && view.ThreadID == threadID {
@@ -217,29 +228,6 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		view.BusyOwner = owner
 	}
 	return view
-}
-
-func (s *Service) mergePersistedRecentThreads(viewsByID map[string]*mergedThreadView) {
-	if s == nil || s.catalog.persistedThreads == nil {
-		return
-	}
-	threads := s.catalog.recentPersistedThreads(persistedRecentThreadLimit)
-	for i := range threads {
-		thread := threads[i]
-		if strings.TrimSpace(thread.ThreadID) == "" || !ordinaryThreadVisible(&thread) {
-			continue
-		}
-		view := viewsByID[thread.ThreadID]
-		if view == nil {
-			viewsByID[thread.ThreadID] = &mergedThreadView{
-				ThreadID: thread.ThreadID,
-				Inst:     syntheticPersistedThreadInstance(&thread),
-				Thread:   cloneThreadRecord(&thread),
-			}
-			continue
-		}
-		view.Thread = mergeThreadMetadata(view.Thread, &thread)
-	}
 }
 
 func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {

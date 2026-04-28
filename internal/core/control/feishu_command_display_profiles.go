@@ -74,10 +74,17 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 
 func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuCommandDisplayProfile {
 	normalized := NormalizeCatalogContext(ctx)
-	if profile, ok := feishuCommandDisplayProfiles[normalized.ProductMode]; ok {
-		return profile
+	profile, ok := feishuCommandDisplayProfiles[normalized.ProductMode]
+	if !ok {
+		profile = feishuCommandDisplayProfiles["normal"]
 	}
-	return feishuCommandDisplayProfiles["normal"]
+	if normalized.Backend == "claude" && normalized.ProductMode == "normal" {
+		return profile.withAdditionalFamilies(
+			displayProfileFamily(FeishuCommandList),
+			displayProfileFamily(FeishuCommandUse),
+		)
+	}
+	return profile
 }
 
 func ResolveFeishuCommandDisplayProfile(productMode string) FeishuCommandDisplayProfile {
@@ -164,4 +171,25 @@ func newFeishuCommandDisplayProfile(productMode string, families ...FeishuComman
 		profile.Families[familyID] = family
 	}
 	return profile
+}
+
+func (p FeishuCommandDisplayProfile) withAdditionalFamilies(families ...FeishuCommandDisplayFamilyProfile) FeishuCommandDisplayProfile {
+	if len(families) == 0 {
+		return p
+	}
+	cloned := FeishuCommandDisplayProfile{
+		ProductMode: p.ProductMode,
+		Families:    make(map[string]FeishuCommandDisplayFamilyProfile, len(p.Families)+len(families)),
+	}
+	for familyID, profile := range p.Families {
+		cloned.Families[familyID] = profile
+	}
+	for _, family := range families {
+		familyID := strings.TrimSpace(family.FamilyID)
+		if familyID == "" {
+			continue
+		}
+		cloned.Families[familyID] = family
+	}
+	return cloned
 }

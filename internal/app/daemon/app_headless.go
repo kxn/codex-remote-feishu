@@ -82,11 +82,13 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	}
 
 	env := append([]string{}, cfg.BaseEnv...)
+	backend := a.service.SurfaceBackend(command.SurfaceSessionID)
 	env = append(env,
 		"CODEX_REMOTE_INSTANCE_ID="+command.InstanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED=1",
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
+		"CODEX_REMOTE_INSTANCE_BACKEND="+string(backend),
 	)
 	if strings.TrimSpace(command.ThreadCWD) == "" {
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")

@@ -87,6 +87,52 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	}
 }
 
+func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: stateDir,
+		},
+	})
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline-claude",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendClaude,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4322, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-claude",
+	})
+
+	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
+		t.Fatalf("expected claude backend env for managed headless launch, got %#v", captured.Env)
+	}
+}
+
 func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

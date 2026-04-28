@@ -45,6 +45,43 @@ func TestUseThreadDetachedFallsBackToPersistedThreadLookupByID(t *testing.T) {
 	}
 }
 
+func TestClaudeUseThreadDetachedRejectsPersistedCodexThreadLookup(t *testing.T) {
+	now := time.Date(2026, 4, 29, 4, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		byID: map[string]state.ThreadRecord{
+			"thread-codex": {
+				ThreadID:   "thread-codex",
+				Name:       "codex only thread",
+				Preview:    "来自 codex sqlite",
+				CWD:        "/data/dl/codex",
+				Loaded:     true,
+				LastUsedAt: now.Add(-1 * time.Minute),
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-codex",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected surface snapshot")
+	}
+	if snapshot.PendingHeadless.InstanceID != "" || snapshot.Attachment.InstanceID != "" || snapshot.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected claude surface to reject codex persisted thread without retargeting, got %#v", snapshot)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "thread_not_found" {
+		t.Fatalf("expected thread_not_found notice, got %#v", events)
+	}
+}
+
 func TestApplyInstanceConnectedAttachesPreselectedHeadlessThread(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 45, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

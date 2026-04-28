@@ -827,8 +827,12 @@ func (s *Service) catalogProvenanceForAction(surface *state.SurfaceConsoleRecord
 
 func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleRecord) []workspaceSelectionEntry {
 	grouped := map[string][]*state.InstanceRecord{}
+	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
 	for _, inst := range s.root.Instances {
 		if inst == nil || !inst.Online {
+			continue
+		}
+		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
@@ -853,8 +857,8 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 			recoverableWorkspaces[workspaceKey] = usedAt
 		}
 	}
-	s.mergeWorkspaceSelectionRecencyFromOnlineThreads(recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
-	s.mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
+	s.mergeWorkspaceSelectionRecencyFromOnlineThreads(surface, recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
+	s.mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(surface, recoverableWorkspaces, recoverableWorkspaceSeen, visibleWorkspaces)
 
 	entries := make([]workspaceSelectionEntry, 0, len(visibleWorkspaces))
 	seenWorkspaceKeys := map[string]struct{}{}

@@ -50,6 +50,59 @@ func TestWorkspaceSessionCatalogProvenanceDrivesTargetPickerOpen(t *testing.T) {
 	}
 }
 
+func TestTargetPickerUseFiltersSessionsByClaudeBackend(t *testing.T) {
+	now := time.Date(2026, 4, 29, 3, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-claude",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendClaude,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", LastUsedAt: now},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-codex",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendCodex,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", LastUsedAt: now.Add(-1 * time.Minute)},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-claude",
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if view.Source != control.TargetPickerRequestSourceUse || view.SelectedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected claude /use to stay scoped to current workspace, got %#v", view)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-claude")); !ok {
+		t.Fatalf("expected claude thread to stay visible, got %#v", view.SessionOptions)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-codex")); ok {
+		t.Fatalf("expected codex thread to be filtered out in claude mode, got %#v", view.SessionOptions)
+	}
+}
+
 func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

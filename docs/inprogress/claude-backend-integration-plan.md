@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-04-28`
-> Summary: 合并此前三份 Claude 设计文档后，吸收 2026-04-28 本机真实 Claude CLI 黑盒结论，并同步 `#495/#497/#498` 已实现后的当前 pre-MVP 收尾状态与 `#496` 决策门位置。
+> Updated: `2026-04-29`
+> Summary: 合并此前三份 Claude 设计文档后，吸收 2026-04-28 本机真实 Claude CLI 黑盒结论，并同步 `#495/#497/#498` 已实现后的 pre-MVP 技术基座，以及 `#496` 已落地后的 visible Claude dev MVP 当前状态。
 
 ## 1. 文档定位
 
@@ -914,7 +914,8 @@ Claude runtime 分三块：
 | `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 属于 A2 pre-MVP 已批准的 native 或纯本地产品入口。 |
 | `/workspace detach` | native | hidden | allow | 仍允许本地解除接管，但不作为 Claude 主展示入口。 |
 | `/compact` | passthrough | hidden | reject for now | 只保留成后续 runtime host 的 passthrough 候选；在 `#495` 前不直接执行。 |
-| `/new` `/workspace*` `/list` `/use` `/useall` | approximation | hidden | reject for now | 后续若要开放，必须依赖 session catalog / routing contract，不得偷跑成 family-only fallback。 |
+| `/new` `/list` `/use` | approximation | visible | allow | `#496` 已把 Claude visible MVP 的会话主链放开：继续复用现有产品壳，但底层改走 backend-aware session catalog / route contract。 |
+| `/workspace*` `/useall` | approximation | hidden | reject | Claude 当前 visible MVP 不开放工作区父页或跨工作区总览；保持 hidden + reject，避免误导用户。 |
 | `/steerall` | reject | hidden | reject | Claude 当前不支持 same-turn steer；必须显式拒绝，不能伪装成 interrupt+new turn。 |
 | `/plan` `/sendfile` `/review` `/patch` `/follow` `/detach` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude pre-MVP 范围内。 |
 
@@ -1001,7 +1002,7 @@ Claude runtime 分三块：
 1. 从研究 closure 看，阶段 C 已经没有协议方向上的大不确定性。
 2. 但开始真正做阶段 C 之前，仍应先把阶段 B 相关 contract 和 `#494` 的 request/final-output contract 固定好。
 
-### 阶段 D：开启 Claude normal-mode MVP
+### 阶段 D：开启 Claude normal-mode MVP（已完成）
 
 目标：
 
@@ -1018,7 +1019,13 @@ Claude runtime 分三块：
 - Claude 是可见 backend
 - 不支持能力有明确提示
 
-### 阶段 E：补齐 command catalog / help / menu / workspace config
+当前结果：
+
+1. `/mode claude` 已作为 dev 环境可见入口落地。
+2. 普通文本、`/stop`、request/respond 主链、`/new`、`/list`、`/use` 已进入 Claude visible MVP。
+3. same-turn steer 继续显式 reject，不再伪装成可用能力。
+
+### 阶段 E：补齐 command catalog / help / menu / workspace config（已完成）
 
 目标：
 
@@ -1030,6 +1037,12 @@ Claude runtime 分三块：
 
 - Claude 产品闭环更完整
 - Codex 路径仍无回归
+
+当前结果：
+
+1. backend-aware help/menu/filter 已落地。
+2. Claude `/list` `/use` `/new` 的可见性、派发策略与 backend-aware target picker 已落地。
+3. `workspace*` 与 `/useall` 继续 hidden + reject，维持当前 MVP 边界。
 
 ## 9. 验收标准
 
@@ -1198,7 +1211,7 @@ Claude runtime 分三块：
    - 最新研究已经明确：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词，而且 capability 必须真实反映 host bridge 是否已落地，所以这一段不能原样带进后续实现
 4. `#494` 当前合同仍然成立。
    - request bridge 对 `plan_confirmation` 的 `decline -> interrupt` 合同仍与黑盒结论一致
-   - Claude command strategy 里把 `/list`、`/use`、`/plan` 继续 hidden / reject，仍与最新研究一致；后续变化属于 `#497/#498` 落地能力，而不是推翻 `#494`
+   - `#496` 之后，Claude command strategy 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/plan`、`workspace*`、`/useall` 仍保持 hidden / reject，继续符合最新研究里的“不能偷跑 family-only fallback”边界
 5. `#492/#493` 的主体方向也仍成立。
    - backend-aware state partition、surface resume carrier、catalog/contextual command seam 目前没有发现被后续 Claude 研究推翻
    - 相关测试面当前仍是绿的：`go test ./internal/core/control ./internal/core/orchestrator ./internal/app/daemon`

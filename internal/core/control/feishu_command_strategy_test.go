@@ -27,7 +27,9 @@ func TestResolveFeishuCommandStrategyAppliesClaudeMatrix(t *testing.T) {
 	}{
 		{familyID: FeishuCommandHistory, wantKind: FeishuCommandStrategyNative, wantVisible: true, wantDispatch: true},
 		{familyID: FeishuCommandCompact, wantKind: FeishuCommandStrategyPassthrough, wantVisible: false, wantDispatch: false, wantNoteContains: "passthrough"},
-		{familyID: FeishuCommandNew, wantKind: FeishuCommandStrategyApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "session catalog"},
+		{familyID: FeishuCommandNew, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
+		{familyID: FeishuCommandList, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
+		{familyID: FeishuCommandUse, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
 		{familyID: FeishuCommandSteerAll, wantKind: FeishuCommandStrategyReject, wantVisible: false, wantDispatch: false, wantNoteContains: "same-turn steer"},
 	}
 	for _, tt := range tests {

@@ -68,8 +68,16 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		ProductMode: "normal",
 		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
 	})
-	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/status"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude current_work menu commands = %#v, want %#v", got, want)
+	}
+
+	switchTarget := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSwitchTarget, false, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	if got, want := resolvedDisplayCommands(switchTarget), []string{"/list", "/use"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("claude switch_target help commands = %#v, want %#v", got, want)
 	}
 
 	sendSettings := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSendSettings, false, CatalogContext{
@@ -155,6 +163,16 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	}
 	if normal.IncludesFamily(FeishuCommandVSCodeMigrate) {
 		t.Fatal("expected normal profile to hide vscode migrate")
+	}
+}
+
+func TestResolveFeishuCommandDisplayProfileForContextAddsClaudeSessionFamilies(t *testing.T) {
+	profile := ResolveFeishuCommandDisplayProfileForContext(CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	if !profile.IncludesFamily(FeishuCommandList) || !profile.IncludesFamily(FeishuCommandUse) {
+		t.Fatalf("expected claude normal profile to include list/use, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
 	}
 }
 

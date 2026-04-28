@@ -76,16 +76,17 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 	case FeishuCommandCompact:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyPassthrough, "Claude `/compact` 目前只作为后续 passthrough 候选；在 runtime host 收口前保持隐藏并拒绝直接执行。")
 	case FeishuCommandNew,
-		FeishuCommandWorkspace,
+		FeishuCommandList,
+		FeishuCommandUse:
+		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude 会话切换沿用现有产品壳，但底层改走 backend-aware session catalog 与 route contract。")
+	case FeishuCommandWorkspace,
 		FeishuCommandWorkspaceList,
 		FeishuCommandWorkspaceNew,
 		FeishuCommandWorkspaceNewDir,
 		FeishuCommandWorkspaceNewGit,
 		FeishuCommandWorkspaceNewWorktree,
-		FeishuCommandList,
-		FeishuCommandUse,
 		FeishuCommandUseAll:
-		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude 的会话/工作区切换仍需要独立 session catalog 与 route contract；当前保持隐藏并拒绝直接执行。")
+		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude 当前 visible MVP 只开放 `/new` `/list` `/use` 这组会话主链；其余工作区/跨工作区入口继续保持隐藏并拒绝直接执行。")
 	case FeishuCommandSteerAll:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "Claude 当前不支持 same-turn steer；请等待本轮结束后继续发送，或使用 /stop 中断。")
 	case FeishuCommandPlan:
@@ -112,6 +113,17 @@ func claudeVisibleNativeStrategy(familyID string) FeishuCommandStrategy {
 		Kind:            FeishuCommandStrategyNative,
 		Visible:         true,
 		DispatchAllowed: true,
+	}
+}
+
+func claudeVisibleAllowedStrategy(familyID string, kind FeishuCommandStrategyKind, note string) FeishuCommandStrategy {
+	return FeishuCommandStrategy{
+		FamilyID:        familyID,
+		Backend:         agentproto.BackendClaude,
+		Kind:            kind,
+		Visible:         true,
+		DispatchAllowed: true,
+		Note:            strings.TrimSpace(note),
 	}
 }
 
