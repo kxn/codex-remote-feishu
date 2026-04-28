@@ -12,7 +12,7 @@ import (
 const reviewApplyPromptPrefix = "请根据以下审阅意见继续修改：\n\n"
 
 func (s *Service) startReviewFromFinalCard(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	return s.startUncommittedReview(surface, s.resolveUncommittedReviewEntryFromFinalCard(surface, action))
+	return s.startReview(surface, s.resolveUncommittedReviewStartFromFinalCard(surface, action))
 }
 
 func (s *Service) discardReviewSession(surface *state.SurfaceConsoleRecord) []eventcontract.Event {

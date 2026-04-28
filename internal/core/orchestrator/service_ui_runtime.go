@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -22,6 +23,7 @@ type ownerCardFlowKind string
 const (
 	ownerCardFlowKindCommandMenu   ownerCardFlowKind = "command_menu"
 	ownerCardFlowKindThreadHistory ownerCardFlowKind = "thread_history"
+	ownerCardFlowKindReviewPicker  ownerCardFlowKind = "review_picker"
 	ownerCardFlowKindTargetPicker  ownerCardFlowKind = "target_picker"
 	ownerCardFlowKindCompact       ownerCardFlowKind = "compact"
 	ownerCardFlowKindPlanProposal  ownerCardFlowKind = "plan_proposal"
@@ -109,6 +111,15 @@ type activeThreadHistoryRecord struct {
 	TurnID   string
 }
 
+type activeReviewPickerRecord struct {
+	InstanceID     string
+	ParentThreadID string
+	ThreadCWD      string
+	RecentCommits  []gitmeta.CommitSummary
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+}
+
 type activePlanProposalRecord struct {
 	ProposalID  string
 	InstanceID  string
@@ -164,6 +175,7 @@ type surfaceUIRuntimeRecord struct {
 	ActiveOwnerCardFlow *activeOwnerCardFlowRecord
 	ActiveTargetPicker  *activeTargetPickerRecord
 	ActiveThreadHistory *activeThreadHistoryRecord
+	ActiveReviewPicker  *activeReviewPickerRecord
 	ActivePathPicker    *activePathPickerRecord
 	ActivePlanProposal  *activePlanProposalRecord
 	ActiveWorkspacePage *activeWorkspacePageRecord
@@ -177,6 +189,7 @@ type SurfaceUIRuntimeSummary struct {
 	ActiveOwnerCardRevision  int
 	ActiveTargetPickerID     string
 	ActiveThreadHistoryID    string
+	ActiveReviewPicker       bool
 	ActivePathPickerID       string
 	ActivePlanProposalID     string
 	ActiveWorkspacePageID    string
@@ -285,6 +298,30 @@ func (s *Service) clearSurfaceThreadHistory(surface *state.SurfaceConsoleRecord)
 	runtime.ActiveThreadHistory = nil
 }
 
+func (s *Service) activeReviewPicker(surface *state.SurfaceConsoleRecord) *activeReviewPickerRecord {
+	runtime := s.surfaceUIRuntimeState(surface)
+	if runtime == nil {
+		return nil
+	}
+	return runtime.ActiveReviewPicker
+}
+
+func (s *Service) setActiveReviewPicker(surface *state.SurfaceConsoleRecord, record *activeReviewPickerRecord) {
+	runtime := s.ensureSurfaceUIRuntime(surface)
+	if runtime == nil {
+		return
+	}
+	runtime.ActiveReviewPicker = record
+}
+
+func (s *Service) clearSurfaceReviewPicker(surface *state.SurfaceConsoleRecord) {
+	runtime := s.surfaceUIRuntimeState(surface)
+	if runtime == nil {
+		return
+	}
+	runtime.ActiveReviewPicker = nil
+}
+
 func (s *Service) activePathPicker(surface *state.SurfaceConsoleRecord) *activePathPickerRecord {
 	runtime := s.surfaceUIRuntimeState(surface)
 	if runtime == nil {
@@ -381,6 +418,9 @@ func (s *Service) SurfaceUIRuntimeSummary(surfaceID string) SurfaceUIRuntimeSumm
 	}
 	if runtime.ActiveThreadHistory != nil {
 		summary.ActiveThreadHistoryID = strings.TrimSpace(summary.ActiveOwnerCardFlowID)
+	}
+	if runtime.ActiveReviewPicker != nil {
+		summary.ActiveReviewPicker = true
 	}
 	if runtime.ActivePathPicker != nil {
 		summary.ActivePathPickerID = strings.TrimSpace(runtime.ActivePathPicker.PickerID)

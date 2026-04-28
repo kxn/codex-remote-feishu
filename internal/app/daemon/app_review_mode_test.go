@@ -87,6 +87,20 @@ func writeReviewModeRepoFile(t *testing.T, root, relativePath, content string) {
 	}
 }
 
+func commitReviewModeRepoFile(t *testing.T, root, relativePath, content, message string) string {
+	t.Helper()
+	writeReviewModeRepoFile(t, root, relativePath, content)
+	runReviewModeGit(t, root, "add", relativePath)
+	runReviewModeGit(t, root, "-c", "user.name=review-mode-tests", "-c", "user.email=review-mode-tests@example.com", "commit", "-q", "-m", message)
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git rev-parse --short HEAD failed: %v\n%s", err, string(output))
+	}
+	return strings.TrimSpace(string(output))
+}
+
 func TestDeliverUIEventDoesNotAddReviewEntryButtonToNormalFinalCardWithoutFileChanges(t *testing.T) {
 	app, gateway, _ := newReviewModeAppForTest(t)
 
@@ -231,7 +245,7 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 		Phase:          state.ReviewSessionPhaseActive,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
-		TargetLabel:    "未提交变更",
+		TargetLabel:    "commit abc1234",
 	}
 
 	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
@@ -259,6 +273,9 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
 		t.Fatalf("expected review title prefix, got %#v", ops[0])
 	}
+	if !strings.Contains(ops[0].CardTitle, "commit abc1234") {
+		t.Fatalf("expected review title to include commit target label, got %#v", ops[0].CardTitle)
+	}
 	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("expected discard button, got %#v", ops[0].CardElements)
 	}
@@ -267,6 +284,37 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	}
 	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button on review final card, got %#v", ops[0].CardElements)
+	}
+}
+
+func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t *testing.T) {
+	app, gateway, repoRoot := newReviewModeAppForTest(t)
+	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:             eventcontract.KindBlockCommitted,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "msg-1",
+		Block: &render.Block{
+			Kind:       render.BlockAssistantMarkdown,
+			InstanceID: "inst-1",
+			ThreadID:   "thread-main",
+			TurnID:     "turn-main-1",
+			ItemID:     "item-main-1",
+			Text:       "这轮已经生成 commit `" + shortSHA + "`。",
+			Final:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver final block with commit mention: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one final card, got %#v", ops)
+	}
+	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewCommand)) {
+		t.Fatalf("expected commit review button, got %#v", ops[0].CardElements)
 	}
 }
 
@@ -340,6 +388,52 @@ func TestHandleGatewayActionStartsDetachedReviewFromCurrentThreadCommand(t *test
 	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart || sent[0].Target.ThreadID != "thread-main" {
 		t.Fatalf("unexpected review start command: %#v", sent)
+	}
+}
+
+func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T) {
+	app, gateway, repoRoot := newReviewModeAppForTest(t)
+	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+	app.service.RecordFinalCardMessage("surface-1", render.Block{
+		Kind:       render.BlockAssistantMarkdown,
+		InstanceID: "inst-1",
+		ThreadID:   "thread-main",
+		TurnID:     "turn-main-1",
+		ItemID:     "item-main-1",
+		Text:       "已经处理完成。",
+		Final:      true,
+	}, "msg-1", "om-final-1", app.daemonLifecycleID)
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionReviewCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-final-1",
+		Text:             "/review commit " + shortSHA,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result != nil {
+		t.Fatalf("expected commit review start to keep source final card and stay append-only, got %#v", result)
+	}
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "正在进入审阅" {
+		t.Fatalf("expected one appended entering-review notice card, got %#v", ops)
+	}
+	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart {
+		t.Fatalf("unexpected review start command: %#v", sent)
+	}
+	if sent[0].Review.Target.Kind != agentproto.ReviewTargetKindCommit || !strings.HasPrefix(sent[0].Review.Target.CommitSHA, shortSHA) {
+		t.Fatalf("unexpected commit review target: %#v", sent[0].Review.Target)
 	}
 }
 

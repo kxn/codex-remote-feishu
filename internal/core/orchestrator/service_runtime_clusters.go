@@ -15,6 +15,7 @@ type servicePickerRuntime struct {
 	nextPathPickerID       int
 	nextTargetPickerID     int
 	nextThreadHistoryID    int
+	nextReviewPickerID     int
 	nextCompactFlowID      int
 	nextPlanProposalID     int
 	nextLauncherFlowID     int
@@ -97,6 +98,11 @@ func (r *servicePickerRuntime) nextTargetPickerToken() string {
 func (r *servicePickerRuntime) nextThreadHistoryToken() string {
 	r.nextThreadHistoryID++
 	return fmt.Sprintf("thread-history-%d", r.nextThreadHistoryID)
+}
+
+func (r *servicePickerRuntime) nextReviewPickerToken() string {
+	r.nextReviewPickerID++
+	return fmt.Sprintf("review-picker-%d", r.nextReviewPickerID)
 }
 
 func (r *servicePickerRuntime) nextCompactFlowToken() string {

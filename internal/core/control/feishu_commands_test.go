@@ -258,34 +258,44 @@ func TestParseFeishuTextActionRecognizesHistoryCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/review uncommitted")
-	if !ok {
-		t.Fatal("expected /review uncommitted to be parsed")
-	}
-	if action.Kind != ActionReviewCommand {
-		t.Fatalf("action kind = %q, want %q", action.Kind, ActionReviewCommand)
-	}
-	if action.Text != "/review uncommitted" {
-		t.Fatalf("action text = %q, want %q", action.Text, "/review uncommitted")
-	}
-	if action.CommandID != FeishuCommandReview {
-		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandReview)
+	tests := []string{"/review", "/review uncommitted", "/review commit", "/review commit abc1234"}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionReviewCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionReviewCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want %q", input, action.Text, input)
+		}
+		if action.CommandID != FeishuCommandReview {
+			t.Fatalf("input %q => command id %q, want %q", input, action.CommandID, FeishuCommandReview)
+		}
 	}
 }
 
 func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
-	action, ok := ParseFeishuMenuAction("review_uncommitted")
-	if !ok {
-		t.Fatal("expected review_uncommitted to be parsed")
+	tests := map[string]string{
+		"review":             "/review",
+		"reviewcommit":       "/review commit",
+		"review_uncommitted": "/review uncommitted",
 	}
-	if action.Kind != ActionReviewCommand {
-		t.Fatalf("action kind = %q, want %q", action.Kind, ActionReviewCommand)
-	}
-	if action.Text != "/review uncommitted" {
-		t.Fatalf("action text = %q, want %q", action.Text, "/review uncommitted")
-	}
-	if action.CommandID != FeishuCommandReview {
-		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandReview)
+	for key, wantText := range tests {
+		action, ok := ParseFeishuMenuAction(key)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", key)
+		}
+		if action.Kind != ActionReviewCommand {
+			t.Fatalf("menu %q => kind %q, want %q", key, action.Kind, ActionReviewCommand)
+		}
+		if action.Text != wantText {
+			t.Fatalf("menu %q => text %q, want %q", key, action.Text, wantText)
+		}
+		if action.CommandID != FeishuCommandReview {
+			t.Fatalf("menu %q => command id %q, want %q", key, action.CommandID, FeishuCommandReview)
+		}
 	}
 }
 

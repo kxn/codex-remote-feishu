@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -93,6 +94,21 @@ func writeReviewSessionRepoFile(t *testing.T, root, relativePath, content string
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q): %v", fullPath, err)
 	}
+}
+
+func commitReviewSessionRepoFile(t *testing.T, root, relativePath, content, message string) gitmeta.CommitSummary {
+	t.Helper()
+	writeReviewSessionRepoFile(t, root, relativePath, content)
+	runReviewSessionGit(t, root, "add", relativePath)
+	runReviewSessionGit(t, root, "-c", "user.name=review-session-tests", "-c", "user.email=review-session-tests@example.com", "commit", "-q", "-m", message)
+	commits, err := gitmeta.ListRecentCommits(root, 1)
+	if err != nil {
+		t.Fatalf("ListRecentCommits(%q): %v", root, err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected latest commit after %q, got %#v", message, commits)
+	}
+	return commits[0]
 }
 
 func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.SurfaceConsoleRecord, sourceMessageID, turnID string) {
@@ -383,6 +399,156 @@ func TestStartReviewCommandRejectsCleanRepo(t *testing.T) {
 	}
 	if surface.ReviewSession != nil {
 		t.Fatalf("did not expect review session for clean repo, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartReviewCommitCommandOpensPickerPage(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	latest := commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-picker",
+		Text:             "/review commit",
+	})
+
+	if len(events) != 1 || events[0].PageView == nil {
+		t.Fatalf("expected one picker page event, got %#v", events)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
+	if catalog.Title != "选择 Commit" || catalog.TrackingKey == "" {
+		t.Fatalf("unexpected commit picker catalog: %#v", catalog)
+	}
+	if len(catalog.Sections) != 1 || len(catalog.Sections[0].Entries) != 1 || catalog.Sections[0].Entries[0].Form == nil {
+		t.Fatalf("expected single form entry, got %#v", catalog.Sections)
+	}
+	form := catalog.Sections[0].Entries[0].Form
+	if form.CommandText != "/review commit" || form.Field.Kind != control.CommandCatalogFormFieldSelectStatic {
+		t.Fatalf("unexpected commit picker form: %#v", form)
+	}
+	if len(form.Field.Options) == 0 || form.Field.Options[0].Value != latest.SHA {
+		t.Fatalf("expected latest commit option first, got %#v", form.Field.Options)
+	}
+	if flow := svc.activeOwnerCardFlow(surface); flow == nil || flow.Kind != ownerCardFlowKindReviewPicker {
+		t.Fatalf("expected active review picker flow, got %#v", flow)
+	}
+	if record := svc.activeReviewPicker(surface); record == nil || record.InstanceID != "inst-1" || record.ParentThreadID != "thread-main" {
+		t.Fatalf("expected stored review picker context, got %#v", record)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("did not expect review session before picker submit, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartReviewCommitCommandBuildsDetachedReviewCommand(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	latest := commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-commit",
+		Text:             "/review commit " + latest.ShortSHA,
+	})
+
+	if len(events) != 2 {
+		t.Fatalf("expected notice + review start command, got %#v", events)
+	}
+	if events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected review start command, got %#v", events)
+	}
+	command := events[1].Command
+	if command.Target.ThreadID != "thread-main" {
+		t.Fatalf("unexpected review start target: %#v", command.Target)
+	}
+	if command.Review.Target.Kind != agentproto.ReviewTargetKindCommit || command.Review.Target.CommitSHA != latest.SHA || command.Review.Target.CommitTitle != latest.Subject {
+		t.Fatalf("unexpected commit review target: %#v", command.Review.Target)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.TargetLabel != "commit "+latest.ShortSHA || surface.ReviewSession.SourceMessageID != "msg-review-commit" {
+		t.Fatalf("unexpected pending commit review session: %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartReviewCommitFromPickerUsesStoredContext(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	latest := commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+
+	pickerEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-picker",
+		Text:             "/review commit",
+	})
+	if len(pickerEvents) != 1 || pickerEvents[0].PageView == nil {
+		t.Fatalf("expected picker page, got %#v", pickerEvents)
+	}
+	svc.RecordPageTrackingMessage(surface.SurfaceSessionID, pickerEvents[0].PageView.TrackingKey, "om-review-picker-1")
+
+	surface.AttachedInstanceID = "inst-1"
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-picker-1",
+		ActorUserID:      "user-1",
+		Text:             "/review commit " + latest.SHA,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "life-picker",
+		},
+	})
+
+	if len(events) != 2 || events[1].Command == nil {
+		t.Fatalf("expected picker submit to start review, got %#v", events)
+	}
+	if events[1].Command.Review.Target.Kind != agentproto.ReviewTargetKindCommit || events[1].Command.Review.Target.CommitSHA != latest.SHA {
+		t.Fatalf("unexpected picker review target: %#v", events[1].Command.Review.Target)
+	}
+	if svc.activeReviewPicker(surface) != nil {
+		t.Fatalf("expected review picker runtime to clear after submit, got %#v", svc.activeReviewPicker(surface))
+	}
+}
+
+func TestStartReviewCommitFromPickerRejectsInstanceSwitch(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	_ = commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "other",
+		WorkspaceRoot: repoRoot,
+		WorkspaceKey:  repoRoot,
+		ShortName:     "other",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	pickerEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-picker",
+		Text:             "/review commit",
+	})
+	if len(pickerEvents) != 1 || pickerEvents[0].PageView == nil {
+		t.Fatalf("expected picker page, got %#v", pickerEvents)
+	}
+	svc.RecordPageTrackingMessage(surface.SurfaceSessionID, pickerEvents[0].PageView.TrackingKey, "om-review-picker-1")
+	surface.AttachedInstanceID = "inst-2"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-picker-1",
+		ActorUserID:      "user-1",
+		Text:             "/review commit deadbeef",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "life-picker",
+		},
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "review_source_instance_changed" {
+		t.Fatalf("expected instance-changed notice, got %#v", events)
+	}
+	if svc.activeReviewPicker(surface) != nil {
+		t.Fatalf("expected stale picker runtime to clear, got %#v", svc.activeReviewPicker(surface))
 	}
 }
 
