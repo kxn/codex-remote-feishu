@@ -1,8 +1,8 @@
 # Backend-Aware 命令 Catalog 设计
 
 > Type: `draft`
-> Updated: `2026-04-26`
-> Summary: 将当前单一 `feishuCommandSpecs` 演进为 family/variant/context resolver；本次补充 2026-04-26 代码复核与最新 feidex 证据，收口当前 catalog 漂移与 backend-aware 命令基座方向。
+> Updated: `2026-04-28`
+> Summary: 将当前单一 `feishuCommandSpecs` 演进为 family/variant/context resolver；本次补充 2026-04-28 对当前 master 的审计与最新 feidex 证据，收口 catalog 漂移、family-only 固化点与 backend-aware 命令基座方向。
 
 ## 1. 文档定位
 
@@ -179,6 +179,28 @@
 - `A. catalog context 接线`
 
 它只负责把 `#185` 已提供的 backend/provider/capability/state seam 接到 catalog resolver 输入，不单独拥有协议字段、状态 schema 或 `/mode` 后端切换语义。
+
+### 3.9 2026-04-28 审计：已落地主链未直接回归，但最近重构又把 seam 固化回 family-only / productMode-only
+
+本轮在当前 `master` (`33b08c2b`) 上重新跑：
+
+- `go test ./internal/core/control ./internal/core/orchestrator ./internal/adapter/feishu`
+
+结果通过。这说明 `#462 / #465 / #469 / #470 / #471` 覆盖的主链没有被最近并行任务直接打坏。
+
+但 2026-04-27 新增的几轮 command 重构，也把三类技术债重新固化了：
+
+1. display resolver 已经有 `CatalogContext`，但 `feishu_command_display_profiles.go` 仍只按 `ProductMode` 选 profile。
+   - `Backend` 和 `Capabilities` 还没有正式进入 family/variant 选择。
+2. `feishu_command_binding.go` 与 `feishu_command_registry.go` 把命令绑定重新收敛到 `FamilyID` / `ActionKind`。
+   - `ResolveFeishuCommandBindingFromAction(...)` 仍用空 `CatalogContext{}` 解析 action，没有 surface backend 输入。
+3. `resolvedFeishuCommandFromSpec(...)` 仍把解析结果统一落成 `family.default`。
+   - 这意味着后面即使新增 Claude family 变种，parse/provenance 仍没有真正的 variant identity。
+4. `/mode` 的 parser、menu argument normalizer、orchestrator apply 仍只支持 `normal | vscode`。
+   - `CatalogContext.Backend` 虽然已经在 display/provenance 链路里出现，但产品入口语义并没有同步升级。
+5. 部分命令页入口仍只传 `ProductMode`，没有把 backend-aware context 贯穿到 page root resolver。
+
+这不是“前几张子单已经失效”，而是“它们只把 seam 铺到了半路，后续重构又默认 family 就是最终执行 key”。如果继续在这些 helper 上直接叠 Claude 适配，会把 `#369` 已铺开的 context/provenance seam 再次埋回去。
 
 ## 4. 设计目标
 
@@ -617,12 +639,14 @@ display 阶段就应该能决定：
 1. 新 registry 包装现有 family / group
 2. 先迁 help/menu 展示，不改 execute
 3. 把当前 `productMode` 硬编码过滤改为 variant 选择
+4. 把 `feishu_command_display_profiles.go` 从 `ProductMode` profile 提升为真正消费 `CatalogContext` 的 display resolver，不再把 `Backend` 丢在 resolver 外面
 
 ### 阶段 3：让 parse 走 resolver
 
 1. slash parse 改成 context-aware
 2. callback payload 增加 family / variant 元数据
 3. 保持解析结果仍可回落到现有 `ActionKind`
+4. 把 `feishu_command_binding.go` / `feishu_command_registry.go` 从 `FamilyID + ActionKind` 主索引升级成 `FamilyID + VariantID + Context` 可扩展结构，避免继续把 `family.default` 固化成最终 provenance
 
 ### 阶段 4：迁移高风险 family
 
