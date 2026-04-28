@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -32,19 +33,31 @@ func installMockClaudeHelper(t *testing.T, scenario string) string {
 	if err != nil {
 		t.Fatalf("os.Executable: %v", err)
 	}
-	script := filepath.Join(t.TempDir(), "mockclaude-helper.sh")
+	helperPath := filepath.Join(t.TempDir(), "mockclaude-helper")
 	content := strings.Join([]string{
 		"#!/usr/bin/env bash",
 		"set -euo pipefail",
 		"export GO_WANT_HELPER_PROCESS=mockclaude",
 		"export MOCKCLAUDE_SCENARIO=" + shellSingleQuote(scenario),
-		"exec " + shellSingleQuote(executable) + " -test.run '^TestHelperProcessMockClaude$' -- \"$@\"",
+		"exec " + shellSingleQuote(executable) + " -test.run TestHelperProcessMockClaude -- \"$@\"",
 		"",
 	}, "\n")
-	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
-		t.Fatalf("WriteFile(%s): %v", script, err)
+	if runtime.GOOS == "windows" {
+		helperPath += ".cmd"
+		content = strings.Join([]string{
+			"@echo off",
+			"set GO_WANT_HELPER_PROCESS=mockclaude",
+			"set MOCKCLAUDE_SCENARIO=" + scenario,
+			"\"" + executable + "\" -test.run TestHelperProcessMockClaude -- %*",
+			"",
+		}, "\r\n")
+	} else {
+		helperPath += ".sh"
 	}
-	return script
+	if err := os.WriteFile(helperPath, []byte(content), 0o755); err != nil {
+		t.Fatalf("WriteFile(%s): %v", helperPath, err)
+	}
+	return helperPath
 }
 
 func shellSingleQuote(value string) string {

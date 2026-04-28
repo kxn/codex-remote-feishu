@@ -13,14 +13,14 @@ func TestReadThreadHistoryGroupsTurnsAndPatchesLatestRunningTurn(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
 
 	workspaceRoot := filepath.Join(t.TempDir(), "ws-history")
-	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-1", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []string{
-		`{"type":"system","timestamp":"2026-04-28T11:00:00Z","cwd":"` + workspaceRoot + `","session_id":"session-1","model":"mimo-v2.5-pro","permissionMode":"plan"}`,
-		`{"type":"user","timestamp":"2026-04-28T11:01:00Z","promptId":"prompt-1","message":{"role":"user","content":"first input"}}`,
-		`{"type":"assistant","timestamp":"2026-04-28T11:01:05Z","promptId":"prompt-1","message":{"role":"assistant","content":[{"type":"text","text":"first answer"}]}}`,
-		`{"type":"user","timestamp":"2026-04-28T11:02:00Z","promptId":"prompt-side","isSidechain":true,"message":{"role":"user","content":"ignore me"}}`,
-		`{"type":"user","timestamp":"2026-04-28T11:03:00Z","promptId":"prompt-2","message":{"role":"user","content":"second input"}}`,
-		`{"type":"assistant","timestamp":"2026-04-28T11:03:10Z","promptId":"prompt-2","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool-1","name":"Bash","input":{"command":"printf hi","description":"Print hi"}}]}}`,
-		`{"type":"user","timestamp":"2026-04-28T11:03:12Z","promptId":"prompt-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":"hi"}]}}`,
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-1", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "timestamp": "2026-04-28T11:00:00Z", "cwd": workspaceRoot, "session_id": "session-1", "model": "mimo-v2.5-pro", "permissionMode": "plan"},
+		{"type": "user", "timestamp": "2026-04-28T11:01:00Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": "first input"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:01:05Z", "promptId": "prompt-1", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "first answer"}}}},
+		{"type": "user", "timestamp": "2026-04-28T11:02:00Z", "promptId": "prompt-side", "isSidechain": true, "message": map[string]any{"role": "user", "content": "ignore me"}},
+		{"type": "user", "timestamp": "2026-04-28T11:03:00Z", "promptId": "prompt-2", "message": map[string]any{"role": "user", "content": "second input"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:03:10Z", "promptId": "prompt-2", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool-1", "name": "Bash", "input": map[string]any{"command": "printf hi", "description": "Print hi"}}}}},
+		{"type": "user", "timestamp": "2026-04-28T11:03:12Z", "promptId": "prompt-2", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "tool-1", "content": "hi"}}}},
 	})
 
 	history, err := readThreadHistory(workspaceRoot, "session-1", RuntimeStateSnapshot{
@@ -84,9 +84,9 @@ func TestResolveResumeSessionRejectsCrossWorkspaceClaudeThread(t *testing.T) {
 
 	workspaceA := filepath.Join(t.TempDir(), "ws-a")
 	workspaceB := filepath.Join(t.TempDir(), "ws-b")
-	expectedPath := writeClaudeSessionFile(t, configDir, workspaceA, "session-resume", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []string{
-		`{"type":"system","cwd":"` + workspaceA + `","session_id":"session-resume"}`,
-		`{"type":"user","message":{"role":"user","content":"resume me"}}`,
+	expectedPath := writeClaudeSessionFile(t, configDir, workspaceA, "session-resume", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "cwd": workspaceA, "session_id": "session-resume"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "resume me"}},
 	})
 
 	filePath, meta, err := resolveResumeSession(workspaceA, "session-resume")

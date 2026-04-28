@@ -3,6 +3,7 @@ package wrapper
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -109,10 +110,10 @@ func TestWrapperClaudeThreadsRefreshUsesLocalSessionCatalog(t *testing.T) {
 	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
-	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []string{
-		`{"type":"system","cwd":"` + workspaceRoot + `","session_id":"mock-claude-session-1","model":"mimo-v2.5-pro"}`,
-		`{"type":"session-title","title":"Refresh session"}`,
-		`{"type":"user","message":{"role":"user","content":"refresh prompt"}}`,
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "mock-claude-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "session-title", "title": "Refresh session"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "refresh prompt"}},
 	})
 
 	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
@@ -153,12 +154,12 @@ func TestWrapperClaudeThreadHistoryReadUsesLocalTranscriptHistory(t *testing.T) 
 	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
-	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []string{
-		`{"type":"system","timestamp":"2026-04-28T11:00:00Z","cwd":"` + workspaceRoot + `","session_id":"mock-claude-session-1","model":"mimo-v2.5-pro"}`,
-		`{"type":"user","timestamp":"2026-04-28T11:01:00Z","promptId":"prompt-1","message":{"role":"user","content":"first input"}}`,
-		`{"type":"assistant","timestamp":"2026-04-28T11:01:05Z","promptId":"prompt-1","message":{"role":"assistant","content":[{"type":"text","text":"first answer"}]}}`,
-		`{"type":"user","timestamp":"2026-04-28T11:02:00Z","promptId":"prompt-2","message":{"role":"user","content":"second input"}}`,
-		`{"type":"assistant","timestamp":"2026-04-28T11:02:05Z","promptId":"prompt-2","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool-1","name":"Bash","input":{"command":"printf hi"}}]}}`,
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "mock-claude-session-1", []map[string]any{
+		{"type": "system", "timestamp": "2026-04-28T11:00:00Z", "cwd": workspaceRoot, "session_id": "mock-claude-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "user", "timestamp": "2026-04-28T11:01:00Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": "first input"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:01:05Z", "promptId": "prompt-1", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "first answer"}}}},
+		{"type": "user", "timestamp": "2026-04-28T11:02:00Z", "promptId": "prompt-2", "message": map[string]any{"role": "user", "content": "second input"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:02:05Z", "promptId": "prompt-2", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool-1", "name": "Bash", "input": map[string]any{"command": "printf hi"}}}}},
 	})
 
 	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
@@ -600,15 +601,23 @@ func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, worksp
 	return server, eventsCh, ackCh, &stdout, &stderr, done
 }
 
-func writeWrapperClaudeSessionFile(t *testing.T, configDir, workspaceRoot, sessionID string, lines []string) string {
+func writeWrapperClaudeSessionFile(t *testing.T, configDir, workspaceRoot, sessionID string, entries []map[string]any) string {
 	t.Helper()
 	projectDir := filepath.Join(configDir, "projects", claudeadapter.SanitizeProjectDirName(workspaceRoot))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project dir: %v", err)
 	}
 	filePath := filepath.Join(projectDir, sessionID+".jsonl")
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	content := make([]byte, 0, len(entries)*64)
+	for _, entry := range entries {
+		line, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatalf("marshal transcript line: %v", err)
+		}
+		content = append(content, line...)
+		content = append(content, '\n')
+	}
+	if err := os.WriteFile(filePath, content, 0o644); err != nil {
 		t.Fatalf("write transcript: %v", err)
 	}
 	return filePath

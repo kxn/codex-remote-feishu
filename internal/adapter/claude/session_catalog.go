@@ -262,8 +262,8 @@ func sessionProjectDirs(workspaceRoot string, includeAll bool) ([]string, bool, 
 func claudeProjectsDir() string {
 	configDir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR"))
 	if configDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
+		home := claudeHomeDir()
+		if home == "" {
 			return ""
 		}
 		configDir = filepath.Join(home, ".claude")

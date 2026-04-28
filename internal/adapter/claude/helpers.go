@@ -14,6 +14,25 @@ import (
 
 const claudeLatestPlanGuessFreshness = 15 * time.Minute
 
+func claudeHomeDir() string {
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		return home
+	}
+	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
+		return home
+	}
+	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
+	path := strings.TrimSpace(os.Getenv("HOMEPATH"))
+	if drive != "" && path != "" {
+		return filepath.Clean(drive + path)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
 func cloneMap(input map[string]any) map[string]any {
 	if len(input) == 0 {
 		return map[string]any{}
@@ -237,8 +256,8 @@ func readClaudePlanBodyFromPath(rawPath string) (string, string, bool) {
 }
 
 func guessLatestClaudePlanFilePath() (string, bool) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
+	homeDir := claudeHomeDir()
+	if homeDir == "" {
 		return "", false
 	}
 	candidates := []string{
