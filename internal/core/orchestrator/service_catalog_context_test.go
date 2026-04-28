@@ -48,10 +48,10 @@ func TestBuildCatalogContextUsesDetachedSurfaceBackend(t *testing.T) {
 	if ctx.ProductMode != string(state.ProductModeNormal) {
 		t.Fatalf("ProductMode = %q, want %q", ctx.ProductMode, state.ProductModeNormal)
 	}
-	if !ctx.Capabilities.RequestRespond || !ctx.Capabilities.SessionCatalog || !ctx.Capabilities.ResumeByThreadID {
+	if !ctx.Capabilities.RequestRespond {
 		t.Fatalf("expected claude fallback capabilities, got %#v", ctx.Capabilities)
 	}
-	if ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.TurnSteer || ctx.Capabilities.VSCodeMode {
+	if ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.TurnSteer || ctx.Capabilities.SessionCatalog || ctx.Capabilities.ResumeByThreadID || ctx.Capabilities.RequiresCWDForResume || ctx.Capabilities.VSCodeMode {
 		t.Fatalf("unexpected codex-only capabilities on detached claude context: %#v", ctx.Capabilities)
 	}
 }
@@ -89,10 +89,10 @@ func TestBuildCatalogContextUsesAttachedInstanceRuntimeSeam(t *testing.T) {
 	if ctx.WorkspaceKey != "/data/dl/repo" {
 		t.Fatalf("WorkspaceKey = %q, want /data/dl/repo", ctx.WorkspaceKey)
 	}
-	if !ctx.Capabilities.RequestRespond || !ctx.Capabilities.SessionCatalog || !ctx.Capabilities.ResumeByThreadID || !ctx.Capabilities.RequiresCWDForResume {
+	if !ctx.Capabilities.RequestRespond {
 		t.Fatalf("expected claude effective capabilities, got %#v", ctx.Capabilities)
 	}
-	if ctx.Capabilities.TurnSteer || ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.VSCodeMode {
+	if ctx.Capabilities.TurnSteer || ctx.Capabilities.ThreadsRefresh || ctx.Capabilities.SessionCatalog || ctx.Capabilities.ResumeByThreadID || ctx.Capabilities.RequiresCWDForResume || ctx.Capabilities.VSCodeMode {
 		t.Fatalf("unexpected codex-only capabilities on claude context: %#v", ctx.Capabilities)
 	}
 }

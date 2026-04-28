@@ -183,7 +183,7 @@ func (t *runtimeTurnTracker) ReconcileChildExit(err error) []agentproto.Event {
 func runtimeTurnEventMaterializesOutput(event agentproto.Event) bool {
 	switch event.Kind {
 	case agentproto.EventItemCompleted:
-		return true
+		return strings.TrimSpace(event.ItemKind) == "agent_message"
 	default:
 		return false
 	}
