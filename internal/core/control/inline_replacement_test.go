@@ -354,6 +354,24 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "bare restart root page can replace stamped command card",
+			action: Action{
+				Kind:    ActionRestartCommand,
+				Text:    "/restart",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
+			name: "restart child stays append-only",
+			action: Action{
+				Kind:    ActionRestartCommand,
+				Text:    "/restart child",
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: false,
+		},
+		{
 			name: "bare debug root page can replace stamped command card",
 			action: Action{
 				Kind:    ActionDebugCommand,

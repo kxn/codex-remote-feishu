@@ -125,7 +125,7 @@
 | `plan_proposal` | `mixed` | turn 完成后若本轮缓存了最终 `item/plan/delta`，orchestrator 会 append 一张 patchable `FeishuPageView` 提案计划卡；这张 page 当前显式设置 `SuppressDefaultRelatedButtons=true`，不会自动补默认 related back button。点击 `直接执行` / `清空上下文并执行` / `取消` 时，gateway 解析 `picker_id + option_id` 回到 `ActionPlanProposalDecision`，并继续在同一张卡上 seal 收口。该卡不是 request gate，不阻塞后续输入；一旦用户继续输入、切线程/切 route、开始新 turn 或卡片过期，也会被服务端 seal 成失效态 |
 | `autocontinue_status` | `mixed` | 上游可重试失败进入 autoContinue overlay 时，orchestrator 会 append 一张 patchable `FeishuPageView` 状态卡。该卡显式 reply 到原始用户消息，并通过 `TrackingKey=AutoContinueEpisodeID` 回写 `message_id`；只要它仍是当前 surface 尾卡，scheduled / running / failed / cancelled 会继续 patch 回同一张卡。一旦后面出现新的消息，这张卡就冻结；后续同 episode 状态改为 append 新卡。该卡只承载自动继续状态，不接管后续业务输出的 reply anchor |
 | bare `/review` / `/review commit` / `/review uncommitted` / 普通 final card review footer / review final card `放弃审阅` / `按审阅意见继续修改` | `mixed` | bare `/review` 与 `/review commit` 当前会先进入同一张 page-owner commit picker：卡片记录当前 `instance_id + parent_thread_id + thread_cwd + recent_commits`，并要求后续 submit/cancel 命中同一 `message_id` 才继续；若中途切换到其他实例，picker submit 会直接拒绝并要求重新发送 `/review commit`。picker submit 通过 `page_submit(surface.command.review + action_arg_prefix=commit)` 进入 detached review owner；bare `/review uncommitted`、常用工具菜单入口与普通 final card 上的 `Review 待提交内容` 则继续直接汇合到同一 detached review owner。普通 final card 的 commit review footer 仍保持 append-only：projector 只会在原 final chunk 底部追加 `评审 <short-sha>` 按钮，不 patch 掉源 final card；这些按钮只对正文里命中的“当前仓库最近 commit”生效，并继续复用 `page_action + daemon_lifecycle_id` 的 freshness / old-card reject。review session final card 上的 `放弃审阅` / `按审阅意见继续修改` 仍复用 stamped first-result replacement，在当前审阅结果卡上同位收口。真正的 detached review session 启动、review runtime 清理，以及把审阅结果带回 parent thread 继续修改，仍由 orchestrator 承接。普通 final card 只有在对应 thread cwd 落在 Git repo/worktree 内且存在未提交内容时才会追加 `Review 待提交内容`；commit footer 则只依赖最近 commit 命中，不依赖 dirty 状态；review session 内的 final card 只保留 `放弃审阅` / `按审阅意见继续修改` 两个显式出口 |
-| bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuPageView` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前仅保留 `管理页外链`，`/upgrade track` 子页当前仅保留 track 切换按钮；`/upgrade` 根页会在当前 Codex 是 standalone-upgradeable 安装时额外显示 `Codex 升级` 按钮，bundle-backed 或其他不可升级安装则静默隐藏；`/upgrade dev` 与 `开发构建` 按钮当前会在允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下暴露，`/upgrade local` 与 `本地升级` 只会在源码 `dev` flavor 下暴露。若来自带 `daemon_lifecycle_id` 的当前 page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade codex`、允许 dev feed 的 flavor 下的 `/upgrade dev`、源码 `dev` flavor 下的 `/upgrade local`、`/debug admin`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 page 上显示错误并保留表单默认值 |
+| bare `/cron` / `/upgrade` / `/restart` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuPageView` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前仅保留 `管理页外链`，`/upgrade track` 子页当前仅保留 track 切换按钮，`/restart` 根页当前仅保留一个 `重启 child` 按钮，并明确说明它只重启当前 attached instance 的 provider child、不重启 daemon。若来自带 `daemon_lifecycle_id` 的当前 page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade codex`、允许 dev feed 的 flavor 下的 `/upgrade dev`、源码 `dev` flavor 下的 `/upgrade local`、`/restart child`、`/debug admin`）仍进入各自原有执行流。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 page 上显示错误并保留表单默认值；`/restart` 根页若检测到 detached、实例离线、surface busy、abandoning，或已有 child restart 在飞，会直接把按钮禁用并把原因留在当前页上 |
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuPageView` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 page-result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `tool_callback` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期，以及由 orchestrator 单点 request presentation owner 基于 `requestType/rawType/metadata` 归一化出的 `SemanticKind + Title/Sections/Options/Questions/HintText` contract，属于产品状态机。`tool_callback` 当前也走同一 owner，但落成只读 fail-closed auto-dispatch；projector 当前只消费 `FeishuRequestView`，不再自己回猜 approval / permissions / MCP subtype |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
@@ -145,7 +145,7 @@
   - orchestrator 会一次性写入 `SemanticKind`、`HintText`、`Sections`、`Options`、`Questions`
   - projector 直接把它当作 request-card owner payload 渲染，不再依赖 `FeishuDirectRequestPrompt` 这类过渡形状，也不再额外读取 `requestKind` 回猜 subtype
 - command/config cards 当前已分为两条 read-model 边界：
-  - `/menu`、bare config cards、bare `/cron` `/upgrade` `/debug` 根页当前跨边界统一携带 `control.FeishuPageView`（`UIEventFeishuPageView`）
+  - `/menu`、bare config cards、bare `/cron` `/upgrade` `/restart` `/debug` 根页当前跨边界统一携带 `control.FeishuPageView`（`UIEventFeishuPageView`）
   - compact / steerall / sendfile terminal、plan proposal、upgrade owner-flow、vscode guidance 等活跃 owner-card 路径当前也统一携带 `control.FeishuPageView`
   - `control.FeishuCatalogView` 当前只保留 orchestrator 内部的 menu/config/page 语义 read model；controller/daemon 在发卡前会先统一收敛成 `FeishuPageView`，adapter 只消费 `UIEventFeishuPageView`；最终卡片都遵循 `业务区 -> notice 区 -> footer`，notice 区仅在存在内容时出现
   - compact owner card 当前已完全迁到 page contract：running 态保留“当前会话”业务区，终态把结果提示放在 notice 区并标记 sealed
@@ -443,7 +443,7 @@ MCP request 卡片当前新增的可视语义：
   - `current_work` 分组当前的 canonical menu-visible 命令为 `/stop`、`/compact`、`/steerall`、`/status`，以及仅 `normal_working` 可见的 `/new`
   - `send_settings` 分组当前的 canonical menu-visible 命令为 `/reasoning`、`/model`、`/access`、`/plan`、`/verbose`、`/autocontinue`
   - `common_tools` 分组当前的 canonical menu-visible 命令为 `/autowhip`、`/history`、`/cron`、`/sendfile`
-  - `maintenance` 分组当前的 canonical menu-visible 命令为 `/mode`、`/upgrade`、`/debug`、`/help`
+  - `maintenance` 分组当前的 canonical menu-visible 命令为 `/mode`、`/upgrade`、`/restart`、`/debug`、`/help`
   - `switch_target` 分组当前还带一层 mode-aware display projection：
     - `normal mode` 只显示一个入口，标题为 `工作会话`，实际命令仍是 canonical `/list`
     - `vscode mode` 继续分别显示 `/list`、`/use`、`/useall`
@@ -521,6 +521,9 @@ MCP request 卡片当前新增的可视语义：
   - 成功与 no-op 会把原卡封成 sealed terminal card，并附带“如需再次调整，请重新发送对应命令”的 reopen 提示
   - 校验失败、参数格式错误、或仍未接管目标等前置条件失败，会继续留在同一张参数卡上，保留可重试表单；必要时把刚才输入的参数回填到默认值
   - 若动作不是从当前参数卡 callback 进入，例如用户直接发送 `/mode vscode`、`/autowhip on`、`/autocontinue on`，则仍保持 append-only，不会把普通文本 slash 升级成 inline replace
+- `/restart` 当前也明确分成 page 与 execute 两类：
+  - bare `/restart` 若来自 stamped 当前卡，会走 `first_result_card` replace，把重启根页直接替回当前卡
+  - `/restart child` 即使来自 stamped 当前卡也不走同步 replace；它只 append 一条 `正在重启` notice，后续成功/失败结果再继续 append-only
 - stamped 菜单命令里的非 inline 命令当前分成几类：
   - `/help`、`/status` 会直接把首个结果卡替成当前菜单卡；不再 append 一张脱离原卡的帮助卡/状态卡
   - `/list`、`/use`、`/useall` 会直接把首个实例列表 / 线程列表 / 提示 / 结果卡替成当前菜单卡；不再回退到 submission anchor。`/list` attach 成功后若同一事件流里还带 thread-selection follow-up，daemon 也会抑制这张重复卡
@@ -529,7 +532,7 @@ MCP request 卡片当前新增的可视语义：
 - stamped 参数卡与迁移卡的非 inline 命令当前额外分两类：
   - stamped `/mode vscode` 若切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先同步静默自动迁到 `managed_shim`；只有缺 target、自动迁移失败、状态检查仍异常，或后续进入 open prompt / 恢复提示时，才会把首张可投影提示卡替回当前参数卡。之后这张卡会被登记为当前 surface 的 `vscode guidance card`，后续异步命中的兼容修复、open prompt、恢复成功/失败、`not_attached_vscode` `/list` 提示，都会继续以 `message.patch` 回到同一张卡；这条强制同步兼容性检测只用于 stamped callback，纯文本 `/mode vscode` 仍保持旧的异步提示语义
 - `/vscode-migrate` 当前也已并入同一套 page contract 根页 / 校验页模型；stamped current-card callback 会先把 root page 或错误页同位替回当前卡，真正执行迁移则改走 `vscode_migrate_owner_flow` callback。迁移结果与后续异步 guidance 继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation
-- bare `/upgrade`、bare `/debug`、bare `/cron`、bare `/vscode-migrate` 当前已经退出 bare continuation 与提交态锚点；它们统一改成 page contract 根页/子页模型，stamped current-card callback 会直接把下一张 page 同位替回当前卡，非法参数也继续留在当前页内报错。
+- bare `/upgrade`、bare `/restart`、bare `/debug`、bare `/cron`、bare `/vscode-migrate` 当前已经退出 bare continuation 与提交态锚点；它们统一改成 page contract 根页/子页模型，stamped current-card callback 会直接把下一张 page 同位替回当前卡，非法参数也继续留在当前页内报错。
 - `/upgrade` 命令族当前还明确收成“page vs execute”两类共享分类：`/upgrade` 与 `/upgrade track` 属于 page subpage，会继续命中 stamped current-card replace；`/upgrade latest`、`/upgrade dev`、`/upgrade local`、`/upgrade codex` 与 `/upgrade track <track>` 都属于立即执行分支，不再依赖零散 token heuristics 区分。
 - `/upgrade latest` 当前不走 callback 同步 replace；但只要进入 daemon owner-card 流，同一张升级卡会继续通过 `message.patch` 在 `checking -> confirm -> running/cancelling -> restarting(sealed)` 之间推进，不再依赖“再次发送 `/upgrade latest`”。
 - `/upgrade codex` 当前也属于立即执行命令，不走 callback 同步 replace；若入口来自 stamped `/upgrade` 根页当前卡，daemon 会直接把这张根页卡交给 Codex upgrade owner-card flow。Codex 卡片当前先即时打开，不自动跑最新版本查询；只有点击 `检查更新` 才会异步 lookup latest。检查结果无论是“已是最新”“发现新版本但暂时不能升级”“发现新版本且可升级”，都会回到同一张可再次检查的 owner card；真正进入升级后只在 initiator surface 的同卡上继续 patch `running -> success/failed`，其它 surface 默认保持静默，只有用户主动输入时才收到缓存提示。
@@ -584,7 +587,7 @@ MCP request 卡片当前新增的可视语义：
   - 当前这条车道覆盖真正脱离当前 owner-card / guidance-card 上下文的：surface resume failure、无 active guidance card 可复用的 VS Code resume failure / `open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
   - 若 `VS Code` 兼容修复、`open VS Code` prompt、恢复成功/失败或 `not_attached_vscode` guidance 已经拥有当前 surface 的 active `vscode guidance card`，daemon 会先把 notice 改写成 patchable direct-command card 并回写同一张 guidance card；只有没有可复用 guidance card 的后台 runtime 路径才会落到这条独立车道
 - 这些真正的 global runtime 系统提示不会借用 final-card anchor 或 turn reply-chain；它们仍作为独立系统提示出现在主时间线
-- `/cron`、`/upgrade`、`/debug` 的 stamped 菜单入口与 stamped page callback，当前都会直接把下一张 page 或结果卡同位替回当前卡，不再先外跳 append 一张独立状态/输入卡。
+- `/cron`、`/upgrade`、`/restart`、`/debug` 的 stamped 菜单入口与 stamped page callback，当前属于根页 / 子页 / 非法参数回显的路径都会直接把下一张 page 或结果卡同位替回当前卡，不再先外跳 append 一张独立状态/输入卡；其中 `/restart child` 仍然保持立即执行 + append-only。
 - “命令已提交”锚点卡当前只剩少量命令继续使用（主要是 `/use`、`/useall`）；这批锚点卡会在短延时后尝试 best-effort 自动撤回，撤回失败时仅静默降级，不影响主流程。
 - 这条路径不会改变产品动作 owner；参数卡 apply、VS Code 菜单 handoff 与迁移卡收口都不复用“命令已提交”锚点，而是由产品 handler 直接返回可 replace / patch 的结果卡。
 - 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction`，并可在底部临时附着 reasoning 状态）不走 callback replace，也不属于旧卡 freshness 判定面：

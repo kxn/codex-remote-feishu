@@ -176,6 +176,8 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "查看帮助", "/help"
 	case control.ActionDebugCommand:
 		return "查看调试升级状态", "/debug"
+	case control.ActionRestartCommand:
+		return "重启当前 child", "/restart"
 	case control.ActionUpgradeCommand:
 		return "发起升级", "/upgrade"
 	case control.ActionTurnPatchCommand:

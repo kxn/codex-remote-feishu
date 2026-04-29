@@ -69,6 +69,19 @@ func (a *App) unregisterChildRestartWaitLocked(commandID string) *childRestartWa
 	return waiter
 }
 
+func (a *App) childRestartWaitInFlightLocked(instanceID string) bool {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return false
+	}
+	for _, waiter := range a.childRestartWaiters {
+		if waiter != nil && strings.TrimSpace(waiter.instanceID) == instanceID {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) completeChildRestartWaitLocked(commandID string, err error) bool {
 	waiter := a.unregisterChildRestartWaitLocked(commandID)
 	if waiter == nil {

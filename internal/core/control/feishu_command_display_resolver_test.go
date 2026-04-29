@@ -84,7 +84,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(maintenance), []string{"/mode", "/upgrade", "/debug", "/help", "/menu"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(maintenance), []string{"/mode", "/upgrade", "/restart", "/debug", "/help", "/menu"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude maintenance help commands = %#v, want %#v", got, want)
 	}
 }

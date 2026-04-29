@@ -225,6 +225,8 @@ func firstResultCardReplaceableAction(action Action) bool {
 		return true
 	case ActionCronCommand:
 		return !cronCommandRunsImmediately(action.Text)
+	case ActionRestartCommand:
+		return !FeishuRestartCommandRunsImmediately(action.Text)
 	case ActionUpgradeCommand:
 		return !FeishuUpgradeCommandRunsImmediately(action.Text)
 	case ActionDebugCommand:

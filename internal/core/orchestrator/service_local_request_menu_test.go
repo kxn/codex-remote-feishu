@@ -319,7 +319,7 @@ func TestMenuActionMaintenanceGroupShowsSystemManagementCommands(t *testing.T) {
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
 	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/mode", "/upgrade", "/debug", "/help"}
+	want := []string{"/mode", "/upgrade", "/restart", "/debug", "/help"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("maintenance commands = %#v, want %#v", got, want)
 	}

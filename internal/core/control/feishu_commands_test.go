@@ -57,6 +57,25 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesRestartCommand(t *testing.T) {
+	tests := []string{
+		"/restart",
+		"/restart child",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionRestartCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionRestartCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
 func TestParseFeishuTextActionRecognizesBendToMyWillRollbackCommand(t *testing.T) {
 	tests := []string{
 		"/bendtomywill",
@@ -383,6 +402,7 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandNew, wantKind: ActionNewThread, wantSlash: "/new"},
 		{commandID: FeishuCommandDetach, wantKind: ActionDetach, wantSlash: "/detach"},
 		{commandID: FeishuCommandFollow, wantKind: ActionFollowLocal, wantSlash: "/follow"},
+		{commandID: FeishuCommandRestart, wantKind: ActionRestartCommand, wantSlash: "/restart"},
 		{commandID: FeishuCommandPatch, wantKind: ActionTurnPatchCommand, wantSlash: "/bendtomywill"},
 		{commandID: FeishuCommandWorkspaceNewWorktree, wantKind: ActionWorkspaceNewWorktree, wantSlash: "/workspace new worktree"},
 	}
@@ -571,6 +591,24 @@ func TestFeishuCommandCatalogsIncludeUpgrade(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("catalog %#v does not include /upgrade", catalog.Title)
+		}
+	}
+}
+
+func TestFeishuCommandCatalogsIncludeRestart(t *testing.T) {
+	for _, catalog := range []FeishuPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
+		found := false
+		for _, section := range catalog.Sections {
+			for _, entry := range section.Entries {
+				for _, command := range entry.Commands {
+					if command == "/restart" {
+						found = true
+					}
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("catalog %#v does not include /restart", catalog.Title)
 		}
 	}
 }
