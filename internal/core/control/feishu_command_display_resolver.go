@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
 
 type FeishuCommandDisplayFamily struct {
 	FamilyID string
@@ -38,6 +42,38 @@ func FeishuCommandDisplayFamiliesForGroup(groupID string) []FeishuCommandDisplay
 	return families
 }
 
+func feishuCommandDisplayFamiliesForGroupContext(groupID string, ctx CatalogContext) []FeishuCommandDisplayFamily {
+	ctx = NormalizeCatalogContext(ctx)
+	families := FeishuCommandDisplayFamiliesForGroup(groupID)
+	if ctx.Backend != agentproto.BackendClaude || ctx.ProductMode != "normal" {
+		return families
+	}
+	switch groupID {
+	case FeishuCommandGroupCurrentWork:
+		def, ok := FeishuCommandDefinitionByID(FeishuCommandDetach)
+		if !ok {
+			return families
+		}
+		for _, family := range families {
+			if family.FamilyID == FeishuCommandDetach {
+				return families
+			}
+		}
+		return append(families, newFeishuCommandDisplayFamily(def))
+	case FeishuCommandGroupSwitchTarget:
+		filtered := make([]FeishuCommandDisplayFamily, 0, len(families))
+		for _, family := range families {
+			if family.FamilyID == FeishuCommandDetach {
+				continue
+			}
+			filtered = append(filtered, family)
+		}
+		return filtered
+	default:
+		return families
+	}
+}
+
 func ResolveFeishuCommandDisplayFamily(familyID string, interactive bool, ctx CatalogContext) (FeishuCommandDisplayResolution, bool) {
 	family, ok := FeishuCommandDisplayFamilyByID(familyID)
 	if !ok {
@@ -47,7 +83,7 @@ func ResolveFeishuCommandDisplayFamily(familyID string, interactive bool, ctx Ca
 }
 
 func ResolveFeishuCommandDisplayGroup(groupID string, interactive bool, ctx CatalogContext) []FeishuCommandDisplayResolution {
-	families := FeishuCommandDisplayFamiliesForGroup(groupID)
+	families := feishuCommandDisplayFamiliesForGroupContext(groupID, ctx)
 	resolved := make([]FeishuCommandDisplayResolution, 0, len(families))
 	for _, family := range families {
 		current, ok := resolveFeishuCommandDisplayFamily(family, interactive, ctx)

@@ -30,9 +30,9 @@ func TestResolveFeishuCommandStrategyAppliesClaudeMatrix(t *testing.T) {
 		{familyID: FeishuCommandNew, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
 		{familyID: FeishuCommandList, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
 		{familyID: FeishuCommandUse, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "route contract"},
-		{familyID: FeishuCommandDetach, wantKind: FeishuCommandStrategyNative, wantVisible: false, wantDispatch: true},
-		{familyID: FeishuCommandReview, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "detached review"},
-		{familyID: FeishuCommandPatch, wantKind: FeishuCommandStrategyApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "patch owner-flow"},
+		{familyID: FeishuCommandDetach, wantKind: FeishuCommandStrategyNative, wantVisible: true, wantDispatch: true},
+		{familyID: FeishuCommandReview, wantKind: FeishuCommandStrategyApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
+		{familyID: FeishuCommandPatch, wantKind: FeishuCommandStrategyApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
 		{familyID: FeishuCommandSteerAll, wantKind: FeishuCommandStrategyReject, wantVisible: false, wantDispatch: false, wantNoteContains: "same-turn steer"},
 	}
 	for _, tt := range tests {

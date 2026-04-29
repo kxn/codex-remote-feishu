@@ -81,9 +81,9 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandUse:
 		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude 会话切换沿用现有产品壳，但底层改走 backend-aware session catalog 与 route contract。")
 	case FeishuCommandReview:
-		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude review 入口沿用现有 detached review 壳，底层继续复用当前 attached 会话上下文。")
+		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude `/review` 当前不纳入 visible MVP；在 detached review contract 补齐前保持隐藏并拒绝直接执行。")
 	case FeishuCommandPatch:
-		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude turn patch 入口沿用现有 patch owner-flow 壳，底层继续复用当前 attached 会话上下文。")
+		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude `/bendtomywill` 当前不纳入 visible MVP；在 turn patch contract 补齐前保持隐藏并拒绝直接执行。")
 	case FeishuCommandWorkspace,
 		FeishuCommandWorkspaceList,
 		FeishuCommandWorkspaceNew,
@@ -104,7 +104,7 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandVSCodeMigrate:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前 Claude pre-MVP 范围未开放该命令；保持隐藏并显式拒绝。")
 	case FeishuCommandDetach:
-		return claudeHiddenNativeStrategy(familyID, "Claude 当前允许 `/detach` 作为本地逃生与残留清理入口，但暂不作为可见主菜单项。")
+		return claudeVisibleNativeStrategy(familyID)
 	default:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前 Claude pre-MVP 范围未开放该命令；保持隐藏并显式拒绝。")
 	}

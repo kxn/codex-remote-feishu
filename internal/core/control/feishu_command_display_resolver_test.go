@@ -68,7 +68,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		ProductMode: "normal",
 		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
 	})
-	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status", "/detach"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude current_work menu commands = %#v, want %#v", got, want)
 	}
 
@@ -92,7 +92,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(commonTools), []string{"/review", "/bendtomywill", "/history"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/history"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
 	}
 

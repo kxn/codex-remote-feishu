@@ -228,9 +228,6 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
-		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
-			continue
-		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
 			grouped[workspaceKey] = append(grouped[workspaceKey], inst)
 		}
@@ -485,18 +482,7 @@ func (s *Service) workspaceOnlineInstancesForBackend(workspaceKey string, backen
 }
 
 func (s *Service) workspaceOnlineInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
-	instances := s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
-	if surface == nil {
-		return instances
-	}
-	filtered := make([]*state.InstanceRecord, 0, len(instances))
-	for _, inst := range instances {
-		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
-			continue
-		}
-		filtered = append(filtered, inst)
-	}
-	return filtered
+	return s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
 }
 
 func (s *Service) sortWorkspaceAttachInstances(surface *state.SurfaceConsoleRecord, workspaceKey string, instances []*state.InstanceRecord) {
@@ -564,15 +550,6 @@ func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRe
 	instances := s.workspaceOnlineInstances(workspaceKey)
 	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
 		instances = s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, s.surfaceBackend(surface))
-	} else if surface != nil {
-		filtered := make([]*state.InstanceRecord, 0, len(instances))
-		for _, inst := range instances {
-			if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
-				continue
-			}
-			filtered = append(filtered, inst)
-		}
-		instances = filtered
 	}
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
 }
@@ -611,9 +588,6 @@ func (s *Service) mergeWorkspaceSelectionRecencyFromOnlineThreads(surface *state
 			continue
 		}
 		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
-			continue
-		}
-		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
 			continue
 		}
 		for _, thread := range ordinaryVisibleThreads(inst) {

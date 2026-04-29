@@ -81,6 +81,7 @@ func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuComm
 	}
 	if normalized.Backend == "claude" && normalized.ProductMode == "normal" {
 		return profile.withAdditionalFamilies(
+			displayProfileFamily(FeishuCommandDetach),
 			displayProfileFamily(FeishuCommandList),
 			displayProfileFamily(FeishuCommandUse),
 			displayProfileFamily(FeishuCommandClaudeProfile),

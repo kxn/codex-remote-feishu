@@ -835,9 +835,6 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
-		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
-			continue
-		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
 			grouped[workspaceKey] = append(grouped[workspaceKey], inst)
 		}

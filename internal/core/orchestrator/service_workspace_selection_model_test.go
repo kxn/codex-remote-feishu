@@ -301,3 +301,30 @@ func TestBuildWorkspaceSelectionModelFiltersNormalModeByClaudeBackend(t *testing
 		t.Fatalf("expected claude backend workspace list only, got %#v", model.Entries)
 	}
 }
+
+func TestBuildWorkspaceSelectionModelDoesNotFilterClaudeWorkspaceByProfile(t *testing.T) {
+	now := time.Date(2026, 4, 29, 3, 6, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "profile-a", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-claude",
+		DisplayName:     "claude-repo",
+		WorkspaceRoot:   "/data/dl/claude",
+		WorkspaceKey:    "/data/dl/claude",
+		ShortName:       "claude",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "profile-b",
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/claude", LastUsedAt: now},
+		},
+	})
+
+	model, events := svc.buildWorkspaceSelectionModel(svc.root.Surfaces["surface-1"], 1)
+	if len(events) != 0 || model == nil {
+		t.Fatalf("expected workspace selection model, got model=%#v events=%#v", model, events)
+	}
+	if len(model.Entries) != 1 || !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/claude") {
+		t.Fatalf("expected profile-mismatched claude workspace to stay visible, got %#v", model.Entries)
+	}
+}

@@ -653,6 +653,41 @@ func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
 	}
 }
 
+func TestAttachWorkspaceIgnoresClaudeProfileMismatch(t *testing.T) {
+	now := time.Date(2026, 4, 29, 3, 12, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "profile-a", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-1",
+		DisplayName:     "repo",
+		WorkspaceRoot:   "/data/dl/repo",
+		WorkspaceKey:    "/data/dl/repo",
+		ShortName:       "repo",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "profile-b",
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/repo"},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/repo",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-1" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected attach to reuse backend-matching workspace despite profile mismatch, got %#v", surface)
+	}
+	if len(events) == 0 {
+		t.Fatalf("expected workspace attach events, got %#v", events)
+	}
+}
+
 func TestAttachWorkspaceSwitchClearsPinnedThread(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
