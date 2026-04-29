@@ -146,15 +146,22 @@ const (
 )
 
 type Root struct {
-	Instances         map[string]*InstanceRecord
-	Surfaces          map[string]*SurfaceConsoleRecord
-	WorkspaceDefaults map[string]ModelConfigRecord
+	Instances                       map[string]*InstanceRecord
+	Surfaces                        map[string]*SurfaceConsoleRecord
+	WorkspaceDefaults               map[string]ModelConfigRecord
+	ClaudeWorkspaceProfileSnapshots map[string]ClaudeWorkspaceProfileSnapshotRecord
 }
 
 type ModelConfigRecord struct {
 	Model           string
 	ReasoningEffort string
 	AccessMode      string
+}
+
+type ClaudeWorkspaceProfileSnapshotRecord struct {
+	ReasoningEffort string
+	AccessMode      string
+	PlanMode        PlanModeSetting
 }
 
 type InstanceRecord struct {
@@ -230,6 +237,7 @@ type SurfaceConsoleRecord struct {
 	ActorUserID          string
 	ProductMode          ProductMode
 	Backend              agentproto.Backend
+	ClaudeProfileID      string
 	Verbosity            SurfaceVerbosity
 	PlanMode             PlanModeSetting
 	ClaimedWorkspaceKey  string
@@ -433,6 +441,7 @@ type HeadlessLaunchRecord struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	ClaudeProfileID  string
 	ThreadName       string
 	ThreadPreview    string
 	RequestedAt      time.Time
@@ -578,8 +587,9 @@ type StagedFileRecord struct {
 
 func NewRoot() *Root {
 	return &Root{
-		Instances:         map[string]*InstanceRecord{},
-		Surfaces:          map[string]*SurfaceConsoleRecord{},
-		WorkspaceDefaults: map[string]ModelConfigRecord{},
+		Instances:                       map[string]*InstanceRecord{},
+		Surfaces:                        map[string]*SurfaceConsoleRecord{},
+		WorkspaceDefaults:               map[string]ModelConfigRecord{},
+		ClaudeWorkspaceProfileSnapshots: map[string]ClaudeWorkspaceProfileSnapshotRecord{},
 	}
 }

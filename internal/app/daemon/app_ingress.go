@@ -230,6 +230,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 			Notice:           notice,
 		}})
 		a.syncSurfaceResumeStateLocked(nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 		return nil
 	}
 	if a.maybeHandleStandaloneCodexUpgradeActionLocked(ctx, action) {
@@ -239,6 +240,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.ensureSurfaceRouteForNotice(action)
 		a.handleUIEventsLocked(ctx, upgradeOwnerFlowBlockedEvents(action.SurfaceSessionID))
 		a.syncSurfaceResumeStateLocked(nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 		return nil
 	}
 	if a.maybeHandleFeishuAppTestActionLocked(ctx, action) {
@@ -252,6 +254,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 			a.handleUIEventsLocked(ctx, appendEvents)
 		}
 		a.syncSurfaceResumeStateLocked(nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 		a.syncWorkspaceSurfaceContextFilesLocked()
 		return inlineResult
 	}
@@ -267,6 +270,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
 	}
 	a.syncSurfaceResumeStateLocked(clearTargets)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncWorkspaceSurfaceContextFilesLocked()
 	if action.Kind == control.ActionModeCommand {
 		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
@@ -543,6 +547,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	a.handleUIEventsLocked(ctx, recoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncWorkspaceSurfaceContextFilesLocked()
 }
 
@@ -610,6 +615,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	}
 	if syncSurfaceResumeState {
 		a.syncSurfaceResumeStateForInstanceLocked(instanceID, nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 	}
 }
 

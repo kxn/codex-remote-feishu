@@ -243,6 +243,9 @@ func (s *Service) normalizeSurfaceProductMode(surface *state.SurfaceConsoleRecor
 	}
 	surface.ProductMode = state.NormalizeProductMode(surface.ProductMode)
 	surface.Backend = state.EffectiveSurfaceBackend(surface, s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)])
+	if strings.TrimSpace(surface.ClaudeProfileID) != "" || surface.Backend == agentproto.BackendClaude {
+		_ = s.surfaceClaudeProfileID(surface)
+	}
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(surface.PlanMode)
 	s.normalizeLegacyNormalFollowRoute(surface)

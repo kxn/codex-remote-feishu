@@ -735,6 +735,7 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 	if surface.AttachedInstanceID == "" {
 		return notice(surface, "detached", s.detachedNoneText(surface))
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	events := s.discardDrafts(surface)
 	clearSurfaceRequests(surface)
 	surface.PendingHeadless = nil

@@ -370,6 +370,40 @@ func TestDaemonPersistsSurfaceBackendAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestDaemonPersistsSurfaceClaudeProfileAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+
+	app.service.MaterializeSurfaceResume(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.ProductModeNormal,
+		agentproto.BackendClaude,
+		"devseek",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	app.syncSurfaceResumeStateLocked(nil)
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected persisted claude profile id, got %#v", entry)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	if got := restarted.service.SurfaceClaudeProfileID("surface-1"); got != "devseek" {
+		t.Fatalf("expected claude profile id restored after restart, got %q", got)
+	}
+	snapshot := restarted.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.ProductMode != "normal" || snapshot.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected latent claude surface after restart, got %#v", snapshot)
+	}
+}
+
 func TestDaemonPersistsSurfaceVerbosityAcrossRestart(t *testing.T) {
 	t.Parallel()
 

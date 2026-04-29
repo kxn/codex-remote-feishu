@@ -21,6 +21,7 @@ func (a *App) maybeHandleStandaloneCodexUpgradeActionLocked(ctx context.Context,
 	if strings.TrimSpace(action.SurfaceSessionID) == strings.TrimSpace(tx.InitiatorSurface) {
 		a.handleUIEventsLocked(ctx, codexUpgradeBlockedEvents(action.SurfaceSessionID, false))
 		a.syncSurfaceResumeStateLocked(nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 		return true
 	}
 	if codexUpgradeQueueableInput(action) && strings.TrimSpace(a.service.AttachedInstanceID(action.SurfaceSessionID)) != "" {
@@ -29,11 +30,13 @@ func (a *App) maybeHandleStandaloneCodexUpgradeActionLocked(ctx context.Context,
 		events = append(events, codexUpgradeBlockedEvents(action.SurfaceSessionID, true)...)
 		a.handleUIEventsLocked(ctx, events)
 		a.syncSurfaceResumeStateLocked(nil)
+		a.syncClaudeWorkspaceProfileStateLocked()
 		return true
 	}
 
 	a.handleUIEventsLocked(ctx, codexUpgradeBlockedEvents(action.SurfaceSessionID, false))
 	a.syncSurfaceResumeStateLocked(nil)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	return true
 }
 

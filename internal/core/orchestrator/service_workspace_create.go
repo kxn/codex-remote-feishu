@@ -133,6 +133,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-workspace-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
@@ -159,12 +160,14 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,
 		ThreadCWD:        workspaceKey,
+		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
 		Status:           state.HeadlessLaunchStarting,
 		Purpose:          state.HeadlessLaunchPurposeFreshWorkspace,
 		PrepareNewThread: prepareNewThread,
 	}
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	noticeTitle := "正在接入工作区"
 	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
 	if prepareNewThread {
@@ -183,12 +186,16 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 		eventcontract.Event{
 			Kind:             eventcontract.KindDaemonCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandStartHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       instanceID,
-				ThreadCWD:        workspaceKey,
-			},
+			DaemonCommand: func() *control.DaemonCommand {
+				command := &control.DaemonCommand{
+					Kind:             control.DaemonCommandStartHeadless,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					InstanceID:       instanceID,
+					ThreadCWD:        workspaceKey,
+				}
+				s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
+				return command
+			}(),
 		},
 	)
 	return events

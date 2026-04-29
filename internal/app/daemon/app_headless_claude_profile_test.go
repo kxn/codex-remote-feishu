@@ -55,7 +55,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		AdminURL:        "http://localhost:9501/admin/",
 		SetupURL:        "http://localhost:9501/setup",
 	})
-	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
 
 	var captured relayruntime.HeadlessLaunchOptions
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
@@ -127,7 +127,7 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 		AdminURL:        "http://localhost:9501/admin/",
 		SetupURL:        "http://localhost:9501/setup",
 	})
-	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
 
 	var captured relayruntime.HeadlessLaunchOptions
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {

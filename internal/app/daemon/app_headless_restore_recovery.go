@@ -101,6 +101,7 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 		events = append(events, restoreEvents...)
 	}
 	a.syncSurfaceResumeStateForSurfacesLocked(updatedSurfaceIDs, nil)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	return events
 }
 

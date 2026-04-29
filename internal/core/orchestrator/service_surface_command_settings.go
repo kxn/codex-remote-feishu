@@ -179,6 +179,9 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	surface.ProductMode = target.ProductMode
 	surface.Backend = state.NormalizeSurfaceBackend(target.ProductMode, target.Backend)
+	if target.ProductMode == state.ProductModeNormal && target.Backend == agentproto.BackendClaude {
+		_ = s.surfaceClaudeProfileID(surface)
+	}
 	if currentWorkspaceKey != "" && target.ProductMode == state.ProductModeNormal {
 		surface.ClaimedWorkspaceKey = currentWorkspaceKey
 	}
@@ -400,6 +403,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 		return notice(surface, "surface_plan_mode_current", text)
 	}
 	surface.PlanMode = target
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	text := fmt.Sprintf("已将当前飞书会话的 Plan mode 切换为 %s。", target)
 	if surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 {
 		text += " 当前已在执行或排队的消息不受影响。"
@@ -433,6 +437,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		surface.PromptOverride.Model = ""
 		surface.PromptOverride.ReasoningEffort = ""
 		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
@@ -509,6 +514,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		})
 	}
 	surface.PromptOverride.ReasoningEffort = strings.ToLower(parts[1])
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {
 		_ = summary
@@ -546,6 +552,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	if isClearCommand(parts[1]) {
 		surface.PromptOverride.AccessMode = ""
 		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 		if commandCardOwnsInlineResult(action) {
 			_ = summary
@@ -567,6 +574,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	}
 	surface.PromptOverride.AccessMode = mode
 	surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {
 		_ = summary

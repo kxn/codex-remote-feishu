@@ -125,6 +125,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	events := []eventcontract.Event{}
 	if surface.AttachedInstanceID != "" {
@@ -166,6 +167,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	clearSurfaceRequests(surface)
 	s.clearPreparedNewThread(surface)
 	surface.PromptOverride = state.ModelConfigRecord{}
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if isHeadlessInstance(inst) && strings.TrimSpace(threadCWD(view)) != "" {
 		s.retargetManagedHeadlessInstance(inst, threadCWD(view))
@@ -350,6 +352,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		}
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
 	threadTitle := displayThreadTitle(view.Inst, view.Thread, view.ThreadID)
@@ -401,6 +404,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		ThreadName:       threadName,
 		ThreadPreview:    threadPreview,
 		ThreadCWD:        cwd,
+		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
 		Status:           state.HeadlessLaunchStarting,
@@ -408,6 +412,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		SourceInstanceID: sourceInstanceID,
 		AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 	}
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	if mode == startHeadlessModeDefault {
 		events = append(events, eventcontract.Event{
 			Kind:             eventcontract.KindNotice,
@@ -422,15 +427,19 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindDaemonCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
-		DaemonCommand: &control.DaemonCommand{
-			Kind:             control.DaemonCommandStartHeadless,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			InstanceID:       instanceID,
-			ThreadID:         view.ThreadID,
-			ThreadTitle:      threadTitle,
-			ThreadCWD:        cwd,
-			AutoRestore:      mode == startHeadlessModeHeadlessRestore,
-		},
+		DaemonCommand: func() *control.DaemonCommand {
+			command := &control.DaemonCommand{
+				Kind:             control.DaemonCommandStartHeadless,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				InstanceID:       instanceID,
+				ThreadID:         view.ThreadID,
+				ThreadTitle:      threadTitle,
+				ThreadCWD:        cwd,
+				AutoRestore:      mode == startHeadlessModeHeadlessRestore,
+			}
+			s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
+			return command
+		}(),
 	})
 	return events
 }

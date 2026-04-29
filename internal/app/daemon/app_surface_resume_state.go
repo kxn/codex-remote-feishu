@@ -79,6 +79,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			entry.ActorUserID,
 			state.ProductMode(entry.ProductMode),
 			agentproto.Backend(entry.Backend),
+			entry.ClaudeProfileID,
 			state.SurfaceVerbosity(entry.Verbosity),
 			state.PlanModeSetting(entry.PlanMode),
 		)
@@ -246,6 +247,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		ActorUserID:      strings.TrimSpace(surface.ActorUserID),
 		ProductMode:      string(state.NormalizeProductMode(surface.ProductMode)),
 		Backend:          string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
+		ClaudeProfileID:  strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
 		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
 		PlanMode:         string(state.NormalizePlanModeSetting(surface.PlanMode)),
 	}
@@ -438,6 +440,7 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 		}
 	}
 	a.syncSurfaceResumeStateForSurfacesLocked(updatedSurfaceIDs, nil)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	return events
 }
 
@@ -479,6 +482,7 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Ev
 		}
 	}
 	a.syncSurfaceResumeStateForSurfacesLocked(updatedSurfaceIDs, nil)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	return events
 }
 

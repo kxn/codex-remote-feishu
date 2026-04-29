@@ -31,6 +31,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 			return blocked
 		}
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey)
 	if inst == nil {
@@ -89,6 +90,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 		Title:     "未选择会话",
 		Preview:   "",
 	}
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	if mode == attachWorkspaceModeTargetPickerNewThread {
 		return s.prepareNewThread(surface)
 	}
@@ -165,6 +167,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	events := s.discardDrafts(surface)
 	if surface.AttachedInstanceID != "" {
@@ -196,6 +199,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	surface.Abandoning = false
 	delete(s.pausedUntil, surface.SurfaceSessionID)
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if productMode == state.ProductModeVSCode {
 		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance, mode)...)

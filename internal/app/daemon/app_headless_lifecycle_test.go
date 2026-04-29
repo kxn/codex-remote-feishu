@@ -100,7 +100,7 @@ func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 			StateDir: stateDir,
 		},
 	})
-	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline-claude",
 		DisplayName:   "repo",

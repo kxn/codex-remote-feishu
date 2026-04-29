@@ -132,6 +132,7 @@ type App struct {
 	relayConnections            map[string]*relayConnectionState
 	feishuRuntime               feishuRuntimeState
 	cronRuntime                 cronRuntimeState
+	claudeWorkspaceProfileState claudeWorkspaceProfileRuntimeState
 
 	adminAuth                  *adminauth.Manager
 	admin                      adminRuntimeState
@@ -183,6 +184,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		pendingGlobalRuntimeNotices: map[string][]eventcontract.Event{},
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
+		claudeWorkspaceProfileState: claudeWorkspaceProfileRuntimeState{},
 		surfaceResumeRuntime:        newSurfaceResumeRuntimeState(),
 		childRestartWaiters:         map[string]*childRestartWaiter{},
 		codexUpgradeRuntime:         codexupgraderuntime.NewState(),
@@ -301,7 +303,9 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.cronRuntime.repoManager = cronrepo.NewManager(cfg.Paths.StateDir)
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
+	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncSurfaceResumeStateLocked(nil)
 }
 

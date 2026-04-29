@@ -25,6 +25,7 @@ type Entry struct {
 	ActorUserID        string    `json:"actorUserID,omitempty"`
 	ProductMode        string    `json:"productMode,omitempty"`
 	Backend            string    `json:"backend,omitempty"`
+	ClaudeProfileID    string    `json:"claudeProfileID,omitempty"`
 	Verbosity          string    `json:"verbosity,omitempty"`
 	PlanMode           string    `json:"planMode,omitempty"`
 	ResumeInstanceID   string    `json:"resumeInstanceID,omitempty"`
@@ -203,6 +204,12 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
 	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), agentproto.Backend(strings.TrimSpace(entry.Backend))))
+	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
+	if entry.ClaudeProfileID != "" {
+		entry.ClaudeProfileID = state.NormalizeClaudeProfileID(entry.ClaudeProfileID)
+	} else if agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
+		entry.ClaudeProfileID = state.DefaultClaudeProfileID
+	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
@@ -234,6 +241,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
 		agentproto.NormalizeBackend(agentproto.Backend(left.Backend)) == agentproto.NormalizeBackend(agentproto.Backend(right.Backend)) &&
+		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&

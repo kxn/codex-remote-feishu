@@ -98,6 +98,7 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 		InstanceID:       "inst-codex",
 	})
 	surface := svc.root.Surfaces["surface-1"]
+	surface.ClaudeProfileID = "devseek"
 	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -117,6 +118,9 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	if surface.PendingHeadless == nil || !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") {
 		t.Fatalf("expected claude mode switch to prepare workspace headless, got %#v", surface.PendingHeadless)
 	}
+	if surface.PendingHeadless.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected pending headless to keep current claude profile, got %#v", surface.PendingHeadless)
+	}
 	if !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
 		t.Fatalf("expected workspace claim to be preserved, got %#v", surface)
 	}
@@ -134,5 +138,8 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	}
 	if events[2].DaemonCommand == nil || events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless daemon command third, got %#v", events)
+	}
+	if events[2].DaemonCommand.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected start headless daemon command to carry current claude profile, got %#v", events[2].DaemonCommand)
 	}
 }

@@ -262,7 +262,7 @@ func TestListWorkspacesDeduplicatesPersistedWorkspaceAliases(t *testing.T) {
 func TestBuildWorkspaceSelectionModelFiltersNormalModeByClaudeBackend(t *testing.T) {
 	now := time.Date(2026, 4, 29, 3, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "")
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-claude",
 		DisplayName:   "claude-repo",

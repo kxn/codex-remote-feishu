@@ -12,6 +12,7 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	if surface == nil {
 		return nil
 	}
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	instanceID := surface.AttachedInstanceID
 	events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已断开，当前提案计划已失效。")
 	clearAutoContinueRuntime(surface)

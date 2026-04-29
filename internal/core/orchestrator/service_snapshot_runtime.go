@@ -84,7 +84,7 @@ func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID s
 	})
 }
 
-func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
+func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, claudeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
 	}
@@ -100,6 +100,7 @@ func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUs
 	}
 	surface.ProductMode = state.NormalizeProductMode(mode)
 	surface.Backend = state.NormalizeSurfaceBackend(surface.ProductMode, backend)
+	s.setSurfaceClaudeProfileID(surface, claudeProfileID)
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
 }
@@ -593,6 +594,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	}
 
 	for _, surface := range surfaces {
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
 		surface.ActiveTurnOrigin = ""
 		surface.DispatchMode = state.DispatchModeNormal
@@ -650,6 +652,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	preserveRemoteOwnership := false
 	for _, surface := range surfaces {
 		noticeText = s.attachmentTransportDegradedText(surface, inst)
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
 		surface.ActiveTurnOrigin = ""
 		surface.DispatchMode = state.DispatchModeNormal
