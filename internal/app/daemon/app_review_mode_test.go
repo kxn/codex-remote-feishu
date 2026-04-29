@@ -42,6 +42,10 @@ func newReviewModeAppForTest(t *testing.T) (*App, *messageIDAssigningGateway, st
 				ThreadID: "thread-review",
 				CWD:      repoRoot,
 				Loaded:   true,
+				Source: &agentproto.ThreadSourceRecord{
+					Kind:           agentproto.ThreadSourceKindReview,
+					ParentThreadID: "thread-main",
+				},
 			},
 		},
 	})
@@ -284,6 +288,48 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	}
 	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button on review final card, got %#v", ops[0].CardElements)
+	}
+}
+
+func TestDeliverUIEventKeepsReviewFinalCardSuppressedAfterSessionRuntimeClears(t *testing.T) {
+	app, gateway, _ := newReviewModeAppForTest(t)
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:             eventcontract.KindBlockCommitted,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-final-main-1",
+		Block: &render.Block{
+			Kind:       render.BlockAssistantMarkdown,
+			InstanceID: "inst-1",
+			ThreadID:   "thread-review",
+			TurnID:     "turn-review-2",
+			ItemID:     "item-review-2",
+			Text:       "建议把验证逻辑抽到 helper。",
+			Final:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver detached review final block without session runtime: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one review final card, got %#v", ops)
+	}
+	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
+		t.Fatalf("expected review title prefix even after session runtime clears, got %#v", ops[0].CardTitle)
+	}
+	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+		t.Fatalf("did not expect review entry button on detached review final card, got %#v", ops[0].CardElements)
+	}
+	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewCommand)) {
+		t.Fatalf("did not expect commit review buttons on detached review final card, got %#v", ops[0].CardElements)
+	}
+	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewDiscard)) {
+		t.Fatalf("did not expect exit buttons once session runtime is gone, got %#v", ops[0].CardElements)
+	}
+	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewApply)) {
+		t.Fatalf("did not expect exit buttons once session runtime is gone, got %#v", ops[0].CardElements)
 	}
 }
 
