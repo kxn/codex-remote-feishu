@@ -65,6 +65,10 @@ describe("AdminRoute", () => {
       }),
     ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "系统集成" })).toBeInTheDocument();
+    expect(screen.queryByText("当前机器人 onboarding 与补救流程。")).not.toBeInTheDocument();
+    expect(screen.queryByText("设置流程")).not.toBeInTheDocument();
+    expect(screen.queryByText(/workflow/i)).not.toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
     expect(
@@ -78,7 +82,7 @@ describe("AdminRoute", () => {
     expect(calls.some((call) => call.path.endsWith("/vscode/detect"))).toBe(false);
   });
 
-  it("shows permission remediation from the shared workflow panel", async () => {
+  it("shows permission remediation inside the admin robot detail", async () => {
     window.history.replaceState({}, "", "/admin");
 
     const { calls } = installMockFetch(withClaudeProfiles({
@@ -126,7 +130,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+    expect(await screen.findByText("权限检查")).toBeInTheDocument();
     expect(
       await screen.findByText(
         "如果当前企业权限暂时申请不到，你也可以先跳过这一步，后面再回来补齐。",
@@ -233,10 +237,9 @@ describe("AdminRoute", () => {
     await user.click(screen.getByRole("button", { name: "验证并保存" }));
 
     expect(await screen.findByRole("heading", { name: "运营机器人" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    expect(
-      await screen.findByText("当前飞书应用已经接入，下面请继续补齐剩余联调与机器决策。"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("权限检查")).toBeInTheDocument();
+    expect(await screen.findByText("当前还有待处理项，完成后这里会恢复为正常状态。")).toBeInTheDocument();
+    expect(screen.queryByText("当前飞书应用已经接入，下面请继续补齐剩余联调与机器决策。")).not.toBeInTheDocument();
   });
 
   it("opens the delete modal and removes the robot after confirmation", async () => {
@@ -351,8 +354,8 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "重新发送测试提示" }));
+    expect(await screen.findByText("事件订阅")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "重新发送测试提示" })[0]);
     expect(
       await screen.findByText(
         "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",

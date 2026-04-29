@@ -5,7 +5,6 @@ import type {
   ClaudeProfilesResponse,
   ClaudeProfileSummary,
   FeishuAppsResponse,
-  FeishuAppSummary,
   ImageStagingCleanupResponse,
   ImageStagingStatusResponse,
   LogsStorageCleanupResponse,
@@ -13,15 +12,11 @@ import type {
   PreviewDriveCleanupResponse,
   PreviewDriveStatusResponse,
 } from "../lib/types";
-import { OnboardingFlowSurface } from "./shared/onboarding-flow";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
-
-type NoticeTone = "good" | "warn" | "danger";
-
-type DetailNotice = {
-  tone: NoticeTone;
-  message: string;
-};
+import {
+  AdminRobotSection,
+  type AdminRobotDetailNotice,
+} from "./admin/AdminRobotSection";
 
 const newRobotID = "new";
 
@@ -29,9 +24,11 @@ export function AdminRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
-  const [apps, setApps] = useState<FeishuAppSummary[]>([]);
+  const [apps, setApps] = useState<FeishuAppsResponse["apps"]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
-  const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
+  const [detailNotice, setDetailNotice] = useState<AdminRobotDetailNotice | null>(
+    null,
+  );
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>(
     [],
   );
@@ -50,10 +47,6 @@ export function AdminRoute() {
   const [actionBusy, setActionBusy] = useState("");
   const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
 
-  const selectedApp = useMemo(
-    () => apps.find((app) => app.id === selectedRobotID) ?? null,
-    [apps, selectedRobotID],
-  );
   const versionTitle = buildAdminPageTitle(bootstrap);
   const previewSummary = useMemo(() => {
     return Object.values(previewMap).reduce(
@@ -233,91 +226,12 @@ export function AdminRoute() {
     }
   }
 
-  function renderRobotDetail() {
-    if (!selectedApp) {
-      return (
-        <>
-          {detailNotice ? (
-            <div className={`notice-banner ${detailNotice.tone}`}>
-              {detailNotice.message}
-            </div>
-          ) : null}
-          <OnboardingFlowSurface
-            mode="admin"
-            connectOnly
-            connectOnlyTitle="新增机器人"
-            connectOnlyDescription="选择扫码创建或手动输入，连接验证通过后会自动加入机器人列表。"
-            onConnectedApp={async (appID) => {
-              setDetailNotice(null);
-              await loadAdminPage({ preferredRobotID: appID });
-            }}
-          />
-        </>
-      );
-    }
-
-    return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>{selectedApp.name || "未命名机器人"}</h2>
-          <p>当前机器人 onboarding 与补救流程。</p>
-        </div>
-        <dl className="definition-list">
-          <div>
-            <dt>App ID</dt>
-            <dd>{selectedApp.appId || "未填写"}</dd>
-          </div>
-          <div>
-            <dt>连接状态</dt>
-            <dd>{describeConnectionState(selectedApp)}</dd>
-          </div>
-          <div>
-            <dt>启用状态</dt>
-            <dd>{selectedApp.enabled ? "已启用" : "未启用"}</dd>
-          </div>
-          <div>
-            <dt>最近验证</dt>
-            <dd>{selectedApp.verifiedAt ? formatTimestamp(selectedApp.verifiedAt) : "暂未验证"}</dd>
-          </div>
-        </dl>
-        {selectedApp.runtimeApply?.pending ? (
-          <div className="notice-banner warn">
-            当前机器人还在同步设置，请稍后刷新状态后再继续操作。
-          </div>
-        ) : null}
-        {detailNotice ? (
-          <div className={`notice-banner ${detailNotice.tone}`}>
-            {detailNotice.message}
-          </div>
-        ) : null}
-        <OnboardingFlowSurface
-          mode="admin"
-          preferredAppID={selectedApp.id}
-          onContextRefresh={(appID) => loadAdminPage({ preferredRobotID: appID || selectedApp.id })}
-        />
-        <div className="button-row">
-          <button
-            className="danger-button"
-            type="button"
-            disabled={Boolean(selectedApp.readOnly)}
-            onClick={() => setDeleteTargetID(selectedApp.id)}
-          >
-            删除机器人
-          </button>
-        </div>
-        {selectedApp.readOnly ? (
-          <p className="support-copy">当前机器人由运行环境提供，不能在这里删除。</p>
-        ) : null}
-      </section>
-    );
-  }
-
   if (loading) {
     return (
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、Claude 配置与本地存储。</p>
+          <p>管理机器人、系统集成、Claude 配置与本地存储。</p>
         </header>
         <section className="panel">
           <div className="empty-state">
@@ -334,7 +248,7 @@ export function AdminRoute() {
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、Claude 配置与本地存储。</p>
+          <p>管理机器人、系统集成、Claude 配置与本地存储。</p>
         </header>
         <section className="panel">
           <div className="empty-state error">
@@ -359,51 +273,27 @@ export function AdminRoute() {
     <div className="product-page">
       <header className="product-topbar">
         <h1>{versionTitle}</h1>
-        <p>管理机器人、Claude 配置与本地存储。</p>
+        <p>管理机器人、系统集成、Claude 配置与本地存储。</p>
       </header>
 
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>机器人管理</h2>
-          <p>查看所有机器人并处理需要关注的状态。</p>
-        </div>
-        <div className="robot-layout" style={{ marginTop: "1rem" }}>
-          <div className="robot-list">
-            {apps.map((app) => (
-              <button
-                key={app.id}
-                className={`robot-list-button${selectedRobotID === app.id ? " active" : ""}`}
-                type="button"
-                onClick={() => {
-                  setDetailNotice(null);
-                  setSelectedRobotID(app.id);
-                }}
-              >
-                <div className="robot-list-head">
-                  <strong>{app.name || "未命名机器人"}</strong>
-                  {app.runtimeApply?.pending ? <span className="robot-tag warn">同步中</span> : null}
-                </div>
-                <p>{app.appId || "未填写 App ID"}</p>
-              </button>
-            ))}
-            <button
-              className={`robot-list-button${selectedRobotID === newRobotID ? " active" : ""}`}
-              type="button"
-              onClick={() => {
-                setDetailNotice(null);
-                setSelectedRobotID(newRobotID);
-              }}
-            >
-              <div className="robot-list-head">
-                <strong>新增机器人</strong>
-                <span className="robot-tag">新增</span>
-              </div>
-              <p>点击开始接入</p>
-            </button>
-          </div>
-          {renderRobotDetail()}
-        </div>
-      </section>
+      <AdminRobotSection
+        apps={apps}
+        selectedRobotID={selectedRobotID}
+        newRobotID={newRobotID}
+        detailNotice={detailNotice}
+        onSelectRobot={(robotID) => {
+          setDetailNotice(null);
+          setSelectedRobotID(robotID);
+        }}
+        onDeleteRobotRequest={setDeleteTargetID}
+        onConnectedApp={async (appID) => {
+          setDetailNotice(null);
+          await loadAdminPage({ preferredRobotID: appID });
+        }}
+        onContextRefresh={async (appID) => {
+          await loadAdminPage({ preferredRobotID: appID || selectedRobotID });
+        }}
+      />
 
       <ClaudeProfileSection
         loadError={claudeProfilesError}
@@ -542,19 +432,6 @@ function buildAdminPageTitle(bootstrap: BootstrapState | null): string {
   return version ? `${name} ${version} 管理` : `${name} 管理`;
 }
 
-function describeConnectionState(app: FeishuAppSummary): string {
-  switch (app.status?.state) {
-    case "connected":
-      return "连接正常";
-    case "disabled":
-      return "已停用";
-    case "error":
-      return "需要处理";
-    default:
-      return "待确认";
-  }
-}
-
 function formatBytes(value: number): string {
   if (value <= 0) {
     return "0 B";
@@ -571,12 +448,4 @@ function formatBytes(value: number): string {
 
 function formatFileSummary(fileCount: number, bytes: number): string {
   return `${fileCount} 个文件，约 ${formatBytes(bytes)}`;
-}
-
-function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "暂不可用";
-  }
-  return date.toLocaleString();
 }

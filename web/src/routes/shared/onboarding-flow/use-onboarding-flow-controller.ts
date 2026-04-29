@@ -626,7 +626,7 @@ export function useOnboardingFlowController({
       await refreshWorkflowFocus();
       setNotice({
         tone: "good",
-        message: mode === "setup" ? "已启用自动启动。" : "已按当前 workflow 启用自动启动。",
+        message: mode === "setup" ? "已启用自动启动。" : "已启用自动运行。",
       });
     } catch {
       setNotice({ tone: "danger", message: "当前还不能启用自动启动，请稍后重试。" });
