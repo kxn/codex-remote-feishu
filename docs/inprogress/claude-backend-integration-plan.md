@@ -400,6 +400,40 @@ Claude runtime：
 1. 第一阶段只做 seam 提取，不改 Codex 语义。
 2. Codex runtime 的输出事件、ack 行为、helper/internal annotation 必须保持一致。
 
+#### 6.2.1 `#501` Claude profile schema + launch contract（2026-04-29）
+
+`#501` 已把 Claude profile 的第一层基座 contract 落成真实代码，当前基线如下：
+
+1. 主配置 schema
+   - persisted Claude profiles 进入主 `config.json` 的 `claude.profiles`
+   - built-in `default` profile 是 synthetic / immutable，不直接落盘
+   - 当前只固定两种认证模式：
+     - `inherit`
+     - `auth_token`
+   - model overrides 当前固定两项：
+     - `model -> ANTHROPIC_MODEL`
+     - `smallModel -> ANTHROPIC_DEFAULT_HAIKU_MODEL`
+2. admin backend contract
+   - `GET /api/admin/claude/profiles`
+   - `POST /api/admin/claude/profiles`
+   - `PUT /api/admin/claude/profiles/{id}`
+   - `DELETE /api/admin/claude/profiles/{id}`
+   - response 只回显 redacted summary，不回显旧 token；token 只暴露 `hasAuthToken`
+   - built-in `default` profile 在 list 中可见，但只读、不可编辑、不可删除
+3. launch-time profile injection
+   - profile 注入发生在 daemon 启动 wrapper 时，而不是 Claude child-only flags
+   - 当 backend=`claude` 且选择 custom profile 时：
+     - 先清掉继承环境中的 `CLAUDE_CONFIG_DIR` 与 `ANTHROPIC_*`
+     - 再按 profile 注入当前值
+     - 再把 wrapper 级 `CLAUDE_CONFIG_DIR` 指向 `<stateDir>/claude/profiles/<profileID>`
+   - 这样 wrapper 本地 session catalog/history plane 与 Claude child 会共享同一套 profile env/config-dir 视图
+4. built-in `default` profile 语义
+   - 不主动覆盖当前进程已有的 Claude 环境
+   - 不创建 profile-scoped runtime config dir
+   - 语义保持为“尽量沿用当前本机 Claude 默认配置”
+
+这条 contract 故意停在 launch seam，不在 `#501` 吸收 surface 持有 `profileID`、busy/idle 切换或 workspace+profile snapshot；这些仍属于 `#502`。
+
 ### 6.3 基座三：把 session catalog/history 从 live transport 分离
 
 #### 要解决的问题

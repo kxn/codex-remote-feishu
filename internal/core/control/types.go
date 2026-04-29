@@ -617,6 +617,7 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	ClaudeProfileID  string
 	WorkspaceKey     string
 	AutoRestore      bool
 	Text             string

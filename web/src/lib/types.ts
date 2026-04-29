@@ -86,6 +86,27 @@ export interface FeishuRuntimeApplyState {
   retryAvailable?: boolean;
 }
 
+export interface ClaudeProfileSummary {
+  id: string;
+  name?: string;
+  authMode?: string;
+  baseURL?: string;
+  hasAuthToken: boolean;
+  model?: string;
+  smallModel?: string;
+  builtIn?: boolean;
+  persisted: boolean;
+  readOnly?: boolean;
+}
+
+export interface ClaudeProfilesResponse {
+  profiles: ClaudeProfileSummary[];
+}
+
+export interface ClaudeProfileResponse {
+  profile: ClaudeProfileSummary;
+}
+
 export interface FeishuAppMutation {
   kind?: string;
   message?: string;

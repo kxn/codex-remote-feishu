@@ -90,6 +90,22 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_BACKEND="+string(backend),
 	)
+	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID, cfg.Paths.StateDir)
+	if err != nil {
+		if command.AutoRestore {
+			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+		}
+		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:             "claude_profile_prepare_failed",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "Claude 配置准备失败。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        true,
+		}))
+	}
 	if strings.TrimSpace(command.ThreadCWD) == "" {
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}

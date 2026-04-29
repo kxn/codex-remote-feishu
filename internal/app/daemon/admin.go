@@ -133,6 +133,7 @@ type adminConfigView struct {
 	Admin   config.AdminSettings    `json:"admin"`
 	Tool    config.ToolSettings     `json:"tool,omitempty"`
 	Wrapper config.WrapperSettings  `json:"wrapper"`
+	Claude  adminClaudeSettingsView `json:"claude,omitempty"`
 	Feishu  adminFeishuSettingsView `json:"feishu"`
 	Debug   config.DebugSettings    `json:"debug"`
 	Storage config.StorageSettings  `json:"storage,omitempty"`
@@ -210,6 +211,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))
+	mux.HandleFunc("GET /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfilesList))
+	mux.HandleFunc("POST /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfileCreate))
+	mux.HandleFunc("PUT /api/admin/claude/profiles/{id}", a.requireAdmin(a.handleClaudeProfileUpdate))
+	mux.HandleFunc("DELETE /api/admin/claude/profiles/{id}", a.requireAdmin(a.handleClaudeProfileDelete))
 	mux.HandleFunc("GET /api/admin/external-access/status", a.requireAdmin(a.handleAdminExternalAccessStatus))
 	mux.HandleFunc("POST /api/admin/external-access/link", a.requireAdmin(a.handleAdminExternalAccessLink))
 	mux.HandleFunc("GET /api/admin/feishu/manifest", a.requireAdmin(a.handleFeishuManifest))
@@ -636,6 +641,7 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 		Admin:   cfg.Admin,
 		Tool:    cfg.Tool,
 		Wrapper: cfg.Wrapper,
+		Claude:  adminPersistedClaudeSettingsView(cfg),
 		Debug:   cfg.Debug,
 		Storage: cfg.Storage,
 		Feishu: adminFeishuSettingsView{
