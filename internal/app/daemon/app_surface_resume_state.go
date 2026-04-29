@@ -420,7 +420,7 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 			Backend:      agentproto.Backend(recovery.Entry.Backend),
 		}, allowMissingTargetFailure)
 		switch result.Status {
-		case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
+		case orchestrator.SurfaceResumeStatusStarting, orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
 			a.clearSurfaceResumeBackoffLocked(surfaceID)
 			events = append(events, restoreEvents...)
 			updatedSurfaceIDs = append(updatedSurfaceIDs, surfaceID)

@@ -508,7 +508,7 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
-			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: firstNonEmpty(failureCode, "workspace_not_found")}
+			return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 		}
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_instance_busy"}
 	}

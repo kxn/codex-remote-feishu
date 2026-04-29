@@ -40,6 +40,7 @@ type SurfaceResumeStatus string
 const (
 	SurfaceResumeStatusSkipped           SurfaceResumeStatus = "skipped"
 	SurfaceResumeStatusWaiting           SurfaceResumeStatus = "waiting"
+	SurfaceResumeStatusStarting          SurfaceResumeStatus = "starting"
 	SurfaceResumeStatusInstanceAttached  SurfaceResumeStatus = "instance_attached"
 	SurfaceResumeStatusThreadAttached    SurfaceResumeStatus = "thread_attached"
 	SurfaceResumeStatusWorkspaceAttached SurfaceResumeStatus = "workspace_attached"
@@ -69,9 +70,10 @@ const (
 type attachWorkspaceMode string
 
 const (
-	attachWorkspaceModeDefault               attachWorkspaceMode = "default"
-	attachWorkspaceModeSurfaceResume         attachWorkspaceMode = "surface_resume"
-	attachWorkspaceModeTargetPickerNewThread attachWorkspaceMode = "target_picker_new_thread"
+	attachWorkspaceModeDefault                attachWorkspaceMode = "default"
+	attachWorkspaceModeSurfaceResume          attachWorkspaceMode = "surface_resume"
+	attachWorkspaceModeTargetPickerNewThread  attachWorkspaceMode = "target_picker_new_thread"
+	attachWorkspaceModeBackendSwitchNewThread attachWorkspaceMode = "backend_switch_new_thread"
 )
 
 type attachInstanceMode string

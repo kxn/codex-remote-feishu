@@ -118,6 +118,9 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	if surface.PendingHeadless == nil || !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") {
 		t.Fatalf("expected claude mode switch to prepare workspace headless, got %#v", surface.PendingHeadless)
 	}
+	if !surface.PendingHeadless.PrepareNewThread {
+		t.Fatalf("expected claude mode switch to preserve new-thread-ready intent, got %#v", surface.PendingHeadless)
+	}
 	if surface.PendingHeadless.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected pending headless to keep current claude profile, got %#v", surface.PendingHeadless)
 	}
@@ -141,5 +144,166 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	}
 	if events[2].DaemonCommand.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected start headless daemon command to carry current claude profile, got %#v", events[2].DaemonCommand)
+	}
+}
+
+func TestModeCommandSwitchesCurrentWorkspaceToClaudeExistingWorkspaceAndPreparesNewThreadReady(t *testing.T) {
+	now := time.Date(2026, 4, 29, 3, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-codex",
+		DisplayName:             "repo-codex",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-codex",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-codex",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-claude",
+		DisplayName:             "repo-claude",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-claude",
+		Backend:                 agentproto.BackendClaude,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-claude",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-codex",
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ClaudeProfileID = "devseek"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode claude",
+	})
+
+	if surface.ProductMode != state.ProductModeNormal || surface.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected normal claude surface after switch, got %#v", surface)
+	}
+	if surface.AttachedInstanceID != "inst-claude" || surface.PendingHeadless != nil {
+		t.Fatalf("expected existing claude workspace to attach directly, got %#v", surface)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeNewThreadReady {
+		t.Fatalf("expected backend switch to land in new_thread_ready, got %#v", surface)
+	}
+	if !strings.EqualFold(surface.PreparedThreadCWD, "/data/dl/repo") || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected prepared/claimed workspace to stay on repo, got %#v", surface)
+	}
+	if surface.PreparedFromThreadID != "" {
+		t.Fatalf("expected backend switch to drop cross-backend session binding, got %#v", surface)
+	}
+
+	var sawSwitchNotice, sawPreparedSelection, sawNewThreadReady bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "surface_mode_switched" {
+			sawSwitchNotice = true
+		}
+		if event.ThreadSelection != nil && event.ThreadSelection.RouteMode == string(state.RouteModeNewThreadReady) && event.ThreadSelection.Title == preparedNewThreadSelectionTitle() {
+			sawPreparedSelection = true
+		}
+		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
+			sawNewThreadReady = true
+		}
+	}
+	if !sawSwitchNotice || !sawPreparedSelection || !sawNewThreadReady {
+		t.Fatalf("expected switch notice + prepared selection + new_thread_ready, got %#v", events)
+	}
+}
+
+func TestModeCommandSwitchesClaudeWorkspaceBackToCodexAndPreparesNewThreadReady(t *testing.T) {
+	now := time.Date(2026, 4, 29, 3, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-claude",
+		DisplayName:             "repo-claude",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-claude",
+		Backend:                 agentproto.BackendClaude,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-claude",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-codex",
+		DisplayName:             "repo-codex",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-codex",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-codex",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-claude",
+	})
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode normal",
+	})
+
+	if surface.ProductMode != state.ProductModeNormal || surface.Backend != agentproto.BackendCodex {
+		t.Fatalf("expected normal codex surface after switch, got %#v", surface)
+	}
+	if surface.AttachedInstanceID != "inst-codex" || surface.PendingHeadless != nil {
+		t.Fatalf("expected existing codex workspace to attach directly, got %#v", surface)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeNewThreadReady {
+		t.Fatalf("expected backend switch to land in new_thread_ready, got %#v", surface)
+	}
+	if !strings.EqualFold(surface.PreparedThreadCWD, "/data/dl/repo") || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected prepared/claimed workspace to stay on repo, got %#v", surface)
+	}
+	if surface.PreparedFromThreadID != "" {
+		t.Fatalf("expected backend switch to drop cross-backend session binding, got %#v", surface)
+	}
+
+	var sawSwitchNotice, sawPreparedSelection, sawNewThreadReady bool
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "surface_mode_switched" {
+			sawSwitchNotice = true
+		}
+		if event.ThreadSelection != nil && event.ThreadSelection.RouteMode == string(state.RouteModeNewThreadReady) && event.ThreadSelection.Title == preparedNewThreadSelectionTitle() {
+			sawPreparedSelection = true
+		}
+		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
+			sawNewThreadReady = true
+		}
+	}
+	if !sawSwitchNotice || !sawPreparedSelection || !sawNewThreadReady {
+		t.Fatalf("expected switch notice + prepared selection + new_thread_ready, got %#v", events)
 	}
 }

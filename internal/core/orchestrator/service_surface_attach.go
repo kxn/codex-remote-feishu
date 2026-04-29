@@ -14,6 +14,15 @@ func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspace
 	return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeDefault)
 }
 
+func attachWorkspaceModePreparesNewThread(mode attachWorkspaceMode) bool {
+	switch mode {
+	case attachWorkspaceModeTargetPickerNewThread, attachWorkspaceModeBackendSwitchNewThread:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, workspaceKey string, mode attachWorkspaceMode) []eventcontract.Event {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
@@ -91,7 +100,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 		Preview:   "",
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
-	if mode == attachWorkspaceModeTargetPickerNewThread {
+	if attachWorkspaceModePreparesNewThread(mode) {
 		return s.prepareNewThread(surface)
 	}
 
