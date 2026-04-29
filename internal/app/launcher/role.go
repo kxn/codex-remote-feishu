@@ -20,6 +20,15 @@ type Decision struct {
 	Args []string
 }
 
+func isWrapperMode(mode string) bool {
+	switch mode {
+	case "app-server", "claude-app-server":
+		return true
+	default:
+		return false
+	}
+}
+
 func Detect(args []string) (Decision, error) {
 	if len(args) == 0 {
 		return Decision{Role: RoleDaemon}, nil
@@ -45,13 +54,13 @@ func Detect(args []string) (Decision, error) {
 		return Decision{Role: RoleUpgradeHelper, Args: args[1:]}, nil
 	case "wrapper":
 		if len(args) < 2 {
-			return Decision{}, usageError("wrapper requires app-server arguments")
+			return Decision{}, usageError("wrapper requires app-server or claude-app-server arguments")
 		}
-		if args[1] != "app-server" {
-			return Decision{}, usageError("wrapper only supports app-server mode")
+		if !isWrapperMode(args[1]) {
+			return Decision{}, usageError("wrapper only supports app-server or claude-app-server mode")
 		}
 		return Decision{Role: RoleWrapper, Args: args[1:]}, nil
-	case "app-server":
+	case "app-server", "claude-app-server":
 		return Decision{Role: RoleWrapper, Args: args}, nil
 	default:
 		return Decision{}, usageError(fmt.Sprintf("unsupported command: %s", args[0]))

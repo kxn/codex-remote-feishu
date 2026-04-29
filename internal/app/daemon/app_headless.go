@@ -126,6 +126,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		Paths:      cfg.Paths,
 		WorkDir:    workDir,
 		InstanceID: command.InstanceID,
+		LaunchMode: headlessLaunchModeForBackend(backend),
 		Args:       cfg.LaunchArgs,
 	})
 	if err != nil {
@@ -163,6 +164,13 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		workDir,
 	)
 	return a.service.HandleHeadlessLaunchStarted(command.SurfaceSessionID, command.InstanceID, pid)
+}
+
+func headlessLaunchModeForBackend(backend agentproto.Backend) string {
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return relayruntime.HeadlessLaunchModeClaudeAppServer
+	}
+	return relayruntime.HeadlessLaunchModeAppServer
 }
 
 func (a *App) killManagedHeadless(command control.DaemonCommand) []eventcontract.Event {

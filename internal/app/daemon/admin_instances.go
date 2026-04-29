@@ -130,6 +130,7 @@ func controlToHeadlessLaunch(cfg HeadlessRuntimeConfig, env []string, workDir, i
 		Paths:      cfg.Paths,
 		WorkDir:    workDir,
 		InstanceID: instanceID,
+		LaunchMode: relayruntime.HeadlessLaunchModeAppServer,
 		Args:       cfg.LaunchArgs,
 	}
 }

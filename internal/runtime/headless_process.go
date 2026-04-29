@@ -2,6 +2,12 @@ package relayruntime
 
 import (
 	"path/filepath"
+	"strings"
+)
+
+const (
+	HeadlessLaunchModeAppServer       = "app-server"
+	HeadlessLaunchModeClaudeAppServer = "claude-app-server"
 )
 
 type HeadlessLaunchOptions struct {
@@ -11,12 +17,13 @@ type HeadlessLaunchOptions struct {
 	Paths      Paths
 	WorkDir    string
 	InstanceID string
+	LaunchMode string
 	Args       []string
 }
 
 func StartDetachedWrapper(opts HeadlessLaunchOptions) (int, error) {
 	logPath := filepath.Join(opts.Paths.LogsDir, "codex-remote-headless-"+sanitizeFilename(opts.InstanceID)+".log")
-	args := append([]string{"app-server"}, opts.Args...)
+	args := buildHeadlessWrapperArgs(opts)
 	return startRuntimeDetachedProcess(runtimeDetachedLaunchOptions{
 		BinaryPath: opts.BinaryPath,
 		Args:       args,
@@ -26,6 +33,20 @@ func StartDetachedWrapper(opts HeadlessLaunchOptions) (int, error) {
 		LogPath:    logPath,
 		Paths:      opts.Paths,
 	})
+}
+
+func buildHeadlessWrapperArgs(opts HeadlessLaunchOptions) []string {
+	args := []string{normalizeHeadlessLaunchMode(opts.LaunchMode)}
+	return append(args, opts.Args...)
+}
+
+func normalizeHeadlessLaunchMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case HeadlessLaunchModeClaudeAppServer:
+		return HeadlessLaunchModeClaudeAppServer
+	default:
+		return HeadlessLaunchModeAppServer
+	}
 }
 
 func sanitizeFilename(value string) string {

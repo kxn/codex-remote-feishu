@@ -36,6 +36,9 @@ func TestCreateManagedHeadlessInstanceSetsExplicitDaemonOwnedLifetime(t *testing
 		!containsEnvEntry(captured.Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
 		t.Fatalf("expected explicit daemon-owned managed headless env, got %#v", captured.Env)
 	}
+	if captured.LaunchMode != relayruntime.HeadlessLaunchModeAppServer {
+		t.Fatalf("expected admin-managed headless to default to codex app-server mode, got %#v", captured)
+	}
 }
 
 func newManagedInstancesAdminTestApp(t *testing.T) *App {

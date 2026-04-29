@@ -148,13 +148,15 @@ func usageText() string {
   codex-remote local-upgrade [flags]
   codex-remote service <subcommand> [flags]
   codex-remote app-server [codex app-server args...]
+  codex-remote claude-app-server [claude app-server args...]
   codex-remote wrapper app-server [codex app-server args...]
+  codex-remote wrapper claude-app-server [claude app-server args...]
   codex-remote version
   codex-remote help
 
 Notes:
   - no arguments defaults to service mode
-  - wrapper role only supports Codex app-server mode
+  - wrapper role supports Codex and Claude app-server modes
   - unknown top-level commands do not fall through to wrapper
 `
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,6 +36,21 @@ func TestStartDetachedWrapperFailsForMissingBinary(t *testing.T) {
 	logPath := filepath.Join(paths.LogsDir, "codex-remote-headless-chat_abc_1.log")
 	if _, statErr := os.Stat(logPath); statErr != nil {
 		t.Fatalf("expected sanitized wrapper log file, stat err=%v", statErr)
+	}
+}
+
+func TestBuildHeadlessWrapperArgsUsesExplicitLaunchMode(t *testing.T) {
+	if got := buildHeadlessWrapperArgs(HeadlessLaunchOptions{
+		LaunchMode: HeadlessLaunchModeClaudeAppServer,
+		Args:       []string{"--flag"},
+	}); strings.Join(got, "\x00") != strings.Join([]string{HeadlessLaunchModeClaudeAppServer, "--flag"}, "\x00") {
+		t.Fatalf("buildHeadlessWrapperArgs claude = %#v", got)
+	}
+	if got := buildHeadlessWrapperArgs(HeadlessLaunchOptions{
+		LaunchMode: "",
+		Args:       []string{"--flag"},
+	}); strings.Join(got, "\x00") != strings.Join([]string{HeadlessLaunchModeAppServer, "--flag"}, "\x00") {
+		t.Fatalf("buildHeadlessWrapperArgs default = %#v", got)
 	}
 }
 

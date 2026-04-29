@@ -75,6 +75,9 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
 		t.Fatalf("expected claude backend env for managed headless launch, got %#v", captured.Env)
 	}
+	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
+		t.Fatalf("expected claude managed headless launch mode, got %#v", captured)
+	}
 	if !containsEnvEntry(captured.Env, config.ClaudeConfigDirEnv+"="+filepath.Join(stateDir, "claude", "profiles", "devseek")) {
 		t.Fatalf("expected profile-scoped CLAUDE_CONFIG_DIR, got %#v", captured.Env)
 	}
@@ -147,6 +150,9 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 	if !containsEnvEntry(captured.Env, config.ClaudeConfigDirEnv+"=/tmp/current-claude") ||
 		!containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=current-model") {
 		t.Fatalf("expected built-in default profile to preserve current claude env, got %#v", captured.Env)
+	}
+	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
+		t.Fatalf("expected built-in default Claude launch mode, got %#v", captured)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "claude", "profiles", "default")); !os.IsNotExist(err) {
 		t.Fatalf("did not expect built-in default profile dir to be created, err=%v", err)

@@ -30,6 +30,16 @@ func TestDetect(t *testing.T) {
 			want: Decision{Role: RoleWrapper, Args: []string{"app-server", "--analytics-default-enabled"}},
 		},
 		{
+			name: "claude app server enters wrapper",
+			args: []string{"claude-app-server", "--verbose"},
+			want: Decision{Role: RoleWrapper, Args: []string{"claude-app-server", "--verbose"}},
+		},
+		{
+			name: "explicit wrapper claude app server enters wrapper",
+			args: []string{"wrapper", "claude-app-server", "--verbose"},
+			want: Decision{Role: RoleWrapper, Args: []string{"claude-app-server", "--verbose"}},
+		},
+		{
 			name: "daemon role",
 			args: []string{"daemon"},
 			want: Decision{Role: RoleDaemon},
@@ -67,7 +77,7 @@ func TestDetect(t *testing.T) {
 		{
 			name:    "wrapper resume rejected",
 			args:    []string{"wrapper", "resume", "--thread", "abc"},
-			wantErr: "wrapper only supports app-server mode",
+			wantErr: "wrapper only supports app-server or claude-app-server mode",
 		},
 		{
 			name:    "daemon extra arg rejected",
@@ -134,6 +144,33 @@ func TestMainRoutesToWrapper(t *testing.T) {
 	}
 	if gotBranch != "release/1.5" {
 		t.Fatalf("wrapper branch = %q, want release/1.5", gotBranch)
+	}
+}
+
+func TestMainRoutesClaudeAppServerToWrapper(t *testing.T) {
+	var gotArgs []string
+	exitCode := Main(Options{
+		Args:   []string{"claude-app-server", "--verbose"},
+		Stdin:  strings.NewReader(""),
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Runners: RunnerSet{
+			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
+				t.Fatal("unexpected install run")
+				return nil
+			},
+			RunWrapper: func(_ context.Context, args []string, _ io.Reader, _, _ io.Writer, _, _ string) (int, error) {
+				gotArgs = append([]string(nil), args...)
+				return 9, nil
+			},
+		},
+	})
+	if exitCode != 9 {
+		t.Fatalf("Main exitCode = %d, want 9", exitCode)
+	}
+	if strings.Join(gotArgs, "\x00") != strings.Join([]string{"claude-app-server", "--verbose"}, "\x00") {
+		t.Fatalf("wrapper args = %#v", gotArgs)
 	}
 }
 

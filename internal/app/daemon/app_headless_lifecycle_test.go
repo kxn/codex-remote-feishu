@@ -131,6 +131,9 @@ func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
 		t.Fatalf("expected claude backend env for managed headless launch, got %#v", captured.Env)
 	}
+	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
+		t.Fatalf("expected claude launch mode for managed headless, got %#v", captured)
+	}
 }
 
 func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
