@@ -100,10 +100,11 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandAutoContinue,
 		FeishuCommandSendFile,
 		FeishuCommandFollow,
-		FeishuCommandDetach,
 		FeishuCommandCron,
 		FeishuCommandVSCodeMigrate:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前 Claude pre-MVP 范围未开放该命令；保持隐藏并显式拒绝。")
+	case FeishuCommandDetach:
+		return claudeHiddenNativeStrategy(familyID, "Claude 当前允许 `/detach` 作为本地逃生与残留清理入口，但暂不作为可见主菜单项。")
 	default:
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前 Claude pre-MVP 范围未开放该命令；保持隐藏并显式拒绝。")
 	}

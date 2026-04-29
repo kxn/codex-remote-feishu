@@ -58,24 +58,11 @@ func (t *Translator) observeMessageStart(event map[string]any) Result {
 		ID:     strings.TrimSpace(lookupStringFromAny(message["id"])),
 		Blocks: map[int]*blockState{},
 	}
-	if t.activeTurn == nil && len(t.pendingTurns) != 0 {
-		t.activeTurn = t.pendingTurns[0]
-		t.pendingTurns = append([]*turnState(nil), t.pendingTurns[1:]...)
-	}
-	if t.activeTurn == nil || t.activeTurn.Started {
+	events := t.startActiveTurnIfNeeded()
+	if t.activeTurn == nil {
 		return Result{}
 	}
-	t.activeTurn.Started = true
-	return Result{
-		Events: []agentproto.Event{{
-			Kind:      agentproto.EventTurnStarted,
-			CommandID: t.activeTurn.CommandID,
-			ThreadID:  t.activeTurn.ThreadID,
-			TurnID:    t.activeTurn.TurnID,
-			CWD:       t.cwd,
-			Model:     t.model,
-		}},
-	}
+	return Result{Events: events}
 }
 
 func (t *Translator) observeContentBlockStart(event map[string]any) Result {
@@ -181,14 +168,14 @@ func (t *Translator) observeContentBlockStop(event map[string]any) Result {
 }
 
 func (t *Translator) observeAssistantMessage(message map[string]any) Result {
+	events := t.startActiveTurnIfNeeded()
 	if t.activeTurn == nil {
-		return Result{}
+		return Result{Events: events}
 	}
 	content := mapsFromAny(lookupMap(message, "message")["content"])
 	if len(content) == 0 {
-		return Result{}
+		return Result{Events: events}
 	}
-	events := make([]agentproto.Event, 0, 4)
 	for index, block := range content {
 		switch strings.TrimSpace(lookupStringFromAny(block["type"])) {
 		case "text":
@@ -453,10 +440,14 @@ func buildAgentQuestions(questions []pendingQuestion) []agentproto.RequestQuesti
 }
 
 func (t *Translator) observeControlRequest(message map[string]any) Result {
+	startEvents := t.startActiveTurnIfNeeded()
+	if t.activeTurn == nil {
+		return Result{Events: startEvents}
+	}
 	requestID := strings.TrimSpace(lookupStringFromAny(message["request_id"]))
 	request := lookupMap(message, "request")
 	if strings.TrimSpace(lookupStringFromAny(request["subtype"])) != "can_use_tool" {
-		return Result{}
+		return Result{Events: startEvents}
 	}
 	toolName := strings.TrimSpace(lookupStringFromAny(request["tool_name"]))
 	toolUseID := strings.TrimSpace(lookupStringFromAny(request["tool_use_id"]))
@@ -465,14 +456,19 @@ func (t *Translator) observeControlRequest(message map[string]any) Result {
 	if tool := t.toolStates[toolUseID]; tool != nil {
 		itemID = tool.ItemID
 	}
+	var result Result
 	switch toolName {
 	case "AskUserQuestion":
-		return t.observeAskUserQuestionRequest(requestID, toolName, toolUseID, itemID, input)
+		result = t.observeAskUserQuestionRequest(requestID, toolName, toolUseID, itemID, input)
 	case "ExitPlanMode":
-		return t.observePlanConfirmationRequest(requestID, toolName, toolUseID, input)
+		result = t.observePlanConfirmationRequest(requestID, toolName, toolUseID, input)
 	default:
-		return t.observeToolApprovalRequest(requestID, toolName, toolUseID, itemID, request, input)
+		result = t.observeToolApprovalRequest(requestID, toolName, toolUseID, itemID, request, input)
 	}
+	if len(startEvents) != 0 {
+		result.Events = append(startEvents, result.Events...)
+	}
+	return result
 }
 
 func (t *Translator) observeAskUserQuestionRequest(requestID, toolName, toolUseID, itemID string, input map[string]any) Result {
@@ -662,10 +658,10 @@ func (t *Translator) observeControlResponse(message map[string]any) Result {
 }
 
 func (t *Translator) observeResultMessage(message map[string]any) Result {
+	events := t.startActiveTurnIfNeeded()
 	if t.activeTurn == nil {
-		return Result{}
+		return Result{Events: events}
 	}
-	events := make([]agentproto.Event, 0, 3)
 	if !t.activeTurn.AgentMessageCompleted {
 		if text := strings.TrimSpace(lookupStringFromAny(message["result"])); text != "" {
 			itemID := t.nextItemID()

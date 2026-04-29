@@ -171,6 +171,33 @@ func (t *Translator) nextItemID() string {
 	return t.nextNativeID("item")
 }
 
+func (t *Translator) ensureActiveTurn() *turnState {
+	if t.activeTurn == nil && len(t.pendingTurns) != 0 {
+		t.activeTurn = t.pendingTurns[0]
+		t.pendingTurns = append([]*turnState(nil), t.pendingTurns[1:]...)
+	}
+	if t.activeTurn != nil && strings.TrimSpace(t.activeTurn.ThreadID) == "" {
+		t.activeTurn.ThreadID = t.canonicalThreadID("")
+	}
+	return t.activeTurn
+}
+
+func (t *Translator) startActiveTurnIfNeeded() []agentproto.Event {
+	turn := t.ensureActiveTurn()
+	if turn == nil || turn.Started {
+		return nil
+	}
+	turn.Started = true
+	return []agentproto.Event{{
+		Kind:      agentproto.EventTurnStarted,
+		CommandID: turn.CommandID,
+		ThreadID:  turn.ThreadID,
+		TurnID:    turn.TurnID,
+		CWD:       t.cwd,
+		Model:     t.model,
+	}}
+}
+
 func (t *Translator) canonicalThreadID(fallback string) string {
 	if strings.TrimSpace(t.sessionID) != "" {
 		return strings.TrimSpace(t.sessionID)

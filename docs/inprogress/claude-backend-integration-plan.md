@@ -945,13 +945,15 @@ Claude runtime 分三块：
 
 | family / 入口 | Claude 策略 | help/menu 可见性 | 当前是否允许直接派发 | 说明 |
 | --- | --- | --- | --- | --- |
-| `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 属于 A2 pre-MVP 已批准的 native 或纯本地产品入口。 |
+| `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/claudeprofile` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 属于 A2 pre-MVP 已批准的 native 或纯本地产品入口。 |
 | `/workspace detach` | native | hidden | allow | 仍允许本地解除接管，但不作为 Claude 主展示入口。 |
+| `/detach` | native | hidden | allow | 作为坏态逃生与残留清理入口允许直接执行，但暂不作为 Claude 主展示入口。 |
 | `/compact` | passthrough | hidden | reject for now | 只保留成后续 runtime host 的 passthrough 候选；在 `#495` 前不直接执行。 |
 | `/new` `/list` `/use` | approximation | visible | allow | `#496` 已把 Claude visible MVP 的会话主链放开：继续复用现有产品壳，但底层改走 backend-aware session catalog / route contract。 |
+| `/review` `/patch` | approximation | visible | allow | 当前 Claude visible MVP 额外开放的高频工具入口；继续复用现有产品壳，但底层仍走 backend-aware contract。 |
 | `/workspace*` `/useall` | approximation | hidden | reject | Claude 当前 visible MVP 不开放工作区父页或跨工作区总览；保持 hidden + reject，避免误导用户。 |
 | `/steerall` | reject | hidden | reject | Claude 当前不支持 same-turn steer；必须显式拒绝，不能伪装成 interrupt+new turn。 |
-| `/plan` `/sendfile` `/review` `/patch` `/follow` `/detach` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude pre-MVP 范围内。 |
+| `/plan` `/sendfile` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude pre-MVP 范围内。 |
 
 ### 7.7 `#494` final-output 终态合同（2026-04-28）
 

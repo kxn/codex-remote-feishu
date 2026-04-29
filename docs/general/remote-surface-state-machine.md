@@ -150,7 +150,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 5. `Abandoning` 仍是更高优先级 gate；但 `PendingHeadless` 不再阻塞 `/mode`，用户可以直接切到 `vscode` 终止恢复流程。
 6. 当前工作会话命令已经按 mode 分流：
    1. `codex normal` 主展示命令是 `workspace` 命令族：`/workspace` / `/workspace new` 负责父页导航，`/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` 打开四张独立业务卡；旧 `/list` / `/use` / `/useall` 只是 alias。
-   2. `claude normal` 的 visible MVP 继续复用同一套命令目录壳：工作会话主链显式开放 `/new`、`/list`、`/use`，`常用工具` 额外开放 `/review` 与 `/bendtomywill`；`workspace*` 与 `/useall` 继续 hidden + reject。
+   2. `claude normal` 的 visible MVP 继续复用同一套命令目录壳：工作会话主链显式开放 `/new`、`/list`、`/use`，`常用工具` 额外开放 `/review` 与 `/bendtomywill`；`workspace*` 与 `/useall` 继续 hidden + reject；`/detach` 保持 hidden，但作为本地逃生与残留清理入口允许直接执行。
    3. `vscode mode` 继续列在线 VS Code instance。
 7. `Verbosity` 当前也是 surface 级偏好：
    1. `/verbose quiet|normal|verbose` 直接改当前 surface。
@@ -284,6 +284,15 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `E4 PausedForLocal` | `DispatchMode=paused_for_local` | 当前 surface 的远端派发被暂停；现有来源包括本地 VS Code 活动，以及 daemon 显式发起的 standalone Codex 升级或 current-thread patch 事务暂停 |
 | `E5 HandoffWait` | `DispatchMode=handoff_wait` | 本地刚结束，等待短窗口后恢复远端队列 |
 | `E6 Abandoning` | `Abandoning=true` | surface 已放弃接管，等待已有 turn 收尾后最终 detach |
+
+补充说明：
+
+1. `E2 Dispatching` 当前只表示“本地 active queue item 已派发，真实 remote turn 还没完成建联”；它并不自动等价于“已有 live turn”。
+2. 对 Claude backend，首个可观察到的 `assistant`、`control_request` 或 `result` 事件现在都会先把 pending turn 提升成真实 turn lifecycle，再继续投影对应输出或失败终态；因此 backend/runtime 的早失败不会再把 surface 永久卡在 `dispatching`。
+3. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
+   1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
+   2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
+4. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
 
 ### 3.4 审阅态 overlay
 
@@ -1481,7 +1490,7 @@ transport degraded retained attachment
 | `G9 UpgradeOwnerFlowRunning` | daemon 侧 active upgrade owner-flow 处于 `running` / `cancelling` / `restarting` 时，只允许 `/status`、`/upgrade`、`/debug`、reaction/recall 与同一张升级卡的 `upgrade_owner_flow(confirm/cancel)`；普通文本/图片/文件、`/list`、`/use`、`/useall`、`/new`、`/follow`、`/detach`、bare config 与其它 competing card flow 当前都会在 `handleAction(...)` 顶层被挡住，并提示“当前正在准备升级”；helper 启动前若用户取消，会先切到 cancelling，再封成 terminal `升级已取消`；helper 即将切换前会把 owner card 封成 `正在重启`，随后等待 daemon 生命周期切换自然结束 |
 | `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 运行中时，会先于现有 self-upgrade owner-flow gate 处理输入。发起 surface 只允许 `/status`、`/debug`、`/upgrade`、reaction/recall 与后续 standalone-codex-upgrade owner-flow 动作；其它普通输入直接返回 `codex_upgrade_running`。其它真正依赖 standalone Codex 的 attached surface 的文本/图片/文件会先通过既有 ingress 路径入队，但 dispatch 维持暂停，并追加“升级完成后执行”的同 code notice；VS Code surface / instance 当前完全跳过这条 gate，不进入 pause / queue-after-upgrade 语义；非 queueable 命令/卡片动作当前直接拒绝，不进入缓存 |
 | `G11 TurnPatchTransactionRunning` | daemon 侧 active turn-patch transaction 运行中时，会先于普通 reducer 处理输入。当前 instance 的 attached surface 会统一被 `PauseSurfaceDispatch(...)`；发起 surface 与同 instance 其它 surface 的普通文本/图片/文件、`/bendtomywill`、`/bendtomywill rollback`、`/new`、`/compact`、`/detach`、bare config 与其它 competing card flow 都会被拒绝，并提示“当前正在修补/回滚当前会话”；只保留 `/status`、`/list`、`/help`、`/menu`、`/history`、`/debug`、reaction/recall 这类查看动作，直到 transaction 成功或失败收口 |
-| `G6 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G6` 一致：只允许 `/status`、`/autowhip`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝 |
+| `G6 AbandoningGate / E6 Abandoning` | `Abandoning` 已在执行 overlay 中持有真实状态；对外门禁与 `G6` 一致：只允许 `/status`、`/autowhip`、`/autocontinue`；再次 `/detach` 只回 `detach_pending`；`/mode` 与其余动作统一拒绝。该 gate 当前只会在“已有真实 started turn 或其它 live work 仍需收尾”时进入；若只是 pre-start dispatching 残留，则 `/detach` 会直接失败 active item 并完成 detach，不再经过 `G6` |
 | `G7 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发必要的修复/失败反馈；legacy `editor_settings` 若能安全静默迁到 `managed_shim`，则不会长时间停在这条 gate。surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示 |
 
 retained-offline overlay 额外规则：
@@ -1624,6 +1633,7 @@ retained-offline overlay 额外规则：
 35. **hard disconnect 时 pending steer 没恢复，steering 中的 queued 输入会脱离普通队列后直接消失**：已修复。当前 disconnect 也会按原顺序恢复 `pendingSteers`，再继续 offline/detach 语义。
 36. **VS Code 菜单进入的 `/list`、`/use`、`/useall` 与迁移/恢复提示会在菜单首跳后逃逸成 submission-anchor / notice / runtime prompt**：已修复。当前 stamped 菜单卡会把实例 / 线程结果、attach / use 终态，以及 stamped `/mode vscode` 与 `/vscode-migrate` 命中的兼容提示 / 迁移结果优先收口到原卡；只有真正脱离当前 card 上下文的后台 runtime 提示才继续走独立 `global runtime` 车道。
 37. **normal mode 的 detached backend 仍隐式回退 `codex`，导致 `codex` / `claude` 共用 workspace defaults、surface resume target 或恢复到错误 backend**：已修复。当前 surface 会单独持久化 `Backend`；`WorkspaceDefaults`、surface resume 与 detached catalog context 都按 backend 分区，旧数据缺失 backend 时 lazy 默认 `codex`，而 `codex <-> claude` 切换会显式清掉旧恢复目标。
+38. **Claude 早失败会把 surface 永久卡在 `dispatching`，且 `/detach` 还会被 pre-MVP gate 拒绝或只能进入无意义的 `abandoning`**：已修复。当前 Claude translator 会在首个 `assistant` / `control_request` / `result` 事件上提升 pending turn 并收口终态；若 surface 仍停在没有 `TurnID`、没有 output 的 pre-start dispatching，`/detach` 会直接失败 active item、清掉 pending remote ownership 并完成 detach；只有真实 started turn / compact / steer 才会进入 `E6 Abandoning`。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

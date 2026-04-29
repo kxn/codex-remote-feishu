@@ -343,16 +343,33 @@ func (s *Service) surfaceNeedsDelayedDetach(surface *state.SurfaceConsoleRecord,
 	if s.surfaceHasPendingSteer(surface) {
 		return true
 	}
-	if binding := s.remoteBindingForSurface(surface); binding != nil {
+	if binding := s.remoteBindingForSurface(surface); binding != nil && !s.surfaceHasPreStartRemoteDispatch(surface) {
 		return true
 	}
 	if surface.ActiveQueueItemID != "" {
 		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
 			switch item.Status {
-			case state.QueueItemDispatching, state.QueueItemRunning:
+			case state.QueueItemRunning:
 				return true
+			case state.QueueItemDispatching:
+				return !s.surfaceHasPreStartRemoteDispatch(surface)
 			}
 		}
 	}
 	return inst != nil && inst.ActiveTurnID != "" && s.surfaceOwnsThread(surface, inst.ActiveThreadID)
+}
+
+func (s *Service) surfaceHasPreStartRemoteDispatch(surface *state.SurfaceConsoleRecord) bool {
+	if surface == nil || surface.AttachedInstanceID == "" || surface.ActiveQueueItemID == "" {
+		return false
+	}
+	item := surface.QueueItems[surface.ActiveQueueItemID]
+	if item == nil || item.Status != state.QueueItemDispatching {
+		return false
+	}
+	binding := s.remoteBindingForSurface(surface)
+	if binding == nil || binding.QueueItemID != "" && binding.QueueItemID != item.ID {
+		return false
+	}
+	return strings.TrimSpace(binding.TurnID) == "" && binding.StartedAt.IsZero() && !binding.AnyOutputSeen
 }

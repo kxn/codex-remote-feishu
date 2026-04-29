@@ -746,6 +746,13 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 	delete(s.handoffUntil, surface.SurfaceSessionID)
 	delete(s.pausedUntil, surface.SurfaceSessionID)
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	if s.surfaceHasPreStartRemoteDispatch(surface) {
+		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
+			events = append(events, s.abortSurfaceActiveQueueItemForDetach(surface, item)...)
+		}
+		events = append(events, s.finalizeDetachedSurface(surface)...)
+		return append(events, notice(surface, "detached", s.detachedText(surface))...)
+	}
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
 		surface.Abandoning = true
 		s.abandoningUntil[surface.SurfaceSessionID] = s.now().Add(s.config.DetachAbandonWait)
@@ -771,4 +778,23 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	return append(events, notice(surface, "detached", s.detachedText(surface))...)
+}
+
+func (s *Service) abortSurfaceActiveQueueItemForDetach(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord) []eventcontract.Event {
+	if surface == nil || item == nil {
+		return nil
+	}
+	item.Status = state.QueueItemFailed
+	if surface.ActiveQueueItemID == item.ID {
+		surface.ActiveQueueItemID = ""
+	}
+	if binding := s.remoteBindingForSurface(surface); binding != nil {
+		s.clearTurnArtifacts(binding.InstanceID, binding.ThreadID, binding.TurnID)
+	}
+	s.clearRemoteOwnership(surface)
+	return s.pendingInputEvents(surface, control.PendingInputState{
+		QueueItemID: item.ID,
+		Status:      string(item.Status),
+		TypingOff:   true,
+	}, queueItemSourceMessageIDs(item))
 }

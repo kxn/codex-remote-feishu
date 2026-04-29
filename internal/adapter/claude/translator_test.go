@@ -222,6 +222,83 @@ func TestClaudeTranslatorAskUserQuestionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestClaudeTranslatorDirectFailureWithoutMessageStartStillReconcilesTurn(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "session-claude-auth",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-auth-fail",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-auth"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "你好"}}},
+	}); err != nil {
+		t.Fatalf("translate prompt send: %v", err)
+	}
+
+	assistant := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-auth-fail",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "text",
+					"text": "Not logged in · Please run /login",
+				},
+			},
+		},
+	})
+	if len(assistant.Events) != 3 {
+		t.Fatalf("expected turn start + assistant item lifecycle, got %#v", assistant.Events)
+	}
+	if assistant.Events[0].Kind != agentproto.EventTurnStarted {
+		t.Fatalf("expected first event to start turn, got %#v", assistant.Events[0])
+	}
+	if assistant.Events[1].Kind != agentproto.EventItemStarted || assistant.Events[2].Kind != agentproto.EventItemCompleted {
+		t.Fatalf("expected assistant message lifecycle, got %#v", assistant.Events)
+	}
+	threadID := assistant.Events[0].ThreadID
+	turnID := assistant.Events[0].TurnID
+	if threadID != "session-claude-auth" {
+		t.Fatalf("expected session thread ID to be used, got %q", threadID)
+	}
+	if got := lookupStringFromAny(assistant.Events[2].Metadata["text"]); got != "Not logged in · Please run /login" {
+		t.Fatalf("unexpected assistant text %q", got)
+	}
+
+	result := observeClaude(t, tr, map[string]any{
+		"type":     "result",
+		"subtype":  "error_during_execution",
+		"is_error": true,
+		"result":   "Not logged in · Please run /login",
+		"errors": []any{
+			map[string]any{"message": "authentication_failed"},
+		},
+	})
+	if len(result.Events) != 1 {
+		t.Fatalf("expected only turn completion after direct assistant failure, got %#v", result.Events)
+	}
+	completed := result.Events[0]
+	if completed.Kind != agentproto.EventTurnCompleted || completed.ThreadID != threadID || completed.TurnID != turnID || completed.Status != "failed" {
+		t.Fatalf("unexpected completion event: %#v", completed)
+	}
+	if completed.Problem == nil || completed.Problem.Code != "claude_turn_failed" {
+		t.Fatalf("expected claude_turn_failed problem, got %#v", completed.Problem)
+	}
+	if tr.activeTurn != nil || len(tr.pendingTurns) != 0 {
+		t.Fatalf("expected translator turn state to be fully reconciled, active=%#v pending=%#v", tr.activeTurn, tr.pendingTurns)
+	}
+}
+
 func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "plan")
