@@ -177,7 +177,7 @@ func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docTyp
 			BaseMember(larkdrive.NewBaseMemberBuilder().
 				MemberType(principal.MemberType).
 				MemberId(principal.MemberID).
-				Perm(previewpkg.PermissionView).
+				Perm(previewpkg.PermissionFullAccess).
 				Type(principal.Type).
 				Build()).
 			Build())

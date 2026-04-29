@@ -16,7 +16,7 @@ const (
 	DefaultRootFolderName = defaultPreviewRootFolderName
 	FileType              = previewFileType
 	FolderType            = previewFolderType
-	PermissionView        = previewPermissionView
+	PermissionFullAccess  = previewPermissionFullAccess
 )
 
 const (

@@ -17,7 +17,7 @@ const (
 	defaultPreviewBackgroundCleanupTick = 1 * time.Hour
 	previewFileType                     = "file"
 	previewFolderType                   = "folder"
-	previewPermissionView               = "view"
+	previewPermissionFullAccess         = "full_access"
 )
 
 var previewColonLocationSuffixPattern = regexp.MustCompile(`^(.*?)(:\d+(?::\d+)?)$`)
