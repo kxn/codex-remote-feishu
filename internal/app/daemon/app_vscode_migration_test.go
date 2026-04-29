@@ -314,7 +314,7 @@ func TestBuildVSCodeMigrationPageViewUsesBodyNoticeAndSealedContract(t *testing.
 		false,
 		"VS Code 接入需要迁移",
 		[]string{"检测到旧版 settings 覆盖。"},
-		"迁移后会重新接入当前 surface。",
+		"迁移后会重新接入当前飞书会话。",
 		"approval",
 		[]control.CommandCatalogButton{vscodeMigrationOwnerButton("迁移并重新接入", flow.FlowID)},
 	)

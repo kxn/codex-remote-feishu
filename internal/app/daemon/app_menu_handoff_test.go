@@ -48,7 +48,7 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 }
@@ -782,7 +782,7 @@ func TestHandleGatewayActionSealsMenuCardForDetachHandoff(t *testing.T) {
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected detach handoff to seal current card, got %#v", result)
 	}
-	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已断开当前工作区接管") {
+	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已解除对当前工作区的接管") {
 		t.Fatalf("expected detach replacement card text, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 	if len(gateway.operations) != 0 {

@@ -14,7 +14,7 @@ func (s *Service) blockThreadSwitch(surface *state.SurfaceConsoleRecord) []event
 		return nil
 	}
 	if s.progress.surfaceHasPendingCompact(surface) {
-		return notice(surface, "thread_switch_compacting", "当前正在整理上下文，暂时不能切换会话。请等待完成、/stop，或先 /detach。")
+		return notice(surface, "thread_switch_compacting", "当前正在压缩上下文，暂时不能切换会话。请等待完成、/stop，或先 /detach。")
 	}
 	if s.surfaceHasPendingSteer(surface) {
 		return notice(surface, "thread_switch_steering", "当前正在把排队输入并入本轮执行，暂时不能切换会话。请稍候再试。")
@@ -131,7 +131,7 @@ func (s *Service) blockNewThreadPreparation(surface *state.SurfaceConsoleRecord)
 		return nil
 	}
 	if s.progress.surfaceHasPendingCompact(surface) {
-		return notice(surface, "new_thread_blocked_compacting", "当前正在整理上下文，暂时不能新建会话。请等待完成、/stop，或先 /detach。")
+		return notice(surface, "new_thread_blocked_compacting", "当前正在压缩上下文，暂时不能新建会话。请等待完成、/stop，或先 /detach。")
 	}
 	if s.surfaceHasPendingSteer(surface) {
 		return notice(surface, "new_thread_blocked_steering", "当前正在把排队输入并入本轮执行，暂时不能新建会话。请稍候再试。")
@@ -250,9 +250,9 @@ func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []eve
 			return nil
 		}
 		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
-			return notice(surface, "thread_unbound", "当前还没有绑定会话；请先 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。")
+			return notice(surface, "thread_unbound", "当前还没有选择会话；请先 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。")
 		}
-		return notice(surface, "thread_unbound", "当前还没有绑定会话，请先 /use 选择一个会话，或执行 /follow 进入跟随模式。")
+		return notice(surface, "thread_unbound", "当前还没有选择会话，请先 /use 选择一个会话，或执行 /follow 进入跟随模式。")
 	}
 }
 

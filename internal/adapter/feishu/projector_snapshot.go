@@ -52,7 +52,7 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		case snapshot.Attachment.RouteMode == "follow_local":
 			lines = append(lines, snapshotLine("当前输入目标", "跟随当前 VS Code（等待中）"))
 		default:
-			lines = append(lines, snapshotLine("当前输入目标", "未绑定会话"))
+			lines = append(lines, snapshotLine("当前输入目标", "未选择会话"))
 		}
 		if first := strings.TrimSpace(snapshot.Attachment.SelectedThreadFirstUserMessage); first != "" {
 			lines = append(lines, snapshotLine("会话起点", compactSnapshotStatusText(first, snapshotStatusPreviewLimit)))

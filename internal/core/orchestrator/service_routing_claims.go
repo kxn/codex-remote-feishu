@@ -199,30 +199,30 @@ func (s *Service) attachedTargetUnavailableText(surface *state.SurfaceConsoleRec
 
 func (s *Service) detachedText(surface *state.SurfaceConsoleRecord) string {
 	if s.surfaceUsesWorkspaceClaims(surface) {
-		return "已断开当前工作区接管。"
+		return "已解除对当前工作区的接管。"
 	}
-	return "已断开当前实例接管。"
+	return "已解除对当前实例的接管。"
 }
 
 func (s *Service) detachedNoneText(surface *state.SurfaceConsoleRecord) string {
 	if s.surfaceUsesWorkspaceClaims(surface) {
-		return "当前没有接管中的工作区。"
+		return "当前没有已接管的工作区。"
 	}
-	return "当前没有接管中的实例。"
+	return "当前没有已接管的实例。"
 }
 
 func (s *Service) detachPendingText(surface *state.SurfaceConsoleRecord) string {
 	if s.surfaceUsesWorkspaceClaims(surface) {
-		return "已放弃当前工作区接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
+		return "已放弃对当前工作区的接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
 	}
-	return "已放弃当前实例接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
+	return "已放弃对当前实例的接管；未发送的队列和图片已清空，正在等待当前 turn 收尾。"
 }
 
 func (s *Service) detachTimeoutText(surface *state.SurfaceConsoleRecord) string {
 	if s.surfaceUsesWorkspaceClaims(surface) {
-		return "等待当前 turn 收尾超时，已强制断开当前工作区接管。"
+		return "等待当前 turn 收尾超时，已强制解除对当前工作区的接管。"
 	}
-	return "等待当前 turn 收尾超时，已强制断开当前实例接管。"
+	return "等待当前 turn 收尾超时，已强制解除对当前实例的接管。"
 }
 
 func (s *Service) attachmentOfflineText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {

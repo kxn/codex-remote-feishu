@@ -249,8 +249,8 @@ func turnPatchRequestView(flow *turnpatchruntime.FlowRecord) control.FeishuReque
 		Sections: []control.FeishuCardTextSection{
 			commandCatalogTextSection(
 				"",
-				"只会替换当前 attached thread 最新 assistant turn 中命中的文本。",
-				"已发出的旧消息不会被回改；提交后会自动备份并在恢复同一 thread 后继续使用。",
+				"只会替换当前会话最新一轮助手回复中命中的文本。",
+				"已发出的旧消息不会被回改；提交后会自动备份，并在恢复同一会话后继续使用。",
 			),
 		},
 		Questions:            questions,
@@ -369,7 +369,7 @@ func turnPatchStatePageView(flow *turnpatchruntime.FlowRecord, title, theme stri
 			threadTitle = strings.TrimSpace(flow.ThreadID)
 		}
 		body = append(body, commandCatalogTextSection("当前会话", threadTitle))
-		body = append(body, commandCatalogTextSection("目标范围", fmt.Sprintf("最新 assistant turn · %d 个候选点", len(flow.Candidates))))
+		body = append(body, commandCatalogTextSection("目标范围", fmt.Sprintf("最新一轮助手回复 · %d 个候选点", len(flow.Candidates))))
 		if strings.TrimSpace(flow.MessageID) == "" {
 			trackingKey = strings.TrimSpace(flow.FlowID)
 		}

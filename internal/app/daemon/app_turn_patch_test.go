@@ -40,7 +40,7 @@ func TestTurnPatchOpenFlowBuildsRequestCard(t *testing.T) {
 	if !strings.Contains(view.Questions[0].Question, "命中片段：") {
 		t.Fatalf("expected first question to include excerpt, got %#v", view.Questions[0])
 	}
-	if !strings.Contains(view.Sections[0].Lines[0], "只会替换当前 attached thread") {
+	if !strings.Contains(view.Sections[0].Lines[0], "只会替换当前会话最新一轮助手回复") {
 		t.Fatalf("expected request card summary, got %#v", view.Sections)
 	}
 	flow := mustOnlyTurnPatchFlow(t, app)

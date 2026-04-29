@@ -39,7 +39,7 @@ func TestDaemonFlushesQueuedGatewayFailureNoticeOnNextSuccess(t *testing.T) {
 	if gateway.operations[0].AttentionText != "需要你回来处理：飞书投递失败。" || gateway.operations[0].AttentionUserID != "user-1" {
 		t.Fatalf("expected queued gateway failure notice to carry attention, got %#v", gateway.operations[0])
 	}
-	if gateway.operations[1].CardTitle != "切换工作会话" {
+	if gateway.operations[1].CardTitle != "切换工作区与会话" {
 		t.Fatalf("expected recovered response to be target picker card, got %#v", gateway.operations[1])
 	}
 	if !strings.Contains(fmt.Sprint(gateway.operations[1].CardElements), "当前还没有可切换的工作区") {

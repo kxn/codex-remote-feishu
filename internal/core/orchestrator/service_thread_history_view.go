@@ -126,7 +126,7 @@ func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, i
 
 func (s *Service) currentThreadHistoryTarget(surface *state.SurfaceConsoleRecord) (*state.InstanceRecord, string, string, string) {
 	if surface == nil {
-		return nil, "", "history_unavailable", "当前 surface 不可用，暂时无法查看历史。"
+		return nil, "", "history_unavailable", "当前飞书会话不可用，暂时无法查看历史。"
 	}
 	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
 	if inst == nil || !inst.Online {

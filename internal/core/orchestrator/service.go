@@ -279,7 +279,7 @@ func (s *Service) normalizeLegacyNormalFollowRoute(surface *state.SurfaceConsole
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  "",
 		RouteMode: string(state.RouteModeUnbound),
-		Title:     "未绑定会话",
+		Title:     "未选择会话",
 		Preview:   "",
 	}
 }

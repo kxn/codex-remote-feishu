@@ -36,13 +36,13 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []eventcont
 		default:
 			surface.RouteMode = state.RouteModeUnbound
 			events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)...)
-			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeUnbound), "未绑定会话")...)
+			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeUnbound), "未选择会话")...)
 			events = append(events, eventcontract.Event{
 				Kind:             eventcontract.KindNotice,
 				SurfaceSessionID: surface.SurfaceSessionID,
 				Notice: &control.Notice{
 					Code: "selected_thread_lost",
-					Text: "原先绑定的会话已不可用，请重新 /use 选择会话。",
+					Text: "原先选择的会话已不可用，请重新 /use 选择会话。",
 				},
 			})
 			events = append(events, s.autoPromptUseThread(surface, inst)...)

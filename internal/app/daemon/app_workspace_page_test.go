@@ -22,7 +22,7 @@ func TestHandleGatewayActionReplacesWorkspaceNavigationCardsInline(t *testing.T)
 			name:          "workspace root page",
 			kind:          control.ActionWorkspaceRoot,
 			text:          "/workspace",
-			expectedTitle: "工作会话",
+			expectedTitle: "工作区与会话",
 		},
 		{
 			name:          "workspace new page",
@@ -34,7 +34,7 @@ func TestHandleGatewayActionReplacesWorkspaceNavigationCardsInline(t *testing.T)
 			name:          "workspace list business card",
 			kind:          control.ActionWorkspaceList,
 			text:          "/workspace list",
-			expectedTitle: "切换工作会话",
+			expectedTitle: "切换工作区与会话",
 		},
 		{
 			name:          "workspace new dir business card",

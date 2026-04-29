@@ -260,7 +260,7 @@ func (s *Service) releaseVictimThread(surface *state.SurfaceConsoleRecord, inst 
 	prevRouteMode := surface.RouteMode
 	s.releaseSurfaceThreadClaim(surface)
 	routeMode := state.RouteModeUnbound
-	title := "未绑定会话"
+	title := "未选择会话"
 	events := s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)
 	if surface.RouteMode == state.RouteModeFollowLocal {
 		routeMode = state.RouteModeFollowLocal

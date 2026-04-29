@@ -86,7 +86,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  "",
 		RouteMode: string(state.RouteModeUnbound),
-		Title:     "未绑定会话",
+		Title:     "未选择会话",
 		Preview:   "",
 	}
 	if mode == attachWorkspaceModeTargetPickerNewThread {
@@ -222,7 +222,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		Preview:   lastPreview,
 	}
 
-	title := "未绑定会话"
+	title := "未选择会话"
 	text := s.attachedLeadText(surface, inst)
 	if surface.SelectedThreadID != "" {
 		title = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID], surface.SelectedThreadID)
@@ -230,7 +230,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	} else if initialThreadID != "" {
 		text = fmt.Sprintf("%s 默认会话当前已被其他飞书会话占用，请先通过 /use 选择可用会话。", text)
 	} else if len(visibleThreads(inst)) != 0 {
-		text = fmt.Sprintf("%s 当前还没有绑定会话，请先通过 /use 选择一个会话。", text)
+		text = fmt.Sprintf("%s 当前还没有选择会话，请先通过 /use 选择一个会话。", text)
 	} else {
 		if productMode == state.ProductModeVSCode {
 			text = fmt.Sprintf("%s 当前没有可用会话，请等待 VS Code 切到会话后再 /use，或直接 /detach。", text)

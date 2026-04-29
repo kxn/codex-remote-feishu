@@ -15,9 +15,9 @@ func targetPickerTitle(source control.TargetPickerRequestSource) string {
 	case control.TargetPickerRequestSourceWorktree:
 		return "从 Worktree 新建工作区"
 	case control.TargetPickerRequestSourceUse:
-		return "切换工作会话"
+		return "切换工作区与会话"
 	default:
-		return "切换工作会话"
+		return "切换工作区与会话"
 	}
 }
 

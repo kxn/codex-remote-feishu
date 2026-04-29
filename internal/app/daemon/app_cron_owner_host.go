@@ -166,7 +166,7 @@ func (a *App) resolveCronBootstrapOwner(result cronrt.OwnerResolution, command c
 	result.Status = cronrt.OwnerStatusBootstrap
 	result.Gateway = identity
 	result.PersistOwner = &cronrt.OwnerBinding{GatewayID: identity.GatewayID, AppID: identity.AppID, BoundAt: time.Now().UTC()}
-	result.Message = fmt.Sprintf("将使用当前 surface 对应的 bot `%s` 初始化 Cron 配置表。", identity.GatewayID)
+	result.Message = fmt.Sprintf("将使用当前飞书会话对应的 bot `%s` 初始化 Cron 配置表。", identity.GatewayID)
 	return result, nil
 }
 

@@ -196,12 +196,12 @@ func TestResolveFeishuCommandDisplayProfileForContextAddsClaudeSessionFamilies(t
 
 func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {
 	normal := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "normal"})
-	if got := commandTextForMenuHomeEntry(normal, "工作会话"); got != "/workspace" {
+	if got := commandTextForMenuHomeEntry(normal, "工作区与会话"); got != "/workspace" {
 		t.Fatalf("normal switch_target home command = %q, want /workspace", got)
 	}
 
 	vscode := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "vscode"})
-	if got := commandTextForMenuHomeEntry(vscode, "工作会话"); got != "/menu switch_target" {
+	if got := commandTextForMenuHomeEntry(vscode, "工作区与会话"); got != "/menu switch_target" {
 		t.Fatalf("vscode switch_target home command = %q, want /menu switch_target", got)
 	}
 }

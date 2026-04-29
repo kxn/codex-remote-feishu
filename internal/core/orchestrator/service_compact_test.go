@@ -290,7 +290,7 @@ func TestCompactStartFailureRestoresQueuedDispatch(t *testing.T) {
 		Layer:            "server",
 		Stage:            "command_response",
 		Operation:        "thread.compact.start",
-		Message:          "Codex 拒绝了这次上下文整理请求。",
+		Message:          "Codex 拒绝了这次上下文压缩请求。",
 		SurfaceSessionID: "surface-1",
 		ThreadID:         "thread-1",
 	}))

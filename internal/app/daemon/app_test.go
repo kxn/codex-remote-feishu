@@ -753,7 +753,7 @@ func TestHandleGatewayActionReplacesScopedThreadCardForCardNavigation(t *testing
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if operationHasActionValue(*result.ReplaceCurrentCard, "show_threads", "", "") {
@@ -799,10 +799,10 @@ func TestHandleGatewayActionReplacesWorkspaceThreadCardForCardNavigation(t *test
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement workspace card title, got %#v", result.ReplaceCurrentCard)
 	}
 }
@@ -851,7 +851,7 @@ func TestHandleGatewayActionReplacesExpandedWorkspaceListCardForCardNavigation(t
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_workspaces", "", "") {
@@ -906,7 +906,7 @@ func TestHandleGatewayActionReplacesExpandedThreadWorkspaceCardForCardNavigation
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "切换工作会话" {
+	if result.ReplaceCurrentCard.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if operationHasActionValue(*result.ReplaceCurrentCard, "show_recent_thread_workspaces", "", "") {
@@ -1009,7 +1009,7 @@ func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
 	var hasFinalReplyCard bool
 	for _, operation := range gateway.operations {
 		switch {
-		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "切换工作会话":
+		case operation.Kind == feishu.OperationSendCard && operation.CardTitle == "切换工作区与会话":
 			hasListCard = true
 		case operation.Kind == feishu.OperationAddReaction && operation.MessageID == "msg-1":
 			hasTyping = true
@@ -1413,7 +1413,7 @@ func TestDaemonFallsBackToActorRouteForColdStartMenuActions(t *testing.T) {
 		t.Fatalf("expected one operation, got %#v", gateway.operations)
 	}
 	got := gateway.operations[0]
-	if got.Kind != feishu.OperationSendCard || got.CardTitle != "切换工作会话" {
+	if got.Kind != feishu.OperationSendCard || got.CardTitle != "切换工作区与会话" {
 		t.Fatalf("unexpected operation: %#v", got)
 	}
 	if got.ReceiveID != "ou_1" || got.ReceiveIDType != "open_id" {

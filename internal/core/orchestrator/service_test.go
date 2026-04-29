@@ -265,7 +265,7 @@ func TestWorkspaceSelectionEventCarriesFeishuTargetPickerContext(t *testing.T) {
 	if events[0].TargetPickerContext.DTOOwner != control.FeishuUIDTOwnerTargetPicker {
 		t.Fatalf("unexpected dto owner: %#v", events[0].TargetPickerContext)
 	}
-	if events[0].TargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].TargetPickerContext.Title != "切换工作会话" {
+	if events[0].TargetPickerContext.Source != control.TargetPickerRequestSourceList || events[0].TargetPickerContext.Title != "切换工作区与会话" {
 		t.Fatalf("unexpected target picker context: %#v", events[0].TargetPickerContext)
 	}
 	if events[0].TargetPickerContext.Surface.ProductMode != string(state.ProductModeNormal) || events[0].TargetPickerContext.Surface.CallbackPayloadOwner != control.FeishuUICallbackPayloadOwnerAdapter {
@@ -951,7 +951,7 @@ func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作区与会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 2 {
@@ -1110,7 +1110,7 @@ func TestShowAllWorkspacesUsesSamePagedWorkspacePrompt(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作区与会话" {
 		t.Fatalf("unexpected target picker view: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 6 {
@@ -1942,7 +1942,7 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 		t.Fatalf("expected one target picker for headless-only runtime, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作会话" {
+	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作区与会话" {
 		t.Fatalf("unexpected target picker: %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 1 {

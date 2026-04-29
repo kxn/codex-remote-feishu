@@ -1063,7 +1063,7 @@ func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 		"当前目录：/data/dl/droid",
 		"接管对象类型：工作区",
 		"已接管：droid",
-		"当前输入目标：未绑定会话",
+		"当前输入目标：未选择会话",
 		"下条飞书消息：Plan 关闭，模型 gpt-5.4，推理 medium，权限 confirm",
 	) {
 		t.Fatalf("unexpected snapshot rendering with attached workspace: %q", rendered)

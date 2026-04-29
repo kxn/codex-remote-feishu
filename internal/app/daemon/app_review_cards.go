@@ -109,7 +109,7 @@ func appendFooterButtons(operation *feishu.Operation, buttons []map[string]any) 
 
 func reviewEntryButton(daemonLifecycleID string) map[string]any {
 	return cardCallbackButton(
-		"Review 待提交内容",
+		"审阅待提交内容",
 		"primary",
 		stampActionPayload(frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewStart), ""), daemonLifecycleID),
 	)
@@ -123,7 +123,7 @@ func reviewCommitButtons(commits []gitmeta.CommitSummary, daemonLifecycleID stri
 			continue
 		}
 		buttons = append(buttons, cardCallbackButton(
-			fmt.Sprintf("评审 %s", reviewCommitButtonSHA(firstNonEmpty(commit.ShortSHA, commit.SHA))),
+			fmt.Sprintf("审阅 %s", reviewCommitButtonSHA(firstNonEmpty(commit.ShortSHA, commit.SHA))),
 			"default",
 			stampActionPayload(frontstageActionPayloadReviewCommit(commit.SHA), daemonLifecycleID),
 		))

@@ -55,7 +55,7 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 	}
 	var switchEntries []control.CommandCatalogEntry
 	for _, section := range catalog.Sections {
-		if section.Title == "工作会话" {
+		if section.Title == "工作区与会话" {
 			switchEntries = section.Entries
 			break
 		}
@@ -65,7 +65,7 @@ func TestHelpActionNormalModeCollapsesSwitchTargetCommands(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal help switch_target commands = %#v, want %#v", got, want)
 	}
-	if len(switchEntries) == 0 || switchEntries[0].Title != "工作会话" {
+	if len(switchEntries) == 0 || switchEntries[0].Title != "工作区与会话" {
 		t.Fatalf("expected workspace family help entries, got %#v", switchEntries)
 	}
 }
@@ -88,7 +88,7 @@ func TestHelpActionVSCodeModeKeepsSeparateSwitchTargetCommands(t *testing.T) {
 	}
 	var switchEntries []control.CommandCatalogEntry
 	for _, section := range catalog.Sections {
-		if section.Title == "工作会话" {
+		if section.Title == "工作区与会话" {
 			switchEntries = section.Entries
 			break
 		}

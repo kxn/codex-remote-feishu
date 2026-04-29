@@ -5,10 +5,10 @@ import "strings"
 func BuildFeishuWorkspaceRootPageView(inMenu bool) FeishuPageView {
 	return NormalizeFeishuPageView(FeishuPageView{
 		CommandID:    FeishuCommandWorkspace,
-		Title:        "工作会话",
+		Title:        "工作区与会话",
 		Interactive:  true,
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作会话"),
+		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作区与会话"),
 		Sections: []CommandCatalogSection{{
 			Entries: workspacePageEntries(
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceList, Label: "切换"},
@@ -28,7 +28,7 @@ func BuildFeishuWorkspaceNewPageView(inMenu bool) FeishuPageView {
 		Title:        "新建工作区",
 		Interactive:  true,
 		DisplayStyle: CommandCatalogDisplayCompactButtons,
-		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作会话", "新建工作区"),
+		Breadcrumbs:  workspacePageBreadcrumbs(inMenu, "工作区与会话", "新建工作区"),
 		Sections: []CommandCatalogSection{{
 			Entries: workspacePageEntries(
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewDir},

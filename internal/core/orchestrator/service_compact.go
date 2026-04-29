@@ -22,28 +22,28 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 	}
 	threadID := strings.TrimSpace(surface.SelectedThreadID)
 	if threadID == "" || !s.surfaceOwnsThread(surface, threadID) || !threadVisible(inst.Threads[threadID]) {
-		return notice(surface, "compact_requires_thread", "当前还没有可整理的会话。请先 /use 选择一个会话。")
+		return notice(surface, "compact_requires_thread", "当前还没有可压缩的会话。请先 /use 选择一个会话。")
 	}
 	if binding := s.turns.compactTurns[inst.InstanceID]; binding != nil {
 		if binding.SurfaceSessionID == surface.SurfaceSessionID || binding.ThreadID == threadID {
-			return notice(surface, "compact_in_progress", "当前正在整理上下文，请稍候。")
+			return notice(surface, "compact_in_progress", "当前正在压缩上下文，请稍候。")
 		}
-		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能整理上下文。")
+		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能压缩上下文。")
 	}
 	if binding := s.turns.pendingRemote[inst.InstanceID]; binding != nil {
-		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能整理上下文。")
+		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能压缩上下文。")
 	}
 	if inst.ActiveTurnID != "" {
-		return notice(surface, "compact_busy", "当前已有正在执行的任务，暂时不能整理上下文。请等待完成或先 /stop。")
+		return notice(surface, "compact_busy", "当前已有正在执行的任务，暂时不能压缩上下文。请等待完成或先 /stop。")
 	}
 	if s.surfaceHasPendingSteer(surface) {
-		return notice(surface, "compact_busy", "当前正在把排队输入并入本轮执行，暂时不能整理上下文。")
+		return notice(surface, "compact_busy", "当前正在把排队输入并入本轮执行，暂时不能压缩上下文。")
 	}
 	if surface.ActiveQueueItemID != "" {
-		return notice(surface, "compact_busy", "当前请求正在派发或执行，暂时不能整理上下文。请等待完成或先 /stop。")
+		return notice(surface, "compact_busy", "当前请求正在派发或执行，暂时不能压缩上下文。请等待完成或先 /stop。")
 	}
 	if len(surface.QueuedQueueItemIDs) != 0 {
-		return notice(surface, "compact_busy", "当前还有排队消息，暂时不能整理上下文。请等待队列清空或先 /stop。")
+		return notice(surface, "compact_busy", "当前还有排队消息，暂时不能压缩上下文。请等待队列清空或先 /stop。")
 	}
 	s.clearThreadHistoryRuntime(surface)
 	s.clearTargetPickerRuntime(surface)
@@ -137,7 +137,7 @@ func (s *Service) completeCompactTurn(instanceID string, event agentproto.Event)
 				detail = compactFailureText(*event.Problem, detail)
 			}
 			if detail == "" {
-				detail = "上下文整理在完成前中断。"
+				detail = "上下文压缩在完成前中断。"
 			}
 			events = append(events, s.emitCompactOwnerFailed(surface, binding, detail)...)
 		}
@@ -164,7 +164,7 @@ func (s *Service) failCompactTurn(instanceID string, fallback string, problem *a
 		detail = compactFailureText(*problem, detail)
 	}
 	if detail == "" {
-		detail = "上下文整理未完成。"
+		detail = "上下文压缩未完成。"
 	}
 	events := s.emitCompactOwnerFailed(surface, binding, detail)
 	if resumeSurface {
@@ -188,12 +188,12 @@ func (s *Service) restorePendingCompactDispatch(surfaceID, commandID, noticeCode
 		Layer:            "daemon",
 		Stage:            "dispatch_command",
 		Operation:        "thread.compact.start",
-		Message:          "上下文整理请求未成功发送到本地 Codex。",
+		Message:          "上下文压缩请求未成功发送到本地 Codex。",
 		SurfaceSessionID: surfaceID,
 		CommandID:        commandID,
 		ThreadID:         binding.ThreadID,
 	})
-	return s.failCompactTurn(surface.AttachedInstanceID, "上下文整理请求未成功发送到本地 Codex。", &problem, true)
+	return s.failCompactTurn(surface.AttachedInstanceID, "上下文压缩请求未成功发送到本地 Codex。", &problem, true)
 }
 
 func (s *Service) restorePendingCompactCommand(instanceID, commandID string, problem agentproto.ErrorInfo) []eventcontract.Event {
@@ -209,12 +209,12 @@ func (s *Service) restorePendingCompactCommand(instanceID, commandID string, pro
 		Layer:            "wrapper",
 		Stage:            "command_ack",
 		Operation:        "thread.compact.start",
-		Message:          "本地 Codex 拒绝了这次上下文整理请求。",
+		Message:          "本地 Codex 拒绝了这次上下文压缩请求。",
 		SurfaceSessionID: binding.SurfaceSessionID,
 		CommandID:        commandID,
 		ThreadID:         binding.ThreadID,
 	})
-	return s.failCompactTurn(instanceID, "本地 Codex 拒绝了这次上下文整理请求。", &problem, true)
+	return s.failCompactTurn(instanceID, "本地 Codex 拒绝了这次上下文压缩请求。", &problem, true)
 }
 
 func (s *Service) handleCompactProblem(instanceID string, problem agentproto.ErrorInfo) []eventcontract.Event {
@@ -231,5 +231,5 @@ func (s *Service) handleCompactProblem(instanceID string, problem agentproto.Err
 	if strings.TrimSpace(problem.ThreadID) != "" && binding.ThreadID != "" && binding.ThreadID != problem.ThreadID {
 		return nil
 	}
-	return s.failCompactTurn(instanceID, "上下文整理在启动前中断。", &problem, true)
+	return s.failCompactTurn(instanceID, "上下文压缩在启动前中断。", &problem, true)
 }

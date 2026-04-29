@@ -573,7 +573,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	}
 	inst.Online = false
 	inst.ActiveTurnID = ""
-	events := s.failCompactTurn(instanceID, "当前实例已离线，上下文整理已中断。", nil, false)
+	events := s.failCompactTurn(instanceID, "当前实例已离线，上下文压缩已中断。", nil, false)
 
 	for _, surface := range s.root.Surfaces {
 		if surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID {
@@ -638,7 +638,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	delete(s.threadRefreshes, instanceID)
 
 	surfaces := s.findAttachedSurfaces(instanceID)
-	events := s.failCompactTurn(instanceID, "当前实例连接已中断，上下文整理已中断。", nil, false)
+	events := s.failCompactTurn(instanceID, "当前实例连接已中断，上下文压缩已中断。", nil, false)
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
 		delete(s.turns.pendingRemote, instanceID)
@@ -721,7 +721,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 		inst.Online = false
 		inst.ActiveTurnID = ""
 	}
-	_ = s.failCompactTurn(instanceID, "当前实例已移除，上下文整理已中断。", nil, false)
+	_ = s.failCompactTurn(instanceID, "当前实例已移除，上下文压缩已中断。", nil, false)
 	s.restorePendingSteersForInstance(instanceID)
 	for _, surface := range s.root.Surfaces {
 		if surface == nil {

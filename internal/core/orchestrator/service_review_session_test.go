@@ -417,7 +417,7 @@ func TestStartReviewCommitCommandOpensPickerPage(t *testing.T) {
 		t.Fatalf("expected one picker page event, got %#v", events)
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
-	if catalog.Title != "选择 Commit" || catalog.TrackingKey == "" {
+	if catalog.Title != "选择提交记录" || catalog.TrackingKey == "" {
 		t.Fatalf("unexpected commit picker catalog: %#v", catalog)
 	}
 	if len(catalog.Sections) != 1 || len(catalog.Sections[0].Entries) != 1 || catalog.Sections[0].Entries[0].Form == nil {
@@ -465,7 +465,7 @@ func TestStartReviewCommitCommandBuildsDetachedReviewCommand(t *testing.T) {
 	if command.Review.Target.Kind != agentproto.ReviewTargetKindCommit || command.Review.Target.CommitSHA != latest.SHA || command.Review.Target.CommitTitle != latest.Subject {
 		t.Fatalf("unexpected commit review target: %#v", command.Review.Target)
 	}
-	if surface.ReviewSession == nil || surface.ReviewSession.TargetLabel != "commit "+latest.ShortSHA || surface.ReviewSession.SourceMessageID != "msg-review-commit" {
+	if surface.ReviewSession == nil || surface.ReviewSession.TargetLabel != "提交 "+latest.ShortSHA || surface.ReviewSession.SourceMessageID != "msg-review-commit" {
 		t.Fatalf("unexpected pending commit review session: %#v", surface.ReviewSession)
 	}
 }

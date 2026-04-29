@@ -67,7 +67,7 @@ func (s *Service) cancelReviewCommitPicker(surface *state.SurfaceConsoleRecord, 
 		return notice(surface, code, text)
 	}
 	s.clearReviewCommitPickerRuntime(surface)
-	return notice(surface, "review_commit_picker_cancelled", "已取消 commit 审阅选择。")
+	return notice(surface, "review_commit_picker_cancelled", "已取消提交记录审阅选择。")
 }
 
 func (s *Service) resolveCommitReviewStartFromCurrentContext(surface *state.SurfaceConsoleRecord, action control.Action, commitSHA string) reviewStartState {
@@ -121,17 +121,17 @@ func (s *Service) resolveCommitReviewStartFromEntry(entry reviewEntryContext, co
 		return failedReviewStart("review_git_state_unavailable", "当前无法检查工作区的 Git 状态，请稍后重试。")
 	}
 	if !info.InRepo() {
-		return failedReviewStart("review_not_in_repo", "当前会话工作目录不在 Git 仓库内，无法按 commit 发起审阅。")
+		return failedReviewStart("review_not_in_repo", "当前会话工作目录不在 Git 仓库内，无法按提交记录发起审阅。")
 	}
 	resolved, err := gitmeta.ResolveCommitPrefix(entry.ThreadCWD, commitSHA)
 	if err != nil {
-		return failedReviewStart("review_commit_unavailable", "当前无法解析这个 commit，请稍后重试。")
+		return failedReviewStart("review_commit_unavailable", "当前无法解析这个提交记录，请稍后重试。")
 	}
 	switch resolved.Status {
 	case gitmeta.CommitResolveNotFound:
-		return failedReviewStart("review_commit_not_found", "当前仓库里找不到这个 commit，请确认 SHA 是否正确。")
+		return failedReviewStart("review_commit_not_found", "当前仓库里找不到这个提交记录，请确认 SHA 是否正确。")
 	case gitmeta.CommitResolveAmbiguous:
-		return failedReviewStart("review_commit_ambiguous", "当前 commit 前缀匹配到多个提交，请改用更长的 SHA。")
+		return failedReviewStart("review_commit_ambiguous", "当前提交前缀匹配到多个提交记录，请改用更长的 SHA。")
 	case gitmeta.CommitResolveFound:
 		commit := resolved.Commit.Normalized()
 		return reviewStartFromEntry(entry, agentproto.ReviewTarget{
@@ -140,7 +140,7 @@ func (s *Service) resolveCommitReviewStartFromEntry(entry reviewEntryContext, co
 			CommitTitle: commit.Subject,
 		}, reviewCommitTargetLabel(commit))
 	default:
-		return failedReviewStart("review_commit_unavailable", "当前无法解析这个 commit，请稍后重试。")
+		return failedReviewStart("review_commit_unavailable", "当前无法解析这个提交记录，请稍后重试。")
 	}
 }
 
@@ -150,14 +150,14 @@ func (s *Service) listRecentReviewCommits(cwd string) ([]gitmeta.CommitSummary, 
 		return nil, "review_git_state_unavailable", "当前无法检查工作区的 Git 状态，请稍后重试。"
 	}
 	if !info.InRepo() {
-		return nil, "review_not_in_repo", "当前会话工作目录不在 Git 仓库内，无法按 commit 发起审阅。"
+		return nil, "review_not_in_repo", "当前会话工作目录不在 Git 仓库内，无法按提交记录发起审阅。"
 	}
 	commits, err := gitmeta.ListRecentCommits(cwd, reviewCommitPickerLimit)
 	if err != nil {
-		return nil, "review_commit_unavailable", "当前无法读取最近的 commit，请稍后重试。"
+		return nil, "review_commit_unavailable", "当前无法读取最近的提交记录，请稍后重试。"
 	}
 	if len(commits) == 0 {
-		return nil, "review_no_commits", "当前 Git 仓库还没有可审阅的 commit。"
+		return nil, "review_no_commits", "当前 Git 仓库还没有可审阅的提交记录。"
 	}
 	return commits, "", ""
 }
@@ -168,9 +168,9 @@ func reviewCommitTargetLabel(commit gitmeta.CommitSummary) string {
 		short = reviewShortCommitSHA(commit.SHA)
 	}
 	if short == "" {
-		return "commit"
+		return "提交"
 	}
-	return "commit " + short
+	return "提交 " + short
 }
 
 func reviewShortCommitSHA(value string) string {
@@ -210,7 +210,7 @@ func (s *Service) buildReviewCommitPickerView(flow *activeOwnerCardFlowRecord, r
 	}
 	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:   control.FeishuCommandReview,
-		Title:       "选择 Commit",
+		Title:       "选择提交记录",
 		Interactive: true,
 		TrackingKey: strings.TrimSpace(flow.FlowID),
 		Sections: []control.CommandCatalogSection{{
@@ -223,7 +223,7 @@ func (s *Service) buildReviewCommitPickerView(flow *activeOwnerCardFlowRecord, r
 					Field: control.CommandCatalogFormField{
 						Name:        reviewCommitPickerFieldName,
 						Kind:        control.CommandCatalogFormFieldSelectStatic,
-						Placeholder: "请选择最近 10 个 commit",
+						Placeholder: "请选择最近 10 条提交记录",
 						Options:     options,
 					},
 				},
@@ -254,7 +254,7 @@ func (s *Service) activeReviewCommitPickerMatchesMessage(surface *state.SurfaceC
 
 func (s *Service) requireActiveReviewCommitPicker(surface *state.SurfaceConsoleRecord, messageID, actorUserID string, fromCardAction bool) (*activeOwnerCardFlowRecord, *activeReviewPickerRecord, string, string) {
 	if surface == nil {
-		return nil, nil, "review_commit_picker_missing", "当前没有进行中的 commit 选择卡片。"
+		return nil, nil, "review_commit_picker_missing", "当前没有进行中的提交记录选择卡片。"
 	}
 	flow := s.activeOwnerCardFlow(surface)
 	record := s.activeReviewPicker(surface)

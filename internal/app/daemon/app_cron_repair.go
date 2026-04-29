@@ -87,7 +87,7 @@ func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolu
 	permissionCtx, cancelPermission := context.WithTimeout(context.Background(), cronrt.BitablePermissionTTL)
 	defer cancelPermission()
 	if err := a.ensureCronUserPermission(permissionCtx, api, updatedBinding.AppToken, a.service.SurfaceActorUserID(command.SurfaceSessionID)); err != nil {
-		permissionWarning = "已跳过当前 surface 用户的编辑权限补齐：" + err.Error()
+		permissionWarning = "已跳过当前飞书会话用户的编辑权限补齐：" + err.Error()
 	}
 
 	now := time.Now().UTC()

@@ -245,7 +245,7 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 		Phase:          state.ReviewSessionPhaseActive,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
-		TargetLabel:    "commit abc1234",
+		TargetLabel:    "提交 abc1234",
 	}
 
 	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
@@ -273,7 +273,7 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
 		t.Fatalf("expected review title prefix, got %#v", ops[0])
 	}
-	if !strings.Contains(ops[0].CardTitle, "commit abc1234") {
+	if !strings.Contains(ops[0].CardTitle, "提交 abc1234") {
 		t.Fatalf("expected review title to include commit target label, got %#v", ops[0].CardTitle)
 	}
 	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewDiscard)) {

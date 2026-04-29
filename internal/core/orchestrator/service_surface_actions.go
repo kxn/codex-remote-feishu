@@ -665,7 +665,7 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []eventcontra
 			notice = control.Notice{
 				Code:     "stop_not_interruptible",
 				Title:    "当前还不能停止",
-				Text:     "当前上下文整理请求正在派发，尚未进入可中断状态。",
+				Text:     "当前上下文压缩请求正在派发，尚未进入可中断状态。",
 				ThemeKey: "system",
 			}
 		} else {

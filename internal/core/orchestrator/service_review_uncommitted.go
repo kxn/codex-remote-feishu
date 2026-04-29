@@ -88,7 +88,7 @@ func (s *Service) handleReviewCommand(surface *state.SurfaceConsoleRecord, actio
 	case control.ReviewCommandModeCancel:
 		return s.cancelReviewCommitPicker(surface, action)
 	default:
-		return notice(surface, "review_command_invalid", "当前暂不支持这个 review 命令。")
+		return notice(surface, "review_command_invalid", "当前暂不支持这个审阅命令。")
 	}
 }
 
