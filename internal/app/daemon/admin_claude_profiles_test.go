@@ -34,6 +34,9 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if createResp.Profile.ID != "devseek" || !createResp.Profile.HasAuthToken || createResp.Profile.BuiltIn || createResp.Profile.ReadOnly {
 		t.Fatalf("unexpected create response: %#v", createResp.Profile)
 	}
+	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].ID != "devseek" {
+		t.Fatalf("expected runtime catalog to include default + devseek after create, got %#v", got)
+	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
 	if err != nil {
@@ -97,6 +100,9 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if updateResp.Profile.BaseURL != "" || updateResp.Profile.Model != "" || updateResp.Profile.SmallModel != "" {
 		t.Fatalf("expected cleared override fields, got %#v", updateResp.Profile)
 	}
+	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].Name != "DevSeek 2" {
+		t.Fatalf("expected runtime catalog to reflect update, got %#v", got)
+	}
 
 	loaded, err = config.LoadAppConfigAtPath(configPath)
 	if err != nil {
@@ -128,5 +134,8 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	}
 	if len(listResp.Profiles) != 1 || listResp.Profiles[0].ID != config.ClaudeDefaultProfileID {
 		t.Fatalf("expected only built-in default profile after delete, got %#v", listResp.Profiles)
+	}
+	if got := app.service.ClaudeProfiles(); len(got) != 1 || got[0].ID != config.ClaudeDefaultProfileID {
+		t.Fatalf("expected runtime catalog to drop deleted profile, got %#v", got)
 	}
 }

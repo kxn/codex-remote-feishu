@@ -8,6 +8,7 @@ import (
 	"time"
 
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -90,6 +91,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_BACKEND="+string(backend),
 	)
+	if backend == agentproto.BackendClaude {
+		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
+	}
 	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID, cfg.Paths.StateDir)
 	if err != nil {
 		if command.AutoRestore {

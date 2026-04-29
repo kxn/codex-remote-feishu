@@ -504,7 +504,7 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 		if inst := s.resolveWorkspaceAttachInstanceForBackend(surface, workspaceKey, targetBackend); inst != nil {
 			return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
 		}
-		if len(s.workspaceOnlineInstancesForBackend(workspaceKey, targetBackend)) == 0 {
+		if len(s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)) == 0 {
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}

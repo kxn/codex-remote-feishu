@@ -149,6 +149,7 @@ type Root struct {
 	Instances                       map[string]*InstanceRecord
 	Surfaces                        map[string]*SurfaceConsoleRecord
 	WorkspaceDefaults               map[string]ModelConfigRecord
+	ClaudeProfiles                  map[string]ClaudeProfileRecord
 	ClaudeWorkspaceProfileSnapshots map[string]ClaudeWorkspaceProfileSnapshotRecord
 }
 
@@ -171,6 +172,7 @@ type InstanceRecord struct {
 	WorkspaceKey            string
 	ShortName               string
 	Backend                 agentproto.Backend
+	ClaudeProfileID         string
 	Source                  string
 	Capabilities            agentproto.Capabilities
 	CapabilitiesDeclared    bool
@@ -590,6 +592,7 @@ func NewRoot() *Root {
 		Instances:                       map[string]*InstanceRecord{},
 		Surfaces:                        map[string]*SurfaceConsoleRecord{},
 		WorkspaceDefaults:               map[string]ModelConfigRecord{},
+		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
 		ClaudeWorkspaceProfileSnapshots: map[string]ClaudeWorkspaceProfileSnapshotRecord{},
 	}
 }

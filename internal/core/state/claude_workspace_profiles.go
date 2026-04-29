@@ -9,6 +9,7 @@ import (
 const (
 	claudeWorkspaceProfileKeySeparator = "\x00"
 	DefaultClaudeProfileID             = "default"
+	DefaultClaudeProfileName           = "默认"
 )
 
 func NormalizeClaudeProfileID(value string) string {
@@ -29,6 +30,28 @@ func ClaudeWorkspaceProfileSnapshotStorageKey(workspaceKey string, backend agent
 		return ""
 	}
 	return string(backend) + claudeWorkspaceProfileKeySeparator + NormalizeClaudeProfileID(profileID) + claudeWorkspaceProfileKeySeparator + workspaceKey
+}
+
+type ClaudeProfileRecord struct {
+	ID      string
+	Name    string
+	BuiltIn bool
+}
+
+func NormalizeClaudeProfileRecord(value ClaudeProfileRecord) ClaudeProfileRecord {
+	value.ID = NormalizeClaudeProfileID(value.ID)
+	value.Name = strings.TrimSpace(value.Name)
+	if value.Name == "" {
+		if value.ID == DefaultClaudeProfileID {
+			value.Name = DefaultClaudeProfileName
+		} else {
+			value.Name = value.ID
+		}
+	}
+	if value.ID == DefaultClaudeProfileID {
+		value.BuiltIn = true
+	}
+	return value
 }
 
 func NormalizeClaudeWorkspaceProfileSnapshotRecord(value ClaudeWorkspaceProfileSnapshotRecord) ClaudeWorkspaceProfileSnapshotRecord {

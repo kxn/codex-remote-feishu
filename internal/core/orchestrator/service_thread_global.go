@@ -55,6 +55,9 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
+		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
+			continue
+		}
 		owner := s.instanceClaimSurface(inst.InstanceID)
 		for _, thread := range ordinaryVisibleThreads(inst) {
 			if thread == nil {
@@ -136,6 +139,9 @@ func (s *Service) normalModeListWorkspaceSetWithViews(surface *state.SurfaceCons
 		if filterByBackend && state.EffectiveInstanceBackend(inst) != targetBackend {
 			continue
 		}
+		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
+			continue
+		}
 		for _, workspaceKey := range instanceWorkspaceSelectionKeys(inst) {
 			if workspaceKey == "" {
 				continue
@@ -186,6 +192,9 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 	}
 	for _, inst := range s.Instances() {
 		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
+			continue
+		}
+		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
 			continue
 		}
 		thread := inst.Threads[threadID]
@@ -471,6 +480,9 @@ func (s *Service) reusableManagedHeadless(surface *state.SurfaceConsoleRecord, c
 	var candidates []*state.InstanceRecord
 	for _, inst := range s.Instances() {
 		if inst == nil || !inst.Online || !isHeadlessInstance(inst) {
+			continue
+		}
+		if !s.instanceMatchesSurfaceClaudeProfile(surface, inst) {
 			continue
 		}
 		if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {

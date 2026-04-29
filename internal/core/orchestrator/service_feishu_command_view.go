@@ -57,6 +57,13 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.EffectiveValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.EffectiveValueKey)
 	view.Config.OverrideValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideValueKey)
 	view.Config.OverrideExtraValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideExtraValueKey)
+	switch flow.CommandID {
+	case control.FeishuCommandClaudeProfile:
+		view.Config.FormOptions = s.claudeProfileCommandOptions()
+		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
+			view.Config.FormDefaultValue = s.surfaceClaudeProfileID(surface)
+		}
+	}
 	return view
 }
 
@@ -96,6 +103,11 @@ func (s *Service) resolveConfigFlowValue(
 	case control.FeishuConfigFlowValueSurfaceProductMode:
 		normalized := control.NormalizeCatalogContext(ctx)
 		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
+	case control.FeishuConfigFlowValueSurfaceClaudeProfile:
+		if surface != nil {
+			return s.surfaceClaudeProfileID(surface)
+		}
+		return state.DefaultClaudeProfileID
 	case control.FeishuConfigFlowValueSurfaceAutoWhip:
 		if surface != nil && surface.AutoWhip.Enabled {
 			return "on"
@@ -144,6 +156,9 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 	if strings.TrimSpace(cardState.FormDefaultValue) != "" {
 		base.FormDefaultValue = strings.TrimSpace(cardState.FormDefaultValue)
 	}
+	if len(cardState.FormOptions) != 0 {
+		base.FormOptions = append([]control.CommandCatalogFormFieldOption(nil), cardState.FormOptions...)
+	}
 	if strings.TrimSpace(cardState.CatalogFamilyID) != "" {
 		base.CatalogFamilyID = strings.TrimSpace(cardState.CatalogFamilyID)
 	}
@@ -163,6 +178,39 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 		base.Sealed = true
 	}
 	return base
+}
+
+func (s *Service) claudeProfileCommandOptions() []control.CommandCatalogFormFieldOption {
+	profiles := s.ClaudeProfiles()
+	if len(profiles) == 0 {
+		return []control.CommandCatalogFormFieldOption{{
+			Label: state.DefaultClaudeProfileName,
+			Value: state.DefaultClaudeProfileID,
+		}}
+	}
+	labelCounts := map[string]int{}
+	for _, profile := range profiles {
+		label := strings.TrimSpace(profile.Name)
+		if label == "" {
+			label = profile.ID
+		}
+		labelCounts[label]++
+	}
+	options := make([]control.CommandCatalogFormFieldOption, 0, len(profiles))
+	for _, profile := range profiles {
+		label := strings.TrimSpace(profile.Name)
+		if label == "" {
+			label = profile.ID
+		}
+		if labelCounts[label] > 1 && !strings.EqualFold(label, strings.TrimSpace(profile.ID)) {
+			label += "（" + strings.TrimSpace(profile.ID) + "）"
+		}
+		options = append(options, control.CommandCatalogFormFieldOption{
+			Label: label,
+			Value: strings.TrimSpace(profile.ID),
+		})
+	}
+	return options
 }
 
 func (s *Service) commandPageFromView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) control.FeishuPageView {

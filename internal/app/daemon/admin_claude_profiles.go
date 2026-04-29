@@ -125,6 +125,9 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	a.adminConfigMu.Unlock()
+	a.mu.Lock()
+	a.syncClaudeProfilesCatalogLocked(updated)
+	a.mu.Unlock()
 
 	writeJSON(w, http.StatusCreated, claudeProfileResponse{
 		Profile: adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: profile}),
@@ -208,6 +211,9 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	a.adminConfigMu.Unlock()
+	a.mu.Lock()
+	a.syncClaudeProfilesCatalogLocked(updated)
+	a.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, claudeProfileResponse{
 		Profile: adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: current}),
@@ -260,6 +266,9 @@ func (a *App) handleClaudeProfileDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	a.adminConfigMu.Unlock()
+	a.mu.Lock()
+	a.syncClaudeProfilesCatalogLocked(updated)
+	a.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
 

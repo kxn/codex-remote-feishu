@@ -42,6 +42,7 @@ const (
 	ActionAutoWhipCommand             ActionKind = "surface.command.auto_whip"
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"
+	ActionClaudeProfileCommand        ActionKind = "surface.command.claude_profile"
 	ActionSendFile                    ActionKind = "surface.command.send_file"
 	ActionRespondRequest              ActionKind = "surface.request.respond"
 	ActionControlRequest              ActionKind = "surface.request.control"
@@ -178,21 +179,23 @@ type SelectionOption struct {
 }
 
 type Snapshot struct {
-	SurfaceSessionID string
-	ActorUserID      string
-	ProductMode      string
-	Backend          agentproto.Backend
-	WorkspaceKey     string
-	Attachment       AttachmentSummary
-	PendingHeadless  PendingHeadlessSummary
-	NextPrompt       PromptRouteSummary
-	Gate             GateSummary
-	Dispatch         DispatchSummary
-	AutoWhip         AutoWhipSummary
-	AutoContinue     AutoContinueSummary
-	PermissionGaps   []PermissionGapSummary
-	Instances        []InstanceSummary
-	Threads          []ThreadSummary
+	SurfaceSessionID  string
+	ActorUserID       string
+	ProductMode       string
+	Backend           agentproto.Backend
+	WorkspaceKey      string
+	ClaudeProfileID   string
+	ClaudeProfileName string
+	Attachment        AttachmentSummary
+	PendingHeadless   PendingHeadlessSummary
+	NextPrompt        PromptRouteSummary
+	Gate              GateSummary
+	Dispatch          DispatchSummary
+	AutoWhip          AutoWhipSummary
+	AutoContinue      AutoContinueSummary
+	PermissionGaps    []PermissionGapSummary
+	Instances         []InstanceSummary
+	Threads           []ThreadSummary
 }
 
 type PermissionGapSummary struct {

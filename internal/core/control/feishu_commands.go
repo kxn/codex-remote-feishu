@@ -1,11 +1,6 @@
 package control
 
 const (
-	FeishuCommandGroupCurrentWork     = "current_work"
-	FeishuCommandGroupSendSettings    = "send_settings"
-	FeishuCommandGroupSwitchTarget    = "switch_target"
-	FeishuCommandGroupCommonTools     = "common_tools"
-	FeishuCommandGroupMaintenance     = "maintenance"
 	FeishuCommandWorkspace            = "workspace"
 	FeishuCommandWorkspaceList        = "workspace_list"
 	FeishuCommandWorkspaceNew         = "workspace_new"
@@ -34,6 +29,7 @@ const (
 	FeishuCommandAccess               = "access"
 	FeishuCommandPlan                 = "plan"
 	FeishuCommandVerbose              = "verbose"
+	FeishuCommandClaudeProfile        = "claude_profile"
 	FeishuCommandHelp                 = "help"
 	FeishuCommandMenu                 = "menu"
 	FeishuCommandDebug                = "debug"
@@ -42,21 +38,6 @@ const (
 	FeishuCommandPatch                = "patch"
 	FeishuCommandVSCodeMigrate        = "vscode_migrate"
 )
-
-type FeishuCommandArgumentKind string
-
-const (
-	FeishuCommandArgumentNone   FeishuCommandArgumentKind = "none"
-	FeishuCommandArgumentChoice FeishuCommandArgumentKind = "choice"
-	FeishuCommandArgumentText   FeishuCommandArgumentKind = "text"
-)
-
-type FeishuCommandGroup struct {
-	ID            string
-	Title         string
-	Description   string
-	RootCommandID string
-}
 
 type FeishuCommandOption struct {
 	Value       string
@@ -113,35 +94,6 @@ type FeishuRecommendedMenu struct {
 	Key         string
 	Name        string
 	Description string
-}
-
-var feishuCommandGroups = []FeishuCommandGroup{
-	{
-		ID:          FeishuCommandGroupCurrentWork,
-		Title:       "基本命令",
-		Description: "",
-	},
-	{
-		ID:          FeishuCommandGroupSendSettings,
-		Title:       "参数设置",
-		Description: "",
-	},
-	{
-		ID:            FeishuCommandGroupSwitchTarget,
-		Title:         "工作区与会话",
-		Description:   "",
-		RootCommandID: FeishuCommandWorkspace,
-	},
-	{
-		ID:          FeishuCommandGroupCommonTools,
-		Title:       "常用工具",
-		Description: "",
-	},
-	{
-		ID:          FeishuCommandGroupMaintenance,
-		Title:       "系统管理",
-		Description: "",
-	},
 }
 
 var feishuCommandSpecs = []feishuCommandSpec{
@@ -453,6 +405,29 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		menuDynamic: []feishuCommandDynamicMenuMatch{
 			{prefix: "verbose_", kind: ActionVerboseCommand, parseArgument: normalizeVerboseMenuArgument},
 			{prefix: "verbose-", kind: ActionVerboseCommand, parseArgument: normalizeVerboseMenuArgument},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandClaudeProfile,
+			GroupID:          FeishuCommandGroupSendSettings,
+			Title:            "切换 Claude 配置",
+			CanonicalSlash:   "/claudeprofile",
+			CanonicalMenuKey: "claude_profile",
+			ArgumentKind:     FeishuCommandArgumentText,
+			ArgumentFormHint: "default",
+			ArgumentFormNote: "输入已存在的 Claude 配置 ID。",
+			ArgumentSubmit:   "切换",
+			Description:      "查看当前 Claude 配置；bare `/claudeprofile` 会返回可切换的配置下拉卡片。",
+			Examples:         []string{"/claudeprofile default"},
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/claudeprofile", kind: ActionClaudeProfileCommand},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "claude_profile", action: Action{Kind: ActionClaudeProfileCommand, Text: "/claudeprofile"}},
 		},
 	},
 	{

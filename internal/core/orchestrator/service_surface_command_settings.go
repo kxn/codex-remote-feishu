@@ -76,6 +76,16 @@ func parsePlanMode(value string) (state.PlanModeSetting, bool) {
 	}
 }
 
+func (s *Service) resolveClaudeProfileSelection(value string) (state.ClaudeProfileRecord, bool) {
+	targetID := state.NormalizeClaudeProfileID(value)
+	for _, profile := range s.ClaudeProfiles() {
+		if strings.EqualFold(strings.TrimSpace(profile.ID), targetID) {
+			return profile, true
+		}
+	}
+	return state.ClaudeProfileRecord{}, false
+}
+
 func commandCardOwnsInlineResult(action control.Action) bool {
 	return action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""
 }
@@ -218,6 +228,113 @@ func (s *Service) resumeWorkspaceAfterClaudeModeSwitch(surface *state.SurfaceCon
 		return s.attachWorkspace(surface, workspaceKey)
 	}
 	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, false)
+}
+
+func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
+		text := "当前不在 Claude normal 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"
+		if commandCardOwnsInlineResult(action) {
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				StatusKind: "error",
+				StatusText: text,
+			})
+		}
+		return notice(surface, "claude_profile_mode_required", text)
+	}
+
+	parts := strings.Fields(strings.TrimSpace(action.Text))
+	if len(parts) <= 1 {
+		return s.openConfigCommandPageForAction(surface, action)
+	}
+	if len(parts) != 2 {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       "用法：`/claudeprofile` 查看当前状态；`/claudeprofile <profile-id>`。",
+			FormDefaultValue: actionCommandArgumentText(action),
+		})
+	}
+
+	target, ok := s.resolveClaudeProfileSelection(parts[1])
+	if !ok {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       "找不到这个 Claude 配置。请从下拉里选择已有配置，或到管理页先创建。",
+			FormDefaultValue: state.NormalizeClaudeProfileID(parts[1]),
+		})
+	}
+
+	currentProfileID := s.surfaceClaudeProfileID(surface)
+	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
+	targetLabel := s.claudeProfileDisplayName(target.ID)
+	if target.ID == currentProfileID {
+		text := fmt.Sprintf("当前已在使用 Claude 配置：%s。", targetLabel)
+		if commandCardOwnsInlineResult(action) {
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				Sealed:     true,
+				StatusKind: "info",
+				StatusText: text,
+			})
+		}
+		return notice(surface, "claude_profile_current", text)
+	}
+
+	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+		if commandCardOwnsInlineResult(action) {
+			text := ""
+			if len(blocked) > 0 && blocked[0].Notice != nil {
+				text = blocked[0].Notice.Text
+			}
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				StatusKind: "error",
+				StatusText: text,
+			})
+		}
+		return blocked
+	}
+
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	if surface.PendingHeadless != nil || s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
+		text := "当前仍有执行中的 turn、派发中的请求、排队消息或工作区准备流程，暂时不能切换 Claude 配置。请等待完成、/stop，或先 /detach。"
+		if commandCardOwnsInlineResult(action) {
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				StatusKind: "error",
+				StatusText: text,
+			})
+		}
+		return notice(surface, "claude_profile_busy", text)
+	}
+
+	prepareNewThread := surface.RouteMode == state.RouteModeNewThreadReady
+	events := s.discardDrafts(surface)
+	events = append(events, s.finalizeDetachedSurface(surface)...)
+	s.setSurfaceClaudeProfileID(surface, target.ID)
+	if currentWorkspaceKey == "" {
+		surface.PromptOverride = state.ModelConfigRecord{}
+		surface.PlanMode = state.PlanModeSettingOff
+		text := fmt.Sprintf("已切换到 Claude 配置：%s。当前没有接管中的工作区。", targetLabel)
+		if commandCardOwnsInlineResult(action) {
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				Sealed:     true,
+				StatusKind: "success",
+				StatusText: text,
+			}, events...)
+		}
+		return append(events, notice(surface, "claude_profile_switched", text)...)
+	}
+
+	surface.ClaimedWorkspaceKey = currentWorkspaceKey
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
+	resumeEvents := s.startFreshWorkspaceHeadlessWithOptions(surface, currentWorkspaceKey, prepareNewThread)
+	statusText := fmt.Sprintf("已切换到 Claude 配置：%s。正在重新准备当前工作区。", targetLabel)
+	if commandCardOwnsInlineResult(action) {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			Sealed:     true,
+			StatusKind: "success",
+			StatusText: statusText,
+		}, append(events, resumeEvents...)...)
+	}
+	events = append(events, notice(surface, "claude_profile_switched", statusText)...)
+	return append(events, resumeEvents...)
 }
 
 func (s *Service) handleAutoWhipCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

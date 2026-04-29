@@ -36,6 +36,39 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	}})
 }
 
+func claudeProfilePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandClaudeProfile)
+	bodySections := BuildFeishuCommandConfigBodySections(def, view)
+	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
+	if view.Sealed {
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
+	}
+	defaultValue := strings.TrimSpace(view.FormDefaultValue)
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = strings.TrimSpace(view.CurrentValue)
+	}
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = ""
+	}
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
+		Title: "立即切换",
+		Entries: []CommandCatalogEntry{{
+			Form: &CommandCatalogForm{
+				CommandID:   FeishuCommandClaudeProfile,
+				CommandText: "/claudeprofile",
+				SubmitLabel: "切换",
+				Field: CommandCatalogFormField{
+					Name:         "command_args",
+					Kind:         CommandCatalogFormFieldSelectStatic,
+					Placeholder:  "选择 Claude 配置",
+					DefaultValue: defaultValue,
+					Options:      append([]CommandCatalogFormFieldOption(nil), view.FormOptions...),
+				},
+			},
+		}},
+	}})
+}
+
 func autoWhipPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
 	def, _ := FeishuCommandDefinitionByID(FeishuCommandAutoWhip)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
@@ -246,6 +279,23 @@ func commandCatalogFormOptionExists(options []CommandCatalogFormFieldOption, val
 		}
 	}
 	return false
+}
+
+func commandCatalogOptionLabel(options []CommandCatalogFormFieldOption, value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return strings.TrimSpace(fallback)
+	}
+	for _, option := range options {
+		if strings.TrimSpace(option.Value) != value {
+			continue
+		}
+		label := strings.TrimSpace(option.Label)
+		if label != "" {
+			return label
+		}
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func choiceCommandButton(label, commandText string, disabled bool, style string) CommandCatalogButton {

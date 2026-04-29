@@ -14,6 +14,7 @@ const (
 	FeishuUIIntentShowCommandMenu             FeishuUIIntentKind = "show_command_menu"
 	FeishuUIIntentShowHistory                 FeishuUIIntentKind = "show_history"
 	FeishuUIIntentShowModeCatalog             FeishuUIIntentKind = "show_mode_catalog"
+	FeishuUIIntentShowClaudeProfileCatalog    FeishuUIIntentKind = "show_claude_profile_catalog"
 	FeishuUIIntentShowAutoWhipCatalog         FeishuUIIntentKind = "show_auto_whip_catalog"
 	FeishuUIIntentShowAutoContinueCatalog     FeishuUIIntentKind = "show_auto_continue_catalog"
 	FeishuUIIntentShowReasoningCatalog        FeishuUIIntentKind = "show_reasoning_catalog"

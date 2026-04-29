@@ -21,6 +21,9 @@ func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDir
 
 func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {
 	lines := []string{snapshotLine("当前模式", displaySnapshotMode(snapshot.ProductMode))}
+	if profile := formatSnapshotClaudeProfile(snapshot); profile != "" {
+		lines = append(lines, snapshotLine("Claude 配置", profile))
+	}
 	if planMode := snapshotPlanModeText(snapshot.NextPrompt, snapshot.Dispatch); planMode != "" {
 		lines = append(lines, snapshotLine("Plan mode", planMode))
 	}
@@ -204,6 +207,22 @@ func displaySnapshotValue(value string) string {
 		return "未知"
 	}
 	return value
+}
+
+func formatSnapshotClaudeProfile(snapshot control.Snapshot) string {
+	if snapshot.Backend != agentproto.BackendClaude {
+		return ""
+	}
+	name := strings.TrimSpace(snapshot.ClaudeProfileName)
+	id := strings.TrimSpace(snapshot.ClaudeProfileID)
+	switch {
+	case name != "" && id != "" && !strings.EqualFold(name, id):
+		return name + "（" + id + "）"
+	case name != "":
+		return name
+	default:
+		return id
+	}
 }
 
 func displaySnapshotAccessMode(value string) string {

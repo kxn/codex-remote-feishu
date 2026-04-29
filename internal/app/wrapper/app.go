@@ -52,6 +52,7 @@ type Config struct {
 	WorkspaceKey         string
 	ShortName            string
 	Backend              agentproto.Backend
+	ClaudeProfileID      string
 	Source               string
 	Managed              bool
 	Lifetime             string
@@ -140,6 +141,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceKey:         state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:            shortName,
 		Backend:              agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
+		ClaudeProfileID:      state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
 		Source:               source,
 		Managed:              managed,
 		Lifetime:             string(lifetime),
@@ -238,6 +240,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			WorkspaceKey:     a.config.WorkspaceKey,
 			ShortName:        a.config.ShortName,
 			Backend:          a.runtime.Backend(),
+			ClaudeProfileID:  strings.TrimSpace(a.config.ClaudeProfileID),
 			Source:           a.config.Source,
 			Managed:          a.config.Managed,
 			Version:          a.config.Version,

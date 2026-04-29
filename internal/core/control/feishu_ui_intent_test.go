@@ -22,6 +22,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowModeCatalog, RawText: "/mode"},
 		},
 		{
+			name:   "bare claude profile",
+			action: Action{Kind: ActionClaudeProfileCommand, Text: "/claudeprofile"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowClaudeProfileCatalog, RawText: "/claudeprofile"},
+		},
+		{
 			name:   "workspace new page",
 			action: Action{Kind: ActionWorkspaceNew, Text: "/workspace new"},
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNew, RawText: "/workspace new"},
@@ -34,6 +39,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 		{
 			name:   "mode apply stays product owned",
 			action: Action{Kind: ActionModeCommand, Text: "/mode vscode"},
+			want:   nil,
+		},
+		{
+			name:   "claude profile apply stays product owned",
+			action: Action{Kind: ActionClaudeProfileCommand, Text: "/claudeprofile devseek"},
 			want:   nil,
 		},
 		{

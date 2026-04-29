@@ -470,6 +470,11 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.ShortName = state.WorkspaceShortName(inst.WorkspaceKey)
 	}
 	inst.Backend = backend
+	if backend == agentproto.BackendClaude {
+		inst.ClaudeProfileID = state.NormalizeClaudeProfileID(hello.Instance.ClaudeProfileID)
+	} else {
+		inst.ClaudeProfileID = ""
+	}
 	inst.Source = firstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
 	inst.Capabilities = capabilities
 	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared

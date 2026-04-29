@@ -83,6 +83,7 @@ func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuComm
 		return profile.withAdditionalFamilies(
 			displayProfileFamily(FeishuCommandList),
 			displayProfileFamily(FeishuCommandUse),
+			displayProfileFamily(FeishuCommandClaudeProfile),
 		)
 	}
 	return profile

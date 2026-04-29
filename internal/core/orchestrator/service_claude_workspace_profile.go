@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -23,6 +24,52 @@ func (s *Service) MaterializeClaudeWorkspaceProfileSnapshots(entries map[string]
 	}
 }
 
+func (s *Service) MaterializeClaudeProfiles(records []state.ClaudeProfileRecord) {
+	if s.root == nil {
+		return
+	}
+	s.root.ClaudeProfiles = map[string]state.ClaudeProfileRecord{}
+	defaultRecord := state.NormalizeClaudeProfileRecord(state.ClaudeProfileRecord{
+		ID:      state.DefaultClaudeProfileID,
+		Name:    state.DefaultClaudeProfileName,
+		BuiltIn: true,
+	})
+	s.root.ClaudeProfiles[defaultRecord.ID] = defaultRecord
+	for _, record := range records {
+		current := state.NormalizeClaudeProfileRecord(record)
+		if current.ID == "" {
+			continue
+		}
+		s.root.ClaudeProfiles[current.ID] = current
+	}
+}
+
+func (s *Service) ClaudeProfiles() []state.ClaudeProfileRecord {
+	if s.root == nil || len(s.root.ClaudeProfiles) == 0 {
+		return []state.ClaudeProfileRecord{state.NormalizeClaudeProfileRecord(state.ClaudeProfileRecord{
+			ID:      state.DefaultClaudeProfileID,
+			Name:    state.DefaultClaudeProfileName,
+			BuiltIn: true,
+		})}
+	}
+	profiles := make([]state.ClaudeProfileRecord, 0, len(s.root.ClaudeProfiles))
+	for _, record := range s.root.ClaudeProfiles {
+		profiles = append(profiles, state.NormalizeClaudeProfileRecord(record))
+	}
+	sort.SliceStable(profiles, func(i, j int) bool {
+		left := profiles[i]
+		right := profiles[j]
+		if left.BuiltIn != right.BuiltIn {
+			return left.BuiltIn
+		}
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		return left.ID < right.ID
+	})
+	return profiles
+}
+
 func (s *Service) ClaudeWorkspaceProfileSnapshots() map[string]state.ClaudeWorkspaceProfileSnapshotRecord {
 	if s.root == nil || len(s.root.ClaudeWorkspaceProfileSnapshots) == 0 {
 		return map[string]state.ClaudeWorkspaceProfileSnapshotRecord{}
@@ -32,6 +79,37 @@ func (s *Service) ClaudeWorkspaceProfileSnapshots() map[string]state.ClaudeWorks
 		cloned[key] = entry
 	}
 	return cloned
+}
+
+func (s *Service) claudeProfileRecord(profileID string) state.ClaudeProfileRecord {
+	profileID = state.NormalizeClaudeProfileID(profileID)
+	if s.root != nil && s.root.ClaudeProfiles != nil {
+		if record, ok := s.root.ClaudeProfiles[profileID]; ok {
+			return state.NormalizeClaudeProfileRecord(record)
+		}
+	}
+	return state.NormalizeClaudeProfileRecord(state.ClaudeProfileRecord{
+		ID:      profileID,
+		Name:    profileID,
+		BuiltIn: profileID == state.DefaultClaudeProfileID,
+	})
+}
+
+func (s *Service) claudeProfileDisplayName(profileID string) string {
+	return s.claudeProfileRecord(profileID).Name
+}
+
+func (s *Service) instanceMatchesSurfaceClaudeProfile(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
+	if surface == nil || inst == nil {
+		return true
+	}
+	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
+		return true
+	}
+	if state.EffectiveInstanceBackend(inst) != agentproto.BackendClaude {
+		return true
+	}
+	return state.NormalizeClaudeProfileID(inst.ClaudeProfileID) == s.surfaceClaudeProfileID(surface)
 }
 
 func (s *Service) SurfaceClaudeProfileID(surfaceID string) string {

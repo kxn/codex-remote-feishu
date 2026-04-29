@@ -152,6 +152,42 @@ func TestParseFeishuTextActionRecognizesModeCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesClaudeProfileCommand(t *testing.T) {
+	tests := []string{
+		"/claudeprofile",
+		"/claudeprofile default",
+		"/claudeprofile devseek",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionClaudeProfileCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionClaudeProfileCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseFeishuMenuActionRecognizesClaudeProfileCommand(t *testing.T) {
+	action, ok := ParseFeishuMenuAction("claude_profile")
+	if !ok {
+		t.Fatal("expected claude_profile menu action to be parsed")
+	}
+	if action.Kind != ActionClaudeProfileCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionClaudeProfileCommand)
+	}
+	if action.Text != "/claudeprofile" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/claudeprofile")
+	}
+	if action.CommandID != FeishuCommandClaudeProfile {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandClaudeProfile)
+	}
+}
+
 func TestParseFeishuTextActionRecognizesSteerAllCommand(t *testing.T) {
 	action, ok := ParseFeishuTextAction("/steerall")
 	if !ok {

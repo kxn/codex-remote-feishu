@@ -64,6 +64,7 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandModel,
 		FeishuCommandReasoning,
 		FeishuCommandAccess,
+		FeishuCommandClaudeProfile,
 		FeishuCommandMode,
 		FeishuCommandVerbose,
 		FeishuCommandHelp,

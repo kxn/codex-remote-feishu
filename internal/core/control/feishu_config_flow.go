@@ -7,6 +7,7 @@ type FeishuConfigFlowValueKey string
 const (
 	FeishuConfigFlowValueNone                     FeishuConfigFlowValueKey = ""
 	FeishuConfigFlowValueSurfaceProductMode       FeishuConfigFlowValueKey = "surface_product_mode"
+	FeishuConfigFlowValueSurfaceClaudeProfile     FeishuConfigFlowValueKey = "surface_claude_profile"
 	FeishuConfigFlowValueSurfaceAutoWhip          FeishuConfigFlowValueKey = "surface_auto_whip"
 	FeishuConfigFlowValueSurfaceAutoContinue      FeishuConfigFlowValueKey = "surface_auto_continue"
 	FeishuConfigFlowValueSurfacePlanMode          FeishuConfigFlowValueKey = "surface_plan_mode"
@@ -99,6 +100,14 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		IntentKind:      FeishuUIIntentShowModeCatalog,
 		PageBuilder:     modePageViewFromCommandConfigView,
 		CurrentValueKey: FeishuConfigFlowValueSurfaceProductMode,
+	},
+	{
+		CommandID:       FeishuCommandClaudeProfile,
+		ActionKind:      ActionClaudeProfileCommand,
+		BareCommand:     "/claudeprofile",
+		IntentKind:      FeishuUIIntentShowClaudeProfileCatalog,
+		PageBuilder:     claudeProfilePageViewFromCommandConfigView,
+		CurrentValueKey: FeishuConfigFlowValueSurfaceClaudeProfile,
 	},
 	{
 		CommandID:       FeishuCommandAutoWhip,

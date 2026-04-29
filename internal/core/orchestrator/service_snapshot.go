@@ -18,6 +18,10 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
+	if snapshot.Backend == agentproto.BackendClaude && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		snapshot.ClaudeProfileID = s.surfaceClaudeProfileID(surface)
+		snapshot.ClaudeProfileName = s.claudeProfileDisplayName(snapshot.ClaudeProfileID)
+	}
 	snapshot.Gate = s.snapshotGateSummary(surface)
 	if pending := surface.PendingHeadless; pending != nil {
 		snapshot.PendingHeadless = control.PendingHeadlessSummary{

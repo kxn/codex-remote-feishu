@@ -102,6 +102,33 @@ func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsClaudeProfile(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode:       "normal",
+			Backend:           "claude",
+			ClaudeProfileID:   "devseek",
+			ClaudeProfileName: "DevSeek Pro",
+			NextPrompt: control.PromptRouteSummary{
+				EffectivePlanMode:         "off",
+				EffectiveModel:            "mimo-v2.5-pro",
+				EffectiveReasoningEffort:  "high",
+				EffectiveAccessMode:       "confirm",
+				EffectiveAccessModeSource: "surface_default",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "Claude 配置：DevSeek Pro（devseek）", "当前模式：normal") {
+		t.Fatalf("expected snapshot rendering to show claude profile, got %q", rendered)
+	}
+}
+
 func TestProjectSnapshotShowsGateAndRetainedOfflineAttachment(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
 
 // BuildFeishuCommandConfigSummarySections converts command-config runtime view
 // state into adapter-owned summary sections, so dynamic values no longer need
@@ -50,6 +54,11 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	switch strings.TrimSpace(view.CommandID) {
 	case FeishuCommandMode:
 		return []FeishuCardTextSection{singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置"))}
+	case FeishuCommandClaudeProfile:
+		return []FeishuCardTextSection{
+			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultClaudeProfileName))),
+			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理、权限和 Plan 记忆。"),
+		}
 	case FeishuCommandAutoWhip:
 		return []FeishuCardTextSection{singleValueCardSection("当前", autoWhipDisplayValue(view.CurrentValue))}
 	case FeishuCommandAutoContinue:

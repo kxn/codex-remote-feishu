@@ -27,6 +27,7 @@ type FeishuCatalogConfigView struct {
 	OverrideValue      string
 	OverrideExtraValue string
 	FormDefaultValue   string
+	FormOptions        []CommandCatalogFormFieldOption
 	StatusKind         string
 	StatusText         string
 	Sealed             bool
