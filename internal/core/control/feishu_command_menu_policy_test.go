@@ -37,11 +37,11 @@ func TestFeishuMenuGroupClassificationMatchesTaskModel(t *testing.T) {
 		},
 		{
 			groupID: FeishuCommandGroupCommonTools,
-			want:    []string{FeishuCommandReview, FeishuCommandAutoWhip, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile},
+			want:    []string{FeishuCommandReview, FeishuCommandPatch, FeishuCommandAutoWhip, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile},
 		},
 		{
 			groupID: FeishuCommandGroupMaintenance,
-			want:    []string{FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandPatch},
+			want:    []string{FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp},
 		},
 	}
 

@@ -79,6 +79,10 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandList,
 		FeishuCommandUse:
 		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude 会话切换沿用现有产品壳，但底层改走 backend-aware session catalog 与 route contract。")
+	case FeishuCommandReview:
+		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude review 入口沿用现有 detached review 壳，底层继续复用当前 attached 会话上下文。")
+	case FeishuCommandPatch:
+		return claudeVisibleAllowedStrategy(familyID, FeishuCommandStrategyApproximation, "Claude turn patch 入口沿用现有 patch owner-flow 壳，底层继续复用当前 attached 会话上下文。")
 	case FeishuCommandWorkspace,
 		FeishuCommandWorkspaceList,
 		FeishuCommandWorkspaceNew,
@@ -94,8 +98,6 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 	case FeishuCommandAutoWhip,
 		FeishuCommandAutoContinue,
 		FeishuCommandSendFile,
-		FeishuCommandReview,
-		FeishuCommandPatch,
 		FeishuCommandFollow,
 		FeishuCommandDetach,
 		FeishuCommandCron,

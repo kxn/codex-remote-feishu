@@ -88,6 +88,14 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		t.Fatalf("claude send_settings help commands = %#v, want %#v", got, want)
 	}
 
+	commonTools := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCommonTools, false, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	})
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/review", "/bendtomywill", "/history"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
+	}
+
 	maintenance := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupMaintenance, false, CatalogContext{
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
@@ -146,6 +154,16 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		FeishuCommandWorkspaceDetach,
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("normal visible switch_target families = %#v, want %#v", got, want)
+	}
+	if got, want := normal.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools), []string{
+		FeishuCommandReview,
+		FeishuCommandPatch,
+		FeishuCommandAutoWhip,
+		FeishuCommandHistory,
+		FeishuCommandCron,
+		FeishuCommandSendFile,
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("normal visible common_tools families = %#v, want %#v", got, want)
 	}
 
 	vscode := ResolveFeishuCommandDisplayProfile("vscode")

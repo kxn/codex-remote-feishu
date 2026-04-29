@@ -918,7 +918,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandPatch,
-			GroupID:          FeishuCommandGroupMaintenance,
+			GroupID:          FeishuCommandGroupCommonTools,
 			Title:            "修补当前会话",
 			CanonicalSlash:   "/bendtomywill",
 			CanonicalMenuKey: "patch",

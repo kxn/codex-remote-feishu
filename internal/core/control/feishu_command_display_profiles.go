@@ -34,6 +34,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		displayProfileFamily(FeishuCommandWorkspaceDetach),
 		displayProfileFamily(FeishuCommandAutoWhip),
 		displayProfileFamily(FeishuCommandHistory),
+		displayProfileFamily(FeishuCommandReview),
 		displayProfileFamily(FeishuCommandCron),
 		displayProfileFamily(FeishuCommandSendFile),
 		displayProfileFamily(FeishuCommandMode),
