@@ -5,19 +5,35 @@ import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
   makeBootstrap,
+  makeClaudeProfile,
   makeFeishuManifest,
   makeImageStagingStatus,
   makeLogsStorageStatus,
   makeOnboardingWorkflow,
   makePreviewDriveStatus,
 } from "../test/fixtures";
-import { installMockFetch } from "../test/http";
+import { installMockFetch, type MockFetchCall } from "../test/http";
+
+function withClaudeProfiles(
+  routes: Record<string, unknown>,
+  profiles = [makeClaudeProfile()],
+) {
+  return {
+    "/api/admin/claude/profiles": {
+      body: { profiles },
+    },
+    "/g/demo/api/admin/claude/profiles": {
+      body: { profiles },
+    },
+    ...routes,
+  };
+}
 
 describe("AdminRoute", () => {
   it("keeps local workflow API requests dot-relative when mounted under a prefixed path", async () => {
     window.history.replaceState({}, "", "/g/demo/admin");
 
-    const { calls } = installMockFetch({
+    const { calls } = installMockFetch(withClaudeProfiles({
       "/g/demo/api/admin/bootstrap-state": {
         body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
       },
@@ -39,7 +55,7 @@ describe("AdminRoute", () => {
       "/g/demo/api/admin/storage/preview-drive/bot-1": {
         body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "Main Bot" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
@@ -54,6 +70,9 @@ describe("AdminRoute", () => {
     expect(
       calls.some((call) => call.path === "/g/demo/api/admin/onboarding/workflow?app=bot-1"),
     ).toBe(true);
+    expect(calls.some((call) => call.path === "/g/demo/api/admin/claude/profiles")).toBe(
+      true,
+    );
     expect(calls.some((call) => call.path.includes("/permission-check"))).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/autostart/detect"))).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/vscode/detect"))).toBe(false);
@@ -62,7 +81,7 @@ describe("AdminRoute", () => {
   it("shows permission remediation from the shared workflow panel", async () => {
     window.history.replaceState({}, "", "/admin");
 
-    const { calls } = installMockFetch({
+    const { calls } = installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/apps": {
         body: {
@@ -103,7 +122,7 @@ describe("AdminRoute", () => {
       "/api/admin/storage/preview-drive/bot-team": {
         body: makePreviewDriveStatus({ gatewayId: "bot-team", name: "协作机器人" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
@@ -123,9 +142,9 @@ describe("AdminRoute", () => {
     const user = userEvent.setup();
     let appsConfigured = false;
 
-    installMockFetch({
+    installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
-      "/api/admin/feishu/apps": (call) => {
+      "/api/admin/feishu/apps": (call: MockFetchCall) => {
         if (call.method === "POST") {
           appsConfigured = true;
           return {
@@ -201,7 +220,7 @@ describe("AdminRoute", () => {
       "/api/admin/storage/preview-drive/bot-new": {
         body: makePreviewDriveStatus({ gatewayId: "bot-new", name: "运营机器人" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
@@ -225,7 +244,7 @@ describe("AdminRoute", () => {
     const user = userEvent.setup();
     let removed = false;
 
-    installMockFetch({
+    installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/onboarding/sessions": {
         status: 201,
@@ -265,7 +284,7 @@ describe("AdminRoute", () => {
       "/api/admin/storage/preview-drive/bot-delete": {
         body: makePreviewDriveStatus({ gatewayId: "bot-delete", name: "待删除机器人" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
@@ -281,7 +300,7 @@ describe("AdminRoute", () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
 
-    installMockFetch({
+    installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/apps": {
         body: {
@@ -328,7 +347,7 @@ describe("AdminRoute", () => {
       "/api/admin/storage/preview-drive/bot-1": {
         body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
@@ -345,7 +364,7 @@ describe("AdminRoute", () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
 
-    installMockFetch({
+    installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/apps": {
         body: {
@@ -381,12 +400,202 @@ describe("AdminRoute", () => {
       "/api/admin/storage/preview-drive/bot-1": {
         body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
       },
-    });
+    }));
 
     render(<AdminRoute />);
 
     expect(await screen.findByText("128 个文件，约 860 MB")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "清理一天前日志" }));
     expect(await screen.findByText("58 个文件，约 420 MB")).toBeInTheDocument();
+  });
+
+  it("shows the built-in default Claude profile as read-only", async () => {
+    window.history.replaceState({}, "", "/admin");
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/admin/onboarding/workflow?app=bot-1": {
+        body: makeOnboardingWorkflow({
+          selectedAppId: "bot-1",
+          currentStage: "permission",
+          app: {
+            app: makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+          },
+        }),
+      },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    expect(await screen.findByRole("heading", { name: "Claude 配置" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "默认" })).toBeInTheDocument();
+    expect(await screen.findByText("系统默认配置")).toBeInTheDocument();
+    expect(
+      await screen.findByText("这个配置会沿用当前 Claude 在本机上的默认认证、端点和模型设置。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新增自定义配置" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "删除配置" })).not.toBeInTheDocument();
+  });
+
+  it("copies a Claude profile without reusing the old token, then clears and deletes it", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    let profiles = [
+      makeClaudeProfile(),
+      makeClaudeProfile({
+        id: "devseek",
+        name: "DevSeek",
+        authMode: "auth_token",
+        baseURL: "https://proxy.internal/v1",
+        hasAuthToken: true,
+        model: "mimo-v2.5-pro",
+        smallModel: "mimo-v2.5-haiku",
+        builtIn: false,
+        persisted: true,
+        readOnly: false,
+      }),
+    ];
+    let createCount = 0;
+    let updateCount = 0;
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/claude/profiles": (call: MockFetchCall) => {
+        if (call.method === "POST") {
+          createCount += 1;
+          const payload = JSON.parse(String(call.init?.body ?? "{}")) as Record<string, unknown>;
+          expect(payload.name).toBe("DevSeek 副本");
+          expect(payload.baseURL).toBe("https://proxy.internal/v1");
+          expect("authToken" in payload).toBe(false);
+          const created = makeClaudeProfile({
+            id: "devseek-copy",
+            name: "DevSeek 副本",
+            authMode: "auth_token",
+            baseURL: "https://proxy.internal/v1",
+            hasAuthToken: false,
+            model: "mimo-v2.5-pro",
+            smallModel: "mimo-v2.5-haiku",
+            builtIn: false,
+            persisted: true,
+            readOnly: false,
+          });
+          profiles = [profiles[0], profiles[1], created];
+          return {
+            status: 201,
+            body: { profile: created },
+          };
+        }
+        return {
+          body: { profiles },
+        };
+      },
+      "/api/admin/claude/profiles/devseek": (call: MockFetchCall) => {
+        if (call.method === "PUT") {
+          updateCount += 1;
+          const payload = JSON.parse(String(call.init?.body ?? "{}")) as Record<string, unknown>;
+          expect(payload.clearAuthToken).toBe(true);
+          const updated = makeClaudeProfile({
+            id: "devseek",
+            name: "DevSeek",
+            authMode: "auth_token",
+            baseURL: "https://proxy.internal/v1",
+            hasAuthToken: false,
+            model: "mimo-v2.5-pro",
+            smallModel: "mimo-v2.5-haiku",
+            builtIn: false,
+            persisted: true,
+            readOnly: false,
+          });
+          profiles = profiles.map((profile) =>
+            profile.id === "devseek" ? updated : profile,
+          );
+          return {
+            body: { profile: updated },
+          };
+        }
+        return { body: {} };
+      },
+      "/api/admin/claude/profiles/devseek-copy": () => {
+        profiles = profiles.filter((profile) => profile.id !== "devseek-copy");
+        return {
+          status: 204,
+          body: {},
+        };
+      },
+      "/api/admin/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/admin/onboarding/workflow?app=bot-1": {
+        body: makeOnboardingWorkflow({
+          selectedAppId: "bot-1",
+          currentStage: "permission",
+          app: {
+            app: makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+          },
+        }),
+      },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+    }, profiles));
+
+    render(<AdminRoute />);
+
+    const originalProfileButton = (await screen.findByText("DevSeek")).closest(
+      "button",
+    );
+    expect(originalProfileButton).not.toBeNull();
+    await user.click(originalProfileButton!);
+    await user.click(screen.getByRole("button", { name: "复制为新配置" }));
+    expect(await screen.findByText("已带入可见字段。你可以补充新的 Token，也可以先留空保存。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(await screen.findByText("Claude 配置已创建。")).toBeInTheDocument();
+    expect(createCount).toBe(1);
+    expect(await screen.findByRole("heading", { name: "DevSeek 副本" })).toBeInTheDocument();
+    expect(await screen.findByText("正在等待新的 Token")).toBeInTheDocument();
+
+    const originalProfileButtonAgain = screen.getByText("DevSeek").closest("button");
+    expect(originalProfileButtonAgain).not.toBeNull();
+    await user.click(originalProfileButtonAgain!);
+    await user.click(screen.getByLabelText(/清除已保存 Token/));
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    expect(await screen.findByText("Claude 配置已保存。")).toBeInTheDocument();
+    expect(updateCount).toBe(1);
+
+    const copiedProfileButton = screen.getByText("DevSeek 副本").closest("button");
+    expect(copiedProfileButton).not.toBeNull();
+    await user.click(copiedProfileButton!);
+    await user.click(screen.getByRole("button", { name: "删除配置" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("确认删除 Claude 配置");
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /DevSeek 副本/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

@@ -81,8 +81,17 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
       throw new Error(`Unhandled fetch for ${method} ${path}`);
     }
     const response = await resolveMockHandler(handler, call, init?.signal ?? request?.signal);
+    const status = response.status ?? 200;
+    if (status === 204 || status === 205 || status === 304) {
+      return new Response(null, {
+        status,
+        headers: {
+          ...(response.headers ?? {}),
+        },
+      });
+    }
     return new Response(JSON.stringify(response.body ?? {}), {
-      status: response.status ?? 200,
+      status,
       headers: {
         "Content-Type": "application/json",
         ...(response.headers ?? {}),

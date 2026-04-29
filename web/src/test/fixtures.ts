@@ -1,6 +1,7 @@
 import type {
   AutostartDetectResponse,
   BootstrapState,
+  ClaudeProfileSummary,
   FeishuAppPermissionCheckResponse,
   FeishuAppSummary,
   GatewayStatus,
@@ -111,6 +112,21 @@ export function makeApp(
     persisted: true,
     readOnly: false,
     status: makeGatewayStatus(),
+    ...overrides,
+  };
+}
+
+export function makeClaudeProfile(
+  overrides: Partial<ClaudeProfileSummary> = {},
+): ClaudeProfileSummary {
+  return {
+    id: "default",
+    name: "默认",
+    authMode: "inherit",
+    hasAuthToken: false,
+    builtIn: true,
+    persisted: false,
+    readOnly: true,
     ...overrides,
   };
 }

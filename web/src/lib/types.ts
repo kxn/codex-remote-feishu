@@ -107,6 +107,17 @@ export interface ClaudeProfileResponse {
   profile: ClaudeProfileSummary;
 }
 
+export interface ClaudeProfileWriteRequest {
+  id?: string;
+  name?: string;
+  authMode?: string;
+  baseURL?: string;
+  authToken?: string;
+  clearAuthToken?: boolean;
+  model?: string;
+  smallModel?: string;
+}
+
 export interface FeishuAppMutation {
   kind?: string;
   message?: string;

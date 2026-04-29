@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { requestJSON, sendJSON } from "../lib/api";
 import type {
   BootstrapState,
+  ClaudeProfilesResponse,
+  ClaudeProfileSummary,
   FeishuAppsResponse,
   FeishuAppSummary,
   ImageStagingCleanupResponse,
@@ -12,6 +14,7 @@ import type {
   PreviewDriveStatusResponse,
 } from "../lib/types";
 import { OnboardingFlowSurface } from "./shared/onboarding-flow";
+import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 
 type NoticeTone = "good" | "warn" | "danger";
 
@@ -29,6 +32,10 @@ export function AdminRoute() {
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
+  const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>(
+    [],
+  );
+  const [claudeProfilesError, setClaudeProfilesError] = useState("");
   const [imageStaging, setImageStaging] =
     useState<ImageStagingStatusResponse | null>(null);
   const [imageStagingError, setImageStagingError] = useState("");
@@ -74,12 +81,14 @@ export function AdminRoute() {
     setLoading(true);
     setLoadError("");
 
-    const [bootstrapState, appList, imageResult, logsResult] = await Promise.all([
-      requestJSON<BootstrapState>("/api/admin/bootstrap-state"),
-      requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
-      safeRequest<ImageStagingStatusResponse>("/api/admin/storage/image-staging"),
-      safeRequest<LogsStorageStatusResponse>("/api/admin/storage/logs"),
-    ]);
+    const [bootstrapState, appList, claudeProfilesResult, imageResult, logsResult] =
+      await Promise.all([
+        requestJSON<BootstrapState>("/api/admin/bootstrap-state"),
+        requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
+        safeRequest<ClaudeProfilesResponse>("/api/admin/claude/profiles"),
+        safeRequest<ImageStagingStatusResponse>("/api/admin/storage/image-staging"),
+        safeRequest<LogsStorageStatusResponse>("/api/admin/storage/logs"),
+      ]);
 
     const previewResults = await Promise.allSettled(
       appList.apps.map(async (app) => {
@@ -109,6 +118,8 @@ export function AdminRoute() {
     setBootstrap(bootstrapState);
     setApps(appList.apps);
     setSelectedRobotID(nextSelectedRobotID);
+    setClaudeProfiles(claudeProfilesResult.data?.profiles || []);
+    setClaudeProfilesError(claudeProfilesResult.error);
     setImageStaging(imageResult.data);
     setImageStagingError(imageResult.error);
     setLogsStorage(logsResult.data);
@@ -306,7 +317,7 @@ export function AdminRoute() {
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、系统集成与本地存储。</p>
+          <p>管理机器人、Claude 配置与本地存储。</p>
         </header>
         <section className="panel">
           <div className="empty-state">
@@ -323,7 +334,7 @@ export function AdminRoute() {
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、系统集成与本地存储。</p>
+          <p>管理机器人、Claude 配置与本地存储。</p>
         </header>
         <section className="panel">
           <div className="empty-state error">
@@ -348,7 +359,7 @@ export function AdminRoute() {
     <div className="product-page">
       <header className="product-topbar">
         <h1>{versionTitle}</h1>
-        <p>管理机器人、系统集成与本地存储。</p>
+        <p>管理机器人、Claude 配置与本地存储。</p>
       </header>
 
       <section className="panel">
@@ -393,6 +404,15 @@ export function AdminRoute() {
           {renderRobotDetail()}
         </div>
       </section>
+
+      <ClaudeProfileSection
+        loadError={claudeProfilesError}
+        profiles={claudeProfiles}
+        setProfiles={setClaudeProfiles}
+        onReload={async () => {
+          await loadAdminPage({ preferredRobotID: selectedRobotID });
+        }}
+      />
 
       <section className="panel">
         <div className="step-stage-head">

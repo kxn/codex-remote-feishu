@@ -1150,24 +1150,34 @@ button {
   color: #0b4a6f;
 }
 
+.inline-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
 .robot-tag.warn {
   border-color: rgba(183, 121, 31, 0.18);
   background: rgba(183, 121, 31, 0.08);
   color: var(--warn);
 }
 
-.robot-layout {
+.robot-layout,
+.profile-layout {
   display: grid;
   grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
   gap: 1rem;
 }
 
-.robot-list {
+.robot-list,
+.profile-list {
   display: grid;
   gap: 0.7rem;
 }
 
-.robot-list-button {
+.robot-list-button,
+.profile-list-button {
   width: 100%;
   padding: 0.95rem 1rem;
   border: 1px solid rgba(18, 34, 48, 0.08);
@@ -1177,12 +1187,14 @@ button {
   cursor: pointer;
 }
 
-.robot-list-button.active {
+.robot-list-button.active,
+.profile-list-button.active {
   border-color: rgba(15, 118, 110, 0.34);
   background: rgba(15, 118, 110, 0.08);
 }
 
-.robot-list-head {
+.robot-list-head,
+.profile-list-head {
   display: flex;
   justify-content: space-between;
   gap: 0.7rem;
@@ -1190,13 +1202,29 @@ button {
 }
 
 .robot-list-head strong,
-.robot-list-button p {
+.robot-list-button p,
+.profile-list-head strong,
+.profile-list-button p {
   margin: 0;
 }
 
-.robot-list-button p {
+.robot-list-button p,
+.profile-list-button p {
   margin-top: 0.45rem;
   color: var(--text-soft);
+}
+
+.profile-hero-card {
+  margin-top: 1rem;
+}
+
+.profile-token-card strong,
+.profile-token-card p {
+  margin: 0;
+}
+
+.profile-token-card p {
+  margin-top: 0.45rem;
 }
 
 .soft-grid {
@@ -1313,6 +1341,7 @@ button {
   .checklist-grid,
   .setup-grid,
   .robot-layout,
+  .profile-layout,
   .scan-preview {
     grid-template-columns: 1fr;
   }
