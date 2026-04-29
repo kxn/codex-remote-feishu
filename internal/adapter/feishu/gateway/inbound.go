@@ -39,12 +39,12 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 
 	switch strings.ToLower(stringPtr(message.MessageType)) {
 	case "text":
-		text, err := ParseTextContent(stringPtr(message.Content))
+		text, commandText, err := parseFeishuEventText(stringPtr(message.Content), message.Mentions)
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
 			return control.Action{}, false, err
 		}
-		commandAction, handled := env.ParseTextAction(text)
+		commandAction, handled := env.ParseTextAction(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID
 			commandAction.SurfaceSessionID = surfaceSessionID
@@ -186,7 +186,7 @@ func inboundMessagePreview(message *larkim.EventMessage) string {
 	rawContent := strings.TrimSpace(stringPtr(message.Content))
 	switch messageType {
 	case "text":
-		text, err := ParseTextContent(rawContent)
+		text, _, err := parseFeishuEventText(rawContent, message.Mentions)
 		if err == nil {
 			return trimLogPreview(text)
 		}
