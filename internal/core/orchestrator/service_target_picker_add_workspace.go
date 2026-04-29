@@ -264,14 +264,14 @@ func (s *Service) buildTargetPickerLocalDirectoryState(surface *state.SurfaceCon
 		})
 		return localState
 	}
+	localState.CanConfirm = true
 	if s.targetPickerDirectoryIsKnownWorkspace(surface, resolvedPath) {
 		localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "该目录已经是已有工作区，请返回并通过“切换”选择要继续的会话。",
+			Level: control.FeishuTargetPickerMessageInfo,
+			Text:  "该目录已经是已有工作区；继续后会直接切到该工作区，并进入新会话待命。",
 		})
 		return localState
 	}
-	localState.CanConfirm = true
 	localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
 		Level: control.FeishuTargetPickerMessageInfo,
 		Text:  "将以这个目录接入工作区，并进入新会话。",
