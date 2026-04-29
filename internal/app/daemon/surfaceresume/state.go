@@ -222,6 +222,16 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		WorkspaceKey: entry.ResumeWorkspaceKey,
 	})
 	entry.ResumeRouteMode = strings.TrimSpace(entry.ResumeRouteMode)
+	if entry.ResumeThreadID == "" && entry.ResumeRouteMode == string(state.RouteModePinned) {
+		if entry.ResumeWorkspaceKey != "" {
+			entry.ResumeRouteMode = string(state.RouteModeNewThreadReady)
+		} else {
+			entry.ResumeRouteMode = string(state.RouteModeUnbound)
+		}
+	}
+	if entry.ResumeThreadID == "" {
+		entry.ResumeHeadless = false
+	}
 	if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) != state.ProductModeNormal {
 		entry.ResumeHeadless = false
 	}

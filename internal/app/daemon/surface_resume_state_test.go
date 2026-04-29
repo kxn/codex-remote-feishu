@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
@@ -256,6 +257,32 @@ func TestSurfaceResumeStoreDefaultsLegacyMissingBackendToCodex(t *testing.T) {
 	}
 }
 
+func TestSurfaceResumeStoreMigratesLegacyPendingFreshWorkspaceHeadlessEntry(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"claude\",\n      \"resumeWorkspaceKey\": \"/data/dl/repo\",\n      \"resumeRouteMode\": \"pinned\",\n      \"resumeHeadless\": true\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write legacy pending workspace state: %v", err)
+	}
+
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load migrated store: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected migrated entry after reload")
+	}
+	if entry.ResumeHeadless {
+		t.Fatalf("expected legacy pending workspace headless flag to clear, got %#v", entry)
+	}
+	if entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected legacy pending workspace entry to migrate into prepared workspace route, got %#v", entry)
+	}
+}
+
 func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *testing.T) {
 	t.Parallel()
 
@@ -284,6 +311,60 @@ func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *tes
 	}
 	if !entry.ResumeHeadless {
 		t.Fatalf("expected persisted resume entry to mark headless recovery, got %#v", entry)
+	}
+}
+
+func TestDaemonPendingFreshWorkspacePersistsPreparedWorkspaceResumeState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 4321, nil
+	}
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-codex",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendCodex,
+		Online:        true,
+	})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-codex",
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionModeCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode claude",
+	})
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil {
+		t.Fatal("expected surface resume state after pending workspace switch")
+	}
+	if entry.Backend != "claude" || entry.ResumeWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected pending workspace switch to persist claude workspace target, got %#v", entry)
+	}
+	if entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeThreadID != "" || entry.ResumeHeadless {
+		t.Fatalf("expected pending workspace switch to persist prepared workspace route instead of headless restore, got %#v", entry)
 	}
 }
 
@@ -849,6 +930,60 @@ func TestDaemonHeadlessRecoveryTickPersistsUpdatedResumeStateForRecoveredSurface
 	}
 }
 
+func TestDaemonRestartRecoversPreparedWorkspaceResumeState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "claude",
+		ResumeWorkspaceKey: "/data/dl/repo",
+		ResumeRouteMode:    "new_thread_ready",
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 4321, nil
+	}
+	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
+	if recovery == nil || recovery.Entry.ResumeWorkspaceKey != "/data/dl/repo" || recovery.Entry.ResumeRouteMode != "new_thread_ready" || recovery.Entry.ResumeHeadless {
+		t.Fatalf("expected startup recovery state to keep prepared workspace semantics, got %#v", recovery)
+	}
+	recoveryEvents, result := app.service.TryAutoResumeNormalSurface("surface-1", orchestrator.SurfaceResumeAttempt{
+		WorkspaceKey:     recovery.Entry.ResumeWorkspaceKey,
+		Backend:          agentproto.Backend(recovery.Entry.Backend),
+		PrepareNewThread: recovery.Entry.ResumeRouteMode == "new_thread_ready",
+	}, true)
+	if result.Status != orchestrator.SurfaceResumeStatusStarting {
+		t.Fatalf("expected prepared workspace recovery to start pending workspace launch, got result=%#v events=%#v", result, recoveryEvents)
+	}
+	if len(recoveryEvents) == 0 || recoveryEvents[len(recoveryEvents)-1].DaemonCommand == nil || recoveryEvents[len(recoveryEvents)-1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected prepared workspace recovery to emit start headless command, got %#v", recoveryEvents)
+	}
+	app.mu.Lock()
+	app.handleUIEventsLocked(context.Background(), recoveryEvents)
+	app.mu.Unlock()
+
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected prepared workspace resume to restart pending workspace launch, got %#v", snapshot)
+	}
+	if snapshot.PendingHeadless.ThreadCWD != "/data/dl/repo" {
+		t.Fatalf("expected prepared workspace resume to preserve new-thread-ready intent, got %#v", snapshot.PendingHeadless)
+	}
+	if snapshot.ProductMode != "normal" || snapshot.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected prepared workspace resume to keep normal claude mode, got %#v", snapshot)
+	}
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeHeadless || entry.ResumeWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected persisted prepared workspace state to stay workspace-owned during restart recovery, got %#v", entry)
+	}
+}
+
 func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T) {
 	t.Parallel()
 
@@ -1105,8 +1240,14 @@ func TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh(t *testing.T) {
 	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
 		t.Fatalf("expected failed resume surface to remain detached, got %#v", snapshot)
 	}
-	if len(gateway.operations) != 1 || !strings.Contains(gateway.operations[0].CardBody, "暂时无法恢复到之前会话") {
-		t.Fatalf("expected single resume failure notice after first refresh, got %#v", gateway.operations)
+	if len(gateway.operations) != 2 {
+		t.Fatalf("expected workspace prepare start + failure notices after first refresh, got %#v", gateway.operations)
+	}
+	if !strings.Contains(gateway.operations[0].CardBody, "接入为可用工作区") {
+		t.Fatalf("expected workspace prepare starting notice first, got %#v", gateway.operations[0])
+	}
+	if gateway.operations[1].CardTitle != "工作区准备失败" {
+		t.Fatalf("expected workspace prepare failure notice second, got %#v", gateway.operations[1])
 	}
 }
 

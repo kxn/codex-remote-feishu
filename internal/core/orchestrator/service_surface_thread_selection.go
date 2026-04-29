@@ -480,6 +480,7 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 
 	failureCode := ""
 	threadID := strings.TrimSpace(attempt.ThreadID)
+	prepareNewThread := attempt.PrepareNewThread
 	targetBackend := s.surfaceBackend(surface)
 	if strings.TrimSpace(string(attempt.Backend)) != "" {
 		targetBackend = agentproto.NormalizeBackend(attempt.Backend)
@@ -502,13 +503,14 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_busy"}
 		}
 		if inst := s.resolveWorkspaceAttachInstanceForBackend(surface, workspaceKey, targetBackend); inst != nil {
-			return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
+			options := attachWorkspaceOptions{ResumeNotice: !prepareNewThread, PrepareNewThread: prepareNewThread}
+			return s.attachWorkspaceWithOptions(surface, workspaceKey, options), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
 		}
 		if len(s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)) == 0 {
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
-			return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+			return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, prepareNewThread || threadID != ""), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 		}
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_instance_busy"}
 	}

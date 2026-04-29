@@ -11,19 +11,10 @@ import (
 )
 
 func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
-	return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeDefault)
+	return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{})
 }
 
-func attachWorkspaceModePreparesNewThread(mode attachWorkspaceMode) bool {
-	switch mode {
-	case attachWorkspaceModeTargetPickerNewThread, attachWorkspaceModeBackendSwitchNewThread:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, workspaceKey string, mode attachWorkspaceMode) []eventcontract.Event {
+func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord, workspaceKey string, options attachWorkspaceOptions) []eventcontract.Event {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
 		return notice(surface, "workspace_not_found", "目标工作区不存在。请重新发送 /list。")
@@ -100,7 +91,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 		Preview:   "",
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
-	if attachWorkspaceModePreparesNewThread(mode) {
+	if options.PrepareNewThread {
 		return s.prepareNewThread(surface)
 	}
 
@@ -111,7 +102,7 @@ func (s *Service) attachWorkspaceWithMode(surface *state.SurfaceConsoleRecord, w
 		noticeText = fmt.Sprintf("已切换到工作区 %s。请继续 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。", workspaceKey)
 	}
 	visibleThreadCount := len(workspaceVisibleThreads(inst, workspaceKey))
-	if mode == attachWorkspaceModeSurfaceResume {
+	if options.ResumeNotice {
 		noticeCode = "surface_resume_workspace_attached"
 		if visibleThreadCount == 0 {
 			noticeText = fmt.Sprintf("之前的会话暂未恢复，已先回到工作区 %s。当前还没有可见会话；你可以直接发送文本开启新会话（或 /new 先进入待命），也可稍后发送 /use。", workspaceKey)
@@ -332,7 +323,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		surface.PendingHeadless = nil
 		if pending.PrepareNewThread {
-			return s.attachWorkspaceWithMode(surface, pending.ThreadCWD, attachWorkspaceModeTargetPickerNewThread)
+			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{PrepareNewThread: true})
 		}
 		return s.attachWorkspace(surface, pending.ThreadCWD)
 	}

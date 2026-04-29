@@ -294,7 +294,9 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 			ResumeRouteMode:    strings.TrimSpace(string(surface.RouteMode)),
 		}
 		if snapshot != nil {
-			target.ResumeHeadless = snapshot.Attachment.Managed && strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless")
+			target.ResumeHeadless = target.ResumeThreadID != "" &&
+				snapshot.Attachment.Managed &&
+				strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless")
 			target.ResumeThreadTitle = strings.TrimSpace(snapshot.Attachment.SelectedThreadTitle)
 		}
 		if target.ResumeThreadID != "" {
@@ -314,6 +316,19 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 		return target, true
 	}
 	if pending := surface.PendingHeadless; pending != nil {
+		if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
+			routeMode := state.RouteModeUnbound
+			if pending.PrepareNewThread {
+				routeMode = state.RouteModeNewThreadReady
+			}
+			if resumeWorkspaceKey := state.ResolveWorkspaceKey(workspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
+				return surfaceResumeTarget{
+					ResumeWorkspaceKey: resumeWorkspaceKey,
+					ResumeRouteMode:    string(routeMode),
+				}, true
+			}
+			return surfaceResumeTarget{}, false
+		}
 		return surfaceResumeTarget{
 			ResumeThreadID:     strings.TrimSpace(pending.ThreadID),
 			ResumeThreadTitle:  strings.TrimSpace(pending.ThreadTitle),
@@ -335,6 +350,20 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 	return surfaceResumeTarget{}, false
 }
 
+func (a *App) surfaceRecordLocked(surfaceID string) *state.SurfaceConsoleRecord {
+	surfaceID = strings.TrimSpace(surfaceID)
+	if surfaceID == "" {
+		return nil
+	}
+	for _, surface := range a.service.Surfaces() {
+		if surface == nil || strings.TrimSpace(surface.SurfaceSessionID) != surfaceID {
+			continue
+		}
+		return surface
+	}
+	return nil
+}
+
 func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before *control.Snapshot) bool {
 	switch action.Kind {
 	case control.ActionDetach:
@@ -344,8 +373,16 @@ func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before
 		if before == nil || after == nil {
 			return false
 		}
-		return !strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode)) ||
-			agentproto.NormalizeBackend(before.Backend) != agentproto.NormalizeBackend(after.Backend)
+		if strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode)) &&
+			agentproto.NormalizeBackend(before.Backend) == agentproto.NormalizeBackend(after.Backend) {
+			return false
+		}
+		if afterSurface := a.surfaceRecordLocked(action.SurfaceSessionID); afterSurface != nil {
+			if _, ok := a.currentSurfaceResumeTargetLocked(afterSurface); ok {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
@@ -414,10 +451,11 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 			workspaceKey = ""
 		}
 		restoreEvents, result := a.service.TryAutoResumeNormalSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
-			InstanceID:   recovery.Entry.ResumeInstanceID,
-			ThreadID:     recovery.Entry.ResumeThreadID,
-			WorkspaceKey: workspaceKey,
-			Backend:      agentproto.Backend(recovery.Entry.Backend),
+			InstanceID:       recovery.Entry.ResumeInstanceID,
+			ThreadID:         recovery.Entry.ResumeThreadID,
+			WorkspaceKey:     workspaceKey,
+			Backend:          agentproto.Backend(recovery.Entry.Backend),
+			PrepareNewThread: strings.TrimSpace(recovery.Entry.ResumeRouteMode) == string(state.RouteModeNewThreadReady),
 		}, allowMissingTargetFailure)
 		switch result.Status {
 		case orchestrator.SurfaceResumeStatusStarting, orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:

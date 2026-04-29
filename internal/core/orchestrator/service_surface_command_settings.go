@@ -234,7 +234,7 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 		return nil
 	}
 	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
-		return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeBackendSwitchNewThread)
+		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{PrepareNewThread: true})
 	}
 	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true)
 }

@@ -121,15 +121,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `ProductMode` / `Backend` 当前已经进入 daemon 级 `surface resume state`：
    1. 进程内已有 surface 会保留它。
    2. daemon 重启后，startup 会先从 `surface resume state` materialize latent surface，并恢复之前的 `ProductMode` / `Backend`。
-   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / `PlanMode` / instance / thread / workspace / route，还会记录 headless 恢复所需的 thread title / thread cwd / headless 标记；它已经是唯一持久化恢复源。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`。
+   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / `PlanMode` / instance / thread / workspace / route，还会记录 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它已经是唯一持久化恢复源。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 误把 `pending fresh workspace` 写成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=""`，load 时会自动迁回 workspace-owned `new_thread_ready` 语义。
    4. `normal` mode surface 随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
       2. 只允许消费同 backend 的 visible instance / workspace；不会再把 `codex normal` 的 resume target 恢复到 `claude normal`，反之亦然。
-      2. 只有 `ResumeHeadless=false` 的目标，visible thread 当前不可见时才允许降级回原 workspace 的 same-backend workspace 续接语义：若该 backend 下已有同 workspace 实例，则 attach 回 `R1 AttachedUnbound`；若还没有，则会 fresh-start managed headless，并保留 `new_thread_ready` 意图。
-   3. `ResumeHeadless=true` 的目标不会再先掉到 workspace fallback；visible 路径没恢复成功时，会直接继续交给 headless auto-restore。
-   4. headless auto-restore 当前只对 `Backend=codex` 的 `normal` entry 生效；`claude normal` 不会消费这条恢复链路。
-   5. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
-   6. 若同时带着 `ResumeHeadless=true` 且 `ResumeInstanceID` 指向一个已连回的 visible instance，headless auto-restore 也会让出这一轮 startup refresh，先给 exact visible thread 恢复机会，避免刚收到 snapshot 前就抢先拉起新的 headless。
+      3. 若 persisted route 本身就是 workspace-owned 的 `ResumeRouteMode=unbound|new_thread_ready`，则会优先按同 backend workspace 继续恢复：已有同 workspace 实例时直接回到 `R1 AttachedUnbound` 或 `R5 NewThreadReady`；若还没有，则会 fresh-start managed headless，并保留同一条 workspace route intent。
+      4. 若 persisted target 是普通 pinned thread 且当前 visible thread 不可见，则允许降级回原 workspace 的 same-backend 续接语义：已有同 workspace 实例时 attach 回 `R1 AttachedUnbound`；若还没有，则会 fresh-start managed headless，并进入 `new_thread_ready`。
+      5. 只有 `ResumeHeadless=true` 且 `ResumeThreadID != ""` 的 concrete headless thread restore 目标，visible 路径没恢复成功时才会跳过 workspace fallback，直接继续交给 headless auto-restore。
+      6. headless auto-restore 当前只对 `Backend=codex` 的 `normal` concrete thread-restore entry 生效；`claude normal` 不会消费这条恢复链路。
+      7. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
+      8. 若同时带着 `ResumeHeadless=true` 且 `ResumeInstanceID` 指向一个已连回的 visible instance，headless auto-restore 也会让出这一轮 startup refresh，先给 exact visible thread 恢复机会，避免刚收到 snapshot 前就抢先拉起新的 headless。
    5. `vscode` mode surface 会按 persisted `ResumeInstanceID` 继续尝试恢复：
       1. 先做本机 VS Code 兼容性检查：
          1. 若检测到旧版 `settings.json` override，或当前 managed shim 已失效，则保持 detached，并发迁移/修复卡片。
@@ -233,14 +234,15 @@ surface 不是单一枚举，而是五层正交状态叠加。
    4. 对 `normal` mode 来说，这个 latent detached 可能是短暂中间态：
       1. exact visible thread 恢复成功后会进入 `R2 AttachedPinned`。
       2. visible thread 不可见但同 backend workspace 仍可接管时，会进入 `R1 AttachedUnbound`。
-      3. visible thread 不可见，且同 backend 当前还没有对应 workspace 实例时，会先进入 `G1 PendingHeadlessStarting`；fresh headless 完成后再进入带 `PreparedThreadCWD` 的 `R5 NewThreadReady`。
-      4. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待；若 persisted target 还带着 `ResumeHeadless=true` + 已连回的 visible `ResumeInstanceID`，headless fallback 也会一起等待这轮 refresh。
+      3. 若 persisted route 本身就是 workspace-owned `new_thread_ready`，且同 backend 当前已有对应 workspace 实例，则会直接进入 `R5 NewThreadReady`。
+      4. visible/workspace 路径需要 fresh workspace prepare 时，会先进入 `G1 PendingHeadlessStarting`；fresh headless 完成后再回到 `R1 AttachedUnbound` 或带 `PreparedThreadCWD` 的 `R5 NewThreadReady`。
+      5. 若还在等待 daemon 启动后的首轮 refresh，则会暂时保持 `R0 Detached` 并静默等待；若 persisted target 还带着 `ResumeHeadless=true` + 已连回的 visible `ResumeInstanceID`，headless fallback 也会一起等待这轮 refresh。
    5. 对 `vscode` mode 来说，这个 latent detached 也可能是短暂中间态：
       1. 若本机 VS Code 集成仍是旧版 `settings.json` override，或 managed shim 因扩展升级而失效，会保持 `R0 Detached` 并改发迁移/修复卡片。
       2. 兼容性检查通过后，exact instance 恢复成功会进入 `R3 FollowWaiting` 或 `R4 FollowBound`。
       3. 若目标 instance 还没重新连回，会保持 `R0 Detached` 并静默等待。
       4. 不做 workspace fallback，也不会进入 headless 恢复。
-   6. 若该 surface 的 `surface resume state` 里仍带有 `ResumeHeadless=true` 的持久化目标，daemon 只会在 `normal` mode 的 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore；`vscode` mode 不会进入这条路径。
+   6. 若该 surface 的 `surface resume state` 里仍带有 `ResumeHeadless=true` 的 concrete thread-restore 目标，daemon 只会在 `normal` mode 的 visible/workspace 恢复链路之后，再继续评估 normal-mode 的 headless auto-restore；`vscode` mode 不会进入这条路径。
 2. 这种 latent surface 在 route 维度上仍然是 `R0 Detached`，不是新的 route state。
 3. 当前 startup 阶段不会因为 resume target 元数据而在 materialize 当下直接进入 `R1~R5`；是否进入后台恢复、是否转入 `G1 PendingHeadlessStarting`，仍取决于 daemon 后续恢复调度，而不是 materialize 本身。
 
@@ -1265,12 +1267,14 @@ E0/E1(other standalone-codex-backed surface)
 G0 None
   -- daemon startup latent normal surface + persisted target --> 先走 normal visible/workspace 恢复判定
   -- /use(thread，需要 create headless) --> G1 PendingHeadlessStarting
-  -- R0 Detached 且 `surface resume state` 里仍有 `ResumeHeadless=true` --> 后台恢复判定
+  -- R0 Detached 且 `surface resume state` 里仍有 `ResumeHeadless=true` 的 concrete thread-restore 目标 --> 后台恢复判定
 
 G1 PendingHeadlessStarting
+  -- instance connected 且 pending.Purpose=fresh_workspace 且 pending.PrepareNewThread=false --> R1 AttachedUnbound + G0 None
+  -- instance connected 且 pending.Purpose=fresh_workspace 且 pending.PrepareNewThread=true --> R5 NewThreadReady + G0 None
   -- instance connected 且 pending.ThreadID != "" 且非 auto-restore --> R2 AttachedPinned + G0 None
   -- instance connected 且 pending.ThreadID != "" 且 auto-restore --> R2 AttachedPinned + G0 None + 单条恢复成功 notice
-  -- instance connected 且 pending.ThreadID == ""（仅历史兼容兜底） --> kill headless + generic notice + G0 None
+  -- instance connected 且 pending.ThreadID == "" 且也不是 fresh_workspace（仅历史兼容兜底） --> kill headless + generic notice + G0 None
   -- /mode codex|claude|vscode（目标 backend 或 ProductMode 发生变化） --> kill headless + clear persisted resume target + G0 None + R0 Detached(目标 mode/backend)
   -- /detach --> kill headless + G0 None + R0 Detached
   -- Tick timeout --> kill headless + clear pending + detach if needed
@@ -1292,8 +1296,9 @@ daemon startup 的 normal resume 额外规则：
    4. `surface resume state` 里仍有 `ResumeThreadID` 或 `ResumeWorkspaceKey`
 3. 恢复优先级：
    1. exact visible thread 恢复
-   2. 仅 `ResumeHeadless=false` 时允许 workspace attach fallback
-   3. `ResumeHeadless=true` 时，visible 路径没有恢复成功就直接继续评估 headless auto-restore
+   2. workspace-owned route 恢复（`ResumeRouteMode=unbound|new_thread_ready`）
+   3. 非 headless pinned thread 的 workspace fallback
+   4. concrete headless thread restore 的 auto-restore
 4. 若 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 还没走完，且 persisted target 里包含 `ResumeThreadID`：
    1. 保持 `R0 Detached`
    2. 静默等待
@@ -1302,13 +1307,14 @@ daemon startup 的 normal resume 额外规则：
    1. 进入 `R2 AttachedPinned`
    2. 只发一条 “已恢复到之前会话” notice
    3. 清掉该 thread 的旧 replay，避免补历史噪音
-6. visible thread 不可见但 workspace attach fallback 成功时：
-   1. 进入 `R1 AttachedUnbound`
-   2. 只发一条 “已先回到工作区” notice
-   3. 明确提示后续 `/use`，或直接发送文本开启新会话（也可 `/new` 先进入待命）
+6. workspace attach / workspace prepare fallback 成功时：
+   1. 若目标 route 是普通 workspace attach，则进入 `R1 AttachedUnbound` 并发一条 “已先回到工作区” notice
+   2. 若目标 route 是 `new_thread_ready`，则直接进入 `R5 NewThreadReady`
+   3. 若需要先 fresh-start workspace，则会先发 `workspace_create_starting`；成功后再按上面两种 route 落位
 7. 若首轮 refresh 已完成，但 visible/workspace 路径仍无法恢复：
-   1. 若 `ResumeHeadless=false`：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
-   2. 若 `ResumeHeadless=true`：继续交给 headless auto-restore 链路；normal resume 自己不额外发失败提示
+   1. 若目标属于普通 non-headless resume 且连 workspace route 也不存在：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
+   2. 若目标已经进入 fresh workspace prepare，但 launcher 失败或超时：保持 `R0 Detached`，发 `workspace_create_start_failed` / `workspace_create_start_timeout`
+   3. 若目标是 `ResumeHeadless=true` 的 concrete headless thread restore：继续交给 headless auto-restore 链路；normal resume 自己不额外发失败提示
 
 daemon startup 的 vscode resume 额外规则：
 
@@ -1433,7 +1439,7 @@ transport degraded retained attachment
    1. `/detach` 立即生效，不进入 `Abandoning`
    2. `/stop` 只返回 `stop_instance_offline` 提示，不伪造已发送 interrupt
 6. reconnect 只恢复实例在线和 follow 评估，不会因为 queued item 还在就抢先重派；必须等 preserved turn 自己 `completed/failed` 后，后续 queued work 才会继续出队。
-7. 如果该 surface 的 `surface resume state` 仍保留 `ResumeHeadless=true` 的恢复目标，hard disconnect 回到 `R0 Detached` 后会重新进入上面的后台 auto-restore 判定。
+7. 如果该 surface 的 `surface resume state` 仍保留 `ResumeHeadless=true` 的 concrete thread-restore 目标，hard disconnect 回到 `R0 Detached` 后会重新进入上面的后台 auto-restore 判定。
 8. daemon graceful shutdown 也不是 `transport_degraded`。当前实现会在真正停掉 Feishu gateway 前，对内存里已知的 surface best-effort 广播单条 `daemon_shutting_down` notice；如果某个 surface 或 gateway 发送失败，只记录日志，不阻塞最终退出。
 9. 这几类提示当前统一归类为 `global runtime` 独立车道，而不是 `owner-flow` 或 `turn-owned`：
    1. 真正脱离当前 owner-card 上下文的 surface resume / VS Code resume failure
@@ -1629,7 +1635,7 @@ retained-offline overlay 额外规则：
 26. **normal detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 normal mode 的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
 27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 `surface resume state` 里的 headless 恢复目标，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。
 28. **daemon 重启后 latent surface 会丢 mode / verbosity，或根本无法在没有 headless hint 的情况下重新 materialize**：已修复。当前 startup 会先从 `surface resume state` 恢复 surface 路由、`ProductMode` 与 `Verbosity`。
-29. **normal mode daemon 重启后会静默掉回 detached、过早报失败，或与 headless restore 优先级互相打架**：已修复。当前恢复顺序已收敛为 exact visible thread > 非 headless 目标的 workspace fallback > headless restore；首轮 refresh 前会静默等待，`ResumeHeadless=true` 的目标不会再先 attach 到错误 workspace，失败路径也只保留单条 notice + backoff。
+29. **normal mode daemon 重启后会静默掉回 detached、过早报失败，或把 `fresh workspace prepare` 和 headless thread restore 混成一条恢复语义**：已修复。当前恢复顺序已收敛为 exact visible thread > workspace-owned route 恢复 > 非 headless pinned-thread 的 workspace fallback > concrete headless restore；`ResumeHeadless` 只再代表 thread restore，`fresh workspace prepare` 会持久化成 workspace+route 语义，首轮 refresh 前仍静默等待，失败路径也按 workspace prepare / generic resume / headless restore 分开收口。
 30. **vscode mode daemon 重启后只保留 mode、不恢复实例，或者恢复链路误走 headless**：已修复。当前会按 exact `ResumeInstanceID` 恢复到原 VS Code 实例，回到 follow-local 语义；若还没有新的 VS Code 活动，会明确提示去 VS Code 再说一句话或手动 `/use`，而且运行时不再读取独立 headless hint 文件。
 31. **vscode mode 进入或 daemon 重启恢复时，会在 legacy `settings.json` / stale managed shim 状态下继续尝试恢复，导致用户看起来进入了 vscode mode，但底层仍沿用旧接入方式或失效入口**：已修复。当前 detached-vscode 恢复会先做本机 VS Code 兼容性检查；命中旧 `settings.json` override 且存在可接管入口时，会先静默自动迁到 `managed_shim` 并清掉旧 `chatgpt.cliExecutable`，成功后再继续后续恢复/open-prompt 链路；只有缺 target、自动迁移失败，或 stale managed shim 需要修复时，才保持 detached 并发可见反馈卡。
 32. **同一张 `/menu` 或 `/use` 导航卡每点一步就继续在消息流里堆新卡，导致用户停留在同一选择上下文却要反复找最新卡**：已修复。当前限定范围内的 same-context 导航已经改成 card callback 同步替换当前卡，不再制造额外历史噪音。

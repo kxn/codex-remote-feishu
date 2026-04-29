@@ -547,7 +547,7 @@ func (s *Service) enterTargetPickerNewThread(surface *state.SurfaceConsoleRecord
 		return s.prepareNewThread(surface)
 	}
 	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
-		return s.attachWorkspaceWithMode(surface, workspaceKey, attachWorkspaceModeTargetPickerNewThread)
+		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{PrepareNewThread: true})
 	}
 	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true)
 }

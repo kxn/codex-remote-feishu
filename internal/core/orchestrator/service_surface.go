@@ -14,10 +14,11 @@ type HeadlessRestoreAttempt struct {
 }
 
 type SurfaceResumeAttempt struct {
-	InstanceID   string
-	ThreadID     string
-	WorkspaceKey string
-	Backend      agentproto.Backend
+	InstanceID       string
+	ThreadID         string
+	WorkspaceKey     string
+	Backend          agentproto.Backend
+	PrepareNewThread bool
 }
 
 type HeadlessRestoreStatus string
@@ -67,14 +68,10 @@ const (
 	startHeadlessModeHeadlessRestore startHeadlessMode = "headless_restore"
 )
 
-type attachWorkspaceMode string
-
-const (
-	attachWorkspaceModeDefault                attachWorkspaceMode = "default"
-	attachWorkspaceModeSurfaceResume          attachWorkspaceMode = "surface_resume"
-	attachWorkspaceModeTargetPickerNewThread  attachWorkspaceMode = "target_picker_new_thread"
-	attachWorkspaceModeBackendSwitchNewThread attachWorkspaceMode = "backend_switch_new_thread"
-)
+type attachWorkspaceOptions struct {
+	ResumeNotice     bool
+	PrepareNewThread bool
+}
 
 type attachInstanceMode string
 
