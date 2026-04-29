@@ -199,6 +199,80 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 	}
 }
 
+func TestNewThreadExitsIdleReviewSessionBeforeFirstText(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	newEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionNewThread,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected /new to exit idle review session, got %#v", surface.ReviewSession)
+	}
+	if surface.RouteMode != state.RouteModeNewThreadReady || surface.SelectedThreadID != "" {
+		t.Fatalf("expected /new to prepare a fresh thread route, got %#v", surface)
+	}
+	if len(newEvents) == 0 || newEvents[len(newEvents)-1].Notice == nil || newEvents[len(newEvents)-1].Notice.Code != "new_thread_ready" {
+		t.Fatalf("expected new_thread_ready notice, got %#v", newEvents)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-new",
+		Text:             "你好",
+	})
+
+	if len(events) != 3 {
+		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
+	}
+	command := events[2].Command
+	if command == nil || command.Kind != agentproto.CommandPromptSend {
+		t.Fatalf("expected prompt send command, got %#v", events)
+	}
+	if command.Target.ThreadID != "" ||
+		command.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew ||
+		!command.Target.CreateThreadIfMissing ||
+		command.Target.SurfaceBindingPolicy == agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("expected first post-/new text to create a fresh thread, got %#v", command.Target)
+	}
+	item := surface.QueueItems[surface.ActiveQueueItemID]
+	if item == nil ||
+		item.FrozenThreadID != "" ||
+		item.FrozenExecutionMode != agentproto.PromptExecutionModeStartNew ||
+		item.RouteModeAtEnqueue != state.RouteModeNewThreadReady {
+		t.Fatalf("expected queued item to freeze new-thread creation, got %#v", item)
+	}
+}
+
+func TestNewThreadBlockedWhileReviewTurnRunning(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionNewThread,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "new_thread_blocked_review_running" {
+		t.Fatalf("expected running review to block /new, got %#v", events)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.ActiveTurnID != "turn-review-1" {
+		t.Fatalf("expected running review session to remain active, got %#v", surface.ReviewSession)
+	}
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected blocked /new to preserve parent selection, got %#v", surface)
+	}
+}
+
 func TestReviewSessionLifecycleAndReplyAnchorFallback(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")

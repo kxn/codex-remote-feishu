@@ -42,6 +42,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 		}
 		discarded := countPendingDrafts(surface)
 		events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到新会话待命状态，之前的提案计划已失效。")
+		clearIdleReviewSession(surface)
 		clearAutoContinueRuntime(surface)
 		events = append(events, s.discardDrafts(surface)...)
 		surface.PreparedAt = s.now()
@@ -62,6 +63,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 	}
 	discarded := countPendingDrafts(surface)
 	events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到新会话待命状态，之前的提案计划已失效。")
+	clearIdleReviewSession(surface)
 	clearAutoContinueRuntime(surface)
 	events = append(events, s.discardDrafts(surface)...)
 	prevThreadID := surface.SelectedThreadID

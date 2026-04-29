@@ -27,10 +27,20 @@ func (s *Service) activeReviewSession(surface *state.SurfaceConsoleRecord) *stat
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return nil
 	}
-	if surface.SelectedThreadID != "" && strings.TrimSpace(surface.SelectedThreadID) != parentThreadID {
+	if strings.TrimSpace(surface.SelectedThreadID) != parentThreadID {
 		return nil
 	}
 	return session
+}
+
+func clearIdleReviewSession(surface *state.SurfaceConsoleRecord) {
+	if surface == nil || surface.ReviewSession == nil {
+		return
+	}
+	if strings.TrimSpace(surface.ReviewSession.ActiveTurnID) != "" {
+		return
+	}
+	surface.ReviewSession = nil
 }
 
 func (s *Service) ReviewSession(surfaceID string) *state.ReviewSessionRecord {

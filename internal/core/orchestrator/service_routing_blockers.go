@@ -136,6 +136,9 @@ func (s *Service) blockNewThreadPreparation(surface *state.SurfaceConsoleRecord)
 	if s.surfaceHasPendingSteer(surface) {
 		return notice(surface, "new_thread_blocked_steering", "当前正在把排队输入并入本轮执行，暂时不能新建会话。请稍候再试。")
 	}
+	if review := s.activeReviewSession(surface); review != nil && strings.TrimSpace(review.ActiveTurnID) != "" {
+		return notice(surface, "new_thread_blocked_review_running", "当前审阅请求正在执行，暂时不能新建会话。请等待完成，或先 /stop 结束当前审阅。")
+	}
 	if item := s.preparedNewThreadActiveItem(surface); item != nil {
 		switch item.Status {
 		case state.QueueItemDispatching:
