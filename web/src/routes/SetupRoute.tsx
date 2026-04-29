@@ -5,6 +5,7 @@ import {
   type JSONResult,
   requestJSON,
   requestJSONAllowHTTPError,
+  requestVoid,
   sendJSON,
 } from "../lib/api";
 import { relativeLocalPath } from "../lib/paths";
@@ -59,6 +60,7 @@ type PermissionState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; data: FeishuAppPermissionCheckResponse }
+  | { status: "skipped"; data: FeishuAppPermissionCheckResponse | null }
   | { status: "missing"; data: FeishuAppPermissionCheckResponse }
   | { status: "error"; message: string };
 
@@ -155,7 +157,8 @@ export function SetupRoute() {
   const stepDone: Record<SetupStepID, boolean> = {
     env: Boolean(runtimeRequirements?.ready),
     connect: hasConnectedApp(activeApp),
-    permission: permissionState.status === "ready",
+    permission:
+      permissionState.status === "ready" || permissionState.status === "skipped",
     events: eventsDone,
     callback: callbackDone,
     menu: menuDone,
@@ -505,6 +508,48 @@ export function SetupRoute() {
     }
     const payload = response.data as FeishuAppPermissionCheckResponse;
     setPermissionState(payload.ready ? { status: "ready", data: payload } : { status: "missing", data: payload });
+  }
+
+  async function skipPermissions(appID: string) {
+    const skippedData =
+      permissionState.status === "missing" ? permissionState.data : null;
+    setActionBusy("permission-skip");
+    try {
+      await requestVoid(
+        `/api/setup/feishu/apps/${encodeURIComponent(appID)}/onboarding-permission/skip`,
+        { method: "POST" },
+      );
+      setPermissionState({ status: "skipped", data: skippedData });
+      setNotice({
+        tone: "warn",
+        message: "已跳过这一步，你可以继续后面的设置。",
+      });
+      setCurrentStep("events");
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能跳过这一步，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function recheckPermissions(appID: string) {
+    setActionBusy("permission-recheck");
+    try {
+      if (permissionState.status === "skipped") {
+        await requestVoid(
+          `/api/setup/feishu/apps/${encodeURIComponent(appID)}/onboarding-permission/reset`,
+          { method: "POST" },
+        );
+      }
+      await checkPermissions(appID);
+    } catch {
+      setPermissionState({
+        status: "error",
+        message: "暂时无法完成权限检查，请稍后重试。",
+      });
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function startTest(
@@ -905,6 +950,77 @@ export function SetupRoute() {
       );
     }
 
+    if (permissionState.status === "skipped") {
+      return (
+        <section className="step-section">
+          <div className="step-stage-head">
+            <h2>权限检查</h2>
+            <p>你已选择先跳过这一步，后续仍可回到这里重新检查。</p>
+          </div>
+          <div className="notice-banner warn">当前按已跳过处理，你可以继续后面的设置。</div>
+          {(permissionState.data?.missingScopes || []).length > 0 ? (
+            <div className="scope-list">
+              {(permissionState.data?.missingScopes || []).map((scope) => (
+                <span
+                  key={`${scope.scopeType || "tenant"}-${scope.scope}`}
+                  className="scope-pill"
+                >
+                  <code>{scope.scope}</code>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="panel">
+            <div className="section-heading">
+              <div>
+                <h4>可复制的一次性权限配置</h4>
+                <p>需要时随时回到这里补齐后再重新检查。</p>
+              </div>
+            </div>
+            <textarea
+              readOnly
+              className="code-textarea"
+              value={permissionState.data?.grantJSON || ""}
+            />
+            <div className="button-row">
+              {permissionState.data?.grantJSON ? (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void copyGrantJSON(permissionState.data?.grantJSON || "")}
+                >
+                  复制配置
+                </button>
+              ) : null}
+              <a
+                className="ghost-button"
+                href={permissionState.data?.app.consoleLinks?.auth || activeConsoleLinks?.auth || "#"}
+                rel="noreferrer"
+                target="_blank"
+              >
+                打开飞书后台权限配置
+              </a>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "permission-recheck"}
+                onClick={() => activeApp?.id && void recheckPermissions(activeApp.id)}
+              >
+                重新检查
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => setCurrentStep("events")}
+              >
+                继续后面的设置
+              </button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     if (permissionState.status === "error") {
       return (
         <section className="step-section">
@@ -917,7 +1033,8 @@ export function SetupRoute() {
             <button
               className="secondary-button"
               type="button"
-              onClick={() => activeApp?.id && void checkPermissions(activeApp.id)}
+              disabled={actionBusy === "permission-recheck"}
+              onClick={() => activeApp?.id && void recheckPermissions(activeApp.id)}
             >
               重新检查
             </button>
@@ -975,9 +1092,18 @@ export function SetupRoute() {
             <button
               className="primary-button"
               type="button"
-              onClick={() => activeApp?.id && void checkPermissions(activeApp.id)}
+              disabled={actionBusy === "permission-recheck"}
+              onClick={() => activeApp?.id && void recheckPermissions(activeApp.id)}
             >
               我已处理，重新检查
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={actionBusy === "permission-skip"}
+              onClick={() => activeApp?.id && void skipPermissions(activeApp.id)}
+            >
+              强制跳过这一步
             </button>
           </div>
         </div>

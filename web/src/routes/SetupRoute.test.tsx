@@ -200,6 +200,132 @@ describe("SetupRoute", () => {
     expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
   });
 
+  it("allows force skipping missing permissions and continues to events", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    let appsConfigured = false;
+
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/setup/feishu/onboarding/sessions": {
+        status: 201,
+        body: {
+          session: {
+            id: "session-1",
+            status: "pending",
+            qrCodeDataUrl: "data:image/png;base64,abc",
+          },
+        },
+      },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect(),
+      },
+      "/api/setup/feishu/apps": (call) => {
+        if (call.method === "POST") {
+          appsConfigured = true;
+          return {
+            status: 201,
+            body: {
+              app: makeApp({
+                id: "bot-manual",
+                name: "团队机器人",
+                appId: "cli_manual",
+              }),
+            },
+          };
+        }
+        return {
+          body: {
+            apps: appsConfigured
+              ? [
+                  makeApp({
+                    id: "bot-manual",
+                    name: "团队机器人",
+                    appId: "cli_manual",
+                    verifiedAt: "2026-04-25T08:10:00Z",
+                  }),
+                ]
+              : [],
+          },
+        };
+      },
+      "/api/setup/feishu/apps/bot-manual/verify": {
+        body: {
+          app: makeApp({
+            id: "bot-manual",
+            name: "团队机器人",
+            appId: "cli_manual",
+            verifiedAt: "2026-04-25T08:10:00Z",
+          }),
+          result: { connected: true, duration: 1_000_000_000 },
+        },
+      },
+      "/api/setup/feishu/apps/bot-manual/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-manual", appId: "cli_manual" }),
+          ready: false,
+          missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
+          grantJSON: `{
+  "scopes": {
+    "tenant": [
+      "drive:drive"
+    ],
+    "user": []
+  }
+}`,
+        }),
+      },
+      "/api/setup/feishu/apps/bot-manual/onboarding-permission/skip": {
+        status: 204,
+      },
+      "/api/setup/feishu/apps/bot-manual/test-events": {
+        body: {
+          gatewayId: "bot-manual",
+          startedAt: "2026-04-25T08:12:00Z",
+          expiresAt: "2026-04-25T08:22:00Z",
+          phrase: "测试",
+          message: "事件订阅测试提示已发送。",
+        },
+      },
+      "/api/setup/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "disabled",
+          configured: false,
+          enabled: false,
+          canApply: true,
+        },
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "手动输入" }));
+    await user.type(screen.getByLabelText("机器人名称（可选）"), "团队机器人");
+    await user.type(screen.getByLabelText("App ID"), "cli_manual");
+    await user.type(screen.getByLabelText("App Secret"), "secret_manual");
+    await user.click(screen.getByRole("button", { name: "验证并继续" }));
+
+    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "强制跳过这一步" }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) =>
+            call.path === "/api/setup/feishu/apps/bot-manual/onboarding-permission/skip" &&
+            call.method === "POST",
+        ),
+      ).toBe(true);
+    });
+    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
+    expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
+  });
+
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to permissions", async () => {
     window.history.replaceState({}, "", "/setup");
     let appsConfigured = false;

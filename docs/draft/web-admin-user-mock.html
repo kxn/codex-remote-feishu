@@ -501,6 +501,7 @@
       const state = {
         selectedRobot: "bot-main",
         selectedClaude: "default",
+        newRobotStatus: "idle",
         eventAttempt: 0,
         callbackAttempt: 0,
         eventStatus: "idle",
@@ -627,8 +628,45 @@
               slot.innerHTML = `<div class="notice bad">请填写完整的 App ID 和 App Secret。</div>`;
               return;
             }
-            slot.innerHTML = `<div class="notice good">保存成功，已完成连接验证。</div>`;
+            if (state.newRobotStatus === "idle") {
+              state.newRobotStatus = "missing";
+            } else if (state.newRobotStatus === "missing") {
+              state.newRobotStatus = "ready";
+            }
+
+            if (state.newRobotStatus === "missing") {
+              slot.innerHTML = `
+                <div class="notice bad">当前还不能进入下一步，请先补齐缺失权限。</div>
+                <p class="hint"><a href="#" onclick="return false;" class="link">打开飞书后台权限配置</a></p>
+                <div class="row" style="margin-top:12px">
+                  <button id="newRobotRecheck" class="btn primary">我已处理，重新检查</button>
+                  <button id="newRobotSkip" class="btn ghost">强制跳过这一步</button>
+                </div>`;
+              document.getElementById("newRobotRecheck").onclick = () => {
+                state.newRobotStatus = "ready";
+                renderAdmin();
+              };
+              document.getElementById("newRobotSkip").onclick = () => {
+                state.newRobotStatus = "skipped";
+                renderAdmin();
+              };
+              return;
+            }
+
+            if (state.newRobotStatus === "skipped") {
+              slot.innerHTML = `<div class="notice warn">已跳过这一步，你可以继续后面的设置。</div>`;
+              return;
+            }
+
+            slot.innerHTML = `<div class="notice good">权限检查通过，可以继续后面的设置。</div>`;
           };
+          if (state.newRobotStatus === "skipped") {
+            document.getElementById("newRobotSlot").innerHTML =
+              `<div class="notice warn">已跳过这一步，你可以继续后面的设置。</div>`;
+          } else if (state.newRobotStatus === "ready") {
+            document.getElementById("newRobotSlot").innerHTML =
+              `<div class="notice good">权限检查通过，可以继续后面的设置。</div>`;
+          }
           return;
         }
 

@@ -700,6 +700,43 @@
           setStepContent("权限检查", "权限已完整，系统会自动进入下一步。", `<div class="notice good">检查通过，正在进入事件订阅...</div>`);
           return;
         }
+        if (state.permission.status === "skipped") {
+          setStepContent(
+            "权限检查",
+            "你已选择先跳过这一步，后续仍可回到这里重新检查。",
+            `<div class="notice warn">当前按已跳过处理，你可以继续后面的设置。</div>
+             <ul class="line-list">${state.permission.missing.map((scope) => `<li><code>${scope}</code></li>`).join("")}</ul>
+             <p class="hint"><a class="link" href="#" onclick="return false;">打开飞书后台权限配置</a></p>
+             <div class="field" style="margin-top:10px">
+               <label>可复制的一次性权限配置</label>
+               <textarea id="scopeJson" class="textarea" readonly>{
+  "scopes": {
+    "tenant": [
+      "drive:drive",
+      "im:datasync.feed_card.time_sensitive:write"
+    ],
+    "user": []
+  }
+}</textarea>
+             </div>
+             <div class="row" style="margin-top:10px">
+               <button id="copyScope" class="btn ghost">复制配置</button>
+               <button id="permissionRecheck" class="btn secondary">重新检查</button>
+               <button id="permissionContinue" class="btn primary">继续后面的设置</button>
+             </div>`
+          );
+          document.getElementById("copyScope").onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(document.getElementById("scopeJson").value);
+              pushNotice("已复制权限配置。");
+            } catch (_) {
+              pushNotice("复制失败，请手动复制。", "warn");
+            }
+          };
+          document.getElementById("permissionRecheck").onclick = () => autoCheckPermission();
+          document.getElementById("permissionContinue").onclick = () => gotoStep("events", true);
+          return;
+        }
         setStepContent(
           "权限检查",
           "检测到缺失权限，请先在飞书后台补齐。",
@@ -721,6 +758,7 @@
            <div class="row" style="margin-top:10px">
              <button id="copyScope" class="btn ghost">复制配置</button>
              <button id="permissionRecheck" class="btn primary">我已处理，重新检查</button>
+             <button id="permissionSkip" class="btn ghost">强制跳过这一步</button>
            </div>`
         );
         document.getElementById("copyScope").onclick = async () => {
@@ -732,6 +770,15 @@
           }
         };
         document.getElementById("permissionRecheck").onclick = () => autoCheckPermission();
+        document.getElementById("permissionSkip").onclick = () => {
+          state.permission.status = "skipped";
+          state.done.permission = true;
+          render();
+          window.setTimeout(() => {
+            gotoStep("events", true);
+            pushNotice("已跳过这一步，你可以继续后面的设置。", "warn");
+          }, 220);
+        };
       }
 
       function autoSendEventTest() {

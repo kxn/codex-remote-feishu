@@ -187,9 +187,9 @@
 - [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-preview-renderer-architecture-redesign.md](./draft/web-preview-renderer-architecture-redesign.md)
 - [web-onboarding-admin-workflow-prd.md](./draft/web-onboarding-admin-workflow-prd.md)
-- [web-onboarding-admin-user-mock.html](./draft/web-onboarding-admin-user-mock.html)
 - [web-onboarding-admin-user-view.md](./draft/web-onboarding-admin-user-view.md)
 - [web-setup-user-mock.html](./draft/web-setup-user-mock.html)
+- [web-setup-flow-v2.md](./draft/web-setup-flow-v2.md)
 - [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 
