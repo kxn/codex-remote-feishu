@@ -526,6 +526,57 @@ func TestParseMessageEventCommandPreservesGatewayID(t *testing.T) {
 	}
 }
 
+func TestParseMessageEventNormalizesMentionPlaceholdersInText(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	event := testTextMessageEvent("evt-mention-text-1", "om-msg-mention-1", "@_user_1 帮我看一下")
+	event.Event.Message.ChatType = stringRef("group")
+	event.Event.Message.Mentions = []*larkim.MentionEvent{{
+		Key:  stringRef("@_user_1"),
+		Name: stringRef("Codex Remote"),
+	}}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected text message to be handled")
+	}
+	if action.Kind != control.ActionTextMessage {
+		t.Fatalf("unexpected action kind: %#v", action)
+	}
+	if action.Text != "@Codex Remote 帮我看一下" {
+		t.Fatalf("text = %q, want normalized mention label", action.Text)
+	}
+}
+
+func TestPlanInboundMessageEventTreatsMentionedSlashCommandAsCommand(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	event := testTextMessageEvent("evt-mention-cmd-1", "om-msg-mention-cmd-1", "@_user_1 /list")
+	event.Event.Message.ChatType = stringRef("group")
+	event.Event.Message.Mentions = []*larkim.MentionEvent{{
+		Key:  stringRef("@_user_1"),
+		Name: stringRef("Codex Remote"),
+	}}
+
+	plan, ok, err := gateway.planInboundMessageEvent(event)
+	if err != nil {
+		t.Fatalf("planInboundMessageEvent returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected mentioned slash command to be handled")
+	}
+	if plan.queue != nil {
+		t.Fatalf("expected mentioned slash command to bypass queued text path, got %#v", plan)
+	}
+	if plan.action == nil || plan.action.Kind != control.ActionListInstances {
+		t.Fatalf("unexpected planned action: %#v", plan)
+	}
+	if plan.action.Text != "/list" {
+		t.Fatalf("action text = %q, want /list", plan.action.Text)
+	}
+}
+
 func TestCardTemplateUsesSemanticColors(t *testing.T) {
 	tests := map[string]string{
 		cardThemeInfo:     "grey",

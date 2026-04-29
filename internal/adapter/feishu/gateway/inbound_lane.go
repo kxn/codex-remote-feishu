@@ -466,12 +466,12 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 
 	switch messageType {
 	case "text":
-		text, err := ParseTextContent(content)
+		text, commandText, err := parseFeishuEventText(content, message.Mentions)
 		if err != nil {
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
 			return PlannedInboundMessage{}, false, err
 		}
-		commandAction, handled := env.ParseTextAction(text)
+		commandAction, handled := env.ParseTextAction(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID
 			commandAction.SurfaceSessionID = surfaceSessionID
