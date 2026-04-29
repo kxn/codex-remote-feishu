@@ -1090,7 +1090,7 @@ func TestTargetPickerCancelClearsActivePickerAndKeepsSurfaceRoute(t *testing.T) 
 	}
 }
 
-func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndBlocksMainConfirm(t *testing.T) {
+func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndKeepsMainConfirmEnabled(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 45, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceRoot := t.TempDir()
@@ -1146,11 +1146,11 @@ func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndBloc
 		t.Fatalf("expected path confirm to restore target card via owner-card patch, got %#v", confirmEvents)
 	}
 	got := confirmEvents[0].TargetPickerView
-	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) || got.CanConfirm {
-		t.Fatalf("expected known workspace path to backfill but stay blocked, got %#v", got)
+	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) || !got.CanConfirm {
+		t.Fatalf("expected known workspace path to backfill and stay confirmable, got %#v", got)
 	}
-	if len(got.SourceMessages) == 0 || !strings.Contains(got.SourceMessages[0].Text, "已有工作区") {
-		t.Fatalf("expected known workspace path to explain blocking reason, got %#v", got.SourceMessages)
+	if len(got.SourceMessages) == 0 || !strings.Contains(got.SourceMessages[0].Text, "直接切到该工作区") {
+		t.Fatalf("expected known workspace path to explain reuse behavior, got %#v", got.SourceMessages)
 	}
 }
 
@@ -1278,7 +1278,7 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryStartsHeadlessForUnknownWo
 	}
 }
 
-func TestTargetPickerConfirmAddWorkspaceLocalDirectoryBlocksSymlinkedKnownWorkspace(t *testing.T) {
+func TestTargetPickerConfirmAddWorkspaceLocalDirectoryAcceptsSymlinkedKnownWorkspace(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink setup is not reliable on windows CI")
 	}
@@ -1304,20 +1304,12 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryBlocksSymlinkedKnownWorksp
 		Online:        true,
 		Threads:       map[string]*state.ThreadRecord{},
 	})
-	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionAttachWorkspace,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		WorkspaceKey:     linkWorkspace,
-	})
 	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionListInstances,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	}))
-	svc.root.Surfaces["surface-1"].ClaimedWorkspaceKey = linkWorkspace
 	addMode := openAddWorkspaceLocalDirectoryPage(t, svc, view)
 	surface := svc.root.Surfaces["surface-1"]
 	record := svc.activeTargetPicker(surface)
@@ -1330,17 +1322,17 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryBlocksSymlinkedKnownWorksp
 		ActorUserID:      "user-1",
 		PickerID:         addMode.PickerID,
 	})
-	if surface.RouteMode != state.RouteModeUnbound || surface.PendingHeadless != nil {
-		t.Fatalf("expected symlinked known workspace to stay blocked without route mutation, got %#v", surface)
+	if surface.PendingHeadless != nil || surface.AttachedInstanceID != "inst-web" {
+		t.Fatalf("expected symlinked known workspace to attach immediately without headless start, got %#v", surface)
+	}
+	if surface.RouteMode != state.RouteModeNewThreadReady || !testutil.SamePath(surface.PreparedThreadCWD, realWorkspace) {
+		t.Fatalf("expected symlinked known workspace to enter new-thread-ready, got %#v", surface)
 	}
 	if len(confirmEvents) != 1 || confirmEvents[0].TargetPickerView == nil {
-		t.Fatalf("expected same-card blocked state after symlinked workspace confirm, got %#v", confirmEvents)
+		t.Fatalf("expected same-card success after symlinked workspace confirm, got %#v", confirmEvents)
 	}
-	if got := confirmEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageEditing || got.CanConfirm {
-		t.Fatalf("expected symlinked known workspace to remain editing and blocked, got %#v", got)
-	}
-	if got := confirmEvents[0].TargetPickerView; len(got.Messages) == 0 || !strings.Contains(got.Messages[0].Text, "已有工作区") {
-		t.Fatalf("expected blocked symlinked workspace to explain reason, got %#v", got)
+	if got := confirmEvents[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+		t.Fatalf("expected symlinked known workspace to finish with success, got %#v", got)
 	}
 }
 
