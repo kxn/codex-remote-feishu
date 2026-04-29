@@ -224,7 +224,7 @@ func TestAppRelayCallbacksUseIngressPump(t *testing.T) {
 	})
 }
 
-func TestSyncSurfaceResumeStateForInstanceLockedScopesHeadlessRecoveryState(t *testing.T) {
+func TestSyncSurfaceResumeStateForInstanceLockedScopesRecoveryState(t *testing.T) {
 	t.Parallel()
 
 	app := newRestoreHintTestApp(t.TempDir())
@@ -271,13 +271,13 @@ func TestSyncSurfaceResumeStateForInstanceLockedScopesHeadlessRecoveryState(t *t
 		app.mu.Unlock()
 		t.Fatalf("delete surface-2 resume state: %v", err)
 	}
-	delete(app.surfaceResumeRuntime.headlessRestore, "surface-1")
-	delete(app.surfaceResumeRuntime.headlessRestore, "surface-2")
+	delete(app.surfaceResumeRuntime.recovery, "surface-1")
+	delete(app.surfaceResumeRuntime.recovery, "surface-2")
 	app.syncSurfaceResumeStateForInstanceLocked("inst-1", nil)
 	_, entry1 := app.surfaceResumeRuntime.store.Get("surface-1")
 	_, entry2 := app.surfaceResumeRuntime.store.Get("surface-2")
-	_, recovery1 := app.surfaceResumeRuntime.headlessRestore["surface-1"]
-	_, recovery2 := app.surfaceResumeRuntime.headlessRestore["surface-2"]
+	_, recovery1 := app.surfaceResumeRuntime.recovery["surface-1"]
+	_, recovery2 := app.surfaceResumeRuntime.recovery["surface-2"]
 	app.mu.Unlock()
 
 	if !entry1 {
@@ -287,10 +287,10 @@ func TestSyncSurfaceResumeStateForInstanceLockedScopesHeadlessRecoveryState(t *t
 		t.Fatal("expected scoped surface resume sync to skip unrelated attached surface")
 	}
 	if !recovery1 {
-		t.Fatal("expected scoped sync to repopulate attached headless recovery state")
+		t.Fatal("expected scoped sync to repopulate attached recovery state")
 	}
 	if recovery2 {
-		t.Fatal("expected scoped sync to skip unrelated headless recovery state")
+		t.Fatal("expected scoped sync to skip unrelated recovery state")
 	}
 }
 

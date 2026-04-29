@@ -7,34 +7,15 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-type HeadlessRestoreAttempt struct {
-	Backend     agentproto.Backend
-	ThreadID    string
-	ThreadTitle string
-	ThreadCWD   string
-}
-
 type SurfaceResumeAttempt struct {
 	InstanceID       string
 	ThreadID         string
+	ThreadTitle      string
+	ThreadCWD        string
 	WorkspaceKey     string
 	Backend          agentproto.Backend
 	PrepareNewThread bool
-}
-
-type HeadlessRestoreStatus string
-
-const (
-	HeadlessRestoreStatusSkipped  HeadlessRestoreStatus = "skipped"
-	HeadlessRestoreStatusWaiting  HeadlessRestoreStatus = "waiting"
-	HeadlessRestoreStatusAttached HeadlessRestoreStatus = "attached"
-	HeadlessRestoreStatusStarting HeadlessRestoreStatus = "starting"
-	HeadlessRestoreStatusFailed   HeadlessRestoreStatus = "failed"
-)
-
-type HeadlessRestoreResult struct {
-	Status      HeadlessRestoreStatus
-	FailureCode string
+	ResumeHeadless   bool
 }
 
 type SurfaceResumeStatus string

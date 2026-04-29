@@ -224,7 +224,7 @@ func TestApplyInstanceConnectedAttachesPreselectedHeadlessThreadReplaysStoredNot
 	}
 }
 
-func TestTryAutoRestoreHeadlessPrefersHeadlessOverVisibleVSCode(t *testing.T) {
+func TestManagedHeadlessResumeBranchPrefersHeadlessOverVisibleVSCode(t *testing.T) {
 	now := time.Date(2026, 4, 8, 3, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
@@ -252,14 +252,15 @@ func TestTryAutoRestoreHeadlessPrefersHeadlessOverVisibleVSCode(t *testing.T) {
 		Threads:       map[string]*state.ThreadRecord{},
 	})
 
-	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
-		ThreadID:    "thread-1",
-		ThreadTitle: "修复登录流程",
-		ThreadCWD:   "/data/dl/droid",
+	events, result := svc.tryAutoResumeManagedHeadlessTarget(svc.root.Surfaces["surface-1"], SurfaceResumeAttempt{
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		ThreadCWD:      "/data/dl/droid",
+		ResumeHeadless: true,
 	}, true)
 
-	if result.Status != HeadlessRestoreStatusAttached {
-		t.Fatalf("expected headless restore to attach, got %#v", result)
+	if result.Status != SurfaceResumeStatusThreadAttached {
+		t.Fatalf("expected managed headless target to attach, got %#v", result)
 	}
 	snapshot := svc.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-headless-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
@@ -270,7 +271,7 @@ func TestTryAutoRestoreHeadlessPrefersHeadlessOverVisibleVSCode(t *testing.T) {
 	}
 }
 
-func TestTryAutoRestoreHeadlessSkipsVSCodeSurface(t *testing.T) {
+func TestTryAutoResumeNormalSurfaceManagedHeadlessTargetSkipsVSCodeSurface(t *testing.T) {
 	now := time.Date(2026, 4, 8, 3, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-1")
@@ -298,14 +299,15 @@ func TestTryAutoRestoreHeadlessSkipsVSCodeSurface(t *testing.T) {
 		Threads:       map[string]*state.ThreadRecord{},
 	})
 
-	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
-		ThreadID:    "thread-1",
-		ThreadTitle: "修复登录流程",
-		ThreadCWD:   "/data/dl/droid",
+	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		ThreadCWD:      "/data/dl/droid",
+		ResumeHeadless: true,
 	}, true)
 
-	if result.Status != HeadlessRestoreStatusSkipped {
-		t.Fatalf("expected vscode surface to skip headless auto-restore, got %#v", result)
+	if result.Status != SurfaceResumeStatusSkipped {
+		t.Fatalf("expected vscode surface to skip managed headless resume, got %#v", result)
 	}
 	snapshot := svc.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
@@ -346,13 +348,14 @@ func TestApplyInstanceConnectedAutoRestoreHeadlessSuppressesReplayAndSelectionNo
 		},
 	})
 
-	events, result := svc.TryAutoRestoreHeadless("surface-1", HeadlessRestoreAttempt{
-		ThreadID:    "thread-1",
-		ThreadTitle: "修复登录流程",
-		ThreadCWD:   "/data/dl/droid",
+	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		ThreadCWD:      "/data/dl/droid",
+		ResumeHeadless: true,
 	}, true)
-	if result.Status != HeadlessRestoreStatusStarting {
-		t.Fatalf("expected auto restore to start pending headless flow, got %#v", result)
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected managed headless target to start pending headless flow, got %#v", result)
 	}
 	if len(events) != 1 || events[0].DaemonCommand == nil || !events[0].DaemonCommand.AutoRestore {
 		t.Fatalf("expected silent auto-restore headless start, got %#v", events)

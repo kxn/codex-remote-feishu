@@ -423,49 +423,6 @@ func (s *Service) vscodeThreadSelectionContextText(surface *state.SurfaceConsole
 	return label + " · " + status
 }
 
-func (s *Service) TryAutoRestoreHeadless(surfaceID string, attempt HeadlessRestoreAttempt, allowMissingThreadFailure bool) ([]eventcontract.Event, HeadlessRestoreResult) {
-	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
-	if surface == nil {
-		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
-	}
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
-		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
-	}
-	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
-		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
-	}
-	view := s.headlessRestoreView(surface, attempt)
-	if view == nil {
-		if !allowMissingThreadFailure {
-			return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusWaiting}
-		}
-		return []eventcontract.Event{{
-			Kind:             eventcontract.KindNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice:           headlessRestoreFailureNotice("thread_not_found"),
-		}}, HeadlessRestoreResult{Status: HeadlessRestoreStatusFailed, FailureCode: "thread_not_found"}
-	}
-	target := s.resolveHeadlessRestoreTargetFromView(surface, view)
-	switch target.Mode {
-	case threadAttachFreeVisible, threadAttachReuseHeadless:
-		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore), HeadlessRestoreResult{Status: HeadlessRestoreStatusAttached}
-	case threadAttachCreateHeadless:
-		return s.startHeadlessForResolvedThreadWithMode(surface, target.View, startHeadlessModeHeadlessRestore), HeadlessRestoreResult{Status: HeadlessRestoreStatusStarting}
-	case threadAttachUnavailable:
-		if target.NoticeCode == "thread_not_found" && !allowMissingThreadFailure {
-			return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusWaiting}
-		}
-		failureCode := firstNonEmpty(strings.TrimSpace(target.NoticeCode), "thread_not_found")
-		return []eventcontract.Event{{
-			Kind:             eventcontract.KindNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice:           headlessRestoreFailureNotice(failureCode),
-		}}, HeadlessRestoreResult{Status: HeadlessRestoreStatusFailed, FailureCode: failureCode}
-	default:
-		return nil, HeadlessRestoreResult{Status: HeadlessRestoreStatusSkipped}
-	}
-}
-
 func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]eventcontract.Event, SurfaceResumeResult) {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	if surface == nil {
@@ -491,6 +448,13 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 			return s.attachSurfaceToKnownThread(surface, inst, view, attachSurfaceToKnownThreadSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
 		} else if code != "" {
 			failureCode = code
+		}
+		if attempt.ResumeHeadless {
+			events, result := s.tryAutoResumeManagedHeadlessTarget(surface, attempt, allowMissingTargetFailure)
+			switch result.Status {
+			case SurfaceResumeStatusThreadAttached, SurfaceResumeStatusStarting, SurfaceResumeStatusWaiting, SurfaceResumeStatusFailed:
+				return events, result
+			}
 		}
 		if !allowMissingTargetFailure {
 			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
@@ -524,6 +488,39 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 	return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: failureCode}
 }
 
+func (s *Service) tryAutoResumeManagedHeadlessTarget(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]eventcontract.Event, SurfaceResumeResult) {
+	view := s.headlessRestoreView(surface, attempt)
+	if view == nil {
+		if !allowMissingTargetFailure {
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+		}
+		return []eventcontract.Event{{
+			Kind:             eventcontract.KindNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice("thread_not_found"),
+		}}, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "thread_not_found"}
+	}
+	target := s.resolveHeadlessRestoreTargetFromView(surface, view)
+	switch target.Mode {
+	case threadAttachFreeVisible, threadAttachReuseHeadless:
+		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
+	case threadAttachCreateHeadless:
+		return s.startHeadlessForResolvedThreadWithMode(surface, target.View, startHeadlessModeHeadlessRestore), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+	case threadAttachUnavailable:
+		if target.NoticeCode == "thread_not_found" && !allowMissingTargetFailure {
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+		}
+		failureCode := firstNonEmpty(strings.TrimSpace(target.NoticeCode), "thread_not_found")
+		return []eventcontract.Event{{
+			Kind:             eventcontract.KindNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           headlessRestoreFailureNotice(failureCode),
+		}}, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: failureCode}
+	default:
+		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
+	}
+}
+
 func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]eventcontract.Event, SurfaceResumeResult) {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	if surface == nil {
@@ -550,7 +547,7 @@ func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]ev
 	return s.attachInstanceWithMode(surface, instanceID, attachInstanceModeSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusInstanceAttached}
 }
 
-func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attempt HeadlessRestoreAttempt) *mergedThreadView {
+func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt) *mergedThreadView {
 	threadID := strings.TrimSpace(attempt.ThreadID)
 	if threadID == "" {
 		return nil

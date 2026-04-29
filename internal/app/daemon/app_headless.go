@@ -65,7 +65,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	now := time.Now().UTC()
 	if strings.TrimSpace(cfg.BinaryPath) == "" {
 		if command.AutoRestore {
-			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
 		}
 		return a.service.HandleHeadlessLaunchFailed(
 			command.SurfaceSessionID,
@@ -100,7 +100,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID, cfg.Paths.StateDir)
 	if err != nil {
 		if command.AutoRestore {
-			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
 		}
 		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 			Code:             "claude_profile_prepare_failed",
@@ -142,7 +142,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			err,
 		)
 		if command.AutoRestore {
-			a.setHeadlessRestoreBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
 		}
 		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, err)
 	}

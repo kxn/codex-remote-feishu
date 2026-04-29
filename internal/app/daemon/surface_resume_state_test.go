@@ -546,15 +546,6 @@ func TestDaemonMaterializesLatentSurfaceFromSurfaceResumeStateOnRestart(t *testi
 		ResumeWorkspaceKey: "/data/dl/droid",
 		ResumeRouteMode:    "pinned",
 	})
-	putRestoreHintForTest(t, stateDir, surfaceresume.HeadlessRestoreHint{
-		SurfaceSessionID: "surface-1",
-		GatewayID:        "app-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		ThreadID:         "thread-missing",
-		ThreadTitle:      "旧会话",
-		ThreadCWD:        "/data/dl/droid",
-	})
 
 	app := newRestoreHintTestApp(stateDir)
 	snapshot := app.service.SurfaceSnapshot("surface-1")
@@ -699,15 +690,6 @@ func TestDaemonVSCodeResumeWaitsForExactInstanceAndNeverUsesHeadless(t *testing.
 		ResumeWorkspaceKey: "/data/dl/droid",
 		ResumeRouteMode:    "follow_local",
 	})
-	putRestoreHintForTest(t, stateDir, surfaceresume.HeadlessRestoreHint{
-		SurfaceSessionID: "surface-1",
-		GatewayID:        "app-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		ThreadID:         "thread-1",
-		ThreadTitle:      "旧 headless 会话",
-		ThreadCWD:        "/data/dl/droid",
-	})
 
 	gateway := newLifecycleGateway()
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
@@ -725,9 +707,6 @@ func TestDaemonVSCodeResumeWaitsForExactInstanceAndNeverUsesHeadless(t *testing.
 	}
 
 	app.onTick(context.Background(), time.Now().UTC())
-	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
-		t.Fatalf("expected vscode resume path to clear stale headless hint, got %#v", hint)
-	}
 	if headlessStarted {
 		t.Fatal("expected vscode resume path to avoid starting headless")
 	}
@@ -996,17 +975,11 @@ func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T
 		ProductMode:        "normal",
 		ResumeInstanceID:   "inst-vscode-1",
 		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/droid",
 		ResumeWorkspaceKey: "/data/dl/droid",
 		ResumeRouteMode:    "pinned",
-	})
-	putRestoreHintForTest(t, stateDir, surfaceresume.HeadlessRestoreHint{
-		SurfaceSessionID: "surface-1",
-		GatewayID:        "app-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		ThreadID:         "thread-1",
-		ThreadTitle:      "修复登录流程",
-		ThreadCWD:        "/data/dl/droid",
+		ResumeHeadless:     true,
 	})
 
 	gateway := &recordingGateway{}
@@ -1045,9 +1018,6 @@ func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T
 	}
 	if snapshot.PendingHeadless.InstanceID != "" {
 		t.Fatalf("expected visible resume to avoid headless fallback, got %#v", snapshot)
-	}
-	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
-		t.Fatalf("expected visible resume to clear stale headless hint, got %#v", hint)
 	}
 	if len(gateway.operations) == 0 || !strings.Contains(gateway.operations[len(gateway.operations)-1].CardBody, "已恢复到之前会话") {
 		t.Fatalf("expected recovery notice after visible resume, got %#v", gateway.operations)
@@ -1101,9 +1071,6 @@ func TestDaemonNormalResumeFallsBackToWorkspace(t *testing.T) {
 	}
 	if snapshot.Attachment.SelectedThreadID != "" || snapshot.Attachment.RouteMode != "unbound" {
 		t.Fatalf("expected workspace fallback to stay unbound, got %#v", snapshot)
-	}
-	if hint := app.HeadlessRestoreHint("surface-1"); hint != nil {
-		t.Fatalf("expected workspace fallback to clear stale headless hint, got %#v", hint)
 	}
 	var sawFallbackNotice bool
 	for _, op := range gateway.operations {

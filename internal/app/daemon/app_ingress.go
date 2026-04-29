@@ -494,7 +494,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.PID,
 	)
 	connectEvents := a.service.ApplyInstanceConnected(inst.InstanceID)
-	a.recordHeadlessRestoreOutcomeEventsLocked(connectEvents, now)
+	a.recordManagedHeadlessResumeOutcomeEventsLocked(connectEvents, now)
 	a.handleUIEventsLocked(ctx, connectEvents)
 	if inst.Source == "vscode" {
 		a.invalidateVSCodeCompatibilityCacheLocked()
@@ -547,9 +547,6 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
-	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
-	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
-	a.handleUIEventsLocked(ctx, recoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
 	a.syncClaudeWorkspaceProfileStateLocked()
@@ -610,9 +607,8 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 				uiEvents = append(uiEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 			}
 			uiEvents = append(uiEvents, a.maybeRecoverNormalSurfacesLocked(now)...)
-			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
 		}
-		a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
+		a.recordManagedHeadlessResumeOutcomeEventsLocked(uiEvents, now)
 		a.handleUIEventsLocked(ctx, uiEvents)
 		if eventAffectsSurfaceResumeState(event) {
 			syncSurfaceResumeState = true
@@ -786,7 +782,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	}
 	uiEvents := a.service.Tick(now)
 	uiEvents = append(uiEvents, a.maybeFlushUpgradeResultLocked(now)...)
-	a.recordHeadlessRestoreOutcomeEventsLocked(uiEvents, now)
+	a.recordManagedHeadlessResumeOutcomeEventsLocked(uiEvents, now)
 	a.handleUIEventsLocked(ctx, uiEvents)
 	a.syncManagedHeadlessLocked(now)
 	a.maybeRefreshIdleManagedHeadlessLocked(now)
@@ -804,9 +800,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
 	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
-	recoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
-	a.recordHeadlessRestoreOutcomeEventsLocked(recoveryEvents, now)
-	a.handleUIEventsLocked(ctx, recoveryEvents)
 	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeStartFeishuPermissionRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)

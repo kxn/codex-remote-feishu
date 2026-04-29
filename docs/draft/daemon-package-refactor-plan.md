@@ -104,11 +104,8 @@
 
 - [app_headless.go](../../internal/app/daemon/app_headless.go)
 - [app_headless_pool.go](../../internal/app/daemon/app_headless_pool.go)
-- [app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
-- [app_headless_restore_recovery.go](../../internal/app/daemon/app_headless_restore_recovery.go)
 - [app_surface_resume_state.go](../../internal/app/daemon/app_surface_resume_state.go)
 - [surface_resume_state.go](../../internal/app/daemon/surface_resume_state.go)
-- [headless_restore_hints.go](../../internal/app/daemon/headless_restore_hints.go)
 - [workspace_surface_context.go](../../internal/app/daemon/workspace_surface_context.go)
 
 这部分负责：
@@ -256,8 +253,6 @@
 
 - [app_headless.go](../../internal/app/daemon/app_headless.go)
 - [app_headless_pool.go](../../internal/app/daemon/app_headless_pool.go)
-- [app_headless_restore_hints.go](../../internal/app/daemon/app_headless_restore_hints.go)
-- [app_headless_restore_recovery.go](../../internal/app/daemon/app_headless_restore_recovery.go)
 
 原因：
 

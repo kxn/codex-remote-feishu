@@ -11,13 +11,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 )
 
-type headlessRestoreRecoveryState struct {
-	Entry           surfaceresume.Entry
-	NextAttemptAt   time.Time
-	LastAttemptAt   time.Time
-	LastFailureCode string
-}
-
 type surfaceResumeRecoveryState struct {
 	Entry           surfaceresume.Entry
 	NextAttemptAt   time.Time
@@ -43,7 +36,6 @@ type surfaceResumeRuntimeState struct {
 	vscodeMigrationNextSeq int64
 	vscodeResumeNotices    map[string]bool
 	vscodeStartupCheckDue  bool
-	headlessRestore        map[string]*headlessRestoreRecoveryState
 	startupRefreshPending  map[string]bool
 	startupRefreshSeen     bool
 	workspaceContextRoots  map[string]string
@@ -88,7 +80,6 @@ func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
 		recovery:              map[string]*surfaceResumeRecoveryState{},
 		vscodeMigrationFlows:  map[string]*vscodeMigrationFlowRecord{},
 		vscodeResumeNotices:   map[string]bool{},
-		headlessRestore:       map[string]*headlessRestoreRecoveryState{},
 		startupRefreshPending: map[string]bool{},
 		workspaceContextRoots: map[string]string{},
 	}

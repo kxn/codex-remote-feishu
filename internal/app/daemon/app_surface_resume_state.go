@@ -42,7 +42,6 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	a.surfaceResumeRuntime.store = store
 	a.materializeSurfaceResumeStateLocked()
 	a.syncSurfaceResumeRecoveryStateLocked()
-	a.syncHeadlessRestoreStateLocked()
 	a.surfaceResumeRuntime.vscodeStartupCheckDue = storedVSCodeResumeExists(store)
 }
 
@@ -136,7 +135,6 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 	}
 	a.syncVSCodeResumeNoticeStateLocked(desired)
 	a.syncSurfaceResumeRecoveryStateLocked()
-	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTargets map[string]bool) {
@@ -178,7 +176,6 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 	}
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
-	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clearTargets map[string]bool) {
@@ -233,7 +230,6 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 	}
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
-	a.syncHeadlessRestoreStateLocked()
 }
 
 func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecord, clearResumeTarget bool) (surfaceresume.Entry, bool) {
@@ -446,6 +442,9 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
 			continue
 		}
+		if recovery.Entry.ResumeHeadless && a.shouldDeferHeadlessResumeUntilInitialRefreshLocked(recovery.Entry, allowMissingTargetFailure) {
+			continue
+		}
 		workspaceKey := recovery.Entry.ResumeWorkspaceKey
 		if recovery.Entry.ResumeHeadless {
 			workspaceKey = ""
@@ -453,9 +452,12 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 		restoreEvents, result := a.service.TryAutoResumeNormalSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
 			InstanceID:       recovery.Entry.ResumeInstanceID,
 			ThreadID:         recovery.Entry.ResumeThreadID,
+			ThreadTitle:      recovery.Entry.ResumeThreadTitle,
+			ThreadCWD:        recovery.Entry.ResumeThreadCWD,
 			WorkspaceKey:     workspaceKey,
 			Backend:          agentproto.Backend(recovery.Entry.Backend),
 			PrepareNewThread: strings.TrimSpace(recovery.Entry.ResumeRouteMode) == string(state.RouteModeNewThreadReady),
+			ResumeHeadless:   recovery.Entry.ResumeHeadless,
 		}, allowMissingTargetFailure)
 		switch result.Status {
 		case orchestrator.SurfaceResumeStatusStarting, orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
@@ -464,6 +466,7 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 			updatedSurfaceIDs = append(updatedSurfaceIDs, surfaceID)
 		case orchestrator.SurfaceResumeStatusFailed:
 			a.setSurfaceResumeBackoffLocked(surfaceID, result.FailureCode, now)
+			events = append(events, restoreEvents...)
 			if recovery.Entry.ResumeHeadless {
 				continue
 			}
@@ -612,4 +615,60 @@ func (a *App) setSurfaceResumeBackoffLocked(surfaceID, code string, now time.Tim
 	recovery.LastAttemptAt = now
 	recovery.NextAttemptAt = now.Add(surfaceResumeRetryBackoff)
 	recovery.LastFailureCode = strings.TrimSpace(code)
+}
+
+func (a *App) shouldDeferHeadlessResumeUntilInitialRefreshLocked(entry surfaceresume.Entry, allowMissingTargetFailure bool) bool {
+	if allowMissingTargetFailure {
+		return false
+	}
+	instanceID := strings.TrimSpace(entry.ResumeInstanceID)
+	if instanceID == "" {
+		return false
+	}
+	inst := a.service.Instance(instanceID)
+	if inst == nil {
+		return false
+	}
+	// Give a connected visible-instance resume one startup refresh round before
+	// falling back to a managed headless restart for the same persisted target.
+	return strings.TrimSpace(inst.Source) != "headless"
+}
+
+func (a *App) recordManagedHeadlessResumeOutcomeEventsLocked(events []eventcontract.Event, now time.Time) {
+	for _, event := range events {
+		if event.Notice == nil {
+			continue
+		}
+		switch strings.TrimSpace(event.Notice.Code) {
+		case "headless_restore_attached":
+			a.clearSurfaceResumeBackoffLocked(event.SurfaceSessionID)
+		case "headless_restore_thread_busy",
+			"headless_restore_thread_not_found",
+			"headless_restore_thread_cwd_missing",
+			"headless_restore_start_failed",
+			"headless_restore_start_timeout":
+			a.setSurfaceResumeBackoffLocked(event.SurfaceSessionID, event.Notice.Code, now)
+		}
+	}
+}
+
+func (a *App) markStartupThreadsRefreshRequestedLocked(instanceID string) {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	if a.surfaceResumeRuntime.startupRefreshPending == nil {
+		a.surfaceResumeRuntime.startupRefreshPending = map[string]bool{}
+	}
+	a.surfaceResumeRuntime.startupRefreshSeen = true
+	a.surfaceResumeRuntime.startupRefreshPending[instanceID] = true
+}
+
+func (a *App) markStartupThreadsRefreshSettledLocked(instanceID string) {
+	a.surfaceResumeRuntime.startupRefreshSeen = true
+	delete(a.surfaceResumeRuntime.startupRefreshPending, strings.TrimSpace(instanceID))
+}
+
+func (a *App) initialThreadsRefreshRoundCompleteLocked() bool {
+	return a.surfaceResumeRuntime.startupRefreshSeen && len(a.surfaceResumeRuntime.startupRefreshPending) == 0
 }
