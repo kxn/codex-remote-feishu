@@ -443,6 +443,19 @@
 
         <section class="block">
           <div class="block-head">
+            <h2 class="block-title">Claude 配置</h2>
+            <p class="block-desc">管理不同的 Claude 连接配置。</p>
+          </div>
+          <div class="block-body">
+            <div class="robot-layout">
+              <div id="claudeList" class="robot-list"></div>
+              <div id="claudeDetail" class="card"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
             <h2 class="block-title">存储管理</h2>
             <p class="block-desc">查看占用并按需清理旧文件。</p>
           </div>
@@ -487,6 +500,7 @@
     <script>
       const state = {
         selectedRobot: "bot-main",
+        selectedClaude: "default",
         eventAttempt: 0,
         callbackAttempt: 0,
         eventStatus: "idle",
@@ -508,8 +522,42 @@
         { id: "new", title: "新增机器人", appId: "", status: "new", issues: [] },
       ];
 
+      const claudeProfiles = [
+        {
+          id: "default",
+          title: "默认配置",
+          tag: "系统",
+          builtIn: true,
+          authMode: "沿用当前 Claude",
+          endpoint: "跟随当前 Claude",
+          model: "跟随当前 Claude",
+          smallModel: "跟随当前 Claude",
+          tokenStatus: "不会单独保存 Token",
+        },
+        {
+          id: "proxy",
+          title: "研发代理",
+          tag: "专用 Token",
+          builtIn: false,
+          authMode: "专用 Token",
+          endpoint: "https://proxy.internal/v1",
+          model: "claude-sonnet-4",
+          smallModel: "claude-3-5-haiku",
+          tokenStatus: "已保存专用 Token",
+        },
+        {
+          id: "new-claude",
+          title: "新增配置",
+          tag: "新增",
+          builtIn: false,
+          isNew: true,
+        },
+      ];
+
       const robotList = document.getElementById("robotList");
       const robotDetail = document.getElementById("robotDetail");
+      const claudeList = document.getElementById("claudeList");
+      const claudeDetail = document.getElementById("claudeDetail");
       const deleteRobotModal = document.getElementById("deleteRobotModal");
       const deleteRobotText = document.getElementById("deleteRobotText");
 
@@ -638,6 +686,206 @@
         document.getElementById("deleteRobotBtn").onclick = () => openDeleteRobotModal(selected.id);
       }
 
+      function renderClaudeList() {
+        claudeList.innerHTML = claudeProfiles
+          .map((profile) => {
+            const active = profile.id === state.selectedClaude;
+            return `
+              <button class="robot-item ${active ? "active" : ""}" data-cid="${profile.id}">
+                <div class="robot-top">
+                  <p class="robot-name">${profile.title}</p>
+                  <span class="tag">${profile.tag}</span>
+                </div>
+                <p class="robot-id">${
+                  profile.isNew
+                    ? "创建一套新的 Claude 配置"
+                    : profile.builtIn
+                      ? "沿用当前 Claude 的本机设置"
+                      : profile.endpoint
+                }</p>
+              </button>`;
+          })
+          .join("");
+
+        claudeList.querySelectorAll(".robot-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedClaude = btn.dataset.cid;
+            renderAdmin();
+          });
+        });
+      }
+
+      function renderClaudeDetail() {
+        const profile = claudeProfiles.find((item) => item.id === state.selectedClaude);
+        if (!profile) return;
+
+        if (profile.isNew) {
+          claudeDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">新增 Claude 配置</h3>
+              <p class="card-desc">填写一套新的 Claude 连接配置。</p>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <label>配置名称</label>
+                <input id="newClaudeName" class="input" placeholder="例如：研发代理" />
+              </div>
+              <div class="grid-2" style="margin-top:12px">
+                <div class="field">
+                  <label>端点地址</label>
+                  <input id="newClaudeEndpoint" class="input" placeholder="例如：https://proxy.internal/v1" />
+                </div>
+                <div class="field">
+                  <label>认证方式</label>
+                  <input class="input" value="专用 Token" readonly />
+                </div>
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>认证 Token</label>
+                <input id="newClaudeToken" class="input" placeholder="请输入 Token" />
+              </div>
+              <div class="grid-2" style="margin-top:12px">
+                <div class="field">
+                  <label>主模型</label>
+                  <input id="newClaudeModel" class="input" placeholder="例如：claude-sonnet-4" />
+                </div>
+                <div class="field">
+                  <label>轻量模型</label>
+                  <input id="newClaudeSmallModel" class="input" placeholder="例如：claude-3-5-haiku" />
+                </div>
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button id="saveClaudeProfile" class="btn primary">保存配置</button>
+              </div>
+              <div id="newClaudeSlot" style="margin-top:10px"></div>
+            </div>`;
+
+          document.getElementById("saveClaudeProfile").onclick = () => {
+            const name = document.getElementById("newClaudeName").value.trim();
+            const endpoint = document.getElementById("newClaudeEndpoint").value.trim();
+            const token = document.getElementById("newClaudeToken").value.trim();
+            const model = document.getElementById("newClaudeModel").value.trim() || "claude-sonnet-4";
+            const smallModel = document.getElementById("newClaudeSmallModel").value.trim() || "claude-3-5-haiku";
+            const slot = document.getElementById("newClaudeSlot");
+            if (!name || !endpoint || !token) {
+              slot.innerHTML = `<div class="notice bad">请填写完整的名称、端点和 Token。</div>`;
+              return;
+            }
+            const created = {
+              id: `custom-${Date.now()}`,
+              title: name,
+              tag: "专用 Token",
+              builtIn: false,
+              authMode: "专用 Token",
+              endpoint,
+              model,
+              smallModel,
+              tokenStatus: "已保存专用 Token",
+            };
+            claudeProfiles.splice(claudeProfiles.length - 1, 0, created);
+            state.selectedClaude = created.id;
+            renderAdmin();
+          };
+          return;
+        }
+
+        if (profile.builtIn) {
+          claudeDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">${profile.title}</h3>
+              <p class="card-desc">这个配置会沿用当前 Claude 在本机上的设置。</p>
+            </div>
+            <div class="card-body">
+              <dl class="kv">
+                <dt>认证方式</dt><dd>${profile.authMode}</dd>
+                <dt>端点</dt><dd>${profile.endpoint}</dd>
+                <dt>主模型</dt><dd>${profile.model}</dd>
+                <dt>轻量模型</dt><dd>${profile.smallModel}</dd>
+              </dl>
+              <div class="notice good" style="margin-top:12px">${profile.tokenStatus}</div>
+              <div class="row" style="margin-top:12px">
+                <button id="newClaudeFromDefault" class="btn primary">新增自定义配置</button>
+              </div>
+            </div>`;
+          document.getElementById("newClaudeFromDefault").onclick = () => {
+            state.selectedClaude = "new-claude";
+            renderAdmin();
+          };
+          return;
+        }
+
+        claudeDetail.innerHTML = `
+          <div class="card-head">
+            <h3 class="card-title">${profile.title}</h3>
+            <p class="card-desc">管理这套 Claude 连接配置。</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>配置名称</label>
+              <input id="editClaudeName" class="input" value="${profile.title}" />
+            </div>
+            <div class="grid-2" style="margin-top:12px">
+              <div class="field">
+                <label>端点地址</label>
+                <input id="editClaudeEndpoint" class="input" value="${profile.endpoint}" />
+              </div>
+              <div class="field">
+                <label>认证方式</label>
+                <input class="input" value="${profile.authMode}" readonly />
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>Token 状态</label>
+              <input class="input" value="${profile.tokenStatus}" readonly />
+            </div>
+            <div class="grid-2" style="margin-top:12px">
+              <div class="field">
+                <label>主模型</label>
+                <input id="editClaudeModel" class="input" value="${profile.model}" />
+              </div>
+              <div class="field">
+                <label>轻量模型</label>
+                <input id="editClaudeSmallModel" class="input" value="${profile.smallModel}" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button id="saveClaudeEdit" class="btn primary">保存配置</button>
+              <button id="copyClaudeProfile" class="btn ghost">复制一份</button>
+              <button id="deleteClaudeProfile" class="btn danger">删除配置</button>
+            </div>
+            <div id="editClaudeSlot" style="margin-top:10px"></div>
+          </div>`;
+
+        document.getElementById("saveClaudeEdit").onclick = () => {
+          profile.title = document.getElementById("editClaudeName").value.trim() || profile.title;
+          profile.endpoint = document.getElementById("editClaudeEndpoint").value.trim() || profile.endpoint;
+          profile.model = document.getElementById("editClaudeModel").value.trim() || profile.model;
+          profile.smallModel =
+            document.getElementById("editClaudeSmallModel").value.trim() || profile.smallModel;
+          document.getElementById("editClaudeSlot").innerHTML = `<div class="notice good">Claude 配置已保存。</div>`;
+          renderClaudeList();
+        };
+
+        document.getElementById("copyClaudeProfile").onclick = () => {
+          const copied = {
+            ...profile,
+            id: `copy-${Date.now()}`,
+            title: `${profile.title}（副本）`,
+          };
+          claudeProfiles.splice(claudeProfiles.length - 1, 0, copied);
+          state.selectedClaude = copied.id;
+          renderAdmin();
+        };
+
+        document.getElementById("deleteClaudeProfile").onclick = () => {
+          const index = claudeProfiles.findIndex((item) => item.id === profile.id);
+          if (index < 0) return;
+          claudeProfiles.splice(index, 1);
+          state.selectedClaude = "default";
+          renderAdmin();
+        };
+      }
+
       function openDeleteRobotModal(robotId) {
         const robot = robots.find((item) => item.id === robotId);
         if (!robot || robot.id === "new") return;
@@ -714,6 +962,8 @@
       function renderAdmin() {
         renderRobotList();
         renderRobotDetail();
+        renderClaudeList();
+        renderClaudeDetail();
         renderStorageAndIntegrations();
         bindActions();
       }
