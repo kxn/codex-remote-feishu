@@ -455,6 +455,49 @@ func TestWrapperClaudeReconcilesFailedTurnWhenChildExitsWithoutResult(t *testing
 	)
 }
 
+func TestWrapperClaudePromptResumesPersistedTargetSession(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-resume")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "resume-session-1", []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "resume-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "session-title", "title": "Persisted resume target"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "resume me"}},
+	})
+
+	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-prompt-claude-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
+		Target: agentproto.Target{
+			ThreadID: "resume-session-1",
+			CWD:      workspaceRoot,
+		},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "resume this session"}},
+		},
+	}); err != nil {
+		t.Fatalf("send prompt: %v", err)
+	}
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-prompt-claude-resume" && ack.Accepted
+	}, stdout, stderr, done)
+
+	waitForObservedEvents(t, eventsCh, 10*time.Second, stdout, stderr, done,
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventTurnStarted && event.ThreadID == "resume-session-1"
+		},
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventTurnCompleted && event.Status == "completed" && event.ThreadID == "resume-session-1"
+		},
+	)
+}
+
 func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
 	t.Helper()
 	repoRoot := wrapperTestRepoRoot(t)

@@ -162,7 +162,7 @@ func (s *Service) mergedThreadView(surface *state.SurfaceConsoleRecord, threadID
 		return nil
 	}
 	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend {
-		return s.mergedThreadViewForBackend(surface, threadID, backend, backend == agentproto.BackendCodex)
+		return s.mergedThreadViewForBackend(surface, threadID, backend, true)
 	}
 	for _, view := range s.mergedThreadViews(surface) {
 		if view != nil && view.ThreadID == threadID {
@@ -209,8 +209,8 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 			view.FreeVisibleInst = inst
 		}
 	}
-	if includePersisted && backend == agentproto.BackendCodex && s.catalog.persistedThreads != nil {
-		thread, err := s.catalog.persistedThreads.ThreadByID(threadID)
+	if includePersisted && s.catalog.persistedThreads != nil {
+		thread, err := s.catalog.persistedThreadByIDForBackend(backend, threadID)
 		if err == nil && ordinaryThreadVisible(thread) {
 			found = true
 			if view.Inst == nil {
@@ -234,7 +234,7 @@ func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threa
 	if s == nil || s.catalog.persistedThreads == nil {
 		return nil
 	}
-	thread, err := s.catalog.persistedThreads.ThreadByID(strings.TrimSpace(threadID))
+	thread, err := s.catalog.persistedThreadByIDForBackend(agentproto.BackendCodex, strings.TrimSpace(threadID))
 	if err != nil || !ordinaryThreadVisible(thread) {
 		return nil
 	}

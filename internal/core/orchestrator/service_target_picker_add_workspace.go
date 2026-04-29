@@ -295,7 +295,11 @@ func (s *Service) targetPickerDirectoryIsKnownWorkspace(surface *state.SurfaceCo
 			return true
 		}
 	}
-	_, ok := s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit)[workspaceKey]
+	workspaces := s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit)
+	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend {
+		workspaces = s.catalog.recentPersistedWorkspacesForBackend(backend, persistedRecentWorkspaceLimit)
+	}
+	_, ok := workspaces[workspaceKey]
 	return ok
 }
 

@@ -204,8 +204,11 @@ func commandCatalogSummaryText(catalog *control.FeishuPageView) string {
 
 type fakePersistedThreadCatalog struct {
 	recent              []state.ThreadRecord
+	recentByBackend     map[agentproto.Backend][]state.ThreadRecord
 	recentWorkspaces    map[string]time.Time
+	workspacesByBackend map[agentproto.Backend]map[string]time.Time
 	byID                map[string]state.ThreadRecord
+	byIDByBackend       map[agentproto.Backend]map[string]state.ThreadRecord
 	recentErr           error
 	recentWorkspacesErr error
 	byIDErr             error
@@ -222,6 +225,27 @@ func (f *fakePersistedThreadCatalog) RecentThreads(limit int) ([]state.ThreadRec
 		return append([]state.ThreadRecord(nil), f.recent...), nil
 	}
 	return append([]state.ThreadRecord(nil), f.recent[:limit]...), nil
+}
+
+func (f *fakePersistedThreadCatalog) RecentThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error) {
+	if f == nil {
+		return nil, nil
+	}
+	backend = agentproto.NormalizeBackend(backend)
+	if f.recentByBackend == nil {
+		if backend != agentproto.BackendCodex {
+			return nil, nil
+		}
+		return f.RecentThreads(limit)
+	}
+	if f.recentErr != nil {
+		return nil, f.recentErr
+	}
+	recent := f.recentByBackend[backend]
+	if limit <= 0 || limit >= len(recent) {
+		return append([]state.ThreadRecord(nil), recent...), nil
+	}
+	return append([]state.ThreadRecord(nil), recent[:limit]...), nil
 }
 
 func (f *fakePersistedThreadCatalog) RecentWorkspaces(limit int) (map[string]time.Time, error) {
@@ -241,6 +265,31 @@ func (f *fakePersistedThreadCatalog) RecentWorkspaces(limit int) (map[string]tim
 	return out, nil
 }
 
+func (f *fakePersistedThreadCatalog) RecentWorkspacesForBackend(backend agentproto.Backend, limit int) (map[string]time.Time, error) {
+	if f == nil {
+		return nil, nil
+	}
+	backend = agentproto.NormalizeBackend(backend)
+	if f.workspacesByBackend == nil {
+		if backend != agentproto.BackendCodex {
+			return nil, nil
+		}
+		return f.RecentWorkspaces(limit)
+	}
+	if f.recentWorkspacesErr != nil {
+		return nil, f.recentWorkspacesErr
+	}
+	workspaces := f.workspacesByBackend[backend]
+	if len(workspaces) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]time.Time, len(workspaces))
+	for workspaceKey, usedAt := range workspaces {
+		out[workspaceKey] = usedAt
+	}
+	return out, nil
+}
+
 func (f *fakePersistedThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, error) {
 	if f == nil {
 		return nil, nil
@@ -249,6 +298,28 @@ func (f *fakePersistedThreadCatalog) ThreadByID(threadID string) (*state.ThreadR
 		return nil, f.byIDErr
 	}
 	thread, ok := f.byID[threadID]
+	if !ok {
+		return nil, nil
+	}
+	threadCopy := thread
+	return &threadCopy, nil
+}
+
+func (f *fakePersistedThreadCatalog) ThreadByIDForBackend(backend agentproto.Backend, threadID string) (*state.ThreadRecord, error) {
+	if f == nil {
+		return nil, nil
+	}
+	backend = agentproto.NormalizeBackend(backend)
+	if f.byIDByBackend == nil {
+		if backend != agentproto.BackendCodex {
+			return nil, nil
+		}
+		return f.ThreadByID(threadID)
+	}
+	if f.byIDErr != nil {
+		return nil, f.byIDErr
+	}
+	thread, ok := f.byIDByBackend[backend][threadID]
 	if !ok {
 		return nil, nil
 	}

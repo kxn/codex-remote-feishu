@@ -11,9 +11,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
-func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), resume *claudeLaunchResumeTarget) (*childSession, error) {
 	childCtx, childCancel := context.WithCancel(ctx)
-	childArgs, childEnv := a.buildClaudeChildLaunch()
+	childArgs, childEnv := a.buildClaudeChildLaunch(resume)
 	cmd := execlaunch.CommandContext(childCtx, a.resolveClaudeBinary(), childArgs...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
@@ -57,7 +57,7 @@ func (a *App) resolveClaudeBinary() string {
 	return "claude"
 }
 
-func (a *App) buildClaudeChildLaunch() ([]string, []string) {
+func (a *App) buildClaudeChildLaunch(resume *claudeLaunchResumeTarget) ([]string, []string) {
 	args := []string{
 		"--print",
 		"--input-format", "stream-json",
@@ -66,6 +66,9 @@ func (a *App) buildClaudeChildLaunch() ([]string, []string) {
 		"--replay-user-messages",
 		"--verbose",
 		"--permission-prompt-tool", "stdio",
+	}
+	if resume != nil && strings.TrimSpace(resume.ThreadID) != "" {
+		args = append(args, "--resume", strings.TrimSpace(resume.ThreadID))
 	}
 	env := config.FilterEnvWithoutProxy(append([]string{}, os.Environ()...))
 	env = append(env, a.config.ChildProxyEnv...)

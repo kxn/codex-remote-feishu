@@ -600,10 +600,11 @@ func (s *Service) mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(surface 
 	if s == nil || s.catalog.persistedThreads == nil {
 		return
 	}
-	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend && backend != agentproto.BackendCodex {
-		return
+	workspaces := s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit)
+	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend {
+		workspaces = s.catalog.recentPersistedWorkspacesForBackend(backend, persistedRecentWorkspaceLimit)
 	}
-	for workspaceKey, usedAt := range s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit) {
+	for workspaceKey, usedAt := range workspaces {
 		workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 		if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 			continue

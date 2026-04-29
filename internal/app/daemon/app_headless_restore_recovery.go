@@ -44,7 +44,6 @@ func (a *App) syncHeadlessRestoreStateLocked() {
 
 func surfaceResumeEntrySupportsHeadlessRestore(entry surfaceresume.Entry) bool {
 	return state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeNormal &&
-		agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendCodex &&
 		entry.ResumeHeadless &&
 		strings.TrimSpace(entry.ResumeThreadID) != ""
 }
@@ -90,6 +89,7 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 			continue
 		}
 		restoreEvents, result := a.service.TryAutoRestoreHeadless(surfaceID, orchestrator.HeadlessRestoreAttempt{
+			Backend:     agentproto.NormalizeBackend(agentproto.Backend(state.Entry.Backend)),
 			ThreadID:    strings.TrimSpace(state.Entry.ResumeThreadID),
 			ThreadTitle: strings.TrimSpace(state.Entry.ResumeThreadTitle),
 			ThreadCWD:   strings.TrimSpace(state.Entry.ResumeThreadCWD),

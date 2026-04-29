@@ -11,10 +11,10 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 	if s == nil || s.catalog.persistedThreads == nil {
 		return
 	}
-	if filterByBackend && backend != agentproto.BackendCodex {
-		return
-	}
 	threads := s.catalog.recentPersistedThreads(persistedRecentThreadLimit)
+	if filterByBackend {
+		threads = s.catalog.recentPersistedThreadsForBackend(backend, persistedRecentThreadLimit)
+	}
 	for i := range threads {
 		thread := threads[i]
 		if strings.TrimSpace(thread.ThreadID) == "" || !ordinaryThreadVisible(&thread) {

@@ -82,6 +82,24 @@ func resolveResumeSession(workspaceRoot, sessionID string) (string, *claudeSessi
 	return filePath, meta, nil
 }
 
+func FindSessionMeta(sessionID string) (*SessionMeta, error) {
+	_, meta, err := findSessionFile(sessionID)
+	if err != nil || meta == nil {
+		return nil, err
+	}
+	copy := SessionMeta(*meta)
+	return &copy, nil
+}
+
+func ResolveResumeSession(workspaceRoot, sessionID string) (*SessionMeta, error) {
+	_, meta, err := resolveResumeSession(workspaceRoot, sessionID)
+	if err != nil || meta == nil {
+		return nil, err
+	}
+	copy := SessionMeta(*meta)
+	return &copy, nil
+}
+
 func readHistoryTurns(filePath, sessionID string, runtime RuntimeStateSnapshot) ([]agentproto.ThreadHistoryTurnRecord, error) {
 	file, err := os.Open(filePath)
 	if err != nil {

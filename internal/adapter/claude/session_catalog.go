@@ -39,6 +39,8 @@ type claudeSessionMeta struct {
 	UpdatedAt time.Time
 }
 
+type SessionMeta = claudeSessionMeta
+
 type claudeSessionEntry struct {
 	Meta   claudeSessionMeta
 	Thread agentproto.ThreadSnapshotRecord
@@ -115,6 +117,22 @@ func HandleLocalCommand(command agentproto.Command, workspaceRoot string, runtim
 	default:
 		return nil, false, nil
 	}
+}
+
+func ListSessionMeta(workspaceRoot string, includeAll bool) ([]SessionMeta, error) {
+	dirs, strictWorkspaceFilter, err := sessionProjectDirs(workspaceRoot, includeAll)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := scanSessionEntries(dirs, workspaceRoot, strictWorkspaceFilter, RuntimeStateSnapshot{})
+	if err != nil {
+		return nil, err
+	}
+	metas := make([]SessionMeta, 0, len(entries))
+	for _, entry := range entries {
+		metas = append(metas, entry.Meta)
+	}
+	return metas, nil
 }
 
 func localSessionPlaneError(command agentproto.Command, code, message string, err error) agentproto.ErrorInfo {

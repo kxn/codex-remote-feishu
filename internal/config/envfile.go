@@ -37,6 +37,7 @@ const (
 	UnifiedConfigEnvPath          = "CODEX_REMOTE_CONFIG"
 	DebugRelayFlowEnv             = "CODEX_REMOTE_DEBUG_RELAY_FLOW"
 	DebugRelayRawEnv              = "CODEX_REMOTE_DEBUG_RELAY_RAW"
+	ResumeThreadIDEnv             = "CODEX_REMOTE_RESUME_THREAD_ID"
 	ExternalAccessHostEnv         = "EXTERNAL_ACCESS_HOST"
 	ExternalAccessPortEnv         = "EXTERNAL_ACCESS_PORT"
 	ExternalAccessProviderEnv     = "CODEX_REMOTE_EXTERNAL_ACCESS_PROVIDER"

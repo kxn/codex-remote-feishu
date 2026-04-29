@@ -486,7 +486,7 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 		targetBackend = agentproto.NormalizeBackend(attempt.Backend)
 	}
 	if threadID != "" {
-		view := s.mergedThreadViewForBackend(surface, threadID, targetBackend, targetBackend == agentproto.BackendCodex)
+		view := s.mergedThreadViewForBackend(surface, threadID, targetBackend, true)
 		if inst, code := s.resolveSurfaceResumeVisibleInstance(surface, view, strings.TrimSpace(attempt.InstanceID), targetBackend); inst != nil {
 			return s.attachSurfaceToKnownThread(surface, inst, view, attachSurfaceToKnownThreadSurfaceResume), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
 		} else if code != "" {
@@ -555,7 +555,11 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	if threadID == "" {
 		return nil
 	}
-	view := s.mergedThreadViewForBackend(surface, threadID, agentproto.BackendCodex, true)
+	backend := agentproto.NormalizeBackend(attempt.Backend)
+	if strings.TrimSpace(string(backend)) == "" && surface != nil {
+		backend = s.surfaceBackend(surface)
+	}
+	view := s.mergedThreadViewForBackend(surface, threadID, backend, true)
 	if view == nil {
 		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD)
 	}

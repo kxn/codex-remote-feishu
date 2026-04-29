@@ -8,6 +8,7 @@ import (
 )
 
 type HeadlessRestoreAttempt struct {
+	Backend     agentproto.Backend
 	ThreadID    string
 	ThreadTitle string
 	ThreadCWD   string

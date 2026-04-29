@@ -147,8 +147,8 @@ func (r *servicePickerRuntime) surfaceThreadHistory(surfaceID string) *agentprot
 type serviceCatalogRuntime struct {
 	service              *Service
 	persistedThreads     PersistedThreadCatalog
-	persistedThreadsLast []state.ThreadRecord
-	persistedWorkspaces  map[string]time.Time
+	persistedThreadsLast map[agentproto.Backend][]state.ThreadRecord
+	persistedWorkspaces  map[agentproto.Backend]map[string]time.Time
 }
 
 func newServiceCatalogRuntime(service *Service) *serviceCatalogRuntime {
@@ -160,39 +160,89 @@ func (r *serviceCatalogRuntime) setPersistedThreadCatalog(catalog PersistedThrea
 		return
 	}
 	r.persistedThreads = catalog
-	r.persistedThreadsLast = nil
-	r.persistedWorkspaces = nil
+	r.persistedThreadsLast = map[agentproto.Backend][]state.ThreadRecord{}
+	r.persistedWorkspaces = map[agentproto.Backend]map[string]time.Time{}
 }
 
 func (r *serviceCatalogRuntime) recentPersistedThreads(limit int) []state.ThreadRecord {
+	return r.recentPersistedThreadsForBackend(agentproto.BackendCodex, limit)
+}
+
+func (r *serviceCatalogRuntime) recentPersistedThreadsForBackend(backend agentproto.Backend, limit int) []state.ThreadRecord {
 	if r == nil || r.persistedThreads == nil {
 		return nil
 	}
-	threads, err := r.persistedThreads.RecentThreads(limit)
+	backend = agentproto.NormalizeBackend(backend)
+	threads, err := r.loadPersistedThreadsForBackend(backend, limit)
 	if err != nil {
-		if len(r.persistedThreadsLast) == 0 {
+		if len(r.persistedThreadsLast[backend]) == 0 {
 			return nil
 		}
-		return clonePersistedThreads(r.persistedThreadsLast)
+		return clonePersistedThreads(r.persistedThreadsLast[backend])
 	}
-	r.persistedThreadsLast = clonePersistedThreads(threads)
+	if r.persistedThreadsLast == nil {
+		r.persistedThreadsLast = map[agentproto.Backend][]state.ThreadRecord{}
+	}
+	r.persistedThreadsLast[backend] = clonePersistedThreads(threads)
 	return clonePersistedThreads(threads)
 }
 
 func (r *serviceCatalogRuntime) recentPersistedWorkspaces(limit int) map[string]time.Time {
+	return r.recentPersistedWorkspacesForBackend(agentproto.BackendCodex, limit)
+}
+
+func (r *serviceCatalogRuntime) recentPersistedWorkspacesForBackend(backend agentproto.Backend, limit int) map[string]time.Time {
 	if r == nil || r.persistedThreads == nil {
 		return nil
 	}
-	workspaces, err := r.persistedThreads.RecentWorkspaces(limit)
+	backend = agentproto.NormalizeBackend(backend)
+	workspaces, err := r.loadPersistedWorkspacesForBackend(backend, limit)
 	if err == nil {
 		normalized := normalizePersistedWorkspaceRecency(workspaces)
-		r.persistedWorkspaces = clonePersistedWorkspaceRecency(normalized)
+		if r.persistedWorkspaces == nil {
+			r.persistedWorkspaces = map[agentproto.Backend]map[string]time.Time{}
+		}
+		r.persistedWorkspaces[backend] = clonePersistedWorkspaceRecency(normalized)
 		return normalized
 	}
-	if len(r.persistedWorkspaces) > 0 {
-		return clonePersistedWorkspaceRecency(r.persistedWorkspaces)
+	if cached := r.persistedWorkspaces[backend]; len(cached) > 0 {
+		return clonePersistedWorkspaceRecency(cached)
 	}
-	return workspaceRecencyFromThreads(r.recentPersistedThreads(persistedRecentThreadLimit))
+	return workspaceRecencyFromThreads(r.recentPersistedThreadsForBackend(backend, persistedRecentThreadLimit))
+}
+
+func (r *serviceCatalogRuntime) persistedThreadByIDForBackend(backend agentproto.Backend, threadID string) (*state.ThreadRecord, error) {
+	if r == nil || r.persistedThreads == nil {
+		return nil, nil
+	}
+	backend = agentproto.NormalizeBackend(backend)
+	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+		return backendCatalog.ThreadByIDForBackend(backend, threadID)
+	}
+	if backend != agentproto.BackendCodex {
+		return nil, nil
+	}
+	return r.persistedThreads.ThreadByID(threadID)
+}
+
+func (r *serviceCatalogRuntime) loadPersistedThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error) {
+	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+		return backendCatalog.RecentThreadsForBackend(backend, limit)
+	}
+	if backend != agentproto.BackendCodex {
+		return nil, nil
+	}
+	return r.persistedThreads.RecentThreads(limit)
+}
+
+func (r *serviceCatalogRuntime) loadPersistedWorkspacesForBackend(backend agentproto.Backend, limit int) (map[string]time.Time, error) {
+	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+		return backendCatalog.RecentWorkspacesForBackend(backend, limit)
+	}
+	if backend != agentproto.BackendCodex {
+		return nil, nil
+	}
+	return r.persistedThreads.RecentWorkspaces(limit)
 }
 
 type serviceTurnRuntime struct {

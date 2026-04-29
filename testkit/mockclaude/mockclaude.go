@@ -57,6 +57,23 @@ func NewFromEnv() *MockClaude {
 	return New(os.Getenv("MOCKCLAUDE_SCENARIO"))
 }
 
+func NewFromEnvAndArgs(args []string) *MockClaude {
+	mock := NewFromEnv()
+	if cwd, err := os.Getwd(); err == nil && strings.TrimSpace(cwd) != "" {
+		mock.CWD = strings.TrimSpace(cwd)
+	}
+	for index := 0; index < len(args); index++ {
+		switch strings.TrimSpace(args[index]) {
+		case "--resume":
+			if index+1 < len(args) {
+				index++
+				mock.SessionID = strings.TrimSpace(args[index])
+			}
+		}
+	}
+	return mock
+}
+
 func New(rawScenario string) *MockClaude {
 	scenario := Scenario(strings.TrimSpace(rawScenario))
 	if scenario == "" {

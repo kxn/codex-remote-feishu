@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -37,7 +36,7 @@ func sameHeadlessRestoreHintContent(left, right surfaceresume.HeadlessRestoreHin
 }
 
 func headlessRestoreHintFromSurfaceResumeEntry(entry surfaceresume.Entry) (surfaceresume.HeadlessRestoreHint, bool) {
-	if !entry.ResumeHeadless || agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) != agentproto.BackendCodex {
+	if !entry.ResumeHeadless {
 		return surfaceresume.HeadlessRestoreHint{}, false
 	}
 	hint := surfaceresume.HeadlessRestoreHint{

@@ -82,6 +82,42 @@ func TestClaudeUseThreadDetachedRejectsPersistedCodexThreadLookup(t *testing.T) 
 	}
 }
 
+func TestClaudeUseThreadDetachedResolvesPersistedClaudeThreadLookup(t *testing.T) {
+	now := time.Date(2026, 4, 29, 4, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		byIDByBackend: map[agentproto.Backend]map[string]state.ThreadRecord{
+			agentproto.BackendClaude: {
+				"thread-claude": {
+					ThreadID:   "thread-claude",
+					Name:       "claude only thread",
+					Preview:    "来自 Claude catalog",
+					CWD:        "/data/dl/claude",
+					Loaded:     true,
+					LastUsedAt: now.Add(-1 * time.Minute),
+				},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-claude",
+	})
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-claude" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/claude" {
+		t.Fatalf("expected claude surface to resolve persisted Claude thread, got %#v", snapshot)
+	}
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected persisted Claude thread lookup to start headless restore path, got %#v", events)
+	}
+}
+
 func TestApplyInstanceConnectedAttachesPreselectedHeadlessThread(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 45, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

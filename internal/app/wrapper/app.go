@@ -36,6 +36,8 @@ type shutdownRequest struct {
 
 type restartRequest struct {
 	CommandID string
+	Target    *agentproto.Target
+	EmitEvent bool
 	ResultCh  chan error
 }
 
@@ -53,6 +55,7 @@ type Config struct {
 	ShortName            string
 	Backend              agentproto.Backend
 	ClaudeProfileID      string
+	ResumeThreadID       string
 	Source               string
 	Managed              bool
 	Lifetime             string
@@ -142,6 +145,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		ShortName:            shortName,
 		Backend:              agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
 		ClaudeProfileID:      state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
+		ResumeThreadID:       strings.TrimSpace(os.Getenv(config.ResumeThreadIDEnv)),
 		Source:               source,
 		Managed:              managed,
 		Lifetime:             string(lifetime),
@@ -295,6 +299,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				}
 				request := restartRequest{
 					CommandID: command.CommandID,
+					EmitEvent: true,
 					ResultCh:  make(chan error, 1),
 				}
 				select {
@@ -336,6 +341,71 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					CommandID:        command.CommandID,
 					ThreadID:         command.Target.ThreadID,
 					TurnID:           command.Target.TurnID,
+				}
+			}
+			if result.Restart != nil {
+				if activeChild == nil {
+					return agentproto.ErrorInfo{
+						Code:             "child_restart_not_supported",
+						Layer:            "wrapper",
+						Stage:            "prepare_child_restart",
+						Operation:        string(command.Kind),
+						Message:          "当前 Claude runtime 无法在不重启 child 的情况下切换到目标会话。",
+						SurfaceSessionID: command.Origin.Surface,
+						CommandID:        command.CommandID,
+						ThreadID:         command.Target.ThreadID,
+						TurnID:           command.Target.TurnID,
+					}
+				}
+				request := restartRequest{
+					CommandID: command.CommandID,
+					Target:    &result.Restart.Target,
+					EmitEvent: false,
+					ResultCh:  make(chan error, 1),
+				}
+				select {
+				case restartCh <- request:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				select {
+				case err := <-request.ResultCh:
+					if err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				result, err = a.runtime.TranslateCommand(command)
+				if err != nil {
+					if problem, ok := err.(agentproto.ErrorInfo); ok {
+						return problem.Normalize()
+					}
+					return agentproto.ErrorInfo{
+						Code:             "translate_command_failed",
+						Layer:            "wrapper",
+						Stage:            "translate_command",
+						Operation:        string(command.Kind),
+						Message:          "wrapper 无法把 relay 命令转换成当前 backend 的 provider 请求。",
+						Details:          err.Error(),
+						SurfaceSessionID: command.Origin.Surface,
+						CommandID:        command.CommandID,
+						ThreadID:         command.Target.ThreadID,
+						TurnID:           command.Target.TurnID,
+					}
+				}
+				if result.Restart != nil {
+					return agentproto.ErrorInfo{
+						Code:             "command_restart_not_converged",
+						Layer:            "wrapper",
+						Stage:            "translate_command",
+						Operation:        string(command.Kind),
+						Message:          "Claude 会话切换后仍未收敛到目标会话，当前无法继续发送请求。",
+						SurfaceSessionID: command.Origin.Surface,
+						CommandID:        command.CommandID,
+						ThreadID:         command.Target.ThreadID,
+						TurnID:           command.Target.TurnID,
+					}
 				}
 			}
 			a.debugf(
@@ -473,7 +543,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		case request := <-restartCh:
 			a.debugf("wrapper child restart requested by daemon: command=%s", request.CommandID)
 			nextGeneration := atomic.LoadInt64(&activeChildGeneration) + 1
-			nextChild, err := a.restartChildSession(ctx, request.CommandID, activeChild, stdout, stderr, writeCh, client, commandResponses, turnTracker, &activeChildGeneration, nextGeneration, errCh, rawLogger, problems.Emit)
+			nextChild, err := a.restartChildSession(ctx, request, activeChild, stdout, stderr, writeCh, client, commandResponses, turnTracker, &activeChildGeneration, nextGeneration, errCh, rawLogger, problems.Emit)
 			if nextChild != nil {
 				activeChild = nextChild
 			}

@@ -16,7 +16,7 @@ func TestHelperProcessMockClaude(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "mockclaude" {
 		return
 	}
-	if err := mockclaude.RunIO(mockclaude.NewFromEnv(), os.Stdin, os.Stdout); err != nil {
+	if err := mockclaude.RunIO(mockclaude.NewFromEnvAndArgs(os.Args[3:]), os.Stdin, os.Stdout); err != nil {
 		var exitErr mockclaude.ExitCodeError
 		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.Code)

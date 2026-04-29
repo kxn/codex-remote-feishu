@@ -108,17 +108,19 @@ func RunMain(ctx context.Context, version, branch string) error {
 		Settings:      externalAccessSettingsViewFromConfig(loadedConfig.Config.ExternalAccess),
 		CurrentBinary: identity.BinaryPath,
 	})
-	if catalog, err := codexstate.NewDefaultSQLiteThreadCatalog(codexstate.SQLiteThreadCatalogOptions{Logf: log.Printf}); err != nil {
-		log.Printf("codex sqlite thread catalog disabled: %v", err)
+	if catalog, err := newDaemonPersistedThreadCatalog(log.Printf); err != nil {
+		log.Printf("persisted thread catalog disabled: %v", err)
 	} else if catalog != nil {
 		app.service.SetPersistedThreadCatalog(catalog)
-		if storage, err := codexstate.NewDefaultTurnPatchStorage(codexstate.TurnPatchStorageOptions{
-			SQLiteCatalog: catalog,
-			Logf:          log.Printf,
-		}); err != nil {
-			log.Printf("turn patch storage disabled: %v", err)
-		} else if storage != nil {
-			app.SetTurnPatchStorage(storage)
+		if catalog.codex != nil {
+			if storage, err := codexstate.NewDefaultTurnPatchStorage(codexstate.TurnPatchStorageOptions{
+				SQLiteCatalog: catalog.codex,
+				Logf:          log.Printf,
+			}); err != nil {
+				log.Printf("turn patch storage disabled: %v", err)
+			} else if storage != nil {
+				app.SetTurnPatchStorage(storage)
+			}
 		}
 	}
 	app.ConfigureAdmin(AdminRuntimeOptions{

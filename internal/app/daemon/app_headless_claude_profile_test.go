@@ -75,6 +75,9 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
 		t.Fatalf("expected claude backend env for managed headless launch, got %#v", captured.Env)
 	}
+	if !containsEnvEntry(captured.Env, config.ResumeThreadIDEnv+"=thread-claude") {
+		t.Fatalf("expected managed headless launch to carry resume thread id, got %#v", captured.Env)
+	}
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
 		t.Fatalf("expected claude managed headless launch mode, got %#v", captured)
 	}

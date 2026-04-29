@@ -173,6 +173,12 @@ type PersistedThreadCatalog interface {
 	ThreadByID(threadID string) (*state.ThreadRecord, error)
 }
 
+type BackendAwarePersistedThreadCatalog interface {
+	RecentThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error)
+	RecentWorkspacesForBackend(backend agentproto.Backend, limit int) (map[string]time.Time, error)
+	ThreadByIDForBackend(backend agentproto.Backend, threadID string) (*state.ThreadRecord, error)
+}
+
 type PathPickerConsumer interface {
 	PathPickerConfirmed(*Service, *state.SurfaceConsoleRecord, control.PathPickerResult) []eventcontract.Event
 	PathPickerCancelled(*Service, *state.SurfaceConsoleRecord, control.PathPickerResult) []eventcontract.Event

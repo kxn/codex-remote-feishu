@@ -91,6 +91,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		"CODEX_REMOTE_LIFETIME=daemon-owned",
 		"CODEX_REMOTE_INSTANCE_BACKEND="+string(backend),
 	)
+	if strings.TrimSpace(command.ThreadID) != "" {
+		env = append(env, config.ResumeThreadIDEnv+"="+strings.TrimSpace(command.ThreadID))
+	}
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}

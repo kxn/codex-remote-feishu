@@ -106,7 +106,10 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	}
 }
 
-func (a *App) restartChildSession(ctx context.Context, commandID string, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartTarget(request.Target)); err != nil {
+		return nil, err
+	}
 	next, err := a.runtime.Launch(ctx, a, rawLogger, reportProblem)
 	if err != nil {
 		return nil, agentproto.ErrorInfo{
@@ -125,15 +128,26 @@ func (a *App) restartChildSession(ctx context.Context, commandID string, current
 			Stage:     "restart_child_launch",
 			Operation: string(agentproto.CommandProcessChildRestart),
 			Message:   "wrapper 无法为当前 backend 启动新的 provider child。",
-			CommandID: commandID,
+			CommandID: request.CommandID,
 		}
 	}
 	stopChildSession(current, a.debugf)
 	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
-	if err := a.restoreChildSessionContext(ctx, commandID, writeCh, client, reportProblem); err != nil {
+	restoreClient := client
+	if !request.EmitEvent {
+		restoreClient = nil
+	}
+	if err := a.restoreChildSessionContext(ctx, request.CommandID, writeCh, restoreClient, reportProblem); err != nil {
 		return next, err
 	}
 	return next, nil
+}
+
+func derefRestartTarget(target *agentproto.Target) agentproto.Target {
+	if target == nil {
+		return agentproto.Target{}
+	}
+	return *target
 }
 
 func (a *App) restoreChildSessionContext(ctx context.Context, commandID string, writeCh chan []byte, client *relayws.Client, reportProblem func(agentproto.ErrorInfo)) error {
