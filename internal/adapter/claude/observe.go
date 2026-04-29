@@ -702,6 +702,7 @@ func (t *Translator) observeResultMessage(message map[string]any) Result {
 	events = append(events, agentproto.Event{
 		Kind:                 agentproto.EventTurnCompleted,
 		CommandID:            t.activeTurn.CommandID,
+		Initiator:            t.activeTurn.Initiator,
 		ThreadID:             t.activeTurn.ThreadID,
 		TurnID:               t.activeTurn.TurnID,
 		TurnCompletionOrigin: agentproto.TurnCompletionOriginRuntime,

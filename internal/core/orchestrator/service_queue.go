@@ -335,8 +335,10 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 	return events
 }
 
-func (s *Service) markRemoteTurnRunning(instanceID string, initiator agentproto.Initiator, threadID, turnID string) []eventcontract.Event {
-	binding := s.promotePendingRemote(instanceID, initiator, threadID, turnID)
+func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Event) []eventcontract.Event {
+	threadID := strings.TrimSpace(event.ThreadID)
+	turnID := strings.TrimSpace(event.TurnID)
+	binding := s.promotePendingRemote(instanceID, event)
 	if binding == nil {
 		return nil
 	}

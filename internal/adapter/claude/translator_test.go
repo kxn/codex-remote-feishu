@@ -263,6 +263,9 @@ func TestClaudeTranslatorDirectFailureWithoutMessageStartStillReconcilesTurn(t *
 	if assistant.Events[0].Kind != agentproto.EventTurnStarted {
 		t.Fatalf("expected first event to start turn, got %#v", assistant.Events[0])
 	}
+	if assistant.Events[0].Initiator.Kind != agentproto.InitiatorRemoteSurface || assistant.Events[0].Initiator.SurfaceSessionID != "surface-1" {
+		t.Fatalf("expected assistant path to preserve remote initiator, got %#v", assistant.Events[0].Initiator)
+	}
 	if assistant.Events[1].Kind != agentproto.EventItemStarted || assistant.Events[2].Kind != agentproto.EventItemCompleted {
 		t.Fatalf("expected assistant message lifecycle, got %#v", assistant.Events)
 	}
@@ -688,6 +691,9 @@ func startClaudeTurn(t *testing.T, tr *Translator, permissionMode string) (strin
 	})
 	if len(started.Events) != 1 || started.Events[0].Kind != agentproto.EventTurnStarted {
 		t.Fatalf("expected turn.started event, got %#v", started.Events)
+	}
+	if started.Events[0].Initiator.Kind != agentproto.InitiatorRemoteSurface || started.Events[0].Initiator.SurfaceSessionID != "surface-1" {
+		t.Fatalf("expected turn.started to preserve remote initiator, got %#v", started.Events[0].Initiator)
 	}
 	return started.Events[0].ThreadID, started.Events[0].TurnID
 }

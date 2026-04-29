@@ -7,11 +7,19 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func normalizeUnspecifiedInitiator(initiator agentproto.Initiator) agentproto.Initiator {
+	if strings.TrimSpace(string(initiator.Kind)) == "" {
+		initiator.Kind = agentproto.InitiatorUnknown
+	}
+	return initiator
+}
+
 func (s *Service) normalizeTurnInitiator(instanceID string, event agentproto.Event) agentproto.Initiator {
+	event.Initiator = normalizeUnspecifiedInitiator(event.Initiator)
 	if event.Initiator.Kind != agentproto.InitiatorLocalUI && event.Initiator.Kind != agentproto.InitiatorUnknown {
 		return event.Initiator
 	}
-	if binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID); binding != nil {
+	if binding := s.lookupRemoteTurnForEvent(instanceID, event); binding != nil {
 		return agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: binding.SurfaceSessionID}
 	}
 	return event.Initiator
@@ -89,19 +97,27 @@ func matchesRemoteBindingThread(binding *remoteTurnBinding, threadID string) boo
 	return sourceThreadID != "" && sourceThreadID == threadID
 }
 
-func (s *Service) pendingRemoteBinding(instanceID, threadID string) *remoteTurnBinding {
+func (s *Service) pendingRemoteBindingRecord(instanceID string) (*remoteTurnBinding, *state.SurfaceConsoleRecord, *state.QueueItemRecord) {
 	binding := s.turns.pendingRemote[instanceID]
 	if binding == nil {
-		return nil
+		return nil, nil, nil
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil {
 		delete(s.turns.pendingRemote, instanceID)
-		return nil
+		return nil, nil, nil
 	}
 	item := surface.QueueItems[binding.QueueItemID]
 	if item == nil || (item.Status != state.QueueItemDispatching && item.Status != state.QueueItemRunning) {
 		delete(s.turns.pendingRemote, instanceID)
+		return nil, nil, nil
+	}
+	return binding, surface, item
+}
+
+func (s *Service) pendingRemoteBinding(instanceID, threadID string) *remoteTurnBinding {
+	binding, _, item := s.pendingRemoteBindingRecord(instanceID)
+	if binding == nil {
 		return nil
 	}
 	if !queuedItemMatchesTurn(item, threadID) {
@@ -110,45 +126,60 @@ func (s *Service) pendingRemoteBinding(instanceID, threadID string) *remoteTurnB
 	return binding
 }
 
-func (s *Service) promotePendingRemote(instanceID string, initiator agentproto.Initiator, threadID, turnID string) *remoteTurnBinding {
-	binding := s.pendingRemoteBindingForInitiator(instanceID, initiator, threadID)
+func (s *Service) pendingRemoteBindingByCommand(instanceID, commandID string) *remoteTurnBinding {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return nil
+	}
+	binding, _, _ := s.pendingRemoteBindingRecord(instanceID)
+	if binding == nil || strings.TrimSpace(binding.CommandID) != commandID {
+		return nil
+	}
+	return binding
+}
+
+func (s *Service) pendingRemoteBindingBySurface(instanceID, surfaceSessionID string) *remoteTurnBinding {
+	surfaceSessionID = strings.TrimSpace(surfaceSessionID)
+	if surfaceSessionID == "" {
+		return nil
+	}
+	binding, _, _ := s.pendingRemoteBindingRecord(instanceID)
+	if binding == nil || strings.TrimSpace(binding.SurfaceSessionID) != surfaceSessionID {
+		return nil
+	}
+	return binding
+}
+
+func (s *Service) pendingRemoteBindingForEvent(instanceID string, event agentproto.Event) *remoteTurnBinding {
+	if binding := s.pendingRemoteBindingByCommand(instanceID, event.CommandID); binding != nil {
+		return binding
+	}
+	initiator := normalizeUnspecifiedInitiator(event.Initiator)
+	if initiator.Kind == agentproto.InitiatorRemoteSurface && strings.TrimSpace(initiator.SurfaceSessionID) != "" {
+		if binding := s.pendingRemoteBindingBySurface(instanceID, initiator.SurfaceSessionID); binding != nil {
+			return binding
+		}
+	}
+	return s.pendingRemoteBinding(instanceID, event.ThreadID)
+}
+
+func (s *Service) promotePendingRemote(instanceID string, event agentproto.Event) *remoteTurnBinding {
+	binding := s.pendingRemoteBindingForEvent(instanceID, event)
 	if binding == nil {
-		return s.activeRemoteBinding(instanceID, turnID)
+		return s.activeRemoteBinding(instanceID, event.TurnID)
 	}
 	delete(s.turns.pendingRemote, instanceID)
+	threadID := strings.TrimSpace(event.ThreadID)
 	if threadID != "" {
 		binding.ThreadID = threadID
 		if remoteBindingSurfaceBindingPolicy(binding) == agentproto.SurfaceBindingPolicyFollowExecutionThread || strings.TrimSpace(binding.SourceThreadID) == "" {
 			binding.SourceThreadID = threadID
 		}
 	}
-	binding.TurnID = turnID
+	binding.TurnID = strings.TrimSpace(event.TurnID)
 	binding.Status = string(state.QueueItemRunning)
 	s.turns.activeRemote[instanceID] = binding
 	return binding
-}
-
-func (s *Service) pendingRemoteBindingForInitiator(instanceID string, initiator agentproto.Initiator, threadID string) *remoteTurnBinding {
-	if initiator.Kind == agentproto.InitiatorRemoteSurface && strings.TrimSpace(initiator.SurfaceSessionID) != "" {
-		binding := s.turns.pendingRemote[instanceID]
-		if binding == nil {
-			return nil
-		}
-		surface := s.root.Surfaces[binding.SurfaceSessionID]
-		if surface == nil {
-			delete(s.turns.pendingRemote, instanceID)
-			return nil
-		}
-		item := surface.QueueItems[binding.QueueItemID]
-		if item == nil || (item.Status != state.QueueItemDispatching && item.Status != state.QueueItemRunning) {
-			delete(s.turns.pendingRemote, instanceID)
-			return nil
-		}
-		if binding.SurfaceSessionID == initiator.SurfaceSessionID {
-			return binding
-		}
-	}
-	return s.pendingRemoteBinding(instanceID, threadID)
 }
 
 func (s *Service) activeRemoteBinding(instanceID, turnID string) *remoteTurnBinding {
@@ -160,6 +191,15 @@ func (s *Service) activeRemoteBinding(instanceID, turnID string) *remoteTurnBind
 		return nil
 	}
 	return binding
+}
+
+func (s *Service) lookupRemoteTurnForEvent(instanceID string, event agentproto.Event) *remoteTurnBinding {
+	if binding := s.activeRemoteBinding(instanceID, event.TurnID); binding != nil {
+		if matchesRemoteBindingThread(binding, event.ThreadID) {
+			return binding
+		}
+	}
+	return s.pendingRemoteBindingForEvent(instanceID, event)
 }
 
 func (s *Service) lookupRemoteTurn(instanceID, threadID, turnID string) *remoteTurnBinding {
@@ -181,7 +221,7 @@ func (s *Service) shouldTrackInstanceActiveTurn(instanceID string, event agentpr
 	if inst := s.root.Instances[instanceID]; inst != nil && threadIsReview(inst.Threads[event.ThreadID]) {
 		return true
 	}
-	binding := s.lookupRemoteTurn(instanceID, event.ThreadID, event.TurnID)
+	binding := s.lookupRemoteTurnForEvent(instanceID, event)
 	if binding == nil {
 		return false
 	}

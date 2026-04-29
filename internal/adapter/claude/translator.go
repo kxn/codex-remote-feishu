@@ -38,6 +38,7 @@ type Translator struct {
 
 type turnState struct {
 	CommandID                string
+	Initiator                agentproto.Initiator
 	ThreadID                 string
 	TurnID                   string
 	Started                  bool
@@ -191,6 +192,7 @@ func (t *Translator) startActiveTurnIfNeeded() []agentproto.Event {
 	return []agentproto.Event{{
 		Kind:      agentproto.EventTurnStarted,
 		CommandID: turn.CommandID,
+		Initiator: turn.Initiator,
 		ThreadID:  turn.ThreadID,
 		TurnID:    turn.TurnID,
 		CWD:       t.cwd,

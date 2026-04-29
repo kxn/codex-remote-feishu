@@ -288,7 +288,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 补充说明：
 
 1. `E2 Dispatching` 当前只表示“本地 active queue item 已派发，真实 remote turn 还没完成建联”；它并不自动等价于“已有 live turn”。
-2. 对 Claude backend，首个可观察到的 `assistant`、`control_request` 或 `result` 事件现在都会先把 pending turn 提升成真实 turn lifecycle，再继续投影对应输出或失败终态；因此 backend/runtime 的早失败不会再把 surface 永久卡在 `dispatching`。
+2. 对 Claude backend，pre-start remote turn 的 stage-0 关联键当前先用 dispatch `CommandID`，再回退 `Initiator.SurfaceSessionID` 与 thread 信息；Claude translator 也会把 remote-surface initiator 显式带进 turn lifecycle。即使某些早期事件仍带 blank initiator，daemon 也会先把它视为 unknown，再通过 `CommandID` 命中 pending turn 并提升成真实 turn lifecycle；因此 backend/runtime 的早失败与 `start_new` 首条消息都不会再把 surface 永久卡在 `dispatching`。
 3. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
@@ -1132,9 +1132,9 @@ E3 Running
 
 补充说明：
 
-1. `pendingRemote` 先按 instance 保留“哪个 queue item 正在等 turn”。
+1. `pendingRemote` 先按 instance 保留“哪个 queue item 正在等 turn”，并同时保留 stage-0 dispatch `CommandID`。
 2. turn 建立后再提升到 `activeRemote`。
-3. 对空 thread 首条消息，promote 会优先按 `Initiator.SurfaceSessionID` 命中。
+3. 对空 thread 首条消息，promote 当前按 `CommandID -> Initiator.SurfaceSessionID -> thread 信息` 这个顺序命中；blank initiator 会先被视为 unknown，不会作为“可信非 remote initiator”直接绕过归并。
 4. 若 queue item 来自 `R5`，turn.started 后 surface 必须切回 `pinned`，不会继续停在 `new_thread_ready`。
 5. instance 级 `ActiveTurnID/ActiveThreadID` 当前只跟踪“当前主交互面真正可中断的 turn”：
    1. local UI turn 会更新它
@@ -1144,10 +1144,11 @@ E3 Running
 6. `/stop` 当前会优先看当前 surface 的 `activeRemote` 绑定：
    1. 即使 instance 级 `ActiveTurnID` 暂时缺失，只要当前 surface 仍保留 active running remote binding，仍会对该主 turn 发 `turn.interrupt`
    2. 若已进入 retained-offline / transport degraded，则仍以 offline notice 为准，不会因为 retained binding 存在而伪造 interrupt
-7. `pendingRemote/activeRemote` 当前显式保留三类 runtime 事实：
-   1. execution thread
-   2. source/main thread
-   3. surface binding policy
+7. `pendingRemote/activeRemote` 当前显式保留四类 runtime 事实：
+   1. dispatch command identity
+   2. execution thread
+   3. source/main thread
+   4. surface binding policy
    这使 detour turn 可以在临时 thread 上跑完整轮 turn，同时 request / progress / image / final / interrupt 仍回原 surface，但不强制 surface 改绑到 execution thread
 8. `turn.steer` 不会占用 `ActiveQueueItemID`，它只复用当前已经存在的 active running turn。
 9. compact 当前不是普通 queue item，也不会占用 `ActiveQueueItemID`；它按 instance 级 `compactTurns` 单独跟踪 pending/running 状态。

@@ -9,6 +9,14 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
+func commandInitiator(command agentproto.Command) agentproto.Initiator {
+	surfaceID := strings.TrimSpace(firstNonEmptyString(command.Origin.Surface, command.Origin.ChatID))
+	if surfaceID == "" {
+		return agentproto.Initiator{Kind: agentproto.InitiatorUnknown}
+	}
+	return agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surfaceID}
+}
+
 func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, error) {
 	switch command.Kind {
 	case agentproto.CommandPromptSend:
@@ -50,6 +58,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 	threadID := t.canonicalThreadID(command.Target.ThreadID)
 	turn := &turnState{
 		CommandID: command.CommandID,
+		Initiator: commandInitiator(command),
 		ThreadID:  threadID,
 		TurnID:    t.nextTurnID(),
 	}

@@ -753,7 +753,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			return s.filterEventsForSurfaceVisibility(append(events, s.reevaluateFollowSurfaces(instanceID)...))
 		}
 		events := append(preface, compactEvents...)
-		events = append(events, s.markRemoteTurnRunning(instanceID, event.Initiator, event.ThreadID, event.TurnID)...)
+		events = append(events, s.markRemoteTurnRunning(instanceID, event)...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventTurnCompleted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
