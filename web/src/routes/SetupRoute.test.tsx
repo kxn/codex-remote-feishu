@@ -97,7 +97,7 @@ describe("SetupRoute", () => {
           default:
             return {
               body: makeOnboardingWorkflow({
-                currentStage: "events",
+                currentStage: "autostart",
                 app: {
                   app: {
                     id: "bot-manual",
@@ -111,15 +111,11 @@ describe("SetupRoute", () => {
                     missingScopes: [],
                     grantJSON: "",
                   },
-                  events: {
-                    status: "pending",
-                  },
                 },
                 guide: {
                   remainingManualActions: [
-                    "完成一次事件订阅联调。",
-                    "完成一次回调联调。",
-                    "确认飞书应用菜单已经配置。",
+                    "决定是否在这台机器上启用自动启动。",
+                    "决定如何处理这台机器上的 VS Code 集成。",
                   ],
                 },
               }),
@@ -201,7 +197,7 @@ describe("SetupRoute", () => {
           case 2:
             return {
               body: makeOnboardingWorkflow({
-                currentStage: "events",
+                currentStage: "autostart",
                 app: {
                   permission: {
                     status: "deferred",
@@ -256,7 +252,7 @@ describe("SetupRoute", () => {
       calls.some((call) => call.path === "/api/setup/feishu/apps/bot-1/onboarding-permission/skip"),
     ).toBe(true);
 
-    const rail = screen.getByText("设置流程").closest("aside");
+    const rail = screen.getByText("设置步骤").closest("aside");
     expect(rail).not.toBeNull();
     await user.click(
       within(rail as HTMLElement).getByRole("button", {
@@ -362,11 +358,19 @@ describe("SetupRoute", () => {
       "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
       "/api/setup/onboarding/workflow": {
         body: makeOnboardingWorkflow({
-          currentStage: "permission",
+          currentStage: "autostart",
           completion: {
             setupRequired: false,
             canComplete: true,
             summary: "当前 setup 已可完成，你也可以先继续处理建议补齐项。",
+          },
+          app: {
+            permission: {
+              status: "complete",
+              summary: "当前基础权限已经齐全。",
+              missingScopes: [],
+              grantJSON: "",
+            },
           },
           autostart: {
             status: "deferred",
@@ -378,11 +382,20 @@ describe("SetupRoute", () => {
           },
           guide: {
             remainingManualActions: [
-              "补齐基础权限并重新检查。",
-              "完成一次事件订阅联调。",
+              "决定是否在这台机器上启用自动启动。",
+              "决定如何处理这台机器上的 VS Code 集成。",
             ],
           },
         }),
+      },
+      "/api/setup/feishu/apps/bot-1/test-events": {
+        body: {
+          gatewayId: "bot-1",
+          startedAt: "2026-04-25T08:12:00Z",
+          expiresAt: "2026-04-25T08:22:00Z",
+          phrase: "测试",
+          message: "事件订阅测试提示已发送。",
+        },
       },
       "/api/setup/complete": {
         body: {
@@ -395,11 +408,11 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "完成设置并进入管理页面" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("补齐基础权限并重新检查。")).toBeInTheDocument();
+    expect(screen.getByText("继续处理事件订阅。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "完成设置并进入管理页面" }));
 
@@ -528,16 +541,6 @@ function makeConnectWorkflow() {
     blocking: true,
     allowedActions: ["start_qr", "submit_manual"],
   });
-  const blockedOptional = (id: "permission" | "events" | "callback" | "menu", title: string) =>
-    makeOnboardingStage({
-      id,
-      title,
-      status: "blocked",
-      summary: "请先完成基础接入。",
-      blocking: false,
-      optional: true,
-    });
-
   return makeOnboardingWorkflow({
     apps: [],
     app: null,
@@ -565,9 +568,6 @@ function makeConnectWorkflow() {
         summary: "请先完成连接验证。",
         blocking: true,
       }),
-      blockedOptional("events", "事件订阅"),
-      blockedOptional("callback", "回调配置"),
-      blockedOptional("menu", "菜单确认"),
       makeOnboardingStage({
         id: "autostart",
         title: "自动启动",

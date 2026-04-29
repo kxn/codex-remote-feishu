@@ -308,10 +308,6 @@ export interface OnboardingWorkflowPermission extends OnboardingWorkflowStage {
   lastCheckedAt?: string;
 }
 
-export interface OnboardingWorkflowAppStep extends OnboardingWorkflowStage {
-  confirmedAt?: string;
-}
-
 export interface OnboardingWorkflowMachineStep extends OnboardingWorkflowStage {
   decision?: OnboardingWorkflowDecision;
   autostart?: AutostartDetectResponse;
@@ -323,9 +319,6 @@ export interface OnboardingWorkflowApp {
   app: FeishuAppSummary;
   connection: OnboardingWorkflowStage;
   permission: OnboardingWorkflowPermission;
-  events: OnboardingWorkflowAppStep;
-  callback: OnboardingWorkflowAppStep;
-  menu: OnboardingWorkflowAppStep;
 }
 
 export interface OnboardingWorkflowGuide {

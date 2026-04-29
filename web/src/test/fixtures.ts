@@ -219,14 +219,11 @@ export function makeOnboardingStage(
 }
 
 type OnboardingWorkflowAppOverrides = Partial<
-  Omit<OnboardingWorkflowApp, "app" | "connection" | "permission" | "events" | "callback" | "menu">
+  Omit<OnboardingWorkflowApp, "app" | "connection" | "permission">
 > & {
   app?: Partial<FeishuAppSummary>;
   connection?: Partial<OnboardingWorkflowStage>;
   permission?: Partial<OnboardingWorkflowPermission>;
-  events?: Partial<OnboardingWorkflowPermission>;
-  callback?: Partial<OnboardingWorkflowPermission>;
-  menu?: Partial<OnboardingWorkflowPermission>;
 };
 
 type OnboardingWorkflowMachineStepOverrides = Partial<
@@ -291,42 +288,6 @@ export function makeOnboardingWorkflow(
 }`,
     ...(workflowOverrides.app?.permission || {}),
   };
-  const events = {
-    ...makeOnboardingStage({
-      id: "events",
-      title: "事件订阅",
-      status: "pending",
-      summary: "建议完成一次事件订阅联调。",
-      optional: true,
-      blocking: false,
-      allowedActions: ["start_test", "confirm"],
-    }),
-    ...(workflowOverrides.app?.events || {}),
-  };
-  const callback = {
-    ...makeOnboardingStage({
-      id: "callback",
-      title: "回调配置",
-      status: "pending",
-      summary: "建议完成一次回调联调。",
-      optional: true,
-      blocking: false,
-      allowedActions: ["start_test", "confirm"],
-    }),
-    ...(workflowOverrides.app?.callback || {}),
-  };
-  const menu = {
-    ...makeOnboardingStage({
-      id: "menu",
-      title: "菜单确认",
-      status: "pending",
-      summary: "建议确认飞书应用菜单已经配置完成。",
-      optional: true,
-      blocking: false,
-      allowedActions: ["open_console", "confirm"],
-    }),
-    ...(workflowOverrides.app?.menu || {}),
-  };
   const app =
     workflowOverrides.app === null
       ? undefined
@@ -334,9 +295,6 @@ export function makeOnboardingWorkflow(
           app: currentApp,
           connection,
           permission,
-          events,
-          callback,
-          menu,
         };
   const {
     decision: autostartDecisionOverrides,
@@ -422,13 +380,10 @@ export function makeOnboardingWorkflow(
     guide: {
       autoConfiguredSummary:
         workflowOverrides.guide?.autoConfiguredSummary ??
-        "当前飞书应用已经接入，下面请继续补齐剩余联调与机器决策。",
+        "当前基础接入已经完成，下面请继续处理这台机器上的可选设置。",
       remainingManualActions:
         workflowOverrides.guide?.remainingManualActions ?? [
           "补齐基础权限并重新检查。",
-          "完成一次事件订阅联调。",
-          "完成一次回调联调。",
-          "确认飞书应用菜单已经配置。",
           "决定是否在这台机器上启用自动启动。",
           "决定如何处理这台机器上的 VS Code 集成。",
         ],
@@ -448,9 +403,6 @@ export function makeOnboardingWorkflow(
         }),
         connection,
         permission,
-        events,
-        callback,
-        menu,
         autostart,
         vscode,
       ],

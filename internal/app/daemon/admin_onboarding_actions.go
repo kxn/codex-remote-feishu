@@ -34,28 +34,6 @@ func (a *App) handleOnboardingMachineDecision(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *App) handleFeishuAppOnboardingStepComplete(w http.ResponseWriter, r *http.Request) {
-	gatewayID := canonicalGatewayID(r.PathValue("id"))
-	step := strings.TrimSpace(r.PathValue("step"))
-	if err := a.writeFeishuAppOnboardingStep(gatewayID, step, time.Now().UTC()); err != nil {
-		status := http.StatusBadRequest
-		code := "onboarding_step_write_failed"
-		message := "failed to persist onboarding app step"
-		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
-			status = http.StatusNotFound
-			code = "feishu_app_not_found"
-			message = "feishu app not found"
-		}
-		writeAPIError(w, status, apiError{
-			Code:    code,
-			Message: message,
-			Details: err.Error(),
-		})
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (a *App) handleFeishuAppPermissionSkip(w http.ResponseWriter, r *http.Request) {
 	gatewayID := canonicalGatewayID(r.PathValue("id"))
 	if err := a.writeFeishuAppPermissionDecision(gatewayID, onboardingDecisionPermissionSkipped, time.Now().UTC()); err != nil {
@@ -187,39 +165,6 @@ func (a *App) clearFeishuAppPermissionDecision(gatewayID string) error {
 	})
 }
 
-func (a *App) writeFeishuAppOnboardingStep(gatewayID, step string, confirmedAt time.Time) error {
-	gatewayID = canonicalGatewayID(gatewayID)
-	step = strings.TrimSpace(step)
-	if gatewayID == "" {
-		return invalidOnboardingStepError(step)
-	}
-	if step != onboardingStageEvents && step != onboardingStageCallback && step != onboardingStageMenu {
-		return invalidOnboardingStepError(step)
-	}
-
-	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
-		return err
-	}
-
-	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
-		if cfg.Admin.Onboarding.Apps == nil {
-			cfg.Admin.Onboarding.Apps = map[string]config.FeishuAppOnboardingState{}
-		}
-		state := cfg.Admin.Onboarding.Apps[gatewayID]
-		value := confirmedAt.UTC()
-		switch step {
-		case onboardingStageEvents:
-			state.EventsConfirmedAt = daemonTimePtr(value)
-		case onboardingStageCallback:
-			state.CallbackConfirmedAt = daemonTimePtr(value)
-		case onboardingStageMenu:
-			state.MenuConfirmedAt = daemonTimePtr(value)
-		}
-		cfg.Admin.Onboarding.Apps[gatewayID] = state
-		return nil
-	})
-}
-
 func (a *App) clearFeishuAppOnboardingState(gatewayID string) error {
 	gatewayID = canonicalGatewayID(gatewayID)
 	if gatewayID == "" {
@@ -269,15 +214,8 @@ func invalidOnboardingDecisionError(kind, decision string) error {
 	return errPlain("invalid onboarding decision for " + strings.TrimSpace(kind) + ": " + strings.TrimSpace(decision))
 }
 
-func invalidOnboardingStepError(step string) error {
-	return errPlain("invalid onboarding step: " + strings.TrimSpace(step))
-}
-
 func feishuAppOnboardingStateEmpty(state config.FeishuAppOnboardingState) bool {
-	return state.EventsConfirmedAt == nil &&
-		state.CallbackConfirmedAt == nil &&
-		state.MenuConfirmedAt == nil &&
-		state.PermissionDecision == nil
+	return state.PermissionDecision == nil
 }
 
 func daemonTimePtr(value time.Time) *time.Time {

@@ -15,11 +15,11 @@ export function OnboardingStageRail({
   return (
     <aside className="panel step-rail">
       <div className="step-stage-head">
-        <h2>设置流程</h2>
-        <p>当前步骤和状态全部来自后端 workflow。</p>
+        <h2>设置步骤</h2>
+        <p>按顺序完成当前安装。</p>
       </div>
       <div className="step-list">
-        {(controller.workflow?.stages || []).map((stage) => (
+        {controller.displayStages.map((stage) => (
           <button
             key={stage.id}
             className={`step-item${stage.id === controller.stageID ? " active" : ""}${
@@ -42,7 +42,19 @@ export function OnboardingWorkflowOverview({
 }: {
   controller: OnboardingFlowController;
 }) {
-  const remainingActions = controller.workflow?.guide?.remainingManualActions || [];
+  const remainingActions = [
+    ...(controller.mode === "setup"
+      ? [controller.eventsStage, controller.callbackStage, controller.menuStage]
+          .filter((stage) => stage?.status === "pending")
+          .map((stage) => `继续处理${stage?.title || ""}。`)
+      : []),
+    ...(controller.workflow?.guide?.remainingManualActions || []),
+  ];
+  const showCompleteButton =
+    controller.mode === "setup" &&
+    controller.workflow?.completion.canComplete &&
+    controller.stageID !== "done" &&
+    controller.stageID !== "permission";
 
   return (
     <div className="detail-stack">
@@ -70,7 +82,7 @@ export function OnboardingWorkflowOverview({
           <div className="section-heading">
             <div>
               <h4>剩余建议项</h4>
-              <p>这些项目不会都阻塞流程完成，但页面会继续按 workflow 提示你处理。</p>
+              <p>这些项目不会都阻塞完成，但建议按顺序继续处理。</p>
             </div>
           </div>
           <ul className="ordered-checklist">
@@ -80,9 +92,7 @@ export function OnboardingWorkflowOverview({
           </ul>
         </div>
       ) : null}
-      {controller.mode === "setup" &&
-      controller.workflow?.completion.canComplete &&
-      controller.stageID !== "done" ? (
+      {showCompleteButton ? (
         <div className="button-row">
           <button
             className="primary-button"
@@ -138,7 +148,7 @@ function EnvironmentStagePanel({
     <section className="step-section">
       <div className="step-stage-head">
         <h2>环境检查</h2>
-        <p>当前页面直接使用后端 workflow 返回的环境检查结果。</p>
+        <p>先确认这台机器已经具备运行条件。</p>
       </div>
       <div className={`notice-banner ${runtimeRequirements?.ready ? "good" : "warn"}`}>
         {runtimeRequirements?.summary || "当前服务还在检查中，请稍候。"}
@@ -223,7 +233,7 @@ function PermissionStagePanel({
           <div className="section-heading">
             <div>
               <h4>可复制的一次性权限配置</h4>
-              <p>补齐后刷新 workflow 即可看到最新状态。</p>
+              <p>补齐后重新检查即可看到最新状态。</p>
             </div>
           </div>
           <textarea
@@ -349,14 +359,14 @@ function EventsStagePanel({
             重新发送测试提示
           </button>
         ) : null}
-        {stageAllowsAction(eventsStage, "confirm") ? (
+        {stageAllowsAction(eventsStage, "continue") ? (
           <button
             className="primary-button"
             type="button"
-            disabled={controller.actionBusy === "confirm-events"}
-            onClick={() => void controller.confirmAppStep("events")}
+            disabled={controller.actionBusy === "continue-events"}
+            onClick={() => void controller.continueSetupStage("events")}
           >
-            我已完成，继续
+            下一步
           </button>
         ) : null}
       </div>
@@ -434,14 +444,14 @@ function CallbackStagePanel({
             重新发送测试提示
           </button>
         ) : null}
-        {stageAllowsAction(callbackStage, "confirm") ? (
+        {stageAllowsAction(callbackStage, "continue") ? (
           <button
             className="primary-button"
             type="button"
-            disabled={controller.actionBusy === "confirm-callback"}
-            onClick={() => void controller.confirmAppStep("callback")}
+            disabled={controller.actionBusy === "continue-callback"}
+            onClick={() => void controller.continueSetupStage("callback")}
           >
-            我已完成，继续
+            下一步
           </button>
         ) : null}
       </div>
@@ -483,14 +493,14 @@ function MenuStagePanel({
         完成菜单配置。
       </p>
       <div className="button-row">
-        {stageAllowsAction(menuStage, "confirm") ? (
+        {stageAllowsAction(menuStage, "continue") ? (
           <button
             className="primary-button"
             type="button"
-            disabled={controller.actionBusy === "confirm-menu"}
-            onClick={() => void controller.confirmAppStep("menu")}
+            disabled={controller.actionBusy === "continue-menu"}
+            onClick={() => void controller.continueSetupStage("menu")}
           >
-            我已完成，继续
+            下一步
           </button>
         ) : null}
       </div>
@@ -545,7 +555,7 @@ function AutostartStagePanel({
               )
             }
           >
-            已启用，记录完成
+            已启用
           </button>
         ) : null}
         {stageAllowsAction(autostartStage, "defer") ? (
@@ -616,7 +626,7 @@ function VSCodeStagePanel({
               )
             }
           >
-            已处理，记录完成
+            已处理
           </button>
         ) : null}
         {stageAllowsAction(vscodeStage, "remote_only") ? (
@@ -672,8 +682,8 @@ function DoneStagePanel({
         <h2>{controller.mode === "setup" ? "欢迎使用" : "流程收口"}</h2>
         <p>
           {controller.mode === "setup"
-            ? "当前 workflow 已经允许完成 setup。"
-            : "当前 workflow 已经没有阻塞项，剩余项按建议补齐即可。"}
+            ? "当前设置已经可以完成。"
+            : "当前已经没有阻塞项，剩余项按建议补齐即可。"}
         </p>
       </div>
       <div className="completed-card">
@@ -685,7 +695,7 @@ function DoneStagePanel({
         <p>
           {controller.mode === "setup"
             ? "你现在可以进入管理页面，继续维护机器人、系统集成和存储清理。"
-            : "后续如需再次检查权限、联调或机器决策，可以继续使用这个 workflow 面板。"}
+            : "后续如需再次检查权限、联调或机器决策，可以继续在这里处理。"}
         </p>
       </div>
       {controller.mode === "setup" ? (

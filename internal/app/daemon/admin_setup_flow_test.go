@@ -176,7 +176,7 @@ func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 	}
 }
 
-func TestSetupOnboardingWorkflowTracksMachineDecisionsAndManualSteps(t *testing.T) {
+func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersistence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -207,12 +207,6 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsAndManualSteps(t *testing.
 		t.Fatalf("vscode decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
 	}
 
-	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-steps/menu/complete", "", cookie)
-	rec = performSetupRequestRecorder(app, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("menu step status = %d, want 204 body=%s", rec.Code, rec.Body.String())
-	}
-
 	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusOK {
@@ -235,8 +229,11 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsAndManualSteps(t *testing.
 	if payload.VSCode.Status != onboardingStageStatusDeferred {
 		t.Fatalf("vscode status = %q, want deferred", payload.VSCode.Status)
 	}
-	if payload.App == nil || payload.App.Menu.Status != onboardingStageStatusComplete {
-		t.Fatalf("menu step = %#v, want complete", payload.App)
+	if payload.App == nil {
+		t.Fatalf("expected selected app view, got %#v", payload)
+	}
+	if payload.CurrentStage != onboardingStagePermission {
+		t.Fatalf("current stage = %q, want %q", payload.CurrentStage, onboardingStagePermission)
 	}
 }
 
@@ -304,8 +301,8 @@ func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
 	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusDeferred {
 		t.Fatalf("permission after skip = %#v, want deferred", payload.App)
 	}
-	if payload.CurrentStage != onboardingStageEvents {
-		t.Fatalf("current stage after skip = %q, want events", payload.CurrentStage)
+	if payload.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage after skip = %q, want autostart", payload.CurrentStage)
 	}
 
 	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-permission/reset", "", cookie)

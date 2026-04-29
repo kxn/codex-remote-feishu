@@ -70,10 +70,7 @@ type OnboardingDecision struct {
 }
 
 type FeishuAppOnboardingState struct {
-	EventsConfirmedAt   *time.Time          `json:"eventsConfirmedAt,omitempty"`
-	CallbackConfirmedAt *time.Time          `json:"callbackConfirmedAt,omitempty"`
-	MenuConfirmedAt     *time.Time          `json:"menuConfirmedAt,omitempty"`
-	PermissionDecision  *OnboardingDecision `json:"permissionDecision,omitempty"`
+	PermissionDecision *OnboardingDecision `json:"permissionDecision,omitempty"`
 }
 
 type ToolSettings struct {

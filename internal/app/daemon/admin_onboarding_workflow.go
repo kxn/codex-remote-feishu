@@ -14,9 +14,6 @@ const (
 	onboardingStageRuntimeRequirements = "runtime_requirements"
 	onboardingStageConnect             = "connect"
 	onboardingStagePermission          = "permission"
-	onboardingStageEvents              = "events"
-	onboardingStageCallback            = "callback"
-	onboardingStageMenu                = "menu"
 	onboardingStageAutostart           = "autostart"
 	onboardingStageVSCode              = "vscode"
 	onboardingStageDone                = "done"
@@ -88,11 +85,6 @@ type onboardingWorkflowPermissionView struct {
 	LastCheckedAt *time.Time                     `json:"lastCheckedAt,omitempty"`
 }
 
-type onboardingWorkflowAppStepView struct {
-	onboardingWorkflowStageView
-	ConfirmedAt *time.Time `json:"confirmedAt,omitempty"`
-}
-
 type onboardingWorkflowMachineStepView struct {
 	onboardingWorkflowStageView
 	Decision  *onboardingWorkflowDecisionView `json:"decision,omitempty"`
@@ -105,9 +97,6 @@ type onboardingWorkflowAppView struct {
 	App        adminFeishuAppSummary            `json:"app"`
 	Connection onboardingWorkflowStageView      `json:"connection"`
 	Permission onboardingWorkflowPermissionView `json:"permission"`
-	Events     onboardingWorkflowAppStepView    `json:"events"`
-	Callback   onboardingWorkflowAppStepView    `json:"callback"`
-	Menu       onboardingWorkflowAppStepView    `json:"menu"`
 }
 
 func (a *App) handleOnboardingWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -145,31 +134,6 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		permission = a.buildOnboardingPermissionStage(selectedAppID, appState)
 	}
 
-	eventsStage := buildOnboardingAppStepStage(
-		onboardingStageEvents,
-		"事件订阅",
-		appState.EventsConfirmedAt,
-		connection.Status == onboardingStageStatusComplete,
-		"建议完成一次事件订阅联调。",
-		[]string{"start_test", "confirm"},
-	)
-	callbackStage := buildOnboardingAppStepStage(
-		onboardingStageCallback,
-		"回调配置",
-		appState.CallbackConfirmedAt,
-		connection.Status == onboardingStageStatusComplete,
-		"建议完成一次回调联调。",
-		[]string{"start_test", "confirm"},
-	)
-	menuStage := buildOnboardingAppStepStage(
-		onboardingStageMenu,
-		"菜单确认",
-		appState.MenuConfirmedAt,
-		connection.Status == onboardingStageStatusComplete,
-		"建议确认飞书应用菜单已经配置完成。",
-		[]string{"open_console", "confirm"},
-	)
-
 	autostartStage := a.buildOnboardingAutostartStage(loaded.Config)
 	vscodeStage := a.buildOnboardingVSCodeStage(loaded.Config)
 
@@ -177,9 +141,6 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		stageView(onboardingStageRuntimeRequirements, "环境检查", runtimeRequirementsSummaryStatus(runtimeReqs.Ready), runtimeReqs.Summary, !runtimeReqs.Ready, false, []string{"retry"}),
 		connection,
 		permission.onboardingWorkflowStageView,
-		eventsStage.onboardingWorkflowStageView,
-		callbackStage.onboardingWorkflowStageView,
-		menuStage.onboardingWorkflowStageView,
 		autostartStage.onboardingWorkflowStageView,
 		vscodeStage.onboardingWorkflowStageView,
 	}
@@ -187,15 +148,14 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	canComplete := runtimeReqs.Ready &&
 		connection.Status == onboardingStageStatusComplete
 
-	manualPending := countPendingStages(eventsStage.Status, callbackStage.Status, menuStage.Status) > 0
 	machinePending := !machineDecisionSatisfied(autostartStage.Status) || !machineDecisionSatisfied(vscodeStage.Status)
 	machineState := onboardingMachineStateBlocked
 	switch {
 	case !runtimeReqs.Ready || connection.Status != onboardingStageStatusComplete:
 		machineState = onboardingMachineStateBlocked
-	case canComplete && !manualPending:
+	case canComplete && !machinePending:
 		machineState = onboardingMachineStateCompleted
-	case manualPending || machinePending:
+	case machinePending:
 		machineState = onboardingMachineStateUsableWithPendingItems
 	default:
 		machineState = onboardingMachineStateUsable
@@ -209,8 +169,8 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		stages = append(stages, stageView(onboardingStageDone, "完成", onboardingStageStatusComplete, "当前 setup 已经可以完成。", false, false, []string{"complete_setup"}))
 	}
 
-	guide := buildOnboardingGuide(currentStage, connection, permission, eventsStage, callbackStage, menuStage, autostartStage, vscodeStage, canComplete)
-	completion := buildOnboardingCompletion(canComplete, currentStage, runtimeReqs.Ready, connection, permission)
+	guide := buildOnboardingGuide(currentStage, connection, permission, autostartStage, vscodeStage, canComplete)
+	completion := buildOnboardingCompletion(canComplete, runtimeReqs.Ready, connection)
 
 	response := onboardingWorkflowResponse{
 		Apps:                apps,
@@ -229,9 +189,6 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 			App:        *selectedApp,
 			Connection: connection,
 			Permission: permission,
-			Events:     eventsStage,
-			Callback:   callbackStage,
-			Menu:       menuStage,
 		}
 	}
 	return response, nil
@@ -318,24 +275,6 @@ func buildBlockedOnboardingPermissionStage(summary string) onboardingWorkflowPer
 	}
 }
 
-func buildOnboardingAppStepStage(id, title string, confirmedAt *time.Time, ready bool, pendingSummary string, allowedActions []string) onboardingWorkflowAppStepView {
-	if !ready {
-		return onboardingWorkflowAppStepView{
-			onboardingWorkflowStageView: stageView(id, title, onboardingStageStatusBlocked, "请先完成基础接入。", false, true, nil),
-			ConfirmedAt:                 confirmedAt,
-		}
-	}
-	if confirmedAt != nil {
-		return onboardingWorkflowAppStepView{
-			onboardingWorkflowStageView: stageView(id, title, onboardingStageStatusComplete, "该项已经确认完成。", false, true, allowedActions),
-			ConfirmedAt:                 confirmedAt,
-		}
-	}
-	return onboardingWorkflowAppStepView{
-		onboardingWorkflowStageView: stageView(id, title, onboardingStageStatusPending, pendingSummary, false, true, allowedActions),
-	}
-}
-
 func (a *App) buildOnboardingAutostartStage(cfg config.AppConfig) onboardingWorkflowMachineStepView {
 	decision := onboardingDecisionViewFromConfig(cfg.Admin.Onboarding.AutostartDecision)
 	status, err := detectAutostart(a.installStatePath())
@@ -405,14 +344,11 @@ func buildOnboardingGuide(
 	currentStage string,
 	connection onboardingWorkflowStageView,
 	permission onboardingWorkflowPermissionView,
-	events onboardingWorkflowAppStepView,
-	callback onboardingWorkflowAppStepView,
-	menu onboardingWorkflowAppStepView,
 	autostart onboardingWorkflowMachineStepView,
 	vscode onboardingWorkflowMachineStepView,
 	canComplete bool,
 ) onboardingWorkflowGuideView {
-	remaining := make([]string, 0, 6)
+	remaining := make([]string, 0, 4)
 	appendRemaining := func(status string, text string) {
 		if status == onboardingStageStatusPending || status == onboardingStageStatusBlocked {
 			remaining = append(remaining, text)
@@ -420,9 +356,6 @@ func buildOnboardingGuide(
 	}
 	appendRemaining(connection.Status, "接入并验证一个可用的飞书应用。")
 	appendRemaining(permission.Status, "补齐基础权限并重新检查。")
-	appendRemaining(events.Status, "完成一次事件订阅联调。")
-	appendRemaining(callback.Status, "完成一次回调联调。")
-	appendRemaining(menu.Status, "确认飞书应用菜单已经配置。")
 	appendRemaining(autostart.Status, "决定是否在这台机器上启用自动启动。")
 	appendRemaining(vscode.Status, "决定如何处理这台机器上的 VS Code 集成。")
 	summary := ""
@@ -431,8 +364,10 @@ func buildOnboardingGuide(
 		summary = "当前 setup 已经可以完成，但仍有建议补齐项。"
 	case canComplete:
 		summary = "当前机器的 onboarding 已经收口完成。"
+	case onboardingStageResolved(permission.Status):
+		summary = "当前基础接入已经完成，下面请继续处理这台机器上的可选设置。"
 	case connection.Status == onboardingStageStatusComplete:
-		summary = "当前飞书应用已经接入，下面请继续补齐剩余联调与机器决策。"
+		summary = "当前飞书应用已经接入，下面请先完成权限检查。"
 	default:
 		summary = "请先让这台机器和一个可用飞书应用进入可继续联调的状态。"
 	}
@@ -445,10 +380,8 @@ func buildOnboardingGuide(
 
 func buildOnboardingCompletion(
 	canComplete bool,
-	currentStage string,
 	runtimeReady bool,
 	connection onboardingWorkflowStageView,
-	permission onboardingWorkflowPermissionView,
 ) onboardingWorkflowCompletionView {
 	if canComplete {
 		return onboardingWorkflowCompletionView{
@@ -457,7 +390,7 @@ func buildOnboardingCompletion(
 			Summary:       "当前 setup 已可完成，你也可以先继续处理建议补齐项。",
 		}
 	}
-	blockingReason := blockingReasonForCompletion(runtimeReady, connection, permission)
+	blockingReason := blockingReasonForCompletion(runtimeReady, connection)
 	return onboardingWorkflowCompletionView{
 		SetupRequired:  true,
 		CanComplete:    false,
@@ -469,7 +402,6 @@ func buildOnboardingCompletion(
 func blockingReasonForCompletion(
 	runtimeReady bool,
 	connection onboardingWorkflowStageView,
-	permission onboardingWorkflowPermissionView,
 ) string {
 	switch {
 	case !runtimeReady:
@@ -490,14 +422,13 @@ func machineDecisionSatisfied(status string) bool {
 	}
 }
 
-func countPendingStages(statuses ...string) int {
-	total := 0
-	for _, status := range statuses {
-		if status == onboardingStageStatusPending {
-			total++
-		}
+func onboardingStageResolved(status string) bool {
+	switch status {
+	case onboardingStageStatusComplete, onboardingStageStatusDeferred, onboardingStageStatusNotApplicable:
+		return true
+	default:
+		return false
 	}
-	return total
 }
 
 func firstPendingStageID(stages []onboardingWorkflowStageView) string {

@@ -314,7 +314,7 @@ describe("AdminRoute", () => {
       "/api/admin/onboarding/workflow?app=bot-1": {
         body: makeOnboardingWorkflow({
           selectedAppId: "bot-1",
-          currentStage: "events",
+          currentStage: "permission",
           app: {
             app: makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
             permission: {
@@ -322,10 +322,6 @@ describe("AdminRoute", () => {
               summary: "当前基础权限已经齐全。",
               missingScopes: [],
               grantJSON: "",
-            },
-            events: {
-              status: "pending",
-              allowedActions: ["start_test", "confirm"],
             },
           },
         }),
@@ -354,8 +350,8 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByText("事件订阅")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "重新发送测试提示" })[0]);
+    expect(await screen.findByText("基础对话与交互")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "测试事件订阅" }));
     expect(
       await screen.findByText(
         "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",

@@ -10,9 +10,8 @@ import type {
 } from "../shared/onboarding-flow/types";
 import { useOnboardingFlowController } from "../shared/onboarding-flow/use-onboarding-flow-controller";
 import {
-  RequirementTable,
-  isResolvedStageStatus,
   stageAllowsAction,
+  isResolvedStageStatus,
 } from "../shared/onboarding-flow/utils";
 
 export type AdminRobotDetailNotice = {
@@ -316,9 +315,7 @@ function ExistingRobotDetail({
       ) : (
         <div className="todo-list">
           <PermissionCard controller={controller} visible={controllerMatchesSelection} />
-          <EventsCard controller={controller} visible={controllerMatchesSelection} />
-          <CallbackCard controller={controller} visible={controllerMatchesSelection} />
-          <MenuCard controller={controller} visible={controllerMatchesSelection} />
+          <InteractionTestCard controller={controller} visible={controllerMatchesSelection} />
         </div>
       )}
     </section>
@@ -416,60 +413,54 @@ function PermissionCard({
   );
 }
 
-function EventsCard({
+function InteractionTestCard({
   controller,
   visible,
 }: {
   controller: OnboardingFlowController;
   visible: boolean;
 }) {
-  const stage = controller.eventsStage;
-  const shouldRender =
-    visible &&
-    stage &&
-    (!isResolvedStageStatus(stage.status) || controller.eventTest.status !== "idle");
-  if (!shouldRender || !stage) {
+  if (!visible) {
     return null;
   }
 
   return (
     <ActionCard
-      title="事件订阅"
-      summary={stage.summary}
-      tone={stage.status === "blocked" ? "danger" : "warn"}
+      title="基础对话与交互"
+      summary="需要时可直接发送测试提示，确认机器人会话和回调都能正常工作。"
+      tone="warn"
       actions={
         <>
-          {stageAllowsAction(stage, "start_test") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={controller.actionBusy === "test-events" || !controller.activeApp?.id}
-              onClick={() =>
-                controller.activeApp?.id &&
-                void controller.startTest(controller.activeApp.id, "events")
-              }
-            >
-              重新发送测试提示
-            </button>
-          ) : null}
-          {stageAllowsAction(stage, "confirm") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={controller.actionBusy === "confirm-events"}
-              onClick={() => void controller.confirmAppStep("events")}
-            >
-              标记为已完成
-            </button>
-          ) : null}
-          {controller.activeConsoleLinks?.events ? (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={controller.actionBusy === "test-events" || !controller.activeApp?.id}
+            onClick={() =>
+              controller.activeApp?.id &&
+              void controller.startTest(controller.activeApp.id, "events")
+            }
+          >
+            测试事件订阅
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={controller.actionBusy === "test-callback" || !controller.activeApp?.id}
+            onClick={() =>
+              controller.activeApp?.id &&
+              void controller.startTest(controller.activeApp.id, "callback")
+            }
+          >
+            测试回调
+          </button>
+          {controller.activeConsoleLinks?.callback ? (
             <a
               className="ghost-button"
-              href={controller.activeConsoleLinks.events}
+              href={controller.activeConsoleLinks.callback}
               rel="noreferrer"
               target="_blank"
             >
-              打开飞书后台
+              打开回调配置
             </a>
           ) : null}
         </>
@@ -483,83 +474,6 @@ function EventsCard({
       {controller.eventTest.status === "error" ? (
         <div className="notice-banner danger">{controller.eventTest.message}</div>
       ) : null}
-      {(controller.manifest?.events || []).length > 0 ? (
-        <details className="compact-detail">
-          <summary>查看需要配置的事件</summary>
-          <div className="compact-detail-body">
-            <RequirementTable
-              headers={["事件", "用途"]}
-              rows={(controller.manifest?.events || []).map((item) => ({
-                key: item.event,
-                cells: [item.event, item.purpose || ""],
-              }))}
-            />
-          </div>
-        </details>
-      ) : null}
-    </ActionCard>
-  );
-}
-
-function CallbackCard({
-  controller,
-  visible,
-}: {
-  controller: OnboardingFlowController;
-  visible: boolean;
-}) {
-  const stage = controller.callbackStage;
-  const shouldRender =
-    visible &&
-    stage &&
-    (!isResolvedStageStatus(stage.status) || controller.callbackTest.status !== "idle");
-  if (!shouldRender || !stage) {
-    return null;
-  }
-
-  return (
-    <ActionCard
-      title="回调配置"
-      summary={stage.summary}
-      tone={stage.status === "blocked" ? "danger" : "warn"}
-      actions={
-        <>
-          {stageAllowsAction(stage, "start_test") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={controller.actionBusy === "test-callback" || !controller.activeApp?.id}
-              onClick={() =>
-                controller.activeApp?.id &&
-                void controller.startTest(controller.activeApp.id, "callback")
-              }
-            >
-              重新发送测试提示
-            </button>
-          ) : null}
-          {stageAllowsAction(stage, "confirm") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={controller.actionBusy === "confirm-callback"}
-              onClick={() => void controller.confirmAppStep("callback")}
-            >
-              标记为已完成
-            </button>
-          ) : null}
-          {controller.activeConsoleLinks?.callback ? (
-            <a
-              className="ghost-button"
-              href={controller.activeConsoleLinks.callback}
-              rel="noreferrer"
-              target="_blank"
-            >
-              打开飞书后台
-            </a>
-          ) : null}
-        </>
-      }
-    >
       {controller.callbackTest.status === "sent" ? (
         <div className="notice-banner good">
           {controller.callbackTest.message || "回调测试卡片已发送。"}
@@ -568,66 +482,21 @@ function CallbackCard({
       {controller.callbackTest.status === "error" ? (
         <div className="notice-banner danger">{controller.callbackTest.message}</div>
       ) : null}
-      {(controller.manifest?.callbacks || []).length > 0 ? (
-        <details className="compact-detail">
-          <summary>查看需要配置的回调</summary>
-          <div className="compact-detail-body">
-            <RequirementTable
-              headers={["回调", "用途"]}
-              rows={(controller.manifest?.callbacks || []).map((item) => ({
-                key: item.callback,
-                cells: [item.callback, item.purpose || ""],
-              }))}
-            />
-          </div>
-        </details>
+      {controller.activeConsoleLinks?.events ? (
+        <p className="support-copy">
+          如需检查事件订阅配置，可前往{" "}
+          <a
+            className="inline-link"
+            href={controller.activeConsoleLinks.events}
+            rel="noreferrer"
+            target="_blank"
+          >
+            飞书后台
+          </a>
+          。
+        </p>
       ) : null}
     </ActionCard>
-  );
-}
-
-function MenuCard({
-  controller,
-  visible,
-}: {
-  controller: OnboardingFlowController;
-  visible: boolean;
-}) {
-  const stage = controller.menuStage;
-  if (!visible || !stage || isResolvedStageStatus(stage.status)) {
-    return null;
-  }
-
-  return (
-    <ActionCard
-      title="菜单确认"
-      summary={stage.summary}
-      tone={stage.status === "blocked" ? "danger" : "warn"}
-      actions={
-        <>
-          {stageAllowsAction(stage, "confirm") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={controller.actionBusy === "confirm-menu"}
-              onClick={() => void controller.confirmAppStep("menu")}
-            >
-              标记为已完成
-            </button>
-          ) : null}
-          {controller.activeConsoleLinks?.bot ? (
-            <a
-              className="ghost-button"
-              href={controller.activeConsoleLinks.bot}
-              rel="noreferrer"
-              target="_blank"
-            >
-              打开飞书后台
-            </a>
-          ) : null}
-        </>
-      }
-    />
   );
 }
 
@@ -873,12 +742,8 @@ function buildRobotStatusBanner(
 }
 
 function hasPendingRobotActions(controller: OnboardingFlowController): boolean {
-  return [
-    controller.permissionStage,
-    controller.eventsStage,
-    controller.callbackStage,
-    controller.menuStage,
-  ].some((stage) => (stage ? !isResolvedStageStatus(stage.status) : false));
+  const permissionStage = controller.permissionStage;
+  return Boolean(permissionStage && !isResolvedStageStatus(permissionStage.status));
 }
 
 function buildIntegrationHint(controller: OnboardingFlowController): string {

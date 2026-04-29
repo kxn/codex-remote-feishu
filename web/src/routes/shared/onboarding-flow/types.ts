@@ -3,7 +3,6 @@ import type {
   FeishuAppSummary,
   FeishuManifestResponse,
   FeishuOnboardingSession,
-  OnboardingWorkflowAppStep,
   OnboardingWorkflowMachineStep,
   OnboardingWorkflowPermission,
   OnboardingWorkflowResponse,
@@ -39,6 +38,8 @@ export type RequirementTableRow = {
   cells: ReactNode[];
 };
 
+export type SetupOptionalStageID = "events" | "callback" | "menu";
+
 export type OnboardingFlowSurfaceProps = {
   mode: OnboardingSurfaceMode;
   preferredAppID?: string;
@@ -62,6 +63,7 @@ export type OnboardingFlowController = {
   notice: Notice | null;
   manifest: FeishuManifestResponse["manifest"] | null;
   workflow: OnboardingWorkflowResponse | null;
+  displayStages: OnboardingWorkflowStage[];
   stageID: string;
   currentStageID: string;
   currentStage: OnboardingWorkflowStage | undefined;
@@ -70,9 +72,9 @@ export type OnboardingFlowController = {
   isReadOnlyApp: boolean;
   connectionStage: OnboardingWorkflowStage | undefined;
   permissionStage: OnboardingWorkflowPermission | null;
-  eventsStage: OnboardingWorkflowAppStep | null;
-  callbackStage: OnboardingWorkflowAppStep | null;
-  menuStage: OnboardingWorkflowAppStep | null;
+  eventsStage: OnboardingWorkflowStage | null;
+  callbackStage: OnboardingWorkflowStage | null;
+  menuStage: OnboardingWorkflowStage | null;
   actionBusy: string;
   onboardingSession: FeishuOnboardingSession | null;
   connectError: string;
@@ -92,7 +94,7 @@ export type OnboardingFlowController = {
   recheckPermissionStage: () => Promise<void>;
   skipPermissionStage: () => Promise<void>;
   startTest: (appID: string, kind: "events" | "callback") => Promise<void>;
-  confirmAppStep: (step: "events" | "callback" | "menu") => Promise<void>;
+  continueSetupStage: (step: SetupOptionalStageID) => Promise<void>;
   recordMachineDecision: (
     kind: "autostart" | "vscode",
     decision: string,
@@ -108,7 +110,6 @@ export type OnboardingFlowController = {
 export type AllowedActionCarrier =
   | OnboardingWorkflowStage
   | OnboardingWorkflowPermission
-  | OnboardingWorkflowAppStep
   | OnboardingWorkflowMachineStep
   | null
   | undefined;

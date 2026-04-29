@@ -15,6 +15,7 @@ import type {
   FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
   FeishuOnboardingSessionResponse,
+  OnboardingWorkflowStage,
   OnboardingWorkflowResponse,
   SetupCompleteResponse,
 } from "../../../lib/types";
@@ -29,6 +30,7 @@ import type {
   OnboardingFlowController,
   OnboardingFlowSurfaceProps,
   RuntimeApplyFailureDetails,
+  SetupOptionalStageID,
   TestState,
 } from "./types";
 import {
@@ -80,14 +82,15 @@ export function useOnboardingFlowController({
     status: "idle",
     message: "",
   });
+  const [setupStageProgress, setSetupStageProgress] = useState<Record<SetupOptionalStageID, boolean>>({
+    events: false,
+    callback: false,
+    menu: false,
+  });
 
-  const currentStageID = connectOnly
+  const backendCurrentStageID = connectOnly
     ? "connect"
     : workflow?.currentStage || workflow?.stages[0]?.id || "runtime_requirements";
-  const stageID = connectOnly ? "connect" : visibleStageID || currentStageID;
-  const currentStage = connectOnly
-    ? syntheticConnectionStage()
-    : workflowStageByID(workflow, currentStageID);
   const activeApp = workflow?.app?.app ?? null;
   const activeConsoleLinks = activeApp?.consoleLinks;
   const isReadOnlyApp = Boolean(activeApp?.readOnly);
@@ -95,9 +98,23 @@ export function useOnboardingFlowController({
     ? syntheticConnectionStage()
     : workflow?.app?.connection || workflowStageByID(workflow, "connect");
   const permissionStage = workflow?.app?.permission || null;
-  const eventsStage = workflow?.app?.events || null;
-  const callbackStage = workflow?.app?.callback || null;
-  const menuStage = workflow?.app?.menu || null;
+  const displayStages = connectOnly
+    ? [syntheticConnectionStage()]
+    : buildDisplayStages(mode, workflow, permissionStage, setupStageProgress);
+  const currentStageID = connectOnly
+    ? "connect"
+    : deriveCurrentStageID(mode, backendCurrentStageID, permissionStage, setupStageProgress);
+  const stageID = connectOnly
+    ? "connect"
+    : visibleStageID && displayStages.some((stage) => stage.id === visibleStageID)
+      ? visibleStageID
+      : currentStageID;
+  const currentStage = connectOnly
+    ? syntheticConnectionStage()
+    : displayStages.find((stage) => stage.id === currentStageID);
+  const eventsStage = displayStageByID(displayStages, "events");
+  const callbackStage = displayStageByID(displayStages, "callback");
+  const menuStage = displayStageByID(displayStages, "menu");
 
   useEffect(() => {
     let cancelled = false;
@@ -130,17 +147,22 @@ export function useOnboardingFlowController({
   useEffect(() => {
     setEventTest({ status: "idle", message: "" });
     setCallbackTest({ status: "idle", message: "" });
+    setSetupStageProgress({
+      events: false,
+      callback: false,
+      menu: false,
+    });
   }, [activeApp?.id]);
 
   useEffect(() => {
-    if (connectOnly || !workflow) {
+    if (connectOnly || displayStages.length === 0) {
       return;
     }
-    if (visibleStageID && workflow.stages.some((stage) => stage.id === visibleStageID)) {
+    if (visibleStageID && displayStages.some((stage) => stage.id === visibleStageID)) {
       return;
     }
-    setVisibleStageID(workflow.currentStage || workflow.stages[0]?.id || "");
-  }, [connectOnly, visibleStageID, workflow]);
+    setVisibleStageID("");
+  }, [connectOnly, displayStages, visibleStageID]);
 
   useEffect(() => {
     if (mode !== "setup") {
@@ -261,7 +283,7 @@ export function useOnboardingFlowController({
     setManifest(manifestState.manifest);
     setWorkflow(workflowState);
     if (options?.focusCurrentStage) {
-      setVisibleStageID(workflowState.currentStage || workflowState.stages[0]?.id || "");
+      setVisibleStageID("");
     }
     setLoading(false);
     return workflowState;
@@ -566,32 +588,26 @@ export function useOnboardingFlowController({
     );
   }
 
-  async function confirmAppStep(step: "events" | "callback" | "menu") {
-    if (!activeApp?.id) {
-      return;
-    }
-    setActionBusy(`confirm-${step}`);
+  async function continueSetupStage(step: SetupOptionalStageID) {
+    setActionBusy(`continue-${step}`);
     try {
-      await requestVoid(
-        `${apiBasePath}/feishu/apps/${encodeURIComponent(activeApp.id)}/onboarding-steps/${encodeURIComponent(step)}/complete`,
-        {
-          method: "POST",
-        },
-      );
-      if (step === "events" || step === "callback") {
+      if (activeApp?.id && (step === "events" || step === "callback")) {
         await clearInstallTest(activeApp.id, step);
       }
+    } catch {
+      // Clearing the transient test context is best-effort only.
+    } finally {
       if (step === "events") {
         setEventTest({ status: "idle", message: "" });
       }
       if (step === "callback") {
         setCallbackTest({ status: "idle", message: "" });
       }
-      await refreshWorkflowFocus();
-      setNotice({ tone: "good", message: `${stepTitle(step)}已记录完成。` });
-    } catch {
-      setNotice({ tone: "danger", message: `当前还不能记录${stepTitle(step)}完成，请稍后重试。` });
-    } finally {
+      setSetupStageProgress((current) => ({
+        ...current,
+        [step]: true,
+      }));
+      setVisibleStageID("");
       setActionBusy("");
     }
   }
@@ -769,6 +785,7 @@ export function useOnboardingFlowController({
     notice,
     manifest,
     workflow,
+    displayStages,
     stageID,
     currentStageID,
     currentStage,
@@ -799,12 +816,148 @@ export function useOnboardingFlowController({
     recheckPermissionStage,
     skipPermissionStage,
     startTest,
-    confirmAppStep,
+    continueSetupStage,
     recordMachineDecision,
     applyAutostart,
     applyVSCode,
     completeSetup,
     copyGrantJSON,
     copyRequirementValue,
+  };
+}
+
+const setupOptionalStageOrder: SetupOptionalStageID[] = [
+  "events",
+  "callback",
+  "menu",
+];
+
+function buildDisplayStages(
+  mode: OnboardingFlowSurfaceProps["mode"],
+  workflow: OnboardingWorkflowResponse | null,
+  permissionStage: OnboardingFlowController["permissionStage"],
+  setupStageProgress: Record<SetupOptionalStageID, boolean>,
+): OnboardingWorkflowStage[] {
+  if (!workflow) {
+    return [];
+  }
+  if (mode !== "setup") {
+    return workflow.stages;
+  }
+
+  const permissionResolved = setupPermissionResolved(permissionStage);
+  const stages: OnboardingWorkflowStage[] = [];
+  for (const stage of workflow.stages) {
+    stages.push(stage);
+    if (stage.id === "permission") {
+      for (const setupStageID of setupOptionalStageOrder) {
+        stages.push(
+          buildSetupOptionalStage(
+            setupStageID,
+            permissionResolved,
+            setupStageProgress[setupStageID],
+          ),
+        );
+      }
+    }
+  }
+  return stages;
+}
+
+function deriveCurrentStageID(
+  mode: OnboardingFlowSurfaceProps["mode"],
+  backendCurrentStageID: string,
+  permissionStage: OnboardingFlowController["permissionStage"],
+  setupStageProgress: Record<SetupOptionalStageID, boolean>,
+): string {
+  if (
+    mode !== "setup" ||
+    !setupPermissionResolved(permissionStage) ||
+    backendCurrentStageID === "runtime_requirements" ||
+    backendCurrentStageID === "connect" ||
+    backendCurrentStageID === "permission"
+  ) {
+    return backendCurrentStageID;
+  }
+  return firstPendingSetupOptionalStage(setupStageProgress) || backendCurrentStageID;
+}
+
+function firstPendingSetupOptionalStage(
+  setupStageProgress: Record<SetupOptionalStageID, boolean>,
+): SetupOptionalStageID | "" {
+  for (const setupStageID of setupOptionalStageOrder) {
+    if (!setupStageProgress[setupStageID]) {
+      return setupStageID;
+    }
+  }
+  return "";
+}
+
+function displayStageByID(
+  stages: OnboardingWorkflowStage[],
+  stageID: SetupOptionalStageID,
+): OnboardingWorkflowStage | null {
+  return stages.find((stage) => stage.id === stageID) || null;
+}
+
+function setupPermissionResolved(
+  permissionStage: OnboardingFlowController["permissionStage"],
+): boolean {
+  if (!permissionStage) {
+    return false;
+  }
+  return (
+    permissionStage.status === "complete" ||
+    permissionStage.status === "deferred" ||
+    permissionStage.status === "not_applicable"
+  );
+}
+
+function buildSetupOptionalStage(
+  stageID: SetupOptionalStageID,
+  permissionResolved: boolean,
+  complete: boolean,
+): OnboardingWorkflowStage {
+  if (!permissionResolved) {
+    return {
+      id: stageID,
+      title: stepTitle(stageID),
+      status: "blocked",
+      summary: "请先完成权限检查。",
+      blocking: false,
+      optional: true,
+      allowedActions: [],
+    };
+  }
+  if (complete) {
+    return {
+      id: stageID,
+      title: stepTitle(stageID),
+      status: "complete",
+      summary:
+        stageID === "events"
+          ? "事件订阅测试已经处理完成。"
+          : stageID === "callback"
+            ? "回调测试已经处理完成。"
+            : "菜单配置已经确认完成。",
+      blocking: false,
+      optional: true,
+      allowedActions: [],
+    };
+  }
+  return {
+    id: stageID,
+    title: stepTitle(stageID),
+    status: "pending",
+    summary:
+      stageID === "events"
+        ? "进入本页会自动向机器人发送测试提示。"
+        : stageID === "callback"
+          ? "进入本页会自动向机器人发送回调测试卡片。"
+          : "请在飞书后台完成菜单配置后继续。",
+    blocking: false,
+    optional: true,
+    allowedActions:
+      stageID === "menu" ? ["continue", "open_console"] : ["start_test", "continue"],
   };
 }
