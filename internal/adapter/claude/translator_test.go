@@ -353,6 +353,59 @@ func TestClaudeTranslatorDoesNotInventSyntheticThreadBeforeSessionInit(t *testin
 	}
 }
 
+func TestClaudeTranslatorInitRefreshesPendingTurnToResumedSession(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "bootstrap-session",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "resume-session-1"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "resume this session"}}},
+	}); err != nil {
+		t.Fatalf("translate prompt send: %v", err)
+	}
+
+	started := observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "resume-session-1",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+	if len(started.Events) != 0 {
+		t.Fatalf("expected init refresh to stay silent, got %#v", started.Events)
+	}
+
+	started = observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type": "message_start",
+			"message": map[string]any{
+				"id":      "msg-start-resume",
+				"type":    "message",
+				"role":    "assistant",
+				"model":   "mimo-v2.5-pro",
+				"content": []any{},
+			},
+		},
+	})
+	if len(started.Events) != 1 || started.Events[0].Kind != agentproto.EventTurnStarted {
+		t.Fatalf("expected turn.started event, got %#v", started.Events)
+	}
+	if started.Events[0].ThreadID != "resume-session-1" {
+		t.Fatalf("expected resumed session init to refresh pending turn thread id, got %#v", started.Events[0])
+	}
+}
+
 func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "plan")

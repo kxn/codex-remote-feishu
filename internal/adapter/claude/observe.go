@@ -12,12 +12,13 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 	switch subtype {
 	case "init":
 		if sessionID := strings.TrimSpace(lookupStringFromAny(message["session_id"])); sessionID != "" {
+			previousSessionID := strings.TrimSpace(t.sessionID)
 			t.sessionID = sessionID
-			if t.activeTurn != nil && strings.TrimSpace(t.activeTurn.ThreadID) == "" {
+			if t.activeTurn != nil && shouldRefreshTurnThreadIDOnInit(t.activeTurn, previousSessionID) {
 				t.activeTurn.ThreadID = sessionID
 			}
 			for _, turn := range t.pendingTurns {
-				if turn != nil && strings.TrimSpace(turn.ThreadID) == "" {
+				if turn != nil && shouldRefreshTurnThreadIDOnInit(turn, previousSessionID) {
 					turn.ThreadID = sessionID
 				}
 			}
@@ -34,6 +35,20 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 		}
 	}
 	return Result{}
+}
+
+func shouldRefreshTurnThreadIDOnInit(turn *turnState, previousSessionID string) bool {
+	if turn == nil {
+		return false
+	}
+	threadID := strings.TrimSpace(turn.ThreadID)
+	if threadID == "" {
+		return true
+	}
+	if turn.Started {
+		return false
+	}
+	return threadID == strings.TrimSpace(previousSessionID)
 }
 
 func (t *Translator) observeStreamMessage(message map[string]any) Result {
