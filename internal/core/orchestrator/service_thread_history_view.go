@@ -417,6 +417,18 @@ func buildThreadHistoryTurnSummaries(history agentproto.ThreadHistoryRecord, cur
 				} else {
 					summary.Outputs = append(summary.Outputs, "[命令] "+command)
 				}
+			case "web_search":
+				if text != "" {
+					summary.Outputs = append(summary.Outputs, "[搜索] "+text)
+				}
+			case "delegated_task":
+				if text != "" {
+					summary.Outputs = append(summary.Outputs, "[Task] "+text)
+				}
+			case "process_plan":
+				if text != "" {
+					summary.Outputs = append(summary.Outputs, "[计划] "+text)
+				}
 			}
 		}
 		summary.InputPreview = threadHistoryInputPreview(summary.Inputs)

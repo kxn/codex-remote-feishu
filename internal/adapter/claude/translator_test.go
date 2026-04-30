@@ -33,7 +33,7 @@ func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
 	if len(assistant.Events) != 1 {
 		t.Fatalf("expected one item.started event, got %#v", assistant.Events)
 	}
-	if assistant.Events[0].Kind != agentproto.EventItemStarted || assistant.Events[0].ItemKind != "dynamic_tool_call" {
+	if assistant.Events[0].Kind != agentproto.EventItemStarted || assistant.Events[0].ItemKind != "command_execution" {
 		t.Fatalf("unexpected assistant tool_use event: %#v", assistant.Events[0])
 	}
 
@@ -113,7 +113,7 @@ func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
 	if len(completed.Events) != 1 {
 		t.Fatalf("expected one tool completed event, got %#v", completed.Events)
 	}
-	if completed.Events[0].Kind != agentproto.EventItemCompleted || completed.Events[0].ItemKind != "dynamic_tool_call" || completed.Events[0].Status != "completed" {
+	if completed.Events[0].Kind != agentproto.EventItemCompleted || completed.Events[0].ItemKind != "command_execution" || completed.Events[0].Status != "completed" {
 		t.Fatalf("unexpected tool completion event: %#v", completed.Events[0])
 	}
 }
@@ -775,8 +775,8 @@ func TestClaudeTranslatorReconcilesFinalAssistantTextOntoStreamingBlock(t *testi
 			},
 		},
 	})
-	if len(thinkingStart.Events) != 0 {
-		t.Fatalf("expected thinking block start to stay silent, got %#v", thinkingStart.Events)
+	if len(thinkingStart.Events) != 1 || thinkingStart.Events[0].Kind != agentproto.EventItemStarted || thinkingStart.Events[0].ItemKind != "reasoning_summary" {
+		t.Fatalf("expected thinking block start to open a reasoning summary item, got %#v", thinkingStart.Events)
 	}
 
 	streamStart := observeClaude(t, tr, map[string]any{
@@ -909,6 +909,93 @@ func TestClaudeTranslatorIgnoresRedundantAssistantTextAfterStreamCompletion(t *t
 	})
 	if len(assistant.Events) != 0 {
 		t.Fatalf("expected assistant final snapshot to avoid duplicating completed text item, got %#v", assistant.Events)
+	}
+}
+
+func TestClaudeTranslatorTodoWriteProjectsToProcessPlan(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	assistant := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-plan-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "tool_use",
+					"id":   "call-plan-1",
+					"name": "TodoWrite",
+					"input": map[string]any{
+						"todos": []any{
+							map[string]any{"content": "Gather evidence", "status": "in_progress", "activeForm": "Gathering evidence"},
+							map[string]any{"content": "Write summary", "status": "pending", "activeForm": "Writing summary"},
+						},
+					},
+				},
+			},
+		},
+	})
+	if len(assistant.Events) != 0 {
+		t.Fatalf("expected TodoWrite assistant frame not to emit immediate visible item, got %#v", assistant.Events)
+	}
+
+	completed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-plan-1",
+					"content":     "Todos have been modified successfully.",
+				},
+			},
+		},
+	})
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one process plan completion event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "process_plan" || event.Status != "completed" {
+		t.Fatalf("unexpected TodoWrite projection: %#v", event)
+	}
+	if snapshot, ok := event.Metadata["planSnapshot"].(map[string]any); !ok || snapshot == nil {
+		t.Fatalf("expected plan snapshot metadata, got %#v", event.Metadata)
+	}
+}
+
+func TestClaudeTranslatorTaskProjectsToDelegatedTask(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	assistant := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-1",
+					"name":  "Task",
+					"input": map[string]any{"subagent_type": "Explore", "description": "Audit the repository"},
+				},
+			},
+		},
+	})
+	if len(assistant.Events) != 1 {
+		t.Fatalf("expected delegated task item start, got %#v", assistant.Events)
+	}
+	if assistant.Events[0].Kind != agentproto.EventItemStarted || assistant.Events[0].ItemKind != "delegated_task" {
+		t.Fatalf("unexpected Task start projection: %#v", assistant.Events[0])
+	}
+	if got := lookupStringFromAny(assistant.Events[0].Metadata["description"]); got != "Audit the repository" {
+		t.Fatalf("expected delegated task description metadata, got %#v", assistant.Events[0].Metadata)
 	}
 }
 

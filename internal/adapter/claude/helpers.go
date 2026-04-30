@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -203,6 +204,322 @@ func stringifyTextContent(value any) string {
 	default:
 		return ""
 	}
+}
+
+func normalizeClaudeSemanticItemKind(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "process_plan":
+		return strings.TrimSpace(raw)
+	default:
+		return ""
+	}
+}
+
+func claudeToolItemKind(toolName string) string {
+	switch strings.TrimSpace(toolName) {
+	case "Bash":
+		return "command_execution"
+	case "WebSearch", "WebFetch", "ToolSearch":
+		return "web_search"
+	case "TodoWrite":
+		return "process_plan"
+	case "Task":
+		return "delegated_task"
+	case "TaskOutput", "TaskStop":
+		return ""
+	case "Read", "Glob", "Grep", "Skill", "Edit", "Write", "NotebookEdit":
+		return "dynamic_tool_call"
+	default:
+		return "dynamic_tool_call"
+	}
+}
+
+func claudeToolVisibleLifecycle(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "TaskOutput", "TaskStop":
+		return false
+	default:
+		return strings.TrimSpace(claudeToolItemKind(toolName)) != ""
+	}
+}
+
+func claudeToolMetadata(toolName string, input map[string]any) map[string]any {
+	metadata := map[string]any{
+		"tool":      strings.TrimSpace(toolName),
+		"arguments": cloneMap(input),
+	}
+	switch claudeToolItemKind(toolName) {
+	case "command_execution":
+		if command := strings.TrimSpace(lookupStringFromAny(input["command"])); command != "" {
+			metadata["command"] = command
+		}
+		if cwd := strings.TrimSpace(lookupStringFromAny(input["cwd"])); cwd != "" {
+			metadata["cwd"] = cwd
+		}
+	case "web_search":
+		mergeClaudeWebToolMetadata(metadata, toolName, input)
+	case "delegated_task":
+		metadata["subagentType"] = strings.TrimSpace(lookupStringFromAny(input["subagent_type"]))
+		metadata["description"] = strings.TrimSpace(lookupStringFromAny(input["description"]))
+		if prompt := strings.TrimSpace(lookupStringFromAny(input["prompt"])); prompt != "" {
+			metadata["prompt"] = prompt
+		}
+	case "process_plan":
+		if snapshot := buildClaudeTodoPlanSnapshot(input); snapshot != nil {
+			metadata["planSnapshot"] = map[string]any{
+				"explanation": snapshot.Explanation,
+				"steps":       encodeClaudePlanSteps(snapshot.Steps),
+			}
+			metadata["text"] = buildClaudePlanSummary(snapshot)
+		}
+	case "dynamic_tool_call":
+		metadata["semanticKind"] = claudeDynamicToolSemanticKind(toolName)
+		metadata["suppressFinalText"] = true
+	}
+	return metadata
+}
+
+func claudeDynamicToolSemanticKind(toolName string) string {
+	switch strings.TrimSpace(toolName) {
+	case "Read", "Glob", "Grep":
+		return "exploration"
+	case "Skill":
+		return "skill"
+	case "Edit", "Write", "NotebookEdit":
+		return "file_change_request"
+	default:
+		return "generic_tool"
+	}
+}
+
+func mergeClaudeWebToolMetadata(metadata map[string]any, toolName string, input map[string]any) {
+	switch strings.TrimSpace(toolName) {
+	case "WebSearch":
+		metadata["actionType"] = "search"
+		if query := firstNonEmptyString(
+			lookupStringFromAny(input["query"]),
+			lookupStringFromAny(input["q"]),
+		); query != "" {
+			metadata["query"] = query
+		}
+	case "WebFetch":
+		metadata["actionType"] = "open_page"
+		if url := firstNonEmptyString(
+			lookupStringFromAny(input["url"]),
+			lookupStringFromAny(input["href"]),
+		); url != "" {
+			metadata["url"] = url
+		}
+	case "ToolSearch":
+		metadata["actionType"] = "find_in_page"
+		if pattern := firstNonEmptyString(
+			lookupStringFromAny(input["pattern"]),
+			lookupStringFromAny(input["query"]),
+			lookupStringFromAny(input["text"]),
+		); pattern != "" {
+			metadata["pattern"] = pattern
+		}
+		if url := firstNonEmptyString(
+			lookupStringFromAny(input["url"]),
+			lookupStringFromAny(input["page_url"]),
+		); url != "" {
+			metadata["url"] = url
+		}
+	}
+}
+
+func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnapshot {
+	records := mapsFromAny(input["todos"])
+	if len(records) == 0 {
+		return nil
+	}
+	snapshot := &agentproto.TurnPlanSnapshot{
+		Explanation: "Claude 当前计划",
+		Steps:       make([]agentproto.TurnPlanStep, 0, len(records)),
+	}
+	activeForms := make([]string, 0, len(records))
+	for _, record := range records {
+		step := strings.TrimSpace(lookupStringFromAny(record["content"]))
+		if step == "" {
+			step = strings.TrimSpace(lookupStringFromAny(record["activeForm"]))
+		}
+		if step == "" {
+			continue
+		}
+		status := agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(record["status"]))
+		if status == "" {
+			status = agentproto.TurnPlanStepStatusPending
+		}
+		snapshot.Steps = append(snapshot.Steps, agentproto.TurnPlanStep{
+			Step:   step,
+			Status: status,
+		})
+		if active := strings.TrimSpace(lookupStringFromAny(record["activeForm"])); active != "" && status == agentproto.TurnPlanStepStatusInProgress {
+			activeForms = append(activeForms, active)
+		}
+	}
+	if len(snapshot.Steps) == 0 {
+		return nil
+	}
+	if len(activeForms) != 0 {
+		snapshot.Explanation = strings.Join(activeForms, "；")
+	}
+	return snapshot
+}
+
+func encodeClaudePlanSteps(steps []agentproto.TurnPlanStep) []map[string]any {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(steps))
+	for _, step := range steps {
+		out = append(out, map[string]any{
+			"step":   strings.TrimSpace(step.Step),
+			"status": string(step.Status),
+		})
+	}
+	return out
+}
+
+func decodeClaudePlanSnapshot(metadata map[string]any) *agentproto.TurnPlanSnapshot {
+	if len(metadata) == 0 {
+		return nil
+	}
+	raw, ok := metadata["planSnapshot"].(map[string]any)
+	if !ok || raw == nil {
+		return nil
+	}
+	snapshot := &agentproto.TurnPlanSnapshot{
+		Explanation: strings.TrimSpace(lookupStringFromAny(raw["explanation"])),
+	}
+	for _, record := range mapsFromAny(raw["steps"]) {
+		step := strings.TrimSpace(lookupStringFromAny(record["step"]))
+		if step == "" {
+			continue
+		}
+		snapshot.Steps = append(snapshot.Steps, agentproto.TurnPlanStep{
+			Step:   step,
+			Status: agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(record["status"])),
+		})
+	}
+	if snapshot.Explanation == "" && len(snapshot.Steps) == 0 {
+		return nil
+	}
+	return snapshot
+}
+
+func buildClaudePlanSummary(snapshot *agentproto.TurnPlanSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	if explanation := strings.TrimSpace(snapshot.Explanation); explanation != "" {
+		return explanation
+	}
+	for _, step := range snapshot.Steps {
+		if step.Status == agentproto.TurnPlanStepStatusInProgress {
+			return strings.TrimSpace(step.Step)
+		}
+	}
+	if len(snapshot.Steps) != 0 {
+		return strings.TrimSpace(snapshot.Steps[0].Step)
+	}
+	return ""
+}
+
+func buildClaudeDelegatedTaskText(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	description := strings.TrimSpace(lookupStringFromAny(metadata["description"]))
+	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
+	switch {
+	case description != "" && subagentType != "":
+		return fmt.Sprintf("Task (%s): %s", subagentType, description)
+	case description != "":
+		return "Task: " + description
+	case subagentType != "":
+		return "Task (" + subagentType + ")"
+	default:
+		return "Task"
+	}
+}
+
+func buildClaudeProcessPlanText(metadata map[string]any) string {
+	snapshot := decodeClaudePlanSnapshot(metadata)
+	if snapshot == nil {
+		return strings.TrimSpace(lookupStringFromAny(metadata["text"]))
+	}
+	return buildClaudePlanSummary(snapshot)
+}
+
+func buildClaudeReasoningDelta(text string) (string, map[string]any, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", nil, false
+	}
+	sentence := claudeReasoningSentence(text)
+	if sentence == "" {
+		return "", nil, false
+	}
+	return fmt.Sprintf("**%s**", sentence), map[string]any{"summaryIndex": claudeReasoningSummaryIndex(sentence)}, true
+}
+
+func claudeReasoningSentence(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.Join(strings.Fields(text), " ")
+	for _, separator := range []string{"。", ".", "!", "！", "?", "？"} {
+		if idx := strings.LastIndex(text, separator); idx >= 0 {
+			candidate := strings.TrimSpace(text[:idx+len(separator)])
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return text
+}
+
+func claudeReasoningSummaryIndex(text string) int {
+	if strings.TrimSpace(text) == "" {
+		return 0
+	}
+	count := 0
+	for _, r := range text {
+		switch r {
+		case '。', '.', '!', '！', '?', '？':
+			count++
+		}
+	}
+	if count == 0 {
+		return 1
+	}
+	return count
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		out[key] = cloneJSONValue(value)
+	}
+	return out
+}
+
+func sortedMetadataKeys(metadata map[string]any) []string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func resolvePlanConfirmationRequestBody(assistantText string) (string, string, string) {

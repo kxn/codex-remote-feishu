@@ -151,6 +151,8 @@ func normalizeExecProgressTimelineItem(item control.ExecCommandProgressTimelineI
 			switch item.Kind {
 			case "web_search":
 				item.Label = "搜索"
+			case "delegated_task":
+				item.Label = "Task"
 			case "mcp_tool_call":
 				item.Label = "MCP"
 			case "dynamic_tool_call":
@@ -174,7 +176,7 @@ func normalizeExecProgressTimelineItem(item control.ExecCommandProgressTimelineI
 
 func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
 	switch strings.ToLower(strings.TrimSpace(item.Kind)) {
-	case "read", "list", "search":
+	case "read", "list", "search", "process_plan_summary", "process_plan_step":
 		return renderExecProgressBlockRow(control.ExecCommandProgressBlockRow{
 			Kind:      item.Kind,
 			Items:     append([]string(nil), item.Items...),
@@ -195,6 +197,10 @@ func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string 
 	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
 	case "read":
 		return execProgressPrefixedMarkdown("读取", strings.Join(execProgressReadNames(row.Items), "、"))
+	case "process_plan_summary":
+		return execProgressPrefixedMarkdown("计划", truncateExecProgressSummary(row.Summary, 60))
+	case "process_plan_step":
+		return execProgressPrefixedMarkdown(planStepStatusLabel(row.Secondary), truncateExecProgressSummary(row.Summary, 60))
 	case "list":
 		return execProgressPrefixedMarkdown("列目录", renderExecProgressEntitySummary(row.Summary, 60))
 	case "search":
@@ -244,6 +250,8 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry, verbose boo
 			return execProgressPrefixedMarkdown(label, renderExecProgressSearchSummary(entry.Summary, "", 40))
 		}
 		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
+	case "delegated_task":
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
 	case "mcp_tool_call", "dynamic_tool_call":
 		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
 	case "file_change":
@@ -411,6 +419,17 @@ func renderExecProgressEntitySummary(summary string, limit int) string {
 		return ""
 	}
 	return markdownCodeSpan(summary)
+}
+
+func planStepStatusLabel(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed":
+		return "计划完成"
+	case "in_progress", "inprogress", "running":
+		return "计划进行中"
+	default:
+		return "计划待办"
+	}
 }
 
 func renderExecProgressFileChangePathMarkdown(file control.FileChangeSummaryEntry, labels map[string]string) string {

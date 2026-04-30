@@ -347,6 +347,11 @@ type ExecCommandProgressExplorationRecord struct {
 	Failed        bool
 }
 
+type ExecCommandProgressPlanRecord struct {
+	Block    ExecCommandProgressBlockRecord
+	Snapshot *agentproto.TurnPlanSnapshot
+}
+
 type ExecCommandProgressRecord struct {
 	InstanceID           string
 	ThreadID             string
@@ -361,6 +366,7 @@ type ExecCommandProgressRecord struct {
 	CWD                  string
 	Status               string
 	Exploration          *ExecCommandProgressExplorationRecord
+	ProcessPlan          *ExecCommandProgressPlanRecord
 	Reasoning            *ExecCommandProgressReasoningRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord

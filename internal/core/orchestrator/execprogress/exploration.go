@@ -26,10 +26,27 @@ type ExplorationAction = explorationAction
 var explorationShellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
 
 func Blocks(progress *state.ExecCommandProgressRecord) []control.ExecCommandProgressBlock {
-	if progress == nil || progress.Exploration == nil {
+	if progress == nil {
 		return nil
 	}
-	block := progress.Exploration.Block
+	blocks := make([]control.ExecCommandProgressBlock, 0, 2)
+	if progress.ProcessPlan != nil {
+		if block := cloneExecCommandProgressBlock(progress.ProcessPlan.Block); block != nil {
+			blocks = append(blocks, *block)
+		}
+	}
+	if progress.Exploration != nil {
+		if block := cloneExecCommandProgressBlock(progress.Exploration.Block); block != nil {
+			blocks = append(blocks, *block)
+		}
+	}
+	if len(blocks) == 0 {
+		return nil
+	}
+	return blocks
+}
+
+func cloneExecCommandProgressBlock(block state.ExecCommandProgressBlockRecord) *control.ExecCommandProgressBlock {
 	rows := make([]control.ExecCommandProgressBlockRow, 0, len(block.Rows))
 	for _, row := range block.Rows {
 		rows = append(rows, control.ExecCommandProgressBlockRow{
@@ -41,12 +58,15 @@ func Blocks(progress *state.ExecCommandProgressRecord) []control.ExecCommandProg
 			LastSeq:   row.LastSeq,
 		})
 	}
-	return []control.ExecCommandProgressBlock{{
+	if strings.TrimSpace(block.BlockID) == "" && strings.TrimSpace(block.Kind) == "" && len(rows) == 0 {
+		return nil
+	}
+	return &control.ExecCommandProgressBlock{
 		BlockID: block.BlockID,
 		Kind:    block.Kind,
 		Status:  block.Status,
 		Rows:    rows,
-	}}
+	}
 }
 
 func UpsertExplorationProgressForCommandExecution(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {

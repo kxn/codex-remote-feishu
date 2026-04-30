@@ -203,3 +203,53 @@ func TestHandleSurfaceThreadHistoryLoadedBuildsDetailNavigation(t *testing.T) {
 		t.Fatalf("unexpected detail payload: %#v", detail)
 	}
 }
+
+func TestThreadHistoryDetailIncludesTypedOutputs(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:   "inst-1",
+		WorkspaceKey: "/data/dl/droid",
+		ShortName:    "droid",
+		Online:       true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	surface.RouteMode = state.RouteModePinned
+	surface.SelectedThreadID = "thread-1"
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, "history-1", "user-1", now, time.Minute, ownerCardFlowPhaseLoading))
+	svc.setActiveThreadHistory(surface, &activeThreadHistoryRecord{
+		ThreadID: "thread-1",
+		ViewMode: control.FeishuThreadHistoryViewDetail,
+		TurnID:   "turn-1",
+	})
+	svc.RecordSurfaceThreadHistory("surface-1", agentproto.ThreadHistoryRecord{
+		Thread: agentproto.ThreadSnapshotRecord{ThreadID: "thread-1", Name: "修复登录流程"},
+		Turns: []agentproto.ThreadHistoryTurnRecord{{
+			TurnID:      "turn-1",
+			Status:      "completed",
+			CompletedAt: now.Add(-time.Minute),
+			Items: []agentproto.ThreadHistoryItemRecord{
+				{Kind: "user_message", Text: "请帮我调研"},
+				{Kind: "web_search", Text: "上海天气"},
+				{Kind: "process_plan", Text: "Gathering evidence"},
+				{Kind: "delegated_task", Text: "Task (Explore): Audit the repository"},
+			},
+		}},
+	})
+
+	events := svc.HandleSurfaceThreadHistoryLoaded("surface-1")
+	if len(events) != 1 || events[0].ThreadHistoryView == nil || events[0].ThreadHistoryView.Detail == nil {
+		t.Fatalf("expected detail view, got %#v", events)
+	}
+	outputs := strings.Join(events[0].ThreadHistoryView.Detail.Outputs, "\n")
+	if !strings.Contains(outputs, "[搜索] 上海天气") ||
+		!strings.Contains(outputs, "[计划] Gathering evidence") ||
+		!strings.Contains(outputs, "[Task] Task (Explore): Audit the repository") {
+		t.Fatalf("expected typed outputs in history detail, got %#v", events[0].ThreadHistoryView.Detail.Outputs)
+	}
+}

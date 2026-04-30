@@ -40,6 +40,8 @@ func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleReco
 	switch strings.TrimSpace(itemKind) {
 	case "file_change", "mcp_tool_call", "context_compaction":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
+	case "process_plan", "delegated_task":
+		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	case "command_execution", "dynamic_tool_call", "web_search":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose
 	default:

@@ -689,6 +689,10 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 		s.progress.recordTurnFileChanges(instanceID, event)
 		return nil
 	}
+	if suppressesCompletedTextRender(event.ItemKind, event.Metadata) {
+		delete(s.itemBuffers, key)
+		return nil
+	}
 	if isDynamicToolCallItem(event.ItemKind) {
 		delete(s.itemBuffers, key)
 		return s.renderDynamicToolCallItem(instanceID, event)

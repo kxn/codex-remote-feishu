@@ -420,6 +420,68 @@ func TestWebSearchProgressQuietVerbositySuppressesCard(t *testing.T) {
 	}
 }
 
+func TestProcessPlanProgressNormalVerbosityEmitsStructuredBlock(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "做计划", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "plan-1",
+		ItemKind: "process_plan",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"planSnapshot": map[string]any{
+				"explanation": "Gathering evidence",
+				"steps": []any{
+					map[string]any{"step": "Gather evidence", "status": "in_progress"},
+					map[string]any{"step": "Write summary", "status": "pending"},
+				},
+			},
+		},
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected process plan progress card, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "process_plan" || len(progress.Blocks[0].Rows) != 3 {
+		t.Fatalf("expected structured process plan block, got %#v", progress.Blocks)
+	}
+}
+
+func TestDelegatedTaskProgressNormalVerbosityEmitsEntry(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "开子任务", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "task-1",
+		ItemKind: "delegated_task",
+		Metadata: map[string]any{
+			"description":  "Audit the repository",
+			"subagentType": "Explore",
+		},
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected delegated task progress card, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "delegated_task" || progress.Entries[0].Summary != "Explore · Audit the repository" {
+		t.Fatalf("unexpected delegated task entry: %#v", progress.Entries)
+	}
+}
+
 func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1055,10 +1117,17 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 		Status:    "failed",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
+	var sawFinalProgress bool
 	for _, event := range finished {
-		if event.Kind == eventcontract.KindExecCommandProgress {
-			t.Fatalf("expected turn completion not to refresh exec progress card, got %#v", finished)
+		if event.Kind == eventcontract.KindExecCommandProgress && event.ExecCommandProgress != nil {
+			sawFinalProgress = true
+			if len(event.ExecCommandProgress.Entries) != 1 || event.ExecCommandProgress.Entries[0].Status != "failed" {
+				t.Fatalf("expected final progress update to mark command failed, got %#v", event.ExecCommandProgress)
+			}
 		}
+	}
+	if !sawFinalProgress {
+		t.Fatalf("expected turn completion to emit one final exec progress update before clearing, got %#v", finished)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
 		t.Fatalf("expected turn completion to clear exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)

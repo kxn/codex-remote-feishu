@@ -316,7 +316,7 @@ func TestWrapperClaudePromptAndRequestRespondMainChain(t *testing.T) {
 			if event.Kind == agentproto.EventTurnStarted && runtimeThreadID == "" {
 				runtimeThreadID = event.ThreadID
 			}
-			if event.Kind == agentproto.EventItemStarted && event.ItemKind == "dynamic_tool_call" {
+			if event.Kind == agentproto.EventItemStarted && event.ItemKind == "command_execution" {
 				sawToolStarted = true
 			}
 			if event.Kind == agentproto.EventRequestStarted && requestID == "" {
@@ -351,7 +351,7 @@ func TestWrapperClaudePromptAndRequestRespondMainChain(t *testing.T) {
 
 	waitForObservedEvents(t, eventsCh, 10*time.Second, stdout, stderr, done,
 		func(event agentproto.Event) bool {
-			return event.Kind == agentproto.EventItemCompleted && event.ItemKind == "dynamic_tool_call" && event.Status == "completed" && event.ThreadID == runtimeThreadID
+			return event.Kind == agentproto.EventItemCompleted && event.ItemKind == "command_execution" && event.Status == "completed" && event.ThreadID == runtimeThreadID
 		},
 		func(event agentproto.Event) bool {
 			return event.Kind == agentproto.EventItemCompleted && event.ItemKind == "agent_message" && event.ThreadID == runtimeThreadID

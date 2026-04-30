@@ -154,13 +154,14 @@ type ThreadHistoryTurnRecord struct {
 }
 
 type ThreadHistoryItemRecord struct {
-	ItemID   string `json:"itemId"`
-	Kind     string `json:"kind,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Command  string `json:"command,omitempty"`
-	CWD      string `json:"cwd,omitempty"`
-	ExitCode *int   `json:"exitCode,omitempty"`
+	ItemID   string         `json:"itemId"`
+	Kind     string         `json:"kind,omitempty"`
+	Status   string         `json:"status,omitempty"`
+	Text     string         `json:"text,omitempty"`
+	Command  string         `json:"command,omitempty"`
+	CWD      string         `json:"cwd,omitempty"`
+	ExitCode *int           `json:"exitCode,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type CommandKind string

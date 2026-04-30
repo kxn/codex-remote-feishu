@@ -131,3 +131,15 @@ func isContextCompactionItem(itemKind string) bool {
 func isDynamicToolCallItem(itemKind string) bool {
 	return strings.TrimSpace(itemKind) == "dynamic_tool_call"
 }
+
+func suppressesCompletedTextRender(itemKind string, metadata map[string]any) bool {
+	switch strings.TrimSpace(itemKind) {
+	case "web_search", "command_execution", "process_plan", "delegated_task":
+		return true
+	}
+	if len(metadata) == 0 {
+		return false
+	}
+	value, ok := metadata["suppressFinalText"].(bool)
+	return ok && value
+}

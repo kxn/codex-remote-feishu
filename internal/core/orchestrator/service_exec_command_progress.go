@@ -22,6 +22,10 @@ func (s *Service) handleProcessProgressItemStarted(instanceID string, event agen
 		return s.handleFileChangeProgressStarted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressStarted(instanceID, event)
+	case "process_plan":
+		return s.handleProcessPlanProgressUpdated(instanceID, event)
+	case "delegated_task":
+		return s.handleDelegatedTaskProgressUpdated(instanceID, event)
 	case "mcp_tool_call":
 		return s.handleMCPToolCallItemStarted(instanceID, event)
 	case "dynamic_tool_call":
@@ -90,6 +94,10 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 		return s.handleFileChangeProgressCompleted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressCompleted(instanceID, event)
+	case "process_plan":
+		return s.handleProcessPlanProgressUpdated(instanceID, event)
+	case "delegated_task":
+		return s.handleDelegatedTaskProgressUpdated(instanceID, event)
 	case "mcp_tool_call":
 		return s.handleMCPToolCallItemCompleted(instanceID, event)
 	case "dynamic_tool_call":
@@ -214,6 +222,49 @@ func (s *Service) handleWebSearchProgressCompleted(instanceID string, event agen
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
+func (s *Service) handleProcessPlanProgressUpdated(instanceID string, event agentproto.Event) []eventcontract.Event {
+	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+		return nil
+	}
+	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if progress == nil || !execprogress.UpsertProcessPlan(progress, event) {
+		return nil
+	}
+	progress.ItemID = execprogress.ProcessPlanBlockID
+	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+}
+
+func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event agentproto.Event) []eventcontract.Event {
+	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+		return nil
+	}
+	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if progress == nil {
+		return nil
+	}
+	entry := state.ExecCommandProgressEntryRecord{
+		ItemID:  strings.TrimSpace(event.ItemID),
+		Kind:    "delegated_task",
+		Label:   "Task",
+		Summary: strings.TrimSpace(metadataString(event.Metadata, "description")),
+		Status:  execprogress.NormalizeStatus(event.Status, event.Kind == agentproto.EventItemCompleted),
+	}
+	subagentType := strings.TrimSpace(metadataString(event.Metadata, "subagentType"))
+	switch {
+	case entry.Summary != "" && subagentType != "":
+		entry.Summary = subagentType + " · " + entry.Summary
+	case entry.Summary == "" && subagentType != "":
+		entry.Summary = subagentType
+	case entry.Summary == "":
+		entry.Summary = "任务处理中"
+	}
+	execprogress.UpsertEntry(progress, entry)
+	progress.ItemID = entry.ItemID
+	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+}
+
 func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
@@ -271,10 +322,23 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 		return nil
 	}
 	defer s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
-	_ = turnStatus
+	status := execprogress.NormalizeStatus(turnStatus, true)
+	for i := range progress.Entries {
+		if strings.TrimSpace(progress.Entries[i].Status) == "running" || strings.TrimSpace(progress.Entries[i].Status) == "started" {
+			progress.Entries[i].Status = status
+		}
+	}
+	if progress.Exploration != nil && strings.TrimSpace(progress.Exploration.Block.Status) == "running" {
+		progress.Exploration.Block.Status = status
+	}
+	if progress.ProcessPlan != nil && strings.TrimSpace(progress.ProcessPlan.Block.Status) == "running" {
+		progress.ProcessPlan.Block.Status = status
+	}
 	_ = finalText
 	if !execprogress.ClearReasoningRecord(progress) {
-		return nil
+		if status == "" {
+			return nil
+		}
 	}
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }

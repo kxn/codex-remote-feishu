@@ -107,6 +107,18 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 			ItemKind:  "agent_message",
 		})
 	}
+	if kind == "thinking" && t.activeTurn != nil {
+		state.ItemID = t.nextItemID()
+		state.StartedEmitted = true
+		events = append(events, agentproto.Event{
+			Kind:      agentproto.EventItemStarted,
+			CommandID: t.activeTurn.CommandID,
+			ThreadID:  t.activeTurn.ThreadID,
+			TurnID:    t.activeTurn.TurnID,
+			ItemID:    state.ItemID,
+			ItemKind:  "reasoning_summary",
+		})
+	}
 	if kind == "tool_use" {
 		tool := &toolState{
 			ToolUseID: state.ToolUseID,
@@ -152,6 +164,27 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 				Delta:     text,
 			}},
 		}
+	case "thinking_delta":
+		if t.activeTurn == nil || state.ItemID == "" {
+			return Result{}
+		}
+		deltaText, metadata, ok := buildClaudeReasoningDelta(lookupStringFromAny(delta["thinking"]))
+		if !ok {
+			return Result{}
+		}
+		state.TextBuffer += deltaText
+		return Result{
+			Events: []agentproto.Event{{
+				Kind:      agentproto.EventItemDelta,
+				CommandID: t.activeTurn.CommandID,
+				ThreadID:  t.activeTurn.ThreadID,
+				TurnID:    t.activeTurn.TurnID,
+				ItemID:    state.ItemID,
+				ItemKind:  "reasoning_summary",
+				Delta:     deltaText,
+				Metadata:  metadata,
+			}},
+		}
 	case "input_json_delta":
 		state.ToolInputDelta += lookupStringFromAny(delta["partial_json"])
 	}
@@ -164,7 +197,24 @@ func (t *Translator) observeContentBlockStop(event map[string]any) Result {
 	}
 	index := lookupIntFromAny(event["index"])
 	state := t.currentMessage.Blocks[index]
-	if state == nil || state.Kind != "text" || state.Completed || state.ItemID == "" {
+	if state == nil || state.Completed || state.ItemID == "" {
+		return Result{}
+	}
+	if state.Kind == "thinking" {
+		state.Completed = true
+		return Result{
+			Events: []agentproto.Event{{
+				Kind:      agentproto.EventItemCompleted,
+				CommandID: t.activeTurn.CommandID,
+				ThreadID:  t.activeTurn.ThreadID,
+				TurnID:    t.activeTurn.TurnID,
+				ItemID:    state.ItemID,
+				ItemKind:  "reasoning_summary",
+				Status:    "completed",
+			}},
+		}
+	}
+	if state.Kind != "text" {
 		return Result{}
 	}
 	state.Completed = true
@@ -400,21 +450,24 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 	}
 	tool.Name = firstNonEmptyString(lookupStringFromAny(block["name"]), tool.Name)
 	tool.Input = cloneMap(lookupMap(block, "input"))
-	if tool.Internal || tool.StartedEmitted {
+	if strings.TrimSpace(tool.Name) == "TodoWrite" {
+		tool.StartedEmitted = true
+		return nil
+	}
+	if tool.Internal || tool.StartedEmitted || !claudeToolVisibleLifecycle(tool.Name) {
 		return nil
 	}
 	tool.StartedEmitted = true
+	itemKind := claudeToolItemKind(tool.Name)
+	metadata := claudeToolMetadata(tool.Name, tool.Input)
 	return []agentproto.Event{{
 		Kind:      agentproto.EventItemStarted,
 		CommandID: t.activeTurn.CommandID,
 		ThreadID:  t.activeTurn.ThreadID,
 		TurnID:    t.activeTurn.TurnID,
 		ItemID:    tool.ItemID,
-		ItemKind:  "dynamic_tool_call",
-		Metadata: map[string]any{
-			"tool":      tool.Name,
-			"arguments": cloneMap(tool.Input),
-		},
+		ItemKind:  itemKind,
+		Metadata:  metadata,
 	}}
 }
 
@@ -459,7 +512,9 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		t.toolStates[tool.ToolUseID] = tool
 	}
 	events := make([]agentproto.Event, 0, 2)
-	if !tool.StartedEmitted {
+	itemKind := claudeToolItemKind(tool.Name)
+	startMetadata := claudeToolMetadata(tool.Name, tool.Input)
+	if !tool.StartedEmitted && claudeToolVisibleLifecycle(tool.Name) {
 		tool.StartedEmitted = true
 		events = append(events, agentproto.Event{
 			Kind:      agentproto.EventItemStarted,
@@ -467,17 +522,13 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 			ThreadID:  t.activeTurn.ThreadID,
 			TurnID:    t.activeTurn.TurnID,
 			ItemID:    tool.ItemID,
-			ItemKind:  "dynamic_tool_call",
-			Metadata: map[string]any{
-				"tool":      tool.Name,
-				"arguments": cloneMap(tool.Input),
-			},
+			ItemKind:  itemKind,
+			Metadata:  startMetadata,
 		})
 	}
-	metadata := map[string]any{
-		"tool":      tool.Name,
-		"arguments": cloneMap(tool.Input),
-		"text":      stringifyTextContent(block["content"]),
+	metadata := claudeToolMetadata(tool.Name, tool.Input)
+	if text := stringifyTextContent(block["content"]); strings.TrimSpace(text) != "" {
+		metadata["text"] = text
 	}
 	switch rawToolResult := message["tool_use_result"].(type) {
 	case map[string]any:
@@ -490,19 +541,21 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		}
 	}
 	isError := lookupBoolFromAny(block["is_error"])
-	events = append(events, agentproto.Event{
-		Kind:      agentproto.EventItemCompleted,
-		CommandID: t.activeTurn.CommandID,
-		ThreadID:  t.activeTurn.ThreadID,
-		TurnID:    t.activeTurn.TurnID,
-		ItemID:    tool.ItemID,
-		ItemKind:  "dynamic_tool_call",
-		Status: map[bool]string{
-			true:  "failed",
-			false: "completed",
-		}[isError],
-		Metadata: metadata,
-	})
+	if claudeToolVisibleLifecycle(tool.Name) && itemKind != "" {
+		events = append(events, agentproto.Event{
+			Kind:      agentproto.EventItemCompleted,
+			CommandID: t.activeTurn.CommandID,
+			ThreadID:  t.activeTurn.ThreadID,
+			TurnID:    t.activeTurn.TurnID,
+			ItemID:    tool.ItemID,
+			ItemKind:  itemKind,
+			Status: map[bool]string{
+				true:  "failed",
+				false: "completed",
+			}[isError],
+			Metadata: metadata,
+		})
+	}
 	tool.Completed = true
 	return Result{Events: events}
 }

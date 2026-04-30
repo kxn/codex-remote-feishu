@@ -45,6 +45,30 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 	return snapshot
 }
 
+func mapsFromAny(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []map[string]any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if item != nil {
+				out = append(out, item)
+			}
+		}
+		return out
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			record, _ := item.(map[string]any)
+			if record != nil {
+				out = append(out, record)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func CommandMetadata(event agentproto.Event) (string, string) {
 	if event.Metadata == nil {
 		return "", ""

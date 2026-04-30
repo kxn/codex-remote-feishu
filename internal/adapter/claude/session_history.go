@@ -248,22 +248,19 @@ func appendHistoryAssistantEntry(turn *parsedHistoryTurn, entry map[string]any) 
 			if text != "" {
 				textParts = append(textParts, text)
 			}
+		case "thinking":
+			continue
 		case "tool_use":
 			toolName := strings.TrimSpace(lookupStringFromAny(block["name"]))
 			if isInternalInteractionTool(toolName) {
 				continue
 			}
 			input, _ := block["input"].(map[string]any)
-			command := strings.TrimSpace(toolUseSummary(toolName, input))
-			if command == "" {
+			item, ok := claudeHistoryToolItem(toolName, input)
+			if !ok {
 				continue
 			}
-			itemIndex := turn.appendItem(agentproto.ThreadHistoryItemRecord{
-				Kind:    "command_execution",
-				Command: command,
-				Text:    command,
-				CWD:     strings.TrimSpace(lookupStringFromAny(entry["cwd"])),
-			})
+			itemIndex := turn.appendItem(item)
 			toolUseID := strings.TrimSpace(lookupStringFromAny(block["id"]))
 			if toolUseID != "" {
 				turn.toolUseItemID[toolUseID] = itemIndex
@@ -275,6 +272,97 @@ func appendHistoryAssistantEntry(turn *parsedHistoryTurn, entry map[string]any) 
 			Kind: "agent_message",
 			Text: strings.Join(textParts, "\n"),
 		})
+	}
+}
+
+func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.ThreadHistoryItemRecord, bool) {
+	itemKind := claudeToolItemKind(toolName)
+	metadata := claudeToolMetadata(toolName, input)
+	switch itemKind {
+	case "command_execution":
+		command := strings.TrimSpace(lookupStringFromAny(metadata["command"]))
+		if command == "" {
+			command = strings.TrimSpace(toolUseSummary(toolName, input))
+		}
+		if command == "" {
+			return agentproto.ThreadHistoryItemRecord{}, false
+		}
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "command_execution",
+			Command:  command,
+			Text:     command,
+			Metadata: metadata,
+		}, true
+	case "web_search":
+		text := strings.TrimSpace(webHistoryText(metadata))
+		if text == "" {
+			text = strings.TrimSpace(toolUseSummary(toolName, input))
+		}
+		if text == "" {
+			return agentproto.ThreadHistoryItemRecord{}, false
+		}
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "web_search",
+			Text:     text,
+			Metadata: metadata,
+		}, true
+	case "delegated_task":
+		text := buildClaudeDelegatedTaskText(metadata)
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "delegated_task",
+			Text:     text,
+			Metadata: metadata,
+		}, true
+	case "process_plan":
+		text := buildClaudeProcessPlanText(metadata)
+		if text == "" {
+			text = strings.TrimSpace(toolUseSummary(toolName, input))
+		}
+		if text == "" {
+			return agentproto.ThreadHistoryItemRecord{}, false
+		}
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "process_plan",
+			Text:     text,
+			Metadata: metadata,
+		}, true
+	case "dynamic_tool_call":
+		text := strings.TrimSpace(toolUseSummary(toolName, input))
+		if text == "" {
+			text = strings.TrimSpace(lookupStringFromAny(metadata["tool"]))
+		}
+		if text == "" {
+			return agentproto.ThreadHistoryItemRecord{}, false
+		}
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "dynamic_tool_call",
+			Text:     text,
+			Metadata: metadata,
+		}, true
+	default:
+		return agentproto.ThreadHistoryItemRecord{}, false
+	}
+}
+
+func webHistoryText(metadata map[string]any) string {
+	switch strings.TrimSpace(lookupStringFromAny(metadata["actionType"])) {
+	case "search":
+		return strings.TrimSpace(lookupStringFromAny(metadata["query"]))
+	case "open_page":
+		return strings.TrimSpace(lookupStringFromAny(metadata["url"]))
+	case "find_in_page":
+		pattern := strings.TrimSpace(lookupStringFromAny(metadata["pattern"]))
+		url := strings.TrimSpace(lookupStringFromAny(metadata["url"]))
+		switch {
+		case pattern != "" && url != "":
+			return pattern + " @ " + url
+		case pattern != "":
+			return pattern
+		default:
+			return url
+		}
+	default:
+		return ""
 	}
 }
 
