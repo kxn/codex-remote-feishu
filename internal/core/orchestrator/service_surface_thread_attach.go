@@ -115,6 +115,26 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	if surface == nil || inst == nil || view == nil || strings.TrimSpace(view.ThreadID) == "" {
 		return nil
 	}
+	instanceBackend := state.EffectiveInstanceBackend(inst)
+	viewBackend := agentproto.NormalizeBackend(view.Backend)
+	if viewBackend != "" && instanceBackend != viewBackend {
+		switch mode {
+		case attachSurfaceToKnownThreadHeadlessRestore:
+			return []eventcontract.Event{{
+				Kind:             eventcontract.KindNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice:           headlessRestoreFailureNotice("thread_not_found"),
+			}}
+		case attachSurfaceToKnownThreadSurfaceResume:
+			return []eventcontract.Event{{
+				Kind:             eventcontract.KindNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice:           surfaceResumeFailureNotice("thread_not_found"),
+			}}
+		default:
+			return notice(surface, "thread_backend_mismatch", "目标会话当前不可恢复，请重新选择可用会话。")
+		}
+	}
 	workspaceKey := mergedThreadWorkspaceClaimKey(view)
 	if s.surfaceUsesWorkspaceClaims(surface) && workspaceKey == "" {
 		return notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")
@@ -157,6 +177,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		return append(events, attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)...)
 	}
 	s.surfaceCurrentWorkspaceKey(surface)
+	surface.Backend = instanceBackend
 	surface.AttachedInstanceID = inst.InstanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
@@ -392,9 +413,25 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		}
 		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式恢复。请切到 `/mode vscode` 后再试。")...)
 	}
-	targetBackend := s.surfaceBackend(surface)
+	targetBackend := agentproto.NormalizeBackend(view.Backend)
+	if targetBackend == "" {
+		targetBackend = s.surfaceBackend(surface)
+	}
 	if view.Inst != nil {
-		targetBackend = state.EffectiveInstanceBackend(view.Inst)
+		instanceBackend := state.EffectiveInstanceBackend(view.Inst)
+		if targetBackend == "" {
+			targetBackend = instanceBackend
+		}
+		if targetBackend != instanceBackend {
+			if mode == startHeadlessModeHeadlessRestore {
+				return append(events, eventcontract.Event{
+					Kind:             eventcontract.KindNotice,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					Notice:           headlessRestoreFailureNotice("thread_not_found"),
+				})
+			}
+			return append(events, notice(surface, "thread_backend_mismatch", "目标会话当前不可恢复，请重新选择可用会话。")...)
+		}
 	}
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{

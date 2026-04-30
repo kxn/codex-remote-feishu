@@ -374,7 +374,7 @@ func (s *Service) threadHistoryResolvedLabel(inst *state.InstanceRecord, history
 		Name:     strings.TrimSpace(history.Thread.Name),
 		CWD:      strings.TrimSpace(history.Thread.CWD),
 	}
-	return displayThreadTitle(syntheticPersistedThreadInstance(thread), thread, history.Thread.ThreadID)
+	return displayThreadTitle(syntheticPersistedThreadInstance(thread, agentproto.BackendCodex), thread, history.Thread.ThreadID)
 }
 
 func buildThreadHistoryTurnSummaries(history agentproto.ThreadHistoryRecord, currentTurnID string) []threadHistoryTurnSummary {

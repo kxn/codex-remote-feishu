@@ -342,6 +342,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 			}
 			view = &mergedThreadView{
 				ThreadID: pending.ThreadID,
+				Backend:  state.EffectiveInstanceBackend(inst),
 				Inst:     inst,
 				Thread:   thread,
 			}

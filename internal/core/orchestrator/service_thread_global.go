@@ -23,6 +23,7 @@ const persistedRecentThreadLimit = 200
 
 type mergedThreadView struct {
 	ThreadID string
+	Backend  agentproto.Backend
 	Inst     *state.InstanceRecord
 	Thread   *state.ThreadRecord
 
@@ -65,12 +66,16 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			}
 			view := viewsByID[thread.ThreadID]
 			if view == nil {
-				view = &mergedThreadView{ThreadID: thread.ThreadID}
+				view = &mergedThreadView{
+					ThreadID: thread.ThreadID,
+					Backend:  state.EffectiveInstanceBackend(inst),
+				}
 				viewsByID[thread.ThreadID] = view
 			}
 			if shouldPromoteMergedThread(view.Inst, view.Thread, inst, thread) {
 				view.Inst = inst
 				view.Thread = thread
+				view.Backend = state.EffectiveInstanceBackend(inst)
 			}
 			if inst.InstanceID == currentInstanceID {
 				view.CurrentVisible = true
@@ -196,6 +201,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		if shouldPromoteMergedThread(view.Inst, view.Thread, inst, thread) {
 			view.Inst = inst
 			view.Thread = thread
+			view.Backend = state.EffectiveInstanceBackend(inst)
 		}
 		if inst.InstanceID == currentInstanceID {
 			view.CurrentVisible = true
@@ -214,8 +220,9 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		if err == nil && ordinaryThreadVisible(thread) {
 			found = true
 			if view.Inst == nil {
-				view.Inst = syntheticPersistedThreadInstance(thread)
+				view.Inst = syntheticPersistedThreadInstance(thread, backend)
 				view.Thread = cloneThreadRecord(thread)
+				view.Backend = backend
 			} else {
 				view.Thread = mergeThreadMetadata(view.Thread, thread)
 			}
@@ -240,7 +247,8 @@ func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threa
 	}
 	view := &mergedThreadView{
 		ThreadID: thread.ThreadID,
-		Inst:     syntheticPersistedThreadInstance(thread),
+		Backend:  agentproto.BackendCodex,
+		Inst:     syntheticPersistedThreadInstance(thread, agentproto.BackendCodex),
 		Thread:   cloneThreadRecord(thread),
 	}
 	if owner := s.threadClaimSurface(view.ThreadID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
@@ -396,7 +404,7 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	return &threadCopy
 }
 
-func syntheticPersistedThreadInstance(thread *state.ThreadRecord) *state.InstanceRecord {
+func syntheticPersistedThreadInstance(thread *state.ThreadRecord, backend agentproto.Backend) *state.InstanceRecord {
 	if thread == nil {
 		return nil
 	}
@@ -408,6 +416,7 @@ func syntheticPersistedThreadInstance(thread *state.ThreadRecord) *state.Instanc
 		WorkspaceRoot: cwd,
 		WorkspaceKey:  state.ResolveWorkspaceKey(cwd),
 		ShortName:     state.WorkspaceShortName(cwd),
+		Backend:       agentproto.NormalizeBackend(backend),
 	}
 }
 
@@ -467,10 +476,14 @@ func sortMergedThreadViews(views []*mergedThreadView) {
 	})
 }
 
-func (s *Service) reusableManagedHeadless(surface *state.SurfaceConsoleRecord, cwd string) *state.InstanceRecord {
+func (s *Service) reusableManagedHeadless(surface *state.SurfaceConsoleRecord, cwd string, backend agentproto.Backend) *state.InstanceRecord {
+	backend = agentproto.NormalizeBackend(backend)
 	var candidates []*state.InstanceRecord
 	for _, inst := range s.Instances() {
 		if inst == nil || !inst.Online || !isHeadlessInstance(inst) {
+			continue
+		}
+		if backend != "" && state.EffectiveInstanceBackend(inst) != backend {
 			continue
 		}
 		if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
@@ -652,7 +665,7 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 			Instance: view.FreeVisibleInst,
 		}
 	}
-	if headless := s.reusableManagedHeadless(surface, threadCWD(view)); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+	if headless := s.reusableManagedHeadless(surface, threadCWD(view), view.Backend); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
 		return resolvedThreadTarget{
 			Mode:     threadAttachReuseHeadless,
 			View:     view,
@@ -696,7 +709,7 @@ func (s *Service) resolveHeadlessRestoreTargetFromView(surface *state.SurfaceCon
 			Instance: view.FreeVisibleInst,
 		}
 	}
-	if headless := s.reusableManagedHeadless(surface, threadCWD(view)); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+	if headless := s.reusableManagedHeadless(surface, threadCWD(view), view.Backend); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
 		return resolvedThreadTarget{
 			Mode:     threadAttachReuseHeadless,
 			View:     view,
@@ -801,6 +814,7 @@ func (s *Service) currentInstanceThreadViews(surface *state.SurfaceConsoleRecord
 		}
 		view := &mergedThreadView{
 			ThreadID:       thread.ThreadID,
+			Backend:        state.EffectiveInstanceBackend(inst),
 			Inst:           inst,
 			Thread:         thread,
 			CurrentVisible: true,

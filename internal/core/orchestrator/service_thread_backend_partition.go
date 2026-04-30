@@ -24,7 +24,8 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 		if view == nil {
 			viewsByID[thread.ThreadID] = &mergedThreadView{
 				ThreadID: thread.ThreadID,
-				Inst:     syntheticPersistedThreadInstance(&thread),
+				Backend:  backend,
+				Inst:     syntheticPersistedThreadInstance(&thread, backend),
 				Thread:   cloneThreadRecord(&thread),
 			}
 			continue

@@ -203,12 +203,19 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
-	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), agentproto.Backend(strings.TrimSpace(entry.Backend))))
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
+	backend := agentproto.Backend(strings.TrimSpace(entry.Backend))
+	if state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) && entry.ClaudeProfileID != "" {
+		backend = agentproto.BackendClaude
+	}
+	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), backend))
 	if entry.ClaudeProfileID != "" {
 		entry.ClaudeProfileID = state.NormalizeClaudeProfileID(entry.ClaudeProfileID)
 	} else if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
 		entry.ClaudeProfileID = state.DefaultClaudeProfileID
+	}
+	if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) != agentproto.BackendClaude {
+		entry.ClaudeProfileID = ""
 	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))

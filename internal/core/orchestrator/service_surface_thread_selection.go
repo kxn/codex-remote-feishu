@@ -551,7 +551,7 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	}
 	view := s.mergedThreadViewForBackend(surface, threadID, backend, true)
 	if view == nil {
-		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD)
+		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD, backend)
 	}
 	cloned := *view
 	thread := &state.ThreadRecord{ThreadID: threadID}
@@ -569,15 +569,17 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	return &cloned
 }
 
-func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, threadCWD string) *mergedThreadView {
+func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, threadCWD string, backend agentproto.Backend) *mergedThreadView {
 	threadID = strings.TrimSpace(threadID)
 	threadCWD = strings.TrimSpace(threadCWD)
 	threadTitle = strings.TrimSpace(threadTitle)
+	backend = agentproto.NormalizeBackend(backend)
 	if threadID == "" || threadCWD == "" {
 		return nil
 	}
 	view := &mergedThreadView{
 		ThreadID: threadID,
+		Backend:  backend,
 		Thread: &state.ThreadRecord{
 			ThreadID: threadID,
 			Name:     threadTitle,

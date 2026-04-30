@@ -165,3 +165,70 @@ func TestTryAutoResumeHeadlessSurfaceLostPinnedThreadStillPreparesNewThreadWhenW
 		t.Fatalf("expected missing pinned thread fallback to preserve new-thread-ready intent, got %#v", surface)
 	}
 }
+
+func TestTryAutoResumeHeadlessSurfaceDoesNotReuseCodexHeadlessForClaudeThread(t *testing.T) {
+	now := time.Date(2026, 4, 30, 1, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		byIDByBackend: map[agentproto.Backend]map[string]state.ThreadRecord{
+			agentproto.BackendClaude: {
+				"thread-claude": {
+					ThreadID:      "thread-claude",
+					Name:          "Claude 恢复会话",
+					CWD:           "/data/dl/repo",
+					Loaded:        true,
+					LastUsedAt:    now.Add(-time.Minute),
+					ListOrder:     1,
+					Preview:       "继续修复",
+					RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: "idle"},
+				},
+			},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-codex-headless",
+		DisplayName:   "repo-codex",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo-codex",
+		Backend:       agentproto.BackendCodex,
+		Managed:       true,
+		Source:        "headless",
+		Online:        true,
+	})
+
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-claude",
+		ThreadTitle:    "Claude 恢复会话",
+		ThreadCWD:      "/data/dl/repo",
+		Backend:        agentproto.BackendClaude,
+		ResumeHeadless: true,
+	}, true)
+
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected claude resume to start a new headless instead of reusing codex one, got result=%#v events=%#v", result, events)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected only start headless command for headless restore, got %#v", events)
+	}
+	if events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected start headless command, got %#v", events)
+	}
+	if events[0].DaemonCommand.InstanceID == "inst-codex-headless" {
+		t.Fatalf("expected resume to avoid reusing codex headless instance, got %#v", events[0].DaemonCommand)
+	}
+	if events[0].DaemonCommand.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected resume start command to carry claude profile, got %#v", events[0].DaemonCommand)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "" {
+		t.Fatalf("expected surface to stay unattached while starting claude headless, got %#v", surface)
+	}
+	if surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID == "inst-codex-headless" {
+		t.Fatalf("expected pending launch for fresh claude headless, got %#v", surface.PendingHeadless)
+	}
+	if surface.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected surface backend to remain claude, got %#v", surface)
+	}
+}

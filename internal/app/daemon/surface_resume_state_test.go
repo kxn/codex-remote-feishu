@@ -257,6 +257,35 @@ func TestSurfaceResumeStoreDefaultsLegacyMissingBackendToCodex(t *testing.T) {
 	}
 }
 
+func TestSurfaceResumeStoreCanonicalizesLegacyCodexBackendWithClaudeProfile(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"codex\",\n      \"claudeProfileID\": \"mimo\",\n      \"resumeThreadID\": \"ca0c6c4c-4ba1-4729-b5cf-3cd7c299add1\",\n      \"resumeThreadTitle\": \"Claude 会话\",\n      \"resumeThreadCWD\": \"/data/dl/ds4debug\",\n      \"resumeWorkspaceKey\": \"/data/dl/ds4debug\",\n      \"resumeRouteMode\": \"pinned\",\n      \"resumeHeadless\": true\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write legacy surface resume state: %v", err)
+	}
+
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load legacy store: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected canonicalized surface resume entry after reload")
+	}
+	if entry.Backend != "claude" {
+		t.Fatalf("expected claude profile to canonicalize backend back to claude, got %#v", entry)
+	}
+	if entry.ClaudeProfileID != "mimo" {
+		t.Fatalf("expected claude profile id to be preserved, got %#v", entry)
+	}
+	if entry.ResumeThreadID != "ca0c6c4c-4ba1-4729-b5cf-3cd7c299add1" || entry.ResumeWorkspaceKey != "/data/dl/ds4debug" || !entry.ResumeHeadless {
+		t.Fatalf("expected resume target to survive canonicalization, got %#v", entry)
+	}
+}
+
 func TestSurfaceResumeStoreMigratesLegacyPendingFreshWorkspaceHeadlessEntry(t *testing.T) {
 	t.Parallel()
 
