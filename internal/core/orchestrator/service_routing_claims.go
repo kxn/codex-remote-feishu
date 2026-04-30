@@ -25,7 +25,7 @@ func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
 }
 
 func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord) state.RouteMode {
-	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
+	if s.surfaceIsVSCode(surface) {
 		return state.RouteModeFollowLocal
 	}
 	return state.RouteModePinned
@@ -117,7 +117,15 @@ func mergedThreadWorkspaceClaimKey(view *mergedThreadView) string {
 }
 
 func (s *Service) surfaceUsesWorkspaceClaims(surface *state.SurfaceConsoleRecord) bool {
-	return s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal
+	return s.surfaceIsHeadless(surface)
+}
+
+func (s *Service) surfaceIsHeadless(surface *state.SurfaceConsoleRecord) bool {
+	return state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface))
+}
+
+func (s *Service) surfaceIsVSCode(surface *state.SurfaceConsoleRecord) bool {
+	return state.IsVSCodeProductMode(s.normalizeSurfaceProductMode(surface))
 }
 
 func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord) string {

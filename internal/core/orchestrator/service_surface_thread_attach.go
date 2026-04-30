@@ -285,7 +285,7 @@ func attachSurfaceToKnownThreadInstanceBusyNotice(surface *state.SurfaceConsoleR
 			Notice:           surfaceResumeFailureNotice("workspace_instance_busy"),
 		}}
 	}
-	if surface != nil && state.NormalizeProductMode(surface.ProductMode) == state.ProductModeNormal {
+	if surface != nil && state.IsHeadlessProductMode(state.NormalizeProductMode(surface.ProductMode)) {
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
 	return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))

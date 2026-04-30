@@ -126,16 +126,11 @@ func (s *Service) buildThreadSelectionModel(surface *state.SurfaceConsoleRecord,
 }
 
 func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page, cursor int) (*control.FeishuThreadSelectionView, []eventcontract.Event) {
-	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) == "" {
+	if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return nil, notice(surface, "not_attached_vscode", "vscode 模式下请先 /list 选择一个 VS Code 实例，再使用 /use 或 /useall。")
 	}
-	productMode := state.ProductModeNormal
-	if surface != nil {
-		productMode = s.normalizeSurfaceProductMode(surface)
-	}
 	model := &control.FeishuThreadSelectionView{}
-	switch productMode {
-	case state.ProductModeVSCode:
+	if s.surfaceIsVSCode(surface) {
 		views := s.scopedMergedThreadViews(surface)
 		if surface != nil {
 			if inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]; inst != nil {
@@ -170,7 +165,7 @@ func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsol
 		for _, view := range selectedViews {
 			model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
 		}
-	default:
+	} else {
 		attached := surface != nil && strings.TrimSpace(surface.AttachedInstanceID) != ""
 		if !attached || mode == threadSelectionDisplayAll || mode == threadSelectionDisplayAllExpanded {
 			if workspaceKey := s.surfaceCurrentWorkspaceKey(surface); workspaceKey != "" {
@@ -224,7 +219,7 @@ func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsol
 				return model, nil
 			}
 		}
-		if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode && strings.TrimSpace(surface.AttachedInstanceID) != "" {
+		if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 			return nil, notice(surface, "no_visible_threads", "当前接管的 VS Code 实例还没有已知会话。请先在 VS Code 里实际操作一次会话，再重试。")
 		}
 		if workspaceKey := s.threadSelectionWorkspaceScope(surface); workspaceKey != "" {
@@ -372,9 +367,7 @@ func (s *Service) threadSelectionViewEntry(surface *state.SurfaceConsoleRecord, 
 }
 
 func (s *Service) threadSelectionSummary(surface *state.SurfaceConsoleRecord, view *mergedThreadView) string {
-	if surface != nil &&
-		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
-		strings.TrimSpace(surface.AttachedInstanceID) != "" {
+	if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		return vscodeThreadSelectionDropdownLabel(view)
 	}
 	return threadSelectionButtonLabel(view.Thread, view.ThreadID)
@@ -428,7 +421,7 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 	if surface == nil {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
-	if !state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) {
+	if !s.surfaceIsHeadless(surface) {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
@@ -526,7 +519,7 @@ func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]ev
 	if surface == nil {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeVSCode {
+	if !s.surfaceIsVSCode(surface) {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {

@@ -5,9 +5,52 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestClaudeModeListUsesHeadlessWorkspacePicker(t *testing.T) {
+	now := time.Date(2026, 4, 30, 9, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-claude-1",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendClaude,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-claude",
+		ChatID:           "chat-claude",
+		ActorUserID:      "user-claude",
+		Text:             "/mode claude",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-claude",
+		ChatID:           "chat-claude",
+		ActorUserID:      "user-claude",
+	})
+
+	if len(events) != 1 || events[0].TargetPickerView == nil {
+		t.Fatalf("expected headless /list to open target picker in claude mode, got %#v", events)
+	}
+	view := events[0].TargetPickerView
+	if view.Source != control.TargetPickerRequestSourceList {
+		t.Fatalf("expected claude /list to keep headless source, got %#v", view)
+	}
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/repo"); !ok {
+		t.Fatalf("expected claude /list to include workspace option, got %#v", view.WorkspaceOptions)
+	}
+}
 
 func TestVSCodeModeListFiltersOutHeadlessInstances(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)

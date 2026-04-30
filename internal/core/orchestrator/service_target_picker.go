@@ -66,7 +66,7 @@ func (s *Service) openTargetPickerWithOptions(surface *state.SurfaceConsoleRecor
 	if surface == nil {
 		return nil
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return nil
 	}
 	s.clearThreadHistoryRuntime(surface)
@@ -540,7 +540,7 @@ func (s *Service) enterTargetPickerNewThread(surface *state.SurfaceConsoleRecord
 	if workspaceKey == "" {
 		return notice(surface, "workspace_not_found", "目标工作区不存在，请重新发送 /list。")
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，不能在这里直接新建会话。")
 	}
 	if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace == workspaceKey && strings.TrimSpace(surface.AttachedInstanceID) != "" {

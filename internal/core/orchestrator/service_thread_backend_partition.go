@@ -34,7 +34,7 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 }
 
 func (s *Service) normalModeThreadBackend(surface *state.SurfaceConsoleRecord) (agentproto.Backend, bool) {
-	if surface == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return "", false
 	}
 	return s.surfaceBackend(surface), true

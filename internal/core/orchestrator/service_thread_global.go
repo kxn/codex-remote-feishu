@@ -569,7 +569,7 @@ func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threa
 }
 
 func (s *Service) resolveThreadTargetWithScope(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) resolvedThreadTarget {
-	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
+	if s.surfaceIsVSCode(surface) {
 		return s.resolveAttachedVSCodeThreadTarget(surface, threadID)
 	}
 	view := s.mergedThreadView(surface, threadID)
@@ -768,7 +768,7 @@ func (s *Service) currentVisibleThreadEligible(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) threadSelectionWorkspaceScope(surface *state.SurfaceConsoleRecord) string {
-	if surface == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if surface == nil || !s.surfaceIsHeadless(surface) {
 		return ""
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {
@@ -834,9 +834,7 @@ func (s *Service) currentInstanceThreadView(surface *state.SurfaceConsoleRecord,
 }
 
 func (s *Service) scopedMergedThreadViews(surface *state.SurfaceConsoleRecord) []*mergedThreadView {
-	if surface != nil &&
-		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
-		strings.TrimSpace(surface.AttachedInstanceID) != "" {
+	if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		return s.currentInstanceThreadViews(surface)
 	}
 	views := s.mergedThreadViews(surface)
@@ -888,7 +886,7 @@ func (s *Service) threadSelectionStatus(surface *state.SurfaceConsoleRecord, vie
 		return "可接管", false
 	case threadAttachFreeVisible:
 		if surface != nil &&
-			s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal &&
+			s.surfaceIsHeadless(surface) &&
 			strings.TrimSpace(surface.AttachedInstanceID) != "" &&
 			target.Instance != nil &&
 			isVSCodeInstance(target.Instance) {
@@ -929,9 +927,7 @@ func (s *Service) threadSelectionMetaText(surface *state.SurfaceConsoleRecord, v
 	if view == nil {
 		return ""
 	}
-	if surface != nil &&
-		s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode &&
-		strings.TrimSpace(surface.AttachedInstanceID) != "" {
+	if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		return s.vscodeThreadSelectionMetaText(surface, view, status)
 	}
 	status = strings.TrimSpace(status)

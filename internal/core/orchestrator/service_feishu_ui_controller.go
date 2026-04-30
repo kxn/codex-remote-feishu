@@ -18,32 +18,32 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 	}
 	switch intent.Kind {
 	case control.FeishuUIIntentShowWorkspaceRoot:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspace, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceNew:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspaceNew, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceList:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPickerForAction(surface, action, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewDir:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceDir, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewGit:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceGit, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewWorktree:
-		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
@@ -52,7 +52,7 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentShowList:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceList, action, "", "", intent.SourceMessageID, true)
 		}
 		return s.presentInstanceSelectionWithAction(surface, action, true)
@@ -63,17 +63,17 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 	case control.FeishuUIIntentShowAllWorkspaces:
 		return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceList, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowThreads:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceUse, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		return s.presentThreadSelectionModeAtCursorWithAction(surface, action, threadSelectionDisplayRecent, intent.Page, 0)
 	case control.FeishuUIIntentShowAllThreads:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceUseAll, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		return s.presentThreadSelectionModeAtCursorWithAction(surface, action, threadSelectionDisplayAll, intent.Page, 0)
 	case control.FeishuUIIntentShowScopedThreads:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceUse, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		mode := threadSelectionDisplayScopedAll
@@ -82,17 +82,17 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		}
 		return s.presentThreadSelectionModeAtCursorWithAction(surface, action, mode, intent.Page, 0)
 	case control.FeishuUIIntentShowWorkspaceThreads:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceWorkspace, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		return s.presentWorkspaceThreadSelectionPageWithAction(surface, action, intent.WorkspaceKey, intent.Page, intent.ReturnPage)
 	case control.FeishuUIIntentShowAllThreadWorkspaces:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceUseAll, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		return s.presentThreadSelectionModeAtCursorWithAction(surface, action, threadSelectionDisplayAllExpanded, intent.Page, 0)
 	case control.FeishuUIIntentShowRecentThreadWorkspaces:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceUseAll, action, intent.WorkspaceKey, "", intent.SourceMessageID, true)
 		}
 		return s.presentThreadSelectionModeAtCursorWithAction(surface, action, threadSelectionDisplayAllExpanded, intent.Page, 0)

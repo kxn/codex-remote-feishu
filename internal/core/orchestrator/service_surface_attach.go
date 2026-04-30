@@ -133,18 +133,18 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	if inst == nil {
 		return notice(surface, "instance_not_found", "实例不存在。")
 	}
-	productMode := s.normalizeSurfaceProductMode(surface)
+	s.normalizeSurfaceProductMode(surface)
 	surfaceBackend := s.surfaceBackend(surface)
 	instanceBackend := state.EffectiveInstanceBackend(inst)
 	workspaceKey := instanceWorkspaceClaimKey(inst)
 	switchingInstance := surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID
-	if productMode == state.ProductModeVSCode && (instanceBackend != agentproto.BackendCodex || !isVSCodeInstance(inst)) {
+	if s.surfaceIsVSCode(surface) && (instanceBackend != agentproto.BackendCodex || !isVSCodeInstance(inst)) {
 		return notice(surface, "mode_backend_mismatch", "当前处于 vscode 模式，只能接管 Codex VS Code 实例。请先选择 VS Code 实例，或切回 `/mode codex` / `/mode claude`。")
 	}
-	if productMode == state.ProductModeNormal && instanceBackend != surfaceBackend {
+	if s.surfaceIsHeadless(surface) && instanceBackend != surfaceBackend {
 		return notice(surface, "mode_backend_mismatch", fmt.Sprintf("当前处于 %s 模式，不能直接接管 %s backend。请先 `/mode %s`。", s.surfaceModeAlias(surface), instanceBackend, instanceBackend))
 	}
-	if switchingInstance && productMode != state.ProductModeVSCode {
+	if switchingInstance && !s.surfaceIsVSCode(surface) {
 		return notice(surface, "attach_requires_detach", "当前会话已接管其他工作区，请先 /detach。")
 	}
 	if switchingInstance {
@@ -153,7 +153,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		}
 	}
 	if surface.AttachedInstanceID == instanceID {
-		if productMode != state.ProductModeVSCode && workspaceKey != "" {
+		if !s.surfaceIsVSCode(surface) && workspaceKey != "" {
 			return notice(surface, "already_attached", fmt.Sprintf("当前已接管工作区：%s。", workspaceKey))
 		}
 		return notice(surface, "already_attached", fmt.Sprintf("当前已接管 %s。", inst.DisplayName))
@@ -201,7 +201,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	if productMode == state.ProductModeVSCode {
+	if s.surfaceIsVSCode(surface) {
 		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance, mode)...)
 	}
 
@@ -236,7 +236,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	} else if len(visibleThreads(inst)) != 0 {
 		text = fmt.Sprintf("%s 当前还没有选择会话，请先通过 /use 选择一个会话。", text)
 	} else {
-		if productMode == state.ProductModeVSCode {
+		if s.surfaceIsVSCode(surface) {
 			text = fmt.Sprintf("%s 当前没有可用会话，请等待 VS Code 切到会话后再 /use，或直接 /detach。", text)
 		} else {
 			text = fmt.Sprintf("%s 当前工作区还没有可用会话；你可以稍后再 /use，或直接发送文本开启新会话（也可 /new 先进入待命）。", text)

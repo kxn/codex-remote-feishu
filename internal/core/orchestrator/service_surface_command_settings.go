@@ -189,10 +189,10 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	surface.ProductMode = target.ProductMode
 	surface.Backend = state.NormalizeSurfaceBackend(target.ProductMode, target.Backend)
-	if target.ProductMode == state.ProductModeNormal && target.Backend == agentproto.BackendClaude {
+	if state.IsHeadlessProductMode(target.ProductMode) && target.Backend == agentproto.BackendClaude {
 		_ = s.surfaceClaudeProfileID(surface)
 	}
-	if currentWorkspaceKey != "" && target.ProductMode == state.ProductModeNormal {
+	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {
 		surface.ClaimedWorkspaceKey = currentWorkspaceKey
 	}
 	if shouldContinueWorkspaceAfterNormalBackendSwitch(currentMode, currentBackend, target, currentWorkspaceKey) {
@@ -224,7 +224,7 @@ func shouldContinueWorkspaceAfterNormalBackendSwitch(currentMode state.ProductMo
 		return false
 	}
 	return state.NormalizeProductMode(currentMode) == state.ProductModeNormal &&
-		target.ProductMode == state.ProductModeNormal &&
+		state.IsHeadlessProductMode(target.ProductMode) &&
 		agentproto.NormalizeBackend(currentBackend) != agentproto.NormalizeBackend(target.Backend)
 }
 
@@ -240,7 +240,7 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 }
 
 func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
+	if !s.surfaceIsHeadless(surface) || s.surfaceBackend(surface) != agentproto.BackendClaude {
 		text := "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{

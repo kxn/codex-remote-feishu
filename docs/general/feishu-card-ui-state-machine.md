@@ -68,7 +68,7 @@
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
-  - 对 normal mode `/list` / `/use` / `/useall`，以及 attach-unbound / `selected_thread_lost` / `thread_claim_lost` 这类被动恢复入口，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
+  - 对 headless 主链 `/list` / `/use` / `/useall`，以及 attach-unbound / `selected_thread_lost` / `thread_claim_lost` 这类被动恢复入口，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
   - 对 VS Code instance/thread selection、kick-thread confirm，以及仍保留 selection 卡形态的少量兼容路径，当前统一先产出 `FeishuSelectionView` read model，再连同 `FeishuSelectionContext` 穿过 `UIEvent` 边界
   - 对 `/menu` 与 bare `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/model` `/verbose` `/claudeprofile`，当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
   - 这组 bare config-card 的 open intent、launcher keep contract、controller 分发与 config page builder 当前已通过 `FeishuConfigFlowDefinition` registry 收口，不再分别在 intent / lifecycle / controller / config catalog 多层平行枚举
@@ -88,7 +88,7 @@
     [internal/adapter/feishu/projector/selection_view.go](../../internal/adapter/feishu/projector/selection_view.go)
     负责把 `FeishuSelectionView + FeishuSelectionSemantics` 归一整理成本地 render model，供 button/dropdown 两类投影复用
     [internal/adapter/feishu/projector/selection_structured.go](../../internal/adapter/feishu/projector/selection_structured.go)
-    负责 selection view 的统一结构化投影入口：VS Code `/list` 按钮式 instance view、VS Code `/use` / `/useall` dropdown、normal button-based selection 与 kick-thread confirm 当前都直接消费 `FeishuSelectionView`；`projector.go` 不再保留单独的 selection fallback 分支
+    负责 selection view 的统一结构化投影入口：VS Code `/list` 按钮式 instance view、VS Code `/use` / `/useall` dropdown、headless 兼容 button-based selection 与 kick-thread confirm 当前都直接消费 `FeishuSelectionView`；`projector.go` 不再保留单独的 selection fallback 分支
     [internal/adapter/feishu/projector/page_catalog.go](../../internal/adapter/feishu/projector/page_catalog.go)
     负责把 `FeishuPageView` 投影成页面卡，并为按钮/表单写入 `page_action` / `page_submit` payload；当前 page callback 还会补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend` provenance，减少后续 variant page 对裸 `ActionKind` 的反推依赖
     [internal/adapter/feishu/projector/path_picker.go](../../internal/adapter/feishu/projector/path_picker.go)
@@ -102,12 +102,12 @@
 
 | 交互面 | 当前 owner | 当前边界 |
 | --- | --- | --- |
-| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned (launcher)` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；首页仅保留分组导航入口，不再额外渲染“常用操作”区块；首页 breadcrumb 固定停在 `菜单首页`，不会再从 `/menu` 命令定义继承 `系统管理` 分组 breadcrumb 或回退按钮；首页分组按钮直接显示分组名，分组页才显示显式 `返回上一层`；normal mode 下像 `工作会话` 这种“分组根入口直接 handoff 到业务页”的情况，当前也通过 group-root command 元数据统一治理，不再靠 group id 特判；菜单导航状态当前通过 owner-card runtime 的 `command_menu + role=launcher` 记录，不再依赖旧 `Surface.MenuFlow` |
-| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责重新打开 `/workspace list` 切换卡；`/list` 这类旧入口只是 alias，不再决定新的主展示结构 |
-| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | normal mode 下当前也只负责重新打开 `/workspace list` 切换卡；vscode mode 下会刷新当前实例的结构化 thread dropdown，不再维持旧分页 prompt；两条路径当前都会默认排除 `source=review` 的 detached review thread，不把 review session 当普通候选展示 |
+| `/menu` 首页 / 分组 / 返回 | `feishu-ui-owned (launcher)` | 当前由 Feishu UI controller 处理同一张命令菜单内的层级切换；首页仅保留分组导航入口，不再额外渲染“常用操作”区块；首页 breadcrumb 固定停在 `菜单首页`，不会再从 `/menu` 命令定义继承 `系统管理` 分组 breadcrumb 或回退按钮；首页分组按钮直接显示分组名，分组页才显示显式 `返回上一层`；headless 主链下像 `工作会话` 这种“分组根入口直接 handoff 到业务页”的情况，当前也通过 group-root command 元数据统一治理，不再靠 group id 特判；菜单导航状态当前通过 owner-card runtime 的 `command_menu + role=launcher` 记录，不再依赖旧 `Surface.MenuFlow` |
+| `show_all_workspaces` / `show_recent_workspaces` | `feishu-ui-owned` | headless 主链下当前只负责重新打开 `/workspace list` 切换卡；`/list` 这类旧入口只是 alias，不再决定新的主展示结构 |
+| `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | headless 主链下当前也只负责重新打开 `/workspace list` 切换卡；`vscode` 下会刷新当前实例的结构化 thread dropdown，不再维持旧分页 prompt；两条路径当前都会默认排除 `source=review` 的 detached review thread，不把 review session 当普通候选展示 |
 | `thread_selection_page` | `feishu-ui-owned` | VS Code 结构化 thread dropdown 的 byte-budget 翻页动作；payload 携带 `view_mode + cursor(start-index)`。命中当前 surface 时 controller 会按当前 surface 状态重建 `FeishuThreadSelectionView`，projector 再按 transport budget 切出新页并 inline replace 当前卡，不引入 owner runtime |
-| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | normal mode 下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 normal mode 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则只服务 `/workspace list`；`target_picker_select_mode` / `target_picker_select_source` 只保留 transport/runtime 兼容。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
+| `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | headless 主链下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
+| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 headless 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则只服务 `/workspace list`；`target_picker_select_mode` / `target_picker_select_source` 只保留 transport/runtime 兼容。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
 | `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
@@ -118,7 +118,7 @@
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card；quiet 静默，normal/verbose 则继续并入共享过程卡 |
 | bare `/bendtomywill` / stamped `/menu common_tools -> /bendtomywill` | `mixed` | 文本或菜单入口当前都先走 daemon-side patch flow runtime：打开时会读取当前 attached thread 的 latest completed assistant turn 预览，并命中 refusal / placeholder 候选后生成一张 `request_user_input` 风格的多题 patch 卡。逐题回答时同一张卡会按 `request_revision` inline replace；全部题目完成后当前卡会切到 patchable progress page，随后 success / failure / rollback 结果继续 patch 同一张卡。若首卡还没有 `message_id`，runtime 会先用 `TrackingKey=flow_id` append，再在 gateway 分配 `message_id` 后回写；最近一次回滚按钮则通过 `page_action(ActionTurnPatchRollback, patch_id)` 继续收口到同一张卡。旧卡、他人点击、busy / VS Code / detached 拒绝，以及候选点不存在等路径，若入口来自 stamped 当前卡，会优先走 page-result replacement 收口，否则继续 append-only notice |
 | stamped `/menu maintenance -> /help` / `/status` | `launcher -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录或 snapshot 状态卡）直接 `ReplaceCurrentCard`，同时把 `command_menu` launcher flow 标记为 terminal/已退出。纯文本 `/help` / `/status` 仍保持 append-only |
-| stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` | `launcher -> owner` | normal mode 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页；该父页当前直接显示 `切换 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管`，`/workspace new` 子页也继续保留三条新建入口。workspace page owner runtime 现在会显式记录 handoff 来源卡的 `message_id` 与 `from_menu`，因此从这些父页继续进入目录/Git/worktree 业务卡时，子卡 footer 的 `返回上一层` 会稳定回到父页或菜单，而不是退化到 target-picker 内部回退。该路径当前通过显式 `launcher -> owner` handoff 进入业务卡，不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
+| stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` | `launcher -> owner` | `codex headless` 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页；该父页当前直接显示 `切换 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管`，`/workspace new` 子页也继续保留三条新建入口。workspace page owner runtime 现在会显式记录 handoff 来源卡的 `message_id` 与 `from_menu`，因此从这些父页继续进入目录/Git/worktree 业务卡时，子卡 footer 的 `返回上一层` 会稳定回到父页或菜单，而不是退化到 target-picker 内部回退。该路径当前通过显式 `launcher -> owner` handoff 进入业务卡，不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/detach` | `launcher -> terminal` | 点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并抑制重复终态 append。菜单 launcher flow 在 handoff 后立即退出，不再保留“半菜单半业务”活跃态 |
 | stamped `/menu current_work -> /steerall` | `launcher -> owner(steerall)` | 点击后会把当前菜单卡直接交给 steer-all owner flow。requested 进度态继续 patch 同一张卡；completed、no-op、failed / disconnect restore 才会把这张卡封成 sealed terminal，不再留下可重复点击的旧菜单 |
 | bare `/mode` / `/autowhip` / `/autocontinue` / `/reasoning` / `/access` / `/plan` / `/model` / `/verbose` / `/claudeprofile` | `mixed` | bare open-card 当前由 Feishu UI controller 处理；其中 `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/verbose` 只保留固定选项，`/model` 额外保留一张手动输入表单，`/claudeprofile` 则固定渲染成单下拉 profile 选择表单。参数卡当前也统一承接 `body / notice / sealed` contract：业务区保留当前值/覆盖值/模型等上下文，notice 区承接成功、错误和 reopen 提示；若 apply 来自带 `daemon_lifecycle_id` 的当前参数卡 callback，则同一张参数卡会继续被 patch 成同卡反馈/终态；当这张参数卡本身是从菜单 launcher handoff 进来的 stamped 配置页时，即使终态 sealed，显式 footer 的 `返回菜单/返回上一层` 也会继续保留；page normalize 只会关闭主交互，不会再额外清掉这类显式 related buttons。其余 direct-open 路径若没有显式 footer，sealed 后也不会自动推导默认 back。`/plan` 的 apply 只改当前 surface 的后续 `PlanMode`，不会追溯改写当前 running turn；`/claudeprofile` 的 apply 只在 `claude` 模式下有效，idle detached 切换会清空当前 surface 的临时 plan/prompt 状态，workspace 内切换则会直接重启当前 workspace 并恢复目标 `workspace+profile` 快照；如果某轮 turn 结束时存在最终 `item/plan/delta`，后续 append 的“提案计划”卡则单独归到 `plan_proposal` owner family，不复用 bare `/plan` 参数卡本身；其中 stamped `/mode vscode` 若切换后立刻命中 legacy `editor_settings` 且存在可接管入口，daemon 会先同步静默自动迁到 `managed_shim`，成功后不再额外弹迁移提示卡；若仍需要可见下一步（缺 target、自动迁移失败、managed shim 修复、open prompt 或恢复提示），daemon 才会把首张可投影提示卡同位替回当前卡，并把该 surface 记录成可继续 patch 的 VS Code guidance card；后续异步 runtime 提示只要仍命中这块 card，就继续回写同一张卡；若是纯文本 slash 或其他非 card-owned 入口，则仍保持 append-only |
@@ -129,7 +129,7 @@
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuPageView` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 page-result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `tool_callback` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期，以及由 orchestrator 单点 request presentation owner 基于 `requestType/rawType/metadata` 归一化出的 `SemanticKind + Title/Sections/Options/Questions/HintText` contract，属于产品状态机。`tool_callback` 当前也走同一 owner，但落成只读 fail-closed auto-dispatch；projector 当前只消费 `FeishuRequestView`，不再自己回猜 approval / permissions / MCP subtype |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
-| `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、normal/vscode mode 差异都属于 core 状态机 |
+| `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、headless/vscode 主分叉差异都属于 core 状态机 |
 | `/new` | `product-owned` | 是否进入 `new_thread_ready`、何时消耗第一条消息、request gate 是否阻断都属于 core 状态机 |
 
 注：
@@ -149,12 +149,12 @@
   - compact / steerall / sendfile terminal、plan proposal、upgrade owner-flow、vscode guidance 等活跃 owner-card 路径当前也统一携带 `control.FeishuPageView`
   - `control.FeishuCatalogView` 当前只保留 orchestrator 内部的 menu/config/page 语义 read model；controller/daemon 在发卡前会先统一收敛成 `FeishuPageView`，adapter 只消费 `UIEventFeishuPageView`；最终卡片都遵循 `业务区 -> notice 区 -> footer`，notice 区仅在存在内容时出现
   - compact owner card 当前已完全迁到 page contract：running 态保留“当前会话”业务区，终态把结果提示放在 notice 区并标记 sealed
-- `control.FeishuTargetPickerView` 当前已经是 normal mode `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` 跨 `UIEvent` 边界的主载体：
-  - 旧的 normal-mode unified target picker 产品形态已经下线；现在跨边界携带的仍是 `control.FeishuTargetPickerView`，但它分别承接四张独立业务卡
+- `control.FeishuTargetPickerView` 当前已经是 headless 主链 `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` 跨 `UIEvent` 边界的主载体：
+  - 旧的 headless unified target picker 产品形态已经下线；现在跨边界携带的仍是 `control.FeishuTargetPickerView`，但它分别承接四张独立业务卡
   - projector 直接以它为 owner 生成 `target_picker_*` callback payload
   - dropdown 刷新与 confirm 已不再经由 `FeishuDirectSelectionPrompt` 兜底
-  - `Page` / `StageLabel` / `Question` 当前仍是 editing / processing / terminal 的稳定页头合同，但 normal mode 主路径已经改成：`/workspace list` 直接落 `Page=target`，`/workspace new dir` 直接落 `Page=local_directory`，`/workspace new git` 直接落 `Page=git`，`/workspace new worktree` 直接落 `Page=worktree`
-  - `FeishuTargetPickerPageMode` / `FeishuTargetPickerPageSource` 仍保留在 DTO / callback 协议里做兼容，但当前主路径默认不会把它们投影给 normal-mode 用户
+  - `Page` / `StageLabel` / `Question` 当前仍是 editing / processing / terminal 的稳定页头合同，但 headless 主路径已经改成：`/workspace list` 直接落 `Page=target`，`/workspace new dir` 直接落 `Page=local_directory`，`/workspace new git` 直接落 `Page=git`，`/workspace new worktree` 直接落 `Page=worktree`
+  - `FeishuTargetPickerPageMode` / `FeishuTargetPickerPageSource` 仍保留在 DTO / callback 协议里做兼容，但当前主路径默认不会把它们投影给 headless 用户
 - `control.FeishuSelectionView` 当前已经是 live selection UI 的主载体：
   - VS Code `/list` 的 instance selection、VS Code `/use` / `/useall` 的 thread selection，以及 kick-thread confirm，当前都直接跨 `UIEvent` 边界携带 `FeishuSelectionView`
   - title / layout / context / hidden-entry hint 当前统一由 `control.DeriveFeishuSelectionSemantics(...)` 派生，orchestrator 的 `FeishuSelectionContext` 与 adapter projector 共用这一份语义 owner，不再各自重复推导
@@ -172,7 +172,7 @@
   - DTO 形状暂未全部迁出
   - `UIEvent` 已经携带独立的 `FeishuSelectionContext` / `FeishuPageContext` / `FeishuRequestContext`（legacy command 路径仍保留 `FeishuCommandContext`）
   - Feishu UI controller 已通过这层 boundary 分流 pure navigation；后续继续扩 controller 时，默认仍应优先依赖这些 query/context 元数据，而不是继续直接读 orchestrator 内部字段
-  - target picker cards 现在是 “read model -> `FeishuTargetPickerView` -> adapter projection -> Feishu V2 卡片” 三段；后续修改 normal `/list` / `/use` / `/useall` 的默认选择、页头单题文案、前置阻塞校验、confirm 按钮或 stale-selection 行为时，默认应落在 target picker read model / projection 层，而不是回到旧 selection query 函数里继续混改
+  - target picker cards 现在是 “read model -> `FeishuTargetPickerView` -> adapter projection -> Feishu V2 卡片” 三段；后续修改 headless `/list` / `/use` / `/useall` 的默认选择、页头单题文案、前置阻塞校验、confirm 按钮或 stale-selection 行为时，默认应落在 target picker read model / projection 层，而不是回到旧 selection query 函数里继续混改
   - selection cards 现在主要服务于 VS Code instance/thread selection 与 kick-thread confirm；它们已经统一成 “read model -> `FeishuSelectionView` / `FeishuSelectionSemantics` -> adapter structured projection -> Feishu V2 卡片” 三段。后续修改这些路径的交互与文案时，默认应落在 selection semantics / structured projection / selection view 结构层，而不是重新引入 prompt compat 载体
   - menu/config/root pages 现在统一是 “`FeishuCatalogView` -> `FeishuPageView` -> page projector -> Feishu V2 卡片” 三段；直接 owner-flow 页面则是 “`FeishuPageView` -> page projector -> Feishu V2 卡片”；后续修改 `/menu` 或 bare config cards 的 breadcrumbs、按钮布局、回退按钮、摘要文案时，默认应落在 catalog/page read model 或 page projector 层
 - `ActionShow*` 与 bare config `Action*Command` 当前若仍存在，属于 gateway / parser 的 transport compatibility 层；live path 会先归并到 `FeishuUIIntent`，不再代表主产品 reducer owner。
@@ -208,14 +208,14 @@
 | `attach_workspace` | `workspace_key` | 接管指定工作区 |
 | `use_thread` | `thread_id`、`field_name`、`allow_cross_workspace` | 选择 thread；VS Code 结构化 thread dropdown 走 `field_name` + `form_value/option` 取值，其余按钮路径仍可直接带 `thread_id` |
 | `thread_selection_page` | `view_mode`、`cursor` | VS Code 结构化 thread dropdown 的 byte-budget 翻页回调；`view_mode` 指明当前是 recent / all / scoped_all 哪条 direct selection flow，`cursor` 是候选项 start-index。服务端只重建当前 selection view，不持久化 owner runtime；projector 若发现当前 thread 不在新页，会清空 `initial_option` |
-| `show_threads` / `show_all_threads` / `show_scoped_threads` | `view_mode`、`page` | normal mode 下重新打开 `/workspace list` 切换卡；vscode / legacy selection path 下仍用于在当前 same-context thread 列表里切页。当前普通线程候选会显式过滤 `source=review` 的 detached review thread |
-| `show_all_workspaces` / `show_recent_workspaces` | `page` | normal mode 下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
-| `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | normal mode 下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
-| `show_workspace_threads` | `workspace_key`、`page`、`return_page` | normal mode 下以指定 workspace 重新打开 `/workspace list` 切换卡，并预填当前 workspace；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
-| `target_picker_select_mode` | `picker_id`、`target_value` | 兼容保留的模式页回调；gateway 直接从 payload 里的 `target_value` 取当前模式，但当前 normal-mode 主路径默认不会发出这类回调 |
-| `target_picker_select_source` | `picker_id`、`target_value` | 兼容保留的来源页回调；当前 projector 仍支持把 `local_directory` / `git_url` 写入 payload，但 normal-mode 主路径默认不会发出这类回调 |
+| `show_threads` / `show_all_threads` / `show_scoped_threads` | `view_mode`、`page` | headless 主链下重新打开 `/workspace list` 切换卡；`vscode` / legacy selection path 下仍用于在当前 same-context thread 列表里切页。当前普通线程候选会显式过滤 `source=review` 的 detached review thread |
+| `show_all_workspaces` / `show_recent_workspaces` | `page` | headless 主链下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
+| `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | headless 主链下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
+| `show_workspace_threads` | `workspace_key`、`page`、`return_page` | headless 主链下以指定 workspace 重新打开 `/workspace list` 切换卡，并预填当前 workspace；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
+| `target_picker_select_mode` | `picker_id`、`target_value` | 兼容保留的模式页回调；gateway 直接从 payload 里的 `target_value` 取当前模式，但当前 headless 主路径默认不会发出这类回调 |
+| `target_picker_select_source` | `picker_id`、`target_value` | 兼容保留的来源页回调；当前 projector 仍支持把 `local_directory` / `git_url` 写入 payload，但当前 headless 主路径默认不会发出这类回调 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | `/workspace list` 切换卡与 `/workspace new worktree` 基准工作区下拉的回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
-| `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread；当前 normal-mode 卡不再发出 `new_thread` |
+| `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread；当前 headless 卡不再发出 `new_thread` |
 | `target_picker_page` | `picker_id`、`field_name`、`cursor` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页回调；`field_name` 区分 workspace / session lane，`cursor` 是动态 byte-budget 分页使用的 start-index。target page 的 workspace 翻页会把对应 cursor 处的 workspace 设为当前选择并重算 session 列表；session 翻页会保留 workspace 状态，但显式清空当前 session 选择，避免 invisible confirm。worktree workspace 翻页会保留 branch / directory 草稿，只重算基准工作区与目标路径预览 |
 | `target_picker_open_path_picker` | `picker_id`、`target_value`、`request_answers` | `/workspace new dir` / `/workspace new git` 主卡的子步骤导航；当前 `target_value` 表示 `local_directory` 或 `git_parent_dir`，`request_answers` 用来把 Git 主卡里的 `repo_url` / `directory_name` 草稿一起带回服务端 |
 | `target_picker_cancel` | `picker_id`、`request_answers` | 四张独立工作会话卡共用的退出按钮；gateway 只需命中当前 active picker，并把必要草稿带回；服务端随后会把当前卡封成对应 terminal 态：普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，worktree processing 态为 `已取消创建`，随后清掉 active picker / owner-card flow |
@@ -437,10 +437,10 @@ MCP request 卡片当前新增的可视语义：
 - 这批动作的 owner 已经从“daemon/gateway 里的散落动作白名单”收束成“`FeishuUIIntent` -> lifecycle policy -> controller replaceable event”三段。
 - `/menu` 分组内命令的阶段可见性当前已收束到统一策略：
   - `/follow` 仅在 `vscode_working` 可见
-  - `/new` 仅在 `normal_working` 可见
-  - `/history` 当前不额外分阶段，normal / vscode 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
+  - `/new` 仅在 headless working（当前 stage token 仍为 `normal_working`）可见
+  - `/history` 当前不额外分阶段，headless / `vscode` 里都默认可见；真正能否拿到历史由当前 route 是否能解析出 thread 决定
   - 其余命令默认可见
-  - `codex` 的 `current_work` 分组当前可见 `/stop`、`/compact`、`/steerall`、`/status`，以及仅 `normal_working` 可见的 `/new`
+  - `codex` 的 `current_work` 分组当前可见 `/stop`、`/compact`、`/steerall`、`/status`，以及仅 headless working（当前 stage token 仍为 `normal_working`）可见的 `/new`
   - `claude` 的 `current_work` 分组当前只保留 `/stop`、`/new`、`/status`、`/detach`
   - `codex` 的 `send_settings` 分组当前可见 `/reasoning`、`/model`、`/access`、`/plan`、`/verbose`、`/autocontinue`
   - `claude` 的 `send_settings` 分组当前只保留 `/reasoning`、`/model`、`/access`、`/verbose`、`/claudeprofile`
@@ -450,7 +450,7 @@ MCP request 卡片当前新增的可视语义：
   - `switch_target` 分组当前还带一层 mode-aware display projection：
     - `codex` 只显示一个入口，标题为 `工作会话`，实际命令是 canonical `/workspace`
     - `claude` 继续复用同一组结构，但只显示 `/list`、`/use`
-    - `vscode mode` 继续分别显示 `/list`、`/use`、`/useall`
+    - `vscode` 继续分别显示 `/list`、`/use`、`/useall`
   - orchestrator 与 projector 共同复用该策略函数，避免两侧分叉
 - 当前所有可 replace 的 Feishu UI 导航，都采用同一套 lifecycle 策略：
   - daemon freshness：`daemon_lifecycle`
@@ -464,10 +464,10 @@ MCP request 卡片当前新增的可视语义：
   - 纯 notice 的无效/过期点击不会 replace 当前卡
 - 这意味着同 daemon 生命周期里的旧卡/并发点击，如果仍属于 pure navigation，不会因为“旧 view”被拒绝；它们会基于**当前** surface state 重新生成卡片。
 - 本次新增的 target picker 下拉刷新也沿用这条 replace 边界：
-  - normal `/workspace list` 的工作区切换
-  - normal `/workspace list` 的会话切换
-  - normal `/workspace new dir` / `/workspace new git` 的 `target_picker_open_path_picker` 子步骤切换
-  - normal `/workspace new worktree` 的基准工作区切换与 dropdown 翻页
+  - `codex headless` `/workspace list` 的工作区切换
+  - `codex headless` `/workspace list` 的会话切换
+  - `codex headless` `/workspace new dir` / `/workspace new git` 的 `target_picker_open_path_picker` 子步骤切换
+  - `codex headless` `/workspace new worktree` 的基准工作区切换与 dropdown 翻页
   - alias `/list` / `/use` / `/useall` 命中同一张 `切换工作会话` 卡时的刷新
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
@@ -634,7 +634,7 @@ MCP request 卡片当前新增的可视语义：
   - `history_expired`
   - 这些提示的目的就是阻止旧卡或非 owner 点击继续改写当前前台状态，因此当前继续保留为显式独立拒绝提示
 3. legacy `FeishuSelectionView`
-  - normal mode 主 `/workspace list`，以及 alias `/list` / `/use` / `/useall`，已迁到 target picker
+  - headless 主链 `/workspace list`，以及 alias `/list` / `/use` / `/useall`，已迁到 target picker
   - VS Code instance/thread selection 与 kick-thread confirm 当前仍走 `FeishuSelectionView`，但 adapter live 路径已经直接消费 `FeishuSelectionView + FeishuSelectionSemantics`，不再回退 `FeishuDirectSelectionPrompt`
   - 因此这条 selection substrate 现在是明确保留的 live path，而不是旧 compat prompt 的残留漏网路径
   - 若整轮没有正文，turn 完成时当前实现会直接停止更新并清理内存态，不再额外补一张最终过程卡
@@ -801,7 +801,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/gateway_path_picker_test.go](../../internal/adapter/feishu/gateway_path_picker_test.go)
   - 锁定 `path_picker_*` 与 `path_picker_page` callback payload 能正确回到 `control.Action`
 - [internal/core/orchestrator/service_test.go](../../internal/core/orchestrator/service_test.go)
-  - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 normal `/list` 的基础 target picker 语义
+  - 锁定 `UIEventFeishuTargetPicker` 会携带显式 `FeishuTargetPickerContext`，以及 headless `/list` 的基础 target picker 语义
 - [internal/core/orchestrator/service_thread_selection_test.go](../../internal/core/orchestrator/service_thread_selection_test.go)
   - 锁定 VS Code direct selection 会用 `thread_selection_page` 按当前 surface 状态重建 `FeishuThreadSelectionView`，而不是引入新的 owner runtime
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
@@ -831,7 +831,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
   - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据；selection/command view 的 UI owner 已切到 read model，但用户可见行为保持不变
 - [internal/core/orchestrator/service_local_request_menu_test.go](../../internal/core/orchestrator/service_local_request_menu_test.go)
-  - 锁定 `/help` 与 `/menu` 当前共用 display projection：`codex` 会把 `switch_target` 收口成 `工作会话`，`claude` 会显示 `/list` / `/use`，`vscode mode` 继续保留 `/list` / `/use` / `/useall`
+  - 锁定 `/help` 与 `/menu` 当前共用 display projection：`codex` 会把 `switch_target` 收口成 `工作会话`，`claude` 会显示 `/list` / `/use`，`vscode` 继续保留 `/list` / `/use` / `/useall`
 - [internal/core/control/feishu_command_page_catalog_test.go](../../internal/core/control/feishu_command_page_catalog_test.go)
   - 锁定 `/menu` 首页不会再从 `/menu` 命令定义隐式继承 maintenance breadcrumb / back button，首页分组按钮文案直接复用分组标题
 - [internal/adapter/feishu/projector_command_catalog_test.go](../../internal/adapter/feishu/projector_command_catalog_test.go)
@@ -853,9 +853,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_mode_backend_test.go](../../internal/core/orchestrator/service_mode_backend_test.go)
   - 锁定 `/mode claude` 从已有工作区切入时，会保留 workspace claim 并直接进入 Claude workspace prepare，而不是停在 detached idle
 - [internal/core/orchestrator/service_workspace_selection_model_test.go](../../internal/core/orchestrator/service_workspace_selection_model_test.go)
-  - 锁定 Claude normal `/list` 的 workspace 目录只看 Claude backend，不混入 Codex recent workspace
+  - 锁定 Claude headless `/list` 的 workspace 目录只看 Claude backend，不混入 Codex recent workspace
 - [internal/core/orchestrator/service_target_picker_test.go](../../internal/core/orchestrator/service_target_picker_test.go)
-  - 锁定 Claude normal `/use` 的 session 候选只看 Claude backend，不混入同 workspace 的 Codex thread
+  - 锁定 Claude headless `/use` 的 session 候选只看 Claude backend，不混入同 workspace 的 Codex thread
 - [internal/app/daemon/app_headless_lifecycle_test.go](../../internal/app/daemon/app_headless_lifecycle_test.go)
   - 锁定 Claude managed headless launch 会把 `CODEX_REMOTE_INSTANCE_BACKEND=claude` 带入运行环境
 - [internal/app/daemon/app_submission_anchor_test.go](../../internal/app/daemon/app_submission_anchor_test.go)
@@ -877,7 +877,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_thread_selection_test.go](../../internal/core/orchestrator/service_thread_selection_test.go)
   - 锁定 request gate 对 `/follow`、`/use`、selection rebind 的冻结
 - [internal/core/orchestrator/service_headless_thread_test.go](../../internal/core/orchestrator/service_headless_thread_test.go)
-  - 锁定 normal mode target picker 的 workspace 过滤、recoverable-only workspace 暴露与 VS Code path 的隔离
+  - 锁定 headless 主链 target picker 的 workspace 过滤、recoverable-only workspace 暴露与 VS Code path 的隔离
 
 ## 8. 审计清单
 

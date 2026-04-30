@@ -410,7 +410,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	var events []eventcontract.Event
 	switch action.Kind {
 	case control.ActionListInstances:
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			events = s.openTargetPickerForAction(surface, action, "", "", "", false)
 			break
 		}

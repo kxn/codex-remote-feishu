@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 headless 模式可用。请先 `/mode codex` 或 `/mode claude`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
@@ -53,7 +53,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 	}
 	cwd, threadID, ok := s.prepareNewThreadBase(surface, inst)
 	if !ok {
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
 		}
 		return notice(surface, "new_thread_requires_bound_thread", "当前必须先绑定并接管一个会话，才能基于它的新建会话。请先 /use，或在 follow 模式下等到已跟随到会话。")
@@ -86,7 +86,7 @@ func (s *Service) prepareNewThreadBase(surface *state.SurfaceConsoleRecord, inst
 	if surface == nil || inst == nil {
 		return "", "", false
 	}
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+	if s.surfaceIsHeadless(surface) {
 		workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
 		if workspaceKey == "" {
 			return "", "", false
@@ -129,7 +129,7 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnboundFile(surface *state.Su
 }
 
 func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) []eventcontract.Event {
-	if surface == nil || inst == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if surface == nil || inst == nil || !s.surfaceIsHeadless(surface) {
 		return nil
 	}
 	if surface.RouteMode != state.RouteModeUnbound || strings.TrimSpace(surface.SelectedThreadID) != "" {

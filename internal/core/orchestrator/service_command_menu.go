@@ -27,7 +27,7 @@ func (s *Service) commandMenuStage(surface *state.SurfaceConsoleRecord) commandM
 	if surface == nil || strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return commandMenuStageDetached
 	}
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeVSCode {
+	if s.surfaceIsVSCode(surface) {
 		return commandMenuStageVSCodeWorking
 	}
 	return commandMenuStageNormalWorking

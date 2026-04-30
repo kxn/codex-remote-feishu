@@ -45,7 +45,7 @@ func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord,
 	if surface == nil {
 		return nil
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return notice(surface, "workspace_create_normal_only", "当前处于 vscode 模式，不能从目录直接添加工作区。请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 	}
 	rootPath, initialPath := workspacePickerPaths(s.surfaceCurrentWorkspaceKey(surface))

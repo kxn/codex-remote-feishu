@@ -144,3 +144,25 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 		t.Fatalf("expected daemon command to carry switched profile, got %#v", events[2].DaemonCommand)
 	}
 }
+
+func TestClaudeProfileCommandRejectedInVSCodeMode(t *testing.T) {
+	now := time.Date(2026, 4, 30, 9, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-vscode")
+	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionClaudeProfileCommand,
+		SurfaceSessionID: "surface-vscode",
+		ChatID:           "chat-vscode",
+		ActorUserID:      "user-vscode",
+		Text:             "/claudeprofile devseek",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "claude_profile_mode_required" {
+		t.Fatalf("expected vscode mode to reject claude profile switch, got %#v", events)
+	}
+	if !strings.Contains(events[0].Notice.Text, "/mode claude") {
+		t.Fatalf("expected guidance to switch to claude mode, got %#v", events[0].Notice)
+	}
+}

@@ -62,7 +62,7 @@ func (s *Service) finishSurfaceAfterWork(surface *state.SurfaceConsoleRecord) []
 }
 
 func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+	if s.surfaceIsHeadless(surface) {
 		if strings.TrimSpace(surface.AttachedInstanceID) == "" {
 			return notice(surface, "follow_deprecated_normal", "headless 模式不再支持 /follow。请先 /list 选择工作区，再 /use 或 /new；如需跟随 VS Code，请先 /mode vscode。")
 		}

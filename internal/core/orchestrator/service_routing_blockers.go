@@ -252,7 +252,7 @@ func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []eve
 		if surface.SelectedThreadID != "" && s.surfaceOwnsThread(surface, surface.SelectedThreadID) {
 			return nil
 		}
-		if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+		if s.surfaceIsHeadless(surface) {
 			return notice(surface, "thread_unbound", "当前还没有选择会话；请先 /use 选择一个会话，或直接发送文本开启新会话（也可 /new 先进入待命）。")
 		}
 		return notice(surface, "thread_unbound", "当前还没有选择会话，请先 /use 选择一个会话，或执行 /follow 进入跟随模式。")
@@ -263,7 +263,7 @@ func (s *Service) autoPromptUseThread(surface *state.SurfaceConsoleRecord, inst 
 	if surface == nil || inst == nil {
 		return nil
 	}
-	if s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+	if s.surfaceIsHeadless(surface) {
 		if workspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface)); workspaceKey != "" {
 			return s.openLockedWorkspaceTargetPicker(surface, workspaceKey, true)
 		}

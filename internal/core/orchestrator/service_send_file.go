@@ -121,7 +121,7 @@ func (s *Service) openSendFilePickerWithInline(surface *state.SurfaceConsoleReco
 	if surface == nil {
 		return nil
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !s.surfaceIsHeadless(surface) {
 		return sendFileUnavailableEvents(surface, "send_file_normal_only", sourceMessageID, "当前处于 vscode 模式，暂不支持从飞书选择文件发送。请先 `/mode codex`。", inline)
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {

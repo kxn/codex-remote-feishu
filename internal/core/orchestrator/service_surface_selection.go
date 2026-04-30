@@ -548,7 +548,7 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 
 func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
 	instances := s.workspaceOnlineInstances(workspaceKey)
-	if surface != nil && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+	if surface != nil && s.surfaceIsHeadless(surface) {
 		instances = s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, s.surfaceBackend(surface))
 	}
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
