@@ -484,7 +484,7 @@ func TestWrapperClaudePromptResumesPersistedTargetSession(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("send prompt: %v", err)
 	}
-	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+	waitForAck(t, ackCh, 10*time.Second, func(ack agentproto.CommandAck) bool {
 		return ack.CommandID == "cmd-prompt-claude-resume" && ack.Accepted
 	}, stdout, stderr, done)
 

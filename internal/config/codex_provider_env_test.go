@@ -215,7 +215,7 @@ func TestSupplementDetachedPATHMergesInteractiveShellPATH(t *testing.T) {
 	}
 
 	got := SupplementDetachedPATH([]string{
-		"PATH=/usr/bin:/bin",
+		"PATH=" + strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator)),
 		"HOME=/tmp/demo",
 	})
 	value, ok := lookupEnvValue(got, "PATH")
@@ -241,7 +241,7 @@ func TestSupplementDetachedPATHFallsBackToNormalizedCurrentPATH(t *testing.T) {
 	}
 
 	got := SupplementDetachedPATH([]string{
-		"PATH=/usr/bin::/usr/bin:/bin",
+		"PATH=" + strings.Join([]string{"/usr/bin", "", "/usr/bin", "/bin"}, string(os.PathListSeparator)),
 	})
 	value, ok := lookupEnvValue(got, "PATH")
 	if !ok {
