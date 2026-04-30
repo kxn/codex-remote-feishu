@@ -252,6 +252,7 @@ func (m *Manager) startDaemon(ctx context.Context) (int, error) {
 	if m.config.DaemonUseSystemProxy {
 		env = append(env, m.config.CapturedProxyEnv...)
 	}
+	env = config.SupplementDetachedPATH(env)
 	return StartDetachedDaemon(LaunchOptions{
 		BinaryPath: m.config.DaemonBinaryPath,
 		ConfigPath: m.config.ConfigPath,

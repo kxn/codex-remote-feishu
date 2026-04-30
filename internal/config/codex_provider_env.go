@@ -69,8 +69,23 @@ func LookupUserShellEnvValue(env []string, key string) (string, error) {
 func BuildCodexChildEnv(currentEnv, proxyEnv, args []string) []string {
 	env := FilterEnvWithoutProxy(append([]string{}, currentEnv...))
 	env = append(env, proxyEnv...)
+	env = SupplementDetachedPATH(env)
 	supplemented, _ := supplementCodexProviderEnv(env, args)
 	return supplemented
+}
+
+func SupplementDetachedPATH(env []string) []string {
+	if shellPath, err := lookupUserShellEnvValue(env, "PATH"); err == nil {
+		merged := mergePATHValue(lookupEnvValueOrEmpty(env, "PATH"), shellPath)
+		if strings.TrimSpace(merged) != "" {
+			return upsertEnvValue(env, "PATH", merged)
+		}
+	}
+	current := normalizePathListBySeparator(lookupEnvValueOrEmpty(env, "PATH"), string(os.PathListSeparator))
+	if len(current) == 0 {
+		return env
+	}
+	return upsertEnvValue(env, "PATH", strings.Join(current, string(os.PathListSeparator)))
 }
 
 func ResolveCodexProviderEnv(args []string, env []string) (CodexProviderEnvInfo, error) {
@@ -451,6 +466,11 @@ func ensureHomeEnv(env []string) []string {
 	return append(env, "HOME="+home)
 }
 
+func lookupEnvValueOrEmpty(env []string, key string) string {
+	value, _ := lookupEnvValue(env, key)
+	return value
+}
+
 func lookupEnvValue(env []string, key string) (string, bool) {
 	for _, entry := range env {
 		currentKey, currentValue, ok := strings.Cut(entry, "=")
@@ -492,6 +512,66 @@ func envSliceToMap(env []string) map[string]string {
 		values[key] = value
 	}
 	return values
+}
+
+func mergePATHValue(current, shell string) string {
+	separator := string(os.PathListSeparator)
+	currentParts := normalizePathListBySeparator(current, separator)
+	shellParts := normalizePathListBySeparator(shell, separator)
+	if len(currentParts) == 0 {
+		return strings.Join(shellParts, separator)
+	}
+	if len(shellParts) == 0 {
+		return strings.Join(currentParts, separator)
+	}
+	seen := make(map[string]struct{}, len(currentParts)+len(shellParts))
+	out := make([]string, 0, len(currentParts)+len(shellParts))
+	appendPart := func(part string) {
+		key := part
+		if os.PathListSeparator == ';' {
+			key = strings.ToLower(key)
+		}
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	for _, part := range currentParts {
+		appendPart(part)
+	}
+	for _, part := range shellParts {
+		appendPart(part)
+	}
+	return strings.Join(out, separator)
+}
+
+func normalizePathListBySeparator(value, separator string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if separator == "" {
+		separator = string(os.PathListSeparator)
+	}
+	parts := strings.Split(value, separator)
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		key := part
+		if separator == ";" {
+			key = strings.ToLower(key)
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	return out
 }
 
 func isValidShellEnvKey(key string) bool {
