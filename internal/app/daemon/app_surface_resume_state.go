@@ -90,7 +90,7 @@ func storedVSCodeResumeExists(store *surfaceresume.Store) bool {
 		return false
 	}
 	for _, entry := range store.Entries() {
-		if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) == state.ProductModeVSCode {
+		if state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)) {
 			return true
 		}
 	}
@@ -412,17 +412,17 @@ func (a *App) syncSurfaceResumeRecoveryStateLocked() {
 }
 
 func surfaceResumeEntryNeedsRecovery(entry surfaceresume.Entry) bool {
-	switch state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) {
-	case state.ProductModeNormal:
+	switch {
+	case state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)):
 		return strings.TrimSpace(entry.ResumeThreadID) != "" || state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) != ""
-	case state.ProductModeVSCode:
+	case state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)):
 		return strings.TrimSpace(entry.ResumeInstanceID) != ""
 	default:
 		return false
 	}
 }
 
-func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Event {
+func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.Event {
 	if len(a.surfaceResumeRuntime.recovery) == 0 {
 		return nil
 	}
@@ -449,7 +449,7 @@ func (a *App) maybeRecoverNormalSurfacesLocked(now time.Time) []eventcontract.Ev
 		if recovery.Entry.ResumeHeadless {
 			workspaceKey = ""
 		}
-		restoreEvents, result := a.service.TryAutoResumeNormalSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
+		restoreEvents, result := a.service.TryAutoResumeHeadlessSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
 			InstanceID:       recovery.Entry.ResumeInstanceID,
 			ThreadID:         recovery.Entry.ResumeThreadID,
 			ThreadTitle:      recovery.Entry.ResumeThreadTitle,
@@ -498,7 +498,7 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Ev
 	updatedSurfaceIDs := make([]string, 0, len(surfaceIDs))
 	for _, surfaceID := range surfaceIDs {
 		recovery := a.surfaceResumeRuntime.recovery[surfaceID]
-		if recovery == nil || state.NormalizeProductMode(state.ProductMode(recovery.Entry.ProductMode)) != state.ProductModeVSCode {
+		if recovery == nil || !state.IsVSCodeProductMode(state.ProductMode(recovery.Entry.ProductMode)) {
 			continue
 		}
 		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
@@ -543,7 +543,7 @@ func (a *App) maybePromptDetachedVSCodeSurfacesLocked() []eventcontract.Event {
 	events := make([]eventcontract.Event, 0, len(surfaceIDs))
 	for _, surfaceID := range surfaceIDs {
 		entry := entries[surfaceID]
-		if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) != state.ProductModeVSCode {
+		if !state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)) {
 			continue
 		}
 		if !entryPredatesDaemonStart(a.daemonStartedAt, entry.UpdatedAt) {
@@ -553,7 +553,7 @@ func (a *App) maybePromptDetachedVSCodeSurfacesLocked() []eventcontract.Event {
 			continue
 		}
 		snapshot := a.service.SurfaceSnapshot(surfaceID)
-		if snapshot == nil || state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) != state.ProductModeVSCode {
+		if snapshot == nil || !state.IsVSCodeProductMode(state.ProductMode(snapshot.ProductMode)) {
 			continue
 		}
 		if strings.TrimSpace(snapshot.Attachment.InstanceID) != "" || strings.TrimSpace(snapshot.PendingHeadless.InstanceID) != "" {
@@ -581,7 +581,7 @@ func (a *App) syncVSCodeResumeNoticeStateLocked(entries map[string]surfaceresume
 	}
 	for surfaceID := range a.surfaceResumeRuntime.vscodeResumeNotices {
 		entry, ok := entries[surfaceID]
-		if !ok || state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) != state.ProductModeVSCode {
+		if !ok || !state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)) {
 			delete(a.surfaceResumeRuntime.vscodeResumeNotices, surfaceID)
 		}
 	}

@@ -423,12 +423,12 @@ func (s *Service) vscodeThreadSelectionContextText(surface *state.SurfaceConsole
 	return label + " · " + status
 }
 
-func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]eventcontract.Event, SurfaceResumeResult) {
+func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]eventcontract.Event, SurfaceResumeResult) {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	if surface == nil {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if !state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
@@ -440,7 +440,7 @@ func (s *Service) TryAutoResumeNormalSurface(surfaceID string, attempt SurfaceRe
 	prepareNewThread := attempt.PrepareNewThread
 	targetBackend := s.surfaceBackend(surface)
 	if strings.TrimSpace(string(attempt.Backend)) != "" {
-		targetBackend = agentproto.NormalizeBackend(attempt.Backend)
+		targetBackend = state.NormalizeHeadlessBackend(attempt.Backend)
 	}
 	if threadID != "" {
 		view := s.mergedThreadViewForBackend(surface, threadID, targetBackend, true)

@@ -545,8 +545,8 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
 	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
+	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
+	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
 	a.syncSurfaceResumeStateLocked(nil)
 	a.syncClaudeWorkspaceProfileStateLocked()
@@ -606,7 +606,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 				uiEvents = append(uiEvents, a.maybeRecoverVSCodeSurfacesLocked(now)...)
 				uiEvents = append(uiEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 			}
-			uiEvents = append(uiEvents, a.maybeRecoverNormalSurfacesLocked(now)...)
+			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
 		}
 		a.recordManagedHeadlessResumeOutcomeEventsLocked(uiEvents, now)
 		a.handleUIEventsLocked(ctx, uiEvents)
@@ -765,8 +765,8 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
 	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
+	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
+	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
 	a.syncSurfaceResumeStateLocked(nil)
 	a.syncWorkspaceSurfaceContextFilesLocked()
 }
@@ -798,8 +798,8 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
 	}
 	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	normalRecoveryEvents := a.maybeRecoverNormalSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, normalRecoveryEvents)
+	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
+	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
 	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeStartFeishuPermissionRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)

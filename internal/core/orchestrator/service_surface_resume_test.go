@@ -10,12 +10,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestTryAutoResumeNormalSurfaceWaitsBeforeFreshWorkspaceFallbackUntilMissingTargetsAllowed(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfaceWaitsBeforeFreshWorkspaceFallbackUntilMissingTargetsAllowed(t *testing.T) {
 	now := time.Date(2026, 4, 29, 4, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		WorkspaceKey:     "/data/dl/repo",
 		Backend:          agentproto.BackendClaude,
 		PrepareNewThread: true,
@@ -33,12 +33,12 @@ func TestTryAutoResumeNormalSurfaceWaitsBeforeFreshWorkspaceFallbackUntilMissing
 	}
 }
 
-func TestTryAutoResumeNormalSurfaceStartsFreshWorkspaceWhenTargetBackendMissing(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfaceStartsFreshWorkspaceWhenTargetBackendMissing(t *testing.T) {
 	now := time.Date(2026, 4, 29, 4, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		WorkspaceKey:     "/data/dl/repo",
 		Backend:          agentproto.BackendClaude,
 		PrepareNewThread: true,
@@ -74,7 +74,7 @@ func TestTryAutoResumeNormalSurfaceStartsFreshWorkspaceWhenTargetBackendMissing(
 	}
 }
 
-func TestTryAutoResumeNormalSurfaceRestoresPreparedNewThreadRouteOnVisibleWorkspace(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfaceRestoresPreparedNewThreadRouteOnVisibleWorkspace(t *testing.T) {
 	now := time.Date(2026, 4, 29, 4, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
@@ -88,7 +88,7 @@ func TestTryAutoResumeNormalSurfaceRestoresPreparedNewThreadRouteOnVisibleWorksp
 		Online:        true,
 	})
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		WorkspaceKey:     "/data/dl/repo",
 		Backend:          agentproto.BackendClaude,
 		PrepareNewThread: true,
@@ -121,12 +121,12 @@ func TestTryAutoResumeNormalSurfaceRestoresPreparedNewThreadRouteOnVisibleWorksp
 	}
 }
 
-func TestTryAutoResumeNormalSurfacePlainWorkspaceFallbackKeepsUnboundIntent(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfacePlainWorkspaceFallbackKeepsUnboundIntent(t *testing.T) {
 	now := time.Date(2026, 4, 29, 4, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		WorkspaceKey: "/data/dl/repo",
 		Backend:      agentproto.BackendClaude,
 	}, true)
@@ -146,12 +146,12 @@ func TestTryAutoResumeNormalSurfacePlainWorkspaceFallbackKeepsUnboundIntent(t *t
 	}
 }
 
-func TestTryAutoResumeNormalSurfaceLostPinnedThreadStillPreparesNewThreadWhenWorkspaceMissing(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfaceLostPinnedThreadStillPreparesNewThreadWhenWorkspaceMissing(t *testing.T) {
 	now := time.Date(2026, 4, 29, 4, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
 
-	_, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	_, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		ThreadID:     "thread-missing",
 		WorkspaceKey: "/data/dl/repo",
 		Backend:      agentproto.BackendClaude,

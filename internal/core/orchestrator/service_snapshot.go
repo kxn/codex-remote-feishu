@@ -18,7 +18,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
-	if snapshot.Backend == agentproto.BackendClaude && s.normalizeSurfaceProductMode(surface) == state.ProductModeNormal {
+	if snapshot.Backend == agentproto.BackendClaude && state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) {
 		snapshot.ClaudeProfileID = s.surfaceClaudeProfileID(surface)
 		snapshot.ClaudeProfileName = s.claudeProfileDisplayName(snapshot.ClaudeProfileID)
 	}
@@ -118,7 +118,7 @@ func snapshotAttachmentObjectType(mode state.ProductMode, inst *state.InstanceRe
 	switch {
 	case inst == nil:
 		return ""
-	case mode == state.ProductModeNormal:
+	case state.IsHeadlessProductMode(mode):
 		return "workspace"
 	case isVSCodeInstance(inst):
 		return "vscode_instance"

@@ -47,6 +47,10 @@ func IsHeadlessProductMode(mode ProductMode) bool {
 	return NormalizeProductMode(mode) == ProductModeNormal
 }
 
+func IsVSCodeProductMode(mode ProductMode) bool {
+	return NormalizeProductMode(mode) == ProductModeVSCode
+}
+
 type SurfaceVerbosity string
 
 const (

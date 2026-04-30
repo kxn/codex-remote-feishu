@@ -207,7 +207,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	if entry.ClaudeProfileID != "" {
 		entry.ClaudeProfileID = state.NormalizeClaudeProfileID(entry.ClaudeProfileID)
-	} else if agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
+	} else if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
 		entry.ClaudeProfileID = state.DefaultClaudeProfileID
 	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
@@ -232,7 +232,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	if entry.ResumeThreadID == "" {
 		entry.ResumeHeadless = false
 	}
-	if state.NormalizeProductMode(state.ProductMode(entry.ProductMode)) != state.ProductModeNormal {
+	if !state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) {
 		entry.ResumeHeadless = false
 	}
 	if entry.SurfaceSessionID == "" {
@@ -250,7 +250,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ChatID) == strings.TrimSpace(right.ChatID) &&
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
-		agentproto.NormalizeBackend(agentproto.Backend(left.Backend)) == agentproto.NormalizeBackend(agentproto.Backend(right.Backend)) &&
+		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&

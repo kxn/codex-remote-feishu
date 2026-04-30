@@ -124,7 +124,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    4. `normal` mode surface 随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
       2. 只允许消费同 backend 的 visible instance / workspace；不会再把 `codex` 的 headless resume target 恢复到 `claude`，反之亦然。
-      3. exact thread 当前不可见但仍存在同 backend 的 persisted thread/session metadata 时，normal resume、detached `/use` 与 managed headless exact-thread continuation 仍会继续消费这份 metadata，不再退回 Codex-only lookup。
+      3. exact thread 当前不可见但仍存在同 backend 的 persisted thread/session metadata 时，headless resume、detached `/use` 与 managed headless exact-thread continuation 仍会继续消费这份 metadata，不再退回 Codex-only lookup。
       4. 若 persisted route 本身就是 workspace-owned 的 `ResumeRouteMode=unbound|new_thread_ready`，则会优先按同 backend workspace 继续恢复：已有同 workspace 实例时直接回到 `R1 AttachedUnbound` 或 `R5 NewThreadReady`；若还没有，则会 fresh-start managed headless，并保留同一条 workspace route intent。
       5. 若 persisted target 是普通 pinned thread 且当前 visible thread 不可见，则允许降级回原 workspace 的 same-backend 续接语义：已有同 workspace 实例时 attach 回 `R1 AttachedUnbound`；若还没有，则会 fresh-start managed headless，并进入 `new_thread_ready`。
       6. 只有 `ResumeHeadless=true` 且 `ResumeThreadID != ""` 的 concrete managed-headless thread-restore 目标，visible exact-thread 路径没恢复成功时才会继续留在 exact-thread continuation，而不是降级进 workspace fallback。
@@ -1282,7 +1282,7 @@ G1 PendingHeadlessStarting
   -- Tick timeout --> kill headless + clear pending + detach if needed
 ```
 
-daemon startup 的 normal resume 额外规则：
+daemon startup 的 headless resume 额外规则：
 
 1. 触发点：
    1. daemon startup 后的 tick
@@ -1316,7 +1316,7 @@ daemon startup 的 normal resume 额外规则：
 7. 若首轮 refresh 已完成，但 visible/workspace 路径仍无法恢复：
    1. 若目标属于普通 non-headless resume 且连 workspace route 也不存在：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
    2. 若目标已经进入 fresh workspace prepare，但 launcher 失败或超时：保持 `R0 Detached`，发 `workspace_create_start_failed` / `workspace_create_start_timeout`
-   3. 若目标是 `ResumeHeadless=true` 的 concrete managed-headless thread restore：normal resume 会在同一条主链里继续 exact-thread continuation，并投影 headless-specific notice；不会再把这件事交给独立的第二 recovery 通道
+   3. 若目标是 `ResumeHeadless=true` 的 concrete managed-headless thread restore：headless resume 会在同一条主链里继续 exact-thread continuation，并投影 headless-specific notice；不会再把这件事交给独立的第二 recovery 通道
 
 daemon startup 的 vscode resume 额外规则：
 

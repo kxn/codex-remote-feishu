@@ -932,7 +932,7 @@ func TestDaemonRestartRecoversPreparedWorkspaceResumeState(t *testing.T) {
 	if recovery == nil || recovery.Entry.ResumeWorkspaceKey != "/data/dl/repo" || recovery.Entry.ResumeRouteMode != "new_thread_ready" || recovery.Entry.ResumeHeadless {
 		t.Fatalf("expected startup recovery state to keep prepared workspace semantics, got %#v", recovery)
 	}
-	recoveryEvents, result := app.service.TryAutoResumeNormalSurface("surface-1", orchestrator.SurfaceResumeAttempt{
+	recoveryEvents, result := app.service.TryAutoResumeHeadlessSurface("surface-1", orchestrator.SurfaceResumeAttempt{
 		WorkspaceKey:     recovery.Entry.ResumeWorkspaceKey,
 		Backend:          agentproto.Backend(recovery.Entry.Backend),
 		PrepareNewThread: recovery.Entry.ResumeRouteMode == "new_thread_ready",
@@ -1014,7 +1014,7 @@ func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T
 
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.Attachment.InstanceID != "inst-vscode-1" || snapshot.Attachment.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected normal resume to reattach visible thread, got %#v", snapshot)
+		t.Fatalf("expected headless resume to reattach visible thread, got %#v", snapshot)
 	}
 	if snapshot.PendingHeadless.InstanceID != "" {
 		t.Fatalf("expected visible resume to avoid headless fallback, got %#v", snapshot)
@@ -1024,7 +1024,7 @@ func TestDaemonNormalResumePrefersVisibleThreadOverHeadlessFallback(t *testing.T
 	}
 }
 
-func TestDaemonNormalResumeFallsBackToWorkspace(t *testing.T) {
+func TestDaemonHeadlessResumeFallsBackToWorkspace(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()

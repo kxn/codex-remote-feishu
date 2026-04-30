@@ -2,11 +2,15 @@ package state
 
 import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 
+func NormalizeHeadlessBackend(backend agentproto.Backend) agentproto.Backend {
+	return agentproto.NormalizeBackend(backend)
+}
+
 func NormalizeSurfaceBackend(mode ProductMode, backend agentproto.Backend) agentproto.Backend {
 	if !IsHeadlessProductMode(mode) {
 		return agentproto.BackendCodex
 	}
-	return agentproto.NormalizeBackend(backend)
+	return NormalizeHeadlessBackend(backend)
 }
 
 func EffectiveSurfaceBackend(surface *SurfaceConsoleRecord, inst *InstanceRecord) agentproto.Backend {
@@ -29,7 +33,7 @@ func SurfaceModeAlias(mode ProductMode, backend agentproto.Backend) string {
 	if !IsHeadlessProductMode(mode) {
 		return "vscode"
 	}
-	switch NormalizeSurfaceBackend(mode, backend) {
+	switch NormalizeHeadlessBackend(backend) {
 	case agentproto.BackendClaude:
 		return "claude"
 	default:

@@ -130,7 +130,7 @@ func (s *Service) surfaceClaudeProfileID(surface *state.SurfaceConsoleRecord) st
 	profileID := strings.TrimSpace(surface.ClaudeProfileID)
 	mode := state.NormalizeProductMode(surface.ProductMode)
 	backend := state.NormalizeSurfaceBackend(mode, surface.Backend)
-	if profileID == "" && mode == state.ProductModeNormal && backend == agentproto.BackendClaude {
+	if profileID == "" && state.IsHeadlessProductMode(mode) && backend == agentproto.BackendClaude {
 		profileID = state.DefaultClaudeProfileID
 	}
 	if profileID == "" {

@@ -191,7 +191,7 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 }
 
 func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, cwd string) (state.ModelConfigRecord, bool) {
-	if inst == nil || surface == nil || s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
+	if inst == nil || surface == nil || !state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) {
 		return state.ModelConfigRecord{}, false
 	}
 	workspaceKey := s.surfaceCurrentWorkspaceKey(surface)

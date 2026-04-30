@@ -271,7 +271,7 @@ func TestManagedHeadlessResumeBranchPrefersHeadlessOverVisibleVSCode(t *testing.
 	}
 }
 
-func TestTryAutoResumeNormalSurfaceManagedHeadlessTargetSkipsVSCodeSurface(t *testing.T) {
+func TestTryAutoResumeHeadlessSurfaceManagedHeadlessTargetSkipsVSCodeSurface(t *testing.T) {
 	now := time.Date(2026, 4, 8, 3, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-1")
@@ -299,7 +299,7 @@ func TestTryAutoResumeNormalSurfaceManagedHeadlessTargetSkipsVSCodeSurface(t *te
 		Threads:       map[string]*state.ThreadRecord{},
 	})
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		ThreadID:       "thread-1",
 		ThreadTitle:    "修复登录流程",
 		ThreadCWD:      "/data/dl/droid",
@@ -348,7 +348,7 @@ func TestApplyInstanceConnectedAutoRestoreHeadlessSuppressesReplayAndSelectionNo
 		},
 	})
 
-	events, result := svc.TryAutoResumeNormalSurface("surface-1", SurfaceResumeAttempt{
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
 		ThreadID:       "thread-1",
 		ThreadTitle:    "修复登录流程",
 		ThreadCWD:      "/data/dl/droid",

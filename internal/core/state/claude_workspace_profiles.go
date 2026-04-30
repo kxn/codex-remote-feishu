@@ -25,7 +25,7 @@ func ClaudeWorkspaceProfileSnapshotStorageKey(workspaceKey string, backend agent
 	if workspaceKey == "" {
 		return ""
 	}
-	backend = agentproto.NormalizeBackend(backend)
+	backend = NormalizeHeadlessBackend(backend)
 	if backend == "" {
 		return ""
 	}
