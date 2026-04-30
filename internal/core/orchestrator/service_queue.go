@@ -39,6 +39,11 @@ func (s *Service) maybeBindSurfaceForRemoteTurn(surface *state.SurfaceConsoleRec
 	if targetThreadID == "" {
 		return nil
 	}
+	var item *state.QueueItemRecord
+	if binding != nil && surface.ActiveQueueItemID != "" {
+		item = surface.QueueItems[binding.QueueItemID]
+	}
+	s.materializeRemoteTurnThread(inst, targetThreadID, "", binding, item)
 	routeMode := surface.RouteMode
 	if routeMode != state.RouteModeFollowLocal {
 		routeMode = state.RouteModePinned
@@ -359,6 +364,7 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 	inst := s.root.Instances[instanceID]
 	if inst != nil {
 		targetThreadID := strings.TrimSpace(firstNonEmpty(item.FrozenThreadID, threadID))
+		s.materializeRemoteTurnThread(inst, targetThreadID, event.CWD, binding, item)
 		s.recordThreadUserMessage(inst, targetThreadID, item.SourceMessagePreview)
 	}
 	s.progress.captureRemoteTurnStartTotalUsage(instanceID, binding, item.FrozenThreadID)
@@ -381,12 +387,7 @@ func (s *Service) maybeCommitBootstrapSurfaceBinding(surface *state.SurfaceConso
 	if targetThreadID == "" {
 		return nil
 	}
-	thread := s.ensureThread(inst, targetThreadID)
-	if !threadVisible(thread) {
-		thread.CWD = firstNonEmpty(thread.CWD, binding.ThreadCWD, item.FrozenCWD)
-		thread.Archived = false
-		thread.TrafficClass = agentproto.TrafficClassPrimary
-	}
+	s.materializeRemoteTurnThread(inst, targetThreadID, "", binding, item)
 	binding.ThreadID = targetThreadID
 	binding.DurableThreadReady = true
 	if item.FrozenThreadID == "" {

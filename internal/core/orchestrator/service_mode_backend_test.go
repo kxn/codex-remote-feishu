@@ -307,3 +307,260 @@ func TestModeCommandSwitchesClaudeWorkspaceBackToCodexAndPreparesNewThreadReady(
 		t.Fatalf("expected switch notice + prepared selection + new_thread_ready, got %#v", events)
 	}
 }
+
+func TestClaudeModeFirstTurnBindsCreatedThreadForFollowupText(t *testing.T) {
+	now := time.Date(2026, 4, 30, 8, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-codex",
+		DisplayName:             "repo-codex",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-codex",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-codex",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-claude",
+		DisplayName:             "repo-claude",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-claude",
+		Backend:                 agentproto.BackendClaude,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-claude",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-codex",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode claude",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-claude" || surface.RouteMode != state.RouteModeNewThreadReady {
+		t.Fatalf("expected claude mode switch to attach existing claude workspace in new-thread-ready state, got %#v", surface)
+	}
+
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	commandID := "cmd-1"
+	sawPrompt := false
+	for _, event := range first {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			sawPrompt = true
+		}
+	}
+	if !sawPrompt {
+		t.Fatalf("expected first text to dispatch a prompt, got %#v", first)
+	}
+	svc.BindPendingRemoteCommand("surface-1", commandID)
+
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventItemStarted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		ItemID:    "item-1",
+		ItemKind:  "agent_message",
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		ItemID:    "item-1",
+		ItemKind:  "agent_message",
+		Status:    "completed",
+		Metadata:  map[string]any{"text": "你好"},
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:                 agentproto.EventTurnCompleted,
+		CommandID:            commandID,
+		ThreadID:             "thread-created",
+		TurnID:               "turn-1",
+		Status:               "completed",
+		Initiator:            agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+		TurnCompletionOrigin: agentproto.TurnCompletionOriginRuntime,
+	})
+
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-created" {
+		t.Fatalf("expected completed first claude turn to bind created thread, got %#v", surface)
+	}
+
+	second := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-2",
+		Text:             "继续",
+	})
+	sawResume := false
+	for _, event := range second {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend &&
+			event.Command.Target.ThreadID == "thread-created" &&
+			event.Command.Target.ExecutionMode == agentproto.PromptExecutionModeResumeExisting &&
+			!event.Command.Target.CreateThreadIfMissing {
+			sawResume = true
+		}
+		if event.Notice != nil && event.Notice.Code == "thread_not_ready" {
+			t.Fatalf("expected second text to stay on created thread, got %#v", second)
+		}
+	}
+	if !sawResume {
+		t.Fatalf("expected second text to resume created thread, got %#v", second)
+	}
+}
+
+func TestClaudeModeFirstTurnBindingSurvivesLauncherMenuActions(t *testing.T) {
+	now := time.Date(2026, 4, 30, 8, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-codex",
+		DisplayName:             "repo-codex",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-codex",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-codex",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-claude",
+		DisplayName:             "repo-claude",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo-claude",
+		Backend:                 agentproto.BackendClaude,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-claude",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-codex",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode claude",
+	})
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	commandID := "cmd-1"
+	sawPrompt := false
+	for _, event := range first {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			sawPrompt = true
+		}
+	}
+	if !sawPrompt {
+		t.Fatalf("expected first text to dispatch a prompt, got %#v", first)
+	}
+	svc.BindPendingRemoteCommand("surface-1", commandID)
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventItemStarted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		ItemID:    "item-1",
+		ItemKind:  "agent_message",
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		CommandID: commandID,
+		ThreadID:  "thread-created",
+		TurnID:    "turn-1",
+		ItemID:    "item-1",
+		ItemKind:  "agent_message",
+		Status:    "completed",
+		Metadata:  map[string]any{"text": "你好"},
+	})
+	svc.ApplyAgentEvent("inst-claude", agentproto.Event{
+		Kind:                 agentproto.EventTurnCompleted,
+		CommandID:            commandID,
+		ThreadID:             "thread-created",
+		TurnID:               "turn-1",
+		Status:               "completed",
+		Initiator:            agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+		TurnCompletionOrigin: agentproto.TurnCompletionOriginRuntime,
+	})
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "menu-1",
+		Text:             "/menu send_settings",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionVerboseCommand,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "menu-2",
+		Text:             "/verbose",
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-created" {
+		t.Fatalf("expected launcher menu actions not to clear created thread binding, got %#v", surface)
+	}
+
+	second := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-2",
+		Text:             "继续",
+	})
+	for _, event := range second {
+		if event.Notice != nil && event.Notice.Code == "thread_not_ready" {
+			t.Fatalf("expected second text to stay sendable after launcher menu actions, got %#v", second)
+		}
+	}
+}

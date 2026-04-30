@@ -113,6 +113,11 @@ func (s *Service) deriveRemoteTurnOutcome(instanceID string, event agentproto.Ev
 		s.clearRemoteTurn(instanceID, event.TurnID)
 		return nil
 	}
+	if threadID := strings.TrimSpace(event.ThreadID); threadID != "" {
+		if inst := s.root.Instances[instanceID]; inst != nil {
+			s.materializeRemoteTurnThread(inst, threadID, event.CWD, binding, item)
+		}
+	}
 	outcome := &remoteTurnOutcome{
 		Binding:            binding,
 		Surface:            surface,

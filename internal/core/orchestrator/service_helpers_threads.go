@@ -61,6 +61,44 @@ func (s *Service) touchThread(thread *state.ThreadRecord) {
 	thread.LastUsedAt = s.now()
 }
 
+func (s *Service) materializeRemoteTurnThread(inst *state.InstanceRecord, threadID, eventCWD string, binding *remoteTurnBinding, item *state.QueueItemRecord) *state.ThreadRecord {
+	threadID = strings.TrimSpace(threadID)
+	if inst == nil || threadID == "" {
+		return nil
+	}
+	thread := s.ensureThread(inst, threadID)
+	if strings.TrimSpace(thread.CWD) == "" {
+		thread.CWD = firstNonEmpty(
+			strings.TrimSpace(eventCWD),
+			strings.TrimSpace(thread.CWD),
+			strings.TrimSpace(bindingThreadCWD(binding)),
+			queueItemFrozenCWD(item),
+		)
+	}
+	if thread.Archived {
+		thread.Archived = false
+	}
+	if thread.TrafficClass == "" || thread.TrafficClass == agentproto.TrafficClassInternalHelper {
+		thread.TrafficClass = agentproto.TrafficClassPrimary
+	}
+	thread.Loaded = true
+	return thread
+}
+
+func bindingThreadCWD(binding *remoteTurnBinding) string {
+	if binding == nil {
+		return ""
+	}
+	return strings.TrimSpace(binding.ThreadCWD)
+}
+
+func queueItemFrozenCWD(item *state.QueueItemRecord) string {
+	if item == nil {
+		return ""
+	}
+	return strings.TrimSpace(item.FrozenCWD)
+}
+
 func (s *Service) pendingInputEvents(surface *state.SurfaceConsoleRecord, pending control.PendingInputState, sourceMessageIDs []string) []eventcontract.Event {
 	if surface == nil {
 		return nil
