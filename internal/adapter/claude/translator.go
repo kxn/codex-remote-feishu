@@ -49,8 +49,9 @@ type turnState struct {
 }
 
 type messageState struct {
-	ID     string
-	Blocks map[int]*blockState
+	ID              string
+	ParentToolUseID string
+	Blocks          map[int]*blockState
 }
 
 type blockState struct {
@@ -66,14 +67,15 @@ type blockState struct {
 }
 
 type toolState struct {
-	ToolUseID      string
-	ItemID         string
-	Name           string
-	Input          map[string]any
-	Internal       bool
-	StartedEmitted bool
-	Completed      bool
-	TurnID         string
+	ToolUseID       string
+	ParentToolUseID string
+	ItemID          string
+	Name            string
+	Input           map[string]any
+	Internal        bool
+	StartedEmitted  bool
+	Completed       bool
+	TurnID          string
 }
 
 type pendingQuestion struct {

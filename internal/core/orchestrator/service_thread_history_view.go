@@ -429,6 +429,10 @@ func buildThreadHistoryTurnSummaries(history agentproto.ThreadHistoryRecord, cur
 				if text != "" {
 					summary.Outputs = append(summary.Outputs, "[计划] "+text)
 				}
+			case "dynamic_tool_call":
+				if text != "" {
+					summary.Outputs = append(summary.Outputs, "[工具] "+text)
+				}
 			}
 		}
 		summary.InputPreview = threadHistoryInputPreview(summary.Inputs)

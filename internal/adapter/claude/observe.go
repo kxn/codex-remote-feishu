@@ -71,8 +71,9 @@ func (t *Translator) observeStreamMessage(message map[string]any) Result {
 func (t *Translator) observeMessageStart(event map[string]any) Result {
 	message := lookupMap(event, "message")
 	t.currentMessage = &messageState{
-		ID:     strings.TrimSpace(lookupStringFromAny(message["id"])),
-		Blocks: map[int]*blockState{},
+		ID:              strings.TrimSpace(lookupStringFromAny(message["id"])),
+		ParentToolUseID: strings.TrimSpace(lookupStringFromAny(event["parent_tool_use_id"])),
+		Blocks:          map[int]*blockState{},
 	}
 	events := t.startActiveTurnIfNeeded()
 	if t.activeTurn == nil {
@@ -121,11 +122,12 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 	}
 	if kind == "tool_use" {
 		tool := &toolState{
-			ToolUseID: state.ToolUseID,
-			ItemID:    t.nextItemID(),
-			Name:      state.ToolName,
-			Input:     map[string]any{},
-			Internal:  isInternalInteractionTool(state.ToolName),
+			ToolUseID:       state.ToolUseID,
+			ParentToolUseID: t.currentParentToolUseID(),
+			ItemID:          t.nextItemID(),
+			Name:            state.ToolName,
+			Input:           map[string]any{},
+			Internal:        isInternalInteractionTool(state.ToolName),
 		}
 		if t.activeTurn != nil {
 			tool.TurnID = t.activeTurn.TurnID
@@ -239,6 +241,7 @@ func (t *Translator) observeAssistantMessage(message map[string]any) Result {
 	if t.activeTurn == nil {
 		return Result{Events: events}
 	}
+	t.syncObservedMessageParent(message)
 	content := mapsFromAny(lookupMap(message, "message")["content"])
 	if len(content) == 0 {
 		return Result{Events: events}
@@ -439,14 +442,18 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 	tool := t.toolStates[toolUseID]
 	if tool == nil {
 		tool = &toolState{
-			ToolUseID: toolUseID,
-			ItemID:    t.nextItemID(),
-			Name:      strings.TrimSpace(lookupStringFromAny(block["name"])),
-			Input:     map[string]any{},
-			Internal:  isInternalInteractionTool(lookupStringFromAny(block["name"])),
-			TurnID:    t.activeTurn.TurnID,
+			ToolUseID:       toolUseID,
+			ParentToolUseID: t.currentParentToolUseID(),
+			ItemID:          t.nextItemID(),
+			Name:            strings.TrimSpace(lookupStringFromAny(block["name"])),
+			Input:           map[string]any{},
+			Internal:        isInternalInteractionTool(lookupStringFromAny(block["name"])),
+			TurnID:          t.activeTurn.TurnID,
 		}
 		t.toolStates[toolUseID] = tool
+	}
+	if strings.TrimSpace(tool.ParentToolUseID) == "" {
+		tool.ParentToolUseID = t.currentParentToolUseID()
 	}
 	tool.Name = firstNonEmptyString(lookupStringFromAny(block["name"]), tool.Name)
 	tool.Input = cloneMap(lookupMap(block, "input"))
@@ -475,6 +482,7 @@ func (t *Translator) observeUserMessage(message map[string]any) Result {
 	if t.activeTurn == nil {
 		return Result{}
 	}
+	t.syncObservedMessageParent(message)
 	blocks := mapsFromAny(lookupMap(message, "message")["content"])
 	if toolResult := firstToolResultBlock(blocks); toolResult != nil {
 		return t.observeToolResult(message, toolResult)
@@ -503,13 +511,17 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 	}
 	if tool == nil {
 		tool = &toolState{
-			ToolUseID: strings.TrimSpace(lookupStringFromAny(block["tool_use_id"])),
-			ItemID:    t.nextItemID(),
-			Name:      "tool",
-			Input:     map[string]any{},
-			TurnID:    t.activeTurn.TurnID,
+			ToolUseID:       strings.TrimSpace(lookupStringFromAny(block["tool_use_id"])),
+			ParentToolUseID: t.currentParentToolUseID(),
+			ItemID:          t.nextItemID(),
+			Name:            "tool",
+			Input:           map[string]any{},
+			TurnID:          t.activeTurn.TurnID,
 		}
 		t.toolStates[tool.ToolUseID] = tool
+	}
+	if strings.TrimSpace(tool.ParentToolUseID) == "" {
+		tool.ParentToolUseID = t.currentParentToolUseID()
 	}
 	events := make([]agentproto.Event, 0, 2)
 	itemKind := claudeToolItemKind(tool.Name)
@@ -541,7 +553,9 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		}
 	}
 	isError := lookupBoolFromAny(block["is_error"])
-	if claudeToolVisibleLifecycle(tool.Name) && itemKind != "" {
+	if completionEvent, ok := t.hiddenClaudeToolLifecycleEvent(tool, itemKind, isError, metadata); ok {
+		events = append(events, completionEvent)
+	} else if claudeToolVisibleLifecycle(tool.Name) && itemKind != "" {
 		events = append(events, agentproto.Event{
 			Kind:      agentproto.EventItemCompleted,
 			CommandID: t.activeTurn.CommandID,
@@ -558,6 +572,110 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 	}
 	tool.Completed = true
 	return Result{Events: events}
+}
+
+func (t *Translator) currentParentToolUseID() string {
+	if t.currentMessage == nil {
+		return ""
+	}
+	return strings.TrimSpace(t.currentMessage.ParentToolUseID)
+}
+
+func (t *Translator) syncObservedMessageParent(message map[string]any) {
+	parentToolUseID := strings.TrimSpace(lookupStringFromAny(message["parent_tool_use_id"]))
+	if t.currentMessage == nil {
+		t.currentMessage = &messageState{
+			ParentToolUseID: parentToolUseID,
+			Blocks:          map[int]*blockState{},
+		}
+		return
+	}
+	t.currentMessage.ParentToolUseID = parentToolUseID
+}
+
+func (t *Translator) hiddenClaudeToolLifecycleEvent(tool *toolState, itemKind string, isError bool, metadata map[string]any) (agentproto.Event, bool) {
+	if t.activeTurn == nil || tool == nil {
+		return agentproto.Event{}, false
+	}
+	switch strings.TrimSpace(tool.Name) {
+	case "TaskOutput":
+		parent := t.delegatedTaskParent(tool)
+		if parent == nil {
+			return agentproto.Event{}, false
+		}
+		delta := strings.TrimSpace(firstNonEmptyString(
+			stringifyTextContent(metadata["text"]),
+			stringifyTextContent(metadata["toolUseResult"]),
+		))
+		if delta == "" {
+			delta = strings.TrimSpace(firstNonEmptyString(
+				lookupStringFromAny(metadata["text"]),
+				lookupStringFromAny(metadata["toolUseResult"]),
+			))
+		}
+		if delta == "" {
+			return agentproto.Event{}, false
+		}
+		return agentproto.Event{
+			Kind:      agentproto.EventItemDelta,
+			CommandID: t.activeTurn.CommandID,
+			ThreadID:  t.activeTurn.ThreadID,
+			TurnID:    t.activeTurn.TurnID,
+			ItemID:    parent.ItemID,
+			ItemKind:  "delegated_task",
+			Delta:     delta,
+			Metadata:  claudeToolMetadata(parent.Name, parent.Input),
+		}, true
+	case "TaskStop":
+		parent := t.delegatedTaskParent(tool)
+		if parent == nil {
+			return agentproto.Event{}, false
+		}
+		eventMetadata := claudeToolMetadata(parent.Name, parent.Input)
+		if text := strings.TrimSpace(lookupStringFromAny(metadata["text"])); text != "" {
+			eventMetadata["text"] = text
+		}
+		if errorMessage := strings.TrimSpace(firstNonEmptyString(
+			lookupStringFromAny(metadata["error"]),
+			lookupStringFromAny(metadata["errorMessage"]),
+			lookupStringFromAny(metadata["message"]),
+			lookupStringFromAny(metadata["text"]),
+		)); errorMessage != "" && isError {
+			eventMetadata["errorMessage"] = errorMessage
+		}
+		parent.Completed = true
+		return agentproto.Event{
+			Kind:      agentproto.EventItemCompleted,
+			CommandID: t.activeTurn.CommandID,
+			ThreadID:  t.activeTurn.ThreadID,
+			TurnID:    t.activeTurn.TurnID,
+			ItemID:    parent.ItemID,
+			ItemKind:  "delegated_task",
+			Status: map[bool]string{
+				true:  "failed",
+				false: "completed",
+			}[isError],
+			Metadata: eventMetadata,
+		}, true
+	default:
+		_ = itemKind
+		return agentproto.Event{}, false
+	}
+}
+
+func (t *Translator) delegatedTaskParent(tool *toolState) *toolState {
+	if tool == nil {
+		return nil
+	}
+	parentToolUseID := strings.TrimSpace(tool.ParentToolUseID)
+	if parentToolUseID == "" {
+		return nil
+	}
+	parent := t.toolStates[parentToolUseID]
+	if parent == nil || strings.TrimSpace(parent.Name) != "Task" {
+		return nil
+	}
+	return parent
 }
 
 func (t *Translator) observeInternalToolResult(message, block map[string]any, tool *toolState) Result {

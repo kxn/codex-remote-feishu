@@ -34,7 +34,7 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 		record.BufferSummaryIndex = summaryIndex
 	}
 	record.Buffer += event.Delta
-	text := normalizeReasoningText(extractFirstMarkdownBold(record.Buffer))
+	text := extractReasoningSummaryText(record.Buffer)
 	if text == "" {
 		return false
 	}
@@ -133,6 +133,13 @@ func extractFirstMarkdownBold(value string) string {
 		return ""
 	}
 	return ""
+}
+
+func extractReasoningSummaryText(value string) string {
+	if text := normalizeReasoningText(extractFirstMarkdownBold(value)); text != "" {
+		return text
+	}
+	return normalizeReasoningText(value)
 }
 
 func normalizeReasoningText(text string) string {

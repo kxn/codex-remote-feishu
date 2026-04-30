@@ -999,6 +999,234 @@ func TestClaudeTranslatorTaskProjectsToDelegatedTask(t *testing.T) {
 	}
 }
 
+func TestClaudeTranslatorTaskStopCompletesDelegatedTaskViaParentToolUseID(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":                 "msg-task-parent-1",
+			"type":               "message",
+			"role":               "assistant",
+			"model":              "mimo-v2.5-pro",
+			"parent_tool_use_id": nil,
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-parent-1",
+					"name":  "Task",
+					"input": map[string]any{"subagent_type": "Explore", "description": "Audit the repository"},
+				},
+			},
+		},
+		"parent_tool_use_id": nil,
+	})
+	if len(started.Events) != 1 || started.Events[0].ItemKind != "delegated_task" {
+		t.Fatalf("expected delegated task start, got %#v", started.Events)
+	}
+	itemID := started.Events[0].ItemID
+
+	hiddenStop := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-stop-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-stop-1",
+					"name":  "TaskStop",
+					"input": map[string]any{},
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-1",
+	})
+	if len(hiddenStop.Events) != 0 {
+		t.Fatalf("expected TaskStop assistant frame to stay hidden, got %#v", hiddenStop.Events)
+	}
+
+	completed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-task-stop-1",
+					"content":     "Subtask completed",
+					"is_error":    false,
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-1",
+	})
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one delegated task completion event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "delegated_task" || event.Status != "completed" {
+		t.Fatalf("unexpected delegated task completion projection: %#v", event)
+	}
+	if event.ItemID != itemID {
+		t.Fatalf("expected delegated task to reuse parent item id %q, got %#v", itemID, event)
+	}
+	if got := lookupStringFromAny(event.Metadata["description"]); got != "Audit the repository" {
+		t.Fatalf("expected parent task metadata to survive completion, got %#v", event.Metadata)
+	}
+}
+
+func TestClaudeTranslatorTaskStopFailureProjectsToDelegatedTaskFailure(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-parent-2",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-parent-2",
+					"name":  "Task",
+					"input": map[string]any{"subagent_type": "Explore", "description": "Gather evidence"},
+				},
+			},
+		},
+	})
+	if len(started.Events) != 1 || started.Events[0].ItemKind != "delegated_task" {
+		t.Fatalf("expected delegated task start, got %#v", started.Events)
+	}
+
+	hiddenStop := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-stop-2",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-stop-2",
+					"name":  "TaskStop",
+					"input": map[string]any{},
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-2",
+	})
+	if len(hiddenStop.Events) != 0 {
+		t.Fatalf("expected TaskStop assistant frame to stay hidden, got %#v", hiddenStop.Events)
+	}
+
+	failed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-task-stop-2",
+					"content":     "Subtask failed",
+					"is_error":    true,
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-2",
+		"tool_use_result": map[string]any{
+			"errorMessage": "subtask exploded",
+		},
+	})
+	if len(failed.Events) != 1 {
+		t.Fatalf("expected one delegated task failed event, got %#v", failed.Events)
+	}
+	event := failed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "delegated_task" || event.Status != "failed" {
+		t.Fatalf("unexpected delegated task failed projection: %#v", event)
+	}
+	if got := lookupStringFromAny(event.Metadata["errorMessage"]); got != "subtask exploded" {
+		t.Fatalf("expected failed delegated task to keep error metadata, got %#v", event.Metadata)
+	}
+}
+
+func TestClaudeTranslatorTaskOutputProjectsHiddenDelegatedTaskDelta(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-parent-3",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-parent-3",
+					"name":  "Task",
+					"input": map[string]any{"subagent_type": "Explore", "description": "Collect evidence"},
+				},
+			},
+		},
+	})
+	if len(started.Events) != 1 || started.Events[0].ItemKind != "delegated_task" {
+		t.Fatalf("expected delegated task start, got %#v", started.Events)
+	}
+
+	hiddenOutput := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-task-output-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type":  "tool_use",
+					"id":    "call-task-output-1",
+					"name":  "TaskOutput",
+					"input": map[string]any{},
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-3",
+	})
+	if len(hiddenOutput.Events) != 0 {
+		t.Fatalf("expected TaskOutput assistant frame to stay hidden, got %#v", hiddenOutput.Events)
+	}
+
+	delta := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-task-output-1",
+					"content":     "Scanned 12 files",
+					"is_error":    false,
+				},
+			},
+		},
+		"parent_tool_use_id": "call-task-parent-3",
+	})
+	if len(delta.Events) != 1 {
+		t.Fatalf("expected one hidden delegated task delta event, got %#v", delta.Events)
+	}
+	event := delta.Events[0]
+	if event.Kind != agentproto.EventItemDelta || event.ItemKind != "delegated_task" || event.Delta != "Scanned 12 files" {
+		t.Fatalf("unexpected delegated task delta projection: %#v", event)
+	}
+}
+
 func startClaudeTurn(t *testing.T, tr *Translator, permissionMode string) (string, string) {
 	t.Helper()
 	observeClaude(t, tr, map[string]any{

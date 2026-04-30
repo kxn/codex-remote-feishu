@@ -262,6 +262,8 @@ final message 只承载 assistant 的最终回答正文。
 同时已经明确：
 
 - `TaskOutput` / `TaskStop` 继续隐藏，不单独可见
+- `TaskStop` 已通过父 `Task` 的隐藏 lifecycle 驱动 `delegated_task.completed|failed`
+- `TaskOutput` 已通过父 `Task` 的隐藏 delta 输入驱动同一条 `delegated_task`，但不新增可见行
 - `process_plan` 走过程卡内 block owner，不再复用独立 `turn.plan.updated` 卡
 - `delegated_task` 走单行过程项 owner
 - `command_execution` / `web_search` / `process_plan` / `delegated_task` 完成后不再默认回落成普通文本

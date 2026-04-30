@@ -482,6 +482,57 @@ func TestDelegatedTaskProgressNormalVerbosityEmitsEntry(t *testing.T) {
 	}
 }
 
+func TestDelegatedTaskProgressCompletionUpdatesSameEntry(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "开子任务", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "task-1",
+		ItemKind: "delegated_task",
+		Metadata: map[string]any{
+			"description":  "Audit the repository",
+			"subagentType": "Explore",
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected delegated task start progress, got %#v", started)
+	}
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "task-1", "om-progress-1")
+
+	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "task-1",
+		ItemKind: "delegated_task",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"description":  "Audit the repository",
+			"subagentType": "Explore",
+		},
+	})
+	if len(completed) != 1 || completed[0].ExecCommandProgress == nil {
+		t.Fatalf("expected delegated task completion progress, got %#v", completed)
+	}
+	progress := completed[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected delegated task completion to reuse same card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "delegated_task" || progress.Entries[0].Status != "completed" {
+		t.Fatalf("unexpected delegated task completion entry: %#v", progress.Entries)
+	}
+	if progress.Entries[0].Summary != "Explore · Audit the repository" {
+		t.Fatalf("expected delegated task completion to keep summary, got %#v", progress.Entries[0])
+	}
+}
+
 func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -1169,6 +1220,54 @@ func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) 
 	record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning
 	if record == nil || record.Text != "Considering Git commands" {
 		t.Fatalf("expected reasoning record to keep raw english text, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
+	}
+}
+
+func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Considering",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first reasoning delta event, got %#v", first)
+	}
+	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering." {
+		t.Fatalf("expected first reasoning frame to surface first fragment, got %#v", first[0].ExecCommandProgress.Timeline)
+	}
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    " possible fixes",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second reasoning delta event, got %#v", second)
+	}
+	if got := second[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering possible fixes." {
+		t.Fatalf("expected accumulated plain-text reasoning summary, got %#v", second[0].ExecCommandProgress.Timeline)
+	}
+	if record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning; record == nil || record.Text != "Considering possible fixes" {
+		t.Fatalf("expected reasoning record to keep accumulated plain-text summary, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
 	}
 }
 
