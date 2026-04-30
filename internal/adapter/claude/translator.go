@@ -57,6 +57,7 @@ type blockState struct {
 	Index          int
 	Kind           string
 	ItemID         string
+	StartedEmitted bool
 	TextBuffer     string
 	ToolUseID      string
 	ToolName       string

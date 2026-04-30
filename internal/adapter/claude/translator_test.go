@@ -760,6 +760,158 @@ func TestClaudeTranslatorMaterializesFinalTextOnErrorResult(t *testing.T) {
 	}
 }
 
+func TestClaudeTranslatorReconcilesFinalAssistantTextOntoStreamingBlock(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, turnID := startClaudeTurn(t, tr, "default")
+
+	thinkingStart := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		},
+	})
+	if len(thinkingStart.Events) != 0 {
+		t.Fatalf("expected thinking block start to stay silent, got %#v", thinkingStart.Events)
+	}
+
+	streamStart := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 1,
+			"content_block": map[string]any{
+				"type": "text",
+				"text": "",
+			},
+		},
+	})
+	if len(streamStart.Events) != 1 || streamStart.Events[0].Kind != agentproto.EventItemStarted {
+		t.Fatalf("expected one text item.started event, got %#v", streamStart.Events)
+	}
+	itemID := streamStart.Events[0].ItemID
+
+	streamDelta := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 1,
+			"delta": map[string]any{
+				"type": "text_delta",
+				"text": "你好！有什么我可以帮助你的吗？",
+			},
+		},
+	})
+	if len(streamDelta.Events) != 1 || streamDelta.Events[0].Kind != agentproto.EventItemDelta {
+		t.Fatalf("expected one text item.delta event, got %#v", streamDelta.Events)
+	}
+
+	assistant := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-final-text-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "text",
+					"text": "你好！有什么我可以帮助你的吗？",
+				},
+			},
+		},
+	})
+	if len(assistant.Events) != 1 || assistant.Events[0].Kind != agentproto.EventItemCompleted {
+		t.Fatalf("expected assistant final text to complete existing stream item, got %#v", assistant.Events)
+	}
+	if assistant.Events[0].ItemID != itemID {
+		t.Fatalf("expected assistant final text to reuse stream item id %q, got %#v", itemID, assistant.Events[0])
+	}
+	if assistant.Events[0].ThreadID != threadID || assistant.Events[0].TurnID != turnID {
+		t.Fatalf("unexpected assistant completion ids: %#v", assistant.Events[0])
+	}
+
+	streamStop := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_stop",
+			"index": 1,
+		},
+	})
+	if len(streamStop.Events) != 0 {
+		t.Fatalf("expected redundant stream stop to stay silent after assistant reconciliation, got %#v", streamStop.Events)
+	}
+}
+
+func TestClaudeTranslatorIgnoresRedundantAssistantTextAfterStreamCompletion(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, turnID := startClaudeTurn(t, tr, "default")
+
+	streamStart := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type": "text",
+				"text": "",
+			},
+		},
+	})
+	if len(streamStart.Events) != 1 || streamStart.Events[0].Kind != agentproto.EventItemStarted {
+		t.Fatalf("expected one text item.started event, got %#v", streamStart.Events)
+	}
+	itemID := streamStart.Events[0].ItemID
+
+	observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type": "text_delta",
+				"text": "already completed",
+			},
+		},
+	})
+	streamStop := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_stop",
+			"index": 0,
+		},
+	})
+	if len(streamStop.Events) != 1 || streamStop.Events[0].Kind != agentproto.EventItemCompleted {
+		t.Fatalf("expected stream stop to complete text item, got %#v", streamStop.Events)
+	}
+	if streamStop.Events[0].ItemID != itemID || streamStop.Events[0].ThreadID != threadID || streamStop.Events[0].TurnID != turnID {
+		t.Fatalf("unexpected stream completion ids: %#v", streamStop.Events[0])
+	}
+
+	assistant := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-final-text-2",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "text",
+					"text": "already completed",
+				},
+			},
+		},
+	})
+	if len(assistant.Events) != 0 {
+		t.Fatalf("expected assistant final snapshot to avoid duplicating completed text item, got %#v", assistant.Events)
+	}
+}
+
 func startClaudeTurn(t *testing.T, tr *Translator, permissionMode string) (string, string) {
 	t.Helper()
 	observeClaude(t, tr, map[string]any{

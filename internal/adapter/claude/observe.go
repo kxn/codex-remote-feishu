@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -96,6 +97,7 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 	var events []agentproto.Event
 	if kind == "text" && t.activeTurn != nil {
 		state.ItemID = t.nextItemID()
+		state.StartedEmitted = true
 		events = append(events, agentproto.Event{
 			Kind:      agentproto.EventItemStarted,
 			CommandID: t.activeTurn.CommandID,
@@ -191,11 +193,20 @@ func (t *Translator) observeAssistantMessage(message map[string]any) Result {
 	if len(content) == 0 {
 		return Result{Events: events}
 	}
+	textBlockCount := 0
+	for _, block := range content {
+		if strings.TrimSpace(lookupStringFromAny(block["type"])) == "text" {
+			textBlockCount++
+		}
+	}
+	textOrdinal := 0
+	claimedTextBlocks := map[*blockState]bool{}
 	for index, block := range content {
 		switch strings.TrimSpace(lookupStringFromAny(block["type"])) {
 		case "text":
 			text := lookupStringFromAny(block["text"])
-			events = append(events, t.completeAssistantText(index, text)...)
+			events = append(events, t.completeAssistantText(index, textOrdinal, textBlockCount, text, claimedTextBlocks)...)
+			textOrdinal++
 		case "tool_use":
 			events = append(events, t.finalizeToolUse(block)...)
 		}
@@ -203,27 +214,33 @@ func (t *Translator) observeAssistantMessage(message map[string]any) Result {
 	return Result{Events: events}
 }
 
-func (t *Translator) completeAssistantText(index int, text string) []agentproto.Event {
+func (t *Translator) completeAssistantText(index, textOrdinal, totalTextBlocks int, text string, claimed map[*blockState]bool) []agentproto.Event {
 	if t.activeTurn == nil {
 		return nil
 	}
-	if t.currentMessage == nil {
-		t.currentMessage = &messageState{Blocks: map[int]*blockState{}}
-	}
-	state := t.currentMessage.Blocks[index]
+	state := t.resolveAssistantTextBlock(index, textOrdinal, totalTextBlocks, text, claimed)
 	if state == nil {
 		state = &blockState{
 			Index:  index,
 			Kind:   "text",
 			ItemID: t.nextItemID(),
 		}
-		t.currentMessage.Blocks[index] = state
+	}
+	if claimed != nil {
+		claimed[state] = true
+	}
+	return t.finishAssistantTextBlock(state, text)
+}
+
+func (t *Translator) finishAssistantTextBlock(state *blockState, text string) []agentproto.Event {
+	if t.activeTurn == nil || state == nil {
+		return nil
 	}
 	if state.ItemID == "" {
 		state.ItemID = t.nextItemID()
 	}
 	events := make([]agentproto.Event, 0, 2)
-	if state.TextBuffer == "" && !state.Completed {
+	if !state.StartedEmitted {
 		events = append(events, agentproto.Event{
 			Kind:      agentproto.EventItemStarted,
 			CommandID: t.activeTurn.CommandID,
@@ -232,13 +249,21 @@ func (t *Translator) completeAssistantText(index int, text string) []agentproto.
 			ItemID:    state.ItemID,
 			ItemKind:  "agent_message",
 		})
+		state.StartedEmitted = true
 	}
 	if state.Completed {
+		if strings.TrimSpace(text) != "" {
+			state.TextBuffer = text
+		}
+		t.activeTurn.LastAssistantText = state.TextBuffer
+		t.activeTurn.AgentMessageCompleted = true
 		return events
 	}
 	state.Completed = true
-	state.TextBuffer = text
-	t.activeTurn.LastAssistantText = text
+	if strings.TrimSpace(text) != "" {
+		state.TextBuffer = text
+	}
+	t.activeTurn.LastAssistantText = state.TextBuffer
 	t.activeTurn.AgentMessageCompleted = true
 	events = append(events, agentproto.Event{
 		Kind:      agentproto.EventItemCompleted,
@@ -248,9 +273,112 @@ func (t *Translator) completeAssistantText(index int, text string) []agentproto.
 		ItemID:    state.ItemID,
 		ItemKind:  "agent_message",
 		Status:    "completed",
-		Metadata:  map[string]any{"text": text},
+		Metadata:  map[string]any{"text": state.TextBuffer},
 	})
 	return events
+}
+
+func (t *Translator) resolveAssistantTextBlock(index, textOrdinal, totalTextBlocks int, text string, claimed map[*blockState]bool) *blockState {
+	if t.currentMessage == nil {
+		return nil
+	}
+	if state := t.currentMessage.Blocks[index]; state != nil && state.Kind == "text" && !claimed[state] {
+		return state
+	}
+	textBlocks := assistantTextBlocks(t.currentMessage)
+	if len(textBlocks) == 0 {
+		return nil
+	}
+	if totalTextBlocks == 1 {
+		if state := assistantLastUnclaimedTextBlock(textBlocks, claimed); state != nil {
+			return state
+		}
+	}
+	if totalTextBlocks > 1 {
+		if state := assistantTextBlockByOrdinal(textBlocks, textOrdinal, claimed); state != nil {
+			return state
+		}
+	}
+	if state := assistantLastPendingTextBlock(textBlocks, claimed); state != nil {
+		return state
+	}
+	if state := assistantLastMatchingCompletedTextBlock(textBlocks, text, claimed); state != nil {
+		return state
+	}
+	return nil
+}
+
+func assistantTextBlocks(message *messageState) []*blockState {
+	if message == nil || len(message.Blocks) == 0 {
+		return nil
+	}
+	blocks := make([]*blockState, 0, len(message.Blocks))
+	for _, state := range message.Blocks {
+		if state == nil || state.Kind != "text" {
+			continue
+		}
+		blocks = append(blocks, state)
+	}
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].Index < blocks[j].Index
+	})
+	return blocks
+}
+
+func assistantTextBlockByOrdinal(blocks []*blockState, ordinal int, claimed map[*blockState]bool) *blockState {
+	if ordinal < 0 {
+		return nil
+	}
+	seen := 0
+	for _, state := range blocks {
+		if claimed[state] {
+			continue
+		}
+		if seen == ordinal {
+			return state
+		}
+		seen++
+	}
+	return nil
+}
+
+func assistantLastUnclaimedTextBlock(blocks []*blockState, claimed map[*blockState]bool) *blockState {
+	for i := len(blocks) - 1; i >= 0; i-- {
+		state := blocks[i]
+		if claimed[state] {
+			continue
+		}
+		return state
+	}
+	return nil
+}
+
+func assistantLastPendingTextBlock(blocks []*blockState, claimed map[*blockState]bool) *blockState {
+	for i := len(blocks) - 1; i >= 0; i-- {
+		state := blocks[i]
+		if claimed[state] || state.Completed {
+			continue
+		}
+		return state
+	}
+	return nil
+}
+
+func assistantLastMatchingCompletedTextBlock(blocks []*blockState, text string, claimed map[*blockState]bool) *blockState {
+	needle := strings.TrimSpace(text)
+	if needle == "" {
+		return nil
+	}
+	for i := len(blocks) - 1; i >= 0; i-- {
+		state := blocks[i]
+		if claimed[state] || !state.Completed {
+			continue
+		}
+		if strings.TrimSpace(state.TextBuffer) == needle {
+			return state
+		}
+	}
+	return nil
 }
 
 func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
