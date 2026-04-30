@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -64,6 +65,7 @@ func newBackendRuntime(cfg Config) backendRuntime {
 }
 
 type codexBackendRuntime struct {
+	mu         sync.Mutex
 	translator *codex.Translator
 }
 
@@ -83,6 +85,8 @@ func (r *codexBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *d
 }
 
 func (r *codexBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	result, err := r.translator.ObserveClient(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
@@ -95,6 +99,8 @@ func (r *codexBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, 
 }
 
 func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	result, err := r.translator.ObserveServer(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
@@ -108,6 +114,8 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 }
 
 func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	outbound, err := r.translator.TranslateCommand(command)
 	if err != nil {
 		return runtimeCommandResult{}, err
@@ -120,18 +128,25 @@ func (r *codexBackendRuntime) PrepareChildRestart(string, agentproto.Target) err
 }
 
 func (r *codexBackendRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.translator.BuildChildRestartRestoreFrame(commandID)
 }
 
 func (r *codexBackendRuntime) CancelChildRestartRestore(requestID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.translator.CancelChildRestartRestore(requestID)
 }
 
 func (r *codexBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.translator.SetDebugLogger(debugLog)
 }
 
 type claudeBackendRuntime struct {
+	mu                   sync.Mutex
 	translator           *claude.Translator
 	workspaceRoot        string
 	initialLaunchResume  *claudeLaunchResumeTarget
@@ -156,19 +171,25 @@ func (r *claudeBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *
 	if app == nil {
 		return nil, nil
 	}
+	r.mu.Lock()
 	resume := r.consumeLaunchResumeTarget()
+	r.mu.Unlock()
 	session, err := app.launchClaudeChildSession(ctx, rawLogger, reportProblem, resume)
 	if err != nil {
 		return nil, err
 	}
 	if resume != nil {
 		copy := *resume
+		r.mu.Lock()
 		r.expectedResumeThread = &copy
+		r.mu.Unlock()
 	}
 	return session, nil
 }
 
 func (r *claudeBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	result, err := r.translator.ObserveClient(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
@@ -181,6 +202,8 @@ func (r *claudeBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult,
 }
 
 func (r *claudeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	result, err := r.translator.ObserveServer(line)
 	if err != nil {
 		return runtimeObserveResult{}, err
@@ -199,6 +222,8 @@ func (r *claudeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult,
 }
 
 func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if events, handled, err := claude.HandleLocalCommand(command, r.workspaceRoot, r.translator.RuntimeStateSnapshot()); handled {
 		if err != nil {
 			return runtimeCommandResult{}, err
@@ -218,6 +243,8 @@ func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (run
 }
 
 func (r *claudeBackendRuntime) PrepareChildRestart(_ string, target agentproto.Target) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	resume, err := r.resolveLaunchResumeTarget(target)
 	if err != nil {
 		return err
@@ -227,14 +254,20 @@ func (r *claudeBackendRuntime) PrepareChildRestart(_ string, target agentproto.T
 }
 
 func (r *claudeBackendRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.translator.BuildChildRestartRestoreFrame(commandID)
 }
 
 func (r *claudeBackendRuntime) CancelChildRestartRestore(requestID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.translator.CancelChildRestartRestore(requestID)
 }
 
 func (r *claudeBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.translator.SetDebugLogger(debugLog)
 }
 

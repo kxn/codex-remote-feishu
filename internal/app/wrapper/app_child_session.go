@@ -82,7 +82,7 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 	go streamCopy(session.stderr, parentStderr, errCh)
 }
 
-func stopChildSession(session *childSession, debugf func(string, ...any)) {
+func signalStopChildSession(session *childSession, debugf func(string, ...any)) {
 	if session == nil {
 		return
 	}
@@ -100,6 +100,13 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	if session.cancel != nil {
 		session.cancel()
 	}
+}
+
+func stopChildSession(session *childSession, debugf func(string, ...any)) {
+	if session == nil {
+		return
+	}
+	signalStopChildSession(session, debugf)
 	select {
 	case <-session.waitErr:
 	case <-time.After(wrapperChildWaitTimeout):
@@ -131,7 +138,9 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 			CommandID: request.CommandID,
 		}
 	}
-	stopChildSession(current, a.debugf)
+	// Restart should synchronously fence old IO before returning, but it should
+	// not block the relay ack path on the old child fully exiting.
+	signalStopChildSession(current, a.debugf)
 	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
 	restoreClient := client
 	if !request.EmitEvent {
