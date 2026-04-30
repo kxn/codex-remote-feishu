@@ -302,8 +302,37 @@ func TestClientSendersTagCurrentEpochAndAllowUnboundWork(t *testing.T) {
 	if pending != nil {
 		t.Fatalf("expected no pending data after ack dequeue, got %#v", pending)
 	}
-	if ack.epoch != 3 {
-		t.Fatalf("expected command ack to inherit current epoch, got %#v", ack)
+	if ack.epoch != 0 {
+		t.Fatalf("expected command ack to stay unbound across reconnects, got %#v", ack)
+	}
+}
+
+func TestClientCommandAckSurvivesEpochAdvance(t *testing.T) {
+	client := newClientWithQueueSizes("ws://relay.test/ws/agent", agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{InstanceID: "inst-1"},
+	}, ClientCallbacks{}, 4, 4)
+
+	atomic.StoreUint64(&client.epoch, 3)
+	if err := client.SendCommandAck(agentproto.CommandAck{CommandID: "cmd-1", Accepted: true}); err != nil {
+		t.Fatalf("SendCommandAck: %v", err)
+	}
+
+	item, pending, err := client.nextOutbound(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("nextOutbound: %v", err)
+	}
+	if pending != nil {
+		t.Fatalf("expected no pending data after ack dequeue, got %#v", pending)
+	}
+	if item.envelope.Type != agentproto.EnvelopeCommandAck {
+		t.Fatalf("expected command ack, got %#v", item)
+	}
+	if item.epoch != 0 {
+		t.Fatalf("expected unbound command ack, got %#v", item)
+	}
+	if !matchesConnectionEpoch(item.epoch, 4) {
+		t.Fatalf("expected command ack to remain sendable after reconnect, got %#v", item)
 	}
 }
 
@@ -616,6 +645,112 @@ func TestClientSendsStructuredRejectedAckAndKeepsConnection(t *testing.T) {
 	}
 	if !goodAck.Accepted {
 		t.Fatalf("expected follow-up command to still be accepted, got %#v", goodAck)
+	}
+}
+
+func TestClientCommandAckRetriesAfterWriteFailureOnReconnect(t *testing.T) {
+	helloCh := make(chan agentproto.Hello, 2)
+	ackCh := make(chan agentproto.CommandAck, 2)
+	commandStartCh := make(chan struct{}, 1)
+	commandReleaseCh := make(chan struct{})
+	connectionMetaCh := make(chan ConnectionMeta, 2)
+
+	server := NewServer(ServerCallbacks{
+		OnHello: func(_ context.Context, meta ConnectionMeta, hello agentproto.Hello) {
+			connectionMetaCh <- meta
+			helloCh <- hello
+		},
+		OnCommandAck: func(_ context.Context, _ ConnectionMeta, _ string, ack agentproto.CommandAck) {
+			ackCh <- ack
+		},
+	})
+	defer server.Close()
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r)
+	}))
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
+	client := NewClient(wsURL, agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{
+			InstanceID: "inst-retry-ack",
+		},
+	}, ClientCallbacks{
+		OnCommand: func(_ context.Context, command agentproto.Command) error {
+			if command.CommandID != "cmd-retry-ack" {
+				return nil
+			}
+			select {
+			case commandStartCh <- struct{}{}:
+			default:
+			}
+			<-commandReleaseCh
+			return nil
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = client.Run(ctx)
+	}()
+	defer client.Close()
+
+	select {
+	case hello := <-helloCh:
+		if hello.Instance.InstanceID != "inst-retry-ack" {
+			t.Fatalf("unexpected hello: %#v", hello)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for initial hello")
+	}
+
+	var firstMeta ConnectionMeta
+	select {
+	case firstMeta = <-connectionMetaCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for initial connection meta")
+	}
+
+	if err := server.SendCommand("inst-retry-ack", agentproto.Command{
+		CommandID: "cmd-retry-ack",
+		Kind:      agentproto.CommandThreadsRefresh,
+	}); err != nil {
+		t.Fatalf("send command: %v", err)
+	}
+
+	select {
+	case <-commandStartCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for command callback")
+	}
+
+	if !server.CloseConnection("inst-retry-ack", firstMeta.ConnectionID) {
+		t.Fatal("expected targeted close to succeed")
+	}
+	close(commandReleaseCh)
+
+	var secondMeta ConnectionMeta
+	for secondMeta.ConnectionID == 0 || secondMeta.ConnectionID == firstMeta.ConnectionID {
+		select {
+		case hello := <-helloCh:
+			if hello.Instance.InstanceID != "inst-retry-ack" {
+				t.Fatalf("unexpected reconnect hello: %#v", hello)
+			}
+		case secondMeta = <-connectionMetaCh:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for reconnect")
+		}
+	}
+
+	select {
+	case ack := <-ackCh:
+		if ack.CommandID != "cmd-retry-ack" || !ack.Accepted {
+			t.Fatalf("unexpected ack after reconnect: %#v", ack)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for command ack after reconnect")
 	}
 }
 

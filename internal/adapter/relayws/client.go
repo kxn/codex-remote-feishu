@@ -168,7 +168,13 @@ func (c *Client) SendCommandAck(ack agentproto.CommandAck) error {
 		ack.InstanceID = c.hello.Instance.InstanceID
 	}
 	return c.enqueue(&c.controlOutbox, c.controlMax, queuedEnvelope{
-		epoch: atomic.LoadUint64(&c.epoch),
+		// Command ack is a transport control-plane reply for a command that was
+		// already delivered by the server. If the wrapper finishes handling the
+		// command while the websocket is reconnecting, pinning the ack to the
+		// previous epoch can silently drop it on the next connection and leave the
+		// daemon waiting forever. Keep command acks unbound so they survive
+		// reconnects just like pre-connect work.
+		epoch: 0,
 		envelope: agentproto.Envelope{
 			Type:       agentproto.EnvelopeCommandAck,
 			CommandAck: &ack,
@@ -216,6 +222,8 @@ func (c *Client) enqueue(outbox *[]queuedEnvelope, max int, item queuedEnvelope,
 
 func (c *Client) RunOnce(ctx context.Context) error {
 	connectionEpoch := atomic.AddUint64(&c.epoch, 1)
+	runCtx, runCancel := context.WithCancel(ctx)
+	defer runCancel()
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, c.url, http.Header{})
 	if err != nil {
 		return err
@@ -250,7 +258,7 @@ func (c *Client) RunOnce(ctx context.Context) error {
 	go func() {
 		var pendingData *queuedEnvelope
 		for {
-			item, nextPendingData, err := c.nextOutbound(ctx, pendingData)
+			item, nextPendingData, err := c.nextOutbound(runCtx, pendingData)
 			pendingData = nextPendingData
 			if err != nil {
 				writeErr <- err
@@ -268,7 +276,14 @@ func (c *Client) RunOnce(ctx context.Context) error {
 			}
 			c.logRaw("out", payload, item.envelope.Type, envelopeInstanceID(item.envelope, c.hello.Instance.InstanceID), envelopeCommandID(item.envelope))
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-				c.outboundState.markProcessed()
+				if item.envelope.Type == agentproto.EnvelopeCommandAck {
+					// Command ack must remain pending until it is actually written.
+					// Requeue it at the front so the next connection can retry the
+					// same control-plane reply instead of silently dropping it.
+					c.restoreControlFront(item)
+				} else {
+					c.outboundState.markProcessed()
+				}
 				writeErr <- err
 				return
 			}
@@ -412,6 +427,18 @@ func (c *Client) dequeueData() (queuedEnvelope, bool) {
 	c.outboxMu.Lock()
 	defer c.outboxMu.Unlock()
 	return dequeueQueuedEnvelopeLocked(&c.dataOutbox)
+}
+
+func (c *Client) restoreControlFront(item queuedEnvelope) {
+	c.outboxMu.Lock()
+	c.controlOutbox = append(c.controlOutbox, queuedEnvelope{})
+	copy(c.controlOutbox[1:], c.controlOutbox[:len(c.controlOutbox)-1])
+	c.controlOutbox[0] = item
+	c.outboxMu.Unlock()
+	select {
+	case c.outboundReady <- struct{}{}:
+	default:
+	}
 }
 
 func dequeueQueuedEnvelopeLocked(queue *[]queuedEnvelope) (queuedEnvelope, bool) {
