@@ -53,7 +53,10 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	}
 	switch strings.TrimSpace(view.CommandID) {
 	case FeishuCommandMode:
-		return []FeishuCardTextSection{singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置"))}
+		return []FeishuCardTextSection{
+			singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置")),
+			singleValueCardSection("兼容说明", "`/mode normal` 仍兼容，但它等价于 `/mode codex`。"),
+		}
 	case FeishuCommandClaudeProfile:
 		return []FeishuCardTextSection{
 			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultClaudeProfileName))),

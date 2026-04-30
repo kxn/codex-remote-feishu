@@ -1,10 +1,6 @@
 package control
 
-import (
-	"strings"
-
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-)
+import "strings"
 
 type FeishuCommandDisplayFamily struct {
 	FamilyID string
@@ -45,7 +41,7 @@ func FeishuCommandDisplayFamiliesForGroup(groupID string) []FeishuCommandDisplay
 func feishuCommandDisplayFamiliesForGroupContext(groupID string, ctx CatalogContext) []FeishuCommandDisplayFamily {
 	ctx = NormalizeCatalogContext(ctx)
 	families := FeishuCommandDisplayFamiliesForGroup(groupID)
-	if ctx.Backend != agentproto.BackendClaude || ctx.ProductMode != "normal" {
+	if VisibleModeForCatalogContext(ctx) != "claude" {
 		return families
 	}
 	switch groupID {

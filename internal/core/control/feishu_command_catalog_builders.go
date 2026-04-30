@@ -11,7 +11,7 @@ func BuildFeishuCommandMenuHomePageView() FeishuPageView {
 }
 
 func BuildFeishuCommandMenuHomePageViewForProductMode(productMode string) FeishuPageView {
-	return BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: productMode})
+	return BuildFeishuCommandMenuHomePageViewForContext(legacyCatalogContext(productMode, ""))
 }
 
 func BuildFeishuCommandMenuHomePageViewForContext(ctx CatalogContext) FeishuPageView {
@@ -31,10 +31,7 @@ func BuildFeishuCommandMenuHomePageViewForContext(ctx CatalogContext) FeishuPage
 }
 
 func BuildFeishuCommandMenuPageView(view FeishuCatalogMenuView, productMode, menuStage string) FeishuPageView {
-	return BuildFeishuCommandMenuPageViewForContext(view, CatalogContext{
-		ProductMode: productMode,
-		MenuStage:   menuStage,
-	})
+	return BuildFeishuCommandMenuPageViewForContext(view, legacyCatalogContext(productMode, menuStage))
 }
 
 func BuildFeishuCommandMenuPageViewForContext(view FeishuCatalogMenuView, ctx CatalogContext) FeishuPageView {
@@ -57,10 +54,7 @@ func BuildFeishuCommandMenuPageViewForContext(view FeishuCatalogMenuView, ctx Ca
 }
 
 func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuPageView {
-	return BuildFeishuCommandMenuGroupPageViewForContext(groupID, CatalogContext{
-		ProductMode: productMode,
-		MenuStage:   menuStage,
-	})
+	return BuildFeishuCommandMenuGroupPageViewForContext(groupID, legacyCatalogContext(productMode, menuStage))
 }
 
 func BuildFeishuCommandMenuGroupPageViewForContext(groupID string, ctx CatalogContext) FeishuPageView {

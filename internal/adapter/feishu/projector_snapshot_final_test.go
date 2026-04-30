@@ -124,7 +124,7 @@ func TestProjectSnapshotShowsClaudeProfile(t *testing.T) {
 		t.Fatalf("unexpected ops: %#v", ops)
 	}
 	rendered := renderedV2CardText(t, ops[0])
-	if !containsAll(rendered, "Claude 配置：DevSeek Pro（devseek）", "当前模式：normal") {
+	if !containsAll(rendered, "Claude 配置：DevSeek Pro（devseek）", "当前模式：claude") {
 		t.Fatalf("expected snapshot rendering to show claude profile, got %q", rendered)
 	}
 }
@@ -1017,7 +1017,7 @@ func TestProjectSnapshotIncludesEffectivePromptConfig(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshotShowsNormalModeWhenDetached(t *testing.T) {
+func TestProjectSnapshotShowsCodexModeWhenDetached(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind: eventcontract.KindSnapshot,
@@ -1030,7 +1030,7 @@ func TestProjectSnapshotShowsNormalModeWhenDetached(t *testing.T) {
 	}
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered,
-		"当前模式：normal",
+		"当前模式：codex",
 		"接管对象类型：无",
 		"已接管：无",
 	) {

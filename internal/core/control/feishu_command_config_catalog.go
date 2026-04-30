@@ -31,7 +31,7 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
-			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "normal"),
+			Buttons: fixedChoiceButtonsFromOptions(def.Options, strings.TrimSpace(view.CurrentValue), "codex"),
 		}},
 	}})
 }

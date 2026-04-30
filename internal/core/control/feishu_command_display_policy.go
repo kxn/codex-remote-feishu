@@ -1,9 +1,15 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
 
 func normalizeFeishuCommandProductMode(productMode string) string {
 	switch strings.ToLower(strings.TrimSpace(productMode)) {
+	case "claude":
+		return "normal"
 	case "vscode":
 		return "vscode"
 	default:
@@ -11,13 +17,21 @@ func normalizeFeishuCommandProductMode(productMode string) string {
 	}
 }
 
+func legacyCatalogContext(productMode, menuStage string) CatalogContext {
+	ctx := CatalogContext{
+		ProductMode: productMode,
+		MenuStage:   menuStage,
+	}
+	if strings.EqualFold(strings.TrimSpace(productMode), "claude") {
+		ctx.Backend = agentproto.BackendClaude
+	}
+	return ctx
+}
+
 // FeishuCommandDefinitionForDisplay projects a canonical command definition into
 // the user-facing help/menu shape for the current surface mode.
 func FeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, productMode string, interactive bool, menuStage string) (FeishuCommandDefinition, bool) {
-	return FeishuCommandDefinitionForDisplayContext(def, interactive, CatalogContext{
-		ProductMode: productMode,
-		MenuStage:   menuStage,
-	})
+	return FeishuCommandDefinitionForDisplayContext(def, interactive, legacyCatalogContext(productMode, menuStage))
 }
 
 func FeishuCommandDefinitionForDisplayContext(def FeishuCommandDefinition, interactive bool, ctx CatalogContext) (FeishuCommandDefinition, bool) {
@@ -50,10 +64,7 @@ func projectFeishuCommandDefinitionForDisplay(def FeishuCommandDefinition, inter
 }
 
 func BuildFeishuCommandDisplayPageView(title, summary string, interactive bool, productMode, menuStage string) FeishuPageView {
-	return BuildFeishuCommandDisplayPageViewForContext(title, summary, interactive, CatalogContext{
-		ProductMode: productMode,
-		MenuStage:   menuStage,
-	})
+	return BuildFeishuCommandDisplayPageViewForContext(title, summary, interactive, legacyCatalogContext(productMode, menuStage))
 }
 
 func BuildFeishuCommandDisplayPageViewForContext(title, summary string, interactive bool, ctx CatalogContext) FeishuPageView {

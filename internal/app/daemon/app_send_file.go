@@ -177,7 +177,7 @@ func sendFileToolErrorText(err *toolError) string {
 	case "surface_not_attached":
 		return "当前还没有接管工作区。请先 `/list` 选择工作区，然后再发送文件。"
 	case "surface_mode_unsupported":
-		return "当前处于 vscode 模式，暂不支持从飞书选择文件发送。请先 `/mode normal`。"
+		return "当前处于 vscode 模式，暂不支持从飞书选择文件发送。请先 `/mode codex`。"
 	default:
 		if msg := strings.TrimSpace(err.Message); msg != "" {
 			return msg

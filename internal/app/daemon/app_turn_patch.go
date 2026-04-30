@@ -504,7 +504,7 @@ func (a *App) turnPatchResolveTargetLocked(action control.Action, requireIdle bo
 	if state.NormalizeProductMode(surface.ProductMode) == state.ProductModeVSCode {
 		a.ensureSurfaceRouteForNotice(action)
 		return nil, []eventcontract.Event{
-			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_vscode_unsupported", "VS Code 模式暂不支持 `/bendtomywill`，请切回 normal 模式后再试。"),
+			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_vscode_unsupported", "VS Code 模式暂不支持 `/bendtomywill`，请切回 `/mode codex` 后再试。"),
 		}
 	}
 	inst := a.service.Instance(surface.AttachedInstanceID)

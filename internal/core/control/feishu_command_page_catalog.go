@@ -3,10 +3,7 @@ package control
 import "strings"
 
 func FeishuPageViewFromView(view FeishuCatalogView, productMode, menuStage string) (FeishuPageView, bool) {
-	return FeishuPageViewFromViewContext(view, CatalogContext{
-		ProductMode: productMode,
-		MenuStage:   menuStage,
-	})
+	return FeishuPageViewFromViewContext(view, legacyCatalogContext(productMode, menuStage))
 }
 
 func FeishuPageViewFromViewContext(view FeishuCatalogView, ctx CatalogContext) (FeishuPageView, bool) {

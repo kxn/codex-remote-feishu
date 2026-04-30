@@ -3,7 +3,7 @@ package control
 import "strings"
 
 type FeishuCommandDisplayProfile struct {
-	ProductMode string
+	VisibleMode string
 	Families    map[string]FeishuCommandDisplayFamilyProfile
 }
 
@@ -13,7 +13,7 @@ type FeishuCommandDisplayFamilyProfile struct {
 }
 
 var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
-	"normal": newFeishuCommandDisplayProfile("normal",
+	"codex": newFeishuCommandDisplayProfile("codex",
 		displayProfileFamily(FeishuCommandStop),
 		displayProfileFamily(FeishuCommandCompact),
 		displayProfileFamily(FeishuCommandSteerAll),
@@ -40,6 +40,26 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		displayProfileFamily(FeishuCommandMode),
 		displayProfileFamily(FeishuCommandUpgrade),
 		displayProfileFamilyWithStages(FeishuCommandPatch, FeishuCommandMenuStageNormalWorking),
+		displayProfileFamily(FeishuCommandDebug),
+		displayProfileFamily(FeishuCommandHelp),
+		displayProfileFamily(FeishuCommandMenu),
+	),
+	"claude": newFeishuCommandDisplayProfile("claude",
+		displayProfileFamily(FeishuCommandStop),
+		displayProfileFamily(FeishuCommandNew),
+		displayProfileFamily(FeishuCommandStatus),
+		displayProfileFamily(FeishuCommandDetach),
+		displayProfileFamily(FeishuCommandReasoning),
+		displayProfileFamily(FeishuCommandModel),
+		displayProfileFamily(FeishuCommandAccess),
+		displayProfileFamily(FeishuCommandList),
+		displayProfileFamily(FeishuCommandUse),
+		displayProfileFamily(FeishuCommandVerbose),
+		displayProfileFamily(FeishuCommandHistory),
+		displayProfileFamily(FeishuCommandSendFile),
+		displayProfileFamily(FeishuCommandMode),
+		displayProfileFamily(FeishuCommandClaudeProfile),
+		displayProfileFamily(FeishuCommandUpgrade),
 		displayProfileFamily(FeishuCommandDebug),
 		displayProfileFamily(FeishuCommandHelp),
 		displayProfileFamily(FeishuCommandMenu),
@@ -75,27 +95,19 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 
 func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuCommandDisplayProfile {
 	normalized := NormalizeCatalogContext(ctx)
-	profile, ok := feishuCommandDisplayProfiles[normalized.ProductMode]
+	profile, ok := feishuCommandDisplayProfiles[VisibleModeForCatalogContext(normalized)]
 	if !ok {
-		profile = feishuCommandDisplayProfiles["normal"]
-	}
-	if normalized.Backend == "claude" && normalized.ProductMode == "normal" {
-		return profile.withAdditionalFamilies(
-			displayProfileFamily(FeishuCommandDetach),
-			displayProfileFamily(FeishuCommandList),
-			displayProfileFamily(FeishuCommandUse),
-			displayProfileFamily(FeishuCommandClaudeProfile),
-		)
+		profile = feishuCommandDisplayProfiles["codex"]
 	}
 	return profile
 }
 
 func ResolveFeishuCommandDisplayProfile(productMode string) FeishuCommandDisplayProfile {
-	normalized := normalizeFeishuCommandProductMode(productMode)
+	normalized := VisibleModeForCatalogContext(legacyCatalogContext(productMode, ""))
 	if profile, ok := feishuCommandDisplayProfiles[normalized]; ok {
 		return profile
 	}
-	return feishuCommandDisplayProfiles["normal"]
+	return feishuCommandDisplayProfiles["codex"]
 }
 
 func (p FeishuCommandDisplayProfile) FamilyProfile(familyID string) (FeishuCommandDisplayFamilyProfile, bool) {
@@ -161,9 +173,9 @@ func displayProfileFamilyWithStages(familyID string, stages ...FeishuCommandMenu
 	return profile
 }
 
-func newFeishuCommandDisplayProfile(productMode string, families ...FeishuCommandDisplayFamilyProfile) FeishuCommandDisplayProfile {
+func newFeishuCommandDisplayProfile(visibleMode string, families ...FeishuCommandDisplayFamilyProfile) FeishuCommandDisplayProfile {
 	profile := FeishuCommandDisplayProfile{
-		ProductMode: normalizeFeishuCommandProductMode(productMode),
+		VisibleMode: strings.TrimSpace(strings.ToLower(visibleMode)),
 		Families:    make(map[string]FeishuCommandDisplayFamilyProfile, len(families)),
 	}
 	for _, family := range families {
@@ -181,7 +193,7 @@ func (p FeishuCommandDisplayProfile) withAdditionalFamilies(families ...FeishuCo
 		return p
 	}
 	cloned := FeishuCommandDisplayProfile{
-		ProductMode: p.ProductMode,
+		VisibleMode: p.VisibleMode,
 		Families:    make(map[string]FeishuCommandDisplayFamilyProfile, len(p.Families)+len(families)),
 	}
 	for familyID, profile := range p.Families {

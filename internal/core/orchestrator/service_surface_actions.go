@@ -12,7 +12,7 @@ import (
 
 func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
 	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 normal 模式可用。请先 `/mode normal`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
+		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 headless 模式可用。请先 `/mode codex` 或 `/mode claude`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
@@ -238,7 +238,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	}
 	if !detour.Triggered && reviewSession == nil && !createThread && threadID == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
-		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；normal 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
+		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
 	if strings.TrimSpace(cwd) == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
@@ -248,7 +248,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		if createThread {
 			return notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")
 		}
-		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；normal 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
+		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
 	events := s.maybeSealPlanProposalForInput(surface)
 	if detour.Triggered {

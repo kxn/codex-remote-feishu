@@ -117,7 +117,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	}
 	workspaceKey := mergedThreadWorkspaceClaimKey(view)
 	if s.surfaceUsesWorkspaceClaims(surface) && workspaceKey == "" {
-		return notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")
+		return notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")
 	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)
@@ -149,7 +149,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			return append(events, attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)...)
 		}
-		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")...)
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")...)
 	}
 
 	if !s.claimInstance(surface, inst.InstanceID) {
@@ -390,7 +390,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 			}
 			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")...)
 		}
-		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 normal 模式恢复。请切到 `/mode vscode` 后再试。")...)
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式恢复。请切到 `/mode vscode` 后再试。")...)
 	}
 	targetBackend := s.surfaceBackend(surface)
 	if view.Inst != nil {

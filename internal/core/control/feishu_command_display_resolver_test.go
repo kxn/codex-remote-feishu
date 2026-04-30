@@ -143,8 +143,8 @@ func TestResolveFeishuCommandDisplayFamilySupportsMenuStageProjection(t *testing
 }
 
 func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing.T) {
-	normal := ResolveFeishuCommandDisplayProfile("normal")
-	if got, want := normal.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
+	codex := ResolveFeishuCommandDisplayProfile("codex")
+	if got, want := codex.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
 		FeishuCommandWorkspace,
 		FeishuCommandWorkspaceList,
 		FeishuCommandWorkspaceNew,
@@ -153,9 +153,9 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		FeishuCommandWorkspaceNewWorktree,
 		FeishuCommandWorkspaceDetach,
 	}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("normal visible switch_target families = %#v, want %#v", got, want)
+		t.Fatalf("codex visible switch_target families = %#v, want %#v", got, want)
 	}
-	if got, want := normal.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools), []string{
+	if got, want := codex.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools), []string{
 		FeishuCommandReview,
 		FeishuCommandPatch,
 		FeishuCommandAutoWhip,
@@ -163,7 +163,7 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		FeishuCommandCron,
 		FeishuCommandSendFile,
 	}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("normal visible common_tools families = %#v, want %#v", got, want)
+		t.Fatalf("codex visible common_tools families = %#v, want %#v", got, want)
 	}
 
 	vscode := ResolveFeishuCommandDisplayProfile("vscode")
@@ -179,18 +179,18 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	if !vscode.IncludesFamily(FeishuCommandVSCodeMigrate) {
 		t.Fatal("expected vscode profile to include vscode migrate")
 	}
-	if normal.IncludesFamily(FeishuCommandVSCodeMigrate) {
-		t.Fatal("expected normal profile to hide vscode migrate")
+	if codex.IncludesFamily(FeishuCommandVSCodeMigrate) {
+		t.Fatal("expected codex profile to hide vscode migrate")
 	}
 }
 
-func TestResolveFeishuCommandDisplayProfileForContextAddsClaudeSessionFamilies(t *testing.T) {
+func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t *testing.T) {
 	profile := ResolveFeishuCommandDisplayProfileForContext(CatalogContext{
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if !profile.IncludesFamily(FeishuCommandList) || !profile.IncludesFamily(FeishuCommandUse) {
-		t.Fatalf("expected claude normal profile to include list/use, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
+	if !profile.IncludesFamily(FeishuCommandList) || !profile.IncludesFamily(FeishuCommandUse) || !profile.IncludesFamily(FeishuCommandDetach) {
+		t.Fatalf("expected claude visible profile to include list/use/detach, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
 	}
 }
 

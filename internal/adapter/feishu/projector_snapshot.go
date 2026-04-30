@@ -20,7 +20,7 @@ func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDir
 }
 
 func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {
-	lines := []string{snapshotLine("当前模式", displaySnapshotMode(snapshot.ProductMode))}
+	lines := []string{snapshotLine("当前模式", displaySnapshotMode(snapshot.ProductMode, snapshot.Backend))}
 	if profile := formatSnapshotClaudeProfile(snapshot); profile != "" {
 		lines = append(lines, snapshotLine("Claude 配置", profile))
 	}
@@ -193,12 +193,15 @@ func compactSnapshotStatusText(text string, limit int) string {
 	return string(runes[:limit]) + "..."
 }
 
-func displaySnapshotMode(mode string) string {
+func displaySnapshotMode(mode string, backend agentproto.Backend) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "vscode", "vs-code", "vs_code":
 		return "vscode"
 	default:
-		return "normal"
+		if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+			return "claude"
+		}
+		return "codex"
 	}
 }
 

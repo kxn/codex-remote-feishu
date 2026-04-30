@@ -476,7 +476,7 @@ func formatOverrideNotice(summary control.PromptRouteSummary, prefix string) str
 	} else if summary.RouteMode == string(state.RouteModeFollowLocal) {
 		lines = append(lines, "当前输入目标：跟随当前 VS Code（等待中）")
 	} else {
-		lines = append(lines, "当前输入目标：未就绪，请先 /use 选择会话；normal 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow")
+		lines = append(lines, "当前输入目标：未就绪，请先 /use 选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow")
 	}
 	lines = append(lines, "说明：覆盖会持续作用于之后从飞书发出的消息，直到 clear、/detach、/mode 切换或接管清理；不会同步 VS Code。")
 	return strings.Join(lines, "\n")

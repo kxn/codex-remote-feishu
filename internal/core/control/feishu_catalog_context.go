@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type CatalogAttachedKind string
@@ -79,4 +80,9 @@ func NormalizeCatalogContext(ctx CatalogContext) CatalogContext {
 		Capabilities:         caps,
 		CapabilitiesDeclared: ctx.CapabilitiesDeclared,
 	}
+}
+
+func VisibleModeForCatalogContext(ctx CatalogContext) string {
+	normalized := NormalizeCatalogContext(ctx)
+	return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
 }

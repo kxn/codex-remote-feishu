@@ -19,32 +19,32 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 	switch intent.Kind {
 	case control.FeishuUIIntentShowWorkspaceRoot:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspace, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceNew:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspaceNew, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceList:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPickerForAction(surface, action, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewDir:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceDir, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewGit:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceGit, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewWorktree:
 		if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先 `/mode normal`。")
+			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentCommand(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowCommandMenu:

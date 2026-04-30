@@ -122,7 +122,7 @@ func (s *Service) openSendFilePickerWithInline(surface *state.SurfaceConsoleReco
 		return nil
 	}
 	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal {
-		return sendFileUnavailableEvents(surface, "send_file_normal_only", sourceMessageID, "当前处于 vscode 模式，暂不支持从飞书选择文件发送。请先 `/mode normal`。", inline)
+		return sendFileUnavailableEvents(surface, "send_file_normal_only", sourceMessageID, "当前处于 vscode 模式，暂不支持从飞书选择文件发送。请先 `/mode codex`。", inline)
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return sendFileUnavailableEvents(surface, "send_file_requires_workspace", sourceMessageID, "当前还没有接管工作区。请先 `/list` 选择工作区，然后再发送文件。", inline)

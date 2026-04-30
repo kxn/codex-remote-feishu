@@ -136,7 +136,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode normal|codex|claude|vscode。",
+			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|vscode（`normal` 仍兼容）。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -144,7 +144,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode normal|codex|claude|vscode。",
+			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|vscode（`normal` 仍兼容）。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -241,7 +241,7 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 
 func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
-		text := "当前不在 Claude normal 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"
+		text := "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",

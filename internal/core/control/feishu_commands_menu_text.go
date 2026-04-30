@@ -33,7 +33,7 @@ func normalizeAccessMenuArgument(value string) (string, bool) {
 func normalizeModeMenuArgument(value string) (string, bool) {
 	mode := strings.ToLower(strings.TrimSpace(value))
 	switch mode {
-	case "normal", "vscode":
+	case "normal", "codex", "claude", "vscode":
 		return mode, true
 	default:
 		return "", false

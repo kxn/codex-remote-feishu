@@ -28,7 +28,7 @@ func TestHandleCardActionTriggerWaitsForCommandResultReplacementAction(t *testin
 			ReplaceCurrentCard: &Operation{
 				Kind:         OperationSendCard,
 				CardTitle:    "当前状态",
-				CardBody:     "当前模式：normal",
+				CardBody:     "当前模式：codex",
 				CardThemeKey: cardThemeInfo,
 			},
 		}

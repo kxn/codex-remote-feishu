@@ -159,7 +159,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		return notice(surface, "already_attached", fmt.Sprintf("当前已接管 %s。", inst.DisplayName))
 	}
 	if s.surfaceUsesWorkspaceClaims(surface) && workspaceKey == "" {
-		return notice(surface, "workspace_key_missing", "当前无法确定目标对应的工作区，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")
+		return notice(surface, "workspace_key_missing", "当前无法确定目标对应的工作区，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")
 	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
@@ -184,7 +184,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 		}
-		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标对应的工作区，暂时不能在 normal 模式接管。请切到 `/mode vscode` 后再试。")...)
+		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标对应的工作区，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")...)
 	}
 	if !s.claimInstance(surface, instanceID) {
 		s.releaseSurfaceWorkspaceClaim(surface)
