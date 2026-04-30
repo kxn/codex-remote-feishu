@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-28`
-> Summary: 同步 Claude 黑盒与集成基线文档索引，反映当前 pre-MVP 研究文档的最新状态。
+> Updated: `2026-04-30`
+> Summary: 补充 mode 术语基线索引，并同步当前文档分类状态。
 
 ## 1. 适用范围
 
@@ -126,6 +126,7 @@
 - [install-deploy-design.md](./general/install-deploy-design.md)
 - [issue-orchestration-workflow.md](./general/issue-orchestration-workflow.md)
 - [local-self-upgrade-flow.md](./general/local-self-upgrade-flow.md)
+- [mode-terminology-guidelines.md](./general/mode-terminology-guidelines.md)
 - [page-mock-guidelines.md](./general/page-mock-guidelines.md)
 - [release-roadmap-workflow.md](./general/release-roadmap-workflow.md)
 - [remote-surface-state-machine.md](./general/remote-surface-state-machine.md)

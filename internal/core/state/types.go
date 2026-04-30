@@ -28,6 +28,8 @@ const (
 type ProductMode string
 
 const (
+	// ProductModeNormal is the persisted token for the headless runtime shape.
+	// User-visible mode names should usually be projected as codex / claude / vscode.
 	ProductModeNormal ProductMode = "normal"
 	ProductModeVSCode ProductMode = "vscode"
 )
@@ -39,6 +41,10 @@ func NormalizeProductMode(mode ProductMode) ProductMode {
 	default:
 		return ProductModeNormal
 	}
+}
+
+func IsHeadlessProductMode(mode ProductMode) bool {
+	return NormalizeProductMode(mode) == ProductModeNormal
 }
 
 type SurfaceVerbosity string
@@ -232,11 +238,13 @@ type ThreadReplayRecord struct {
 }
 
 type SurfaceConsoleRecord struct {
-	SurfaceSessionID     string
-	Platform             string
-	GatewayID            string
-	ChatID               string
-	ActorUserID          string
+	SurfaceSessionID string
+	Platform         string
+	GatewayID        string
+	ChatID           string
+	ActorUserID      string
+	// ProductMode carries the outer runtime shape: headless vs vscode.
+	// Backend carries the inner provider choice inside that shape.
 	ProductMode          ProductMode
 	Backend              agentproto.Backend
 	ClaudeProfileID      string

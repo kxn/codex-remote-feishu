@@ -1,14 +1,14 @@
 # Backend-Aware 命令 Catalog 设计
 
 > Type: `draft`
-> Updated: `2026-04-28`
-> Summary: 将当前单一 `feishuCommandSpecs` 演进为 family/variant/context resolver；本次补充 2026-04-28 对当前 master 的审计与最新 feidex 证据，收口 catalog 漂移、family-only 固化点与 backend-aware 命令基座方向。
+> Updated: `2026-04-30`
+> Summary: 同步 mode 术语基线，明确 headless/vscode 是一级形态，`codex|claude|vscode` 才是用户可见 mode。
 
 ## 1. 文档定位
 
 这份文档回答的是一个具体架构问题：
 
-1. 现在的菜单 / 命令 catalog 是否足够支撑 `codex normal`、`claude normal`、`vscode` 三套产品语义并存。
+1. 现在的菜单 / 命令 catalog 是否足够支撑 `codex`、`claude`、`vscode` 三套用户可见 mode 并存。
 2. 如果不够，应该把“共享命令”、“同名异实现”、“同名异 UI”、“独有命令”分别落在哪一层。
 3. 后续如果再接更多 backend，怎样避免 catalog 继续堆成 mode / backend 的条件分支泥团。
 
@@ -23,21 +23,19 @@
 
 ## 2. 背景
 
-当前菜单系统已经支持：
+当前菜单系统在运行形态上已经支持：
 
-- `normal`
+- `headless`
 - `vscode`
 
 并且在产品上已经存在显著差异：
 
-- `normal` 下，“工作会话”分组会收口成 workspace 语义
+- `headless` 下，“工作会话”分组会收口成 workspace 语义
 - `vscode` 下，“工作会话”分组会保留 `/list`、`/use`、`/useall`、`/follow`
 
 这套差异目前能跑，但它主要是靠一组全局命令定义，再按 `productMode` 和少量 `menuStage` 条件投影出来的。
 
-如果后续再加：
-
-- `claude normal`
+如果后续把 `claude` 正式作为 headless 下的另一条 visible mode 打开，
 
 问题会立刻升级为三类，而不是简单的“多一个 mode”：
 
@@ -56,7 +54,7 @@
 
 当前 help/menu 展示的主入口仍然是一套全局定义，真正的差异主要在 `FeishuCommandDefinitionForDisplay(...)` 里硬编码过滤：
 
-- `normal` 隐藏 `/list`、`/use`、`/useall`、`/follow`
+- `headless` 隐藏 `/list`、`/use`、`/useall`、`/follow`
 - `vscode` 隐藏 workspace 家族
 
 问题不是这段代码是否工作，而是它只能表达“显示或隐藏”，不能表达：
@@ -85,8 +83,8 @@
 
 - `model.codex.normal`
 - `model.claude.normal`
-- `list.normal.codex`
-- `list.normal.claude`
+- `list.headless.codex`
+- `list.headless.claude`
 - `list.vscode`
 
 这些“用户看起来同名，但 flow 不一定相同”的变种。
@@ -95,13 +93,13 @@
 
 当前状态层里：
 
-- `ProductMode` 只有 `normal` / `vscode`
+- `ProductMode` 当前仍只有 `normal` / `vscode` 两个持久化 token
 - `WorkspaceDefaults` 只有 `workspace -> config`
 - `InstanceRecord` 只有 `Source`，没有 `Backend`
 
 这会导致：
 
-1. 无法把 `codex normal` 与 `claude normal` 正式区分为不同上下文。
+1. 无法把 headless 下的 `codex` 与 `claude` 正式区分为不同上下文。
 2. `/model`、`/reasoning`、`/access` 这类 workspace 默认配置天然会串 backend。
 3. catalog 只能从 `ProductMode` 推断视图，而不能从 `backend + mode + capability` 推断视图。
 
@@ -222,7 +220,7 @@
 
 ### 6.1 backend 与 product mode 必须正交
 
-推荐把“用户可见模式”和“底层 backend”拆成两层：
+推荐把“用户可见 mode”和“底层 backend/运行形态”拆成两层：
 
 - `Backend`
   - `codex`
@@ -231,13 +229,13 @@
   - `normal`
   - `vscode`
 
-用户入口可以仍然保留：
+用户入口保留：
 
 - `/mode codex`
 - `/mode claude`
 - `/mode vscode`
 
-但存储和路由不应再把它们当成同一维度。
+但存储和路由不应再把它们当成同一维度。`normal` 在这里仍只是 headless 的历史 token 与 `/mode codex` 的兼容 alias。
 
 建议解释：
 
@@ -460,8 +458,8 @@ type ResolvedCommand struct {
 
 例如 `model`：
 
-- `codex normal` 可以展示模型列表 + reasoning 补充说明
-- `claude normal` 可以展示 Claude 支持的 model / mode 选项
+- headless 下的 `codex` mode 可以展示模型列表 + reasoning 补充说明
+- headless 下的 `claude` mode 可以展示 Claude 支持的 model / mode 选项
 
 ### backend 独有命令
 

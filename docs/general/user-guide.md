@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-04-20`
-> Summary: 补充 1.6 用户可见能力，包括添加工作区、reply steer、手动 compact、发送文件、Cron 和共享过程卡语义。
+> Updated: `2026-04-30`
+> Summary: 按当前 mode 术语基线重写 headless/vscode 与 `codex|claude|vscode` 的用户说明，保留 `/mode normal` 兼容说明。
 
 ## 1. 这是什么
 
@@ -16,11 +16,11 @@
 
 当前最推荐的使用方式其实很简单：
 
-- 默认直接用 `normal` 模式
+- 默认直接用 `codex` 模式
 - 在飞书里按工作区和会话继续工作
 - 只有你明确需要“跟着 VS Code 当前焦点走”时，再切到 `vscode` 模式
 
-虽然 VS Code 联动看起来更酷，但真正长时间用下来，通常还是 `normal` 模式更稳、更顺手。
+虽然 VS Code 联动看起来更酷，但真正长时间用下来，通常还是 headless 下的 `codex` 模式更稳、更顺手。
 
 ## 2. 为什么是这样设计
 
@@ -275,23 +275,39 @@ Windows PowerShell：
 - `会话`
   - 你在 Codex 里能继续恢复的那条对话
 
-当前产品有两种模式：
+当前可以先按两层来理解：
 
-- `normal`
-  - 默认模式，也是最推荐的模式
+- 运行形态
+  - `headless`
+  - `vscode`
+- 用户可见 mode
+  - `codex`
+  - `claude`
+  - `vscode`
+
+其中：
+
+- `codex`
+  - 默认也是最推荐的 headless mode
+- `claude`
+  - 也是 headless，只是 backend 换成 Claude
 - `vscode`
   - 专门给“飞书跟随 VS Code 当前焦点”这个场景准备
 
 切换方式：
 
 ```text
+/mode codex
+/mode claude
 /mode vscode
 /mode normal
 ```
 
-### 7.1 normal 模式怎么用
+`/mode normal` 仍兼容，但它现在等价于 `/mode codex`。
 
-在 `normal` 模式下，最常见的入口是：
+### 7.1 Headless 模式怎么用
+
+在 headless 下，最常见的入口是：
 
 ```text
 /list
@@ -546,7 +562,7 @@ Windows PowerShell：
 
 - `/list`
   - 查看并选择当前可接管的目标
-  - `normal` 模式下主要是工作区
+  - headless 下主要是工作区
   - `vscode` 模式下主要是在线 VS Code 实例
 - `/use`
   - 快速继续最近可见会话
@@ -568,8 +584,12 @@ Windows PowerShell：
   - 断开当前接管
 - `/mode vscode`
   - 切到 VS Code 跟随模式
+- `/mode codex`
+  - 切回默认的 headless Codex 模式
+- `/mode claude`
+  - 切到 headless Claude 模式
 - `/mode normal`
-  - 切回默认工作区模式
+  - 兼容旧写法，等价于 `/mode codex`
 - `/follow`
   - 在 `vscode` 模式下重新跟随当前 VS Code 焦点
 - `/sendfile`
@@ -605,7 +625,7 @@ Windows PowerShell：
 - 旧卡片、旧按钮、旧菜单动作如果已经过期，会收到明确提示；这时候直接重发对应命令就行
 - `测试连接` 只说明你当前保存的飞书凭据是可用的，不代表旧聊天窗口会自动切换到新机器人身份
 - 如果你把 `App ID` 换成了另一个飞书应用，需要从新机器人的聊天入口重新开始会话
-- 如果你平时就是普通远程使用，优先坚持 `normal` 模式，通常体验最稳定
+- 如果你平时就是普通远程使用，优先坚持 headless 下的 `codex` 模式，通常体验最稳定
 
 ## 12. 相关文档
 
