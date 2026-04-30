@@ -316,7 +316,7 @@ func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
 
 func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
 	tests := map[string]string{
-		"review":             "/review",
+		"review":             "/review uncommitted",
 		"reviewcommit":       "/review commit",
 		"review_uncommitted": "/review uncommitted",
 	}

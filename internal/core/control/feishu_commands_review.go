@@ -23,7 +23,7 @@ func reviewCommandSpec() feishuCommandSpec {
 			{alias: "/review", kind: ActionReviewCommand},
 		},
 		menuExact: []feishuCommandMatch{
-			{alias: "review", action: Action{Kind: ActionReviewCommand, Text: "/review"}},
+			{alias: "review", action: Action{Kind: ActionReviewCommand, Text: "/review uncommitted"}},
 			{alias: "reviewcommit", action: Action{Kind: ActionReviewCommand, Text: "/review commit"}},
 			{alias: "review_uncommitted", action: Action{Kind: ActionReviewCommand, Text: "/review uncommitted"}},
 			{alias: "reviewuncommitted", action: Action{Kind: ActionReviewCommand, Text: "/review uncommitted"}},

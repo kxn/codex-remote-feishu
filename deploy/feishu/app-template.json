@@ -22,7 +22,7 @@
       {
         "key": "new",
         "name": "新建会话",
-        "description": "仅 normal 模式可用：准备一个新会话，下一条消息会作为首条输入。"
+        "description": "仅 headless 模式可用：准备一个新会话，下一条消息会作为首条输入。"
       },
       {
         "key": "reasoning",

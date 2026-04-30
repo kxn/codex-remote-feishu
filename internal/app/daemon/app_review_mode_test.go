@@ -437,6 +437,40 @@ func TestHandleGatewayActionStartsDetachedReviewFromCurrentThreadCommand(t *test
 	}
 }
 
+func TestHandleGatewayActionKeepsMenulessReviewCardAppendOnly(t *testing.T) {
+	app, gateway, repoRoot := newReviewModeAppForTest(t)
+	commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionReviewCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-review-append-1",
+		Text:             "/review",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result != nil {
+		t.Fatalf("expected non-menu stamped review command to stay append-only, got %#v", result)
+	}
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "选择提交记录" {
+		t.Fatalf("expected one appended review picker card, got %#v", ops)
+	}
+	if len(sent) != 0 {
+		t.Fatalf("did not expect review start command for bare review picker open, got %#v", sent)
+	}
+}
+
 func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")

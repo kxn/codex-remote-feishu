@@ -855,6 +855,79 @@ func TestHandleGatewayActionUpdatesMenuCardForCompactOwnerFlow(t *testing.T) {
 	}
 }
 
+func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
+	})
+	repoRoot := initReviewModeRepo(t)
+	writeReviewModeRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "proj1",
+		WorkspaceRoot: repoRoot,
+		WorkspaceKey:  repoRoot,
+		ShortName:     "proj1",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "会话1", CWD: repoRoot, Loaded: true},
+		},
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ThreadID:         "thread-1",
+	})
+
+	menuResult := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-review-1",
+		Text:             "/menu common_tools",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if menuResult == nil || menuResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected menu group replacement result, got %#v", menuResult)
+	}
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionReviewCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-review-1",
+		Text:             "/review uncommitted",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected menu review handoff to replace current card, got %#v", result)
+	}
+	if result.ReplaceCurrentCard.CardTitle != "正在进入审阅" {
+		t.Fatalf("unexpected review replacement title: %#v", result.ReplaceCurrentCard)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
 func TestHandleGatewayActionReplacesMenuCardWhenSendFileUnavailable(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

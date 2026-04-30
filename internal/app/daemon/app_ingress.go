@@ -248,7 +248,8 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	}
 	if events, handled := a.interceptTurnPatchActionLocked(action); handled {
 		contract := control.ResolveFeishuFrontstageActionContract(action)
-		inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
+		menuLauncherSource := a.service.ActionTargetsActiveCommandLauncher(action)
+		inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, menuLauncherSource, events)
 		inlineNavigationReplace := inlineResult != nil && contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView
 		if !inlineNavigationReplace || len(appendEvents) != 0 {
 			a.handleUIEventsLocked(ctx, appendEvents)
@@ -258,9 +259,10 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncWorkspaceSurfaceContextFilesLocked()
 		return inlineResult
 	}
+	menuLauncherSource := a.service.ActionTargetsActiveCommandLauncher(action)
 	events := a.applyIngressActionLocked(action)
 	contract := control.ResolveFeishuFrontstageActionContract(action)
-	inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
+	inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, menuLauncherSource, events)
 	inlineNavigationReplace := inlineResult != nil && contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView
 	if !inlineNavigationReplace || len(appendEvents) != 0 {
 		a.handleUIEventsLocked(ctx, appendEvents)
@@ -306,8 +308,11 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	return inlineResult
 }
 
-func (a *App) synchronousCurrentCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, events []eventcontract.Event) (*feishu.ActionResult, []eventcontract.Event) {
-	if !control.SupportsFeishuSynchronousCurrentCardReplacement(action) || len(events) == 0 {
+func (a *App) synchronousCurrentCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, fromActiveMenuLauncher bool, events []eventcontract.Event) (*feishu.ActionResult, []eventcontract.Event) {
+	if len(events) == 0 {
+		return nil, events
+	}
+	if !fromActiveMenuLauncher && !control.SupportsFeishuSynchronousCurrentCardReplacement(action) {
 		return nil, events
 	}
 	switch contract.CurrentCardMode {
@@ -319,10 +324,13 @@ func (a *App) synchronousCurrentCardActionResultLocked(action control.Action, co
 		if inlineFallbackReplacementBlockedByActivePicker(events) {
 			return nil, events
 		}
-		return a.firstResultCardActionResultLocked(action, contract, events)
+		return a.firstResultCardActionResultLocked(action, contract, fromActiveMenuLauncher, events)
 	case control.FeishuFrontstageCurrentCardFirstResultCard:
-		return a.firstResultCardActionResultLocked(action, contract, events)
+		return a.firstResultCardActionResultLocked(action, contract, fromActiveMenuLauncher, events)
 	default:
+		if fromActiveMenuLauncher {
+			return a.firstResultCardActionResultLocked(action, contract, true, events)
+		}
 		return nil, events
 	}
 }
@@ -368,7 +376,7 @@ func filterUIEventsByFollowupPolicy(events []eventcontract.Event, policy eventco
 	return eventcontract.FilterEventsByFollowupPolicy(events, policy)
 }
 
-func (a *App) firstResultCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, events []eventcontract.Event) (*feishu.ActionResult, []eventcontract.Event) {
+func (a *App) firstResultCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, fromActiveMenuLauncher bool, events []eventcontract.Event) (*feishu.ActionResult, []eventcontract.Event) {
 	if len(events) == 0 {
 		return nil, events
 	}
