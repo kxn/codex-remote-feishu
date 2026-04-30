@@ -20,23 +20,27 @@ const (
 )
 
 type RuntimeStateSnapshot struct {
-	SessionID          string
-	CWD                string
-	Model              string
-	PlanMode           string
-	ActiveTurnID       string
-	WaitingOnApproval  bool
-	WaitingOnUserInput bool
+	SessionID            string
+	CWD                  string
+	Model                string
+	AccessMode           string
+	PlanMode             string
+	NativePermissionMode string
+	ActiveTurnID         string
+	WaitingOnApproval    bool
+	WaitingOnUserInput   bool
 }
 
 type claudeSessionMeta struct {
-	ID        string
-	Title     string
-	Preview   string
-	CWD       string
-	Model     string
-	PlanMode  string
-	UpdatedAt time.Time
+	ID                   string
+	Title                string
+	Preview              string
+	CWD                  string
+	Model                string
+	AccessMode           string
+	PlanMode             string
+	NativePermissionMode string
+	UpdatedAt            time.Time
 }
 
 type SessionMeta = claudeSessionMeta
@@ -51,11 +55,14 @@ func (t *Translator) RuntimeStateSnapshot() RuntimeStateSnapshot {
 		return RuntimeStateSnapshot{}
 	}
 	snapshot := RuntimeStateSnapshot{
-		SessionID: strings.TrimSpace(t.sessionID),
-		CWD:       strings.TrimSpace(t.cwd),
-		Model:     strings.TrimSpace(t.model),
-		PlanMode:  claudePlanModeFromPermission(strings.TrimSpace(t.permissionMode)),
+		SessionID:            strings.TrimSpace(t.sessionID),
+		CWD:                  strings.TrimSpace(t.cwd),
+		Model:                strings.TrimSpace(t.model),
+		NativePermissionMode: strings.TrimSpace(t.permissionMode),
 	}
+	selection := claudePermissionSelectionFromNative(snapshot.NativePermissionMode)
+	snapshot.AccessMode = selection.AccessMode
+	snapshot.PlanMode = selection.PlanMode
 	if t.activeTurn != nil {
 		snapshot.ActiveTurnID = strings.TrimSpace(t.activeTurn.TurnID)
 	}
@@ -216,6 +223,7 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 	loaded := false
 	state := string(agentproto.ThreadRuntimeStatusTypeNotLoaded)
 	model := strings.TrimSpace(meta.Model)
+	accessMode := strings.TrimSpace(meta.AccessMode)
 	planMode := strings.TrimSpace(meta.PlanMode)
 	if threadID != "" && threadID == strings.TrimSpace(runtime.SessionID) {
 		if current := runtime.currentRuntimeStatus(); current != nil {
@@ -224,6 +232,7 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 			state = string(current.LegacyState())
 		}
 		model = firstNonEmptyString(strings.TrimSpace(runtime.Model), model)
+		accessMode = firstNonEmptyString(strings.TrimSpace(runtime.AccessMode), accessMode)
 		planMode = firstNonEmptyString(strings.TrimSpace(runtime.PlanMode), planMode)
 	}
 	return agentproto.ThreadSnapshotRecord{
@@ -347,6 +356,9 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 		populateSessionMeta(&meta, entry)
 		return sessionMetaComplete(meta)
 	})
+	selection := claudePermissionSelectionFromNative(meta.NativePermissionMode)
+	meta.AccessMode = selection.AccessMode
+	meta.PlanMode = selection.PlanMode
 	meta.Title = normalizeSessionSnippet(firstNonEmptyString(meta.Title, meta.Preview, meta.ID), claudeSessionTitleLimit)
 	meta.Preview = normalizeSessionSnippet(meta.Preview, claudeSessionPreviewLimit)
 	if meta.Preview == meta.Title {
@@ -371,8 +383,8 @@ func populateSessionMeta(meta *claudeSessionMeta, entry map[string]any) {
 	if meta.Model == "" {
 		meta.Model = strings.TrimSpace(lookupStringFromAny(entry["model"]))
 	}
-	if meta.PlanMode == "" {
-		meta.PlanMode = claudePlanModeFromPermission(strings.TrimSpace(lookupStringFromAny(entry["permissionMode"])))
+	if meta.NativePermissionMode == "" {
+		meta.NativePermissionMode = strings.TrimSpace(lookupStringFromAny(entry["permissionMode"]))
 	}
 }
 
@@ -521,11 +533,4 @@ func sameWorkspaceCWD(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
-}
-
-func claudePlanModeFromPermission(permissionMode string) string {
-	if strings.EqualFold(strings.TrimSpace(permissionMode), "plan") {
-		return "plan"
-	}
-	return ""
 }

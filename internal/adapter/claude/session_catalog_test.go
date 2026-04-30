@@ -55,7 +55,7 @@ func TestListSessionThreadsFiltersWorkspaceAndIncludeAll(t *testing.T) {
 	if len(includeAll) != 3 {
 		t.Fatalf("expected deduped cross-workspace sessions, got %#v", includeAll)
 	}
-	if includeAll[0].ThreadID != "shared-session" || includeAll[0].CWD != workspaceB || includeAll[0].PlanMode != "plan" {
+	if includeAll[0].ThreadID != "shared-session" || includeAll[0].CWD != workspaceB || includeAll[0].PlanMode != "on" {
 		t.Fatalf("expected newer shared session to win dedupe, got %#v", includeAll[0])
 	}
 	if includeAll[1].ThreadID != "session-a1" || includeAll[2].ThreadID != "session-b1" {

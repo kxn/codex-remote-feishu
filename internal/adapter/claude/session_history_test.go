@@ -26,7 +26,7 @@ func TestReadThreadHistoryGroupsTurnsAndPatchesLatestRunningTurn(t *testing.T) {
 	history, err := readThreadHistory(workspaceRoot, "session-1", RuntimeStateSnapshot{
 		SessionID:          "session-1",
 		Model:              "mimo-v2.5-pro",
-		PlanMode:           "plan",
+		PlanMode:           "on",
 		ActiveTurnID:       "turn-live",
 		WaitingOnApproval:  true,
 		WaitingOnUserInput: false,
@@ -37,7 +37,7 @@ func TestReadThreadHistoryGroupsTurnsAndPatchesLatestRunningTurn(t *testing.T) {
 	if history == nil {
 		t.Fatal("expected history record")
 	}
-	if history.Thread.ThreadID != "session-1" || history.Thread.PlanMode != "plan" {
+	if history.Thread.ThreadID != "session-1" || history.Thread.PlanMode != "on" {
 		t.Fatalf("unexpected thread snapshot: %#v", history.Thread)
 	}
 	if history.Thread.RuntimeStatus == nil || history.Thread.RuntimeStatus.Type != agentproto.ThreadRuntimeStatusTypeActive || !history.Thread.RuntimeStatus.HasFlag(agentproto.ThreadActiveFlagWaitingOnApproval) {

@@ -68,7 +68,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 	t.pendingTurns = append(t.pendingTurns, turn)
 
 	outbound := make([][]byte, 0, 2)
-	if frame, ok, err := t.buildPermissionModeFrame(command.Overrides.PlanMode); err != nil {
+	if frame, ok, err := t.buildPermissionModeFrame(command.Overrides.AccessMode, command.Overrides.PlanMode); err != nil {
 		return nil, err
 	} else if ok {
 		outbound = append(outbound, frame)
@@ -89,12 +89,8 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 	return outbound, nil
 }
 
-func (t *Translator) buildPermissionModeFrame(planMode string) ([]byte, bool, error) {
-	desired := "default"
-	switch strings.ToLower(strings.TrimSpace(planMode)) {
-	case "plan":
-		desired = "plan"
-	}
+func (t *Translator) buildPermissionModeFrame(accessMode, planMode string) ([]byte, bool, error) {
+	desired := claudePermissionSelectionFromOverrides(accessMode, planMode).NativeMode
 	if strings.TrimSpace(t.permissionMode) == desired {
 		return nil, false, nil
 	}
