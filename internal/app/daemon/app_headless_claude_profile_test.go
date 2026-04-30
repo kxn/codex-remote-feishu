@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,7 +29,6 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
-	stateDir := t.TempDir()
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
 		ConfigPath: configPath,
@@ -44,7 +42,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),
-			StateDir: stateDir,
+			StateDir: t.TempDir(),
 		},
 	})
 	app.ConfigureAdmin(AdminRuntimeOptions{
@@ -81,8 +79,8 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
 		t.Fatalf("expected claude managed headless launch mode, got %#v", captured)
 	}
-	if !containsEnvEntry(captured.Env, config.ClaudeConfigDirEnv+"="+filepath.Join(stateDir, "claude", "profiles", "devseek")) {
-		t.Fatalf("expected profile-scoped CLAUDE_CONFIG_DIR, got %#v", captured.Env)
+	if !containsEnvEntry(captured.Env, config.ClaudeConfigDirEnv+"=/tmp/old-claude") {
+		t.Fatalf("expected custom profile to preserve shared CLAUDE_CONFIG_DIR, got %#v", captured.Env)
 	}
 	if !containsEnvEntry(captured.Env, config.ClaudeBaseURLEnv+"=https://proxy.internal/v1") ||
 		!containsEnvEntry(captured.Env, config.ClaudeAuthTokenEnv+"=profile-token") ||
@@ -94,14 +92,6 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=old-model") {
 		t.Fatalf("expected stale claude env to be replaced, got %#v", captured.Env)
 	}
-
-	info, err := os.Stat(filepath.Join(stateDir, "claude", "profiles", "devseek"))
-	if err != nil {
-		t.Fatalf("expected profile runtime config dir to exist: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("expected profile runtime config dir to be a directory, got %#v", info)
-	}
 }
 
 func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEnv(t *testing.T) {
@@ -111,7 +101,6 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 	}
 
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
-	stateDir := t.TempDir()
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: "/tmp/codex-remote",
 		ConfigPath: configPath,
@@ -122,7 +111,7 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 		},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),
-			StateDir: stateDir,
+			StateDir: t.TempDir(),
 		},
 	})
 	app.ConfigureAdmin(AdminRuntimeOptions{
@@ -157,9 +146,6 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
 		t.Fatalf("expected built-in default Claude launch mode, got %#v", captured)
 	}
-	if _, err := os.Stat(filepath.Join(stateDir, "claude", "profiles", "default")); !os.IsNotExist(err) {
-		t.Fatalf("did not expect built-in default profile dir to be created, err=%v", err)
-	}
 }
 
 func TestApplyClaudeHeadlessProfileEnvReturnsMissingProfileError(t *testing.T) {
@@ -186,7 +172,7 @@ func TestApplyClaudeHeadlessProfileEnvReturnsMissingProfileError(t *testing.T) {
 		AdminURL:        "http://localhost:9501/admin/",
 		SetupURL:        "http://localhost:9501/setup",
 	})
-	_, err := app.applyClaudeHeadlessProfileEnv([]string{"PATH=/usr/bin"}, agentproto.BackendClaude, "missing-profile", t.TempDir())
+	_, err := app.applyClaudeHeadlessProfileEnv([]string{"PATH=/usr/bin"}, agentproto.BackendClaude, "missing-profile")
 	if err == nil || !strings.Contains(err.Error(), "missing-profile") {
 		t.Fatalf("expected missing profile error, got %v", err)
 	}

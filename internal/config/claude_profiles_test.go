@@ -93,8 +93,7 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 		ClaudeModelEnv + "=old-model",
 		ClaudeDefaultHaikuModelEnv + "=old-small-model",
 	}
-	stateDir := filepath.Join("var", "lib", "codex-remote", "state")
-	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, customProfile, stateDir)
+	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, customProfile)
 	if err != nil {
 		t.Fatalf("ApplyClaudeProfileLaunchEnv(custom): %v", err)
 	}
@@ -102,8 +101,8 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	if value, ok := lookupEnvValue(updatedEnv, "KEEP_ME"); !ok || value != "1" {
 		t.Fatalf("expected unrelated env to survive, got %#v", updatedEnv)
 	}
-	if value, ok := lookupEnvValue(updatedEnv, ClaudeConfigDirEnv); !ok || value != filepath.Join(stateDir, "claude", "profiles", "devseek") {
-		t.Fatalf("unexpected CLAUDE_CONFIG_DIR: %#v", updatedEnv)
+	if value, ok := lookupEnvValue(updatedEnv, ClaudeConfigDirEnv); !ok || value != "/tmp/old-claude" {
+		t.Fatalf("expected custom profile to preserve shared CLAUDE_CONFIG_DIR, got %#v", updatedEnv)
 	}
 	if value, ok := lookupEnvValue(updatedEnv, ClaudeBaseURLEnv); !ok || value != "https://proxy.internal/v1" {
 		t.Fatalf("unexpected base url env: %#v", updatedEnv)
@@ -118,7 +117,7 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 		t.Fatalf("unexpected small model env: %#v", updatedEnv)
 	}
 
-	defaultEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, defaultProfile, stateDir)
+	defaultEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, defaultProfile)
 	if err != nil {
 		t.Fatalf("ApplyClaudeProfileLaunchEnv(default): %v", err)
 	}

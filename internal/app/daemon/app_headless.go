@@ -97,7 +97,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
-	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID, cfg.Paths.StateDir)
+	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
 	if err != nil {
 		if command.AutoRestore {
 			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)

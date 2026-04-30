@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -22,7 +21,6 @@ const (
 )
 
 var claudeProfileLaunchEnvKeys = []string{
-	ClaudeConfigDirEnv,
 	ClaudeBaseURLEnv,
 	ClaudeAuthTokenEnv,
 	ClaudeModelEnv,
@@ -170,25 +168,12 @@ func ResolveClaudeProfile(cfg AppConfig, profileID string) (ClaudeProfile, bool)
 	return ClaudeProfile{}, false
 }
 
-func ClaudeProfileRuntimeConfigDir(stateDir, profileID string) string {
-	profileID = CanonicalClaudeProfileID(profileID)
-	if profileID == "" || profileID == ClaudeDefaultProfileID {
-		return ""
-	}
-	return filepath.Join(strings.TrimSpace(stateDir), "claude", "profiles", profileID)
-}
-
-func ApplyClaudeProfileLaunchEnv(baseEnv []string, profile ClaudeProfile, stateDir string) ([]string, error) {
+func ApplyClaudeProfileLaunchEnv(baseEnv []string, profile ClaudeProfile) ([]string, error) {
 	env := append([]string{}, baseEnv...)
 	if profile.BuiltIn {
 		return env, nil
 	}
-	configDir := ClaudeProfileRuntimeConfigDir(stateDir, profile.ID)
-	if strings.TrimSpace(configDir) == "" {
-		return nil, fmt.Errorf("claude profile %q requires a runtime config dir", strings.TrimSpace(profile.ID))
-	}
 	env = removeEnvKeys(env, claudeProfileLaunchEnvKeys...)
-	env = upsertEnvValue(env, ClaudeConfigDirEnv, configDir)
 	if value := strings.TrimSpace(profile.BaseURL); value != "" {
 		env = upsertEnvValue(env, ClaudeBaseURLEnv, value)
 	}

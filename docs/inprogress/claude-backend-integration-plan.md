@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-30`
-> Summary: 同步 Claude MVP 命令面基线：`/sendfile` 属于飞书/本地侧文件投递能力，不依赖 Claude 后端，可在 Claude 模式下作为 `common_tools` 可见入口开放。
+> Summary: 同步 Claude profile 与 session 平面基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog。
 
 ## 1. 文档定位
 
@@ -420,17 +420,30 @@ Claude runtime：
    - `DELETE /api/admin/claude/profiles/{id}`
    - response 只回显 redacted summary，不回显旧 token；token 只暴露 `hasAuthToken`
    - built-in `default` profile 在 list 中可见，但只读、不可编辑、不可删除
-3. launch-time profile injection
+3. product contract: profile is not a session boundary
+   - Claude profile 是“调用配置”：端点、认证、模型。
+   - Claude profile 不是“会话空间”：同一个用户在不同 profile 下看到同一组 Claude session/history/catalog。
+   - 用户切换 profile 后，后续新启动或恢复的 Claude 子进程使用新 profile 的调用配置；已有 session id、workspace session catalog 与恢复逻辑不因为 profile 改变而分叉。
+   - `/list`、`/use`、自动恢复、workspace recency 与 session history 只能按 backend/workspace/session 语义过滤，不允许重新引入按 profile 隔离 session 的路径。
+4. launch-time profile injection
    - profile 注入发生在 daemon 启动 wrapper 时，而不是 Claude child-only flags
    - 当 backend=`claude` 且选择 custom profile 时：
-     - 先清掉继承环境中的 `CLAUDE_CONFIG_DIR` 与 `ANTHROPIC_*`
-     - 再按 profile 注入当前值
-     - 再把 wrapper 级 `CLAUDE_CONFIG_DIR` 指向 `<stateDir>/claude/profiles/<profileID>`
-   - 这样 wrapper 本地 session catalog/history plane 与 Claude child 会共享同一套 profile env/config-dir 视图
-4. built-in `default` profile 语义
+     - 保留继承环境中的 `CLAUDE_CONFIG_DIR`
+     - 清掉继承环境中的 `ANTHROPIC_*` profile 覆盖项
+     - 再按 profile 注入 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`
+   - profile 只是 endpoint/key/model 配置，不是 session namespace
+   - wrapper 本地 session catalog/history plane 与 Claude child 必须继续共享同一个 `CLAUDE_CONFIG_DIR` 视图
+   - 不允许为 custom profile 创建 `<stateDir>/claude/profiles/<profileID>` 这类 profile-scoped runtime config dir
+5. built-in `default` profile 语义
    - 不主动覆盖当前进程已有的 Claude 环境
    - 不创建 profile-scoped runtime config dir
    - 语义保持为“尽量沿用当前本机 Claude 默认配置”
+
+6. 黑盒验证补充（2026-04-30）
+   - 本机真实 Claude CLI 2.1.37 已验证：同一 `CLAUDE_CONFIG_DIR` 下，只切换 `ANTHROPIC_*` endpoint/key/model env，可以正常 `--resume` 同一个 session。
+   - 同一个 session 一旦切到另一个 `CLAUDE_CONFIG_DIR`，会稳定返回 `No conversation found with session ID`。
+   - 因此 profile-scoped `CLAUDE_CONFIG_DIR` 不是 Claude 技术限制，而是错误地把认证配置隔离和 session 存储隔离绑在一起。
+   - 私有实测产物位置：`/data/dl/.codex-shared/kxn-codex-remote-feishu/private/claude-blackbox-runs/2026-04-30/profile-env-shared-session`。
 
 这条 contract 故意停在 launch seam，不在 `#501` 吸收 surface 持有 `profileID`、busy/idle 切换或 workspace+profile snapshot；这些仍属于 `#502`。
 
