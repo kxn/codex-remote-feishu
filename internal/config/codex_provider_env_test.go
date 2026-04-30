@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,6 +197,105 @@ env_key = "CUSTOM_API_KEY"
 	}
 	if count := countEnvKey(got, "http_proxy"); count != 1 {
 		t.Fatalf("http_proxy count = %d, want 1", count)
+	}
+}
+
+func TestSupplementDetachedPATHMergesInteractiveShellPATH(t *testing.T) {
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		if key != "PATH" {
+			t.Fatalf("lookup key = %q, want PATH", key)
+		}
+		return strings.Join([]string{
+			"/opt/homebrew/bin",
+			"/usr/local/bin",
+			"/usr/bin",
+		}, string(os.PathListSeparator)), nil
+	}
+
+	got := SupplementDetachedPATH([]string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/tmp/demo",
+	})
+	value, ok := lookupEnvValue(got, "PATH")
+	if !ok {
+		t.Fatal("PATH missing after supplement")
+	}
+	want := strings.Join([]string{
+		"/usr/bin",
+		"/bin",
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+	}, string(os.PathListSeparator))
+	if value != want {
+		t.Fatalf("PATH = %q, want %q", value, want)
+	}
+}
+
+func TestSupplementDetachedPATHFallsBackToNormalizedCurrentPATH(t *testing.T) {
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		return "", fmt.Errorf("shell unavailable")
+	}
+
+	got := SupplementDetachedPATH([]string{
+		"PATH=/usr/bin::/usr/bin:/bin",
+	})
+	value, ok := lookupEnvValue(got, "PATH")
+	if !ok {
+		t.Fatal("PATH missing after supplement")
+	}
+	want := strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator))
+	if value != want {
+		t.Fatalf("PATH = %q, want %q", value, want)
+	}
+}
+
+func TestBuildCodexChildEnvSupplementsDetachedPATHBeforeCodexLookup(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupCalls := 0
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		lookupCalls++
+		switch key {
+		case "PATH":
+			return strings.Join([]string{"/opt/homebrew/bin", "/usr/bin"}, string(os.PathListSeparator)), nil
+		case "CUSTOM_API_KEY":
+			value, ok := lookupEnvValue(env, "PATH")
+			if !ok {
+				t.Fatal("CUSTOM_API_KEY lookup env missing PATH")
+			}
+			want := strings.Join([]string{"/usr/bin", "/opt/homebrew/bin"}, string(os.PathListSeparator))
+			if value != want {
+				t.Fatalf("PATH during CUSTOM_API_KEY lookup = %q, want %q", value, want)
+			}
+			return "from-shell", nil
+		default:
+			t.Fatalf("unexpected lookup key %q", key)
+			return "", nil
+		}
+	}
+
+	got := BuildCodexChildEnv([]string{
+		"HOME=" + homeDir,
+		"PATH=/usr/bin",
+	}, nil, []string{"app-server"})
+	if lookupCalls != 2 {
+		t.Fatalf("lookup calls = %d, want 2", lookupCalls)
+	}
+	if value, ok := lookupEnvValue(got, "PATH"); !ok || value != strings.Join([]string{"/usr/bin", "/opt/homebrew/bin"}, string(os.PathListSeparator)) {
+		t.Fatalf("PATH = %q ok=%v", value, ok)
 	}
 }
 

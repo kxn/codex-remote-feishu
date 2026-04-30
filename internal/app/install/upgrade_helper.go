@@ -273,6 +273,7 @@ func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateVa
 	if cfg.Config.Feishu.UseSystemProxy {
 		env = append(env, config.CaptureProxyEnv()...)
 	}
+	env = config.SupplementDetachedPATH(env)
 	return upgradeHelperStartDetachedDaemonFunc(relayruntime.LaunchOptions{
 		BinaryPath: stateValue.CurrentBinaryPath,
 		ConfigPath: firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), cfg.Path),
