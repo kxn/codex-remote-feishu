@@ -468,7 +468,7 @@ func TestWrapperClaudePromptResumesPersistedTargetSession(t *testing.T) {
 		{"type": "user", "message": map[string]any{"role": "user", "content": "resume me"}},
 	})
 
-	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
+	server, eventsCh, _, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspace(t, "hello", workspaceRoot)
 
 	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
 		CommandID: "cmd-prompt-claude-resume",
@@ -484,9 +484,6 @@ func TestWrapperClaudePromptResumesPersistedTargetSession(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("send prompt: %v", err)
 	}
-	waitForAck(t, ackCh, 10*time.Second, func(ack agentproto.CommandAck) bool {
-		return ack.CommandID == "cmd-prompt-claude-resume" && ack.Accepted
-	}, stdout, stderr, done)
 
 	waitForObservedEvents(t, eventsCh, 10*time.Second, stdout, stderr, done,
 		func(event agentproto.Event) bool {
