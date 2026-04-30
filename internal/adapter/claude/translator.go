@@ -177,9 +177,6 @@ func (t *Translator) ensureActiveTurn() *turnState {
 		t.activeTurn = t.pendingTurns[0]
 		t.pendingTurns = append([]*turnState(nil), t.pendingTurns[1:]...)
 	}
-	if t.activeTurn != nil && strings.TrimSpace(t.activeTurn.ThreadID) == "" {
-		t.activeTurn.ThreadID = t.canonicalThreadID("")
-	}
 	return t.activeTurn
 }
 

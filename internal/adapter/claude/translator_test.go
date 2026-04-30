@@ -302,6 +302,57 @@ func TestClaudeTranslatorDirectFailureWithoutMessageStartStillReconcilesTurn(t *
 	}
 }
 
+func TestClaudeTranslatorDoesNotInventSyntheticThreadBeforeSessionInit(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-pre-init",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "你好"}}},
+	}); err != nil {
+		t.Fatalf("translate prompt send: %v", err)
+	}
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type": "message_start",
+			"message": map[string]any{
+				"id":      "msg-start-pre-init",
+				"type":    "message",
+				"role":    "assistant",
+				"model":   "mimo-v2.5-pro",
+				"content": []any{},
+			},
+		},
+	})
+	if len(started.Events) != 1 || started.Events[0].Kind != agentproto.EventTurnStarted {
+		t.Fatalf("expected turn.started event, got %#v", started.Events)
+	}
+	if started.Events[0].ThreadID != "" {
+		t.Fatalf("expected no synthetic thread id before session init, got %#v", started.Events[0])
+	}
+
+	observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "session-after-init",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+	result := observeClaude(t, tr, map[string]any{
+		"type":     "result",
+		"subtype":  "success",
+		"is_error": false,
+		"result":   "done",
+	})
+	last := result.Events[len(result.Events)-1]
+	if last.Kind != agentproto.EventTurnCompleted || last.ThreadID != "session-after-init" {
+		t.Fatalf("expected completion to use authoritative session id, got %#v", last)
+	}
+}
+
 func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "plan")

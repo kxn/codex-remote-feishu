@@ -145,10 +145,16 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 	if surface.ActiveQueueItemID == item.ID {
 		surface.ActiveQueueItemID = ""
 	}
-	if binding := s.remoteBindingForSurface(surface); binding != nil {
+	binding := s.remoteBindingForSurface(surface)
+	if binding != nil {
 		s.clearTurnArtifacts(binding.InstanceID, binding.ThreadID, binding.TurnID)
 	}
 	s.clearRemoteOwnership(surface)
+	if shouldRestorePreparedNewThread(surface, item, binding) {
+		s.releaseSurfaceThreadClaim(surface)
+		surface.SelectedThreadID = ""
+		surface.RouteMode = state.RouteModeNewThreadReady
+	}
 
 	events := s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID: item.ID,

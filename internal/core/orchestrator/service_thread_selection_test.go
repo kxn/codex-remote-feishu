@@ -1525,6 +1525,9 @@ func TestHandleCommandDispatchFailureClearsPendingRemoteState(t *testing.T) {
 	if surface.ActiveQueueItemID != "" {
 		t.Fatalf("expected surface active queue to clear after dispatch failure")
 	}
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected normal pinned route to remain unchanged after dispatch failure, got %#v", surface)
+	}
 	item := surface.QueueItems["queue-1"]
 	if item == nil || item.Status != state.QueueItemFailed {
 		t.Fatalf("expected queue item to be marked failed, got %#v", item)
@@ -1587,6 +1590,9 @@ func TestHandleCommandRejectedClearsPendingRemoteState(t *testing.T) {
 	surface := svc.root.Surfaces["surface-1"]
 	if surface.ActiveQueueItemID != "" {
 		t.Fatalf("expected active queue to clear after rejected command")
+	}
+	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
+		t.Fatalf("expected normal pinned route to remain unchanged after command rejection, got %#v", surface)
 	}
 	item := surface.QueueItems["queue-1"]
 	if item == nil || item.Status != state.QueueItemFailed {

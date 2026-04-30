@@ -32,6 +32,9 @@ func queuedItemMatchesTurn(item *state.QueueItemRecord, threadID string) bool {
 	if item.FrozenThreadID != "" {
 		return threadID == "" || threadID == item.FrozenThreadID
 	}
+	if item.RouteModeAtEnqueue == state.RouteModeNewThreadReady {
+		return true
+	}
 	return threadID == ""
 }
 
@@ -79,6 +82,19 @@ func remoteBindingSurfaceThreadID(binding *remoteTurnBinding) string {
 		return remoteBindingSourceThreadID(binding)
 	}
 	return remoteBindingExecutionThreadID(binding)
+}
+
+func shouldRestorePreparedNewThread(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, binding *remoteTurnBinding) bool {
+	if surface == nil || item == nil {
+		return false
+	}
+	if item.RouteModeAtEnqueue != state.RouteModeNewThreadReady {
+		return false
+	}
+	if binding == nil {
+		return true
+	}
+	return binding.BootstrapNewThread && !binding.ThreadCommitted
 }
 
 func matchesRemoteBindingThread(binding *remoteTurnBinding, threadID string) bool {

@@ -13,11 +13,11 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 	case "init":
 		if sessionID := strings.TrimSpace(lookupStringFromAny(message["session_id"])); sessionID != "" {
 			t.sessionID = sessionID
-			if t.activeTurn != nil && !t.activeTurn.Started {
+			if t.activeTurn != nil && strings.TrimSpace(t.activeTurn.ThreadID) == "" {
 				t.activeTurn.ThreadID = sessionID
 			}
 			for _, turn := range t.pendingTurns {
-				if turn != nil && !turn.Started {
+				if turn != nil && strings.TrimSpace(turn.ThreadID) == "" {
 					turn.ThreadID = sessionID
 				}
 			}

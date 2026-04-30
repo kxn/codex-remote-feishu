@@ -55,7 +55,10 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 			ThreadID:         command.Target.ThreadID,
 		}
 	}
-	threadID := t.canonicalThreadID(command.Target.ThreadID)
+	threadID := strings.TrimSpace(command.Target.ThreadID)
+	if t.sessionID != "" {
+		threadID = t.canonicalThreadID(threadID)
+	}
 	turn := &turnState{
 		CommandID: command.CommandID,
 		Initiator: commandInitiator(command),

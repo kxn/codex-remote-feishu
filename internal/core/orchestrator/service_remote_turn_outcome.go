@@ -99,6 +99,10 @@ func (s *Service) deriveRemoteTurnOutcome(instanceID string, event agentproto.Ev
 	if binding == nil {
 		return nil
 	}
+	if threadID := strings.TrimSpace(event.ThreadID); threadID != "" {
+		binding.ThreadID = threadID
+		binding.DurableThreadReady = true
+	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil || surface.ActiveQueueItemID == "" {
 		s.clearRemoteTurn(instanceID, event.TurnID)

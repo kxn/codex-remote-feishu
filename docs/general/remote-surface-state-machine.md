@@ -1031,14 +1031,16 @@ R4 FollowBound
 
 R5 NewThreadReady
   -- 第一条普通文本 --> R5 + E1/E2，等待新 thread 落地
-  -- turn.started(remote_surface，新 thread) --> R2 AttachedPinned
+  -- turn.started(remote_surface，新 thread) --> 保持 R5，turn 进入 running，但 surface 仍停留在 workspace-owned prepared state
+  -- 首轮 turn.completed(success，新 thread 已权威建立) --> R2 AttachedPinned
+  -- 首轮 turn.completed(任意终态，且新 thread 已权威建立) --> R2 AttachedPinned；若失败则同时展示对应 failure notice
   -- /list(headless) --> 保持 R5 NewThreadReady，打开 target picker
   -- /use / /useall(headless substrate) 且仅有 staged/queued draft --> 打开 target picker；confirm 后 discard drafts + 切换或重新准备
   -- /use / /useall(headless substrate) 且首条消息已 dispatching/running --> 打开 target picker；confirm 时拒绝 route exit
   -- /follow(headless) --> 拒绝 + migration notice
   -- 重复 /new 且无 draft --> 保持 R5，仅回 already_new_thread_ready
   -- 重复 /new 且仅有 staged/queued draft --> discard drafts，保持 R5
-  -- thread/start/dispatch 失败 --> 保持 R5
+  -- dispatch / command reject / thread-start reject / runtime fail(新 thread 尚未权威建立) --> 保持 R5
   -- /detach(no live work 或仅 unsent draft) --> R0 Detached
   -- /detach(dispatching/running 首条消息) --> E6 Abandoning -> R0 Detached
 ```
@@ -1046,9 +1048,13 @@ R5 NewThreadReady
 补充说明：
 
 1. `R5` 下首条文本 queued 后，第二条文本、新图片与新文件都会被拒绝，直到该新 thread 真正落地。
-2. 若是在 `R1 AttachedUnbound` 下先发图片或文件，当前实现会先隐式进入 `R5` 并把附件保留为 staged；随后第一条文本会按“新 thread 首条输入”把 staged image / staged file + 文本一起发送。
-3. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
-4. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
+2. `R5` 的 surface 提交点不再是 `turn.started`，而是“新 thread 的权威身份已经建立并且本轮 bootstrap 已经完成提交”。
+3. 这意味着 `turn.started` 期间 surface 仍可能显示为 `new_thread_ready`；这是当前实现刻意保留的 bootstrap overlay，而不是卡死状态。
+4. 若首轮失败时 durable thread 尚未建立，surface 会自动回到可重试的 `R5`；下一条文本会再次尝试 create-thread。
+5. 若 durable thread 已建立但本轮仍失败，例如 `thread/start` 成功后 `turn/start` 被拒绝，则 surface 会提交到新 thread，并在该 thread 上展示失败。
+6. 若是在 `R1 AttachedUnbound` 下先发图片或文件，当前实现会先隐式进入 `R5` 并把附件保留为 staged；随后第一条文本会按“新 thread 首条输入”把 staged image / staged file + 文本一起发送。
+7. `R5` 下 `/use`、`/follow` 只会在首条消息已 `dispatching/running` 时被拒绝；若只是 staged/queued draft，会先丢弃再切走。
+8. `/attach` 或 `/use` 进入某个已选 thread 后，还会执行一次 thread replay 检查：
    1. 该 thread idle 且存在 `UndeliveredReplay` 时，会立刻补发并清空。
    2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
 5. headless 主链 `/list` / `/use` / `/useall` 当前共享同一套 workspace candidate / resolver 基础：
@@ -1143,7 +1149,7 @@ E3 Running
 1. `pendingRemote` 先按 instance 保留“哪个 queue item 正在等 turn”，并同时保留 stage-0 dispatch `CommandID`。
 2. turn 建立后再提升到 `activeRemote`。
 3. 对空 thread 首条消息，promote 当前按 `CommandID -> Initiator.SurfaceSessionID -> thread 信息` 这个顺序命中；blank initiator 会先被视为 unknown，不会作为“可信非 remote initiator”直接绕过归并。
-4. 若 queue item 来自 `R5`，turn.started 后 surface 必须切回 `pinned`，不会继续停在 `new_thread_ready`。
+4. 若 queue item 来自 `R5`，`turn.started` 只负责把 pending remote 提升到 running；surface 只有在 durable thread 已建立并完成 bootstrap 提交后才会切回 `pinned`。
 5. instance 级 `ActiveTurnID/ActiveThreadID` 当前只跟踪“当前主交互面真正可中断的 turn”：
    1. local UI turn 会更新它
    2. 命中当前 `pendingRemote/activeRemote` 绑定、且 surface 策略是 `follow_execution_thread` 的 remote turn 也会更新它

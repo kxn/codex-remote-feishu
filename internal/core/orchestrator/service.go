@@ -72,6 +72,8 @@ type remoteTurnBinding struct {
 	AutoContinueEpisodeID string
 	AttemptTriggerKind    string
 	ExecutionMode         agentproto.PromptExecutionMode
+	BootstrapNewThread    bool
+	ThreadCommitted       bool
 	SourceMessageID       string
 	SourceMessagePreview  string
 	ReplyToMessageID      string
@@ -83,6 +85,7 @@ type remoteTurnBinding struct {
 	//   execution intentionally should not steal the current selection (#428 entry
 	//   will consume this later; do not delete as dead code).
 	ThreadID             string
+	DurableThreadReady   bool
 	SourceThreadID       string
 	SurfaceBindingPolicy agentproto.SurfaceBindingPolicy
 	ThreadCWD            string

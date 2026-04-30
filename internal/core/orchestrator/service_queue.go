@@ -286,6 +286,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		ReplyToMessageID:      firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
 		ReplyToMessagePreview: firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
 		ExecutionMode:         item.FrozenExecutionMode,
+		BootstrapNewThread:    item.RouteModeAtEnqueue == state.RouteModeNewThreadReady,
 		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
 		SourceThreadID:        queuedItemSourceThreadID(item),
 		SurfaceBindingPolicy:  queuedItemSurfaceBindingPolicy(item),
@@ -369,18 +370,36 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 		QueueItemID: item.ID,
 		Status:      string(item.Status),
 	}, queueItemSourceMessageIDs(item))
-	if !remoteBindingKeepsSurfaceSelection(binding) {
-		routeMode := item.RouteModeAtEnqueue
-		if routeMode == "" || routeMode == state.RouteModeNewThreadReady {
-			routeMode = state.RouteModePinned
-		}
-		targetThreadID := remoteBindingSurfaceThreadID(binding)
-		if targetThreadID == "" {
-			targetThreadID = strings.TrimSpace(item.FrozenThreadID)
-		}
-		events = append(events, s.bindSurfaceToThreadMode(surface, inst, targetThreadID, routeMode)...)
-	}
 	return events
+}
+
+func (s *Service) maybeCommitBootstrapSurfaceBinding(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, item *state.QueueItemRecord, binding *remoteTurnBinding, threadID string) []eventcontract.Event {
+	if surface == nil || inst == nil || item == nil || binding == nil || remoteBindingKeepsSurfaceSelection(binding) {
+		return nil
+	}
+	targetThreadID := strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID, item.FrozenThreadID))
+	if targetThreadID == "" {
+		return nil
+	}
+	thread := s.ensureThread(inst, targetThreadID)
+	if !threadVisible(thread) {
+		thread.CWD = firstNonEmpty(thread.CWD, binding.ThreadCWD, item.FrozenCWD)
+		thread.Archived = false
+		thread.TrafficClass = agentproto.TrafficClassPrimary
+	}
+	binding.ThreadID = targetThreadID
+	binding.DurableThreadReady = true
+	if item.FrozenThreadID == "" {
+		item.FrozenThreadID = targetThreadID
+	}
+	if !binding.BootstrapNewThread {
+		return nil
+	}
+	if binding.ThreadCommitted {
+		return nil
+	}
+	binding.ThreadCommitted = true
+	return s.bindSurfaceToThreadMode(surface, inst, targetThreadID, state.RouteModePinned)
 }
 
 func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract.Event {
@@ -389,6 +408,8 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	}
 	item := outcome.Item
 	surface := outcome.Surface
+	binding := outcome.Binding
+	inst := s.root.Instances[outcome.InstanceID]
 	switch outcome.Cause {
 	case terminalCauseCompleted, terminalCauseUserInterrupted:
 		item.Status = state.QueueItemCompleted
@@ -429,6 +450,13 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 			s.clearThreadReplay(inst, outcome.ThreadID)
 		}
 		events = append(events, s.remoteTurnFailureEvent(outcome))
+	}
+
+	if !remoteBindingKeepsSurfaceSelection(binding) && !binding.ThreadCommitted {
+		targetThreadID := strings.TrimSpace(firstNonEmpty(binding.ThreadID, outcome.ThreadID, item.FrozenThreadID))
+		if targetThreadID != "" && (outcome.Cause == terminalCauseCompleted || binding.DurableThreadReady) {
+			events = append(events, s.maybeCommitBootstrapSurfaceBinding(surface, inst, item, binding, targetThreadID)...)
+		}
 	}
 
 	if outcome.Cause == terminalCauseCompleted {
