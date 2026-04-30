@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-04-30`
-> Summary: 同步 mode 术语基线，明确 `ProductMode=normal` 只是 headless 持久化 token，用户可见 mode 统一按 `codex|claude|vscode` 描述。
+> Summary: 同步 Claude MVP 命令面基线：`/sendfile` 属于飞书/本地侧文件投递能力，不依赖 Claude 后端，可在 Claude 模式下作为 `common_tools` 可见入口开放。
 
 ## 1. 文档定位
 
@@ -948,6 +948,7 @@ Claude runtime 分三块：
 | family / 入口 | Claude 策略 | help/menu 可见性 | 当前应否允许直接派发 | 说明 |
 | --- | --- | --- | --- | --- |
 | `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/claudeprofile` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 仍属于 Claude MVP 已批准的 native 或纯本地产品入口。 |
+| `/sendfile` | native | visible | allow | 飞书/本地侧文件投递能力，不依赖 Claude runtime/backend；可按既有 sendfile picker 与后台发送流程开放。 |
 | `/detach` | native | visible | allow | Claude MVP 正式开放；它不再只是隐藏逃生口，而是统一的脱困 / 解除接管入口。 |
 | `/workspace detach` | native | hidden | allow | 仅保留兼容 alias；Claude 的主展示入口是 `/detach`。 |
 | `/compact` | passthrough | hidden | reject for now | 仍只保留成后续 runtime host 的 passthrough 候选。 |
@@ -955,14 +956,14 @@ Claude runtime 分三块：
 | `/review` `/patch` | approximation | hidden | reject | 当前不纳入 Claude MVP；在 detached review / turn patch 的 runtime contract 补齐前，不对用户暴露。 |
 | `/workspace*` `/useall` | approximation | hidden | reject | Claude MVP 不开放工作区父页或跨工作区总览。 |
 | `/steerall` | reject | hidden | reject | Claude 当前不支持 same-turn steer；必须显式拒绝。 |
-| `/plan` `/sendfile` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
+| `/plan` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
 
 对 help/menu 的显式投影也一并固定为：
 
 1. `current_work` 只保留 `/stop`、`/new`、`/status`、`/detach`
 2. `switch_target` 只保留 `/list`、`/use`
 3. `send_settings` 继续保留 `/reasoning`、`/model`、`/access`、`/verbose`、`/claudeprofile`
-4. `common_tools` 当前只保留 `/history`
+4. `common_tools` 当前保留 `/history`、`/sendfile`
 
 #### 7.6.2 `/detach` 的产品语义
 
@@ -1326,7 +1327,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
    - 最新研究已经明确：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词，而且 capability 必须真实反映 host bridge 是否已落地，所以这一段不能原样带进后续实现
 4. `#494` 当前合同仍然成立。
    - request bridge 对 `plan_confirmation` 的 `decline -> interrupt` 合同仍与黑盒结论一致
-   - `#496` 之后，Claude command strategy 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/plan`、`workspace*`、`/useall` 仍保持 hidden / reject，继续符合最新研究里的“不能偷跑 family-only fallback”边界
+   - `#496` 之后，Claude command strategy 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/sendfile` 因为属于飞书/本地侧文件投递，不依赖 Claude backend，也应作为 visible + allow native 入口开放；`/plan`、`workspace*`、`/useall` 仍保持 hidden / reject，继续符合最新研究里的“不能偷跑 family-only fallback”边界
 5. `#492/#493` 的主体方向也仍成立。
    - backend-aware state partition、surface resume carrier、catalog/contextual command seam 目前没有发现被后续 Claude 研究推翻
    - 相关测试面当前仍是绿的：`go test ./internal/core/control ./internal/core/orchestrator ./internal/app/daemon`
