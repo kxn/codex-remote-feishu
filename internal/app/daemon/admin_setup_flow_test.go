@@ -14,6 +14,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -239,14 +240,27 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 
 func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
 	oldListScopes := listFeishuAppScopes
+	oldDetectAutostart := detectAutostart
 	listFeishuAppScopes = func(context.Context, feishu.LiveGatewayConfig) ([]feishu.AppScopeStatus, error) {
 		return []feishu.AppScopeStatus{
 			{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},
 			{ScopeName: "im:message:send_as_bot", ScopeType: "tenant", GrantStatus: 1},
 		}, nil
 	}
+	detectAutostart = func(statePath string) (install.AutostartStatus, error) {
+		return install.AutostartStatus{
+			Platform:         "linux",
+			Supported:        true,
+			Manager:          install.ServiceManagerSystemdUser,
+			CurrentManager:   install.ServiceManagerDetached,
+			Status:           "disabled",
+			InstallStatePath: statePath,
+			CanApply:         true,
+		}, nil
+	}
 	t.Cleanup(func() {
 		listFeishuAppScopes = oldListScopes
+		detectAutostart = oldDetectAutostart
 	})
 
 	home := t.TempDir()
