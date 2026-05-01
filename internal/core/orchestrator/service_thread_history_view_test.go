@@ -238,6 +238,7 @@ func TestThreadHistoryDetailIncludesTypedOutputs(t *testing.T) {
 				{Kind: "web_search", Text: "上海天气"},
 				{Kind: "process_plan", Text: "Gathering evidence"},
 				{Kind: "delegated_task", Text: "Task (Explore): Audit the repository"},
+				{Kind: "file_change", Text: "internal/app/app.go"},
 				{Kind: "dynamic_tool_call", Text: "Read config.yaml"},
 			},
 		}},
@@ -251,6 +252,7 @@ func TestThreadHistoryDetailIncludesTypedOutputs(t *testing.T) {
 	if !strings.Contains(outputs, "[搜索] 上海天气") ||
 		!strings.Contains(outputs, "[计划] Gathering evidence") ||
 		!strings.Contains(outputs, "[Task] Task (Explore): Audit the repository") ||
+		!strings.Contains(outputs, "[修改] internal/app/app.go") ||
 		!strings.Contains(outputs, "[工具] Read config.yaml") {
 		t.Fatalf("expected typed outputs in history detail, got %#v", events[0].ThreadHistoryView.Detail.Outputs)
 	}

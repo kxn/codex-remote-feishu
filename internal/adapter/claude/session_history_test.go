@@ -105,3 +105,44 @@ func TestResolveResumeSessionRejectsCrossWorkspaceClaudeThread(t *testing.T) {
 		t.Fatalf("expected cross-workspace rejection to retain source metadata, got %#v", crossMeta)
 	}
 }
+
+func TestReadThreadHistoryProjectsClaudeEditAsFileChange(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-file-change")
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-file-change", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "timestamp": "2026-04-28T11:00:00Z", "cwd": workspaceRoot, "session_id": "session-file-change", "model": "mimo-v2.5-pro", "permissionMode": "default"},
+		{"type": "user", "timestamp": "2026-04-28T11:01:00Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": "请修改文件"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:01:05Z", "promptId": "prompt-1", "message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{
+				"type": "tool_use",
+				"id":   "tool-edit-1",
+				"name": "Edit",
+				"input": map[string]any{
+					"file_path":  "internal/app/app.go",
+					"old_string": "old line",
+					"new_string": "new line",
+				},
+			},
+		}}},
+		{"type": "user", "timestamp": "2026-04-28T11:01:08Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "tool_result", "tool_use_id": "tool-edit-1", "content": "updated"},
+		}}},
+	})
+
+	history, err := readThreadHistory(workspaceRoot, "session-file-change", RuntimeStateSnapshot{})
+	if err != nil {
+		t.Fatalf("readThreadHistory: %v", err)
+	}
+	if history == nil || len(history.Turns) != 1 {
+		t.Fatalf("expected one history turn, got %#v", history)
+	}
+	items := history.Turns[0].Items
+	if len(items) != 2 {
+		t.Fatalf("expected user + file_change items, got %#v", items)
+	}
+	if items[1].Kind != "file_change" || items[1].Text != "internal/app/app.go" {
+		t.Fatalf("expected Claude Edit to render as file_change, got %#v", items[1])
+	}
+}

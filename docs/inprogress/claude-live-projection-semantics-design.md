@@ -257,6 +257,7 @@ final message 只承载 assistant 的最终回答正文。
 - `TodoWrite -> process_plan`
 - `Bash -> command_execution`
 - `WebSearch/WebFetch/ToolSearch -> web_search`
+- `Edit -> file_change`
 - `Read/Glob/Grep -> dynamic_tool_call(exploration owner)`
 
 同时已经明确：
@@ -267,6 +268,7 @@ final message 只承载 assistant 的最终回答正文。
 - `process_plan` 走过程卡内 block owner，不再复用独立 `turn.plan.updated` 卡
 - `delegated_task` 走单行过程项 owner
 - `command_execution` / `web_search` / `process_plan` / `delegated_task` 完成后不再默认回落成普通文本
+- `Write` / `NotebookEdit` 暂未进入 `file_change` owner，继续 deliberate fallback 到 `dynamic_tool_call`
 
 ## 6. Tool 家族的产品映射
 
@@ -331,11 +333,13 @@ final message 只承载 assistant 的最终回答正文。
 
 | Native carrier | 产品对象 | 用户可见面 |
 | --- | --- | --- |
-| `Edit` / `Write` / `NotebookEdit` | `file_change` | 过程卡一行 |
+| `Edit` | `file_change` | 过程卡一行 |
+| `Write` / `NotebookEdit` | `dynamic_tool_call`（deliberate fallback） | 过程卡一行 |
 
 规则：
 
-- 展示“修改了什么”
+- `Edit` 进入现有 `file_change` owner，并贡献 turn-end file summary / history `[修改] ...`
+- `Write` / `NotebookEdit` 暂时不强行同构；在 payload/owner 收口前继续走 fallback
 - 不展示原始大块参数
 
 ### 6.7 计划进行中

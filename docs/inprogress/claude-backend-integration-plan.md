@@ -890,8 +890,8 @@ Claude runtime 分三块：
 | `stream_event.message_start` | 新一轮 assistant turn 真正进入 running | `turn.started` | 作为 Claude live turn 的主起点 |
 | `assistant.text` | assistant 正文输出 | `item.started / item.delta / item.completed` with `itemKind=agent_message` | 现有文本 item 语义可直接复用 |
 | `assistant.thinking` | provider-native reasoning / hidden chain-of-thought side channel | `item.delta` with `itemKind=reasoning_summary`；如需保留原文，仅留在 adapter-local/raw history | pre-MVP 不需要新增公开 reasoning carrier |
-| `assistant.tool_use`（外部工具） | 工具调用开始，已拿到稳定 `tool_use_id + name + input` | `item.started` with `itemKind=dynamic_tool_call` + metadata(`tool`,`arguments`,`toolUseID`) | `dynamic_tool_call` 足够承接第一版，不必先拆成更多专属 item kind |
-| `user.tool_result`（外部工具） | 工具执行完成，携带 stdout/stderr/error/image/interrupt 等真实结果 | `item.completed` with `itemKind=dynamic_tool_call` + structured metadata | 这是工具完成的主 carrier，不能再把 assistant `tool_use` 误当 completed |
+| `assistant.tool_use`（外部工具） | 工具调用开始，已拿到稳定 `tool_use_id + name + input` | `item.started` with typed `itemKind` selected by tool family (`command_execution` / `web_search` / `file_change` / `dynamic_tool_call`) | 当前已知强语义工具直接进 typed owner，其余仍允许回落 `dynamic_tool_call` |
+| `user.tool_result`（外部工具） | 工具执行完成，携带 stdout/stderr/error/image/interrupt 等真实结果 | `item.completed` with the same typed `itemKind` + structured metadata | 这是工具完成的主 carrier，不能再把 assistant `tool_use` 误当 completed |
 | `control_request(can_use_tool)`（外部工具） | 外部审批点 | `request.started` with `type=approval` + `semanticKind=approval_can_use_tool` | `#494` 已有 canonical request contract，可直接复用 |
 | `assistant.tool_use`（`AskUserQuestion` / `ExitPlanMode` / `EnterPlanMode`） | 内部交互工具种子，提供 `tool_use_id` 与补充上下文 | adapter-local correlation state | 这类 internal tool 不应直接投影成通用 `dynamic_tool_call` 过程噪音 |
 | `control_request(can_use_tool + AskUserQuestion)` | 真正可外部响应的提问 request | `request.started` with `type=request_user_input` + `semanticKind=request_user_input` | 问题主来源可直接用 `control_request.input.questions` |
@@ -912,9 +912,9 @@ Claude runtime 分三块：
 2. 真正缺的是 provider-local correlation state。
    - 最少需要按 `tool_use_id` 关联 `assistant.tool_use -> control_request -> user.tool_result -> result`。
    - 这是一层 `internal/adapter/claude/**` 实现问题，不是上层协议字段缺失。
-3. `#497` 第一版应优先复用 `dynamic_tool_call`。
-   - Claude 非内部工具先统一投影成 `dynamic_tool_call started/completed`。
-   - 是否把 Bash/Web/Search/Write 再细分回 `command_execution` / `web_search` / `file_change`，留作后续增强，不作为 pre-MVP 阻塞项。
+3. `#497` 的第一版闭包已经从“全量 `dynamic_tool_call`”推进到“typed owner + fallback”。
+   - 已明确语义的工具优先直接进入现有 canonical owner，例如 `Bash -> command_execution`、`Web* -> web_search`、`Edit -> file_change`。
+   - 其余尚未稳定收口的工具仍允许保留 `dynamic_tool_call` fallback，例如当前的 `Write` / `NotebookEdit`。
 4. 不再额外拆“交互工具桥接/plan materialization”子单。
    - `#494` 已拥有 canonical request/reply contract。
    - 剩余工作是 Claude native 多 carrier 的相关性与 materialization 规则，属于 `#497` 的 live transport mapper closure。

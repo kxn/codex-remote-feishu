@@ -1227,6 +1227,82 @@ func TestClaudeTranslatorTaskOutputProjectsHiddenDelegatedTaskDelta(t *testing.T
 	}
 }
 
+func TestClaudeTranslatorEditProjectsToFileChange(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-edit-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "tool_use",
+					"id":   "call-edit-1",
+					"name": "Edit",
+					"input": map[string]any{
+						"file_path":   "internal/app/app.go",
+						"old_string":  "old line",
+						"new_string":  "new line",
+						"replace_all": false,
+					},
+				},
+			},
+		},
+	})
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one Edit start event, got %#v", started.Events)
+	}
+	startEvent := started.Events[0]
+	if startEvent.Kind != agentproto.EventItemStarted || startEvent.ItemKind != "file_change" {
+		t.Fatalf("unexpected Edit start projection: %#v", startEvent)
+	}
+	if len(startEvent.FileChanges) != 1 {
+		t.Fatalf("expected file change payload on start, got %#v", startEvent)
+	}
+	if startEvent.FileChanges[0].Path != "internal/app/app.go" || startEvent.FileChanges[0].Kind != agentproto.FileChangeUpdate {
+		t.Fatalf("unexpected started file change payload: %#v", startEvent.FileChanges)
+	}
+
+	completed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-edit-1",
+					"content":     "The file has been updated successfully.",
+					"is_error":    false,
+				},
+			},
+		},
+		"tool_use_result": map[string]any{
+			"filePath":        "internal/app/app.go",
+			"oldString":       "old line",
+			"newString":       "new line",
+			"replaceAll":      false,
+			"structuredPatch": "@@ -1 +1 @@\n-old line\n+new line",
+		},
+	})
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one Edit completion event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "file_change" || event.Status != "completed" {
+		t.Fatalf("unexpected Edit completion projection: %#v", event)
+	}
+	if len(event.FileChanges) != 1 {
+		t.Fatalf("expected completed file change payload, got %#v", event)
+	}
+	if event.FileChanges[0].Path != "internal/app/app.go" || event.FileChanges[0].Diff != "@@ -1 +1 @@\n-old line\n+new line" {
+		t.Fatalf("unexpected completed file change payload: %#v", event.FileChanges)
+	}
+}
+
 func startClaudeTurn(t *testing.T, tr *Translator, permissionMode string) (string, string) {
 	t.Helper()
 	observeClaude(t, tr, map[string]any{

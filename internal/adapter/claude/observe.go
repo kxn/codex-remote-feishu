@@ -467,7 +467,7 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 	tool.StartedEmitted = true
 	itemKind := claudeToolItemKind(tool.Name)
 	metadata := claudeToolMetadata(tool.Name, tool.Input)
-	return []agentproto.Event{{
+	event := agentproto.Event{
 		Kind:      agentproto.EventItemStarted,
 		CommandID: t.activeTurn.CommandID,
 		ThreadID:  t.activeTurn.ThreadID,
@@ -475,7 +475,11 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 		ItemID:    tool.ItemID,
 		ItemKind:  itemKind,
 		Metadata:  metadata,
-	}}
+	}
+	if itemKind == "file_change" {
+		event.FileChanges = claudeToolFileChanges(metadata)
+	}
+	return []agentproto.Event{event}
 }
 
 func (t *Translator) observeUserMessage(message map[string]any) Result {
@@ -528,7 +532,7 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 	startMetadata := claudeToolMetadata(tool.Name, tool.Input)
 	if !tool.StartedEmitted && claudeToolVisibleLifecycle(tool.Name) {
 		tool.StartedEmitted = true
-		events = append(events, agentproto.Event{
+		event := agentproto.Event{
 			Kind:      agentproto.EventItemStarted,
 			CommandID: t.activeTurn.CommandID,
 			ThreadID:  t.activeTurn.ThreadID,
@@ -536,7 +540,11 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 			ItemID:    tool.ItemID,
 			ItemKind:  itemKind,
 			Metadata:  startMetadata,
-		})
+		}
+		if itemKind == "file_change" {
+			event.FileChanges = claudeToolFileChanges(startMetadata)
+		}
+		events = append(events, event)
 	}
 	metadata := claudeToolMetadata(tool.Name, tool.Input)
 	if text := stringifyTextContent(block["content"]); strings.TrimSpace(text) != "" {
@@ -556,7 +564,7 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 	if completionEvent, ok := t.hiddenClaudeToolLifecycleEvent(tool, itemKind, isError, metadata); ok {
 		events = append(events, completionEvent)
 	} else if claudeToolVisibleLifecycle(tool.Name) && itemKind != "" {
-		events = append(events, agentproto.Event{
+		event := agentproto.Event{
 			Kind:      agentproto.EventItemCompleted,
 			CommandID: t.activeTurn.CommandID,
 			ThreadID:  t.activeTurn.ThreadID,
@@ -568,7 +576,11 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 				false: "completed",
 			}[isError],
 			Metadata: metadata,
-		})
+		}
+		if itemKind == "file_change" {
+			event.FileChanges = claudeToolFileChanges(metadata)
+		}
+		events = append(events, event)
 	}
 	tool.Completed = true
 	return Result{Events: events}

@@ -429,6 +429,10 @@ func buildThreadHistoryTurnSummaries(history agentproto.ThreadHistoryRecord, cur
 				if text != "" {
 					summary.Outputs = append(summary.Outputs, "[计划] "+text)
 				}
+			case "file_change":
+				if text != "" {
+					summary.Outputs = append(summary.Outputs, "[修改] "+text)
+				}
 			case "dynamic_tool_call":
 				if text != "" {
 					summary.Outputs = append(summary.Outputs, "[工具] "+text)

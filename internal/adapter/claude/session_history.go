@@ -326,6 +326,19 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 			Text:     text,
 			Metadata: metadata,
 		}, true
+	case "file_change":
+		text := buildClaudeFileChangeHistoryText(metadata)
+		if text == "" {
+			text = strings.TrimSpace(toolUseSummary(toolName, input))
+		}
+		if text == "" {
+			return agentproto.ThreadHistoryItemRecord{}, false
+		}
+		return agentproto.ThreadHistoryItemRecord{
+			Kind:     "file_change",
+			Text:     text,
+			Metadata: metadata,
+		}, true
 	case "dynamic_tool_call":
 		text := strings.TrimSpace(toolUseSummary(toolName, input))
 		if text == "" {
@@ -342,6 +355,17 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 	default:
 		return agentproto.ThreadHistoryItemRecord{}, false
 	}
+}
+
+func buildClaudeFileChangeHistoryText(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	path := strings.TrimSpace(lookupStringFromAny(metadata["filePath"]))
+	if path == "" {
+		return ""
+	}
+	return path
 }
 
 func webHistoryText(metadata map[string]any) string {

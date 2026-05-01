@@ -208,7 +208,7 @@ func stringifyTextContent(value any) string {
 
 func normalizeClaudeSemanticItemKind(raw string) string {
 	switch strings.TrimSpace(raw) {
-	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "process_plan":
+	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "process_plan", "file_change":
 		return strings.TrimSpace(raw)
 	default:
 		return ""
@@ -227,7 +227,9 @@ func claudeToolItemKind(toolName string) string {
 		return "delegated_task"
 	case "TaskOutput", "TaskStop":
 		return ""
-	case "Read", "Glob", "Grep", "Skill", "Edit", "Write", "NotebookEdit":
+	case "Edit":
+		return "file_change"
+	case "Read", "Glob", "Grep", "Skill", "Write", "NotebookEdit":
 		return "dynamic_tool_call"
 	default:
 		return "dynamic_tool_call"
@@ -272,11 +274,44 @@ func claudeToolMetadata(toolName string, input map[string]any) map[string]any {
 			}
 			metadata["text"] = buildClaudePlanSummary(snapshot)
 		}
+	case "file_change":
+		mergeClaudeFileChangeMetadata(metadata, toolName, input)
 	case "dynamic_tool_call":
 		metadata["semanticKind"] = claudeDynamicToolSemanticKind(toolName)
 		metadata["suppressFinalText"] = true
 	}
 	return metadata
+}
+
+func mergeClaudeFileChangeMetadata(metadata map[string]any, toolName string, input map[string]any) {
+	if metadata == nil {
+		return
+	}
+	metadata["semanticKind"] = "file_change_request"
+	metadata["suppressFinalText"] = true
+	metadata["tool"] = strings.TrimSpace(toolName)
+	if path := firstNonEmptyString(
+		lookupStringFromAny(input["filePath"]),
+		lookupStringFromAny(input["file_path"]),
+		lookupStringFromAny(input["path"]),
+	); path != "" {
+		metadata["filePath"] = path
+	}
+	if oldString := firstNonEmptyString(
+		lookupStringFromAny(input["oldString"]),
+		lookupStringFromAny(input["old_string"]),
+	); oldString != "" {
+		metadata["oldString"] = oldString
+	}
+	if newString := firstNonEmptyString(
+		lookupStringFromAny(input["newString"]),
+		lookupStringFromAny(input["new_string"]),
+	); newString != "" {
+		metadata["newString"] = newString
+	}
+	if replaceAll, ok := claudeLookupBool(input, "replaceAll", "replace_all"); ok {
+		metadata["replaceAll"] = replaceAll
+	}
 }
 
 func claudeDynamicToolSemanticKind(toolName string) string {
@@ -450,6 +485,121 @@ func buildClaudeProcessPlanText(metadata map[string]any) string {
 		return strings.TrimSpace(lookupStringFromAny(metadata["text"]))
 	}
 	return buildClaudePlanSummary(snapshot)
+}
+
+func claudeToolFileChanges(metadata map[string]any) []agentproto.FileChangeRecord {
+	if len(metadata) == 0 {
+		return nil
+	}
+	path := strings.TrimSpace(firstNonEmptyString(
+		lookupStringFromAny(metadata["filePath"]),
+		lookupStringFromAny(metadata["file_path"]),
+		lookupStringFromAny(metadata["path"]),
+	))
+	if path == "" {
+		return nil
+	}
+	oldString := firstNonEmptyString(
+		lookupStringFromAny(metadata["oldString"]),
+		lookupStringFromAny(metadata["old_string"]),
+	)
+	newString := firstNonEmptyString(
+		lookupStringFromAny(metadata["newString"]),
+		lookupStringFromAny(metadata["new_string"]),
+	)
+	record := agentproto.FileChangeRecord{
+		Path: path,
+		Kind: claudeFileChangeKind(oldString, newString),
+		Diff: buildClaudeFileChangeDiff(metadata, path, oldString, newString),
+	}
+	return []agentproto.FileChangeRecord{record}
+}
+
+func claudeFileChangeKind(oldString, newString string) agentproto.FileChangeKind {
+	oldString = strings.TrimSpace(oldString)
+	newString = strings.TrimSpace(newString)
+	switch {
+	case oldString == "" && newString != "":
+		return agentproto.FileChangeAdd
+	case oldString != "" && newString == "":
+		return agentproto.FileChangeDelete
+	default:
+		return agentproto.FileChangeUpdate
+	}
+}
+
+func buildClaudeFileChangeDiff(metadata map[string]any, path, oldString, newString string) string {
+	if diff := strings.TrimSpace(lookupStringFromAny(metadata["structuredPatch"])); diff != "" {
+		return diff
+	}
+	path = strings.TrimSpace(path)
+	oldLabel := path
+	newLabel := path
+	if oldLabel == "" {
+		oldLabel = "before"
+	}
+	if newLabel == "" {
+		newLabel = "after"
+	}
+	switch claudeFileChangeKind(oldString, newString) {
+	case agentproto.FileChangeAdd:
+		return unifiedDiffText("/dev/null", newLabel, "", newString)
+	case agentproto.FileChangeDelete:
+		return unifiedDiffText(oldLabel, "/dev/null", oldString, "")
+	default:
+		return unifiedDiffText(oldLabel, newLabel, oldString, newString)
+	}
+}
+
+func unifiedDiffText(oldLabel, newLabel, oldBody, newBody string) string {
+	oldLines := splitClaudeDiffLines(oldBody)
+	newLines := splitClaudeDiffLines(newBody)
+	var buffer strings.Builder
+	buffer.WriteString("--- ")
+	buffer.WriteString(strings.TrimSpace(oldLabel))
+	buffer.WriteString("\n")
+	buffer.WriteString("+++ ")
+	buffer.WriteString(strings.TrimSpace(newLabel))
+	buffer.WriteString("\n")
+	buffer.WriteString(fmt.Sprintf("@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines)))
+	for _, line := range oldLines {
+		buffer.WriteString("-")
+		buffer.WriteString(line)
+		buffer.WriteString("\n")
+	}
+	for _, line := range newLines {
+		buffer.WriteString("+")
+		buffer.WriteString(line)
+		buffer.WriteString("\n")
+	}
+	return strings.TrimRight(buffer.String(), "\n")
+}
+
+func splitClaudeDiffLines(body string) []string {
+	if body == "" {
+		return nil
+	}
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
+	lines := strings.Split(body, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func claudeLookupBool(values map[string]any, keys ...string) (bool, bool) {
+	for _, key := range keys {
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+		current, ok := value.(bool)
+		if ok {
+			return current, true
+		}
+	}
+	return false, false
 }
 
 func buildClaudeReasoningDelta(text string) (string, map[string]any, bool) {
