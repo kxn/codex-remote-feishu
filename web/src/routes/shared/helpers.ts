@@ -127,11 +127,10 @@ export function vscodeOutcomeSummary(vscode: VSCodeDetectResponse | null, outcom
 
 export function buildAdminFeishuVerifySuccessMessage(app: FeishuAppSummary, duration: number): string {
   const parts = [`连接测试成功，用时 ${(duration / 1_000_000_000).toFixed(1)}s。`];
-  parts.push("这一步只验证当前凭证可连接。");
   if (app.status?.state !== "connected") {
-    parts.push("运行态仍在重连，实际使用请以连接状态恢复为准。");
+    parts.push("实际连接以运行状态为准。");
   }
-  parts.push("如果刚切到另一个飞书 App，旧会话不会自动迁移，请到新机器人侧重新开始会话。");
+  parts.push("切换到新应用后请在新机器人侧重新开始会话。");
   return parts.join("");
 }
 
@@ -141,9 +140,8 @@ export function buildSetupFeishuVerifySuccessMessage(app: FeishuAppSummary, muta
     parts.push(mutation.message);
   }
   parts.push("飞书应用连接成功，已进入下一步。");
-  parts.push("这一步只验证当前凭证可连接。");
   if (app.status?.state !== "connected") {
-    parts.push("运行态仍在重连，后续实际使用请以连接状态恢复为准。");
+    parts.push("实际连接以运行状态为准。");
   }
   if (mutation?.requiresNewChat) {
     parts.push("请到新机器人侧重新开始会话，再继续后面的联调。");

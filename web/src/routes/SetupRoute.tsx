@@ -702,11 +702,11 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>环境检查</h2>
-          <p>进入后自动检查服务与运行条件。</p>
+          <p>确认服务与运行条件正常</p>
         </div>
         {runtimeRequirements?.ready ? (
           <div className="notice-banner good">
-            环境检查通过，正在进入飞书连接...
+            环境正常
           </div>
         ) : (
           <div className="notice-banner warn">当前服务还在检查中，请稍候。</div>
@@ -749,7 +749,7 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>飞书连接</h2>
-          <p>选择扫码创建或手动输入，连接验证通过后会自动进入下一步。</p>
+          <p>扫码或手动输入接入飞书应用</p>
         </div>
         <div className="choice-toggle">
           <button
@@ -781,7 +781,7 @@ export function SetupRoute() {
           <div>
             <h4 style={{ margin: 0 }}>扫码创建</h4>
             <p className="support-copy">
-              请使用飞书扫码完成创建，页面会自动轮询并继续下一步。
+              使用飞书扫描二维码，页面将自动完成后续操作
             </p>
             <div className="scan-frame">
               {onboardingSession?.qrCodeDataUrl ? (
@@ -931,7 +931,7 @@ export function SetupRoute() {
         <section className="step-section">
           <div className="step-stage-head">
             <h2>权限检查</h2>
-            <p>进入页面后自动检查当前权限。</p>
+            <p>确认飞书应用权限配置正确</p>
           </div>
           <div className="notice-banner warn">正在检查权限，请稍候...</div>
         </section>
@@ -943,7 +943,7 @@ export function SetupRoute() {
         <section className="step-section">
           <div className="step-stage-head">
             <h2>权限检查</h2>
-            <p>权限已完整，系统会自动进入下一步。</p>
+            <p>权限配置正确</p>
           </div>
           <div className="notice-banner good">检查通过，正在进入事件订阅...</div>
         </section>
@@ -1026,7 +1026,7 @@ export function SetupRoute() {
         <section className="step-section">
           <div className="step-stage-head">
             <h2>权限检查</h2>
-            <p>暂时没有拿到最新结果，请重新检查。</p>
+            <p>检查失败，请重试</p>
           </div>
           <div className="notice-banner danger">{permissionState.message}</div>
           <div className="button-row">
@@ -1116,7 +1116,7 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>事件订阅</h2>
-          <p>进入本页后，机器人会自动发出事件订阅测试提示。</p>
+          <p>机器人已尝试发送事件订阅测试</p>
         </div>
         {eventTest.status === "sent" ? (
           <div className="notice-banner good">
@@ -1174,7 +1174,7 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>回调配置</h2>
-          <p>进入本页后，机器人会自动发出回调测试卡片。</p>
+          <p>机器人已尝试发送回调测试卡片</p>
         </div>
         {callbackTest.status === "sent" ? (
           <div className="notice-banner good">
@@ -1232,7 +1232,7 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>菜单确认</h2>
-          <p>请在飞书后台完成菜单配置后继续下一步。</p>
+          <p>在飞书后台配置机器人菜单</p>
         </div>
         <p className="support-copy">
           前往
@@ -1270,7 +1270,7 @@ export function SetupRoute() {
         <section className="step-section">
           <div className="step-stage-head">
             <h2>自动启动</h2>
-            <p>正在检查当前系统是否支持自动启动。</p>
+            <p>检测系统是否支持自动启动</p>
           </div>
           <div className="notice-banner warn">检测中，请稍候...</div>
         </section>
@@ -1379,7 +1379,7 @@ export function SetupRoute() {
         <section className="step-section">
           <div className="step-stage-head">
             <h2>VS Code 集成</h2>
-            <p>是否在这台机器上使用 VS Code + Codex。</p>
+            <p>VS Code 集成设置</p>
           </div>
           <div className="notice-banner warn">
             当前还不能确认 VS Code 集成状态。你可以稍后在管理页面继续处理。
@@ -1428,10 +1428,7 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>VS Code 集成</h2>
-          <p>是否在这台机器上使用 VS Code + Codex。</p>
-        </div>
-        <div className="notice-banner warn">
-          如果你需要在这台机器上使用 VS Code，请完成集成。
+          <p>VS Code 集成设置</p>
         </div>
         <div className="button-row">
           <button
@@ -1466,7 +1463,7 @@ export function SetupRoute() {
         </div>
         <div className="completed-card">
           <h3>欢迎，设置已经完成。</h3>
-          <p>你现在可以进入管理页面，继续维护机器人、系统集成和存储清理。</p>
+          <p>你可以在管理页面继续调整设置、查看存储状态。</p>
         </div>
         <div className="button-row">
           <a className="primary-button" href={adminURL}>
@@ -1572,7 +1569,7 @@ export function SetupRoute() {
         <aside className="panel step-rail">
           <div className="step-stage-head">
             <h2>设置流程</h2>
-            <p>可随时回看已完成步骤。</p>
+            <p>共 9 步</p>
           </div>
           <div className="step-list">
             {setupSteps.map((step, index) => {

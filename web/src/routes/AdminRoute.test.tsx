@@ -253,7 +253,7 @@ describe("AdminRoute", () => {
     await user.type(screen.getByLabelText("机器人名称（可选）"), "运营机器人");
     await user.type(screen.getByLabelText("App ID"), "cli_new");
     await user.type(screen.getByLabelText("App Secret"), "secret_new");
-    await user.click(screen.getByRole("button", { name: "验证并保存" }));
+    await user.click(screen.getByRole("button", { name: "连接并验证" }));
 
     expect(await screen.findByRole("heading", { name: "运营机器人" })).toBeInTheDocument();
     expect(await screen.findByText("已完成连接验证。")).toBeInTheDocument();

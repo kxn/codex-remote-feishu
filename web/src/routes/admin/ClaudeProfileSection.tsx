@@ -227,7 +227,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
       <section className="panel">
         <div className="step-stage-head">
           <h2>Claude 配置</h2>
-          <p>管理不同的 Claude 连接配置。</p>
+          <p>Claude 连接配置</p>
         </div>
         <div className="empty-state error">
           <strong>当前还不能读取 Claude 配置</strong>
@@ -251,7 +251,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
       <section className="panel">
         <div className="step-stage-head">
           <h2>Claude 配置</h2>
-          <p>管理不同的 Claude 连接配置。</p>
+          <p>Claude 连接配置</p>
         </div>
         {loadError ? (
           <div className="notice-banner warn">
@@ -294,7 +294,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
                 <strong>新增配置</strong>
                 <span className="robot-tag">新增</span>
               </div>
-              <p>创建一套新的 Claude 连接配置</p>
+              <p>新建配置</p>
             </button>
           </div>
           {renderDetailCard({
@@ -387,7 +387,7 @@ function renderDetailCard(props: DetailCardProps) {
       <section className="panel">
         <div className="step-stage-head">
           <h2>{profileTitle(activeProfile)}</h2>
-          <p>使用这台机器当前可用的 Claude 设置。</p>
+          <p>系统默认的 Claude 连接</p>
         </div>
         {detailNotice ? (
           <div className={`notice-banner ${detailNotice.tone}`}>
@@ -419,8 +419,8 @@ function renderDetailCard(props: DetailCardProps) {
       : profileTitle(activeProfile);
   const description =
     editorMode === "create"
-      ? "填写新的 Claude 连接配置。"
-      : "修改后保存会更新当前配置。";
+      ? "填写连接信息"
+      : "";
 
   return (
     <section className="panel">

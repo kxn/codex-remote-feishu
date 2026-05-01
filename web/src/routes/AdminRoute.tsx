@@ -627,7 +627,7 @@ export function AdminRoute() {
         <section className="panel">
           <div className="step-stage-head">
             <h2>新增机器人</h2>
-            <p>选择扫码创建或手动输入，连接验证通过后会自动加入机器人列表。</p>
+            <p>扫码或手动输入接入飞书应用</p>
           </div>
           <div className="choice-toggle">
             <button
@@ -653,7 +653,7 @@ export function AdminRoute() {
                 <div>
                   <h4 style={{ margin: 0 }}>扫码创建</h4>
                   <p className="support-copy">
-                    请使用飞书扫码完成创建，页面会自动轮询并继续下一步。
+                    使用飞书扫描二维码，页面将自动完成后续操作
                   </p>
                   <div className="scan-frame">
                     {onboardingSession?.qrCodeDataUrl ? (
@@ -778,7 +778,7 @@ export function AdminRoute() {
                   disabled={actionBusy === "create-robot"}
                   onClick={() => void createRobot()}
                 >
-                  验证并保存
+                  连接并验证
                 </button>
               </div>
             </div>
@@ -796,7 +796,7 @@ export function AdminRoute() {
       <section className="panel">
         <div className="step-stage-head">
           <h2>{selectedApp.name || "未命名机器人"}</h2>
-          <p>机器人状态与测试入口。</p>
+          <p>连接状态、权限与测试</p>
         </div>
         <dl className="definition-list">
           <div>
@@ -804,7 +804,7 @@ export function AdminRoute() {
             <dd>{selectedApp.appId || "未填写"}</dd>
           </div>
           <div>
-            <dt>连接状态</dt>
+            <dt>连接</dt>
             <dd>{describeConnectionState(selectedApp)}</dd>
           </div>
           <div>
@@ -898,7 +898,7 @@ export function AdminRoute() {
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、系统集成与本地存储。</p>
+          <p>飞书机器人、系统集成与本地存储</p>
         </header>
         <section className="panel">
           <div className="empty-state">
@@ -915,7 +915,7 @@ export function AdminRoute() {
       <div className="product-page">
         <header className="product-topbar">
           <h1>{versionTitle}</h1>
-          <p>管理机器人、系统集成与本地存储。</p>
+          <p>飞书机器人、系统集成与本地存储</p>
         </header>
         <section className="panel">
           <div className="empty-state error">
@@ -940,13 +940,13 @@ export function AdminRoute() {
     <div className="product-page">
       <header className="product-topbar">
         <h1>{versionTitle}</h1>
-        <p>管理机器人、系统集成与本地存储。</p>
+        <p>飞书机器人、系统集成与本地存储</p>
       </header>
 
       <section className="panel">
         <div className="step-stage-head">
           <h2>机器人管理</h2>
-          <p>查看所有机器人并处理需要关注的状态。</p>
+          <p>已接入的飞书应用</p>
         </div>
         <div className="robot-layout" style={{ marginTop: "1rem" }}>
           <div className="robot-list">
@@ -994,7 +994,7 @@ export function AdminRoute() {
       <section className="panel">
         <div className="step-stage-head">
           <h2>系统集成</h2>
-          <p>统一管理自动运行设置与 VS Code 集成。</p>
+          <p>自动运行与 VS Code 集成</p>
         </div>
         <div className="soft-grid two-column" style={{ marginTop: "1rem" }}>
           <article className="soft-card-v2">
@@ -1057,7 +1057,7 @@ export function AdminRoute() {
       <section className="panel">
         <div className="step-stage-head">
           <h2>存储管理</h2>
-          <p>查看占用并按需清理旧文件。</p>
+          <p>预览文件、图片暂存与日志清理</p>
         </div>
         <div className="soft-grid" style={{ marginTop: "1rem" }}>
           <article className="soft-card-v2">
