@@ -384,6 +384,8 @@ type ExecCommandProgressReasoningRecord struct {
 	Buffer              string
 	BufferSummaryIndex  int
 	LastUpdatedAt       time.Time
+	Revision            int64
+	LastEmittedRevision int64
 }
 
 type DynamicToolProgressGroupRecord struct {

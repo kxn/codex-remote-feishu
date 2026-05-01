@@ -603,7 +603,7 @@ MCP request 卡片当前新增的可视语义：
     - 并把 daemon 侧记录的 active progress `card_start_seq` 前移到当前仍可见窗口的首条持久行，供下一次 patch 继续复用
   - 这条滚动窗口当前不做业务级行内硬截断；只有单条可见行本身就无法放入单卡时，projector 才会按 Feishu transport 预算对这一行做最小必要裁剪，避免整张共享过程卡无法发送
   - gateway 层的 oversized card trim 仍保留为最后一道兜底，但共享过程卡当前不应以它作为主路径
-- `reasoning_summary` 当前进入普通 timeline：verbose 下 Codex reasoning summary 与 Claude thinking 都按真实发生顺序沉淀为过程行；同一 item + summary index 的 delta 原地累计更新，不同 summary index 保留为不同历史行。
+- `reasoning_summary` 当前进入普通 timeline：verbose 下 Codex reasoning summary 与 Claude thinking 都按真实发生顺序沉淀为过程行；同一 item + summary index 的 delta 原地累计更新，不同 summary index 保留为不同历史行。reasoning/thinking delta 会先更新 active progress 内存行并标记 dirty；第一段会立即建卡，之后同一工作中卡因 reasoning/thinking 主动 patch 时按约 1 秒窗口合并。普通工具/文件/搜索等过程事件若本来要 patch，会自然携带最新 reasoning/thinking 行并刷新水位；`reasoning_summary` item completed、assistant 正文开始终结进度卡前，以及 turn completed finalization 前都会强制 flush dirty reasoning，避免最后一段 thinking 丢失。
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
   - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文开始输出时只终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要

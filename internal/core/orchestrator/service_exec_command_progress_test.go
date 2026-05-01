@@ -1260,14 +1260,25 @@ func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
 			"summaryIndex": 1,
 		},
 	})
-	if len(second) != 1 || second[0].ExecCommandProgress == nil {
-		t.Fatalf("expected second reasoning delta event, got %#v", second)
-	}
-	if got := second[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering possible fixes" {
-		t.Fatalf("expected accumulated plain-text reasoning summary, got %#v", second[0].ExecCommandProgress.Timeline)
+	if len(second) != 0 {
+		t.Fatalf("expected second reasoning delta inside throttle window to be coalesced, got %#v", second)
 	}
 	if record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning; record == nil || record.Text != "Considering possible fixes" {
 		t.Fatalf("expected reasoning record to keep accumulated plain-text summary, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
+	}
+
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	now = now.Add(execCommandProgressReasoningFlushInterval)
+	tick := svc.Tick(now)
+	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
+		t.Fatalf("expected tick to flush coalesced reasoning delta after throttle window, got %#v", tick)
+	}
+	progress := tick[0].ExecCommandProgress
+	if progress.MessageID != "om-progress-1" {
+		t.Fatalf("expected tick flush to update existing progress card, got %#v", progress)
+	}
+	if got := progress.Timeline[0].Summary; got != "Considering possible fixes" {
+		t.Fatalf("expected coalesced reasoning summary on tick flush, got %#v", progress.Timeline)
 	}
 }
 
@@ -1331,10 +1342,16 @@ func TestReasoningSummaryProgressKeepsDifferentSummaryIndexesAsTimelineRows(t *t
 			"summaryIndex": 2,
 		},
 	})
-	if len(second) != 1 || second[0].ExecCommandProgress == nil {
-		t.Fatalf("expected second reasoning summary event, got %#v", second)
+	if len(second) != 0 {
+		t.Fatalf("expected second reasoning summary inside throttle window to be coalesced, got %#v", second)
 	}
-	timeline := second[0].ExecCommandProgress.Timeline
+	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	now = now.Add(execCommandProgressReasoningFlushInterval)
+	tick := svc.Tick(now)
+	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
+		t.Fatalf("expected tick to flush second reasoning row, got %#v", tick)
+	}
+	timeline := tick[0].ExecCommandProgress.Timeline
 	if len(timeline) != 2 ||
 		timeline[0].Kind != "reasoning_summary" ||
 		timeline[0].Summary != "Reviewing existing flow" ||
@@ -1391,7 +1408,7 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 		TurnID:   "turn-1",
 		ItemID:   "reasoning-1",
 		ItemKind: "reasoning_summary",
-		Delta:    "**Planning**",
+		Delta:    "Planning",
 		Metadata: map[string]any{
 			"summaryIndex": 1,
 		},
@@ -1400,6 +1417,21 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    " changes",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(coalesced) != 0 {
+		t.Fatalf("expected dirty reasoning delta to be coalesced before ordinary progress, got %#v", coalesced)
+	}
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -1420,7 +1452,7 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 	}
 	if len(progress.Timeline) != 2 ||
 		progress.Timeline[0].Kind != "reasoning_summary" ||
-		progress.Timeline[0].Summary != "Planning" ||
+		progress.Timeline[0].Summary != "Planning changes" ||
 		progress.Timeline[1].Kind != "command_execution" ||
 		progress.Timeline[1].Summary != "npm test" {
 		t.Fatalf("expected reasoning timeline entry to persist before command progress, got %#v", progress.Timeline)
@@ -1488,7 +1520,7 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 		TurnID:   "turn-1",
 		ItemID:   "reasoning-1",
 		ItemKind: "reasoning_summary",
-		Delta:    "**Thinking**",
+		Delta:    "Thinking",
 		Metadata: map[string]any{
 			"summaryIndex": 1,
 		},
@@ -1497,6 +1529,21 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    " about response shape",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(coalesced) != 0 {
+		t.Fatalf("expected dirty reasoning delta before assistant text to be coalesced, got %#v", coalesced)
+	}
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -1519,8 +1566,12 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 		ItemID:   "msg-1",
 		ItemKind: "agent_message",
 		Delta:    "先给你结论。",
-	}); len(events) != 0 {
-		t.Fatalf("expected assistant text delta not to emit extra progress after clearing reasoning entry, got %#v", events)
+	}); len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected assistant text delta to flush dirty reasoning before clearing progress, got %#v", events)
+	} else if progress := events[0].ExecCommandProgress; progress.MessageID != "om-progress-1" ||
+		len(progress.Timeline) != 1 ||
+		progress.Timeline[0].Summary != "Thinking about response shape" {
+		t.Fatalf("expected assistant text delta to flush latest reasoning snapshot, got %#v", progress)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
 		t.Fatalf("expected assistant text delta to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
@@ -1541,7 +1592,7 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 		TurnID:   "turn-1",
 		ItemID:   "reasoning-1",
 		ItemKind: "reasoning_summary",
-		Delta:    "**Planning**",
+		Delta:    "Planning",
 		Metadata: map[string]any{
 			"summaryIndex": 1,
 		},
@@ -1550,6 +1601,21 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    " final answer",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(coalesced) != 0 {
+		t.Fatalf("expected dirty reasoning delta before turn completion to be coalesced, got %#v", coalesced)
+	}
 
 	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
@@ -1574,7 +1640,7 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 	}
 	if len(progress.Timeline) != 1 ||
 		progress.Timeline[0].Kind != "reasoning_summary" ||
-		progress.Timeline[0].Summary != "Planning" ||
+		progress.Timeline[0].Summary != "Planning final answer" ||
 		progress.Timeline[0].Status != "completed" {
 		t.Fatalf("expected reasoning entry to persist and finalize on completion, got %#v", progress.Timeline)
 	}

@@ -60,6 +60,7 @@
 1. 多行过程超过卡片预算时，优先在 projector 层按可见行滚动窗口丢弃最旧历史，并在顶部提示“较早过程已省略，仅保留最近进度”。
 2. 单条可见过程行本身超过 30KB transport 预算时，才允许对这一行做预算裁剪；这不是业务级固定长度摘要规则。
 3. reasoning/thinking 行不再有单独的短截断策略，仍受上述统一卡片预算策略约束。
+4. reasoning/thinking delta 不逐条触发 `message.patch`；同一张工作中卡因 reasoning/thinking 主动更新时按约 1 秒窗口合并，普通高价值过程更新会顺手携带最新 reasoning/thinking 内容，正文开始、reasoning item 结束或 turn 结束前会强制 flush 最后一段内容。
 
 来源：
 

@@ -11,6 +11,7 @@ import (
 )
 
 const execCommandProgressMinInterval = 300 * time.Millisecond
+const execCommandProgressReasoningFlushInterval = time.Second
 
 func (s *Service) handleProcessProgressItemStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	switch strings.TrimSpace(event.ItemKind) {
@@ -41,8 +42,9 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 	}
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
+		events := s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
-		return nil
+		return events
 	case "reasoning_summary":
 		return s.handleReasoningSummaryProgressDelta(instanceID, event)
 	default:
@@ -53,10 +55,13 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 func (s *Service) handleProcessProgressItemCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
+		events := s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		if s.eventCarriesAssistantText(instanceID, event) {
 			s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
 		}
-		return nil
+		return events
+	case "reasoning_summary":
+		return s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 	case "command_execution":
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
 	case "file_change":
@@ -341,6 +346,9 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	}
 	progress.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	progress.LastEmittedAt = s.now()
+	if progress.Reasoning != nil {
+		progress.Reasoning.LastEmittedRevision = progress.Reasoning.Revision
+	}
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {

@@ -977,6 +977,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		}
 		events = append(events, s.maybeDispatchPendingAutoWhip(surface, now)...)
 		events = append(events, s.maybeDispatchPendingAutoContinue(surface, now)...)
+		events = append(events, s.tickExecCommandProgressReasoning(surface, now)...)
 	}
 	return s.filterEventsForSurfaceVisibility(events)
 }

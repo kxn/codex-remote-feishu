@@ -39,7 +39,7 @@
 1. `ExecCommandProgress` 增加了结构化 `Blocks`，其中 exploration block 可表达 `running / completed / failed` 与多条 `read / list / search` 行。
 2. `command_execution` 会把最稳定的一批命令归一进 exploration block，包括 `cat / bat / head / tail / sed / ls / rg / grep`。
 3. `dynamic_tool_call.read` 已接入同一套 exploration block，并继续沿用后端语义化而非前端猜字符串。
-4. Feishu 过程卡优先渲染 exploration block；Codex reasoning summary 与 Claude thinking 会作为 `reasoning_summary` timeline 行沉淀在同一张“工作中”卡里，不再作为底部瞬时状态，也不会因为后续普通进度或 assistant 正文开始而被撤回。
+4. Feishu 过程卡优先渲染 exploration block；Codex reasoning summary 与 Claude thinking 会作为 `reasoning_summary` timeline 行沉淀在同一张“工作中”卡里，不再作为底部瞬时状态，也不会因为后续普通进度或 assistant 正文开始而被撤回。reasoning/thinking delta 的主动卡片更新按约 1 秒合并；普通进度更新会携带最新 thinking，reasoning item 结束、assistant 正文开始和 turn 结束前会 flush 最后一段内容。
 5. Feishu projector 当前按“每个可见行一个 markdown element”出站共享过程卡，而不是把整段 timeline 压成单个 markdown body，避免某一行的 inline 语法把后续行一起污染。
 6. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
 7. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。

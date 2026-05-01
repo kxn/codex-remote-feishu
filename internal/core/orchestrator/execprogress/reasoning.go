@@ -43,6 +43,7 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 	record.Text = text
 	record.VisibleSummaryIndex = summaryIndex
 	record.LastUpdatedAt = now
+	record.Revision++
 	UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  record.ItemID,
 		Kind:    "reasoning_summary",
