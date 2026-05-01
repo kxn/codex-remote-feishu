@@ -30,7 +30,7 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
 	}
 	if request.PendingDispatchCommandID != "" {
-		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待本地 Codex 处理。")
+		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
 	}
 	if requestAction.RequestRevision != 0 && requestAction.RequestRevision != request.CardRevision {
 		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
@@ -65,7 +65,7 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
 	}
 	if request.PendingDispatchCommandID != "" {
-		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待本地 Codex 处理。")
+		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
 	}
 	if requestControl.RequestRevision != 0 && requestControl.RequestRevision != request.CardRevision {
 		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
@@ -88,7 +88,7 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 			request,
 			action,
 			buildMCPElicitationPayload("cancel", nil, promptMCPElicitationMeta(request.Prompt, nil)),
-			"已提交取消请求，等待 Codex 继续。",
+			"已提交取消请求，"+control.RequestWaitingContinueText(requestPromptBackend(request))+"。",
 		)
 	default:
 		return notice(surface, "request_invalid", "这个请求控制动作当前不支持。")
@@ -110,7 +110,8 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	if event.RequestPrompt != nil {
 		promptType = string(event.RequestPrompt.Type)
 	}
-	definition, unsupportedText := buildRequestPromptPresentationDefinition(event.RequestPrompt, event.Metadata)
+	backend := s.surfaceBackend(surface)
+	definition, unsupportedText := buildRequestPromptPresentationDefinition(backend, event.RequestPrompt, event.Metadata)
 	requestType := normalizeRequestType(firstNonEmpty(definition.RequestType, promptType, metadataString(event.Metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
@@ -128,6 +129,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		RequestID:    event.RequestID,
 		RequestType:  requestType,
 		SemanticKind: definition.SemanticKind,
+		Backend:      backend,
 		Prompt:       event.RequestPrompt,
 		InstanceID:   instanceID,
 		ThreadID:     event.ThreadID,
@@ -493,22 +495,23 @@ func requestPromptQuestionsComplete(request *state.RequestPromptRecord) bool {
 }
 
 func requestPromptPendingDispatchStatusText(request *state.RequestPromptRecord) string {
+	waitingText := requestWaitingContinueText(requestPromptBackend(request))
 	if request == nil {
-		return "已提交当前请求，等待 Codex 继续。"
+		return "已提交当前请求，" + waitingText + "。"
 	}
 	switch requestPromptSemanticKind(request) {
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork, control.RequestSemanticApproval:
-		return "已提交当前确认，等待 Codex 继续。"
+		return "已提交当前确认，" + waitingText + "。"
 	case control.RequestSemanticPermissionsRequestApproval:
-		return "已提交授权决定，等待 Codex 继续。"
+		return "已提交授权决定，" + waitingText + "。"
 	case control.RequestSemanticMCPServerElicitationForm:
-		return "已提交当前表单，等待 Codex 继续。"
+		return "已提交当前表单，" + waitingText + "。"
 	case control.RequestSemanticToolCallback:
-		return "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，等待 Codex 继续。"
+		return "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，" + waitingText + "。"
 	case control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitation:
-		return "已提交当前请求，等待 Codex 继续。"
+		return "已提交当前请求，" + waitingText + "。"
 	default:
-		return "已提交当前答案，等待 Codex 继续。"
+		return "已提交当前答案，" + waitingText + "。"
 	}
 }
 
@@ -561,6 +564,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		RequestID:            record.RequestID,
 		RequestType:          record.RequestType,
 		SemanticKind:         requestPromptSemanticKind(record),
+		Backend:              requestPromptBackend(record),
 		RequestRevision:      record.CardRevision,
 		Title:                record.Title,
 		DetourLabel:          s.requestDetourLabel(record),

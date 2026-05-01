@@ -63,6 +63,58 @@ func TestApprovalCommandRequestPromptAddsCancelOption(t *testing.T) {
 	}
 }
 
+func TestApprovalCommandRequestPromptUsesClaudeBranding(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-claude-1",
+		DisplayName:             "claude-droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Backend:                 agentproto.BackendClaude,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-claude-1"})
+	svc.ApplyAgentEvent("inst-claude-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	events := svc.ApplyAgentEvent("inst-claude-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-cmd-1",
+		Metadata: map[string]any{
+			"requestType": "approval",
+			"requestKind": "approval_command",
+			"title":       "需要确认执行命令",
+		},
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected one request prompt event, got %#v", events)
+	}
+	prompt := requestPromptFromEvent(t, events[0])
+	if !strings.Contains(prompt.HintText, "告诉 Claude 怎么改") {
+		t.Fatalf("expected Claude-branded hint, got %#v", prompt)
+	}
+	if len(prompt.Options) == 0 || prompt.Options[len(prompt.Options)-1].Label != "告诉 Claude 怎么改" {
+		t.Fatalf("expected Claude-branded feedback option, got %#v", prompt.Options)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-cmd-1"]
+	if record == nil || record.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected pending request to retain Claude backend, got %#v", record)
+	}
+}
+
 func TestRespondRequestCancelDispatchesDecision(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

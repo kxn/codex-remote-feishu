@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -166,7 +167,7 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 	return out
 }
 
-func buildApprovalRequestOptions(semanticKind string, metadata map[string]any) []state.RequestPromptOptionRecord {
+func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string, metadata map[string]any) []state.RequestPromptOptionRecord {
 	var options []state.RequestPromptOptionRecord
 	seen := map[string]bool{}
 	semanticKind = control.NormalizeRequestSemanticKind(semanticKind, "approval")
@@ -191,7 +192,7 @@ func buildApprovalRequestOptions(semanticKind string, metadata map[string]any) [
 			case "cancel":
 				label = "取消"
 			case "captureFeedback":
-				label = "告诉 Codex 怎么改"
+				label = requestFeedbackActionLabel(backend)
 			default:
 				return
 			}
@@ -226,7 +227,7 @@ func buildApprovalRequestOptions(semanticKind string, metadata map[string]any) [
 			add("cancel", "取消", "default")
 		}
 	}
-	add("captureFeedback", "告诉 Codex 怎么改", "default")
+	add("captureFeedback", requestFeedbackActionLabel(backend), "default")
 	return options
 }
 
@@ -420,6 +421,7 @@ func metadataRequestOptions(metadata map[string]any) []state.RequestPromptOption
 }
 
 func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
+	waitingText := requestWaitingContinueText(requestPromptBackend(request))
 	if request == nil {
 		return "当前有待处理请求。"
 	}
@@ -439,7 +441,7 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	case control.RequestSemanticMCPServerElicitation, control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL:
 		return "当前有待处理的 MCP 请求。请先在卡片上填写返回内容、提交当前答案，或取消请求。"
 	case control.RequestSemanticToolCallback:
-		return "当前有工具回调正在自动上报 unsupported 结果。请等待 Codex 继续，或使用 /stop 结束当前 turn。"
+		return "当前有工具回调正在自动上报 unsupported 结果。请" + waitingText + "，或使用 /stop 结束当前 turn。"
 	default:
 		return "当前有待处理请求。这个请求类型暂时不能在飞书端直接处理，请先回到本地处理或等待后续支持。"
 	}

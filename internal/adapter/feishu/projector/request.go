@@ -49,7 +49,7 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 		options = []control.RequestPromptOption{
 			{OptionID: "accept", Label: "允许一次", Style: "primary"},
 			{OptionID: "decline", Label: "拒绝", Style: "default"},
-			{OptionID: "captureFeedback", Label: "告诉 Codex 怎么改", Style: "default"},
+			{OptionID: "captureFeedback", Label: control.RequestFeedbackActionLabel(prompt.Backend), Style: "default"},
 		}
 	}
 	actions := make([]map[string]any, 0, len(options))
@@ -65,7 +65,7 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 	if group := cardButtonGroupElement(actions); len(group) != 0 {
 		elements = append(elements, group)
 	}
-	if hint := requestPromptHintMarkdown(prompt, defaultApprovalRequestHint(options)); hint != "" {
+	if hint := requestPromptHintMarkdown(prompt, defaultApprovalRequestHint(prompt, options)); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": hint,
@@ -364,9 +364,9 @@ func requestPromptHintMarkdown(prompt control.FeishuRequestView, fallback string
 	return strings.TrimSpace(fallback)
 }
 
-func defaultApprovalRequestHint(options []control.RequestPromptOption) string {
+func defaultApprovalRequestHint(prompt control.FeishuRequestView, options []control.RequestPromptOption) string {
 	if requestPromptContainsOption(options, "captureFeedback") {
-		return "如果想拒绝并补充处理意见，请点击“告诉 Codex 怎么改”后再发送下一条文字。"
+		return "如果想拒绝并补充处理意见，请点击“" + control.RequestFeedbackActionLabel(prompt.Backend) + "”后再发送下一条文字。"
 	}
 	return "这个确认只影响当前这一次请求。"
 }

@@ -15,12 +15,12 @@ import (
 
 const mcpElicitationJSONFieldID = "__mcp_elicitation_json"
 
-func buildPermissionsRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+func buildPermissionsRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	body := strings.TrimSpace(firstNonEmpty(
 		promptBody(prompt),
 		metadataString(metadata, "body"),
 		metadataString(metadata, "reason"),
-		"本地 Codex 正在等待授予附加权限。",
+		requestLocalBackendDisplayName(backend)+" 正在等待授予附加权限。",
 	))
 	sections := appendRequestPromptSection(nil, "", body)
 	if reason := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
@@ -68,7 +68,7 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 	}
 }
 
-func buildMCPElicitationSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	mode := mcpElicitationMode(prompt, metadata)
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
@@ -89,7 +89,7 @@ func buildMCPElicitationSections(prompt *agentproto.RequestPrompt, metadata map[
 		lines = append(lines, "请依次填写需要返回给 MCP server 的内容，当前题提交后会自动继续。")
 	}
 	if len(lines) == 0 {
-		lines = append(lines, "本地 Codex 正在等待 MCP server 返回更多信息。")
+		lines = append(lines, requestLocalBackendDisplayName(backend)+" 正在等待 MCP server 返回更多信息。")
 	}
 	sections = appendRequestPromptSection(sections, "", lines...)
 	return sections

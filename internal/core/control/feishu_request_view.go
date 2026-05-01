@@ -3,6 +3,7 @@ package control
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
@@ -12,6 +13,7 @@ type FeishuRequestView struct {
 	RequestID            string
 	RequestType          string
 	SemanticKind         string
+	Backend              agentproto.Backend
 	RequestRevision      int
 	Title                string
 	DetourLabel          string
@@ -41,6 +43,7 @@ func NormalizeFeishuRequestView(view FeishuRequestView) FeishuRequestView {
 	view.DetourLabel = strings.TrimSpace(view.DetourLabel)
 	view.ThreadID = strings.TrimSpace(view.ThreadID)
 	view.ThreadTitle = strings.TrimSpace(view.ThreadTitle)
+	view.Backend = agentproto.NormalizeBackend(view.Backend)
 	view.HintText = strings.TrimSpace(view.HintText)
 	view.StatusText = strings.TrimSpace(view.StatusText)
 	return view

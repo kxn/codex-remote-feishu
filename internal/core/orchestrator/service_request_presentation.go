@@ -18,7 +18,7 @@ type requestPromptPresentationDefinition struct {
 	HintText     string
 }
 
-func buildRequestPromptPresentationDefinition(prompt *agentproto.RequestPrompt, metadata map[string]any) (requestPromptPresentationDefinition, string) {
+func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) (requestPromptPresentationDefinition, string) {
 	requestType := normalizeRequestType(firstNonEmpty(promptRequestType(prompt), metadataString(metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
@@ -31,49 +31,49 @@ func buildRequestPromptPresentationDefinition(prompt *agentproto.RequestPrompt, 
 	switch semanticKind {
 	case control.RequestSemanticApprovalCommand:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认执行命令", "需要处理请求", "需要确认")
-		definition.Sections = buildApprovalCommandRequestSections(prompt, metadata)
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Sections = buildApprovalCommandRequestSections(backend, prompt, metadata)
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalFileChange:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认修改文件", "需要处理请求", "需要确认")
-		definition.Sections = buildApprovalFileChangeRequestSections(prompt, metadata)
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Sections = buildApprovalFileChangeRequestSections(backend, prompt, metadata)
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalNetwork:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认网络访问", "需要处理请求", "需要确认")
-		definition.Sections = buildApprovalNetworkRequestSections(prompt, metadata)
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Sections = buildApprovalNetworkRequestSections(backend, prompt, metadata)
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalCanUseTool:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认工具调用", "需要处理请求", "需要确认")
-		definition.Sections = buildApprovalCanUseToolRequestSections(prompt, metadata)
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Sections = buildApprovalCanUseToolRequestSections(backend, prompt, metadata)
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticPlanConfirmation:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认计划", "需要处理请求", "需要确认")
 		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "当前计划需要你确认后才能继续。")
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticRequestUserInput:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要补充输入", "需要处理请求")
-		definition.Sections = buildRequestUserInputSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你补充参数或说明。")
+		definition.Sections = buildRequestUserInputSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你补充参数或说明。")
 		definition.Questions = metadataRequestQuestions(metadata)
 		if len(definition.Questions) == 0 {
 			return definition, "收到缺少问题定义的 request_user_input 请求，当前无法在飞书端处理。"
 		}
 	case control.RequestSemanticPermissionsRequestApproval:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要授予权限", "需要处理请求")
-		definition.Sections = buildPermissionsRequestSections(prompt, metadata)
+		definition.Sections = buildPermissionsRequestSections(backend, prompt, metadata)
 		definition.Options = buildPermissionsRequestOptions()
 		definition.HintText = "你可以选择仅授权当前这一次，或在当前会话内持续授权。"
 	case control.RequestSemanticMCPServerElicitationForm:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
-		definition.Sections = buildMCPElicitationSections(prompt, metadata)
+		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)
 		definition.Questions = buildMCPElicitationQuestions(prompt, metadata)
 		definition.Options = buildMCPElicitationOptions(prompt, metadata, definition.Questions)
 	case control.RequestSemanticMCPServerElicitationURL:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
-		definition.Sections = buildMCPElicitationSections(prompt, metadata)
+		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)
 		definition.Options = buildMCPElicitationOptions(prompt, metadata, nil)
 		definition.HintText = "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。"
 	case control.RequestSemanticToolCallback:
@@ -81,9 +81,9 @@ func buildRequestPromptPresentationDefinition(prompt *agentproto.RequestPrompt, 
 		definition.Sections = buildToolCallbackRequestSections(prompt, metadata)
 	default:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认", "需要处理请求")
-		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你的确认。")
-		definition.Options = buildApprovalRequestOptions(semanticKind, metadata)
-		definition.HintText = approvalRequestHintText(semanticKind, definition.Options)
+		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你的确认。")
+		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
+		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	}
 	return definition, ""
 }
@@ -171,8 +171,8 @@ func normalizeRequestSemanticToken(value string) string {
 	return value
 }
 
-func buildApprovalCommandRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你确认执行命令。")
+func buildApprovalCommandRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认执行命令。")
 	if cwd := strings.TrimSpace(metadataString(metadata, "cwd")); cwd != "" {
 		sections = appendRequestPromptSection(sections, "工作目录", cwd)
 	}
@@ -182,16 +182,16 @@ func buildApprovalCommandRequestSections(prompt *agentproto.RequestPrompt, metad
 	return sections
 }
 
-func buildApprovalFileChangeRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你确认文件修改。")
+func buildApprovalFileChangeRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认文件修改。")
 	if grantRoot := strings.TrimSpace(metadataString(metadata, "grantRoot")); grantRoot != "" {
 		sections = appendRequestPromptSection(sections, "写入范围", grantRoot)
 	}
 	return sections
 }
 
-func buildApprovalNetworkRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "本地 Codex 正在等待你确认网络访问。")
+func buildApprovalNetworkRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认网络访问。")
 	network := requestMetadataMap(metadata["networkApprovalContext"])
 	lines := make([]string, 0, 3)
 	if host := strings.TrimSpace(firstNonEmpty(lookupStringFromAny(network["host"]), lookupStringFromAny(network["hostname"]))); host != "" {
@@ -209,8 +209,8 @@ func buildApprovalNetworkRequestSections(prompt *agentproto.RequestPrompt, metad
 	return sections
 }
 
-func buildApprovalCanUseToolRequestSections(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalCommandRequestSections(prompt, metadata)
+func buildApprovalCanUseToolRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := buildApprovalCommandRequestSections(backend, prompt, metadata)
 	if toolName := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "toolName"), metadataString(metadata, "tool_name"))); toolName != "" {
 		sections = appendRequestPromptSection(sections, "工具", toolName)
 	}
@@ -268,7 +268,7 @@ func requestPromptTitle(current, fallback string, genericTitles ...string) strin
 	return current
 }
 
-func approvalRequestHintText(semanticKind string, options []state.RequestPromptOptionRecord) string {
+func approvalRequestHintText(backend agentproto.Backend, semanticKind string, options []state.RequestPromptOptionRecord) string {
 	captureFeedback := false
 	for _, option := range options {
 		if control.NormalizeRequestOptionID(option.OptionID) == "captureFeedback" {
@@ -279,32 +279,32 @@ func approvalRequestHintText(semanticKind string, options []state.RequestPromptO
 	switch semanticKind {
 	case control.RequestSemanticApprovalCommand:
 		if captureFeedback {
-			return "如果命令或参数不符合预期，请点击“告诉 Codex 怎么改”；如果只是当前不想执行，可以直接拒绝或取消。"
+			return "如果命令或参数不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果只是当前不想执行，可以直接拒绝或取消。"
 		}
 		return "请确认这条命令是否可以继续执行。"
 	case control.RequestSemanticApprovalFileChange:
 		if captureFeedback {
-			return "如果写入范围或改动方向不符合预期，请点击“告诉 Codex 怎么改”；如果不允许写入，直接拒绝即可。"
+			return "如果写入范围或改动方向不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果不允许写入，直接拒绝即可。"
 		}
 		return "请确认这次文件修改是否可以继续。"
 	case control.RequestSemanticApprovalNetwork:
 		if captureFeedback {
-			return "如果联网目标或访问方式不符合预期，请点击“告诉 Codex 怎么改”；如果不允许联网，直接拒绝即可。"
+			return "如果联网目标或访问方式不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果不允许联网，直接拒绝即可。"
 		}
 		return "请确认这次网络访问是否可以继续。"
 	case control.RequestSemanticApprovalCanUseTool:
 		if captureFeedback {
-			return "如果工具调用范围或权限建议不符合预期，请点击“告诉 Codex 怎么改”；如果不允许本次工具调用，直接拒绝即可。"
+			return "如果工具调用范围或权限建议不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果不允许本次工具调用，直接拒绝即可。"
 		}
 		return "允许后会继续当前工具调用；拒绝只会拒绝这次工具调用。"
 	case control.RequestSemanticPlanConfirmation:
 		if captureFeedback {
-			return "批准会继续执行当前计划；拒绝会停止当前 turn。如需修改计划，请点击“告诉 Codex 怎么改”。"
+			return "批准会继续执行当前计划；拒绝会停止当前 turn。如需修改计划，请点击“" + requestFeedbackActionLabel(backend) + "”。"
 		}
 		return "批准会继续执行当前计划；拒绝会停止当前 turn。"
 	default:
 		if captureFeedback {
-			return "如果想拒绝并补充处理意见，请点击“告诉 Codex 怎么改”后再发送下一条文字。"
+			return "如果想拒绝并补充处理意见，请点击“" + requestFeedbackActionLabel(backend) + "”后再发送下一条文字。"
 		}
 		return "这个确认只影响当前这一次请求。"
 	}

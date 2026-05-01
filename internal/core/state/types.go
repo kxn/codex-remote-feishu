@@ -533,6 +533,7 @@ type RequestPromptRecord struct {
 	RequestID                string
 	RequestType              string
 	SemanticKind             string
+	Backend                  agentproto.Backend
 	Prompt                   *agentproto.RequestPrompt
 	InstanceID               string
 	ThreadID                 string

@@ -18,6 +18,15 @@ func NormalizeBackend(value Backend) Backend {
 	}
 }
 
+func BackendDisplayName(backend Backend) string {
+	switch NormalizeBackend(backend) {
+	case BackendClaude:
+		return "Claude"
+	default:
+		return "Codex"
+	}
+}
+
 func DefaultCapabilitiesForBackend(backend Backend) Capabilities {
 	switch NormalizeBackend(backend) {
 	case BackendClaude:

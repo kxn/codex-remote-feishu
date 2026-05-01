@@ -820,18 +820,19 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 		RequestID:    "req-1",
 		RequestType:  "approval",
 		SemanticKind: control.RequestSemanticApprovalCommand,
+		Backend:      "claude",
 		Title:        "需要确认",
 		ThreadID:     "thread-1",
 		ThreadTitle:  "droid · 修复登录流程",
-		HintText:     "如果命令或参数不符合预期，请点击“告诉 Codex 怎么改”；如果只是当前不想执行，可以直接拒绝或取消。",
+		HintText:     "如果命令或参数不符合预期，请点击“告诉 Claude 怎么改”；如果只是当前不想执行，可以直接拒绝或取消。",
 		Sections: []control.FeishuCardTextSection{{
-			Lines: []string{"本地 Codex 想执行：", "```text", "git push", "```"},
+			Lines: []string{"本地 Claude 想执行：", "```text", "git push", "```"},
 		}},
 		Options: []control.RequestPromptOption{
 			{OptionID: "accept", Label: "允许执行", Style: "primary"},
 			{OptionID: "acceptForSession", Label: "本会话允许", Style: "default"},
 			{OptionID: "decline", Label: "拒绝", Style: "default"},
-			{OptionID: "captureFeedback", Label: "告诉 Codex 怎么改", Style: "default"},
+			{OptionID: "captureFeedback", Label: "告诉 Claude 怎么改", Style: "default"},
 		},
 	})
 	event.SourceMessageID = "om-source-1"
@@ -857,7 +858,7 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	if got := plainTextContent(ops[0].CardElements[0]); !containsAll(got, "当前会话：droid · 修复登录流程") {
 		t.Fatalf("unexpected thread section: %#v", ops[0].CardElements[0])
 	}
-	if got := plainTextContent(ops[0].CardElements[1]); !containsAll(got, "本地 Codex 想执行：", "git push", "```text") {
+	if got := plainTextContent(ops[0].CardElements[1]); !containsAll(got, "本地 Claude 想执行：", "git push", "```text") {
 		t.Fatalf("unexpected request section: %#v", ops[0].CardElements[1])
 	}
 	actionRow := cardElementButtons(t, ops[0].CardElements[2])
@@ -891,7 +892,7 @@ func TestProjectRequestPromptAsCard(t *testing.T) {
 	if got := plainTextContent(renderedElements[0]); !containsAll(got, "当前会话：droid · 修复登录流程") {
 		t.Fatalf("unexpected rendered thread section: %#v", renderedElements[0])
 	}
-	if got := plainTextContent(renderedElements[1]); !containsAll(got, "本地 Codex 想执行：", "git push", "```text") {
+	if got := plainTextContent(renderedElements[1]); !containsAll(got, "本地 Claude 想执行：", "git push", "```text") {
 		t.Fatalf("unexpected rendered request section: %#v", renderedElements[1])
 	}
 	renderedButtons := renderedColumnButtons(t, renderedElements[2])

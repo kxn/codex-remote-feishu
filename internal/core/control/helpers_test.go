@@ -20,6 +20,15 @@ func TestNormalizeRequestOptionID(t *testing.T) {
 	}
 }
 
+func TestRequestFeedbackActionLabel(t *testing.T) {
+	if got := RequestFeedbackActionLabel("codex"); got != "告诉 Codex 怎么改" {
+		t.Fatalf("codex feedback label = %q", got)
+	}
+	if got := RequestFeedbackActionLabel("claude"); got != "告诉 Claude 怎么改" {
+		t.Fatalf("claude feedback label = %q", got)
+	}
+}
+
 func TestShortenThreadID(t *testing.T) {
 	tests := []struct {
 		input string

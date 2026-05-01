@@ -3,6 +3,7 @@ package control
 import (
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
@@ -20,8 +21,9 @@ func TestFrontstageOwnerCardNormalizeMatrix(t *testing.T) {
 			name: "approval waiting dispatch seals",
 			gotPhase: func() frontstagecontract.Phase {
 				view := NormalizeFeishuRequestView(FeishuRequestView{
+					Backend:    agentproto.BackendClaude,
 					Phase:      frontstagecontract.PhaseWaitingDispatch,
-					StatusText: "已提交当前请求，等待 Codex 继续。",
+					StatusText: "已提交当前请求，等待 Claude 继续。",
 				})
 				if view.ActionPolicy != frontstagecontract.ActionPolicyReadOnly || !view.Sealed {
 					t.Fatalf("unexpected normalized waiting request: %#v", view)
