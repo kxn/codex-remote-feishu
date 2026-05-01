@@ -24,13 +24,21 @@ type ClientCallbacks struct {
 	OnError   func(context.Context, agentproto.ErrorInfo) error
 }
 
+type relayConn interface {
+	ReadMessage() (int, []byte, error)
+	WriteMessage(int, []byte) error
+	Close() error
+}
+
+type dialRelayConnFunc func(context.Context, string, http.Header) (relayConn, error)
+
 type Client struct {
 	url       string
 	hello     agentproto.Hello
 	callbacks ClientCallbacks
 
 	mu      sync.RWMutex
-	conn    *websocket.Conn
+	conn    relayConn
 	epoch   uint64
 	closed  chan struct{}
 	closeMu sync.Once
@@ -43,7 +51,8 @@ type Client struct {
 	outboundReady chan struct{}
 	outboundState outboundState
 
-	rawLogger *debuglog.RawLogger
+	dialRelayConn dialRelayConnFunc
+	rawLogger     *debuglog.RawLogger
 }
 
 type queuedEnvelope struct {
@@ -84,9 +93,18 @@ func newClientWithQueueSizes(url string, hello agentproto.Hello, callbacks Clien
 		controlMax:    controlCapacity,
 		dataMax:       dataCapacity,
 		outboundReady: make(chan struct{}, 1),
+		dialRelayConn: defaultDialRelayConn,
 	}
 	close(client.outboundState.ensureIdleLocked())
 	return client
+}
+
+func defaultDialRelayConn(ctx context.Context, url string, header http.Header) (relayConn, error) {
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, url, header)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
@@ -224,7 +242,7 @@ func (c *Client) RunOnce(ctx context.Context) error {
 	connectionEpoch := atomic.AddUint64(&c.epoch, 1)
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, c.url, http.Header{})
+	conn, err := c.dialRelayConn(ctx, c.url, http.Header{})
 	if err != nil {
 		return err
 	}

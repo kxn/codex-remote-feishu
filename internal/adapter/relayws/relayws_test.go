@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -649,108 +650,107 @@ func TestClientSendsStructuredRejectedAckAndKeepsConnection(t *testing.T) {
 }
 
 func TestClientCommandAckRetriesAfterWriteFailureOnReconnect(t *testing.T) {
-	helloCh := make(chan agentproto.Hello, 2)
-	ackCh := make(chan agentproto.CommandAck, 2)
-	commandStartCh := make(chan struct{}, 1)
-	commandReleaseCh := make(chan struct{})
-	connectionMetaCh := make(chan ConnectionMeta, 2)
-
-	server := NewServer(ServerCallbacks{
-		OnHello: func(_ context.Context, meta ConnectionMeta, hello agentproto.Hello) {
-			connectionMetaCh <- meta
-			helloCh <- hello
-		},
-		OnCommandAck: func(_ context.Context, _ ConnectionMeta, _ string, ack agentproto.CommandAck) {
-			ackCh <- ack
-		},
-	})
-	defer server.Close()
-
-	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		server.ServeHTTP(w, r)
-	}))
-	defer httpServer.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
-	client := NewClient(wsURL, agentproto.Hello{
+	client := newClientWithQueueSizes("ws://relay.test/ws/agent", agentproto.Hello{
 		Protocol: agentproto.WireProtocol,
 		Instance: agentproto.InstanceHello{
 			InstanceID: "inst-retry-ack",
 		},
-	}, ClientCallbacks{
-		OnCommand: func(_ context.Context, command agentproto.Command) error {
-			if command.CommandID != "cmd-retry-ack" {
-				return nil
-			}
-			select {
-			case commandStartCh <- struct{}{}:
-			default:
-			}
-			<-commandReleaseCh
-			return nil
-		},
-	})
+	}, ClientCallbacks{}, 4, 4)
+
+	firstConn := newStubRelayConn(t)
+	firstConn.readErr = errors.New("first connection closed")
+	firstConn.writeErrAtCall = 2 // hello succeeds; ack write fails
+	secondConn := newStubRelayConn(t)
+	secondConn.readErr = context.Canceled
+
+	dialCalls := make(chan int, 4)
+	var dialCount atomic.Int32
+	client.dialRelayConn = func(ctx context.Context, _ string, _ http.Header) (relayConn, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		call := int(dialCount.Add(1))
+		dialCalls <- call
+		switch call {
+		case 1:
+			return firstConn, nil
+		case 2:
+			return secondConn, nil
+		default:
+			return nil, context.Canceled
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	runErrCh := make(chan error, 1)
 	go func() {
-		_ = client.Run(ctx)
+		runErrCh <- client.Run(ctx)
 	}()
 	defer client.Close()
 
 	select {
-	case hello := <-helloCh:
-		if hello.Instance.InstanceID != "inst-retry-ack" {
-			t.Fatalf("unexpected hello: %#v", hello)
+	case call := <-dialCalls:
+		if call != 1 {
+			t.Fatalf("expected first dial call, got %d", call)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for initial hello")
+		t.Fatal("timed out waiting for first dial")
 	}
 
-	var firstMeta ConnectionMeta
-	select {
-	case firstMeta = <-connectionMetaCh:
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for initial connection meta")
-	}
-
-	if err := server.SendCommand("inst-retry-ack", agentproto.Command{
-		CommandID: "cmd-retry-ack",
-		Kind:      agentproto.CommandThreadsRefresh,
-	}); err != nil {
-		t.Fatalf("send command: %v", err)
+	if err := client.SendCommandAck(agentproto.CommandAck{CommandID: "cmd-retry-ack", Accepted: true}); err != nil {
+		t.Fatalf("SendCommandAck: %v", err)
 	}
 
 	select {
-	case <-commandStartCh:
+	case <-dialCalls:
 	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for command callback")
+		t.Fatal("timed out waiting for reconnect dial")
 	}
 
-	if !server.CloseConnection("inst-retry-ack", firstMeta.ConnectionID) {
-		t.Fatal("expected targeted close to succeed")
-	}
-	close(commandReleaseCh)
-
-	var secondMeta ConnectionMeta
-	for secondMeta.ConnectionID == 0 || secondMeta.ConnectionID == firstMeta.ConnectionID {
-		select {
-		case hello := <-helloCh:
-			if hello.Instance.InstanceID != "inst-retry-ack" {
-				t.Fatalf("unexpected reconnect hello: %#v", hello)
-			}
-		case secondMeta = <-connectionMetaCh:
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for reconnect")
-		}
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer drainCancel()
+	if err := client.WaitForOutboundIdle(drainCtx); err != nil {
+		t.Fatalf("WaitForOutboundIdle: %v", err)
 	}
 
+	cancel()
 	select {
-	case ack := <-ackCh:
-		if ack.CommandID != "cmd-retry-ack" || !ack.Accepted {
-			t.Fatalf("unexpected ack after reconnect: %#v", ack)
+	case err := <-runErrCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("client run returned %v, want context.Canceled", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for command ack after reconnect")
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for client shutdown")
+	}
+
+	firstConn.mu.Lock()
+	firstWrites := append([][]byte(nil), firstConn.writes...)
+	firstConn.mu.Unlock()
+	secondConn.mu.Lock()
+	secondWrites := append([][]byte(nil), secondConn.writes...)
+	secondConn.mu.Unlock()
+
+	if len(firstWrites) != 1 {
+		t.Fatalf("expected first connection to persist only hello before failing ack write, got %d writes", len(firstWrites))
+	}
+	if envelopeTypeFromPayload(t, firstWrites[0]) != agentproto.EnvelopeHello {
+		t.Fatalf("expected first connection first write to be hello, got %s", envelopeTypeFromPayload(t, firstWrites[0]))
+	}
+	if len(secondWrites) != 2 {
+		t.Fatalf("expected second connection to write hello and retried ack, got %d writes", len(secondWrites))
+	}
+	if envelopeTypeFromPayload(t, secondWrites[0]) != agentproto.EnvelopeHello {
+		t.Fatalf("expected second connection first write to be hello, got %s", envelopeTypeFromPayload(t, secondWrites[0]))
+	}
+	if envelopeTypeFromPayload(t, secondWrites[1]) != agentproto.EnvelopeCommandAck {
+		t.Fatalf("expected second connection second write to be command ack, got %s", envelopeTypeFromPayload(t, secondWrites[1]))
+	}
+	ack := mustCommandAckFromPayload(t, secondWrites[1])
+	if ack.CommandID != "cmd-retry-ack" || !ack.Accepted {
+		t.Fatalf("unexpected retried command ack: %#v", ack)
 	}
 }
 
@@ -818,6 +818,86 @@ func TestServerSendsWelcomeBeforeOnHelloCommand(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for command callback")
 	}
+}
+
+type stubRelayConn struct {
+	t              *testing.T
+	mu             sync.Mutex
+	writes         [][]byte
+	writeCalls     int
+	writeErrAtCall int
+	writeErr       error
+	readErr        error
+	readBlocks     bool
+	readReady      chan struct{}
+	closed         chan struct{}
+}
+
+func newStubRelayConn(t *testing.T) *stubRelayConn {
+	t.Helper()
+	return &stubRelayConn{
+		t:       t,
+		readErr: context.Canceled,
+		closed:  make(chan struct{}),
+	}
+}
+
+func (c *stubRelayConn) WriteMessage(_ int, payload []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writeCalls++
+	if c.writeErrAtCall > 0 && c.writeCalls == c.writeErrAtCall {
+		if c.writeErr != nil {
+			return c.writeErr
+		}
+		return errors.New("stub write failed")
+	}
+	c.writes = append(c.writes, append([]byte(nil), payload...))
+	return nil
+}
+
+func (c *stubRelayConn) ReadMessage() (int, []byte, error) {
+	if c.readBlocks {
+		select {
+		case <-c.closed:
+			return 0, nil, context.Canceled
+		case <-c.readReady:
+		}
+	}
+	if c.readErr == nil {
+		return 0, nil, context.Canceled
+	}
+	return 0, nil, c.readErr
+}
+
+func (c *stubRelayConn) Close() error {
+	select {
+	case <-c.closed:
+	default:
+		close(c.closed)
+	}
+	return nil
+}
+
+func envelopeTypeFromPayload(t *testing.T, payload []byte) agentproto.EnvelopeType {
+	t.Helper()
+	envelope, err := agentproto.UnmarshalEnvelope(payload)
+	if err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	return envelope.Type
+}
+
+func mustCommandAckFromPayload(t *testing.T, payload []byte) agentproto.CommandAck {
+	t.Helper()
+	envelope, err := agentproto.UnmarshalEnvelope(payload)
+	if err != nil {
+		t.Fatalf("unmarshal command ack envelope: %v", err)
+	}
+	if envelope.CommandAck == nil {
+		t.Fatalf("expected command ack payload, got %#v", envelope)
+	}
+	return *envelope.CommandAck
 }
 
 func TestRelayWSRawLoggerCapturesIncomingAndOutgoingEnvelopes(t *testing.T) {
