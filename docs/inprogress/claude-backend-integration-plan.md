@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-04-30`
-> Summary: 同步 Claude profile 与 session 平面基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog。
+> Updated: `2026-05-01`
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。
 
 ## 1. 文档定位
 
@@ -444,6 +444,14 @@ Claude runtime：
    - 同一个 session 一旦切到另一个 `CLAUDE_CONFIG_DIR`，会稳定返回 `No conversation found with session ID`。
    - 因此 profile-scoped `CLAUDE_CONFIG_DIR` 不是 Claude 技术限制，而是错误地把认证配置隔离和 session 存储隔离绑在一起。
    - 私有实测产物位置：`/data/dl/.codex-shared/kxn-codex-remote-feishu/private/claude-blackbox-runs/2026-04-30/profile-env-shared-session`。
+
+7. launch-time MCP injection（2026-05-01）
+   - Claude 运行时 MCP 注入发生在 wrapper 启动 Claude child 时，不发生在 daemon headless wrapper 参数层。
+   - wrapper 可以给 Claude child 追加 `--mcp-config <runtime-config-file>`，但不允许追加 `--strict-mcp-config`，否则会覆盖用户已有 Claude MCP 配置。
+   - runtime config 只承载 `codex_remote_feishu` HTTP MCP server，token 通过 `CODEX_REMOTE_FEISHU_MCP_BEARER` 环境变量传给 Claude child。
+   - runtime config 文件只能包含 `Authorization: Bearer ${CODEX_REMOTE_FEISHU_MCP_BEARER}` 占位符，不写入 bearer token 明文。
+   - 该注入不修改用户 `CLAUDE_CONFIG_DIR/.claude.json`，也不改变 profile/session 共享同一个 `CLAUDE_CONFIG_DIR` 的基线。
+   - 本机真实 Claude CLI 2.1.37 已验证：`--mcp-config` 会追加动态 MCP，同时保留 `CLAUDE_CONFIG_DIR/.claude.json` 中已有 MCP；真实 tool service 通过该方式连接后，`system:init.mcp_servers` 中 `codex_remote_feishu` 为 `connected`。
 
 这条 contract 故意停在 launch seam，不在 `#501` 吸收 surface 持有 `profileID`、busy/idle 切换或 workspace+profile snapshot；这些仍属于 `#502`。
 

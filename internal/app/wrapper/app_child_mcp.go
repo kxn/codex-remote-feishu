@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -26,24 +27,17 @@ func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	args := append([]string{}, baseArgs...)
 	env := childEnvWithProxy(a.config.ChildProxyEnv, args)
 	args, env = a.applyCodexProviderLaunch(args, env)
-	if !a.feishuMCPPublicationEligible() {
-		return args, env
-	}
+	args, env = a.applyCodexFeishuMCPPublication(args, env)
+	return args, env
+}
 
-	info, err := readChildToolServiceInfo(a.config.RuntimePaths.ToolServiceFile)
-	if err != nil {
-		a.debugf("feishu mcp publication skipped: read state failed path=%s err=%v", a.config.RuntimePaths.ToolServiceFile, err)
+func (a *App) applyCodexFeishuMCPPublication(baseArgs, baseEnv []string) ([]string, []string) {
+	args := append([]string{}, baseArgs...)
+	env := append([]string{}, baseEnv...)
+	info, ok := a.readFeishuMCPPublicationInfo()
+	if !ok {
 		return args, env
 	}
-	if strings.TrimSpace(info.URL) == "" || strings.TrimSpace(info.Token) == "" {
-		a.debugf("feishu mcp publication skipped: incomplete state path=%s", a.config.RuntimePaths.ToolServiceFile)
-		return args, env
-	}
-	if tokenType := strings.TrimSpace(info.TokenType); tokenType != "" && !strings.EqualFold(tokenType, "bearer") {
-		a.debugf("feishu mcp publication skipped: unsupported token type=%s", tokenType)
-		return args, env
-	}
-
 	args = append(
 		args,
 		"-c", codexMCPOverride("url", info.URL),
@@ -51,6 +45,44 @@ func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	)
 	env = upsertEnvValue(env, feishuMCPBearerEnvName, strings.TrimSpace(info.Token))
 	return args, env
+}
+
+func (a *App) applyClaudeFeishuMCPPublication(baseArgs, baseEnv []string) ([]string, []string) {
+	args := append([]string{}, baseArgs...)
+	env := append([]string{}, baseEnv...)
+	info, ok := a.readFeishuMCPPublicationInfo()
+	if !ok {
+		return args, env
+	}
+	configPath, err := a.writeClaudeFeishuMCPConfig(info)
+	if err != nil {
+		a.debugf("feishu mcp publication skipped: write claude config failed path=%s err=%v", a.claudeFeishuMCPConfigPath(), err)
+		return args, env
+	}
+	args = append(args, "--mcp-config", configPath)
+	env = upsertEnvValue(env, feishuMCPBearerEnvName, strings.TrimSpace(info.Token))
+	return args, env
+}
+
+func (a *App) readFeishuMCPPublicationInfo() (childToolServiceInfo, bool) {
+	if !a.feishuMCPPublicationEligible() {
+		return childToolServiceInfo{}, false
+	}
+
+	info, err := readChildToolServiceInfo(a.config.RuntimePaths.ToolServiceFile)
+	if err != nil {
+		a.debugf("feishu mcp publication skipped: read state failed path=%s err=%v", a.config.RuntimePaths.ToolServiceFile, err)
+		return childToolServiceInfo{}, false
+	}
+	if strings.TrimSpace(info.URL) == "" || strings.TrimSpace(info.Token) == "" {
+		a.debugf("feishu mcp publication skipped: incomplete state path=%s", a.config.RuntimePaths.ToolServiceFile)
+		return childToolServiceInfo{}, false
+	}
+	if tokenType := strings.TrimSpace(info.TokenType); tokenType != "" && !strings.EqualFold(tokenType, "bearer") {
+		a.debugf("feishu mcp publication skipped: unsupported token type=%s", tokenType)
+		return childToolServiceInfo{}, false
+	}
+	return info, true
 }
 
 func (a *App) applyCodexProviderLaunch(baseArgs, baseEnv []string) ([]string, []string) {
@@ -81,6 +113,38 @@ func codexMCPOverride(field, value string) string {
 	return fmt.Sprintf("mcp_servers.%s.%s=%s", feishuMCPServerID, strings.TrimSpace(field), strconv.Quote(strings.TrimSpace(value)))
 }
 
+func (a *App) writeClaudeFeishuMCPConfig(info childToolServiceInfo) (string, error) {
+	path := a.claudeFeishuMCPConfigPath()
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("claude mcp config path is empty")
+	}
+	payload := map[string]any{
+		"mcpServers": map[string]any{
+			feishuMCPServerID: map[string]any{
+				"type": "http",
+				"url":  strings.TrimSpace(info.URL),
+				"headers": map[string]string{
+					"Authorization": "Bearer ${" + feishuMCPBearerEnvName + "}",
+				},
+			},
+		},
+	}
+	if err := writeJSONFileAtomic(path, payload, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (a *App) claudeFeishuMCPConfigPath() string {
+	if path := strings.TrimSpace(a.config.RuntimePaths.ClaudeMCPConfigFile); path != "" {
+		return path
+	}
+	if stateDir := strings.TrimSpace(a.config.RuntimePaths.StateDir); stateDir != "" {
+		return filepath.Join(stateDir, "codex-remote-claude-mcp.json")
+	}
+	return ""
+}
+
 func readChildToolServiceInfo(path string) (childToolServiceInfo, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -95,6 +159,39 @@ func readChildToolServiceInfo(path string) (childToolServiceInfo, error) {
 		return childToolServiceInfo{}, err
 	}
 	return info, nil
+}
+
+func writeJSONFileAtomic(path string, payload any, mode os.FileMode) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("path is empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	raw = append(raw, '\n')
+	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+	if err := tmpFile.Chmod(mode); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if _, err := tmpFile.Write(raw); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func upsertEnvValue(env []string, key, value string) []string {

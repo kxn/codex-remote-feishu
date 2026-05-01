@@ -9,18 +9,19 @@ import (
 )
 
 type Paths struct {
-	ConfigDir        string
-	ConfigFile       string
-	DataDir          string
-	LogsDir          string
-	DaemonLogFile    string
-	DaemonRawLogFile string
-	StateDir         string
-	ManagerLockFile  string
-	DaemonLockFile   string
-	PIDFile          string
-	IdentityFile     string
-	ToolServiceFile  string
+	ConfigDir           string
+	ConfigFile          string
+	DataDir             string
+	LogsDir             string
+	DaemonLogFile       string
+	DaemonRawLogFile    string
+	StateDir            string
+	ManagerLockFile     string
+	DaemonLockFile      string
+	PIDFile             string
+	IdentityFile        string
+	ToolServiceFile     string
+	ClaudeMCPConfigFile string
 }
 
 func DefaultPaths() (Paths, error) {
@@ -42,18 +43,19 @@ func DefaultPaths() (Paths, error) {
 	logsDir := filepath.Join(dataDir, "logs")
 	stateDir := filepath.Join(stateHome, ProductName)
 	return Paths{
-		ConfigDir:        configDir,
-		ConfigFile:       filepath.Join(configDir, "config.json"),
-		DataDir:          dataDir,
-		LogsDir:          logsDir,
-		DaemonLogFile:    filepath.Join(logsDir, "codex-remote-relayd.log"),
-		DaemonRawLogFile: filepath.Join(logsDir, "codex-remote-relayd-raw.ndjson"),
-		StateDir:         stateDir,
-		ManagerLockFile:  filepath.Join(stateDir, "relay-manager.lock"),
-		DaemonLockFile:   filepath.Join(stateDir, "relayd.lock"),
-		PIDFile:          filepath.Join(stateDir, "codex-remote-relayd.pid"),
-		IdentityFile:     filepath.Join(stateDir, "codex-remote-relayd.identity.json"),
-		ToolServiceFile:  filepath.Join(stateDir, "codex-remote-tool-service.json"),
+		ConfigDir:           configDir,
+		ConfigFile:          filepath.Join(configDir, "config.json"),
+		DataDir:             dataDir,
+		LogsDir:             logsDir,
+		DaemonLogFile:       filepath.Join(logsDir, "codex-remote-relayd.log"),
+		DaemonRawLogFile:    filepath.Join(logsDir, "codex-remote-relayd-raw.ndjson"),
+		StateDir:            stateDir,
+		ManagerLockFile:     filepath.Join(stateDir, "relay-manager.lock"),
+		DaemonLockFile:      filepath.Join(stateDir, "relayd.lock"),
+		PIDFile:             filepath.Join(stateDir, "codex-remote-relayd.pid"),
+		IdentityFile:        filepath.Join(stateDir, "codex-remote-relayd.identity.json"),
+		ToolServiceFile:     filepath.Join(stateDir, "codex-remote-tool-service.json"),
+		ClaudeMCPConfigFile: filepath.Join(stateDir, "codex-remote-claude-mcp.json"),
 	}, nil
 }
 
