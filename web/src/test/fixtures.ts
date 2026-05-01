@@ -2,6 +2,7 @@ import type {
   AutostartDetectResponse,
   BootstrapState,
   ClaudeProfileSummary,
+  CodexProviderSummary,
   FeishuAppPermissionCheckResponse,
   FeishuAppSummary,
   GatewayStatus,
@@ -124,6 +125,20 @@ export function makeClaudeProfile(
     name: "默认",
     authMode: "inherit",
     hasAuthToken: false,
+    builtIn: true,
+    persisted: false,
+    readOnly: true,
+    ...overrides,
+  };
+}
+
+export function makeCodexProvider(
+  overrides: Partial<CodexProviderSummary> = {},
+): CodexProviderSummary {
+  return {
+    id: "default",
+    name: "系统默认",
+    hasApiKey: false,
     builtIn: true,
     persisted: false,
     readOnly: true,

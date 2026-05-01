@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AdminRoute } from "./AdminRoute";
@@ -6,6 +6,7 @@ import {
   makeApp,
   makeBootstrap,
   makeClaudeProfile,
+  makeCodexProvider,
   makeImageStagingStatus,
   makeLogsStorageStatus,
   makePermissionCheck,
@@ -19,6 +20,12 @@ function withClaudeProfiles(
   profiles = [makeClaudeProfile()],
 ) {
   return {
+    "/api/admin/codex/providers": {
+      body: { providers: [makeCodexProvider()] },
+    },
+    "/g/demo/api/admin/codex/providers": {
+      body: { providers: [makeCodexProvider()] },
+    },
     "/api/admin/claude/profiles": {
       body: { profiles },
     },
@@ -77,6 +84,7 @@ describe("AdminRoute", () => {
     ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Claude 配置" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Codex Provider" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /新增机器人/ })).toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
@@ -84,6 +92,9 @@ describe("AdminRoute", () => {
       calls.some((call) => call.path === "/g/demo/api/admin/bootstrap-state"),
     ).toBe(true);
     expect(calls.some((call) => call.path === "/g/demo/api/admin/claude/profiles")).toBe(
+      true,
+    );
+    expect(calls.some((call) => call.path === "/g/demo/api/admin/codex/providers")).toBe(
       true,
     );
   });
@@ -468,8 +479,56 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByRole("heading", { name: "Claude 配置" })).toBeInTheDocument();
-    expect(await screen.findByText("系统默认配置")).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: "Claude 配置" });
+    const section = heading.closest("section");
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText("本机默认配置")).toBeInTheDocument();
+  });
+
+  it("renders the Codex provider panel on the v1.7.0 admin layout", async () => {
+    window.history.replaceState({}, "", "/admin");
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "主机器人" }),
+          ready: true,
+        }),
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    const heading = await screen.findByRole("heading", { name: "Codex Provider" });
+    const section = heading.closest("section");
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText("本机默认配置")).toBeInTheDocument();
   });
 
   it("keeps Claude profile editing user-facing and saves by required name", async () => {
@@ -589,7 +648,14 @@ describe("AdminRoute", () => {
     expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /新增配置/ }));
+    const claudeSection = screen
+      .getByRole("heading", { name: "Claude 配置" })
+      .closest("section");
+    expect(claudeSection).not.toBeNull();
+
+    await user.click(
+      within(claudeSection as HTMLElement).getByRole("button", { name: /新增配置/ }),
+    );
     await user.click(screen.getByRole("button", { name: "保存配置" }));
     expect(await screen.findByText("请填写名称。")).toBeInTheDocument();
 

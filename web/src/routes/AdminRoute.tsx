@@ -11,6 +11,8 @@ import type {
   BootstrapState,
   ClaudeProfilesResponse,
   ClaudeProfileSummary,
+  CodexProvidersResponse,
+  CodexProviderSummary,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -35,6 +37,7 @@ import {
   vscodeIsReady,
 } from "./shared/helpers";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
+import { CodexProviderSection } from "./admin/CodexProviderSection";
 
 type NoticeTone = "good" | "warn" | "danger";
 
@@ -74,6 +77,8 @@ export function AdminRoute() {
     Record<string, PermissionSummaryState>
   >({});
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
+  const [codexProviders, setCodexProviders] = useState<CodexProviderSummary[]>([]);
+  const [codexProvidersError, setCodexProvidersError] = useState("");
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>([]);
   const [claudeProfilesError, setClaudeProfilesError] = useState("");
   const [newRobotForm, setNewRobotForm] = useState<NewRobotForm>({
@@ -200,6 +205,7 @@ export function AdminRoute() {
     const [
       bootstrapState,
       appList,
+      codexProvidersResult,
       claudeProfilesResult,
       autostartState,
       vscodeState,
@@ -208,6 +214,7 @@ export function AdminRoute() {
     ] = await Promise.all([
       requestJSON<BootstrapState>("/api/admin/bootstrap-state"),
       requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
+      safeRequest<CodexProvidersResponse>("/api/admin/codex/providers"),
       safeRequest<ClaudeProfilesResponse>("/api/admin/claude/profiles"),
       loadAutostartState("/api/admin/autostart/detect"),
       loadVSCodeState("/api/admin/vscode/detect"),
@@ -243,6 +250,8 @@ export function AdminRoute() {
     setBootstrap(bootstrapState);
     setApps(appList.apps);
     setSelectedRobotID(nextSelectedRobotID);
+    setCodexProviders(codexProvidersResult.data?.providers || []);
+    setCodexProvidersError(codexProvidersResult.error);
     setClaudeProfiles(claudeProfilesResult.data?.profiles || []);
     setClaudeProfilesError(claudeProfilesResult.error);
     setAutostart(autostartState.data);
@@ -1031,6 +1040,15 @@ export function AdminRoute() {
         loadError={claudeProfilesError}
         profiles={claudeProfiles}
         setProfiles={setClaudeProfiles}
+        onReload={async () => {
+          await loadAdminPage({ preferredRobotID: selectedRobotID });
+        }}
+      />
+
+      <CodexProviderSection
+        loadError={codexProvidersError}
+        providers={codexProviders}
+        setProviders={setCodexProviders}
         onReload={async () => {
           await loadAdminPage({ preferredRobotID: selectedRobotID });
         }}

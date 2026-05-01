@@ -133,6 +133,7 @@ type adminConfigView struct {
 	Admin   config.AdminSettings    `json:"admin"`
 	Tool    config.ToolSettings     `json:"tool,omitempty"`
 	Wrapper config.WrapperSettings  `json:"wrapper"`
+	Codex   adminCodexSettingsView  `json:"codex,omitempty"`
 	Claude  adminClaudeSettingsView `json:"claude,omitempty"`
 	Feishu  adminFeishuSettingsView `json:"feishu"`
 	Debug   config.DebugSettings    `json:"debug"`
@@ -210,6 +211,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))
+	mux.HandleFunc("GET /api/admin/codex/providers", a.requireAdmin(a.handleCodexProvidersList))
+	mux.HandleFunc("POST /api/admin/codex/providers", a.requireAdmin(a.handleCodexProviderCreate))
+	mux.HandleFunc("PUT /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderUpdate))
+	mux.HandleFunc("DELETE /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderDelete))
 	mux.HandleFunc("GET /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfilesList))
 	mux.HandleFunc("POST /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfileCreate))
 	mux.HandleFunc("PUT /api/admin/claude/profiles/{id}", a.requireAdmin(a.handleClaudeProfileUpdate))
@@ -639,6 +644,7 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 		Admin:   cfg.Admin,
 		Tool:    cfg.Tool,
 		Wrapper: cfg.Wrapper,
+		Codex:   adminPersistedCodexSettingsView(cfg),
 		Claude:  adminPersistedClaudeSettingsView(cfg),
 		Debug:   cfg.Debug,
 		Storage: cfg.Storage,

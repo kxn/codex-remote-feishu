@@ -306,9 +306,10 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
 	if loaded, err := a.loadAdminConfig(); err == nil {
+		a.syncCodexProvidersCatalogLocked(loaded.Config)
 		a.syncClaudeProfilesCatalogLocked(loaded.Config)
 	} else {
-		log.Printf("load claude profiles catalog failed during headless runtime setup: err=%v", err)
+		log.Printf("load config catalogs failed during headless runtime setup: err=%v", err)
 	}
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncSurfaceResumeStateLocked(nil)

@@ -4,37 +4,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestResolveWorkspaceAttachInstanceForCodexProviderFiltersMismatchedInstance(t *testing.T) {
-	now := time.Date(2026, 5, 1, 6, 0, 0, 0, time.UTC)
+func TestCodexProvidersMaterializeBuiltInAndDisambiguateDuplicateNames(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-default",
-		DisplayName:     "repo-default",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
-		Online:          true,
-	})
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-proxy",
-		DisplayName:     "repo-proxy",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
-		Online:          true,
+	svc.MaterializeCodexProviders([]state.CodexProviderRecord{
+		{ID: "team-proxy", Name: "Team Proxy"},
+		{ID: "team-proxy-2", Name: "Team Proxy"},
 	})
 
-	inst := svc.resolveWorkspaceAttachInstanceForBackend(svc.root.Surfaces["surface-1"], "/data/dl/repo", agentproto.BackendCodex)
-	if inst == nil || inst.InstanceID != "inst-proxy" {
-		t.Fatalf("expected provider-matched instance, got %#v", inst)
+	got := svc.CodexProviders()
+	if len(got) != 3 {
+		t.Fatalf("expected default + 2 custom providers, got %#v", got)
+	}
+	if got[0].ID != state.DefaultCodexProviderID || got[0].Name != state.DefaultCodexProviderName || !got[0].BuiltIn {
+		t.Fatalf("unexpected built-in default provider: %#v", got[0])
+	}
+	if got[1].ID != "team-proxy" || got[1].Name != "Team Proxy" {
+		t.Fatalf("unexpected first custom provider: %#v", got[1])
+	}
+	if got[2].ID != "team-proxy-2" || got[2].Name != "Team Proxy" {
+		t.Fatalf("unexpected second custom provider: %#v", got[2])
 	}
 }

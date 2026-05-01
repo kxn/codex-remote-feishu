@@ -115,6 +115,30 @@ export interface ClaudeProfileWriteRequest {
   smallModel?: string;
 }
 
+export interface CodexProviderSummary {
+  id: string;
+  name?: string;
+  baseURL?: string;
+  hasApiKey: boolean;
+  builtIn?: boolean;
+  persisted: boolean;
+  readOnly?: boolean;
+}
+
+export interface CodexProvidersResponse {
+  providers: CodexProviderSummary[];
+}
+
+export interface CodexProviderResponse {
+  provider: CodexProviderSummary;
+}
+
+export interface CodexProviderWriteRequest {
+  name?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
 export interface FeishuAppMutation {
   kind?: string;
   message?: string;
