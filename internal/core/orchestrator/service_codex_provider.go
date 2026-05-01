@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -98,43 +97,12 @@ func (s *Service) SurfaceCodexProviderID(surfaceID string) string {
 }
 
 func (s *Service) surfaceCodexProviderID(surface *state.SurfaceConsoleRecord) string {
-	if surface == nil {
-		return state.DefaultCodexProviderID
-	}
-	providerID := strings.TrimSpace(surface.CodexProviderID)
-	mode := state.NormalizeProductMode(surface.ProductMode)
-	backend := state.NormalizeSurfaceBackend(mode, surface.Backend)
-	if providerID == "" && state.IsHeadlessProductMode(mode) && backend == agentproto.BackendCodex {
-		providerID = state.DefaultCodexProviderID
-	}
-	if providerID == "" {
-		surface.CodexProviderID = ""
-		return ""
-	}
-	surface.CodexProviderID = state.NormalizeCodexProviderID(providerID)
-	return surface.CodexProviderID
+	return state.EffectiveSurfaceCodexProviderID(s.surfaceDesiredContract(surface))
 }
 
 func (s *Service) setSurfaceCodexProviderID(surface *state.SurfaceConsoleRecord, providerID string) {
 	if surface == nil {
 		return
 	}
-	providerID = strings.TrimSpace(providerID)
-	if providerID == "" {
-		surface.CodexProviderID = ""
-		_ = s.surfaceCodexProviderID(surface)
-		return
-	}
-	surface.CodexProviderID = state.NormalizeCodexProviderID(providerID)
-}
-
-func (s *Service) applyCurrentCodexProviderToHeadlessCommand(surface *state.SurfaceConsoleRecord, command *control.DaemonCommand) {
-	if surface == nil || command == nil {
-		return
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendCodex {
-		command.CodexProviderID = ""
-		return
-	}
-	command.CodexProviderID = s.surfaceCodexProviderID(surface)
+	surface.CodexProviderID = state.NormalizeDesiredCodexProviderID(providerID)
 }

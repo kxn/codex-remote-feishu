@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -67,6 +68,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		InstanceID:       "inst-claude-profile",
 		ThreadID:         "thread-claude",
 		ThreadCWD:        "/data/dl/repo",
+		Backend:          agentproto.BackendClaude,
 		ClaudeProfileID:  "devseek",
 	})
 
@@ -136,6 +138,7 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 		InstanceID:       "inst-claude-default",
 		ThreadID:         "thread-claude",
 		ThreadCWD:        "/data/dl/repo",
+		Backend:          agentproto.BackendClaude,
 		ClaudeProfileID:  config.ClaudeDefaultProfileID,
 	})
 
@@ -145,6 +148,75 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 	}
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
 		t.Fatalf("expected built-in default Claude launch mode, got %#v", captured)
+	}
+}
+
+func TestDaemonRejectsHeadlessStartWithoutFrozenBackendContract(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.WriteAppConfig(configPath, config.DefaultAppConfig()); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: configPath,
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: t.TempDir(),
+		},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		ConfigPath:      configPath,
+		Services:        defaultFeishuServices(),
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://localhost:9501/admin/",
+		SetupURL:        "http://localhost:9501/setup",
+	})
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "devseek", "", "")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-missing-backend",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendClaude,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+	startEvents := app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-claude",
+	})
+	if len(startEvents) != 2 || startEvents[1].DaemonCommand == nil || startEvents[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected use-thread flow to prepare pending headless launch, got %#v", startEvents)
+	}
+	command := *startEvents[1].DaemonCommand
+	command.Backend = ""
+
+	var startCalled bool
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		startCalled = true
+		return 0, nil
+	}
+
+	events := app.startManagedHeadless(command)
+
+	if startCalled {
+		t.Fatal("expected daemon to reject missing frozen backend contract before launch")
+	}
+	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != "headless_start_failed" {
+		t.Fatalf("expected headless_start_failed notice, got %#v", events)
+	}
+	if snapshot := app.service.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected failed launch to clear pending headless snapshot, got %#v", snapshot)
 	}
 }
 

@@ -464,6 +464,7 @@ type HeadlessLaunchRecord struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	Backend          agentproto.Backend
 	CodexProviderID  string
 	ClaudeProfileID  string
 	ThreadName       string

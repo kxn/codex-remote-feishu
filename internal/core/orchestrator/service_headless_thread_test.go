@@ -54,6 +54,46 @@ func TestPreselectedHeadlessLaunchBlocksNormalInput(t *testing.T) {
 	}
 }
 
+func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testing.T) {
+	now := time.Date(2026, 5, 1, 13, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "team-proxy", "devseek", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendClaude,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected detached /use to start headless launch, got %#v", events)
+	}
+	pending := svc.root.Surfaces["surface-1"].PendingHeadless
+	if pending == nil {
+		t.Fatalf("expected pending headless launch, got %#v", svc.root.Surfaces["surface-1"])
+	}
+	if pending.Backend != agentproto.BackendClaude || pending.CodexProviderID != "" || pending.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected pending launch to freeze claude launch contract, got %#v", pending)
+	}
+	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendClaude || got.CodexProviderID != "" || got.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected daemon command to match frozen launch contract, got %#v", got)
+	}
+}
+
 func TestDetachCancelsPendingHeadlessLaunch(t *testing.T) {
 	now := time.Date(2026, 4, 8, 10, 12, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

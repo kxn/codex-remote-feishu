@@ -207,23 +207,21 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.CodexProviderID = strings.TrimSpace(entry.CodexProviderID)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	backend := agentproto.Backend(strings.TrimSpace(entry.Backend))
-	if state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) && entry.ClaudeProfileID != "" {
+	if state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) &&
+		entry.ClaudeProfileID != "" &&
+		(strings.TrimSpace(entry.Backend) == "" ||
+			(agentproto.NormalizeBackend(backend) == agentproto.BackendCodex && strings.TrimSpace(entry.CodexProviderID) == "")) {
 		backend = agentproto.BackendClaude
 	}
-	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), backend))
-	if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendCodex {
-		entry.CodexProviderID = state.NormalizeCodexProviderID(entry.CodexProviderID)
-	} else {
-		entry.CodexProviderID = ""
-	}
-	if entry.ClaudeProfileID != "" {
-		entry.ClaudeProfileID = state.NormalizeClaudeProfileID(entry.ClaudeProfileID)
-	} else if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
-		entry.ClaudeProfileID = state.DefaultClaudeProfileID
-	}
-	if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) != agentproto.BackendClaude {
-		entry.ClaudeProfileID = ""
-	}
+	rawContract := state.NormalizeSurfaceBackendContract(state.SurfaceBackendContract{
+		ProductMode:     state.ProductMode(entry.ProductMode),
+		Backend:         backend,
+		CodexProviderID: entry.CodexProviderID,
+		ClaudeProfileID: entry.ClaudeProfileID,
+	})
+	entry.Backend = string(rawContract.Backend)
+	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
+	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)

@@ -83,7 +83,22 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	}
 
 	env := append([]string{}, cfg.BaseEnv...)
-	backend := a.service.SurfaceBackend(command.SurfaceSessionID)
+	backend := agentproto.NormalizeBackend(command.Backend)
+	if strings.TrimSpace(string(command.Backend)) == "" {
+		errInfo := agentproto.ErrorInfo{
+			Code:             "headless_backend_missing",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "headless 启动合同缺少 backend。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+		}
+		if command.AutoRestore {
+			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+		}
+		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, errInfo)
+	}
 	env = append(env,
 		"CODEX_REMOTE_INSTANCE_ID="+command.InstanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",

@@ -319,6 +319,35 @@ func TestSurfaceResumeStoreCanonicalizesLegacyCodexBackendWithClaudeProfile(t *t
 	}
 }
 
+func TestSurfaceResumeStoreKeepsExplicitBackendEvenWhenInactiveProfileStorageExists(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"codex\",\n      \"codexProviderID\": \"team-proxy\",\n      \"claudeProfileID\": \"devseek\"\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write mixed backend state: %v", err)
+	}
+
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load mixed backend state: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("expected mixed backend entry after reload")
+	}
+	if entry.Backend != "codex" {
+		t.Fatalf("expected explicit backend to win, got %#v", entry)
+	}
+	if entry.CodexProviderID != "team-proxy" {
+		t.Fatalf("expected active codex provider to be preserved, got %#v", entry)
+	}
+	if entry.ClaudeProfileID != "" {
+		t.Fatalf("expected inactive claude profile projection to stay hidden, got %#v", entry)
+	}
+}
+
 func TestSurfaceResumeStoreMigratesLegacyPendingFreshWorkspaceHeadlessEntry(t *testing.T) {
 	t.Parallel()
 

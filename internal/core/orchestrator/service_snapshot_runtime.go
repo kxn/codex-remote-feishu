@@ -102,10 +102,12 @@ func (s *Service) MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID
 	if surface == nil {
 		return
 	}
-	surface.ProductMode = state.NormalizeProductMode(mode)
-	surface.Backend = state.NormalizeSurfaceBackend(surface.ProductMode, backend)
-	s.setSurfaceCodexProviderID(surface, codexProviderID)
-	s.setSurfaceClaudeProfileID(surface, claudeProfileID)
+	s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
+		ProductMode:     mode,
+		Backend:         backend,
+		CodexProviderID: codexProviderID,
+		ClaudeProfileID: claudeProfileID,
+	})
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
 }

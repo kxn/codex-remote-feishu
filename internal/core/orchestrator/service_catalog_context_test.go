@@ -59,6 +59,22 @@ func TestBuildCatalogContextUsesDetachedSurfaceBackend(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogContextDoesNotMutateStoredCrossBackendIDs(t *testing.T) {
+	now := time.Date(2026, 5, 1, 13, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "team-proxy", "devseek", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+
+	ctx := svc.buildCatalogContext(surface)
+
+	if ctx.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected detached context to project claude backend, got %#v", ctx)
+	}
+	if surface.CodexProviderID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected read-only catalog context build to preserve desired contract storage, got %#v", surface)
+	}
+}
+
 func TestBuildCatalogContextUsesAttachedInstanceRuntimeSeam(t *testing.T) {
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -434,6 +434,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		}
 	}
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
+	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,
 		ThreadID:         view.ThreadID,
@@ -441,8 +442,9 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		ThreadName:       threadName,
 		ThreadPreview:    threadPreview,
 		ThreadCWD:        cwd,
-		CodexProviderID:  s.surfaceCodexProviderID(surface),
-		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
+		Backend:          launchContract.Backend,
+		CodexProviderID:  launchContract.CodexProviderID,
+		ClaudeProfileID:  launchContract.ClaudeProfileID,
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
 		Status:           state.HeadlessLaunchStarting,
@@ -475,8 +477,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 				ThreadCWD:        cwd,
 				AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 			}
-			s.applyCurrentCodexProviderToHeadlessCommand(surface, command)
-			s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
+			s.applyHeadlessLaunchContract(command, launchContract)
 			return command
 		}(),
 	})

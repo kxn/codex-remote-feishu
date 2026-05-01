@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -124,34 +123,14 @@ func (s *Service) SurfaceClaudeProfileID(surfaceID string) string {
 }
 
 func (s *Service) surfaceClaudeProfileID(surface *state.SurfaceConsoleRecord) string {
-	if surface == nil {
-		return state.DefaultClaudeProfileID
-	}
-	profileID := strings.TrimSpace(surface.ClaudeProfileID)
-	mode := state.NormalizeProductMode(surface.ProductMode)
-	backend := state.NormalizeSurfaceBackend(mode, surface.Backend)
-	if profileID == "" && state.IsHeadlessProductMode(mode) && backend == agentproto.BackendClaude {
-		profileID = state.DefaultClaudeProfileID
-	}
-	if profileID == "" {
-		surface.ClaudeProfileID = ""
-		return ""
-	}
-	surface.ClaudeProfileID = state.NormalizeClaudeProfileID(profileID)
-	return surface.ClaudeProfileID
+	return state.EffectiveSurfaceClaudeProfileID(s.surfaceDesiredContract(surface))
 }
 
 func (s *Service) setSurfaceClaudeProfileID(surface *state.SurfaceConsoleRecord, profileID string) {
 	if surface == nil {
 		return
 	}
-	profileID = strings.TrimSpace(profileID)
-	if profileID == "" {
-		surface.ClaudeProfileID = ""
-		_ = s.surfaceClaudeProfileID(surface)
-		return
-	}
-	surface.ClaudeProfileID = state.NormalizeClaudeProfileID(profileID)
+	surface.ClaudeProfileID = state.NormalizeDesiredClaudeProfileID(profileID)
 }
 
 func (s *Service) currentClaudeWorkspaceProfileSnapshotKey(surface *state.SurfaceConsoleRecord) string {
@@ -219,15 +198,4 @@ func (s *Service) restoreCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 		}
 	}
 	surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
-}
-
-func (s *Service) applyCurrentClaudeProfileToHeadlessCommand(surface *state.SurfaceConsoleRecord, command *control.DaemonCommand) {
-	if surface == nil || command == nil {
-		return
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
-		command.ClaudeProfileID = ""
-		return
-	}
-	command.ClaudeProfileID = s.surfaceClaudeProfileID(surface)
 }

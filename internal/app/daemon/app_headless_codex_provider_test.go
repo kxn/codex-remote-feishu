@@ -56,6 +56,7 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		SurfaceSessionID: "surface-1",
 		InstanceID:       "inst-codex-provider",
 		ThreadCWD:        "/data/dl/repo",
+		Backend:          agentproto.BackendCodex,
 		CodexProviderID:  "team-proxy",
 	})
 
@@ -118,6 +119,7 @@ func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *tes
 		SurfaceSessionID: "surface-1",
 		InstanceID:       "inst-codex-default",
 		ThreadCWD:        "/data/dl/repo",
+		Backend:          agentproto.BackendCodex,
 		CodexProviderID:  config.CodexDefaultProviderID,
 	})
 

@@ -157,11 +157,13 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 	}
+	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,
 		ThreadCWD:        workspaceKey,
-		CodexProviderID:  s.surfaceCodexProviderID(surface),
-		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
+		Backend:          launchContract.Backend,
+		CodexProviderID:  launchContract.CodexProviderID,
+		ClaudeProfileID:  launchContract.ClaudeProfileID,
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
 		Status:           state.HeadlessLaunchStarting,
@@ -194,8 +196,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 					InstanceID:       instanceID,
 					ThreadCWD:        workspaceKey,
 				}
-				s.applyCurrentCodexProviderToHeadlessCommand(surface, command)
-				s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
+				s.applyHeadlessLaunchContract(command, launchContract)
 				return command
 			}(),
 		},

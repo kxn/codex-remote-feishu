@@ -187,11 +187,12 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			},
 		})
 	}
-	surface.ProductMode = target.ProductMode
-	surface.Backend = state.NormalizeSurfaceBackend(target.ProductMode, target.Backend)
-	if state.IsHeadlessProductMode(target.ProductMode) && target.Backend == agentproto.BackendClaude {
-		_ = s.surfaceClaudeProfileID(surface)
-	}
+	s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
+		ProductMode:     target.ProductMode,
+		Backend:         target.Backend,
+		CodexProviderID: surface.CodexProviderID,
+		ClaudeProfileID: surface.ClaudeProfileID,
+	})
 	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {
 		surface.ClaimedWorkspaceKey = currentWorkspaceKey
 	}

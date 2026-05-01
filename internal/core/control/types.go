@@ -234,7 +234,9 @@ type PendingHeadlessSummary struct {
 	ThreadID        string
 	ThreadTitle     string
 	ThreadCWD       string
+	Backend         agentproto.Backend
 	CodexProviderID string
+	ClaudeProfileID string
 	Status          string
 	PID             int
 	ExpiresAt       time.Time
@@ -623,6 +625,7 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	Backend          agentproto.Backend
 	CodexProviderID  string
 	ClaudeProfileID  string
 	WorkspaceKey     string

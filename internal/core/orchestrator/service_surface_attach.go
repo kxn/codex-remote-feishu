@@ -69,8 +69,6 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")...)
 	}
 
-	surface.Backend = state.EffectiveInstanceBackend(inst)
-	surface.CodexProviderID = state.NormalizeCodexProviderID(inst.CodexProviderID)
 	surface.AttachedInstanceID = inst.InstanceID
 	s.surfaceCurrentWorkspaceKey(surface)
 	surface.PendingHeadless = nil
@@ -192,8 +190,6 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
 	}
 	s.surfaceCurrentWorkspaceKey(surface)
-	surface.Backend = instanceBackend
-	surface.CodexProviderID = state.NormalizeCodexProviderID(inst.CodexProviderID)
 	surface.AttachedInstanceID = instanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
@@ -324,7 +320,13 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		surface.PendingHeadless = nil
-		s.setSurfaceCodexProviderID(surface, pending.CodexProviderID)
+		pendingContract := state.HeadlessLaunchContractFromPending(pending)
+		s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
+			ProductMode:     surface.ProductMode,
+			Backend:         pendingContract.Backend,
+			CodexProviderID: pending.CodexProviderID,
+			ClaudeProfileID: pending.ClaudeProfileID,
+		})
 		if pending.PrepareNewThread {
 			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{PrepareNewThread: true})
 		}

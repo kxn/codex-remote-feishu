@@ -34,3 +34,28 @@ func TestSurfaceModeAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestSurfaceDesiredBackendContractPreservesCrossBackendStoredIDs(t *testing.T) {
+	surface := &SurfaceConsoleRecord{
+		ProductMode:     ProductModeNormal,
+		Backend:         agentproto.BackendClaude,
+		CodexProviderID: "team-proxy",
+		ClaudeProfileID: "devseek",
+	}
+	contract := SurfaceDesiredBackendContract(surface)
+	if contract.Backend != agentproto.BackendClaude {
+		t.Fatalf("unexpected backend: %#v", contract)
+	}
+	if contract.CodexProviderID != "team-proxy" {
+		t.Fatalf("expected codex provider storage to stay intact, got %#v", contract)
+	}
+	if contract.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected claude profile storage to stay intact, got %#v", contract)
+	}
+	if got := EffectiveSurfaceCodexProviderID(contract); got != "" {
+		t.Fatalf("expected inactive codex provider projection to stay hidden, got %q", got)
+	}
+	if got := EffectiveSurfaceClaudeProfileID(contract); got != "devseek" {
+		t.Fatalf("expected active claude profile projection, got %q", got)
+	}
+}
