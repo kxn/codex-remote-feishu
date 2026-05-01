@@ -170,11 +170,11 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 		if t.activeTurn == nil || state.ItemID == "" {
 			return Result{}
 		}
-		deltaText, metadata, ok := buildClaudeReasoningDelta(lookupStringFromAny(delta["thinking"]))
-		if !ok {
+		thinking := lookupStringFromAny(delta["thinking"])
+		if thinking == "" {
 			return Result{}
 		}
-		state.TextBuffer += deltaText
+		state.TextBuffer += thinking
 		return Result{
 			Events: []agentproto.Event{{
 				Kind:      agentproto.EventItemDelta,
@@ -183,10 +183,12 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 				TurnID:    t.activeTurn.TurnID,
 				ItemID:    state.ItemID,
 				ItemKind:  "reasoning_summary",
-				Delta:     deltaText,
-				Metadata:  metadata,
+				Delta:     thinking,
+				Metadata:  map[string]any{"summaryIndex": 1},
 			}},
 		}
+	case "signature_delta":
+		return Result{}
 	case "input_json_delta":
 		state.ToolInputDelta += lookupStringFromAny(delta["partial_json"])
 	}

@@ -456,53 +456,6 @@ func buildClaudeProcessPlanText(metadata map[string]any) string {
 	return buildClaudePlanSummary(snapshot)
 }
 
-func buildClaudeReasoningDelta(text string) (string, map[string]any, bool) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "", nil, false
-	}
-	sentence := claudeReasoningSentence(text)
-	if sentence == "" {
-		return "", nil, false
-	}
-	return fmt.Sprintf("**%s**", sentence), map[string]any{"summaryIndex": claudeReasoningSummaryIndex(sentence)}, true
-}
-
-func claudeReasoningSentence(text string) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
-	text = strings.ReplaceAll(text, "\n", " ")
-	text = strings.Join(strings.Fields(text), " ")
-	for _, separator := range []string{"。", ".", "!", "！", "?", "？"} {
-		if idx := strings.LastIndex(text, separator); idx >= 0 {
-			candidate := strings.TrimSpace(text[:idx+len(separator)])
-			if candidate != "" {
-				return candidate
-			}
-		}
-	}
-	return text
-}
-
-func claudeReasoningSummaryIndex(text string) int {
-	if strings.TrimSpace(text) == "" {
-		return 0
-	}
-	count := 0
-	for _, r := range text {
-		switch r {
-		case '。', '.', '!', '！', '?', '？':
-			count++
-		}
-	}
-	if count == 0 {
-		return 1
-	}
-	return count
-}
-
 func cloneMetadata(metadata map[string]any) map[string]any {
 	if len(metadata) == 0 {
 		return nil

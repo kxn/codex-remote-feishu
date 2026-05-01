@@ -847,6 +847,104 @@ func TestClaudeTranslatorReconcilesFinalAssistantTextOntoStreamingBlock(t *testi
 	}
 }
 
+func TestClaudeTranslatorAccumulatesThinkingDeltasOnSingleReasoningItem(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, turnID := startClaudeTurn(t, tr, "default")
+
+	thinkingStart := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		},
+	})
+	if len(thinkingStart.Events) != 1 || thinkingStart.Events[0].Kind != agentproto.EventItemStarted || thinkingStart.Events[0].ItemKind != "reasoning_summary" {
+		t.Fatalf("expected thinking block start to open a reasoning summary item, got %#v", thinkingStart.Events)
+	}
+	itemID := thinkingStart.Events[0].ItemID
+
+	first := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "I need to inspect",
+			},
+		},
+	})
+	if len(first.Events) != 1 || first.Events[0].Kind != agentproto.EventItemDelta {
+		t.Fatalf("expected first thinking delta, got %#v", first.Events)
+	}
+	if first.Events[0].ItemID != itemID || first.Events[0].ThreadID != threadID || first.Events[0].TurnID != turnID {
+		t.Fatalf("unexpected first thinking ids: %#v", first.Events[0])
+	}
+	if first.Events[0].Delta != "I need to inspect" {
+		t.Fatalf("expected first raw thinking delta, got %#v", first.Events[0])
+	}
+	if first.Events[0].Metadata["summaryIndex"] != 1 {
+		t.Fatalf("expected stable summary index, got %#v", first.Events[0].Metadata)
+	}
+
+	second := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": " the adapter before answering.",
+			},
+		},
+	})
+	if len(second.Events) != 1 || second.Events[0].Kind != agentproto.EventItemDelta {
+		t.Fatalf("expected second thinking delta, got %#v", second.Events)
+	}
+	if second.Events[0].ItemID != itemID {
+		t.Fatalf("expected second delta to reuse thinking item %q, got %#v", itemID, second.Events[0])
+	}
+	if second.Events[0].Delta != " the adapter before answering." {
+		t.Fatalf("expected second raw thinking delta, got %#v", second.Events[0])
+	}
+
+	signature := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":      "signature_delta",
+				"signature": "sig",
+			},
+		},
+	})
+	if len(signature.Events) != 0 {
+		t.Fatalf("expected signature delta to stay hidden, got %#v", signature.Events)
+	}
+
+	stop := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_stop",
+			"index": 0,
+		},
+	})
+	if len(stop.Events) != 1 || stop.Events[0].Kind != agentproto.EventItemCompleted || stop.Events[0].ItemKind != "reasoning_summary" {
+		t.Fatalf("expected thinking stop to complete reasoning item, got %#v", stop.Events)
+	}
+	if stop.Events[0].ItemID != itemID {
+		t.Fatalf("expected thinking stop to reuse item %q, got %#v", itemID, stop.Events[0])
+	}
+	if stop.Events[0].Delta != "" {
+		t.Fatalf("expected thinking stop not to repeat accumulated content, got %#v", stop.Events[0])
+	}
+}
+
 func TestClaudeTranslatorIgnoresRedundantAssistantTextAfterStreamCompletion(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "default")
