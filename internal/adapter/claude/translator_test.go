@@ -1303,6 +1303,150 @@ func TestClaudeTranslatorEditProjectsToFileChange(t *testing.T) {
 	}
 }
 
+func TestClaudeTranslatorWriteProjectsToFileChange(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-write-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "tool_use",
+					"id":   "call-write-1",
+					"name": "Write",
+					"input": map[string]any{
+						"file_path": "/tmp/readme.md",
+						"content":   "# hello\nworld\n",
+					},
+				},
+			},
+		},
+	})
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one Write start event, got %#v", started.Events)
+	}
+	startEvent := started.Events[0]
+	if startEvent.Kind != agentproto.EventItemStarted || startEvent.ItemKind != "file_change" {
+		t.Fatalf("unexpected Write start projection: %#v", startEvent)
+	}
+	if len(startEvent.FileChanges) != 1 || startEvent.FileChanges[0].Path != "/tmp/readme.md" || startEvent.FileChanges[0].Kind != agentproto.FileChangeAdd {
+		t.Fatalf("unexpected Write start file change payload: %#v", startEvent.FileChanges)
+	}
+
+	completed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-write-1",
+					"content":     "File created successfully at: /tmp/readme.md",
+					"is_error":    false,
+				},
+			},
+		},
+		"tool_use_result": map[string]any{
+			"type":         "create",
+			"filePath":     "/tmp/readme.md",
+			"content":      "# hello\nworld\n",
+			"originalFile": "",
+		},
+	})
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one Write completion event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "file_change" || event.Status != "completed" {
+		t.Fatalf("unexpected Write completion projection: %#v", event)
+	}
+	if len(event.FileChanges) != 1 {
+		t.Fatalf("expected completed Write file change payload, got %#v", event)
+	}
+	if event.FileChanges[0].Path != "/tmp/readme.md" || event.FileChanges[0].Kind != agentproto.FileChangeAdd {
+		t.Fatalf("unexpected completed Write file change payload: %#v", event.FileChanges)
+	}
+	if event.FileChanges[0].Diff == "" {
+		t.Fatalf("expected completed Write diff to be populated, got %#v", event.FileChanges[0])
+	}
+}
+
+func TestClaudeTranslatorNotebookEditProjectsToFileChange(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	_, _ = startClaudeTurn(t, tr, "default")
+
+	started := observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-notebook-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{
+					"type": "tool_use",
+					"id":   "call-notebook-1",
+					"name": "NotebookEdit",
+					"input": map[string]any{
+						"notebook_path": "/tmp/demo.ipynb",
+						"cell_id":       "cell-1",
+						"new_source":    "print('hello')",
+						"cell_type":     "code",
+						"edit_mode":     "replace",
+					},
+				},
+			},
+		},
+	})
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one NotebookEdit start event, got %#v", started.Events)
+	}
+	startEvent := started.Events[0]
+	if startEvent.Kind != agentproto.EventItemStarted || startEvent.ItemKind != "file_change" {
+		t.Fatalf("unexpected NotebookEdit start projection: %#v", startEvent)
+	}
+	if len(startEvent.FileChanges) != 1 || startEvent.FileChanges[0].Path != "/tmp/demo.ipynb" {
+		t.Fatalf("unexpected NotebookEdit start file change payload: %#v", startEvent.FileChanges)
+	}
+
+	completed := observeClaude(t, tr, map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": "call-notebook-1",
+					"content":     "Notebook cell updated successfully.",
+					"is_error":    false,
+				},
+			},
+		},
+		"tool_use_result": map[string]any{
+			"notebook_path": "/tmp/demo.ipynb",
+			"cell_id":       "cell-1",
+			"new_source":    "print('hello')",
+			"cell_type":     "code",
+			"edit_mode":     "replace",
+		},
+	})
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one NotebookEdit completion event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "file_change" || event.Status != "completed" {
+		t.Fatalf("unexpected NotebookEdit completion projection: %#v", event)
+	}
+	if len(event.FileChanges) != 1 || event.FileChanges[0].Path != "/tmp/demo.ipynb" || event.FileChanges[0].Diff == "" {
+		t.Fatalf("unexpected NotebookEdit completed file change payload: %#v", event.FileChanges)
+	}
+}
+
 func startClaudeTurn(t *testing.T, tr *Translator, permissionMode string) (string, string) {
 	t.Helper()
 	observeClaude(t, tr, map[string]any{

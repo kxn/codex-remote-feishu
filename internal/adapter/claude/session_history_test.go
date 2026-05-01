@@ -146,3 +146,97 @@ func TestReadThreadHistoryProjectsClaudeEditAsFileChange(t *testing.T) {
 		t.Fatalf("expected Claude Edit to render as file_change, got %#v", items[1])
 	}
 }
+
+func TestReadThreadHistoryProjectsClaudeWriteAsFileChange(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-file-write")
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-file-write", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "timestamp": "2026-04-28T11:00:00Z", "cwd": workspaceRoot, "session_id": "session-file-write", "model": "mimo-v2.5-pro", "permissionMode": "default"},
+		{"type": "user", "timestamp": "2026-04-28T11:01:00Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": "请创建文件"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:01:05Z", "promptId": "prompt-1", "message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{
+				"type": "tool_use",
+				"id":   "tool-write-1",
+				"name": "Write",
+				"input": map[string]any{
+					"file_path": "/tmp/readme.md",
+					"content":   "# hello\nworld\n",
+				},
+			},
+		}}},
+		{"type": "user", "timestamp": "2026-04-28T11:01:08Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "tool_result", "tool_use_id": "tool-write-1", "content": "created"},
+		}}, "tool_use_result": map[string]any{
+			"type":         "create",
+			"filePath":     "/tmp/readme.md",
+			"content":      "# hello\nworld\n",
+			"originalFile": "",
+		}},
+	})
+
+	history, err := readThreadHistory(workspaceRoot, "session-file-write", RuntimeStateSnapshot{})
+	if err != nil {
+		t.Fatalf("readThreadHistory: %v", err)
+	}
+	if history == nil || len(history.Turns) != 1 {
+		t.Fatalf("expected one history turn, got %#v", history)
+	}
+	items := history.Turns[0].Items
+	if len(items) != 2 {
+		t.Fatalf("expected user + file_change items, got %#v", items)
+	}
+	if items[1].Kind != "file_change" || items[1].Text != "/tmp/readme.md" {
+		t.Fatalf("expected Claude Write to render as file_change, got %#v", items[1])
+	}
+}
+
+func TestReadThreadHistoryProjectsClaudeNotebookEditAsFileChange(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-notebook-edit")
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-notebook-edit", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "timestamp": "2026-04-28T11:00:00Z", "cwd": workspaceRoot, "session_id": "session-notebook-edit", "model": "mimo-v2.5-pro", "permissionMode": "default"},
+		{"type": "user", "timestamp": "2026-04-28T11:01:00Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": "请改 notebook"}},
+		{"type": "assistant", "timestamp": "2026-04-28T11:01:05Z", "promptId": "prompt-1", "message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{
+				"type": "tool_use",
+				"id":   "tool-notebook-1",
+				"name": "NotebookEdit",
+				"input": map[string]any{
+					"notebook_path": "/tmp/demo.ipynb",
+					"cell_id":       "cell-1",
+					"new_source":    "print('hello')",
+					"cell_type":     "code",
+					"edit_mode":     "replace",
+				},
+			},
+		}}},
+		{"type": "user", "timestamp": "2026-04-28T11:01:08Z", "promptId": "prompt-1", "message": map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "tool_result", "tool_use_id": "tool-notebook-1", "content": "updated"},
+		}}, "tool_use_result": map[string]any{
+			"notebook_path": "/tmp/demo.ipynb",
+			"cell_id":       "cell-1",
+			"new_source":    "print('hello')",
+			"cell_type":     "code",
+			"edit_mode":     "replace",
+		}},
+	})
+
+	history, err := readThreadHistory(workspaceRoot, "session-notebook-edit", RuntimeStateSnapshot{})
+	if err != nil {
+		t.Fatalf("readThreadHistory: %v", err)
+	}
+	if history == nil || len(history.Turns) != 1 {
+		t.Fatalf("expected one history turn, got %#v", history)
+	}
+	items := history.Turns[0].Items
+	if len(items) != 2 {
+		t.Fatalf("expected user + file_change items, got %#v", items)
+	}
+	if items[1].Kind != "file_change" || items[1].Text != "/tmp/demo.ipynb" {
+		t.Fatalf("expected Claude NotebookEdit to render as file_change, got %#v", items[1])
+	}
+}

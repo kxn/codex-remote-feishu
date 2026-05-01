@@ -555,6 +555,9 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		for key, value := range rawToolResult {
 			metadata[key] = cloneJSONValue(value)
 		}
+		if itemKind == "file_change" {
+			mergeClaudeFileChangeMetadataPayload(metadata, tool.Name, rawToolResult)
+		}
 	case string:
 		if strings.TrimSpace(rawToolResult) != "" {
 			metadata["toolUseResult"] = strings.TrimSpace(rawToolResult)
