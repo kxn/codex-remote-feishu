@@ -546,10 +546,10 @@ func (s *Service) enterTargetPickerNewThread(surface *state.SurfaceConsoleRecord
 	if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace == workspaceKey && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		return s.prepareNewThread(surface)
 	}
-	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
-		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{PrepareNewThread: true})
-	}
-	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true)
+	targetBackend := s.surfaceBackend(surface)
+	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, true)
+	resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
+	return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{PrepareNewThread: true})
 }
 
 func targetPickerNewThreadSucceeded(surface *state.SurfaceConsoleRecord, workspaceKey string) bool {

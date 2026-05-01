@@ -488,44 +488,6 @@ func (s *Service) workspaceOnlineInstancesForBackend(workspaceKey string, backen
 	return filtered
 }
 
-func (s *Service) workspaceOnlineInstancesForSurfaceBackend(workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
-	instances := s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
-	return instances
-}
-
-func (s *Service) workspaceCompatibleInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
-	instances := s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, backend)
-	if len(instances) == 0 {
-		return nil
-	}
-	filtered := make([]*state.InstanceRecord, 0, len(instances))
-	for _, inst := range instances {
-		if inst == nil || !s.surfaceInstanceCompatibleForAttach(surface, inst) {
-			continue
-		}
-		filtered = append(filtered, inst)
-	}
-	return filtered
-}
-
-func (s *Service) workspaceDirectAttachInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
-	instances := s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, backend)
-	if len(instances) == 0 {
-		return nil
-	}
-	filtered := make([]*state.InstanceRecord, 0, len(instances))
-	for _, inst := range instances {
-		if inst == nil {
-			continue
-		}
-		if compat := s.surfaceInstanceCompatibility(surface, inst); !compat.Compatible {
-			continue
-		}
-		filtered = append(filtered, inst)
-	}
-	return filtered
-}
-
 func (s *Service) sortWorkspaceAttachInstances(surface *state.SurfaceConsoleRecord, workspaceKey string, instances []*state.InstanceRecord) {
 	sort.Slice(instances, func(i, j int) bool {
 		left := instances[i]
@@ -588,16 +550,14 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 }
 
 func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
-	instances := s.workspaceOnlineInstances(workspaceKey)
 	if surface != nil && s.surfaceIsHeadless(surface) {
-		instances = s.workspaceDirectAttachInstancesForSurfaceBackend(surface, workspaceKey, s.surfaceBackend(surface))
+		resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
+		if resolution.Mode == contractResolutionAttachVisible {
+			return resolution.Instance
+		}
+		return nil
 	}
-	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
-}
-
-func (s *Service) resolveWorkspaceAttachInstanceForBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) *state.InstanceRecord {
-	instances := s.workspaceDirectAttachInstancesForSurfaceBackend(surface, workspaceKey, backend)
-	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
+	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, s.workspaceOnlineInstances(workspaceKey))
 }
 
 func (s *Service) workspaceHasVSCodeActivity(instances []*state.InstanceRecord) bool {

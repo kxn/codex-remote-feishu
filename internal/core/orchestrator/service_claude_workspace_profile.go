@@ -98,19 +98,6 @@ func (s *Service) claudeProfileDisplayName(profileID string) string {
 	return s.claudeProfileRecord(profileID).Name
 }
 
-func (s *Service) instanceMatchesSurfaceClaudeProfile(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
-	if surface == nil || inst == nil {
-		return true
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendClaude {
-		return true
-	}
-	if state.EffectiveInstanceBackend(inst) != agentproto.BackendClaude {
-		return true
-	}
-	return state.NormalizeClaudeProfileID(inst.ClaudeProfileID) == s.surfaceClaudeProfileID(surface)
-}
-
 func (s *Service) SurfaceClaudeProfileID(surfaceID string) string {
 	if s.root == nil {
 		return ""

@@ -15,6 +15,26 @@ type headlessContractSwitchContinuation struct {
 	RestartInstanceID string
 }
 
+func (s *Service) buildHeadlessWorkspaceContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend, prepareNewThread bool) headlessContractSwitchContinuation {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	backend = agentproto.NormalizeBackend(backend)
+	if surface == nil || workspaceKey == "" || backend == "" {
+		return headlessContractSwitchContinuation{}
+	}
+	continuation := headlessContractSwitchContinuation{
+		Attempt: SurfaceResumeAttempt{
+			WorkspaceKey:     workspaceKey,
+			Backend:          backend,
+			PrepareNewThread: prepareNewThread,
+		},
+	}
+	if resolution := s.resolveWorkspaceContract(surface, workspaceKey, backend); resolution.Mode == contractResolutionRestartManaged && resolution.RestartInstance != nil {
+		continuation.RestartManagedNow = true
+		continuation.RestartInstanceID = strings.TrimSpace(resolution.RestartInstance.InstanceID)
+	}
+	return continuation
+}
+
 func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) headlessContractSwitchContinuation {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	backend = agentproto.NormalizeBackend(backend)
@@ -87,6 +107,31 @@ func (s *Service) restartHeadlessContractContinuation(surface *state.SurfaceCons
 		return nil
 	}
 	return s.startHeadlessForContractSwitch(surface, attempt)
+}
+
+func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, resolution contractResolution, options attachWorkspaceOptions) []eventcontract.Event {
+	if surface == nil {
+		return nil
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(continuation.Attempt.WorkspaceKey)
+	if workspaceKey == "" {
+		return nil
+	}
+	options.PrepareNewThread = options.PrepareNewThread || continuation.Attempt.PrepareNewThread
+	switch resolution.Mode {
+	case contractResolutionAttachVisible, contractResolutionReuseManaged:
+		return s.attachWorkspaceWithOptions(surface, workspaceKey, options)
+	case contractResolutionRestartManaged, contractResolutionCreateHeadless:
+		events := s.queueHeadlessContractRestart(nil, surface, continuation)
+		return append(events, s.restartHeadlessContractContinuation(surface, continuation)...)
+	case contractResolutionUnavailable:
+		return notice(surface,
+			firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"),
+			firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"),
+		)
+	default:
+		return nil
+	}
 }
 
 func (s *Service) startHeadlessForContractSwitch(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt) []eventcontract.Event {

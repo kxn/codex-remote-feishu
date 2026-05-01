@@ -36,7 +36,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
 	inst := (*state.InstanceRecord)(nil)
 	switch resolution.Mode {
-	case contractResolutionAttachVisible:
+	case contractResolutionAttachVisible, contractResolutionReuseManaged:
 		inst = resolution.Instance
 	case contractResolutionUnavailable:
 		return notice(surface, firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"), firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"))

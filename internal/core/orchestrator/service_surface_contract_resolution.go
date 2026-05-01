@@ -53,6 +53,15 @@ type contractResolution struct {
 	IncompatibleSeen bool
 }
 
+func (resolution contractResolution) allowsDirectAttach() bool {
+	switch resolution.Mode {
+	case contractResolutionAttachVisible, contractResolutionReuseManaged, contractResolutionRestartManaged:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) resolveHeadlessContract(surface *state.SurfaceConsoleRecord, ctx contractResolutionContext) contractResolution {
 	if ctx.CurrentVisibleOK {
 		return contractResolution{Mode: contractResolutionCurrentVisible}

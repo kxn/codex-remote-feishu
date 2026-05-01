@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -70,19 +69,6 @@ func (s *Service) codexProviderRecord(providerID string) state.CodexProviderReco
 
 func (s *Service) codexProviderDisplayName(providerID string) string {
 	return s.codexProviderRecord(providerID).Name
-}
-
-func (s *Service) instanceMatchesSurfaceCodexProvider(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
-	if surface == nil || inst == nil {
-		return true
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendCodex {
-		return true
-	}
-	if state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex {
-		return true
-	}
-	return state.NormalizeCodexProviderID(inst.CodexProviderID) == s.surfaceCodexProviderID(surface)
 }
 
 func (s *Service) SurfaceCodexProviderID(surfaceID string) string {

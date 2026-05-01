@@ -48,22 +48,6 @@ func (s *Service) surfaceInstanceCompatibleForAttach(surface *state.SurfaceConso
 	return s.surfaceInstanceCompatibility(surface, inst).Compatible
 }
 
-func (s *Service) surfaceInstanceDirectAttachCompatible(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
-	if inst == nil {
-		return false
-	}
-	if surface == nil {
-		return true
-	}
-	if s.normalizeSurfaceProductMode(surface) != state.ProductModeNormal || s.surfaceBackend(surface) != agentproto.BackendCodex {
-		return true
-	}
-	if state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex {
-		return true
-	}
-	return state.NormalizeCodexProviderID(inst.CodexProviderID) == s.surfaceCodexProviderID(surface)
-}
-
 func (s *Service) mergedThreadViewHasCompatibleVisibleInstance(surface *state.SurfaceConsoleRecord, view *mergedThreadView) bool {
 	if view == nil {
 		return false

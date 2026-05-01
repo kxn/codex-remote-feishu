@@ -234,11 +234,10 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 	if surface == nil || workspaceKey == "" {
 		return nil
 	}
-	resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
-	if resolution.Mode == contractResolutionAttachVisible {
-		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{PrepareNewThread: true})
-	}
-	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true)
+	targetBackend := state.SurfaceDesiredBackendContract(surface).Backend
+	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, true)
+	resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
+	return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{PrepareNewThread: true})
 }
 
 func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

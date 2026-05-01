@@ -287,7 +287,11 @@ func (s *Service) targetPickerDirectoryIsKnownWorkspace(surface *state.SurfaceCo
 	if normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface)) == workspaceKey {
 		return true
 	}
-	if s.resolveWorkspaceAttachInstance(surface, workspaceKey) != nil {
+	if backend, filterByBackend := s.normalModeThreadBackend(surface); filterByBackend {
+		if len(s.workspaceOnlineInstancesForBackend(workspaceKey, backend)) != 0 {
+			return true
+		}
+	} else if len(s.workspaceOnlineInstances(workspaceKey)) != 0 {
 		return true
 	}
 	for _, view := range s.mergedThreadViews(surface) {

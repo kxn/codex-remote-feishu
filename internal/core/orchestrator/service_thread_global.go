@@ -496,38 +496,6 @@ func sortMergedThreadViews(views []*mergedThreadView) {
 	})
 }
 
-func (s *Service) reusableManagedHeadless(surface *state.SurfaceConsoleRecord, cwd string, backend agentproto.Backend) *state.InstanceRecord {
-	backend = agentproto.NormalizeBackend(backend)
-	var candidates []*state.InstanceRecord
-	for _, inst := range s.Instances() {
-		if inst == nil || !inst.Online || !isHeadlessInstance(inst) {
-			continue
-		}
-		if backend != "" && state.EffectiveInstanceBackend(inst) != backend {
-			continue
-		}
-		if backend == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
-			continue
-		}
-		if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
-			continue
-		}
-		candidates = append(candidates, inst)
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		left := reusableHeadlessScore(surface, candidates[i], cwd)
-		right := reusableHeadlessScore(surface, candidates[j], cwd)
-		if left != right {
-			return left > right
-		}
-		return candidates[i].InstanceID < candidates[j].InstanceID
-	})
-	return candidates[0]
-}
-
 func reusableHeadlessScore(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, cwd string) int {
 	if inst == nil {
 		return 0

@@ -458,14 +458,19 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 	if workspaceKey != "" {
 		resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
 		switch resolution.Mode {
-		case contractResolutionAttachVisible:
+		case contractResolutionAttachVisible, contractResolutionReuseManaged:
 			options := attachWorkspaceOptions{ResumeNotice: !prepareNewThread, PrepareNewThread: prepareNewThread}
 			return s.attachWorkspaceWithOptions(surface, workspaceKey, options), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
-		case contractResolutionReuseManaged, contractResolutionRestartManaged, contractResolutionCreateHeadless:
+		case contractResolutionRestartManaged, contractResolutionCreateHeadless:
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
-			return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, prepareNewThread || threadID != ""), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+			workspacePrepareNewThread := prepareNewThread || threadID != ""
+			continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, workspacePrepareNewThread)
+			return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{
+				ResumeNotice:     !prepareNewThread,
+				PrepareNewThread: workspacePrepareNewThread,
+			}), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 		case contractResolutionUnavailable:
 			code := firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy")
 			if code == "workspace_not_found" && !allowMissingTargetFailure {
