@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -95,6 +97,18 @@ func CanonicalClaudeProfileID(value string) string {
 
 func IsBuiltInClaudeProfileID(value string) bool {
 	return CanonicalClaudeProfileID(value) == ClaudeDefaultProfileID
+}
+
+func ClaudeProfileIDFromName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if id := CanonicalClaudeProfileID(name); id != "" {
+		return id
+	}
+	sum := sha1.Sum([]byte(name))
+	return "profile-" + hex.EncodeToString(sum[:])[:12]
 }
 
 func NormalizeClaudeProfiles(profiles []ClaudeProfileConfig) []ClaudeProfileConfig {

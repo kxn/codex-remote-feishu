@@ -471,4 +471,142 @@ describe("AdminRoute", () => {
     expect(await screen.findByRole("heading", { name: "Claude 配置" })).toBeInTheDocument();
     expect(await screen.findByText("系统默认配置")).toBeInTheDocument();
   });
+
+  it("keeps Claude profile editing user-facing and saves by required name", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    let profile = makeClaudeProfile({
+      id: "devseek",
+      name: "DevSeek",
+      authMode: "auth_token",
+      baseURL: "https://proxy.internal/v1",
+      hasAuthToken: true,
+      model: "mimo-v2.5-pro",
+      smallModel: "mimo-v2.5-haiku",
+      builtIn: false,
+      persisted: true,
+      readOnly: false,
+    });
+
+    const { calls } = installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
+        },
+      },
+      "/api/admin/feishu/apps/bot-1/permission-check": {
+        body: makePermissionCheck({
+          app: makeApp({ id: "bot-1", name: "主机器人" }),
+          ready: true,
+        }),
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+      "/api/admin/claude/profiles": (call: MockFetchCall) => {
+        if (call.method === "POST") {
+          const body = JSON.parse(String(call.init?.body ?? "{}"));
+          profile = makeClaudeProfile({
+            id: "test-profile",
+            name: body.name,
+            authMode: "auth_token",
+            baseURL: body.baseURL,
+            hasAuthToken: Boolean(body.authToken),
+            model: body.model,
+            smallModel: body.smallModel,
+            builtIn: false,
+            persisted: true,
+            readOnly: false,
+          });
+          return { status: 201, body: { profile } };
+        }
+        return { body: { profiles: [makeClaudeProfile(), profile] } };
+      },
+      "/api/admin/claude/profiles/devseek": (call: MockFetchCall) => {
+        const body = JSON.parse(String(call.init?.body ?? "{}"));
+        profile = makeClaudeProfile({
+          id: "devseek-updated",
+          name: body.name,
+          authMode: "auth_token",
+          baseURL: body.baseURL,
+          hasAuthToken: true,
+          model: body.model,
+          smallModel: body.smallModel,
+          builtIn: false,
+          persisted: true,
+          readOnly: false,
+        });
+        return { body: { profile } };
+      },
+    }, [makeClaudeProfile(), profile]));
+
+    render(<AdminRoute />);
+
+    await user.click(await screen.findByRole("button", { name: /DevSeek/ }));
+
+    expect(screen.queryByText("认证方式")).not.toBeInTheDocument();
+    expect(screen.queryByText("Token 状态")).not.toBeInTheDocument();
+    expect(screen.queryByText("Token 处理方式")).not.toBeInTheDocument();
+    expect(screen.queryByText(/不会再次回显/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/自动生成/)).not.toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/名称/);
+    await user.clear(nameInput);
+    await user.type(nameInput, "DevSeek Updated");
+    await user.clear(screen.getByLabelText("端点地址"));
+    await user.type(screen.getByLabelText("端点地址"), "https://proxy.updated/v1");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    expect(await screen.findByText("Claude 配置已保存。")).toBeInTheDocument();
+    const updateCall = calls.find(
+      (call) => call.method === "PUT" && call.path === "/api/admin/claude/profiles/devseek",
+    );
+    expect(updateCall).toBeDefined();
+    expect(JSON.parse(String(updateCall?.init?.body))).toEqual({
+      name: "DevSeek Updated",
+      baseURL: "https://proxy.updated/v1",
+      model: "mimo-v2.5-pro",
+      smallModel: "mimo-v2.5-haiku",
+    });
+    expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /新增配置/ }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(await screen.findByText("请填写名称。")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/名称/), "测试配置");
+    await user.type(screen.getByLabelText("认证 Token"), "new-token");
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    const createCall = calls.find(
+      (call) => call.method === "POST" && call.path === "/api/admin/claude/profiles",
+    );
+    expect(createCall).toBeDefined();
+    expect(JSON.parse(String(createCall?.init?.body))).toEqual({
+      name: "测试配置",
+      baseURL: "",
+      authToken: "new-token",
+      model: "",
+      smallModel: "",
+    });
+  });
 });

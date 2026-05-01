@@ -108,12 +108,9 @@ export interface ClaudeProfileResponse {
 }
 
 export interface ClaudeProfileWriteRequest {
-  id?: string;
   name?: string;
-  authMode?: string;
   baseURL?: string;
   authToken?: string;
-  clearAuthToken?: boolean;
   model?: string;
   smallModel?: string;
 }

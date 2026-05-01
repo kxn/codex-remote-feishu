@@ -33,14 +33,11 @@ type claudeProfileResponse struct {
 }
 
 type claudeProfileWriteRequest struct {
-	ID             string  `json:"id,omitempty"`
-	Name           *string `json:"name"`
-	AuthMode       *string `json:"authMode"`
-	BaseURL        *string `json:"baseURL"`
-	AuthToken      *string `json:"authToken"`
-	ClearAuthToken bool    `json:"clearAuthToken,omitempty"`
-	Model          *string `json:"model"`
-	SmallModel     *string `json:"smallModel"`
+	Name       *string `json:"name"`
+	BaseURL    *string `json:"baseURL"`
+	AuthToken  *string `json:"authToken"`
+	Model      *string `json:"model"`
+	SmallModel *string `json:"smallModel"`
 }
 
 func (a *App) handleClaudeProfilesList(w http.ResponseWriter, _ *http.Request) {
@@ -80,8 +77,17 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	updated := loaded.Config
-	requestedID := config.CanonicalClaudeProfileID(req.ID)
-	if config.IsBuiltInClaudeProfileID(requestedID) {
+	name, _ := trimmedOptionalString(req.Name)
+	profileID := config.ClaudeProfileIDFromName(name)
+	if profileID == "" {
+		a.adminConfigMu.Unlock()
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "claude_profile_name_required",
+			Message: "claude profile name is required",
+		})
+		return
+	}
+	if config.IsBuiltInClaudeProfileID(profileID) {
 		a.adminConfigMu.Unlock()
 		writeAPIError(w, http.StatusConflict, apiError{
 			Code:    "claude_profile_read_only",
@@ -90,31 +96,25 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	if requestedID != "" && config.IndexOfClaudeProfile(updated.Claude.Profiles, requestedID) >= 0 {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusConflict, apiError{
-			Code:    "duplicate_claude_profile_id",
-			Message: "claude profile id already exists",
-			Details: requestedID,
-		})
-		return
-	}
 
-	name, _ := trimmedOptionalString(req.Name)
-	profileID := requestedID
-	if profileID == "" {
-		profileID = config.NextClaudeProfileID(updated.Claude.Profiles, "", name)
-	}
 	profile := config.ClaudeProfileConfig{
 		ID:         profileID,
-		Name:       firstNonEmpty(name, profileID),
-		AuthMode:   config.NormalizeClaudeAuthMode(optionalStringValue(req.AuthMode)),
+		Name:       name,
+		AuthMode:   config.ClaudeAuthModeAuthToken,
 		BaseURL:    optionalStringValue(req.BaseURL),
 		AuthToken:  optionalStringValue(req.AuthToken),
 		Model:      optionalStringValue(req.Model),
 		SmallModel: optionalStringValue(req.SmallModel),
 	}
-	updated.Claude.Profiles = append(updated.Claude.Profiles, profile)
+	if index := config.IndexOfClaudeProfile(updated.Claude.Profiles, profileID); index >= 0 {
+		current := updated.Claude.Profiles[index]
+		if strings.TrimSpace(profile.AuthToken) == "" {
+			profile.AuthToken = strings.TrimSpace(current.AuthToken)
+		}
+		updated.Claude.Profiles[index] = profile
+	} else {
+		updated.Claude.Profiles = append(updated.Claude.Profiles, profile)
+	}
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
 		a.adminConfigMu.Unlock()
 		writeAPIError(w, http.StatusInternalServerError, apiError{
@@ -181,11 +181,40 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 
 	current := updated.Claude.Profiles[index]
 	if req.Name != nil {
-		current.Name = firstNonEmpty(optionalStringValue(req.Name), current.ID)
+		name := optionalStringValue(req.Name)
+		if name == "" {
+			a.adminConfigMu.Unlock()
+			writeAPIError(w, http.StatusBadRequest, apiError{
+				Code:    "claude_profile_name_required",
+				Message: "claude profile name is required",
+			})
+			return
+		}
+		nextID := config.ClaudeProfileIDFromName(name)
+		if config.IsBuiltInClaudeProfileID(nextID) {
+			a.adminConfigMu.Unlock()
+			writeAPIError(w, http.StatusConflict, apiError{
+				Code:    "claude_profile_read_only",
+				Message: "the built-in default claude profile cannot be replaced",
+				Details: config.ClaudeDefaultProfileID,
+			})
+			return
+		}
+		if nextID != profileID {
+			if existingIndex := config.IndexOfClaudeProfile(updated.Claude.Profiles, nextID); existingIndex >= 0 && existingIndex != index {
+				a.adminConfigMu.Unlock()
+				writeAPIError(w, http.StatusConflict, apiError{
+					Code:    "duplicate_claude_profile_name",
+					Message: "claude profile name already exists",
+					Details: name,
+				})
+				return
+			}
+			current.ID = nextID
+		}
+		current.Name = name
 	}
-	if req.AuthMode != nil {
-		current.AuthMode = config.NormalizeClaudeAuthMode(optionalStringValue(req.AuthMode))
-	}
+	current.AuthMode = config.ClaudeAuthModeAuthToken
 	if req.BaseURL != nil {
 		current.BaseURL = optionalStringValue(req.BaseURL)
 	}
@@ -195,9 +224,7 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if req.SmallModel != nil {
 		current.SmallModel = optionalStringValue(req.SmallModel)
 	}
-	if req.ClearAuthToken {
-		current.AuthToken = ""
-	} else if req.AuthToken != nil {
+	if req.AuthToken != nil {
 		current.AuthToken = optionalStringValue(req.AuthToken)
 	}
 	updated.Claude.Profiles[index] = current

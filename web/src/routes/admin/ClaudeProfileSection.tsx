@@ -20,16 +20,13 @@ type DetailNotice = {
 };
 
 type EditorMode = "built-in" | "edit" | "create";
-type TokenMode = "keep" | "replace" | "clear";
 
 type ClaudeProfileDraft = {
   name: string;
-  authMode: string;
   baseURL: string;
   authToken: string;
   model: string;
   smallModel: string;
-  tokenMode: TokenMode;
 };
 
 type ClaudeProfileSectionProps = {
@@ -85,7 +82,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateDraft(draft, editorMode, activeProfile);
+    const validationError = validateDraft(draft);
     if (validationError) {
       setDetailNotice({ tone: "warn", message: validationError });
       return;
@@ -119,7 +116,9 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
         "PUT",
         buildUpdatePayload(draft, activeProfile),
       );
-      setProfiles((current) => appendOrReplaceProfile(current, response.profile));
+      setProfiles((current) =>
+        appendOrReplaceProfile(current, response.profile, activeProfile.id),
+      );
       selectPersistedProfile(response.profile);
       setDetailNotice({ tone: "good", message: "Claude 配置已保存。" });
     } catch (error) {
@@ -193,16 +192,6 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
     setEditorMode("create");
     setDraft(createEmptyDraft());
     setDetailNotice(null);
-  }
-
-  function startCopyFrom(profile: ClaudeProfileSummary) {
-    setActiveProfileID(newClaudeProfileID);
-    setEditorMode("create");
-    setDraft(createCopyDraft(profile));
-    setDetailNotice({
-      tone: "good",
-      message: "已带入可见字段。你可以补充新的 Token，也可以先留空保存。",
-    });
   }
 
   function cancelCreate() {
@@ -290,11 +279,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
                 <div className="profile-list-head">
                   <strong>{profileTitle(profile)}</strong>
                   <span className="robot-tag">
-                    {profile.builtIn
-                      ? "系统"
-                      : profile.authMode === "auth_token"
-                        ? "专用 Token"
-                        : "沿用当前 Claude"}
+                    {profile.builtIn ? "默认" : "自定义"}
                   </span>
                 </div>
                 <p>{profileCardSummary(profile)}</p>
@@ -323,11 +308,6 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
             onDeleteTargetChange: setDeleteTargetID,
             onDraftChange: setDraft,
             onSave: (event) => void handleSave(event),
-            onStartCopy: () => {
-              if (activeProfile && !activeProfile.builtIn) {
-                startCopyFrom(activeProfile);
-              }
-            },
             onStartCreate: startCreateBlank,
           })}
         </div>
@@ -384,7 +364,6 @@ type DetailCardProps = {
   onDeleteTargetChange: (value: string | null) => void;
   onDraftChange: Dispatch<SetStateAction<ClaudeProfileDraft>>;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
-  onStartCopy: () => void;
   onStartCreate: () => void;
 };
 
@@ -400,7 +379,6 @@ function renderDetailCard(props: DetailCardProps) {
     onDeleteTargetChange,
     onDraftChange,
     onSave,
-    onStartCopy,
     onStartCreate,
   } = props;
 
@@ -409,7 +387,7 @@ function renderDetailCard(props: DetailCardProps) {
       <section className="panel">
         <div className="step-stage-head">
           <h2>{profileTitle(activeProfile)}</h2>
-          <p>这个配置会沿用当前 Claude 在本机上的默认认证、端点和模型设置。</p>
+          <p>使用这台机器当前可用的 Claude 设置。</p>
         </div>
         {detailNotice ? (
           <div className={`notice-banner ${detailNotice.tone}`}>
@@ -418,26 +396,8 @@ function renderDetailCard(props: DetailCardProps) {
         ) : null}
         <div className="completed-card profile-hero-card">
           <h3>系统默认配置</h3>
-          <p>如果你想指定专用端点、认证 Token 或模型，请新建一个自定义配置。</p>
+          <p>如需使用其他端点或模型，请新增配置。</p>
         </div>
-        <dl className="definition-list">
-          <div>
-            <dt>认证方式</dt>
-            <dd>沿用当前 Claude</dd>
-          </div>
-          <div>
-            <dt>端点</dt>
-            <dd>跟随当前 Claude</dd>
-          </div>
-          <div>
-            <dt>主模型</dt>
-            <dd>跟随当前 Claude</dd>
-          </div>
-          <div>
-            <dt>轻量模型</dt>
-            <dd>跟随当前 Claude</dd>
-          </div>
-        </dl>
         <div className="button-row">
           <button
             className="primary-button"
@@ -459,15 +419,8 @@ function renderDetailCard(props: DetailCardProps) {
       : profileTitle(activeProfile);
   const description =
     editorMode === "create"
-      ? "填写一套新的 Claude 连接配置。"
-      : "修改这个配置时，旧 Token 不会再次回显。";
-  const showTokenFields = draft.authMode === "auth_token";
-  const hasSavedToken = Boolean(activeProfile?.hasAuthToken);
-  const shouldShowReplacementInput =
-    showTokenFields &&
-    (editorMode === "create" ||
-      !hasSavedToken ||
-      draft.tokenMode === "replace");
+      ? "填写新的 Claude 连接配置。"
+      : "修改后保存会更新当前配置。";
 
   return (
     <section className="panel">
@@ -480,11 +433,14 @@ function renderDetailCard(props: DetailCardProps) {
           {detailNotice.message}
         </div>
       ) : null}
-      <form onSubmit={onSave}>
+      <form noValidate onSubmit={onSave}>
         <div className="form-grid" style={{ marginTop: "1rem" }}>
           <label className="field form-grid-span-2">
-            <span>配置名称</span>
+            <span>
+              名称 <em className="field-required">*</em>
+            </span>
             <input
+              required
               value={draft.name}
               placeholder="例如：研发代理"
               onChange={(event) =>
@@ -494,176 +450,37 @@ function renderDetailCard(props: DetailCardProps) {
                 }))
               }
             />
-            <span className="form-hint">留空时会自动生成一个名称。</span>
           </label>
 
-          <div className="field form-grid-span-2">
-            <span>认证方式</span>
-            <div className="choice-card-list">
-              <label
-                className={`choice-card${draft.authMode === "inherit" ? " selected" : ""}`}
-              >
-                <input
-                  checked={draft.authMode === "inherit"}
-                  name="claude-auth-mode"
-                  type="radio"
-                  value="inherit"
-                  onChange={() =>
-                    onDraftChange((current) => ({
-                      ...current,
-                      authMode: "inherit",
-                      tokenMode: "keep",
-                    }))
-                  }
-                />
-                <div>
-                  <strong>沿用当前 Claude</strong>
-                  <p>继续使用本机 Claude 已有的认证和默认端点。</p>
-                </div>
-              </label>
-              <label
-                className={`choice-card${draft.authMode === "auth_token" ? " selected" : ""}`}
-              >
-                <input
-                  checked={draft.authMode === "auth_token"}
-                  name="claude-auth-mode"
-                  type="radio"
-                  value="auth_token"
-                  onChange={() =>
-                    onDraftChange((current) => ({
-                      ...current,
-                      authMode: "auth_token",
-                      tokenMode:
-                        editorMode === "edit" && activeProfile?.hasAuthToken
-                          ? "keep"
-                          : "replace",
-                    }))
-                  }
-                />
-                <div>
-                  <strong>使用专用 Token</strong>
-                  <p>给这个配置保存独立的端点地址和认证 Token。</p>
-                </div>
-              </label>
-            </div>
-          </div>
+          <label className="field">
+            <span>端点地址</span>
+            <input
+              value={draft.baseURL}
+              placeholder="例如：https://proxy.internal/v1"
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  baseURL: event.target.value,
+                }))
+              }
+            />
+          </label>
 
-          {showTokenFields ? (
-            <>
-              <label className="field">
-                <span>端点地址</span>
-                <input
-                  value={draft.baseURL}
-                  placeholder="例如：https://proxy.internal/v1"
-                  onChange={(event) =>
-                    onDraftChange((current) => ({
-                      ...current,
-                      baseURL: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <div className="field">
-                <span>Token 状态</span>
-                <div className="soft-card-v2 profile-token-card">
-                  <strong>{describeTokenStatus(editorMode, activeProfile, draft)}</strong>
-                  <p>{describeTokenHint(editorMode, activeProfile, draft)}</p>
-                </div>
-              </div>
-            </>
-          ) : null}
-
-          {showTokenFields && editorMode === "edit" && hasSavedToken ? (
-            <div className="field form-grid-span-2">
-              <span>Token 处理方式</span>
-              <div className="choice-card-list">
-                <label
-                  className={`choice-card${draft.tokenMode === "keep" ? " selected" : ""}`}
-                >
-                  <input
-                    checked={draft.tokenMode === "keep"}
-                    name="claude-token-mode"
-                    type="radio"
-                    value="keep"
-                    onChange={() =>
-                      onDraftChange((current) => ({
-                        ...current,
-                        tokenMode: "keep",
-                        authToken: "",
-                      }))
-                    }
-                  />
-                  <div>
-                    <strong>保持现状</strong>
-                    <p>继续使用已保存的 Token，不会再次回显旧值。</p>
-                  </div>
-                </label>
-                <label
-                  className={`choice-card${draft.tokenMode === "replace" ? " selected" : ""}`}
-                >
-                  <input
-                    checked={draft.tokenMode === "replace"}
-                    name="claude-token-mode"
-                    type="radio"
-                    value="replace"
-                    onChange={() =>
-                      onDraftChange((current) => ({
-                        ...current,
-                        tokenMode: "replace",
-                        authToken: "",
-                      }))
-                    }
-                  />
-                  <div>
-                    <strong>替换 Token</strong>
-                    <p>保存后用一组新的 Token 覆盖旧值。</p>
-                  </div>
-                </label>
-                <label
-                  className={`choice-card${draft.tokenMode === "clear" ? " selected" : ""}`}
-                >
-                  <input
-                    checked={draft.tokenMode === "clear"}
-                    name="claude-token-mode"
-                    type="radio"
-                    value="clear"
-                    onChange={() =>
-                      onDraftChange((current) => ({
-                        ...current,
-                        tokenMode: "clear",
-                        authToken: "",
-                      }))
-                    }
-                  />
-                  <div>
-                    <strong>清除已保存 Token</strong>
-                    <p>保存后会移除这个配置当前保存的 Token。</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          ) : null}
-
-          {shouldShowReplacementInput ? (
-            <label className="field form-grid-span-2">
-              <span>认证 Token</span>
-              <input
-                autoComplete="new-password"
-                placeholder="保存时写入，之后不会再次回显"
-                type="password"
-                value={draft.authToken}
-                onChange={(event) =>
-                  onDraftChange((current) => ({
-                    ...current,
-                    authToken: event.target.value,
-                  }))
-                }
-              />
-              <span className="form-hint">
-                这个字段只会在保存时写入，页面不会显示旧 Token。
-              </span>
-            </label>
-          ) : null}
+          <label className="field">
+            <span>认证 Token</span>
+            <input
+              autoComplete="new-password"
+              placeholder="输入认证 Token"
+              type="password"
+              value={draft.authToken}
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  authToken: event.target.value,
+                }))
+              }
+            />
+          </label>
 
           <label className="field">
             <span>主模型</span>
@@ -713,14 +530,6 @@ function renderDetailCard(props: DetailCardProps) {
           ) : (
             <>
               <button
-                className="secondary-button"
-                disabled={actionBusy === "save-claude-profile"}
-                type="button"
-                onClick={() => onStartCopy()}
-              >
-                复制为新配置
-              </button>
-              <button
                 className="danger-button"
                 disabled={Boolean(deleteTargetID) || actionBusy === "delete-claude-profile"}
                 type="button"
@@ -739,64 +548,35 @@ function renderDetailCard(props: DetailCardProps) {
 function createEmptyDraft(): ClaudeProfileDraft {
   return {
     name: "",
-    authMode: "inherit",
     baseURL: "",
     authToken: "",
     model: "",
     smallModel: "",
-    tokenMode: "replace",
   };
 }
 
 function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDraft {
   return {
     name: profileTitle(profile),
-    authMode: profile.authMode?.trim() || "inherit",
     baseURL: profile.baseURL?.trim() || "",
     authToken: "",
     model: profile.model?.trim() || "",
     smallModel: profile.smallModel?.trim() || "",
-    tokenMode: profile.hasAuthToken ? "keep" : "replace",
   };
 }
 
-function createCopyDraft(profile: ClaudeProfileSummary): ClaudeProfileDraft {
-  return {
-    name: `${profileTitle(profile)} 副本`,
-    authMode: profile.authMode?.trim() || "inherit",
-    baseURL: profile.baseURL?.trim() || "",
-    authToken: "",
-    model: profile.model?.trim() || "",
-    smallModel: profile.smallModel?.trim() || "",
-    tokenMode: "replace",
-  };
-}
-
-function validateDraft(
-  draft: ClaudeProfileDraft,
-  mode: EditorMode,
-  profile: ClaudeProfileSummary | null,
-): string {
-  void draft;
-  void mode;
-  void profile;
+function validateDraft(draft: ClaudeProfileDraft): string {
+  if (!draft.name.trim()) {
+    return "请填写名称。";
+  }
   return "";
 }
 
 function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteRequest {
-  if (draft.authMode === "auth_token") {
-    return {
-      name: optionalString(draft.name),
-      authMode: "auth_token",
-      baseURL: optionalString(draft.baseURL),
-      authToken: optionalString(draft.authToken),
-      model: draft.model.trim(),
-      smallModel: draft.smallModel.trim(),
-    };
-  }
   return {
-    name: optionalString(draft.name),
-    authMode: "inherit",
+    name: draft.name.trim(),
+    baseURL: draft.baseURL.trim(),
+    authToken: optionalString(draft.authToken),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
   };
@@ -807,35 +587,27 @@ function buildUpdatePayload(
   profile: ClaudeProfileSummary,
 ): ClaudeProfileWriteRequest {
   const payload: ClaudeProfileWriteRequest = {
-    name: optionalString(draft.name),
-    authMode: draft.authMode === "auth_token" ? "auth_token" : "inherit",
+    name: draft.name.trim(),
+    baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
   };
-  if (draft.authMode === "auth_token") {
-    payload.baseURL = draft.baseURL.trim();
-    if (draft.tokenMode === "replace") {
-      payload.authToken = optionalString(draft.authToken);
-    }
-    if (draft.tokenMode === "clear") {
-      payload.clearAuthToken = true;
-    }
-    return payload;
+  const authToken = optionalString(draft.authToken);
+  if (authToken) {
+    payload.authToken = authToken;
   }
-  payload.baseURL = "";
-  if (profile.hasAuthToken) {
-    payload.clearAuthToken = true;
-  }
+  void profile;
   return payload;
 }
 
 function appendOrReplaceProfile(
   profiles: ClaudeProfileSummary[],
   profile: ClaudeProfileSummary,
+  previousID = profile.id,
 ): ClaudeProfileSummary[] {
-  const nextProfiles = profiles.map((current) =>
-    current.id === profile.id ? profile : current,
-  );
+  const nextProfiles = profiles
+    .filter((current) => current.id !== previousID || current.id === profile.id)
+    .map((current) => (current.id === profile.id ? profile : current));
   if (nextProfiles.some((current) => current.id === profile.id)) {
     return nextProfiles;
   }
@@ -870,52 +642,7 @@ function profileTitle(profile: ClaudeProfileSummary | null): string {
 
 function profileCardSummary(profile: ClaudeProfileSummary): string {
   if (profile.builtIn) {
-    return "沿用当前 Claude 的本地设置";
+    return "本机默认配置";
   }
-  if (profile.authMode === "auth_token") {
-    return profile.baseURL?.trim() || "已切到专用 Token，但还没有保存端点";
-  }
-  return "沿用当前 Claude 的认证和端点";
-}
-
-function describeTokenStatus(
-  mode: EditorMode,
-  profile: ClaudeProfileSummary | null,
-  draft: ClaudeProfileDraft,
-): string {
-  if (draft.authMode !== "auth_token") {
-    return "当前不会保存专用 Token";
-  }
-  if (mode === "create") {
-    return draft.authToken.trim() ? "准备写入新的 Token" : "还没有填写 Token";
-  }
-  if (draft.tokenMode === "replace") {
-    return draft.authToken.trim() ? "准备替换为新的 Token" : "正在等待新的 Token";
-  }
-  if (draft.tokenMode === "clear") {
-    return "保存后会清除当前 Token";
-  }
-  return profile?.hasAuthToken ? "将继续使用已保存 Token" : "当前还没有保存 Token";
-}
-
-function describeTokenHint(
-  mode: EditorMode,
-  profile: ClaudeProfileSummary | null,
-  draft: ClaudeProfileDraft,
-): string {
-  if (draft.authMode !== "auth_token") {
-    return "如果以后需要独立端点和认证，再切到专用 Token。";
-  }
-  if (mode === "create") {
-    return "这个字段只会在保存时写入，之后不会再次回显。";
-  }
-  if (draft.tokenMode === "replace") {
-    return "保存后会用新的 Token 覆盖旧值。";
-  }
-  if (draft.tokenMode === "clear") {
-    return "保存后会移除当前 Token；需要时可以稍后再补上新的 Token。";
-  }
-  return profile?.hasAuthToken
-    ? "页面不会显示旧 Token，但保存时会继续沿用它。"
-    : "当前还没有保存 Token，请填写后再保存。";
+  return profile.baseURL?.trim() || "自定义连接配置";
 }
