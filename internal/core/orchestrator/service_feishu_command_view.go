@@ -58,6 +58,11 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.OverrideValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideValueKey)
 	view.Config.OverrideExtraValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideExtraValueKey)
 	switch flow.CommandID {
+	case control.FeishuCommandCodexProvider:
+		view.Config.FormOptions = s.codexProviderCommandOptions()
+		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
+			view.Config.FormDefaultValue = s.surfaceCodexProviderID(surface)
+		}
 	case control.FeishuCommandClaudeProfile:
 		view.Config.FormOptions = s.claudeProfileCommandOptions()
 		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
@@ -103,6 +108,11 @@ func (s *Service) resolveConfigFlowValue(
 	case control.FeishuConfigFlowValueSurfaceProductMode:
 		normalized := control.NormalizeCatalogContext(ctx)
 		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
+	case control.FeishuConfigFlowValueSurfaceCodexProvider:
+		if surface != nil {
+			return s.surfaceCodexProviderID(surface)
+		}
+		return state.DefaultCodexProviderID
 	case control.FeishuConfigFlowValueSurfaceClaudeProfile:
 		if surface != nil {
 			return s.surfaceClaudeProfileID(surface)
@@ -178,6 +188,39 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 		base.Sealed = true
 	}
 	return base
+}
+
+func (s *Service) codexProviderCommandOptions() []control.CommandCatalogFormFieldOption {
+	providers := s.CodexProviders()
+	if len(providers) == 0 {
+		return []control.CommandCatalogFormFieldOption{{
+			Label: state.DefaultCodexProviderName,
+			Value: state.DefaultCodexProviderID,
+		}}
+	}
+	labelCounts := map[string]int{}
+	for _, provider := range providers {
+		label := strings.TrimSpace(provider.Name)
+		if label == "" {
+			label = provider.ID
+		}
+		labelCounts[label]++
+	}
+	options := make([]control.CommandCatalogFormFieldOption, 0, len(providers))
+	for _, provider := range providers {
+		label := strings.TrimSpace(provider.Name)
+		if label == "" {
+			label = provider.ID
+		}
+		if labelCounts[label] > 1 && !strings.EqualFold(label, strings.TrimSpace(provider.ID)) {
+			label += "（" + strings.TrimSpace(provider.ID) + "）"
+		}
+		options = append(options, control.CommandCatalogFormFieldOption{
+			Label: label,
+			Value: strings.TrimSpace(provider.ID),
+		})
+	}
+	return options
 }
 
 func (s *Service) claudeProfileCommandOptions() []control.CommandCatalogFormFieldOption {

@@ -13,7 +13,9 @@ func (s *Service) ApplyFeishuUIIntent(action control.Action, intent control.Feis
 
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
 	if flow, ok := control.FeishuConfigFlowDefinitionByIntentKind(intent.Kind); ok {
-		_ = flow
+		if strategy, ok := control.ResolveFeishuCommandStrategy(s.buildCatalogContext(surface), flow.CommandID); ok && !strategy.DispatchAllowed {
+			return s.commandStrategyNotice(surface, strategy)
+		}
 		return s.openConfigCommandPageForAction(surface, action)
 	}
 	switch intent.Kind {

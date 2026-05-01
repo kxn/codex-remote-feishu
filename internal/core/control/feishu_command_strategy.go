@@ -34,6 +34,16 @@ func ResolveFeishuCommandStrategy(ctx CatalogContext, familyID string) (FeishuCo
 		return FeishuCommandStrategy{}, false
 	}
 	if ctx.Backend != agentproto.BackendClaude {
+		if familyID == FeishuCommandClaudeProfile {
+			return FeishuCommandStrategy{
+				FamilyID:        familyID,
+				Backend:         ctx.Backend,
+				Kind:            FeishuCommandStrategyReject,
+				Visible:         false,
+				DispatchAllowed: false,
+				Note:            "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。",
+			}, true
+		}
 		return FeishuCommandStrategy{
 			FamilyID:        familyID,
 			Backend:         ctx.Backend,
@@ -98,10 +108,14 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "Claude 计划确认走 request bridge；在显式 plan contract 落地前不开放 `/plan` 命令入口。")
 	case FeishuCommandAutoWhip,
 		FeishuCommandAutoContinue,
+		FeishuCommandCodexProvider,
 		FeishuCommandSendFile,
 		FeishuCommandFollow,
 		FeishuCommandCron,
 		FeishuCommandVSCodeMigrate:
+		if familyID == FeishuCommandCodexProvider {
+			return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前不在 Codex 模式，暂时不能切换 Codex Provider。请先 `/mode codex`。")
+		}
 		return claudeHiddenBlockedStrategy(familyID, FeishuCommandStrategyReject, "当前 Claude pre-MVP 范围未开放该命令；保持隐藏并显式拒绝。")
 	case FeishuCommandDetach:
 		return claudeVisibleNativeStrategy(familyID)

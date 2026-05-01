@@ -1,8 +1,8 @@
 # Web Setup And Admin User View
 
 > Type: `draft`
-> Updated: `2026-04-29`
-> Summary: 从用户视角看，setup 是一次性向导，admin 是日常管理页；两者都以 `v1.7.0` 页面结构为基线，admin 只额外增加 `Claude 配置`，权限检查允许强制跳过。
+> Updated: `2026-05-01`
+> Summary: 从用户视角看，setup 是一次性向导，admin 是日常管理页；两者都以 `v1.7.0` 页面结构为基线，admin 默认增加 `Claude 配置` 与 `Codex Provider`，权限检查允许强制跳过。
 
 ## 1. setup
 
@@ -39,14 +39,21 @@ admin 默认看到的是：
 1. `机器人管理`
 2. `系统集成`
 3. `Claude 配置`
-4. `存储管理`
+4. `Codex Provider`
+5. `存储管理`
 
 其中：
 
 - `新增机器人` 的连接和权限处理，和 setup 内的新建路径保持同样边界
-- `Claude 配置` 是当前唯一新增的默认主界面区块
+- `Claude 配置` 和 `Codex Provider` 都直接放在 admin 主界面
 
-## 3. 当前统一结论
+## 3. runtime 入口
+
+- `codex headless` 只显示 `切换 Codex Provider`
+- `claude headless` 只显示 `切换 Claude 配置`
+- `vscode` 不显示这两条入口
+- 手动输入另一种 backend 的命令时，会直接报错
+## 4. 当前统一结论
 
 - setup/admin 都以 `v1.7.0` 页面结构为基线
 - setup 内的 `事件订阅` 和 `回调配置` 继续保留

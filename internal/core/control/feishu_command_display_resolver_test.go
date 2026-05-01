@@ -182,6 +182,12 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	if codex.IncludesFamily(FeishuCommandVSCodeMigrate) {
 		t.Fatal("expected codex profile to hide vscode migrate")
 	}
+	if !codex.IncludesFamily(FeishuCommandCodexProvider) {
+		t.Fatal("expected codex profile to include codex provider")
+	}
+	if vscode.IncludesFamily(FeishuCommandCodexProvider) {
+		t.Fatal("expected vscode profile to hide codex provider")
+	}
 }
 
 func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t *testing.T) {

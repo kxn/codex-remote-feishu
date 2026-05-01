@@ -36,6 +36,39 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	}})
 }
 
+func codexProviderPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandCodexProvider)
+	bodySections := BuildFeishuCommandConfigBodySections(def, view)
+	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
+	if view.Sealed {
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
+	}
+	defaultValue := strings.TrimSpace(view.FormDefaultValue)
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = strings.TrimSpace(view.CurrentValue)
+	}
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = ""
+	}
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
+		Title: "立即切换",
+		Entries: []CommandCatalogEntry{{
+			Form: &CommandCatalogForm{
+				CommandID:   FeishuCommandCodexProvider,
+				CommandText: "/codexprovider",
+				SubmitLabel: "切换",
+				Field: CommandCatalogFormField{
+					Name:         "command_args",
+					Kind:         CommandCatalogFormFieldSelectStatic,
+					Placeholder:  "选择 Codex Provider",
+					DefaultValue: defaultValue,
+					Options:      append([]CommandCatalogFormFieldOption(nil), view.FormOptions...),
+				},
+			},
+		}},
+	}})
+}
+
 func claudeProfilePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
 	def, _ := FeishuCommandDefinitionByID(FeishuCommandClaudeProfile)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)

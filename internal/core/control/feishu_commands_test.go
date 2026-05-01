@@ -172,6 +172,42 @@ func TestParseFeishuTextActionRecognizesClaudeProfileCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesCodexProviderCommand(t *testing.T) {
+	tests := []string{
+		"/codexprovider",
+		"/codexprovider default",
+		"/codexprovider team-proxy",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionCodexProviderCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionCodexProviderCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseFeishuMenuActionRecognizesCodexProviderCommand(t *testing.T) {
+	action, ok := ParseFeishuMenuAction("codex_provider")
+	if !ok {
+		t.Fatal("expected codex_provider menu action to be parsed")
+	}
+	if action.Kind != ActionCodexProviderCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionCodexProviderCommand)
+	}
+	if action.Text != "/codexprovider" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/codexprovider")
+	}
+	if action.CommandID != FeishuCommandCodexProvider {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandCodexProvider)
+	}
+}
+
 func TestParseFeishuMenuActionRecognizesClaudeProfileCommand(t *testing.T) {
 	action, ok := ParseFeishuMenuAction("claude_profile")
 	if !ok {

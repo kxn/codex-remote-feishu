@@ -24,6 +24,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		displayProfileFamily(FeishuCommandAccess),
 		displayProfileFamily(FeishuCommandPlan),
 		displayProfileFamily(FeishuCommandVerbose),
+		displayProfileFamily(FeishuCommandCodexProvider),
 		displayProfileFamily(FeishuCommandAutoContinue),
 		displayProfileFamily(FeishuCommandWorkspace),
 		displayProfileFamily(FeishuCommandWorkspaceList),

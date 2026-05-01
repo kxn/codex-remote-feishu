@@ -1,14 +1,14 @@
 # Web Setup / Web Admin 改造方案与技术调研（V2 合并版）
 
 > Type: `draft`
-> Updated: `2026-04-29`
-> Summary: 这份 V2 文档现在只保留一个当前结论：web 页面以 `v1.7.0` 为基线，admin 只新增 `Claude 配置`，权限检查允许强制跳过。
+> Updated: `2026-05-01`
+> Summary: 这份 V2 文档现在只保留一个当前结论：web 页面以 `v1.7.0` 为基线，admin 默认新增 `Claude 配置` 与 `Codex Provider`，权限检查允许强制跳过。
 
 ## 1. 当前页面基线
 
 - setup：继续使用 `v1.7.0` 向导结构
 - admin：继续使用 `v1.7.0` 管理页结构
-- admin 默认新增：`Claude 配置`
+- admin 默认新增：`Claude 配置`、`Codex Provider`
 
 ## 2. 当前流程基线
 

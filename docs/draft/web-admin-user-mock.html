@@ -456,6 +456,19 @@
 
         <section class="block">
           <div class="block-head">
+            <h2 class="block-title">Codex Provider</h2>
+            <p class="block-desc">管理不同的 Codex 连接配置。</p>
+          </div>
+          <div class="block-body">
+            <div class="robot-layout">
+              <div id="codexList" class="robot-list"></div>
+              <div id="codexDetail" class="card"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="block-head">
             <h2 class="block-title">存储管理</h2>
             <p class="block-desc">查看占用并按需清理旧文件。</p>
           </div>
@@ -501,6 +514,7 @@
       const state = {
         selectedRobot: "bot-main",
         selectedClaude: "default",
+        selectedCodex: "default",
         newRobotStatus: "idle",
         eventAttempt: 0,
         callbackAttempt: 0,
@@ -555,10 +569,38 @@
         },
       ];
 
+      const codexProviders = [
+        {
+          id: "default",
+          title: "系统默认",
+          tag: "默认",
+          builtIn: true,
+          endpoint: "沿用当前 Codex 默认设置",
+          keyStatus: "不单独保存 API Key",
+        },
+        {
+          id: "team-proxy",
+          title: "研发代理",
+          tag: "自定义",
+          builtIn: false,
+          endpoint: "https://proxy.internal/v1",
+          keyStatus: "已保存 API Key",
+        },
+        {
+          id: "new-codex",
+          title: "新增配置",
+          tag: "新增",
+          builtIn: false,
+          isNew: true,
+        },
+      ];
+
       const robotList = document.getElementById("robotList");
       const robotDetail = document.getElementById("robotDetail");
       const claudeList = document.getElementById("claudeList");
       const claudeDetail = document.getElementById("claudeDetail");
+      const codexList = document.getElementById("codexList");
+      const codexDetail = document.getElementById("codexDetail");
       const deleteRobotModal = document.getElementById("deleteRobotModal");
       const deleteRobotText = document.getElementById("deleteRobotText");
 
@@ -924,6 +966,157 @@
         };
       }
 
+      function renderCodexList() {
+        codexList.innerHTML = codexProviders
+          .map((provider) => {
+            const active = provider.id === state.selectedCodex;
+            return `
+              <button class="robot-item ${active ? "active" : ""}" data-pid="${provider.id}">
+                <div class="robot-top">
+                  <p class="robot-name">${provider.title}</p>
+                  <span class="tag">${provider.tag}</span>
+                </div>
+                <p class="robot-id">${
+                  provider.isNew ? "创建一套新的 Codex Provider" : provider.endpoint
+                }</p>
+              </button>`;
+          })
+          .join("");
+
+        codexList.querySelectorAll(".robot-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.selectedCodex = btn.dataset.pid;
+            renderAdmin();
+          });
+        });
+      }
+
+      function renderCodexDetail() {
+        const provider = codexProviders.find((item) => item.id === state.selectedCodex);
+        if (!provider) return;
+
+        if (provider.isNew) {
+          codexDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">新增 Codex Provider</h3>
+              <p class="card-desc">填写一套新的 Codex 连接配置。</p>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <label>名称</label>
+                <input id="newCodexName" class="input" placeholder="例如：研发代理" />
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>端点地址</label>
+                <input id="newCodexEndpoint" class="input" placeholder="例如：https://proxy.internal/v1" />
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label>API Key</label>
+                <input id="newCodexKey" class="input" placeholder="请输入 API Key" />
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button id="saveCodexProvider" class="btn primary">保存配置</button>
+              </div>
+              <div id="newCodexSlot" style="margin-top:10px"></div>
+            </div>`;
+
+          document.getElementById("saveCodexProvider").onclick = () => {
+            const name = document.getElementById("newCodexName").value.trim();
+            const endpoint = document.getElementById("newCodexEndpoint").value.trim();
+            const key = document.getElementById("newCodexKey").value.trim();
+            const slot = document.getElementById("newCodexSlot");
+            if (!name || !endpoint || !key) {
+              slot.innerHTML = `<div class="notice bad">请填写完整的名称、端点地址和 API Key。</div>`;
+              return;
+            }
+            const created = {
+              id: `codex-${Date.now()}`,
+              title: name,
+              tag: "自定义",
+              builtIn: false,
+              endpoint,
+              keyStatus: "已保存 API Key",
+            };
+            codexProviders.splice(codexProviders.length - 1, 0, created);
+            state.selectedCodex = created.id;
+            renderAdmin();
+          };
+          return;
+        }
+
+        if (provider.builtIn) {
+          codexDetail.innerHTML = `
+            <div class="card-head">
+              <h3 class="card-title">${provider.title}</h3>
+              <p class="card-desc">使用这台机器当前可用的 Codex 设置。</p>
+            </div>
+            <div class="card-body">
+              <dl class="kv">
+                <dt>端点</dt><dd>${provider.endpoint}</dd>
+                <dt>API Key</dt><dd>${provider.keyStatus}</dd>
+              </dl>
+              <div class="row" style="margin-top:12px">
+                <button id="newCodexFromDefault" class="btn primary">新增自定义配置</button>
+              </div>
+            </div>`;
+          document.getElementById("newCodexFromDefault").onclick = () => {
+            state.selectedCodex = "new-codex";
+            renderAdmin();
+          };
+          return;
+        }
+
+        codexDetail.innerHTML = `
+          <div class="card-head">
+            <h3 class="card-title">${provider.title}</h3>
+            <p class="card-desc">管理这套 Codex 连接配置。</p>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label>名称</label>
+              <input id="editCodexName" class="input" value="${provider.title}" />
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>端点地址</label>
+              <input id="editCodexEndpoint" class="input" value="${provider.endpoint}" />
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>API Key</label>
+              <input id="editCodexKey" class="input" placeholder="请输入 API Key" />
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button id="saveCodexEdit" class="btn primary">保存配置</button>
+              <button id="deleteCodexProvider" class="btn danger">删除配置</button>
+            </div>
+            <div id="editCodexSlot" style="margin-top:10px"></div>
+          </div>`;
+
+        document.getElementById("saveCodexEdit").onclick = () => {
+          const name = document.getElementById("editCodexName").value.trim();
+          const endpoint = document.getElementById("editCodexEndpoint").value.trim();
+          const key = document.getElementById("editCodexKey").value.trim();
+          if (!name || !endpoint || !key) {
+            document.getElementById("editCodexSlot").innerHTML =
+              `<div class="notice bad">请填写完整的名称、端点地址和 API Key。</div>`;
+            return;
+          }
+          provider.title = name;
+          provider.endpoint = endpoint;
+          provider.keyStatus = "已保存 API Key";
+          document.getElementById("editCodexSlot").innerHTML =
+            `<div class="notice good">Codex Provider 已保存。</div>`;
+          renderCodexList();
+        };
+
+        document.getElementById("deleteCodexProvider").onclick = () => {
+          const index = codexProviders.findIndex((item) => item.id === provider.id);
+          if (index < 0) return;
+          codexProviders.splice(index, 1);
+          state.selectedCodex = "default";
+          renderAdmin();
+        };
+      }
+
       function openDeleteRobotModal(robotId) {
         const robot = robots.find((item) => item.id === robotId);
         if (!robot || robot.id === "new") return;
@@ -1002,6 +1195,8 @@
         renderRobotDetail();
         renderClaudeList();
         renderClaudeDetail();
+        renderCodexList();
+        renderCodexDetail();
         renderStorageAndIntegrations();
         bindActions();
       }

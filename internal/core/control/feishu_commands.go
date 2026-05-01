@@ -29,6 +29,7 @@ const (
 	FeishuCommandAccess               = "access"
 	FeishuCommandPlan                 = "plan"
 	FeishuCommandVerbose              = "verbose"
+	FeishuCommandCodexProvider        = "codex_provider"
 	FeishuCommandClaudeProfile        = "claude_profile"
 	FeishuCommandHelp                 = "help"
 	FeishuCommandMenu                 = "menu"
@@ -405,6 +406,29 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		menuDynamic: []feishuCommandDynamicMenuMatch{
 			{prefix: "verbose_", kind: ActionVerboseCommand, parseArgument: normalizeVerboseMenuArgument},
 			{prefix: "verbose-", kind: ActionVerboseCommand, parseArgument: normalizeVerboseMenuArgument},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandCodexProvider,
+			GroupID:          FeishuCommandGroupSendSettings,
+			Title:            "切换 Codex Provider",
+			CanonicalSlash:   "/codexprovider",
+			CanonicalMenuKey: "codex_provider",
+			ArgumentKind:     FeishuCommandArgumentText,
+			ArgumentFormHint: "default",
+			ArgumentFormNote: "输入已存在的 Codex Provider ID。",
+			ArgumentSubmit:   "切换",
+			Description:      "查看当前 Codex Provider；bare `/codexprovider` 会返回可切换的配置下拉卡片。",
+			Examples:         []string{"/codexprovider default"},
+			ShowInHelp:       true,
+			ShowInMenu:       true,
+		},
+		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/codexprovider", kind: ActionCodexProviderCommand},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "codex_provider", action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider"}},
 		},
 	},
 	{

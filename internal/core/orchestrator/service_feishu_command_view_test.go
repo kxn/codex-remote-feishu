@@ -72,3 +72,41 @@ func TestBuildConfigCommandViewStatePopulatesClaudeProfileOptions(t *testing.T) 
 		}
 	}
 }
+
+func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) {
+	now := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.MaterializeCodexProviders([]state.CodexProviderRecord{
+		{ID: "team-proxy", Name: "Team Proxy"},
+		{ID: "team-proxy-2", Name: "Team Proxy"},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	if !ok {
+		t.Fatal("expected codex provider config flow")
+	}
+	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if view.Config.CurrentValue != "team-proxy" {
+		t.Fatalf("current value = %q, want %q", view.Config.CurrentValue, "team-proxy")
+	}
+	if view.Config.FormDefaultValue != "team-proxy" {
+		t.Fatalf("default value = %q, want %q", view.Config.FormDefaultValue, "team-proxy")
+	}
+	if got := view.Config.FormOptions; len(got) != 3 {
+		t.Fatalf("expected default + 2 custom providers, got %#v", got)
+	} else {
+		if got[0].Label != state.DefaultCodexProviderName || got[0].Value != state.DefaultCodexProviderID {
+			t.Fatalf("unexpected built-in default option: %#v", got[0])
+		}
+		if got[1].Label != "Team Proxy（team-proxy）" || got[1].Value != "team-proxy" {
+			t.Fatalf("unexpected first custom option: %#v", got[1])
+		}
+		if got[2].Label != "Team Proxy（team-proxy-2）" || got[2].Value != "team-proxy-2" {
+			t.Fatalf("unexpected second custom option: %#v", got[2])
+		}
+	}
+}

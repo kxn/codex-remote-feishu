@@ -39,6 +39,7 @@ const (
 	ActionPlanCommand                 ActionKind = "surface.command.plan"
 	ActionPlanProposalDecision        ActionKind = "surface.command.plan_proposal_decision"
 	ActionVerboseCommand              ActionKind = "surface.command.verbose"
+	ActionCodexProviderCommand        ActionKind = "surface.command.codex_provider"
 	ActionAutoWhipCommand             ActionKind = "surface.command.auto_whip"
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"

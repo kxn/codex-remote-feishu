@@ -190,7 +190,7 @@ provider 管理和 provider 选择要分开：
 
 1. 当前 surface 是 `codex headless` 时：
    - 显示 `切换 Codex Provider`
-   - 建议 slash 为 `/codexprovider`
+   - slash 为 `/codexprovider`
 2. 当前 surface 是 `claude headless` 时：
    - 显示 `切换 Claude 配置`
    - 继续沿用 `/claudeprofile`
@@ -198,6 +198,9 @@ provider 管理和 provider 选择要分开：
    - 两者都不显示
 4. 两者不能同时在 help、menu、config page 中可见。
 5. 如果用户手动输入了当前 backend 不支持的那一条命令，必须返回显式报错，不做 silent fallback，也不偷偷改成另一条配置命令。
+6. 这条显式报错同时适用于：
+   - bare `/codexprovider` / `/claudeprofile`
+   - 带参数的 `/codexprovider <id>` / `/claudeprofile <id>`
 
 ## 5. 配置模型
 
@@ -379,15 +382,17 @@ setup 不出现任何 provider 配置入口。
 
 ## 9. 参考落点
 
-### 9.1 当前已确认需要清理的陈旧文档 / mock
+### 9.1 当前已同步的相关文档 / mock
 
-下列文档仍停留在“admin 只新增 `Claude 配置`”的旧状态，后续实现时应与本设计同步更新：
+本轮已经同步到当前结论的文档与 mock：
 
 - `docs/implemented/web-admin-ui-redesign.md`
 - `docs/draft/web-onboarding-admin-workflow-prd.md`
 - `docs/draft/web-onboarding-admin-user-view.md`
 - `docs/draft/web-setup-flow-v2.md`
 - `docs/draft/web-admin-user-mock.html`
+- `docs/general/remote-surface-state-machine.md`
+- `docs/general/feishu-card-ui-state-machine.md`
 
 当前仓库内最接近的现成实现路径：
 
@@ -407,4 +412,4 @@ setup 不出现任何 provider 配置入口。
   - `internal/config/codex_provider_env.go`
   - `internal/app/wrapper/app_process.go`
 
-本轮建议优先按 `Claude 配置` 的形状复用 Web 与 admin API，再把“最终如何投影到 Codex 启动参数和 child env”接到现有 `BuildCodexChildEnv(...)` 和 wrapper 启动链路上。
+本轮实现已经按 `Claude 配置` 的形状复用了 Web 与 admin API，并把“最终如何投影到 Codex 启动参数和 child env”接到了现有 `BuildCodexChildEnv(...)` 和 wrapper 启动链路上。

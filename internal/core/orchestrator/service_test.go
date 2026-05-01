@@ -333,10 +333,16 @@ func TestApplyFeishuUIIntentBuildsVerboseCatalog(t *testing.T) {
 
 func TestApplyFeishuUIIntentBuildsConfigCatalogsFromRegistry(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
 
 	for _, flow := range control.FeishuConfigFlowDefinitions() {
 		t.Run(flow.CommandID, func(t *testing.T) {
+			svc := newServiceForTest(&now)
+			switch flow.CommandID {
+			case control.FeishuCommandClaudeProfile:
+				svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "", "", "")
+			case control.FeishuCommandCodexProvider:
+				svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "", "", "", "")
+			}
 			events := svc.ApplyFeishuUIIntent(control.Action{
 				Kind:             flow.ActionKind,
 				SurfaceSessionID: "surface-1",

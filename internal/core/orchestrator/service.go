@@ -488,6 +488,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleAutoContinueCommand(surface, action)
 	case control.ActionModeCommand:
 		events = s.handleModeCommand(surface, action)
+	case control.ActionCodexProviderCommand:
+		events = s.handleCodexProviderCommand(surface, action)
 	case control.ActionClaudeProfileCommand:
 		events = s.handleClaudeProfileCommand(surface, action)
 	case control.ActionRespondRequest:

@@ -51,6 +51,30 @@ func TestResolveFeishuCommandStrategyAppliesClaudeMatrix(t *testing.T) {
 	}
 }
 
+func TestResolveFeishuCommandStrategyRejectsWrongProviderSwitcherForBackend(t *testing.T) {
+	codexStrategy, ok := ResolveFeishuCommandStrategy(CatalogContext{}, FeishuCommandClaudeProfile)
+	if !ok {
+		t.Fatal("expected claude profile strategy to resolve in codex")
+	}
+	if codexStrategy.DispatchAllowed || codexStrategy.Visible {
+		t.Fatalf("expected codex backend to reject claude profile command, got %#v", codexStrategy)
+	}
+	if !containsNormalized(codexStrategy.Note, "/mode claude") {
+		t.Fatalf("expected claude mode guidance, got %q", codexStrategy.Note)
+	}
+
+	claudeStrategy, ok := ResolveFeishuCommandStrategy(CatalogContext{Backend: agentproto.BackendClaude}, FeishuCommandCodexProvider)
+	if !ok {
+		t.Fatal("expected codex provider strategy to resolve in claude")
+	}
+	if claudeStrategy.DispatchAllowed || claudeStrategy.Visible {
+		t.Fatalf("expected claude backend to reject codex provider command, got %#v", claudeStrategy)
+	}
+	if !containsNormalized(claudeStrategy.Note, "/mode codex") {
+		t.Fatalf("expected codex mode guidance, got %q", claudeStrategy.Note)
+	}
+}
+
 func TestResolveFeishuActionStrategyUsesResolvedFamily(t *testing.T) {
 	strategy, ok := ResolveFeishuActionStrategy(CatalogContext{Backend: agentproto.BackendClaude}, Action{
 		Kind: ActionSteerAll,

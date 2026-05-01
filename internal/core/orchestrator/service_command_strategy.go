@@ -16,6 +16,10 @@ func (s *Service) commandStrategyBlocked(surface *state.SurfaceConsoleRecord, ac
 	if !ok || strategy.DispatchAllowed {
 		return nil
 	}
+	return s.commandStrategyNotice(surface, strategy)
+}
+
+func (s *Service) commandStrategyNotice(surface *state.SurfaceConsoleRecord, strategy control.FeishuCommandStrategy) []eventcontract.Event {
 	text := strings.TrimSpace(strategy.Note)
 	if text == "" {
 		text = "当前 backend 暂不支持这个命令。"

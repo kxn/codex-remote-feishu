@@ -303,7 +303,7 @@ func TestClaudeProfileCommandRejectedInVSCodeMode(t *testing.T) {
 		Text:             "/claudeprofile devseek",
 	})
 
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "claude_profile_mode_required" {
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "command_rejected" {
 		t.Fatalf("expected vscode mode to reject claude profile switch, got %#v", events)
 	}
 	if !strings.Contains(events[0].Notice.Text, "/mode claude") {
