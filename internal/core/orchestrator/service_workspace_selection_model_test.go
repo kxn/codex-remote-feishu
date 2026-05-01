@@ -334,14 +334,14 @@ func TestBuildWorkspaceSelectionModelDoesNotFilterCodexWorkspaceByProvider(t *te
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, "team-proxy", "", "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:       "inst-codex",
-		DisplayName:      "codex-repo",
-		WorkspaceRoot:    "/data/dl/codex",
-		WorkspaceKey:     "/data/dl/codex",
-		ShortName:        "codex",
-		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "default",
-		Online:           true,
+		InstanceID:      "inst-codex",
+		DisplayName:     "codex-repo",
+		WorkspaceRoot:   "/data/dl/codex",
+		WorkspaceKey:    "/data/dl/codex",
+		ShortName:       "codex",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "default",
+		Online:          true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/codex", LastUsedAt: now},
 		},

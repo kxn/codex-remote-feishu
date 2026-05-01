@@ -27,12 +27,12 @@ type mergedThreadView struct {
 	Inst     *state.InstanceRecord
 	Thread   *state.ThreadRecord
 
-	CurrentVisible           bool
-	FreeVisibleInst          *state.InstanceRecord
-	AnyVisibleInst           *state.InstanceRecord
+	CurrentVisible            bool
+	FreeVisibleInst           *state.InstanceRecord
+	AnyVisibleInst            *state.InstanceRecord
 	CompatibleFreeVisibleInst *state.InstanceRecord
 	CompatibleAnyVisibleInst  *state.InstanceRecord
-	BusyOwner                *state.SurfaceConsoleRecord
+	BusyOwner                 *state.SurfaceConsoleRecord
 }
 
 type resolvedThreadTarget struct {
