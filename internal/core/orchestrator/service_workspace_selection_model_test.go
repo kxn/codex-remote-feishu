@@ -327,6 +327,9 @@ func TestBuildWorkspaceSelectionModelDoesNotFilterClaudeWorkspaceByProfile(t *te
 	if len(model.Entries) != 1 || !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/claude") {
 		t.Fatalf("expected profile-mismatched claude workspace to stay visible, got %#v", model.Entries)
 	}
+	if model.Entries[0].Attachable {
+		t.Fatalf("expected profile-mismatched claude workspace to stop pretending it is directly attachable, got %#v", model.Entries[0])
+	}
 }
 
 func TestBuildWorkspaceSelectionModelDoesNotFilterCodexWorkspaceByProvider(t *testing.T) {

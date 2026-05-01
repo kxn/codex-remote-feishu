@@ -456,20 +456,23 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 
 	workspaceKey := normalizeWorkspaceClaimKey(attempt.WorkspaceKey)
 	if workspaceKey != "" {
-		if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
-			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_busy"}
-		}
-		if inst := s.resolveWorkspaceAttachInstanceForBackend(surface, workspaceKey, targetBackend); inst != nil {
+		resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
+		switch resolution.Mode {
+		case contractResolutionAttachVisible:
 			options := attachWorkspaceOptions{ResumeNotice: !prepareNewThread, PrepareNewThread: prepareNewThread}
 			return s.attachWorkspaceWithOptions(surface, workspaceKey, options), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
-		}
-		if len(s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, targetBackend)) == 0 {
+		case contractResolutionReuseManaged, contractResolutionRestartManaged, contractResolutionCreateHeadless:
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
 			return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, prepareNewThread || threadID != ""), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+		case contractResolutionUnavailable:
+			code := firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy")
+			if code == "workspace_not_found" && !allowMissingTargetFailure {
+				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
+			}
+			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: code}
 		}
-		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "workspace_instance_busy"}
 	}
 
 	if failureCode == "" {

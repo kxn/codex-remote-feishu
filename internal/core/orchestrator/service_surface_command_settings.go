@@ -234,7 +234,8 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 	if surface == nil || workspaceKey == "" {
 		return nil
 	}
-	if inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey); inst != nil {
+	resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
+	if resolution.Mode == contractResolutionAttachVisible {
 		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{PrepareNewThread: true})
 	}
 	return s.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, true)
@@ -314,22 +315,9 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 		return notice(surface, "claude_profile_busy", text)
 	}
 
-	continuation := s.buildClaudeProfileSwitchContinuation(surface, currentWorkspaceKey)
+	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendClaude)
 	events := s.discardDrafts(surface)
-	if continuation.RestartManagedNow {
-		events = append(events, eventcontract.Event{
-			Kind:             eventcontract.KindDaemonCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandKillHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       continuation.RestartInstanceID,
-				ThreadID:         continuation.Attempt.ThreadID,
-				ThreadTitle:      continuation.Attempt.ThreadTitle,
-				ThreadCWD:        continuation.Attempt.ThreadCWD,
-			},
-		})
-	}
+	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	s.setSurfaceClaudeProfileID(surface, target.ID)
 	if currentWorkspaceKey == "" {
@@ -348,7 +336,7 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 
 	surface.ClaimedWorkspaceKey = currentWorkspaceKey
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
-	resumeEvents := s.restartClaudeProfileContinuation(surface, continuation)
+	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Claude 配置：%s。正在重新准备当前工作区。", targetLabel)
 	if commandCardOwnsInlineResult(action) {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{

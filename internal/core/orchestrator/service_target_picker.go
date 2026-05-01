@@ -873,19 +873,22 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
-		compatibleInstances := instances
-		if filterByBackend {
-			compatibleInstances = s.workspaceCompatibleInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)
-			s.sortWorkspaceAttachInstances(surface, workspaceKey, compatibleInstances)
-		}
 		latestUsedAt := recoverableWorkspaces[workspaceKey]
 		ageText := ""
 		if !latestUsedAt.IsZero() {
 			ageText = humanizeRelativeTime(s.now(), latestUsedAt)
 		}
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
-		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, compatibleInstances) != nil
-		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
+		attachable := false
+		recoverableOnly := len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
+		if filterByBackend {
+			switch s.resolveWorkspaceContract(surface, workspaceKey, targetBackend).Mode {
+			case contractResolutionAttachVisible, contractResolutionReuseManaged, contractResolutionRestartManaged:
+				attachable = true
+			}
+		} else {
+			attachable = s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
+		}
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
 		if busy {
 			continue

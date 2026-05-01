@@ -198,33 +198,30 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeExistingWorkspaceAndPrepares
 	if surface.ProductMode != state.ProductModeNormal || surface.Backend != agentproto.BackendClaude {
 		t.Fatalf("expected normal claude surface after switch, got %#v", surface)
 	}
-	if surface.AttachedInstanceID != "inst-claude" || surface.PendingHeadless != nil {
-		t.Fatalf("expected existing claude workspace to attach directly, got %#v", surface)
+	if surface.AttachedInstanceID != "" || surface.PendingHeadless == nil {
+		t.Fatalf("expected profile-mismatched claude workspace to start matching headless, got %#v", surface)
 	}
-	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeNewThreadReady {
-		t.Fatalf("expected backend switch to land in new_thread_ready, got %#v", surface)
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected backend switch fresh-start path to stay unbound until launch completes, got %#v", surface)
 	}
-	if !strings.EqualFold(surface.PreparedThreadCWD, "/data/dl/repo") || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
-		t.Fatalf("expected prepared/claimed workspace to stay on repo, got %#v", surface)
+	if !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") || !surface.PendingHeadless.PrepareNewThread || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected backend switch to preserve workspace/new-thread intent in pending headless, got %#v", surface)
 	}
-	if surface.PreparedFromThreadID != "" {
-		t.Fatalf("expected backend switch to drop cross-backend session binding, got %#v", surface)
+	if surface.PreparedFromThreadID != "" || surface.PreparedThreadCWD != "" {
+		t.Fatalf("expected fresh-start path not to pre-bind prepared thread route before launch, got %#v", surface)
 	}
 
-	var sawSwitchNotice, sawPreparedSelection, sawNewThreadReady bool
+	var sawSwitchNotice, sawWorkspaceStarting bool
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "surface_mode_switched" {
 			sawSwitchNotice = true
 		}
-		if event.ThreadSelection != nil && event.ThreadSelection.RouteMode == string(state.RouteModeNewThreadReady) && event.ThreadSelection.Title == preparedNewThreadSelectionTitle() {
-			sawPreparedSelection = true
-		}
-		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
-			sawNewThreadReady = true
+		if event.Notice != nil && event.Notice.Code == "workspace_create_starting" {
+			sawWorkspaceStarting = true
 		}
 	}
-	if !sawSwitchNotice || !sawPreparedSelection || !sawNewThreadReady {
-		t.Fatalf("expected switch notice + prepared selection + new_thread_ready, got %#v", events)
+	if !sawSwitchNotice || !sawWorkspaceStarting {
+		t.Fatalf("expected switch notice + fresh-start notice, got %#v", events)
 	}
 }
 
@@ -279,10 +276,10 @@ func TestModeCommandSwitchesClaudeWorkspaceBackToCodexAndPreparesNewThreadReady(
 		t.Fatalf("expected normal codex surface after switch, got %#v", surface)
 	}
 	if surface.AttachedInstanceID != "inst-codex" || surface.PendingHeadless != nil {
-		t.Fatalf("expected existing codex workspace to attach directly, got %#v", surface)
+		t.Fatalf("expected compatible codex workspace to attach directly, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeNewThreadReady {
-		t.Fatalf("expected backend switch to land in new_thread_ready, got %#v", surface)
+		t.Fatalf("expected compatible codex workspace switch to land in new_thread_ready, got %#v", surface)
 	}
 	if !strings.EqualFold(surface.PreparedThreadCWD, "/data/dl/repo") || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
 		t.Fatalf("expected prepared/claimed workspace to stay on repo, got %#v", surface)
@@ -355,7 +352,7 @@ func TestClaudeModeFirstTurnBindsCreatedThreadForFollowupText(t *testing.T) {
 
 	surface := svc.root.Surfaces["surface-1"]
 	if surface.AttachedInstanceID != "inst-claude" || surface.RouteMode != state.RouteModeNewThreadReady {
-		t.Fatalf("expected claude mode switch to attach existing claude workspace in new-thread-ready state, got %#v", surface)
+		t.Fatalf("expected claude mode switch to attach compatible visible workspace in new-thread-ready state, got %#v", surface)
 	}
 
 	first := svc.ApplySurfaceAction(control.Action{

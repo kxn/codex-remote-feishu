@@ -94,22 +94,9 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 		return notice(surface, "codex_provider_busy", text)
 	}
 
-	continuation := s.buildCodexProviderSwitchContinuation(surface, currentWorkspaceKey)
+	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendCodex)
 	events := s.discardDrafts(surface)
-	if continuation.RestartManagedNow {
-		events = append(events, eventcontract.Event{
-			Kind:             eventcontract.KindDaemonCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			DaemonCommand: &control.DaemonCommand{
-				Kind:             control.DaemonCommandKillHeadless,
-				SurfaceSessionID: surface.SurfaceSessionID,
-				InstanceID:       continuation.RestartInstanceID,
-				ThreadID:         continuation.Attempt.ThreadID,
-				ThreadTitle:      continuation.Attempt.ThreadTitle,
-				ThreadCWD:        continuation.Attempt.ThreadCWD,
-			},
-		})
-	}
+	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	s.setSurfaceCodexProviderID(surface, target.ID)
 	if currentWorkspaceKey == "" {
@@ -125,7 +112,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	}
 
 	surface.ClaimedWorkspaceKey = currentWorkspaceKey
-	resumeEvents := s.restartCodexProviderContinuation(surface, continuation)
+	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Codex Provider：%s。正在重新准备当前工作区。", targetLabel)
 	if commandCardOwnsInlineResult(action) {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{

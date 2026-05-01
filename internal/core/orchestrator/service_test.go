@@ -659,7 +659,7 @@ func TestAttachWorkspaceEntersUnboundAndPromptsUse(t *testing.T) {
 	}
 }
 
-func TestAttachWorkspaceIgnoresClaudeProfileMismatch(t *testing.T) {
+func TestAttachWorkspaceRejectsClaudeProfileMismatch(t *testing.T) {
 	now := time.Date(2026, 4, 29, 3, 12, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "profile-a", "", "")
@@ -686,11 +686,11 @@ func TestAttachWorkspaceIgnoresClaudeProfileMismatch(t *testing.T) {
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-1" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
-		t.Fatalf("expected attach to reuse backend-matching workspace despite profile mismatch, got %#v", surface)
+	if surface.AttachedInstanceID != "" || !testutil.SamePath(surface.ClaimedWorkspaceKey, "") {
+		t.Fatalf("expected attach to reject profile-mismatched workspace instead of silently attaching, got %#v", surface)
 	}
-	if len(events) == 0 {
-		t.Fatalf("expected workspace attach events, got %#v", events)
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "workspace_contract_mismatch" {
+		t.Fatalf("expected contract mismatch notice, got %#v", events)
 	}
 }
 

@@ -268,12 +268,6 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
-		compatibleInstances := instances
-		if filterByBackend {
-			compatibleInstances = s.workspaceCompatibleInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)
-			s.sortWorkspaceAttachInstances(surface, workspaceKey, compatibleInstances)
-		}
-
 		latestUsedAt := recoverableWorkspaces[workspaceKey]
 		ageText := ""
 		if !latestUsedAt.IsZero() {
@@ -283,8 +277,16 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
 		isCurrent := surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace == workspaceKey
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
-		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, compatibleInstances) != nil
-		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
+		attachable := false
+		recoverableOnly := len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
+		if filterByBackend {
+			switch s.resolveWorkspaceContract(surface, workspaceKey, targetBackend).Mode {
+			case contractResolutionAttachVisible, contractResolutionReuseManaged, contractResolutionRestartManaged:
+				attachable = true
+			}
+		} else {
+			attachable = s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
+		}
 
 		if isCurrent {
 			current = &control.FeishuWorkspaceSelectionCurrent{
@@ -513,7 +515,10 @@ func (s *Service) workspaceDirectAttachInstancesForSurfaceBackend(surface *state
 	}
 	filtered := make([]*state.InstanceRecord, 0, len(instances))
 	for _, inst := range instances {
-		if inst == nil || !s.surfaceInstanceDirectAttachCompatible(surface, inst) {
+		if inst == nil {
+			continue
+		}
+		if compat := s.surfaceInstanceCompatibility(surface, inst); !compat.Compatible {
 			continue
 		}
 		filtered = append(filtered, inst)
@@ -585,7 +590,7 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
 	instances := s.workspaceOnlineInstances(workspaceKey)
 	if surface != nil && s.surfaceIsHeadless(surface) {
-		instances = s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, s.surfaceBackend(surface))
+		instances = s.workspaceDirectAttachInstancesForSurfaceBackend(surface, workspaceKey, s.surfaceBackend(surface))
 	}
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
 }

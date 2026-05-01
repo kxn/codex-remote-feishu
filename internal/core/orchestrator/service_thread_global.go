@@ -667,45 +667,45 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 			NoticeText: "目标会话所在 workspace 当前已被其他飞书会话占用。",
 		}
 	}
-	if view.CurrentVisible && s.currentVisibleThreadEligible(surface, view.ThreadID) {
+	resolution := s.resolveThreadContract(surface, view, view.CurrentVisible && s.currentVisibleThreadEligible(surface, view.ThreadID), false)
+	switch resolution.Mode {
+	case contractResolutionCurrentVisible:
 		return resolvedThreadTarget{
 			Mode: threadAttachCurrentVisible,
 			View: view,
 		}
-	}
-	if view.BusyOwner != nil {
-		return resolvedThreadTarget{
-			Mode:       threadAttachUnavailable,
-			View:       view,
-			NoticeCode: "thread_busy",
-			NoticeText: "目标会话当前已被其他飞书会话占用。",
-		}
-	}
-	if view.FreeVisibleInst != nil {
+	case contractResolutionAttachVisible:
 		return resolvedThreadTarget{
 			Mode:     threadAttachFreeVisible,
 			View:     view,
-			Instance: view.FreeVisibleInst,
+			Instance: resolution.Instance,
 		}
-	}
-	if headless := s.reusableManagedHeadless(surface, threadCWD(view), view.Backend); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+	case contractResolutionReuseManaged:
 		return resolvedThreadTarget{
 			Mode:     threadAttachReuseHeadless,
 			View:     view,
-			Instance: headless,
+			Instance: resolution.Instance,
 		}
-	}
-	if strings.TrimSpace(threadCWD(view)) == "" {
+	case contractResolutionRestartManaged, contractResolutionCreateHeadless:
+		if strings.TrimSpace(threadCWD(view)) == "" {
+			return resolvedThreadTarget{
+				Mode:       threadAttachUnavailable,
+				View:       view,
+				NoticeCode: "thread_cwd_missing",
+				NoticeText: "目标会话缺少可恢复的工作目录，当前无法直接接管。",
+			}
+		}
+		return resolvedThreadTarget{
+			Mode: threadAttachCreateHeadless,
+			View: view,
+		}
+	default:
 		return resolvedThreadTarget{
 			Mode:       threadAttachUnavailable,
 			View:       view,
-			NoticeCode: "thread_cwd_missing",
-			NoticeText: "目标会话缺少可恢复的工作目录，当前无法直接接管。",
+			NoticeCode: firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "thread_not_found"),
+			NoticeText: firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标会话不存在或当前不可见。"),
 		}
-	}
-	return resolvedThreadTarget{
-		Mode: threadAttachCreateHeadless,
-		View: view,
 	}
 }
 
@@ -725,18 +725,24 @@ func (s *Service) resolveHeadlessRestoreTargetFromView(surface *state.SurfaceCon
 			NoticeText: "目标会话当前已被其他飞书会话占用。",
 		}
 	}
-	if view.FreeVisibleInst != nil && isHeadlessInstance(view.FreeVisibleInst) {
+	if view.CompatibleFreeVisibleInst != nil && isHeadlessInstance(view.CompatibleFreeVisibleInst) {
 		return resolvedThreadTarget{
 			Mode:     threadAttachFreeVisible,
 			View:     view,
-			Instance: view.FreeVisibleInst,
+			Instance: view.CompatibleFreeVisibleInst,
 		}
 	}
-	if headless := s.reusableManagedHeadless(surface, threadCWD(view), view.Backend); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+	if headless := s.reusableManagedHeadlessForResolution(surface, threadCWD(view), view.Backend); headless != nil && strings.TrimSpace(threadCWD(view)) != "" {
+		if s.surfaceInstanceCompatibleForAttach(surface, headless) {
+			return resolvedThreadTarget{
+				Mode:     threadAttachReuseHeadless,
+				View:     view,
+				Instance: headless,
+			}
+		}
 		return resolvedThreadTarget{
-			Mode:     threadAttachReuseHeadless,
-			View:     view,
-			Instance: headless,
+			Mode: threadAttachCreateHeadless,
+			View: view,
 		}
 	}
 	if strings.TrimSpace(threadCWD(view)) == "" {
@@ -763,7 +769,7 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online &&
 			state.EffectiveInstanceBackend(inst) == backend &&
 			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) &&
-			(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, inst)) {
+			s.surfaceInstanceCompatibleForAttach(surface, inst) {
 			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 				return nil, "thread_busy"
 			}
@@ -776,9 +782,8 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	if view.BusyOwner != nil {
 		return nil, "thread_busy"
 	}
-	if view.FreeVisibleInst != nil && state.EffectiveInstanceBackend(view.FreeVisibleInst) == backend &&
-		(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, view.FreeVisibleInst)) {
-		return view.FreeVisibleInst, ""
+	if view.CompatibleFreeVisibleInst != nil && state.EffectiveInstanceBackend(view.CompatibleFreeVisibleInst) == backend {
+		return view.CompatibleFreeVisibleInst, ""
 	}
 	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend {
 		return nil, "workspace_instance_busy"

@@ -94,30 +94,27 @@ func TestTryAutoResumeHeadlessSurfaceRestoresPreparedNewThreadRouteOnVisibleWork
 		PrepareNewThread: true,
 	}, true)
 
-	if result.Status != SurfaceResumeStatusWorkspaceAttached {
-		t.Fatalf("expected visible workspace resume to attach directly, got %#v", result)
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected profile-mismatched visible workspace resume to start matching headless, got %#v", result)
 	}
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "inst-claude" || surface.PendingHeadless != nil {
-		t.Fatalf("expected visible workspace resume to attach existing backend workspace, got %#v", surface)
+	if surface.AttachedInstanceID != "" || surface.PendingHeadless == nil {
+		t.Fatalf("expected visible workspace resume to avoid attaching mismatched workspace and start headless instead, got %#v", surface)
 	}
-	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeNewThreadReady {
-		t.Fatalf("expected prepared workspace resume to land in new_thread_ready, got %#v", surface)
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected fresh-start resume path to stay unbound until launch completes, got %#v", surface)
 	}
-	if !strings.EqualFold(surface.PreparedThreadCWD, "/data/dl/repo") || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
-		t.Fatalf("expected prepared workspace route to stay on repo, got %#v", surface)
+	if !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") || !surface.PendingHeadless.PrepareNewThread || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected fresh-start resume path to preserve workspace intent in pending headless, got %#v", surface)
 	}
-	var sawPreparedSelection, sawReadyNotice bool
+	var sawWorkspaceStarting bool
 	for _, event := range events {
-		if event.ThreadSelection != nil && event.ThreadSelection.RouteMode == string(state.RouteModeNewThreadReady) {
-			sawPreparedSelection = true
-		}
-		if event.Notice != nil && event.Notice.Code == "new_thread_ready" {
-			sawReadyNotice = true
+		if event.Notice != nil && event.Notice.Code == "workspace_create_starting" {
+			sawWorkspaceStarting = true
 		}
 	}
-	if !sawPreparedSelection || !sawReadyNotice {
-		t.Fatalf("expected prepared workspace resume to emit new-thread-ready events, got %#v", events)
+	if !sawWorkspaceStarting {
+		t.Fatalf("expected fresh-start resume to emit workspace_create_starting, got %#v", events)
 	}
 }
 

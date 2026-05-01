@@ -33,10 +33,19 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	inst := s.resolveWorkspaceAttachInstance(surface, workspaceKey)
-	if inst == nil {
+	resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
+	inst := (*state.InstanceRecord)(nil)
+	switch resolution.Mode {
+	case contractResolutionAttachVisible:
+		inst = resolution.Instance
+	case contractResolutionUnavailable:
+		return notice(surface, firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"), firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"))
+	default:
 		if len(s.workspaceOnlineInstances(workspaceKey)) == 0 {
 			return notice(surface, "workspace_not_found", "目标工作区已失效，请重新发送 /list。")
+		}
+		if resolution.IncompatibleSeen {
+			return notice(surface, "workspace_contract_mismatch", "目标工作区当前只有不符合当前配置的实例，不能直接接管。请切换配置后再试，或从会话恢复路径进入。")
 		}
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
