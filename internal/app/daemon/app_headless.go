@@ -94,10 +94,30 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	if strings.TrimSpace(command.ThreadID) != "" {
 		env = append(env, config.ResumeThreadIDEnv+"="+strings.TrimSpace(command.ThreadID))
 	}
+	if backend == agentproto.BackendCodex {
+		env = append(env, config.CodexRuntimeProviderIDEnv+"="+state.NormalizeCodexProviderID(command.CodexProviderID))
+	}
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
-	env, err := a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
+	launchArgs := append([]string{}, cfg.LaunchArgs...)
+	env, launchArgs, err := a.applyCodexHeadlessProviderConfig(env, launchArgs, backend, command.CodexProviderID)
+	if err != nil {
+		if command.AutoRestore {
+			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+		}
+		return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:             "codex_provider_prepare_failed",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "Codex Provider 准备失败。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        true,
+		}))
+	}
+	env, err = a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
 	if err != nil {
 		if command.AutoRestore {
 			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
@@ -130,7 +150,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		WorkDir:    workDir,
 		InstanceID: command.InstanceID,
 		LaunchMode: headlessLaunchModeForBackend(backend),
-		Args:       cfg.LaunchArgs,
+		Args:       launchArgs,
 	})
 	if err != nil {
 		log.Printf(

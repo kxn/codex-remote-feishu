@@ -25,6 +25,7 @@ type Entry struct {
 	ActorUserID        string    `json:"actorUserID,omitempty"`
 	ProductMode        string    `json:"productMode,omitempty"`
 	Backend            string    `json:"backend,omitempty"`
+	CodexProviderID    string    `json:"codexProviderID,omitempty"`
 	ClaudeProfileID    string    `json:"claudeProfileID,omitempty"`
 	Verbosity          string    `json:"verbosity,omitempty"`
 	PlanMode           string    `json:"planMode,omitempty"`
@@ -203,12 +204,18 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
+	entry.CodexProviderID = strings.TrimSpace(entry.CodexProviderID)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	backend := agentproto.Backend(strings.TrimSpace(entry.Backend))
 	if state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) && entry.ClaudeProfileID != "" {
 		backend = agentproto.BackendClaude
 	}
 	entry.Backend = string(state.NormalizeSurfaceBackend(state.ProductMode(entry.ProductMode), backend))
+	if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendCodex {
+		entry.CodexProviderID = state.NormalizeCodexProviderID(entry.CodexProviderID)
+	} else {
+		entry.CodexProviderID = ""
+	}
 	if entry.ClaudeProfileID != "" {
 		entry.ClaudeProfileID = state.NormalizeClaudeProfileID(entry.ClaudeProfileID)
 	} else if state.NormalizeHeadlessBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendClaude {
@@ -258,6 +265,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
 		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
+		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&

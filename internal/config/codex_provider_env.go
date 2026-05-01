@@ -482,7 +482,7 @@ func lookupEnvValue(env []string, key string) (string, bool) {
 	return "", false
 }
 
-func upsertEnvValue(env []string, key, value string) []string {
+func UpsertEnvValue(env []string, key, value string) []string {
 	updated := make([]string, 0, len(env)+1)
 	replaced := false
 	for _, entry := range env {
@@ -500,6 +500,10 @@ func upsertEnvValue(env []string, key, value string) []string {
 		updated = append(updated, key+"="+value)
 	}
 	return updated
+}
+
+func upsertEnvValue(env []string, key, value string) []string {
+	return UpsertEnvValue(env, key, value)
 }
 
 func envSliceToMap(env []string) map[string]string {

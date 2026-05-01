@@ -39,6 +39,7 @@ type AppConfig struct {
 	Tool           ToolSettings           `json:"tool,omitempty"`
 	ExternalAccess ExternalAccessSettings `json:"externalAccess,omitempty"`
 	Wrapper        WrapperSettings        `json:"wrapper"`
+	Codex          CodexSettings          `json:"codex,omitempty"`
 	Claude         ClaudeSettings         `json:"claude,omitempty"`
 	Feishu         FeishuSettings         `json:"feishu"`
 	Debug          DebugSettings          `json:"debug"`
@@ -417,6 +418,7 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.Wrapper.IntegrationMode = defaults.Wrapper.IntegrationMode
 	}
 
+	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
 
 	if cfg.Debug.Pprof != nil {

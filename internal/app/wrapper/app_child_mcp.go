@@ -6,6 +6,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
 const (
@@ -22,6 +25,7 @@ type childToolServiceInfo struct {
 func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	args := append([]string{}, baseArgs...)
 	env := childEnvWithProxy(a.config.ChildProxyEnv, args)
+	args, env = a.applyCodexProviderLaunch(args, env)
 	if !a.feishuMCPPublicationEligible() {
 		return args, env
 	}
@@ -46,6 +50,26 @@ func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 		"-c", codexMCPOverride("bearer_token_env_var", feishuMCPBearerEnvName),
 	)
 	env = upsertEnvValue(env, feishuMCPBearerEnvName, strings.TrimSpace(info.Token))
+	return args, env
+}
+
+func (a *App) applyCodexProviderLaunch(baseArgs, baseEnv []string) ([]string, []string) {
+	args := append([]string{}, baseArgs...)
+	env := append([]string{}, baseEnv...)
+	if agentproto.NormalizeBackend(a.config.Backend) != agentproto.BackendCodex {
+		return args, env
+	}
+	loaded, err := config.LoadAppConfigAtPath(a.config.ConfigPath)
+	if err != nil {
+		a.debugf("codex provider launch skipped: load config failed path=%s err=%v", a.config.ConfigPath, err)
+		return args, env
+	}
+	provider, ok := config.ResolveCodexProvider(loaded.Config, a.config.CodexProviderID)
+	if !ok || provider.BuiltIn {
+		return args, env
+	}
+	args = append(args, config.CodexProviderLaunchOverrides(provider)...)
+	env = upsertEnvValue(env, config.CodexProviderAPIKeyEnv, strings.TrimSpace(provider.APIKey))
 	return args, env
 }
 

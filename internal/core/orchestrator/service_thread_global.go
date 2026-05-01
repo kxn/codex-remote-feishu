@@ -64,6 +64,9 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if !threadBelongsToInstanceWorkspace(inst, thread) {
 				continue
 			}
+			if state.EffectiveInstanceBackend(inst) == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
+				continue
+			}
 			view := viewsByID[thread.ThreadID]
 			if view == nil {
 				view = &mergedThreadView{
@@ -191,6 +194,9 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 	}
 	for _, inst := range s.Instances() {
 		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
+			continue
+		}
+		if backend == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
 			continue
 		}
 		thread := inst.Threads[threadID]
@@ -486,6 +492,9 @@ func (s *Service) reusableManagedHeadless(surface *state.SurfaceConsoleRecord, c
 		if backend != "" && state.EffectiveInstanceBackend(inst) != backend {
 			continue
 		}
+		if backend == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
+			continue
+		}
 		if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && (surface == nil || owner.SurfaceSessionID != surface.SurfaceSessionID) {
 			continue
 		}
@@ -739,7 +748,8 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	if preferredInstanceID != "" {
 		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online &&
 			state.EffectiveInstanceBackend(inst) == backend &&
-			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) {
+			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) &&
+			(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, inst)) {
 			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 				return nil, "thread_busy"
 			}
@@ -752,10 +762,12 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	if view.BusyOwner != nil {
 		return nil, "thread_busy"
 	}
-	if view.FreeVisibleInst != nil && state.EffectiveInstanceBackend(view.FreeVisibleInst) == backend {
+	if view.FreeVisibleInst != nil && state.EffectiveInstanceBackend(view.FreeVisibleInst) == backend &&
+		(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, view.FreeVisibleInst)) {
 		return view.FreeVisibleInst, ""
 	}
-	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend {
+	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend &&
+		(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, view.AnyVisibleInst)) {
 		return nil, "workspace_instance_busy"
 	}
 	return nil, "thread_not_found"

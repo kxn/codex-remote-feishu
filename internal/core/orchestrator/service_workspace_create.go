@@ -160,6 +160,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:       instanceID,
 		ThreadCWD:        workspaceKey,
+		CodexProviderID:  s.surfaceCodexProviderID(surface),
 		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
@@ -193,6 +194,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 					InstanceID:       instanceID,
 					ThreadCWD:        workspaceKey,
 				}
+				s.applyCurrentCodexProviderToHeadlessCommand(surface, command)
 				s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
 				return command
 			}(),

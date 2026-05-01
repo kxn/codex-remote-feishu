@@ -71,13 +71,14 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 	sort.Strings(surfaceIDs)
 	for _, surfaceID := range surfaceIDs {
 		entry := entries[surfaceID]
-		a.service.MaterializeSurfaceResume(
+		a.service.MaterializeSurfaceResumeWithCodexProvider(
 			entry.SurfaceSessionID,
 			entry.GatewayID,
 			entry.ChatID,
 			entry.ActorUserID,
 			state.ProductMode(entry.ProductMode),
 			agentproto.Backend(entry.Backend),
+			entry.CodexProviderID,
 			entry.ClaudeProfileID,
 			state.SurfaceVerbosity(entry.Verbosity),
 			state.PlanModeSetting(entry.PlanMode),
@@ -243,6 +244,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		ActorUserID:      strings.TrimSpace(surface.ActorUserID),
 		ProductMode:      string(state.NormalizeProductMode(surface.ProductMode)),
 		Backend:          string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
+		CodexProviderID:  strings.TrimSpace(a.service.SurfaceCodexProviderID(surface.SurfaceSessionID)),
 		ClaudeProfileID:  strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
 		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
 		PlanMode:         string(state.NormalizePlanModeSetting(surface.PlanMode)),

@@ -184,6 +184,7 @@ type Snapshot struct {
 	ProductMode       string
 	Backend           agentproto.Backend
 	WorkspaceKey      string
+	CodexProviderID   string
 	ClaudeProfileID   string
 	ClaudeProfileName string
 	Attachment        AttachmentSummary
@@ -228,14 +229,15 @@ type AttachmentSummary struct {
 }
 
 type PendingHeadlessSummary struct {
-	InstanceID  string
-	ThreadID    string
-	ThreadTitle string
-	ThreadCWD   string
-	Status      string
-	PID         int
-	ExpiresAt   time.Time
-	RequestedAt time.Time
+	InstanceID      string
+	ThreadID        string
+	ThreadTitle     string
+	ThreadCWD       string
+	CodexProviderID string
+	Status          string
+	PID             int
+	ExpiresAt       time.Time
+	RequestedAt     time.Time
 }
 
 type PromptRouteSummary struct {
@@ -620,6 +622,7 @@ type DaemonCommand struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	CodexProviderID  string
 	ClaudeProfileID  string
 	WorkspaceKey     string
 	AutoRestore      bool

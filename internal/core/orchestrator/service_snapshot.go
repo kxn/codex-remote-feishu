@@ -15,6 +15,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
 		Backend:          s.surfaceBackend(surface),
 		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
+		CodexProviderID:  s.surfaceCodexProviderID(surface),
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
@@ -25,14 +26,15 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 	snapshot.Gate = s.snapshotGateSummary(surface)
 	if pending := surface.PendingHeadless; pending != nil {
 		snapshot.PendingHeadless = control.PendingHeadlessSummary{
-			InstanceID:  pending.InstanceID,
-			ThreadID:    pending.ThreadID,
-			ThreadTitle: pending.ThreadTitle,
-			ThreadCWD:   pending.ThreadCWD,
-			Status:      string(pending.Status),
-			PID:         pending.PID,
-			ExpiresAt:   pending.ExpiresAt,
-			RequestedAt: pending.RequestedAt,
+			InstanceID:      pending.InstanceID,
+			ThreadID:        pending.ThreadID,
+			ThreadTitle:     pending.ThreadTitle,
+			ThreadCWD:       pending.ThreadCWD,
+			CodexProviderID: pending.CodexProviderID,
+			Status:          string(pending.Status),
+			PID:             pending.PID,
+			ExpiresAt:       pending.ExpiresAt,
+			RequestedAt:     pending.RequestedAt,
 		}
 	}
 	if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {

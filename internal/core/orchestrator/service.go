@@ -252,6 +252,9 @@ func (s *Service) normalizeSurfaceProductMode(surface *state.SurfaceConsoleRecor
 	}
 	surface.ProductMode = state.NormalizeProductMode(surface.ProductMode)
 	surface.Backend = state.EffectiveSurfaceBackend(surface, s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)])
+	if strings.TrimSpace(surface.CodexProviderID) != "" || surface.Backend == agentproto.BackendCodex {
+		_ = s.surfaceCodexProviderID(surface)
+	}
 	if strings.TrimSpace(surface.ClaudeProfileID) != "" || surface.Backend == agentproto.BackendClaude {
 		_ = s.surfaceClaudeProfileID(surface)
 	}

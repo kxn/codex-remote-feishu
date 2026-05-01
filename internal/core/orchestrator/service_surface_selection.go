@@ -482,7 +482,21 @@ func (s *Service) workspaceOnlineInstancesForBackend(workspaceKey string, backen
 }
 
 func (s *Service) workspaceOnlineInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
-	return s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
+	instances := s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
+	if len(instances) == 0 {
+		return nil
+	}
+	if surface == nil || backend != agentproto.BackendCodex {
+		return instances
+	}
+	filtered := make([]*state.InstanceRecord, 0, len(instances))
+	for _, inst := range instances {
+		if inst == nil || !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
+			continue
+		}
+		filtered = append(filtered, inst)
+	}
+	return filtered
 }
 
 func (s *Service) sortWorkspaceAttachInstances(surface *state.SurfaceConsoleRecord, workspaceKey string, instances []*state.InstanceRecord) {

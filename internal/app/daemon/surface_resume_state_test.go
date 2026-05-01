@@ -257,6 +257,39 @@ func TestSurfaceResumeStoreDefaultsLegacyMissingBackendToCodex(t *testing.T) {
 	}
 }
 
+func TestSurfaceResumeStatePersistsCodexProviderID(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	app.service.MaterializeSurfaceResumeWithCodexProvider(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.ProductModeNormal,
+		agentproto.BackendCodex,
+		"team-proxy",
+		"",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.CodexProviderID != "team-proxy" {
+		t.Fatalf("expected persisted codex provider id, got %#v", entry)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	if got := restarted.service.SurfaceCodexProviderID("surface-1"); got != "team-proxy" {
+		t.Fatalf("expected codex provider id restored after restart, got %q", got)
+	}
+}
+
 func TestSurfaceResumeStoreCanonicalizesLegacyCodexBackendWithClaudeProfile(t *testing.T) {
 	t.Parallel()
 

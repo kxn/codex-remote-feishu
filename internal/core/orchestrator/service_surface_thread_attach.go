@@ -441,6 +441,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		ThreadName:       threadName,
 		ThreadPreview:    threadPreview,
 		ThreadCWD:        cwd,
+		CodexProviderID:  s.surfaceCodexProviderID(surface),
 		ClaudeProfileID:  s.surfaceClaudeProfileID(surface),
 		RequestedAt:      s.now(),
 		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
@@ -474,6 +475,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 				ThreadCWD:        cwd,
 				AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 			}
+			s.applyCurrentCodexProviderToHeadlessCommand(surface, command)
 			s.applyCurrentClaudeProfileToHeadlessCommand(surface, command)
 			return command
 		}(),

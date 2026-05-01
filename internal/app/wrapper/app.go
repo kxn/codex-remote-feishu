@@ -54,6 +54,7 @@ type Config struct {
 	WorkspaceKey         string
 	ShortName            string
 	Backend              agentproto.Backend
+	CodexProviderID      string
 	ClaudeProfileID      string
 	ResumeThreadID       string
 	Source               string
@@ -144,6 +145,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceKey:         state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:            shortName,
 		Backend:              agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
+		CodexProviderID:      state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
 		ClaudeProfileID:      state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
 		ResumeThreadID:       strings.TrimSpace(os.Getenv(config.ResumeThreadIDEnv)),
 		Source:               source,
@@ -244,6 +246,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			WorkspaceKey:     a.config.WorkspaceKey,
 			ShortName:        a.config.ShortName,
 			Backend:          a.runtime.Backend(),
+			CodexProviderID:  strings.TrimSpace(a.config.CodexProviderID),
 			ClaudeProfileID:  strings.TrimSpace(a.config.ClaudeProfileID),
 			Source:           a.config.Source,
 			Managed:          a.config.Managed,

@@ -182,6 +182,7 @@ type InstanceRecord struct {
 	WorkspaceKey            string
 	ShortName               string
 	Backend                 agentproto.Backend
+	CodexProviderID         string
 	ClaudeProfileID         string
 	Source                  string
 	Capabilities            agentproto.Capabilities
@@ -251,6 +252,7 @@ type SurfaceConsoleRecord struct {
 	// Backend carries the inner provider choice inside that shape.
 	ProductMode          ProductMode
 	Backend              agentproto.Backend
+	CodexProviderID      string
 	ClaudeProfileID      string
 	Verbosity            SurfaceVerbosity
 	PlanMode             PlanModeSetting
@@ -461,6 +463,7 @@ type HeadlessLaunchRecord struct {
 	ThreadID         string
 	ThreadTitle      string
 	ThreadCWD        string
+	CodexProviderID  string
 	ClaudeProfileID  string
 	ThreadName       string
 	ThreadPreview    string

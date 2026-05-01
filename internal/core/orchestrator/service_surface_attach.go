@@ -70,6 +70,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	}
 
 	surface.Backend = state.EffectiveInstanceBackend(inst)
+	surface.CodexProviderID = state.NormalizeCodexProviderID(inst.CodexProviderID)
 	surface.AttachedInstanceID = inst.InstanceID
 	s.surfaceCurrentWorkspaceKey(surface)
 	surface.PendingHeadless = nil
@@ -192,6 +193,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	}
 	s.surfaceCurrentWorkspaceKey(surface)
 	surface.Backend = instanceBackend
+	surface.CodexProviderID = state.NormalizeCodexProviderID(inst.CodexProviderID)
 	surface.AttachedInstanceID = instanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
@@ -322,6 +324,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		surface.PendingHeadless = nil
+		s.setSurfaceCodexProviderID(surface, pending.CodexProviderID)
 		if pending.PrepareNewThread {
 			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{PrepareNewThread: true})
 		}

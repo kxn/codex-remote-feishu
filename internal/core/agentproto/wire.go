@@ -45,6 +45,7 @@ type InstanceHello struct {
 	WorkspaceKey     string  `json:"workspaceKey,omitempty"`
 	ShortName        string  `json:"shortName,omitempty"`
 	Backend          Backend `json:"backend,omitempty"`
+	CodexProviderID  string  `json:"codexProviderId,omitempty"`
 	ClaudeProfileID  string  `json:"claudeProfileId,omitempty"`
 	Source           string  `json:"source,omitempty"`
 	Managed          bool    `json:"managed,omitempty"`

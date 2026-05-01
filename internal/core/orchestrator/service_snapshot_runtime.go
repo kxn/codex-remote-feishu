@@ -85,6 +85,10 @@ func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID s
 }
 
 func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, claudeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
+	s.MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID, chatID, actorUserID, mode, backend, "", claudeProfileID, verbosity, planMode)
+}
+
+func (s *Service) MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, codexProviderID, claudeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
 	}
@@ -100,6 +104,7 @@ func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUs
 	}
 	surface.ProductMode = state.NormalizeProductMode(mode)
 	surface.Backend = state.NormalizeSurfaceBackend(surface.ProductMode, backend)
+	s.setSurfaceCodexProviderID(surface, codexProviderID)
 	s.setSurfaceClaudeProfileID(surface, claudeProfileID)
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
