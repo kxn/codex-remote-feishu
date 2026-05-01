@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codex Remote 设置向导 — 设计 Mock</title>
+  <style>
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-subtle: #eff4ff;
+      --surface: #ffffff;
+      --surface-subtle: #f8f9fb;
+      --border: #e2e5ea;
+      --border-light: #eef0f3;
+      --text-primary: #111827;
+      --text-secondary: #5f6b7a;
+      --text-muted: #9ca3af;
+      --success: #059669;
+      --success-bg: #ecfdf5;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+    body {
+      font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      color: var(--text-primary);
+      background: var(--surface-subtle);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden; word-break: break-word; overflow-wrap: break-word;
+      min-width: 320px;
+    }
+
+    /* ─── Header ─── */
+    .page-header {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; gap: 8px;
+      height: 56px; padding: 0 20px;
+      background: rgba(255,255,255,0.94);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-logo { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, #2563eb, #1d4ed8); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+    .header-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-version { font-size: 12px; color: var(--text-muted); flex-shrink: 0; display: none; }
+    .header-step { margin-left: auto; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+    /* ─── Main ─── */
+    .page-main { max-width: 1040px; margin: 0 auto; padding: 20px 20px 40px; }
+
+    /* ─── Step demo label ─── */
+    .demo-label { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .demo-label:first-of-type { margin-top: 0; }
+
+    /* ─── Setup layout (desktop: two columns) ─── */
+    .setup-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+    /* ─── Step Rail ─── */
+    .step-rail {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      padding: 18px; display: flex; flex-direction: column; gap: 0;
+    }
+    .step-rail h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+    .step-node { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; cursor: pointer; position: relative; }
+    .step-node:not(:last-child)::after {
+      content: ''; position: absolute; left: 11px; top: 38px; bottom: 0;
+      width: 2px; background: var(--border);
+    }
+    .step-node.done:not(:last-child)::after { background: var(--success); }
+    .step-dot {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid var(--border); background: white;
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+    }
+    .step-node.done .step-dot { background: var(--success); border-color: var(--success); color: white; }
+    .step-node.active .step-dot { background: var(--accent); border-color: var(--accent); color: white; }
+    .step-label { display: flex; flex-direction: column; gap: 1px; }
+    .step-label strong { font-size: 12px; }
+    .step-label span { font-size: 10px; color: var(--text-muted); }
+    .step-node.done .step-label span { color: var(--success); }
+    .step-node.active .step-label span { color: var(--accent); }
+
+    /* ─── Step content ─── */
+    .step-stage {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md); box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      padding: 24px; min-height: 200px; min-width: 0;
+    }
+    .step-stage-head { margin-bottom: 18px; }
+    .step-stage-head h2 { font-size: 20px; font-weight: 600; }
+    .step-stage-head p { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ─── Notice ─── */
+    .notice { padding: 9px 14px; border-radius: var(--radius-sm); border-left: 3px solid; font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+    .notice-success { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+    .notice-warning { background: var(--warning-bg); border-color: var(--warning); color: var(--warning); }
+    .notice-danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      height: 36px; padding: 0 16px; border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 500; cursor: pointer; line-height: 1.3;
+      border: none; transition: background 120ms ease; text-align: center;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--surface-subtle); }
+    .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger:hover { background: var(--danger-bg); }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+
+    /* ─── Mode toggle ─── */
+    .mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+
+    /* ─── QR scan ─── */
+    .qr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 20px; }
+    .qr-frame { display: flex; align-items: center; justify-content: center; min-height: 220px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: repeating-linear-gradient(45deg, #f0f2f5, #f0f2f5 2px, #f8f9fb 2px, #f8f9fb 10px); min-width: 0; }
+    .qr-frame span { color: var(--text-muted); font-size: 13px; }
+
+    /* ─── Form ─── */
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 4px; }
+    .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .field label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .field label em { color: var(--danger); font-style: normal; }
+    .field input { height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; color: var(--text-primary); background: white; min-width: 0; width: 100%; }
+    .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    .field input::placeholder { color: var(--text-muted); }
+
+    /* ─── Scope pills ─── */
+    .scope-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+    .scope-pill { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 4px; background: var(--danger-bg); border: 1px solid rgba(220,38,38,0.15); font-size: 11px; color: var(--danger); font-family: monospace; word-break: break-all; }
+
+    /* ─── Table ─── */
+    .table-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 360px; }
+    .table-wrap th { padding: 9px 14px; text-align: left; background: var(--surface-subtle); font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .table-wrap td { padding: 9px 14px; border-top: 1px solid var(--border-light); vertical-align: top; }
+    .table-wrap td code { font-size: 12px; background: var(--surface-subtle); padding: 2px 6px; border-radius: 3px; word-break: break-all; }
+
+    /* ─── Checklist ─── */
+    .checklist { display: flex; flex-direction: column; gap: 6px; list-style: none; padding: 0; }
+    .checklist li { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+    .checklist li strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .checklist li span { font-size: 12px; color: var(--text-secondary); }
+
+    /* ─── Done card ─── */
+    .done-card { padding: 18px; border: 1px solid rgba(5,150,105,0.2); border-radius: var(--radius-sm); background: var(--success-bg); }
+    .done-card h3 { font-size: 17px; margin-bottom: 6px; }
+    .done-card p { font-size: 13px; color: #065f46; line-height: 1.55; }
+
+    /* ─── Permission panel ─── */
+    .perm-panel { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); min-width: 0; }
+    .perm-panel h4 { font-size: 13px; margin-bottom: 2px; }
+    .perm-panel p { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+    .perm-panel textarea { width: 100%; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; font-family: monospace; font-size: 12px; resize: vertical; background: white; overflow-wrap: break-word; }
+
+    /* ─── Link ─── */
+    .link { color: var(--accent); font-weight: 500; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+
+    /* ─── Bottom nav bars ─── */
+    .bottom-nav { display: none; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+    /* ═══════════════════════════════════════════
+       Responsive
+       ═══════════════════════════════════════════ */
+
+    /* ≤ 1024px — tablet, collapse to single column */
+    @media (max-width: 1024px) {
+      .setup-layout { grid-template-columns: 1fr; }
+      .step-rail { display: none; }
+    }
+
+    /* ≤ 768px — phone landscape / tablet portrait */
+    @media (max-width: 768px) {
+      .page-main { padding: 12px 12px 36px; }
+      .page-header { padding: 0 12px; height: 50px; }
+      .header-version { display: none; }
+
+      .step-stage { padding: 18px; }
+
+      .qr-layout { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ≤ 480px — phone portrait */
+    @media (max-width: 480px) {
+      .page-header { height: 46px; padding: 0 10px; }
+      .header-title { font-size: 12px; }
+      .header-step { font-size: 11px; }
+
+      .page-main { padding: 10px 10px 36px; }
+      .demo-label { font-size: 13px; margin: 28px 0 12px; }
+
+      .step-stage { padding: 14px; border-radius: 8px; }
+      .step-stage-head { margin-bottom: 14px; }
+      .step-stage-head h2 { font-size: 17px; }
+
+      .qr-frame { min-height: 180px; }
+      .qr-layout { gap: 12px; }
+
+      .btn { height: 42px; padding: 0 14px; font-size: 14px; }
+      .btn-row { flex-direction: column; }
+      .btn-row .btn { width: 100%; }
+
+      .form-grid { gap: 10px; }
+
+      .table-wrap table { min-width: 280px; }
+      .table-wrap td code { font-size: 11px; }
+
+      .bottom-nav { display: flex; }
+      .bottom-nav .btn { width: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="header-logo">CR</div>
+  <span class="header-title">Codex Remote Feishu</span>
+  <span class="header-version">v2.3.0 安装程序</span>
+  <span class="header-step">步骤 3/9</span>
+</header>
+
+<main class="page-main">
+
+  <!-- ================================================
+       Desktop: full step rail + current step
+       ================================================ -->
+  <p class="demo-label">桌面端：完整步骤栏 + 当前步骤</p>
+  <div class="setup-layout">
+    <aside class="step-rail">
+      <h3>设置流程</h3>
+      <div class="step-node done">
+        <div class="step-dot">&#10003;</div>
+        <div class="step-label"><strong>环境检查</strong><span>已完成</span></div>
+      </div>
+      <div class="step-node done">
+        <div class="step-dot">&#10003;</div>
+        <div class="step-label"><strong>飞书连接</strong><span>已完成</span></div>
+      </div>
+      <div class="step-node active">
+        <div class="step-dot">3</div>
+        <div class="step-label"><strong>权限检查</strong><span>进行中</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">4</div>
+        <div class="step-label"><strong>事件订阅</strong><span>待处理</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">5</div>
+        <div class="step-label"><strong>回调配置</strong><span>待处理</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">6</div>
+        <div class="step-label"><strong>菜单确认</strong><span>待处理</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">7</div>
+        <div class="step-label"><strong>自动启动</strong><span>待处理</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">8</div>
+        <div class="step-label"><strong>VS Code 集成</strong><span>待处理</span></div>
+      </div>
+      <div class="step-node">
+        <div class="step-dot">9</div>
+        <div class="step-label"><strong>完成</strong><span>待处理</span></div>
+      </div>
+    </aside>
+
+    <!-- Step: 权限检查 — 缺失权限状态 -->
+    <section class="step-stage">
+      <div class="step-stage-head">
+        <h2>权限检查</h2>
+        <p>确认飞书应用权限配置正确</p>
+      </div>
+      <div class="notice notice-danger">当前还需要补齐权限，请先在飞书后台配置。</div>
+      <div class="scope-list">
+        <span class="scope-pill">im:message</span>
+        <span class="scope-pill">im:message.p2p_msg:readonly</span>
+        <span class="scope-pill">im:resource</span>
+        <span class="scope-pill">contact:user.base:readonly</span>
+        <span class="scope-pill">approval:instance</span>
+      </div>
+      <div class="perm-panel" style="margin-top:14px;">
+        <h4>一次性权限配置</h4>
+        <p>在飞书后台补齐后重新检查</p>
+        <textarea readonly>{"scopes": ["im:message", "im:message.p2p_msg:readonly", "im:resource", "contact:user.base:readonly", "approval:instance"]}</textarea>
+        <div class="btn-row" style="margin-bottom:0;">
+          <button class="btn btn-ghost">复制配置</button>
+          <a class="btn btn-ghost" href="#">打开飞书后台</a>
+          <button class="btn btn-primary">重新检查</button>
+          <button class="btn btn-danger">跳过此步</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================================================
+       Other step previews (single column for clarity)
+       ================================================ -->
+
+  <p class="demo-label">其他步骤预览</p>
+
+  <!-- Step: 环境检查 -->
+  <div class="step-stage" style="margin-bottom: 16px;">
+    <div class="step-stage-head"><h2>环境检查</h2><p>确认服务与运行条件正常</p></div>
+    <div class="notice notice-success">环境正常</div>
+    <ul class="checklist">
+      <li><strong>Node.js 运行时</strong><span>v20.11.0 — 版本满足要求</span></li>
+      <li><strong>网络连通性</strong><span>飞书 API 可正常访问</span></li>
+      <li><strong>磁盘空间</strong><span>可用 45.2 GB</span></li>
+    </ul>
+  </div>
+
+  <!-- Step: 飞书连接 -->
+  <div class="step-stage" style="margin-bottom: 16px;">
+    <div class="step-stage-head"><h2>飞书连接</h2><p>扫码或手动输入接入飞书应用</p></div>
+    <div class="mode-toggle">
+      <button class="btn btn-primary">扫码创建</button>
+      <button class="btn btn-ghost">手动输入</button>
+    </div>
+    <div class="qr-layout">
+      <div class="qr-frame"><span>二维码区域</span></div>
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
+        <div class="notice notice-warning" style="margin:0;">等待扫码结果...</div>
+        <div class="btn-row" style="margin-top:0;">
+          <button class="btn btn-ghost">改用手动输入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step: 事件订阅 -->
+  <div class="step-stage" style="margin-bottom: 16px;">
+    <div class="step-stage-head"><h2>事件订阅</h2><p>机器人已尝试发送事件订阅测试</p></div>
+    <div class="notice notice-success">事件订阅测试提示已发送</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">前往 <a class="link" href="#">飞书后台</a> 配置事件订阅。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>事件</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>im.message.receive_v1</code> <button class="btn btn-ghost" style="height:26px;padding:0 8px;font-size:11px;margin-left:6px;">复制</button></td>
+            <td>接收消息</td>
+          </tr>
+          <tr>
+            <td><code>im.message.reaction.created_v1</code> <button class="btn btn-ghost" style="height:26px;padding:0 8px;font-size:11px;margin-left:6px;">复制</button></td>
+            <td>表情回复事件</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-primary">下一步</button>
+  </div>
+
+  <!-- Step: VS Code 集成 -->
+  <div class="step-stage" style="margin-bottom: 16px;">
+    <div class="step-stage-head"><h2>VS Code 集成</h2><p>VS Code 集成设置</p></div>
+    <div class="notice notice-warning">检测到 VS Code 集成未完成，请先处理。</div>
+    <div class="btn-row">
+      <button class="btn btn-primary">确认集成</button>
+      <button class="btn btn-ghost">先不使用</button>
+    </div>
+  </div>
+
+  <!-- Step: 完成 -->
+  <div class="step-stage" style="margin-bottom: 16px;">
+    <div class="step-stage-head"><h2>欢迎使用</h2><p>基础设置已完成</p></div>
+    <div class="done-card">
+      <h3>设置已经完成。</h3>
+      <p>你可以在管理页面继续调整设置、查看存储状态。</p>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="#">去管理页面</a>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

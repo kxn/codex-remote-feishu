@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codex Remote 管理 — 设计 Mock</title>
+  <style>
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-subtle: #eff4ff;
+      --surface: #ffffff;
+      --surface-subtle: #f8f9fb;
+      --border: #e2e5ea;
+      --border-light: #eef0f3;
+      --text-primary: #111827;
+      --text-secondary: #5f6b7a;
+      --text-muted: #9ca3af;
+      --success: #059669;
+      --success-bg: #ecfdf5;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+    body {
+      font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      color: var(--text-primary);
+      background: var(--surface-subtle);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden; word-break: break-word; overflow-wrap: break-word;
+      min-width: 320px;
+    }
+
+    /* ─── Header ─── */
+    .page-header {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      height: 56px; padding: 0 20px;
+      background: rgba(255,255,255,0.94);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .header-logo { width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, #2563eb, #1d4ed8); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+    .header-title { font-weight: 600; font-size: 14px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-version { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+    /* ─── Main ─── */
+    .page-main { max-width: 1200px; margin: 0 auto; padding: 20px 20px 40px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ─── Section Header ─── */
+    .section-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
+    .section-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ─── Card ─── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      padding: 18px 20px;
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    /* ─── Robot layout ─── */
+    .robot-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; }
+    .robot-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .robot-item {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid transparent;
+      cursor: pointer; transition: background 120ms ease, border-color 120ms ease;
+      background: #fafbfc; min-width: 0;
+    }
+    .robot-item:hover { background: var(--accent-subtle); }
+    .robot-item.active { background: var(--accent-subtle); border-color: var(--accent); }
+    .robot-item-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
+    .robot-item-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .robot-item-appid { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tag { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+    .tag-warn { background: var(--warning-bg); color: var(--warning); }
+    .tag-new { background: var(--accent-subtle); color: var(--accent); }
+    .tag-add { padding: 10px 14px; text-align: left; border: 1px dashed var(--border); border-radius: var(--radius-sm); cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+
+    /* ─── Robot detail ─── */
+    .robot-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .attr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .attr { padding: 10px 12px; background: var(--surface-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border-light); min-width: 0; }
+    .attr-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px; }
+    .attr-value { font-size: 13px; font-weight: 500; color: var(--text-primary); overflow-wrap: break-word; word-break: break-word; }
+
+    /* ─── Notice ─── */
+    .notice { padding: 9px 14px; border-radius: var(--radius-sm); border-left: 3px solid; font-size: 13px; line-height: 1.55; }
+    .notice-success { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+    .notice-warning { background: var(--warning-bg); border-color: var(--warning); color: var(--warning); }
+    .notice-danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      height: 36px; padding: 0 16px; border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 500; cursor: pointer; line-height: 1.3;
+      border: none; transition: background 120ms ease; text-align: center;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--surface-subtle); }
+    .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger:hover { background: var(--danger-bg); }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ─── System cards ─── */
+    .sys-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .sys-card { padding: 14px 16px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+    .sys-card h4 { font-size: 14px; margin-bottom: 4px; }
+    .sys-card p { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+
+    /* ─── Storage cards ─── */
+    .storage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .storage-card { padding: 14px 16px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+    .storage-card h4 { font-size: 14px; margin-bottom: 2px; }
+    .storage-card .stat { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 2px 0 6px; }
+    .storage-card .stat span { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+
+    /* ─── Config layout ─── */
+    .config-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; }
+    .config-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .config-item {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid transparent;
+      cursor: pointer; transition: background 120ms ease; min-width: 0;
+    }
+    .config-item:hover { background: var(--surface-subtle); }
+    .config-item.active { background: var(--accent-subtle); border-color: var(--accent); }
+    .config-item-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
+    .config-item-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .config-item-summary { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ─── Form ─── */
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .field label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .field label em { color: var(--danger); font-style: normal; }
+    .field input { height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; color: var(--text-primary); background: white; min-width: 0; width: 100%; }
+    .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    .field input::placeholder { color: var(--text-muted); }
+
+    /* ─── Scope pills ─── */
+    .scope-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .scope-pill { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 4px; background: var(--danger-bg); border: 1px solid rgba(220,38,38,0.15); font-size: 11px; color: var(--danger); font-family: monospace; word-break: break-all; }
+
+    /* ─── QR scan ─── */
+    .qr-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 20px; }
+    .qr-frame { display: flex; align-items: center; justify-content: center; min-height: 220px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: repeating-linear-gradient(45deg, #f0f2f5, #f0f2f5 2px, #f8f9fb 2px, #f8f9fb 10px); min-width: 0; }
+    .qr-frame .placeholder { color: var(--text-muted); font-size: 13px; }
+    .qr-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+    /* ─── Toggle mode ─── */
+    .mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+
+    /* ─── Modal ─── */
+    .modal-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.4); }
+    .modal-box { width: 400px; max-width: 100%; padding: 22px 20px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+    .modal-box h3 { font-size: 16px; margin-bottom: 10px; }
+    .modal-box p { font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.55; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+    /* ─── Inline link ─── */
+    .link { color: var(--accent); font-weight: 500; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+
+    /* ═══════════════════════════════════════════
+       Responsive
+       ═══════════════════════════════════════════ */
+
+    /* ≤ 1024px — compact tablet */
+    @media (max-width: 1024px) {
+      .robot-layout { grid-template-columns: 1fr; }
+      .config-layout { grid-template-columns: 1fr; }
+      .config-list { flex-direction: row; overflow-x: auto; gap: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .config-list::-webkit-scrollbar { display: none; }
+      .config-item { flex-shrink: 0; }
+      .config-item-summary { display: none; }
+    }
+
+    /* ≤ 768px — phone landscape / tablet portrait */
+    @media (max-width: 768px) {
+      .page-main { padding: 12px 12px 32px; gap: 14px; }
+      .page-header { padding: 0 12px; height: 50px; }
+
+      .card { padding: 14px 16px; }
+
+      .storage-grid { grid-template-columns: 1fr; }
+      .sys-grid { grid-template-columns: 1fr; }
+      .attr-grid { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+      .qr-layout { grid-template-columns: 1fr; }
+    }
+
+    /* ≤ 480px — phone portrait */
+    @media (max-width: 480px) {
+      .page-header { height: 46px; padding: 0 10px; }
+      .header-title { font-size: 12px; }
+      .header-version { display: none; }
+
+      .page-main { padding: 10px 10px 32px; gap: 12px; }
+      .card { padding: 12px 14px; border-radius: 8px; }
+      .card-header { margin-bottom: 10px; }
+
+      .section-title { font-size: 15px; }
+
+      .robot-layout { gap: 12px; }
+      .robot-list { gap: 2px; }
+      .robot-item { padding: 8px 12px; }
+
+      .attr-grid { gap: 6px; }
+      .attr { padding: 8px 10px; }
+
+      .storage-card, .sys-card { padding: 12px; }
+
+      .qr-frame { min-height: 180px; }
+      .qr-layout { gap: 12px; }
+
+      .btn { height: 42px; padding: 0 14px; font-size: 14px; }
+      .btn-row { flex-direction: column; }
+      .btn-row .btn { width: 100%; }
+
+      .form-grid { gap: 10px; }
+
+      .config-list { gap: 4px; }
+      .config-item { padding: 8px 12px; font-size: 12px; }
+
+      .modal-overlay { padding: 12px; }
+      .modal-box { padding: 18px 16px; }
+      .modal-actions { flex-direction: column-reverse; }
+      .modal-actions .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="header-brand">
+    <div class="header-logo">CR</div>
+    <span class="header-title">Codex Remote Feishu</span>
+  </div>
+  <span class="header-version">v2.3.0 管理</span>
+</header>
+
+<main class="page-main">
+
+  <!-- ═══ 机器人管理 ═══ -->
+  <div class="card">
+    <div class="card-header">
+      <div><h2 class="section-title">机器人管理</h2><p class="section-desc">已接入的飞书应用</p></div>
+      <button class="btn btn-primary">新建</button>
+    </div>
+    <div class="robot-layout">
+      <div class="robot-list">
+        <div class="robot-item active">
+          <div class="robot-item-head">
+            <span class="robot-item-name">运营助手</span>
+            <span class="tag tag-warn">异常</span>
+          </div>
+          <span class="robot-item-appid">cli_a3f8b2c1d4e5</span>
+        </div>
+        <div class="robot-item">
+          <div class="robot-item-head">
+            <span class="robot-item-name">研发机器人</span>
+          </div>
+          <span class="robot-item-appid">cli_b7e4f9a2c6d8</span>
+        </div>
+        <div class="robot-item">
+          <div class="robot-item-head">
+            <span class="robot-item-name">测试环境机器人</span>
+          </div>
+          <span class="robot-item-appid">cli_c2d6e8f1a4b7</span>
+        </div>
+        <div class="tag-add">+ 新增机器人</div>
+      </div>
+      <div class="robot-detail">
+        <h3 style="font-size:15px;font-weight:600;">运营助手</h3>
+        <div class="attr-grid">
+          <div class="attr"><div class="attr-label">App ID</div><div class="attr-value">cli_a3f8b2c1d4e5</div></div>
+          <div class="attr"><div class="attr-label">连接</div><div class="attr-value" style="color:var(--success);">连接正常</div></div>
+          <div class="attr"><div class="attr-label">状态</div><div class="attr-value">已启用</div></div>
+          <div class="attr"><div class="attr-label">最近验证</div><div class="attr-value">2026-04-28 14:32</div></div>
+        </div>
+        <div class="notice notice-warning">当前机器人还在同步设置，请稍后刷新后再操作。</div>
+        <div class="btn-row">
+          <button class="btn btn-primary">测试事件订阅</button>
+          <button class="btn btn-ghost">测试回调</button>
+          <button class="btn btn-danger">删除机器人</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 新增机器人 ═══ -->
+  <div class="card">
+    <h3 class="section-title" style="margin-bottom:2px;">新增机器人</h3>
+    <p class="section-desc" style="margin-bottom:14px;">扫码或手动输入接入飞书应用</p>
+    <div class="mode-toggle">
+      <button class="btn btn-primary">扫码创建</button>
+      <button class="btn btn-ghost">手动输入</button>
+    </div>
+    <div class="qr-layout">
+      <div class="qr-frame"><span class="placeholder">二维码区域</span></div>
+      <div class="qr-side">
+        <div class="notice notice-warning">等待扫码结果...</div>
+        <div class="btn-row">
+          <button class="btn btn-ghost">重新扫码</button>
+          <button class="btn btn-ghost">改用手动输入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 系统集成 ═══ -->
+  <div class="card">
+    <div class="card-header">
+      <div><h2 class="section-title">系统集成</h2><p class="section-desc">自动运行与 VS Code 集成</p></div>
+    </div>
+    <div class="sys-grid">
+      <div class="sys-card">
+        <h4>自动运行设置</h4>
+        <p>当前已启用</p>
+        <button class="btn btn-ghost">重新检查并修复</button>
+      </div>
+      <div class="sys-card">
+        <h4>VS Code 集成</h4>
+        <p>已在这台机器上接入（扩展入口）</p>
+        <button class="btn btn-ghost">重新检查并修复</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 存储管理 ═══ -->
+  <div class="card">
+    <div class="card-header">
+      <div><h2 class="section-title">存储管理</h2><p class="section-desc">预览文件、图片暂存与日志清理</p></div>
+    </div>
+    <div class="storage-grid">
+      <div class="storage-card">
+        <h4>预览文件</h4>
+        <div class="stat">12 <span>个文件</span></div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">约 2.4 MB</p>
+        <button class="btn btn-ghost">清理旧预览</button>
+      </div>
+      <div class="storage-card">
+        <h4>图片暂存</h4>
+        <div class="stat">38 <span>个文件</span></div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">约 8.1 MB</p>
+        <button class="btn btn-ghost">清理旧图片</button>
+      </div>
+      <div class="storage-card">
+        <h4>日志文件</h4>
+        <div class="stat">156 <span>个文件</span></div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">约 47.6 MB</p>
+        <button class="btn btn-ghost">清理一天前日志</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Claude 配置 ═══ -->
+  <div class="card">
+    <div class="card-header">
+      <div><h2 class="section-title">Claude 配置</h2><p class="section-desc">Claude 连接配置</p></div>
+    </div>
+    <div class="config-layout">
+      <div class="config-list">
+        <div class="config-item active">
+          <div class="config-item-head">
+            <span class="config-item-name">默认</span>
+            <span class="tag tag-new">默认</span>
+          </div>
+          <span class="config-item-summary">本机默认</span>
+        </div>
+        <div class="config-item">
+          <div class="config-item-head">
+            <span class="config-item-name">研发代理</span>
+            <span class="tag tag-new">自定义</span>
+          </div>
+          <span class="config-item-summary">proxy.internal/v1</span>
+        </div>
+        <div class="tag-add" style="margin-top:4px;">+ 新建配置</div>
+      </div>
+      <div style="min-width:0;">
+        <h4 style="font-size:14px; margin-bottom:8px;">研发代理</h4>
+        <div class="form-grid">
+          <label class="field" style="grid-column:1/-1;"><span>名称 <em>*</em></span><input value="研发代理"></label>
+          <label class="field"><span>端点地址</span><input value="https://proxy.internal/v1"></label>
+          <label class="field"><span>认证 Token</span><input type="password" placeholder="输入认证 Token"></label>
+          <label class="field"><span>主模型</span><input placeholder="留空时跟随默认"></label>
+          <label class="field"><span>轻量模型</span><input placeholder="留空时跟随默认"></label>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary">保存修改</button>
+          <button class="btn btn-danger">删除配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 删除确认 Modal ═══ -->
+  <div class="modal-overlay">
+    <div class="modal-box">
+      <h3>确认删除机器人</h3>
+      <p>删除后将移除"运营助手"，此操作不可恢复。</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost">取消</button>
+        <button class="btn btn-danger">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>
