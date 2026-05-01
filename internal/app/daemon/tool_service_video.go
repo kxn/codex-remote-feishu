@@ -12,7 +12,6 @@ import (
 )
 
 func (a *App) sendIMVideoTool(ctx context.Context, arguments map[string]any) (map[string]any, *toolError) {
-	surfaceID, _ := arguments["surface_session_id"].(string)
 	path, _ := arguments["path"].(string)
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -26,7 +25,7 @@ func (a *App) sendIMVideoTool(ctx context.Context, arguments map[string]any) (ma
 	}
 
 	a.mu.Lock()
-	resolved, apiErr := a.resolveToolSurfaceContextLocked(surfaceID)
+	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
 	a.mu.Unlock()
 	if apiErr != nil {
 		return nil, apiErr

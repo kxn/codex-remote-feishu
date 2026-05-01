@@ -56,14 +56,15 @@ func TestSendIMVideoToolRoutesByResolvedSurface(t *testing.T) {
 		ActorUserID:      "user-2",
 		InstanceID:       "inst-2",
 	})
+	startToolTestRemoteTurn(t, app, "surface-2", "inst-2", "thread-2", "turn-2")
 
 	videoPath := filepath.Join(t.TempDir(), "demo.mp4")
 	if err := os.WriteFile(videoPath, []byte("fake-video"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	result, toolErr := app.sendIMVideoTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-2",
+	result, toolErr := app.sendIMVideoTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"surface_session_id": "surface-1",
 		"path":               videoPath,
 	})
 	if toolErr != nil {
@@ -110,7 +111,7 @@ func TestSendIMVideoToolRejectsInvalidPathAndDetachedSurface(t *testing.T) {
 	})
 
 	missingPath := filepath.Join(t.TempDir(), "missing.mp4")
-	_, toolErr := app.sendIMVideoTool(context.Background(), map[string]any{
+	_, toolErr := app.sendIMVideoTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
 		"surface_session_id": "surface-1",
 		"path":               missingPath,
 	})
@@ -122,7 +123,7 @@ func TestSendIMVideoToolRejectsInvalidPathAndDetachedSurface(t *testing.T) {
 	if err := os.WriteFile(textPath, []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	_, toolErr = app.sendIMVideoTool(context.Background(), map[string]any{
+	_, toolErr = app.sendIMVideoTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
 		"surface_session_id": "surface-1",
 		"path":               textPath,
 	})
@@ -130,24 +131,15 @@ func TestSendIMVideoToolRejectsInvalidPathAndDetachedSurface(t *testing.T) {
 		t.Fatalf("expected invalid_video_path for non-mp4, got %#v", toolErr)
 	}
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-detached",
-		GatewayID:        "app-1",
-		ChatID:           "chat-detached",
-		ActorUserID:      "user-detached",
-		Text:             "hello",
-	})
 	videoPath := filepath.Join(t.TempDir(), "demo.mp4")
 	if err := os.WriteFile(videoPath, []byte("fake-video"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	_, toolErr = app.sendIMVideoTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-detached",
-		"path":               videoPath,
+	_, toolErr = app.sendIMVideoTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"path": videoPath,
 	})
-	if toolErr == nil || toolErr.Code != "surface_not_attached" {
-		t.Fatalf("expected detached surface error, got %#v", toolErr)
+	if toolErr == nil || toolErr.Code != "current_turn_surface_unavailable" {
+		t.Fatalf("expected missing current turn error, got %#v", toolErr)
 	}
 }
 
@@ -207,14 +199,14 @@ func TestSendIMVideoToolMapsUploadAndSendFailures(t *testing.T) {
 				ActorUserID:      "user-1",
 				InstanceID:       "inst-1",
 			})
+			startToolTestRemoteTurn(t, app, "surface-1", "inst-1", "thread-1", "turn-1")
 
 			videoPath := filepath.Join(t.TempDir(), "demo.mp4")
 			if err := os.WriteFile(videoPath, []byte("fake-video"), 0o644); err != nil {
 				t.Fatalf("WriteFile() error = %v", err)
 			}
-			_, toolErr := app.sendIMVideoTool(context.Background(), map[string]any{
-				"surface_session_id": "surface-1",
-				"path":               videoPath,
+			_, toolErr := app.sendIMVideoTool(withToolCallerInstanceID(context.Background(), "inst-1"), map[string]any{
+				"path": videoPath,
 			})
 			if toolErr == nil || toolErr.Code != tc.wantCode {
 				t.Fatalf("expected %s, got %#v", tc.wantCode, toolErr)

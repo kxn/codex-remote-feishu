@@ -292,6 +292,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 
 1. `E2 Dispatching` 当前只表示“本地 active queue item 已派发，真实 remote turn 还没完成建联”；它并不自动等价于“已有 live turn”。
 2. 对 Claude backend，pre-start remote turn 的 stage-0 关联键当前先用 dispatch `CommandID`，再回退 `Initiator.SurfaceSessionID` 与 thread 信息；Claude translator 也会把 remote-surface initiator 显式带进 turn lifecycle。即使某些早期事件仍带 blank initiator，daemon 也会先把它视为 unknown，再通过 `CommandID` 命中 pending turn 并提升成真实 turn lifecycle；因此 backend/runtime 的早失败与 `start_new` 首条消息都不会再把 surface 永久卡在 `dispatching`。
+2.1. Feishu MCP 发送类工具和 Drive comments 工具当前也消费这套 remote turn 绑定：wrapper 发布 MCP URL 时只附带 caller instance id，daemon 在 tool call 时先按该 instance 查询 `activeRemote`，再查询 `pendingRemote`，并把产物或评论读取上下文绑定到命中的 `SurfaceSessionID`。工具参数里的 legacy `surface_session_id` 不参与路由；如果 caller instance 当前没有 active/pending remote turn，工具会 fail closed，不回退到 workspace surface context。
 3. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。

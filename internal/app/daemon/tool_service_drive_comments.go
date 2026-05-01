@@ -25,10 +25,6 @@ func driveFileCommentsToolInputSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"surface_session_id": map[string]any{
-				"type":        "string",
-				"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
-			},
 			"url": map[string]any{
 				"type":        "string",
 				"description": "Full Feishu file or document URL whose comments should be read",
@@ -44,13 +40,12 @@ func driveFileCommentsToolInputSchema() map[string]any {
 				"maximum":     toolDriveFileCommentsMaxPageSize,
 			},
 		},
-		"required":             []string{"surface_session_id", "url"},
-		"additionalProperties": false,
+		"required":             []string{"url"},
+		"additionalProperties": true,
 	}
 }
 
 func (a *App) readDriveFileCommentsTool(ctx context.Context, arguments map[string]any) (any, *toolError) {
-	surfaceID, _ := arguments["surface_session_id"].(string)
 	rawURL, _ := arguments["url"].(string)
 	pageToken, _ := arguments["page_token"].(string)
 
@@ -64,7 +59,7 @@ func (a *App) readDriveFileCommentsTool(ctx context.Context, arguments map[strin
 	}
 
 	a.mu.Lock()
-	resolved, resolveErr := a.resolveToolSurfaceContextLocked(surfaceID)
+	resolved, resolveErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
 	a.mu.Unlock()
 	if resolveErr != nil {
 		return nil, resolveErr

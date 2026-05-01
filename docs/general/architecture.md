@@ -261,7 +261,7 @@ Feishu 平台适配层，负责：
 - loopback-only 访问边界
 - bearer token 鉴权
 - daemon 侧 tool 业务逻辑作为唯一 source of truth
-- workspace `.codex-remote/surface-context.json` 作为当前 surface 上下文载体
+- wrapper 发布 MCP URL 时附带调用者 instance id；daemon 在每次 tool call 时按该 instance 的 active/pending remote turn 解析当前 surface
 
 ### 4.11 `internal/app/wrapper`
 
@@ -336,12 +336,13 @@ Feishu inbound
 ### 6.3 Feishu MCP tool context
 
 ```text
-normal 模式下的 workspace 排他接管
-  -> daemon 在 workspace/.codex-remote/surface-context.json 写入当前 surface
-  -> 本地 Feishu MCP tool description 要求 Codex 先读取该文件
-  -> tool call 显式带回 surface_session_id
-  -> daemon local MCP tool service 校验 bearer token、解析 surface context 并执行 tools/list / tools/call
-  -> `feishu_send_im_image` / `feishu_send_im_video` / `feishu_send_im_file` 可继续用显式 `surface_session_id` 把本地产物按图片 / 视频 / 文件语义发送回当前 Feishu surface
+wrapper 启动 child
+  -> wrapper 读取 daemon tool service state
+  -> wrapper 向 Codex/Claude 发布带 `codex_remote_instance_id` query 的 Feishu MCP URL
+  -> daemon local MCP tool service 校验 loopback + bearer token，并把 caller instance 写入 MCP session context
+  -> tool call 不接收公开 surface 参数
+  -> daemon 按 caller instance 先查 active remote turn，再查 pending remote turn
+  -> `feishu_send_im_image` / `feishu_send_im_video` / `feishu_send_im_file` 把本地产物按图片 / 视频 / 文件语义发送回该 turn 的发起 Feishu surface
   -> generic tool result 先归模型消费；只有模型显式调用 delivery tool 时，产物才会变成用户可见消息
 ```
 

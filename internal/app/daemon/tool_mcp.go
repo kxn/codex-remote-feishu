@@ -15,6 +15,9 @@ import (
 const toolMCPServerName = "codex-remote-feishu-tool-service"
 
 const toolMCPSessionTimeout = 30 * time.Minute
+const toolCallerInstanceIDQueryParam = "codex_remote_instance_id"
+
+type toolCallerInstanceIDContextKey struct{}
 
 func (a *App) newToolRuntimeHandler() http.Handler {
 	server := a.newToolMCPServer()
@@ -25,6 +28,22 @@ func (a *App) newToolRuntimeHandler() http.Handler {
 		SessionTimeout: toolMCPSessionTimeout,
 	})
 	return a.requireToolAuth(handler)
+}
+
+func withToolCallerInstanceID(ctx context.Context, instanceID string) context.Context {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, toolCallerInstanceIDContextKey{}, instanceID)
+}
+
+func toolCallerInstanceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	value, _ := ctx.Value(toolCallerInstanceIDContextKey{}).(string)
+	return strings.TrimSpace(value)
 }
 
 func (a *App) newToolMCPServer() *mcp.Server {
@@ -60,8 +79,6 @@ func (a *App) handleMCPToolCall(ctx context.Context, toolName string, req *mcp.C
 		apiErr *toolError
 	)
 	switch strings.TrimSpace(toolName) {
-	case feishuSurfaceResolverToolName:
-		result, apiErr = a.resolveSurfaceContextTool(arguments)
 	case feishuSendIMFileToolName:
 		result, apiErr = a.sendIMFileTool(ctx, arguments)
 	case feishuSendIMImageToolName:

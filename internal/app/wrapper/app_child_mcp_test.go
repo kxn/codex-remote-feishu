@@ -23,6 +23,7 @@ func TestBuildCodexChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
   "tokenType": "bearer"
 }`)
 	app := New(Config{
+		InstanceID:   "inst-1",
 		Source:       "headless",
 		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
 	})
@@ -35,7 +36,7 @@ func TestBuildCodexChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 	if args[0] != "app-server" || args[1] != "-c" || args[2] != `model="gpt-5"` {
 		t.Fatalf("expected base args to stay intact, got %#v", args[:3])
 	}
-	if args[3] != "-c" || args[4] != `mcp_servers.codex_remote_feishu.url="http://127.0.0.1:9702"` {
+	if args[3] != "-c" || args[4] != `mcp_servers.codex_remote_feishu.url="http://127.0.0.1:9702?codex_remote_instance_id=inst-1"` {
 		t.Fatalf("unexpected url override args: %#v", args[3:5])
 	}
 	if args[5] != "-c" || args[6] != `mcp_servers.codex_remote_feishu.bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"` {
@@ -71,6 +72,7 @@ func TestBuildCodexChildLaunchSkipsFeishuMCPForVSCodeSource(t *testing.T) {
 func TestBuildCodexChildLaunchSkipsFeishuMCPWhenStateMissing(t *testing.T) {
 	clearFeishuMCPBearerEnv(t)
 	app := New(Config{
+		InstanceID:   "inst-1",
 		Source:       "headless",
 		RuntimePaths: relayruntime.Paths{ToolServiceFile: filepath.Join(t.TempDir(), "missing.json")},
 	})
@@ -93,6 +95,7 @@ func TestBuildCodexChildLaunchSkipsFeishuMCPForUnsupportedTokenType(t *testing.T
   "tokenType": "basic"
 }`)
 	app := New(Config{
+		InstanceID:   "inst-1",
 		Source:       "headless",
 		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
 	})
@@ -116,7 +119,8 @@ func TestBuildClaudeChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 }`)
 	configPath := filepath.Join(t.TempDir(), "claude-mcp.json")
 	app := New(Config{
-		Source: "headless",
+		InstanceID: "inst-1",
+		Source:     "headless",
 		RuntimePaths: relayruntime.Paths{
 			ToolServiceFile:     statePath,
 			ClaudeMCPConfigFile: configPath,
@@ -167,7 +171,7 @@ func TestBuildClaudeChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected %s server in Claude MCP config: %#v", feishuMCPServerID, payload)
 	}
-	if server.Type != "http" || server.URL != "http://127.0.0.1:9702" {
+	if server.Type != "http" || server.URL != "http://127.0.0.1:9702?codex_remote_instance_id=inst-1" {
 		t.Fatalf("unexpected Claude MCP server config: %#v", server)
 	}
 	if got := server.Headers["Authorization"]; got != "Bearer ${"+feishuMCPBearerEnvName+"}" {
@@ -208,7 +212,8 @@ func TestBuildClaudeChildLaunchSkipsFeishuMCPWhenStateMissing(t *testing.T) {
 	clearFeishuMCPBearerEnv(t)
 	configPath := filepath.Join(t.TempDir(), "claude-mcp.json")
 	app := New(Config{
-		Source: "headless",
+		InstanceID: "inst-1",
+		Source:     "headless",
 		RuntimePaths: relayruntime.Paths{
 			ToolServiceFile:     filepath.Join(t.TempDir(), "missing.json"),
 			ClaudeMCPConfigFile: configPath,
@@ -236,6 +241,7 @@ func TestBuildClaudeChildLaunchSkipsFeishuMCPWhenConfigPathMissing(t *testing.T)
   "tokenType": "bearer"
 }`)
 	app := New(Config{
+		InstanceID:   "inst-1",
 		Source:       "headless",
 		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
 	})

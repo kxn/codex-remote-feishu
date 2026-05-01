@@ -3,6 +3,7 @@ package wrapper
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 const (
 	feishuMCPServerID      = "codex_remote_feishu"
 	feishuMCPBearerEnvName = "CODEX_REMOTE_FEISHU_MCP_BEARER"
+	feishuMCPInstanceIDKey = "codex_remote_instance_id"
 )
 
 type childToolServiceInfo struct {
@@ -78,6 +80,12 @@ func (a *App) readFeishuMCPPublicationInfo() (childToolServiceInfo, bool) {
 		a.debugf("feishu mcp publication skipped: incomplete state path=%s", a.config.RuntimePaths.ToolServiceFile)
 		return childToolServiceInfo{}, false
 	}
+	urlWithCaller, ok := appendToolCallerInstanceParam(info.URL, a.config.InstanceID)
+	if !ok {
+		a.debugf("feishu mcp publication skipped: caller identity unavailable instance=%s url=%s", a.config.InstanceID, info.URL)
+		return childToolServiceInfo{}, false
+	}
+	info.URL = urlWithCaller
 	if tokenType := strings.TrimSpace(info.TokenType); tokenType != "" && !strings.EqualFold(tokenType, "bearer") {
 		a.debugf("feishu mcp publication skipped: unsupported token type=%s", tokenType)
 		return childToolServiceInfo{}, false
@@ -111,6 +119,22 @@ func (a *App) feishuMCPPublicationEligible() bool {
 
 func codexMCPOverride(field, value string) string {
 	return fmt.Sprintf("mcp_servers.%s.%s=%s", feishuMCPServerID, strings.TrimSpace(field), strconv.Quote(strings.TrimSpace(value)))
+}
+
+func appendToolCallerInstanceParam(rawURL, instanceID string) (string, bool) {
+	rawURL = strings.TrimSpace(rawURL)
+	instanceID = strings.TrimSpace(instanceID)
+	if rawURL == "" || instanceID == "" {
+		return "", false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || strings.TrimSpace(parsed.Scheme) == "" || strings.TrimSpace(parsed.Host) == "" {
+		return "", false
+	}
+	values := parsed.Query()
+	values.Set(feishuMCPInstanceIDKey, instanceID)
+	parsed.RawQuery = values.Encode()
+	return parsed.String(), true
 }
 
 func (a *App) writeClaudeFeishuMCPConfig(info childToolServiceInfo) (string, error) {

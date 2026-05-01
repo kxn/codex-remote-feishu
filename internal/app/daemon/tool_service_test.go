@@ -281,13 +281,14 @@ func TestSendIMFileToolRoutesByResolvedSurface(t *testing.T) {
 		ActorUserID:      "user-2",
 		InstanceID:       "inst-2",
 	})
+	startToolTestRemoteTurn(t, app, "surface-2", "inst-2", "thread-2", "turn-2")
 
 	filePath := filepath.Join(t.TempDir(), "report.txt")
 	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	result, toolErr := app.sendIMFileTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-2",
+	result, toolErr := app.sendIMFileTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"surface_session_id": "surface-1",
 		"path":               filePath,
 	})
 	if toolErr != nil {
@@ -304,7 +305,7 @@ func TestSendIMFileToolRoutesByResolvedSurface(t *testing.T) {
 	}
 }
 
-func TestSendIMFileToolRejectsInvalidAndDetachedSurface(t *testing.T) {
+func TestSendIMFileToolRejectsMissingCurrentTurnSurface(t *testing.T) {
 	sender := &fakeToolSender{}
 	app, _ := newToolServiceTestApp(t, sender)
 	if err := app.Bind(); err != nil {
@@ -320,27 +321,17 @@ func TestSendIMFileToolRejectsInvalidAndDetachedSurface(t *testing.T) {
 	}
 
 	_, toolErr := app.sendIMFileTool(context.Background(), map[string]any{
-		"surface_session_id": "missing-surface",
-		"path":               filePath,
+		"path": filePath,
 	})
-	if toolErr == nil || toolErr.Code != "surface_not_found" {
-		t.Fatalf("expected invalid surface rejection, got %#v", toolErr)
+	if toolErr == nil || toolErr.Code != "caller_instance_id_required" {
+		t.Fatalf("expected missing caller rejection, got %#v", toolErr)
 	}
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-detached",
-		GatewayID:        "app-1",
-		ChatID:           "chat-detached",
-		ActorUserID:      "user-detached",
-		Text:             "hello",
+	_, toolErr = app.sendIMFileTool(withToolCallerInstanceID(context.Background(), "inst-1"), map[string]any{
+		"path": filePath,
 	})
-	_, toolErr = app.sendIMFileTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-detached",
-		"path":               filePath,
-	})
-	if toolErr == nil || toolErr.Code != "surface_not_attached" {
-		t.Fatalf("expected detached surface rejection, got %#v", toolErr)
+	if toolErr == nil || toolErr.Code != "current_turn_surface_unavailable" {
+		t.Fatalf("expected missing current turn rejection, got %#v", toolErr)
 	}
 }
 
@@ -405,10 +396,10 @@ func TestSendIMFileToolMapsUploadAndSendFailures(t *testing.T) {
 				ActorUserID:      "user-1",
 				InstanceID:       "inst-1",
 			})
+			startToolTestRemoteTurn(t, app, "surface-1", "inst-1", "thread-1", "turn-1")
 
-			_, toolErr := app.sendIMFileTool(context.Background(), map[string]any{
-				"surface_session_id": "surface-1",
-				"path":               filePath,
+			_, toolErr := app.sendIMFileTool(withToolCallerInstanceID(context.Background(), "inst-1"), map[string]any{
+				"path": filePath,
 			})
 			if toolErr == nil || toolErr.Code != tc.wantCode {
 				t.Fatalf("expected %s, got %#v", tc.wantCode, toolErr)
@@ -461,13 +452,14 @@ func TestSendIMImageToolRoutesByResolvedSurface(t *testing.T) {
 		ActorUserID:      "user-2",
 		InstanceID:       "inst-2",
 	})
+	startToolTestRemoteTurn(t, app, "surface-2", "inst-2", "thread-2", "turn-2")
 
 	imagePath := filepath.Join(t.TempDir(), "preview.png")
 	if err := os.WriteFile(imagePath, []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	result, toolErr := app.sendIMImageTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-2",
+	result, toolErr := app.sendIMImageTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"surface_session_id": "surface-1",
 		"path":               imagePath,
 	})
 	if toolErr != nil {
@@ -498,9 +490,8 @@ func TestSendIMImageToolRejectsInvalidPathAndDetachedSurface(t *testing.T) {
 	if err := os.WriteFile(textPath, []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	_, toolErr := app.sendIMImageTool(context.Background(), map[string]any{
-		"surface_session_id": "missing-surface",
-		"path":               textPath,
+	_, toolErr := app.sendIMImageTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"path": textPath,
 	})
 	if toolErr == nil || toolErr.Code != "invalid_image_path" {
 		t.Fatalf("expected invalid image path rejection before surface lookup, got %#v", toolErr)
@@ -510,20 +501,11 @@ func TestSendIMImageToolRejectsInvalidPathAndDetachedSurface(t *testing.T) {
 	if err := os.WriteFile(imagePath, []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-detached",
-		GatewayID:        "app-1",
-		ChatID:           "chat-detached",
-		ActorUserID:      "user-detached",
-		Text:             "hello",
+	_, toolErr = app.sendIMImageTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"path": imagePath,
 	})
-	_, toolErr = app.sendIMImageTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-detached",
-		"path":               imagePath,
-	})
-	if toolErr == nil || toolErr.Code != "surface_not_attached" {
-		t.Fatalf("expected detached surface rejection, got %#v", toolErr)
+	if toolErr == nil || toolErr.Code != "current_turn_surface_unavailable" {
+		t.Fatalf("expected missing current turn rejection, got %#v", toolErr)
 	}
 }
 
@@ -588,10 +570,10 @@ func TestSendIMImageToolMapsUploadAndSendFailures(t *testing.T) {
 				ActorUserID:      "user-1",
 				InstanceID:       "inst-1",
 			})
+			startToolTestRemoteTurn(t, app, "surface-1", "inst-1", "thread-1", "turn-1")
 
-			_, toolErr := app.sendIMImageTool(context.Background(), map[string]any{
-				"surface_session_id": "surface-1",
-				"path":               imagePath,
+			_, toolErr := app.sendIMImageTool(withToolCallerInstanceID(context.Background(), "inst-1"), map[string]any{
+				"path": imagePath,
 			})
 			if toolErr == nil || toolErr.Code != tc.wantCode {
 				t.Fatalf("expected %s, got %#v", tc.wantCode, toolErr)
@@ -644,9 +626,10 @@ func TestReadDriveFileCommentsToolRoutesByResolvedSurface(t *testing.T) {
 		ActorUserID:      "user-2",
 		InstanceID:       "inst-2",
 	})
+	startToolTestRemoteTurn(t, app, "surface-2", "inst-2", "thread-2", "turn-2")
 
-	result, toolErr := app.readDriveFileCommentsTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-2",
+	result, toolErr := app.readDriveFileCommentsTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"surface_session_id": "surface-1",
 		"url":                "https://my.feishu.cn/file/file-token-1",
 	})
 	if toolErr != nil {
@@ -677,28 +660,18 @@ func TestReadDriveFileCommentsToolRejectsInvalidInputAndDetachedSurface(t *testi
 		_ = app.Shutdown(context.Background())
 	}()
 
-	_, toolErr := app.readDriveFileCommentsTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-1",
-		"url":                "https://my.feishu.cn/wiki/wiki-token-1",
+	_, toolErr := app.readDriveFileCommentsTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"url": "https://my.feishu.cn/wiki/wiki-token-1",
 	})
 	if toolErr == nil || toolErr.Code != "unsupported_document_url" {
 		t.Fatalf("expected unsupported document url rejection, got %#v", toolErr)
 	}
 
-	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-detached",
-		GatewayID:        "app-1",
-		ChatID:           "chat-detached",
-		ActorUserID:      "user-detached",
-		Text:             "hello",
+	_, toolErr = app.readDriveFileCommentsTool(withToolCallerInstanceID(context.Background(), "inst-2"), map[string]any{
+		"url": "https://my.feishu.cn/file/file-token-1",
 	})
-	_, toolErr = app.readDriveFileCommentsTool(context.Background(), map[string]any{
-		"surface_session_id": "surface-detached",
-		"url":                "https://my.feishu.cn/file/file-token-1",
-	})
-	if toolErr == nil || toolErr.Code != "surface_not_attached" {
-		t.Fatalf("expected detached surface rejection, got %#v", toolErr)
+	if toolErr == nil || toolErr.Code != "current_turn_surface_unavailable" {
+		t.Fatalf("expected missing current turn rejection, got %#v", toolErr)
 	}
 }
 

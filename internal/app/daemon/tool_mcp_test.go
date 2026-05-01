@@ -5,21 +5,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type toolMCPRequestOptions struct {
-	Method          string
-	Token           string
-	SessionID       string
-	ProtocolVersion string
-	Body            string
+	Method           string
+	Token            string
+	SessionID        string
+	ProtocolVersion  string
+	CallerInstanceID string
+	Body             string
 }
 
 func toolMCPInitializeRequestBody() string {
@@ -51,7 +54,13 @@ func performToolMCPRequest(t *testing.T, handler http.Handler, opts toolMCPReque
 	if method == "" {
 		method = http.MethodPost
 	}
-	req := httptest.NewRequest(method, "http://127.0.0.1/", strings.NewReader(opts.Body))
+	target := "http://127.0.0.1/"
+	if strings.TrimSpace(opts.CallerInstanceID) != "" {
+		values := url.Values{}
+		values.Set(toolCallerInstanceIDQueryParam, strings.TrimSpace(opts.CallerInstanceID))
+		target += "?" + values.Encode()
+	}
+	req := httptest.NewRequest(method, target, strings.NewReader(opts.Body))
 	req.Host = "127.0.0.1:9502"
 	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Accept", "application/json, text/event-stream")
@@ -73,11 +82,16 @@ func performToolMCPRequest(t *testing.T, handler http.Handler, opts toolMCPReque
 }
 
 func initializeToolMCPSession(t *testing.T, handler http.Handler, token string) (string, string) {
+	return initializeToolMCPSessionWithCaller(t, handler, token, "")
+}
+
+func initializeToolMCPSessionWithCaller(t *testing.T, handler http.Handler, token, callerInstanceID string) (string, string) {
 	t.Helper()
 	rec := performToolMCPRequest(t, handler, toolMCPRequestOptions{
-		Method: http.MethodPost,
-		Token:  token,
-		Body:   toolMCPInitializeRequestBody(),
+		Method:           http.MethodPost,
+		Token:            token,
+		CallerInstanceID: callerInstanceID,
+		Body:             toolMCPInitializeRequestBody(),
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("initialize failed: code=%d body=%s", rec.Code, rec.Body.String())
@@ -99,11 +113,12 @@ func initializeToolMCPSession(t *testing.T, handler http.Handler, token string) 
 		t.Fatalf("initialize missing protocol version: body=%s", rec.Body.String())
 	}
 	rec = performToolMCPRequest(t, handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           token,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
-		Body:            toolMCPNotificationInitializedBody(),
+		Method:           http.MethodPost,
+		Token:            token,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: callerInstanceID,
+		Body:             toolMCPNotificationInitializedBody(),
 	})
 	if rec.Code != http.StatusAccepted && rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
 		t.Fatalf("initialized notification failed: code=%d body=%s", rec.Code, rec.Body.String())
@@ -118,6 +133,22 @@ func decodeToolMCPResponse(t *testing.T, rec *httptest.ResponseRecorder) map[str
 		t.Fatalf("unmarshal response: %v body=%s", err, rec.Body.String())
 	}
 	return payload
+}
+
+func startToolTestRemoteTurn(t *testing.T, app *App, surfaceID, instanceID, threadID, turnID string) {
+	t.Helper()
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceID,
+		MessageID:        "msg-" + surfaceID,
+		Text:             "run",
+	})
+	app.service.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  threadID,
+		TurnID:    turnID,
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surfaceID},
+	})
 }
 
 func TestToolMCPListAndCallTools(t *testing.T) {
@@ -148,14 +179,16 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken)
+	startToolTestRemoteTurn(t, app, "surface-normal", "inst-1", "thread-1", "turn-1")
+	sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, "inst-1")
 
 	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
-		Body:            toolMCPCallRequestBody(t, 2, "tools/list", map[string]any{}),
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-1",
+		Body:             toolMCPCallRequestBody(t, 2, "tools/list", map[string]any{}),
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("tools/list failed: code=%d body=%s", rec.Code, rec.Body.String())
@@ -163,7 +196,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 5 {
+	if len(tools) != 4 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -172,45 +205,27 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 			seen[strings.TrimSpace(item["name"].(string))] = item
 		}
 	}
-	if !strings.Contains(seen[feishuSurfaceResolverToolName]["description"].(string), ".codex-remote/surface-context.json") {
-		t.Fatalf("resolver description missing workspace context rule: %#v", seen[feishuSurfaceResolverToolName])
+	if _, ok := seen[feishuSurfaceResolverToolName]; ok {
+		t.Fatalf("resolver should not be published in MCP tool list: %#v", seen[feishuSurfaceResolverToolName])
 	}
-	if !strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), ".codex-remote/surface-context.json") {
-		t.Fatalf("file-send description missing workspace context rule: %#v", seen[feishuSendIMFileToolName])
+	if strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), ".codex-remote/surface-context.json") {
+		t.Fatalf("file-send description still exposes workspace context: %#v", seen[feishuSendIMFileToolName])
 	}
-	if !strings.Contains(seen[feishuSendIMImageToolName]["description"].(string), ".codex-remote/surface-context.json") {
-		t.Fatalf("image-send description missing workspace context rule: %#v", seen[feishuSendIMImageToolName])
+	if strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), "surface_session_id") {
+		t.Fatalf("file-send description still exposes surface_session_id: %#v", seen[feishuSendIMFileToolName])
 	}
-	if !strings.Contains(seen[feishuSendIMVideoToolName]["description"].(string), ".codex-remote/surface-context.json") {
-		t.Fatalf("video-send description missing workspace context rule: %#v", seen[feishuSendIMVideoToolName])
+	if strings.Contains(seen[feishuSendIMImageToolName]["description"].(string), ".codex-remote/surface-context.json") {
+		t.Fatalf("image-send description still exposes workspace context: %#v", seen[feishuSendIMImageToolName])
+	}
+	if strings.Contains(seen[feishuSendIMVideoToolName]["description"].(string), ".codex-remote/surface-context.json") {
+		t.Fatalf("video-send description still exposes workspace context: %#v", seen[feishuSendIMVideoToolName])
 	}
 	if !strings.Contains(seen[feishuReadDriveFileCommentsToolName]["description"].(string), "Pass the exact Feishu URL") {
 		t.Fatalf("drive-comment description missing comment workflow trigger: %#v", seen[feishuReadDriveFileCommentsToolName])
 	}
-
-	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
-		Body: toolMCPCallRequestBody(t, 3, "tools/call", map[string]any{
-			"name": feishuSurfaceResolverToolName,
-			"arguments": map[string]any{
-				"surface_session_id": "surface-normal",
-			},
-		}),
-	})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("resolver tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
-	}
-	resolvePayload := decodeToolMCPResponse(t, rec)
-	callResult, _ := resolvePayload["result"].(map[string]any)
-	if callResult["isError"] == true {
-		t.Fatalf("resolver tool unexpectedly returned error: %#v", resolvePayload)
-	}
-	structured, _ := callResult["structuredContent"].(map[string]any)
-	if structured["surface_session_id"] != "surface-normal" || structured["product_mode"] != "normal" {
-		t.Fatalf("unexpected resolver structured content: %#v", structured)
+	fileSchema, _ := seen[feishuSendIMFileToolName]["inputSchema"].(map[string]any)
+	if strings.Contains(marshalToolPayloadText(fileSchema), "surface_session_id") {
+		t.Fatalf("file-send schema should not expose surface_session_id: %#v", fileSchema)
 	}
 
 	filePath := filepath.Join(t.TempDir(), "report.txt")
@@ -218,15 +233,15 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-1",
 		Body: toolMCPCallRequestBody(t, 4, "tools/call", map[string]any{
 			"name": feishuSendIMFileToolName,
 			"arguments": map[string]any{
-				"surface_session_id": "surface-normal",
-				"path":               filePath,
+				"path": filePath,
 			},
 		}),
 	})
@@ -248,15 +263,15 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-1",
 		Body: toolMCPCallRequestBody(t, 5, "tools/call", map[string]any{
 			"name": feishuSendIMImageToolName,
 			"arguments": map[string]any{
-				"surface_session_id": "surface-normal",
-				"path":               imagePath,
+				"path": imagePath,
 			},
 		}),
 	})
@@ -278,15 +293,15 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-1",
 		Body: toolMCPCallRequestBody(t, 6, "tools/call", map[string]any{
 			"name": feishuSendIMVideoToolName,
 			"arguments": map[string]any{
-				"surface_session_id": "surface-normal",
-				"path":               videoPath,
+				"path": videoPath,
 			},
 		}),
 	})
@@ -304,15 +319,15 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	}
 
 	rec = performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-1",
 		Body: toolMCPCallRequestBody(t, 7, "tools/call", map[string]any{
 			"name": feishuReadDriveFileCommentsToolName,
 			"arguments": map[string]any{
-				"surface_session_id": "surface-normal",
-				"url":                "https://my.feishu.cn/file/file-token-1",
+				"url": "https://my.feishu.cn/file/file-token-1",
 			},
 		}),
 	})
@@ -339,16 +354,21 @@ func TestToolMCPBusinessErrorsStayInToolResult(t *testing.T) {
 		_ = app.Shutdown(context.Background())
 	}()
 
-	sessionID, protocolVersion := initializeToolMCPSession(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken)
+	sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, "inst-missing")
+	filePath := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
-		Method:          http.MethodPost,
-		Token:           app.toolRuntime.BearerToken,
-		SessionID:       sessionID,
-		ProtocolVersion: protocolVersion,
+		Method:           http.MethodPost,
+		Token:            app.toolRuntime.BearerToken,
+		SessionID:        sessionID,
+		ProtocolVersion:  protocolVersion,
+		CallerInstanceID: "inst-missing",
 		Body: toolMCPCallRequestBody(t, 2, "tools/call", map[string]any{
-			"name": feishuSurfaceResolverToolName,
+			"name": feishuSendIMFileToolName,
 			"arguments": map[string]any{
-				"surface_session_id": "missing-surface",
+				"path": filePath,
 			},
 		}),
 	})
@@ -362,7 +382,183 @@ func TestToolMCPBusinessErrorsStayInToolResult(t *testing.T) {
 	}
 	structured, _ := result["structuredContent"].(map[string]any)
 	errPayload, _ := structured["error"].(map[string]any)
-	if errPayload["code"] != "surface_not_found" {
+	if errPayload["code"] != "current_turn_surface_unavailable" {
 		t.Fatalf("unexpected tool error payload: %#v", payload)
+	}
+}
+
+func TestToolMCPCallUsesSessionCallerInstanceFromInitializeRequest(t *testing.T) {
+	sender := &fakeToolSender{}
+	app, _ := newToolServiceTestApp(t, sender)
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer func() {
+		_ = app.Shutdown(context.Background())
+	}()
+
+	workspaceRoot := t.TempDir()
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-current",
+		GatewayID:        "app-current",
+		ChatID:           "chat-current",
+		ActorUserID:      "user-current",
+		InstanceID:       "inst-1",
+	})
+	startToolTestRemoteTurn(t, app, "surface-current", "inst-1", "thread-1", "turn-1")
+
+	sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, "inst-1")
+	filePath := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.BearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 2, "tools/call", map[string]any{
+			"name": feishuSendIMFileToolName,
+			"arguments": map[string]any{
+				"path": filePath,
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send file tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.fileCalls) != 1 {
+		t.Fatalf("expected one file send call, got %#v", sender.fileCalls)
+	}
+	if got := sender.fileCalls[0]; got.GatewayID != "app-current" || got.SurfaceSessionID != "surface-current" || got.ChatID != "chat-current" {
+		t.Fatalf("tool call did not use session caller surface: %#v", got)
+	}
+}
+
+func TestToolMCPCallRoutesToCurrentTurnSurfaceAndIgnoresLegacySurfaceArgument(t *testing.T) {
+	sender := &fakeToolSender{}
+	app, _ := newToolServiceTestApp(t, sender)
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer func() {
+		_ = app.Shutdown(context.Background())
+	}()
+
+	workspaceRoot := t.TempDir()
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.MaterializeSurfaceResume("surface-single", "app-single", "chat-single", "user-single", state.ProductModeNormal, agentproto.BackendCodex, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	app.service.MaterializeSurfaceResume("surface-group", "app-group", "chat-group", "user-group", state.ProductModeNormal, agentproto.BackendCodex, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	app.service.Surface("surface-single").AttachedInstanceID = "inst-1"
+	app.service.Surface("surface-group").AttachedInstanceID = "inst-1"
+	startToolTestRemoteTurn(t, app, "surface-group", "inst-1", "thread-1", "turn-1")
+
+	sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, "inst-1")
+	filePath := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.BearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 2, "tools/call", map[string]any{
+			"name": feishuSendIMFileToolName,
+			"arguments": map[string]any{
+				"surface_session_id": "surface-single",
+				"path":               filePath,
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send file tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.fileCalls) != 1 {
+		t.Fatalf("expected one file send call, got %#v", sender.fileCalls)
+	}
+	if got := sender.fileCalls[0]; got.GatewayID != "app-group" || got.SurfaceSessionID != "surface-group" || got.ChatID != "chat-group" {
+		t.Fatalf("legacy surface argument should be ignored in favor of current turn surface: %#v", got)
+	}
+}
+
+func TestToolMCPCallCanResolvePendingRemoteTurnBeforeTurnStarted(t *testing.T) {
+	sender := &fakeToolSender{}
+	app, _ := newToolServiceTestApp(t, sender)
+	if err := app.Bind(); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	defer func() {
+		_ = app.Shutdown(context.Background())
+	}()
+
+	workspaceRoot := t.TempDir()
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		Source:        "headless",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-pending",
+		GatewayID:        "app-pending",
+		ChatID:           "chat-pending",
+		ActorUserID:      "user-pending",
+		InstanceID:       "inst-1",
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-pending",
+		MessageID:        "msg-pending",
+		Text:             "run",
+	})
+	if pending := app.service.PendingRemoteTurns(); len(pending) != 1 || pending[0].SurfaceSessionID != "surface-pending" {
+		t.Fatalf("expected pending remote turn before MCP call, got %#v", pending)
+	}
+
+	sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, "inst-1")
+	filePath := filepath.Join(t.TempDir(), "report.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+		Method:          http.MethodPost,
+		Token:           app.toolRuntime.BearerToken,
+		SessionID:       sessionID,
+		ProtocolVersion: protocolVersion,
+		Body: toolMCPCallRequestBody(t, 2, "tools/call", map[string]any{
+			"name": feishuSendIMFileToolName,
+			"arguments": map[string]any{
+				"path": filePath,
+			},
+		}),
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send file tool call failed: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(sender.fileCalls) != 1 {
+		t.Fatalf("expected one file send call, got %#v", sender.fileCalls)
+	}
+	if got := sender.fileCalls[0]; got.GatewayID != "app-pending" || got.SurfaceSessionID != "surface-pending" || got.ChatID != "chat-pending" {
+		t.Fatalf("tool call did not route through pending remote turn: %#v", got)
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -22,11 +23,10 @@ const feishuSendIMImageToolName = "feishu_send_im_image"
 const feishuSendIMVideoToolName = "feishu_send_im_video"
 const feishuReadDriveFileCommentsToolName = "feishu_read_drive_file_comments"
 
-const feishuSurfaceResolverDescription = "Resolve the current Feishu remote surface context. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. If the file is missing, invalid, or you are not in normal remote workspace mode, do not guess."
-const feishuSendIMFileDescription = "Send a local file to the current Feishu remote surface as an IM file attachment. Use this when the artifact should be delivered as a downloadable file rather than rendered inline. For screenshots and other user-facing images, prefer feishu_send_im_image. For MP4 videos that should render as videos in chat, prefer feishu_send_im_video. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local file path and do not guess a surface, chat, or remote URL."
-const feishuSendIMImageDescription = "Send a local image to the current Feishu remote surface as an inline IM image message. Use this proactively when you created or saved a screenshot, visual diff, rendered preview, chart, mockup, or another image artifact that would directly help the current conversation. Prefer this tool over feishu_send_im_file for PNG, JPEG, GIF, WebP, or BMP images because the image will render directly in chat. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local image path and do not guess a surface, chat, or remote URL."
-const feishuSendIMVideoDescription = "Send a local MP4 video to the current Feishu remote surface as an inline IM video message. Use this when the artifact should render as a video in chat instead of appearing as a downloadable file attachment. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found. Use a real local .mp4 file path and do not guess a surface, chat, or remote URL."
-const feishuReadDriveFileCommentsDescription = "Read comments from a Feishu file or document URL. Use this when the user gives you a Feishu link, or asks you to review comments on a markdown preview link that was already uploaded to Feishu. Before calling this tool, read .codex-remote/surface-context.json from the current workspace root and pass surface_session_id exactly as found so the request uses the correct Feishu app context. Pass the exact Feishu URL; this tool will extract the token and file type for supported URL forms such as /file/, /drive/file/, /docx/, /doc/, /sheets/, and /slides/. Do not manually extract tokens, and do not guess from wiki URLs in this version."
+const feishuSendIMFileDescription = "Send a local file to the Feishu conversation that started the current remote turn. Use this when the artifact should be delivered as a downloadable file rather than rendered inline. For screenshots and other user-facing images, prefer feishu_send_im_image. For MP4 videos that should render as videos in chat, prefer feishu_send_im_video. Use a real local file path; the target Feishu conversation is resolved automatically from the running turn."
+const feishuSendIMImageDescription = "Send a local image to the Feishu conversation that started the current remote turn as an inline IM image message. Use this proactively when you created or saved a screenshot, visual diff, rendered preview, chart, mockup, or another image artifact that would directly help the current conversation. Prefer this tool over feishu_send_im_file for PNG, JPEG, GIF, WebP, or BMP images because the image will render directly in chat. Use a real local image path; the target Feishu conversation is resolved automatically from the running turn."
+const feishuSendIMVideoDescription = "Send a local MP4 video to the Feishu conversation that started the current remote turn as an inline IM video message. Use this when the artifact should render as a video in chat instead of appearing as a downloadable file attachment. Use a real local .mp4 file path; the target Feishu conversation is resolved automatically from the running turn."
+const feishuReadDriveFileCommentsDescription = "Read comments from a Feishu file or document URL using the Feishu app context for the conversation that started the current remote turn. Use this when the user gives you a Feishu link, or asks you to review comments on a markdown preview link that was already uploaded to Feishu. Pass the exact Feishu URL; this tool will extract the token and file type for supported URL forms such as /file/, /drive/file/, /docx/, /doc/, /sheets/, and /slides/. Do not manually extract tokens, and do not guess from wiki URLs in this version."
 
 type toolDefinition struct {
 	Name        string         `json:"name"`
@@ -64,37 +64,18 @@ type resolvedToolSurfaceContext struct {
 func toolDefinitions() []toolDefinition {
 	return []toolDefinition{
 		{
-			Name:        feishuSurfaceResolverToolName,
-			Description: feishuSurfaceResolverDescription,
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"surface_session_id": map[string]any{
-						"type":        "string",
-						"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
-					},
-				},
-				"required":             []string{"surface_session_id"},
-				"additionalProperties": false,
-			},
-		},
-		{
 			Name:        feishuSendIMFileToolName,
 			Description: feishuSendIMFileDescription,
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"surface_session_id": map[string]any{
-						"type":        "string",
-						"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
-					},
 					"path": map[string]any{
 						"type":        "string",
 						"description": "Existing local file path to send as a Feishu IM file message",
 					},
 				},
-				"required":             []string{"surface_session_id", "path"},
-				"additionalProperties": false,
+				"required":             []string{"path"},
+				"additionalProperties": true,
 			},
 		},
 		{
@@ -103,17 +84,13 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"surface_session_id": map[string]any{
-						"type":        "string",
-						"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
-					},
 					"path": map[string]any{
 						"type":        "string",
 						"description": "Existing local image path to send as a Feishu IM image message",
 					},
 				},
-				"required":             []string{"surface_session_id", "path"},
-				"additionalProperties": false,
+				"required":             []string{"path"},
+				"additionalProperties": true,
 			},
 		},
 		{
@@ -122,17 +99,13 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"surface_session_id": map[string]any{
-						"type":        "string",
-						"description": "Feishu surface session id loaded from .codex-remote/surface-context.json",
-					},
 					"path": map[string]any{
 						"type":        "string",
 						"description": "Existing local .mp4 path to send as a Feishu IM video message",
 					},
 				},
-				"required":             []string{"surface_session_id", "path"},
-				"additionalProperties": false,
+				"required":             []string{"path"},
+				"additionalProperties": true,
 			},
 		},
 		{
@@ -168,7 +141,8 @@ func (a *App) requireToolAuth(next http.Handler) http.Handler {
 			})
 			return
 		}
-		next.ServeHTTP(w, r)
+		instanceID := strings.TrimSpace(r.URL.Query().Get(toolCallerInstanceIDQueryParam))
+		next.ServeHTTP(w, r.WithContext(withToolCallerInstanceID(r.Context(), instanceID)))
 	})
 }
 
@@ -204,7 +178,6 @@ func (a *App) resolveSurfaceContextTool(arguments map[string]any) (map[string]an
 }
 
 func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map[string]any, *toolError) {
-	surfaceID, _ := arguments["surface_session_id"].(string)
 	path, _ := arguments["path"].(string)
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -233,7 +206,7 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 	}
 
 	a.mu.Lock()
-	resolved, apiErr := a.resolveToolSurfaceContextLocked(surfaceID)
+	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
 	a.mu.Unlock()
 	if apiErr != nil {
 		return nil, apiErr
@@ -289,7 +262,6 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 }
 
 func (a *App) sendIMImageTool(ctx context.Context, arguments map[string]any) (map[string]any, *toolError) {
-	surfaceID, _ := arguments["surface_session_id"].(string)
 	path, _ := arguments["path"].(string)
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -303,7 +275,7 @@ func (a *App) sendIMImageTool(ctx context.Context, arguments map[string]any) (ma
 	}
 
 	a.mu.Lock()
-	resolved, apiErr := a.resolveToolSurfaceContextLocked(surfaceID)
+	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
 	a.mu.Unlock()
 	if apiErr != nil {
 		return nil, apiErr
@@ -384,6 +356,36 @@ func validateSendImagePath(path string) *toolError {
 			Message: "path must point to a supported image file",
 		}
 	}
+}
+
+func (a *App) resolveToolCallerSurfaceContextLocked(callerInstanceID string) (resolvedToolSurfaceContext, *toolError) {
+	callerInstanceID = strings.TrimSpace(callerInstanceID)
+	if callerInstanceID == "" {
+		return resolvedToolSurfaceContext{}, &toolError{
+			Code:    "caller_instance_id_required",
+			Message: "current remote turn caller is not available",
+		}
+	}
+	if surfaceID := toolRemoteTurnSurfaceForInstance(a.service.ActiveRemoteTurns(), callerInstanceID); surfaceID != "" {
+		return a.resolveToolSurfaceContextLocked(surfaceID)
+	}
+	if surfaceID := toolRemoteTurnSurfaceForInstance(a.service.PendingRemoteTurns(), callerInstanceID); surfaceID != "" {
+		return a.resolveToolSurfaceContextLocked(surfaceID)
+	}
+	return resolvedToolSurfaceContext{}, &toolError{
+		Code:    "current_turn_surface_unavailable",
+		Message: "current Feishu remote turn surface is unavailable; this tool can only be used while handling a Feishu-triggered remote turn",
+	}
+}
+
+func toolRemoteTurnSurfaceForInstance(turns []orchestrator.RemoteTurnStatus, callerInstanceID string) string {
+	callerInstanceID = strings.TrimSpace(callerInstanceID)
+	for _, turn := range turns {
+		if strings.TrimSpace(turn.InstanceID) == callerInstanceID && strings.TrimSpace(turn.SurfaceSessionID) != "" {
+			return strings.TrimSpace(turn.SurfaceSessionID)
+		}
+	}
+	return ""
 }
 
 func (a *App) resolveToolSurfaceContextLocked(surfaceID string) (resolvedToolSurfaceContext, *toolError) {
