@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -10,10 +9,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const execCommandProgressTransientAnimationInterval = 1500 * time.Millisecond
-
-func (s *Service) handleAssistantMessageProgressStart(instanceID string, event agentproto.Event) []eventcontract.Event {
-	return s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
+func (s *Service) handleAssistantMessageProgressStart(_ string, _ agentproto.Event) []eventcontract.Event {
+	return nil
 }
 
 func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -32,13 +29,4 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
-}
-
-func (s *Service) clearExecCommandProgressReasoning(instanceID, threadID, turnID string) []eventcontract.Event {
-	surface := s.turnSurface(instanceID, threadID, turnID)
-	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
-	if !execprogress.ClearReasoningRecord(progress) {
-		return nil
-	}
-	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }

@@ -383,8 +383,7 @@ type ExecCommandProgressReasoningRecord struct {
 	VisibleSummaryIndex int
 	Buffer              string
 	BufferSummaryIndex  int
-	AnimationStep       int
-	LastAnimatedAt      time.Time
+	LastUpdatedAt       time.Time
 }
 
 type DynamicToolProgressGroupRecord struct {

@@ -713,8 +713,9 @@ func TestProjectExecCommandProgressFallsBackWhenStoredWindowIsStale(t *testing.T
 	}
 }
 
-func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutOverflowWindowRotation(t *testing.T) {
+func TestProjectExecCommandProgressKeepsLongReasoningSummaryUntilCardBudget(t *testing.T) {
 	projector := NewProjector()
+	summary := strings.Repeat("Thinking about command sequencing ", 10)
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
@@ -725,15 +726,48 @@ func TestProjectExecCommandProgressTruncatesLongReasoningSummaryWithoutOverflowW
 			MessageID:    "om-progress-1",
 			CardStartSeq: 1,
 			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: strings.Repeat("Thinking about command sequencing ", 200), LastSeq: 1},
+				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
 			},
 		}),
 	})
 	if len(ops) != 1 {
-		t.Fatalf("expected long reasoning summary to stay on current card without overflow window rotation, got %#v", ops)
+		t.Fatalf("expected long reasoning summary to stay on current card, got %#v", ops)
 	}
-	if strings.Count(ops[0].CardBody, "Thinking about command sequencing") != 1 || !strings.Contains(ops[0].CardBody, "...") {
-		t.Fatalf("expected long reasoning summary to be truncated in-place, got %#v", ops[0])
+	if !strings.Contains(ops[0].CardBody, strings.TrimSpace(summary)) || strings.Contains(ops[0].CardBody, "...") {
+		t.Fatalf("expected reasoning summary to avoid dedicated short truncation, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressTruncatesSingleReasoningLineOnlyAtCardBudget(t *testing.T) {
+	projector := NewProjector()
+	summary := strings.Repeat("Thinking about command sequencing ", 5000)
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID:     "thread-1",
+			TurnID:       "turn-1",
+			ItemID:       "reasoning-1",
+			MessageID:    "om-progress-1",
+			CardStartSeq: 1,
+			Entries: []control.ExecCommandProgressEntry{
+				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
+			},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected oversized single reasoning row to degrade to a sendable current card, got %#v", ops)
+	}
+	if !strings.Contains(ops[0].CardBody, "Thinking about command sequencing") || !strings.Contains(ops[0].CardBody, "...") {
+		t.Fatalf("expected card-budget fallback to truncate the single oversized row, got %#v", ops[0])
+	}
+	payload := renderOperationCard(ops[0], ops[0].effectiveCardEnvelope())
+	size, err := feishuInteractiveMessageTransportSize(payload)
+	if err != nil {
+		t.Fatalf("measure shared progress transport payload: %v", err)
+	}
+	if size > feishuCardTransportLimitBytes {
+		t.Fatalf("expected fallback shared progress transport <= %d bytes, got %d", feishuCardTransportLimitBytes, size)
 	}
 }
 

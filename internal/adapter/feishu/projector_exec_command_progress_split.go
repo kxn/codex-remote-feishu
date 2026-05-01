@@ -145,7 +145,45 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 			Lines:    fallbackLines,
 		}
 	}
+	if truncated, ok := truncateExecProgressRenderedLineToFit(lastLine, subtitle); ok {
+		return execProgressCardWindowState{
+			StartSeq: lastLine.Seq,
+			EndSeq:   lastLine.Seq,
+			Lines:    []execProgressRenderedLine{truncated},
+		}
+	}
 	return execProgressCardWindowState{}
+}
+
+func truncateExecProgressRenderedLineToFit(line execProgressRenderedLine, subtitle string) (execProgressRenderedLine, bool) {
+	const suffix = "..."
+	content := strings.TrimSpace(line.Content)
+	if content == "" {
+		return execProgressRenderedLine{}, false
+	}
+	runes := []rune(content)
+	if len(runes) <= len([]rune(suffix)) {
+		return execProgressRenderedLine{}, false
+	}
+	low, high := 1, len(runes)-len([]rune(suffix))
+	var best string
+	for low <= high {
+		mid := (low + high) / 2
+		candidate := strings.TrimSpace(string(runes[:mid])) + suffix
+		testLine := line
+		testLine.Content = candidate
+		if execProgressCardFits([]execProgressRenderedLine{testLine}, subtitle) {
+			best = candidate
+			low = mid + 1
+			continue
+		}
+		high = mid - 1
+	}
+	if best == "" {
+		return execProgressRenderedLine{}, false
+	}
+	line.Content = best
+	return line, true
 }
 
 func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLine, windowIndex int, subtitle string) (execProgressCardWindowState, bool) {

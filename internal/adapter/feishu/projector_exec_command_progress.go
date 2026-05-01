@@ -244,7 +244,7 @@ func renderExecProgressEntry(entry control.ExecCommandProgressEntry, verbose boo
 	case "command_execution":
 		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 30))
 	case "reasoning_summary":
-		return truncateExecProgressSummary(entry.Summary, 60)
+		return strings.TrimSpace(entry.Summary)
 	case "web_search":
 		if label == "搜索" {
 			return execProgressPrefixedMarkdown(label, renderExecProgressSearchSummary(entry.Summary, "", 40))

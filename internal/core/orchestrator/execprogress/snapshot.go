@@ -112,9 +112,6 @@ func UpsertEntry(progress *state.ExecCommandProgressRecord, entry state.ExecComm
 	entry.Label = strings.TrimSpace(entry.Label)
 	entry.Summary = strings.TrimSpace(entry.Summary)
 	entry.Status = strings.TrimSpace(entry.Status)
-	if entry.Kind != "reasoning_summary" {
-		ClearReasoningRecord(progress)
-	}
 	if entry.Summary == "" {
 		return
 	}

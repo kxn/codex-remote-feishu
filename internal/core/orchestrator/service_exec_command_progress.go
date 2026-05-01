@@ -41,9 +41,8 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 	}
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
-		events := s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
-		return events
+		return nil
 	case "reasoning_summary":
 		return s.handleReasoningSummaryProgressDelta(instanceID, event)
 	default:
@@ -51,43 +50,13 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 	}
 }
 
-func (s *Service) tickExecCommandProgressAnimations(surface *state.SurfaceConsoleRecord, now time.Time) []eventcontract.Event {
-	if surface == nil || surface.ActiveExecProgress == nil {
-		return nil
-	}
-	progress := surface.ActiveExecProgress
-	if strings.TrimSpace(progress.MessageID) == "" || !execprogress.HasVisibleReasoning(progress) {
-		return nil
-	}
-	record := progress.Reasoning
-	if record == nil {
-		return nil
-	}
-	if !record.LastAnimatedAt.IsZero() && now.Sub(record.LastAnimatedAt) < execCommandProgressTransientAnimationInterval {
-		return nil
-	}
-	if !progress.LastEmittedAt.IsZero() && now.Sub(progress.LastEmittedAt) < execCommandProgressTransientAnimationInterval {
-		return nil
-	}
-	record.AnimationStep = (record.AnimationStep + 1) % 3
-	record.LastAnimatedAt = now
-	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
-		ItemID:  record.ItemID,
-		Kind:    "reasoning_summary",
-		Summary: execprogress.FormatReasoningText(record.Text, record.AnimationStep),
-		Status:  "running",
-	})
-	return s.emitExecCommandProgress(surface, progress, progress.ThreadID, progress.TurnID, false)
-}
-
 func (s *Service) handleProcessProgressItemCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
-		events := s.clearExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 		if s.eventCarriesAssistantText(instanceID, event) {
 			s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
 		}
-		return events
+		return nil
 	case "command_execution":
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
 	case "file_change":
@@ -335,10 +304,8 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 		progress.ProcessPlan.Block.Status = status
 	}
 	_ = finalText
-	if !execprogress.ClearReasoningRecord(progress) {
-		if status == "" {
-			return nil
-		}
+	if status == "" {
+		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }

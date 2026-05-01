@@ -1208,10 +1208,10 @@ func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) 
 		t.Fatalf("expected one reasoning progress event, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "reasoning_summary" || progress.Entries[0].Summary != "Considering Git commands." {
+	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "reasoning_summary" || progress.Entries[0].Summary != "Considering Git commands" {
 		t.Fatalf("expected reasoning to surface as english timeline entry, got %#v", progress)
 	}
-	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_summary" || progress.Timeline[0].Summary != "Considering Git commands." {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_summary" || progress.Timeline[0].Summary != "Considering Git commands" {
 		t.Fatalf("expected reasoning timeline item, got %#v", progress.Timeline)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
@@ -1245,7 +1245,7 @@ func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
 	if len(first) != 1 || first[0].ExecCommandProgress == nil {
 		t.Fatalf("expected first reasoning delta event, got %#v", first)
 	}
-	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering." {
+	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering" {
 		t.Fatalf("expected first reasoning frame to surface first fragment, got %#v", first[0].ExecCommandProgress.Timeline)
 	}
 
@@ -1263,7 +1263,7 @@ func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
 	if len(second) != 1 || second[0].ExecCommandProgress == nil {
 		t.Fatalf("expected second reasoning delta event, got %#v", second)
 	}
-	if got := second[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering possible fixes." {
+	if got := second[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering possible fixes" {
 		t.Fatalf("expected accumulated plain-text reasoning summary, got %#v", second[0].ExecCommandProgress.Timeline)
 	}
 	if record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning; record == nil || record.Text != "Considering possible fixes" {
@@ -1293,12 +1293,58 @@ func TestReasoningSummaryProgressKeepsCheckingPhraseInEnglish(t *testing.T) {
 	if len(events) != 1 || events[0].ExecCommandProgress == nil {
 		t.Fatalf("expected english checking progress event, got %#v", events)
 	}
-	if len(events[0].ExecCommandProgress.Timeline) != 1 || events[0].ExecCommandProgress.Timeline[0].Summary != "Checking workflow progress." {
+	if len(events[0].ExecCommandProgress.Timeline) != 1 || events[0].ExecCommandProgress.Timeline[0].Summary != "Checking workflow progress" {
 		t.Fatalf("expected checking phrase to stay in english timeline, got %#v", events[0].ExecCommandProgress.Timeline)
 	}
 }
 
-func TestExecCommandProgressReasoningAnimationTicksSlowly(t *testing.T) {
+func TestReasoningSummaryProgressKeepsDifferentSummaryIndexesAsTimelineRows(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Reviewing existing flow",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first reasoning summary event, got %#v", first)
+	}
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Planning a safer update",
+		Metadata: map[string]any{
+			"summaryIndex": 2,
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected second reasoning summary event, got %#v", second)
+	}
+	timeline := second[0].ExecCommandProgress.Timeline
+	if len(timeline) != 2 ||
+		timeline[0].Kind != "reasoning_summary" ||
+		timeline[0].Summary != "Reviewing existing flow" ||
+		timeline[1].Kind != "reasoning_summary" ||
+		timeline[1].Summary != "Planning a safer update" {
+		t.Fatalf("expected separate summary indexes to persist as separate timeline rows, got %#v", timeline)
+	}
+}
+
+func TestReasoningSummaryProgressDoesNotAnimateWithoutNewDelta(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 6, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1320,27 +1366,18 @@ func TestExecCommandProgressReasoningAnimationTicksSlowly(t *testing.T) {
 	if len(first) != 1 || first[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial reasoning timeline event, got %#v", first)
 	}
-	if len(first[0].ExecCommandProgress.Timeline) != 1 || first[0].ExecCommandProgress.Timeline[0].Summary != "Thinking." {
-		t.Fatalf("expected first frame to start with one dot, got %#v", first[0].ExecCommandProgress.Timeline)
+	if len(first[0].ExecCommandProgress.Timeline) != 1 || first[0].ExecCommandProgress.Timeline[0].Summary != "Thinking" {
+		t.Fatalf("expected reasoning timeline to keep raw text, got %#v", first[0].ExecCommandProgress.Timeline)
 	}
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
-	now = now.Add(execCommandProgressTransientAnimationInterval - time.Millisecond)
+	now = now.Add(10 * time.Second)
 	if tick := svc.Tick(now); len(tick) != 0 {
-		t.Fatalf("expected no animation tick before interval, got %#v", tick)
-	}
-
-	now = now.Add(time.Millisecond)
-	second := svc.Tick(now)
-	if len(second) != 1 || second[0].ExecCommandProgress == nil {
-		t.Fatalf("expected second animation frame, got %#v", second)
-	}
-	if len(second[0].ExecCommandProgress.Timeline) != 1 || second[0].ExecCommandProgress.Timeline[0].Summary != "Thinking.." {
-		t.Fatalf("expected second frame with two dots, got %#v", second[0].ExecCommandProgress.Timeline)
+		t.Fatalf("expected no synthetic reasoning animation update, got %#v", tick)
 	}
 }
 
-func TestReasoningSummaryProgressIsClearedBeforeOrdinaryProgressEntries(t *testing.T) {
+func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1381,17 +1418,63 @@ func TestReasoningSummaryProgressIsClearedBeforeOrdinaryProgressEntries(t *testi
 	if progress.MessageID != "om-progress-1" {
 		t.Fatalf("expected ordinary progress to reuse the same card, got %#v", progress)
 	}
-	for _, entry := range progress.Entries {
-		if entry.Kind == "reasoning_summary" {
-			t.Fatalf("expected reasoning timeline entry to clear before ordinary progress, got %#v", progress.Entries)
-		}
-	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "npm test" {
-		t.Fatalf("expected command entry after reasoning clear, got %#v", progress.Entries)
+	if len(progress.Timeline) != 2 ||
+		progress.Timeline[0].Kind != "reasoning_summary" ||
+		progress.Timeline[0].Summary != "Planning" ||
+		progress.Timeline[1].Kind != "command_execution" ||
+		progress.Timeline[1].Summary != "npm test" {
+		t.Fatalf("expected reasoning timeline entry to persist before command progress, got %#v", progress.Timeline)
 	}
 }
 
-func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testing.T) {
+func TestReasoningSummaryProgressPersistsBeforeExplorationRows(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Planning",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning progress event, got %#v", first)
+	}
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "cat docs/README.md",
+		},
+	})
+	if len(second) != 1 || second[0].ExecCommandProgress == nil {
+		t.Fatalf("expected exploration progress update, got %#v", second)
+	}
+	timeline := second[0].ExecCommandProgress.Timeline
+	if len(timeline) != 2 ||
+		timeline[0].Kind != "reasoning_summary" ||
+		timeline[0].Summary != "Planning" ||
+		timeline[1].Kind != "read" ||
+		len(timeline[1].Items) != 1 ||
+		timeline[1].Items[0] != "docs/README.md" {
+		t.Fatalf("expected reasoning timeline entry to persist before exploration row, got %#v", timeline)
+	}
+}
+
+func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1415,24 +1498,15 @@ func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testi
 	}
 	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
-	cleared := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
 		ThreadID: "thread-1",
 		TurnID:   "turn-1",
 		ItemID:   "msg-1",
 		ItemKind: "agent_message",
 	})
-	if len(cleared) != 1 || cleared[0].Kind != eventcontract.KindExecCommandProgress || cleared[0].ExecCommandProgress == nil {
-		t.Fatalf("expected reasoning clear event before assistant text card, got %#v", cleared)
-	}
-	progress := cleared[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
-		t.Fatalf("expected reasoning clear to stay on the same card, got %#v", progress)
-	}
-	for _, entry := range progress.Entries {
-		if entry.Kind == "reasoning_summary" {
-			t.Fatalf("expected reasoning entry to be removed before assistant text card, got %#v", progress.Entries)
-		}
+	if len(started) != 0 {
+		t.Fatalf("expected assistant message start not to retract reasoning progress, got %#v", started)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
 		t.Fatal("expected progress state to remain until assistant text is emitted")
@@ -1453,7 +1527,7 @@ func TestReasoningSummaryProgressClearsBeforeAssistantTextStartsNewCard(t *testi
 	}
 }
 
-func TestReasoningSummaryProgressClearsOnTurnCompletion(t *testing.T) {
+func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1492,16 +1566,17 @@ func TestReasoningSummaryProgressClearsOnTurnCompletion(t *testing.T) {
 		}
 	}
 	if progressEvent == nil {
-		t.Fatalf("expected turn completion to clear reasoning progress, got %#v", finished)
+		t.Fatalf("expected turn completion to finalize reasoning progress, got %#v", finished)
 	}
 	progress := progressEvent
 	if progress.MessageID != "om-progress-1" {
-		t.Fatalf("expected cleared progress snapshot on completion, got %#v", progress)
+		t.Fatalf("expected final progress snapshot on completion, got %#v", progress)
 	}
-	for _, entry := range progress.Entries {
-		if entry.Kind == "reasoning_summary" {
-			t.Fatalf("expected reasoning entry to be removed on completion, got %#v", progress.Entries)
-		}
+	if len(progress.Timeline) != 1 ||
+		progress.Timeline[0].Kind != "reasoning_summary" ||
+		progress.Timeline[0].Summary != "Planning" ||
+		progress.Timeline[0].Status != "completed" {
+		t.Fatalf("expected reasoning entry to persist and finalize on completion, got %#v", progress.Timeline)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
 		t.Fatalf("expected turn completion to clear shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
