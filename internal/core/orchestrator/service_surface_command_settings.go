@@ -313,8 +313,22 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 		return notice(surface, "claude_profile_busy", text)
 	}
 
-	prepareNewThread := surface.RouteMode == state.RouteModeNewThreadReady
+	continuation := s.buildClaudeProfileSwitchContinuation(surface, currentWorkspaceKey)
 	events := s.discardDrafts(surface)
+	if continuation.RestartManagedNow {
+		events = append(events, eventcontract.Event{
+			Kind:             eventcontract.KindDaemonCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			DaemonCommand: &control.DaemonCommand{
+				Kind:             control.DaemonCommandKillHeadless,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				InstanceID:       continuation.RestartInstanceID,
+				ThreadID:         continuation.Attempt.ThreadID,
+				ThreadTitle:      continuation.Attempt.ThreadTitle,
+				ThreadCWD:        continuation.Attempt.ThreadCWD,
+			},
+		})
+	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	s.setSurfaceClaudeProfileID(surface, target.ID)
 	if currentWorkspaceKey == "" {
@@ -333,7 +347,7 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 
 	surface.ClaimedWorkspaceKey = currentWorkspaceKey
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
-	resumeEvents := s.startFreshWorkspaceHeadlessWithOptions(surface, currentWorkspaceKey, prepareNewThread)
+	resumeEvents := s.restartClaudeProfileContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Claude 配置：%s。正在重新准备当前工作区。", targetLabel)
 	if commandCardOwnsInlineResult(action) {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
