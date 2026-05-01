@@ -91,4 +91,3 @@ func (s *Service) startHeadlessForCodexProviderSwitch(surface *state.SurfaceCons
 	}
 	return s.startFreshWorkspaceHeadlessWithOptions(surface, attempt.WorkspaceKey, attempt.PrepareNewThread)
 }
-
