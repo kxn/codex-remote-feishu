@@ -27,10 +27,12 @@ type mergedThreadView struct {
 	Inst     *state.InstanceRecord
 	Thread   *state.ThreadRecord
 
-	CurrentVisible  bool
-	FreeVisibleInst *state.InstanceRecord
-	AnyVisibleInst  *state.InstanceRecord
-	BusyOwner       *state.SurfaceConsoleRecord
+	CurrentVisible           bool
+	FreeVisibleInst          *state.InstanceRecord
+	AnyVisibleInst           *state.InstanceRecord
+	CompatibleFreeVisibleInst *state.InstanceRecord
+	CompatibleAnyVisibleInst  *state.InstanceRecord
+	BusyOwner                *state.SurfaceConsoleRecord
 }
 
 type resolvedThreadTarget struct {
@@ -64,9 +66,6 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if !threadBelongsToInstanceWorkspace(inst, thread) {
 				continue
 			}
-			if state.EffectiveInstanceBackend(inst) == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
-				continue
-			}
 			view := viewsByID[thread.ThreadID]
 			if view == nil {
 				view = &mergedThreadView{
@@ -89,6 +88,15 @@ func (s *Service) mergedThreadViews(surface *state.SurfaceConsoleRecord) []*merg
 			if inst.Online && (owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
 				betterVisibleThreadInstance(surface, view.FreeVisibleInst, inst, thread) {
 				view.FreeVisibleInst = inst
+			}
+			compat := s.surfaceInstanceCompatibility(surface, inst)
+			if compat.Compatible && inst.Online && betterVisibleThreadInstance(surface, view.CompatibleAnyVisibleInst, inst, thread) {
+				view.CompatibleAnyVisibleInst = inst
+			}
+			if compat.Compatible && inst.Online &&
+				(owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
+				betterVisibleThreadInstance(surface, view.CompatibleFreeVisibleInst, inst, thread) {
+				view.CompatibleFreeVisibleInst = inst
 			}
 		}
 	}
@@ -196,9 +204,6 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		if inst == nil || state.EffectiveInstanceBackend(inst) != backend {
 			continue
 		}
-		if backend == agentproto.BackendCodex && surface != nil && !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
-			continue
-		}
 		thread := inst.Threads[threadID]
 		if !ordinaryThreadVisible(thread) || !threadBelongsToInstanceWorkspace(inst, thread) {
 			continue
@@ -219,6 +224,15 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		if inst.Online && (owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
 			betterVisibleThreadInstance(surface, view.FreeVisibleInst, inst, thread) {
 			view.FreeVisibleInst = inst
+		}
+		compat := s.surfaceInstanceCompatibility(surface, inst)
+		if compat.Compatible && inst.Online && betterVisibleThreadInstance(surface, view.CompatibleAnyVisibleInst, inst, thread) {
+			view.CompatibleAnyVisibleInst = inst
+		}
+		if compat.Compatible && inst.Online &&
+			(owner == nil || (surface != nil && owner.SurfaceSessionID == surface.SurfaceSessionID)) &&
+			betterVisibleThreadInstance(surface, view.CompatibleFreeVisibleInst, inst, thread) {
+			view.CompatibleFreeVisibleInst = inst
 		}
 	}
 	if includePersisted && s.catalog.persistedThreads != nil {
@@ -766,8 +780,7 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 		(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, view.FreeVisibleInst)) {
 		return view.FreeVisibleInst, ""
 	}
-	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend &&
-		(backend != agentproto.BackendCodex || s.instanceMatchesSurfaceCodexProvider(surface, view.AnyVisibleInst)) {
+	if view.AnyVisibleInst != nil && state.EffectiveInstanceBackend(view.AnyVisibleInst) == backend {
 		return nil, "workspace_instance_busy"
 	}
 	return nil, "thread_not_found"

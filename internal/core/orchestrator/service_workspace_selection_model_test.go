@@ -328,3 +328,33 @@ func TestBuildWorkspaceSelectionModelDoesNotFilterClaudeWorkspaceByProfile(t *te
 		t.Fatalf("expected profile-mismatched claude workspace to stay visible, got %#v", model.Entries)
 	}
 }
+
+func TestBuildWorkspaceSelectionModelDoesNotFilterCodexWorkspaceByProvider(t *testing.T) {
+	now := time.Date(2026, 5, 1, 2, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:       "inst-codex",
+		DisplayName:      "codex-repo",
+		WorkspaceRoot:    "/data/dl/codex",
+		WorkspaceKey:     "/data/dl/codex",
+		ShortName:        "codex",
+		Backend:          agentproto.BackendCodex,
+		CodexProviderID:  "default",
+		Online:           true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/codex", LastUsedAt: now},
+		},
+	})
+
+	model, events := svc.buildWorkspaceSelectionModel(svc.root.Surfaces["surface-1"], 1)
+	if len(events) != 0 || model == nil {
+		t.Fatalf("expected workspace selection model, got model=%#v events=%#v", model, events)
+	}
+	if len(model.Entries) != 1 || !testutil.SamePath(model.Entries[0].WorkspaceKey, "/data/dl/codex") {
+		t.Fatalf("expected provider-mismatched codex workspace to stay visible, got %#v", model.Entries)
+	}
+	if model.Entries[0].Attachable {
+		t.Fatalf("expected provider-mismatched codex workspace to stop pretending it is directly attachable, got %#v", model.Entries[0])
+	}
+}

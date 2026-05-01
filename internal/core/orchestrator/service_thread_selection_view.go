@@ -47,8 +47,14 @@ func (s *Service) currentInstanceThreadViews(surface *state.SurfaceConsoleRecord
 		}
 		if inst.Online {
 			view.AnyVisibleInst = inst
+			if s.surfaceInstanceCompatibleForAttach(surface, inst) {
+				view.CompatibleAnyVisibleInst = inst
+			}
 			if owner == nil || owner.SurfaceSessionID == surface.SurfaceSessionID {
 				view.FreeVisibleInst = inst
+				if s.surfaceInstanceCompatibleForAttach(surface, inst) {
+					view.CompatibleFreeVisibleInst = inst
+				}
 			}
 		}
 		if busyOwner := s.threadClaimSurface(thread.ThreadID); busyOwner != nil && busyOwner.SurfaceSessionID != surface.SurfaceSessionID {
@@ -119,6 +125,12 @@ func (s *Service) threadSelectionStatus(surface *state.SurfaceConsoleRecord, vie
 	}
 	if view.BusyOwner != nil {
 		return "已被其他飞书会话接管", true
+	}
+	if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) {
+		if strings.TrimSpace(threadCWD(view)) == "" {
+			return "当前仅可见，暂不可直接接管", true
+		}
+		return "当前仅可见；后续将按恢复路径处理", false
 	}
 	target := s.resolveThreadTargetWithScope(surface, view.ThreadID, allowCrossWorkspace)
 	switch target.Mode {

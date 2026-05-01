@@ -463,7 +463,7 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 			options := attachWorkspaceOptions{ResumeNotice: !prepareNewThread, PrepareNewThread: prepareNewThread}
 			return s.attachWorkspaceWithOptions(surface, workspaceKey, options), SurfaceResumeResult{Status: SurfaceResumeStatusWorkspaceAttached}
 		}
-		if len(s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)) == 0 {
+		if len(s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, targetBackend)) == 0 {
 			if !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}

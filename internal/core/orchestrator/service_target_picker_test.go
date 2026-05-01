@@ -104,6 +104,35 @@ func TestTargetPickerUseFiltersSessionsByClaudeBackendButNotProfile(t *testing.T
 	}
 }
 
+func TestTargetPickerUseShowsCodexSessionDespiteProviderMismatch(t *testing.T) {
+	now := time.Date(2026, 5, 1, 2, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-codex",
+		DisplayName:     "repo",
+		WorkspaceRoot:   "/data/dl/repo",
+		WorkspaceKey:    "/data/dl/repo",
+		ShortName:       "repo",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "default",
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", LastUsedAt: now},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowThreads,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-codex")); !ok {
+		t.Fatalf("expected provider-mismatched codex thread to stay visible, got %#v", view.SessionOptions)
+	}
+}
+
 func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

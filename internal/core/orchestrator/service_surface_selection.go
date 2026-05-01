@@ -268,6 +268,11 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
+		compatibleInstances := instances
+		if filterByBackend {
+			compatibleInstances = s.workspaceCompatibleInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)
+			s.sortWorkspaceAttachInstances(surface, workspaceKey, compatibleInstances)
+		}
 
 		latestUsedAt := recoverableWorkspaces[workspaceKey]
 		ageText := ""
@@ -278,7 +283,7 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
 		isCurrent := surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace == workspaceKey
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
-		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
+		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, compatibleInstances) != nil
 		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
 
 		if isCurrent {
@@ -481,17 +486,34 @@ func (s *Service) workspaceOnlineInstancesForBackend(workspaceKey string, backen
 	return filtered
 }
 
-func (s *Service) workspaceOnlineInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
+func (s *Service) workspaceOnlineInstancesForSurfaceBackend(workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
 	instances := s.workspaceOnlineInstancesForBackend(workspaceKey, backend)
+	return instances
+}
+
+func (s *Service) workspaceCompatibleInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
+	instances := s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, backend)
 	if len(instances) == 0 {
 		return nil
 	}
-	if surface == nil || backend != agentproto.BackendCodex {
-		return instances
+	filtered := make([]*state.InstanceRecord, 0, len(instances))
+	for _, inst := range instances {
+		if inst == nil || !s.surfaceInstanceCompatibleForAttach(surface, inst) {
+			continue
+		}
+		filtered = append(filtered, inst)
+	}
+	return filtered
+}
+
+func (s *Service) workspaceDirectAttachInstancesForSurfaceBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) []*state.InstanceRecord {
+	instances := s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, backend)
+	if len(instances) == 0 {
+		return nil
 	}
 	filtered := make([]*state.InstanceRecord, 0, len(instances))
 	for _, inst := range instances {
-		if inst == nil || !s.instanceMatchesSurfaceCodexProvider(surface, inst) {
+		if inst == nil || !s.surfaceInstanceDirectAttachCompatible(surface, inst) {
 			continue
 		}
 		filtered = append(filtered, inst)
@@ -563,13 +585,13 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
 	instances := s.workspaceOnlineInstances(workspaceKey)
 	if surface != nil && s.surfaceIsHeadless(surface) {
-		instances = s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, s.surfaceBackend(surface))
+		instances = s.workspaceOnlineInstancesForSurfaceBackend(workspaceKey, s.surfaceBackend(surface))
 	}
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
 }
 
 func (s *Service) resolveWorkspaceAttachInstanceForBackend(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) *state.InstanceRecord {
-	instances := s.workspaceOnlineInstancesForSurfaceBackend(surface, workspaceKey, backend)
+	instances := s.workspaceDirectAttachInstancesForSurfaceBackend(surface, workspaceKey, backend)
 	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances)
 }
 

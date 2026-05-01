@@ -873,16 +873,21 @@ func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleReco
 		seenWorkspaceKeys[workspaceKey] = struct{}{}
 		instances := append([]*state.InstanceRecord(nil), grouped[workspaceKey]...)
 		s.sortWorkspaceAttachInstances(surface, workspaceKey, instances)
+		compatibleInstances := instances
+		if filterByBackend {
+			compatibleInstances = s.workspaceCompatibleInstancesForSurfaceBackend(surface, workspaceKey, targetBackend)
+			s.sortWorkspaceAttachInstances(surface, workspaceKey, compatibleInstances)
+		}
 		latestUsedAt := recoverableWorkspaces[workspaceKey]
 		ageText := ""
 		if !latestUsedAt.IsZero() {
 			ageText = humanizeRelativeTime(s.now(), latestUsedAt)
 		}
 		hasVSCodeActivity := s.workspaceHasVSCodeActivity(instances)
-		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, instances) != nil
+		attachable := s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, compatibleInstances) != nil
 		recoverableOnly := !attachable && len(instances) == 0 && recoverableWorkspaceSeen[workspaceKey]
 		busy := s.workspaceBusyOwnerForSurface(surface, workspaceKey) != nil
-		if busy || (!attachable && !recoverableOnly) {
+		if busy {
 			continue
 		}
 		gitInfo := gitmeta.WorkspaceInfo{}
@@ -916,8 +921,21 @@ func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord
 		if mergedThreadWorkspaceClaimKey(view) != workspaceKey {
 			continue
 		}
+		if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) && strings.TrimSpace(threadCWD(view)) == "" {
+			continue
+		}
 		target := s.resolveThreadTargetFromView(surface, view)
 		if target.Mode == threadAttachUnavailable {
+			if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) {
+				entry := s.threadSelectionViewEntry(surface, view, true)
+				meta := targetPickerSessionMetaText(source, s.threadSelectionMetaText(surface, view, entry.Status))
+				options = append(options, control.FeishuTargetPickerSessionOption{
+					Value:    targetPickerThreadValue(view.ThreadID),
+					Kind:     control.FeishuTargetPickerSessionThread,
+					Label:    entry.Summary,
+					MetaText: meta,
+				})
+			}
 			continue
 		}
 		entry := s.threadSelectionViewEntry(surface, view, true)
