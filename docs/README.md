@@ -166,6 +166,7 @@
 - [app-server-third-batch-product-directions.md](./draft/app-server-third-batch-product-directions.md)
 - [claude-cli-blackbox-findings-2026-04-28.md](./draft/claude-cli-blackbox-findings-2026-04-28.md)
 - [codex-session-patcher-research-2026-04.md](./draft/codex-session-patcher-research-2026-04.md)
+- [web-codex-provider-management-design.md](./draft/web-codex-provider-management-design.md)
 - [claude-cli-blackbox-test-plan.md](./draft/claude-cli-blackbox-test-plan.md)
 - [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
