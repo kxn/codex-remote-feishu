@@ -226,6 +226,18 @@ func (s *Service) resolveReviewEntryFromCurrentContext(surface *state.SurfaceCon
 	if !threadVisible(thread) {
 		return failedReviewEntryContext("review_current_thread_missing", "当前会话已经不可用，请先 /use 重新选择一个会话。")
 	}
+	if threadIsReview(thread) {
+		parentThreadID := reviewThreadParentThreadID(thread, surface.ReviewSession)
+		if parentThreadID == "" {
+			return failedReviewEntryContext("review_parent_thread_missing", "当前审阅会话缺少原始会话上下文，请重新选择会话后再试。")
+		}
+		parentThread := inst.Threads[parentThreadID]
+		if !threadVisible(parentThread) {
+			return failedReviewEntryContext("review_parent_thread_missing", "原始会话已经不可用，请重新选择会话后再试。")
+		}
+		threadID = parentThreadID
+		thread = parentThread
+	}
 	return s.resolveReviewEntryFromThread(
 		strings.TrimSpace(surface.AttachedInstanceID),
 		threadID,

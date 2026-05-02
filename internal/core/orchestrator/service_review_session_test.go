@@ -550,6 +550,67 @@ func TestStartReviewCommandBuildsDetachedReviewCommandFromCurrentThread(t *testi
 	}
 }
 
+func TestStartReviewCommandUsesParentWhenSelectionIsReviewThread(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
+	svc.releaseSurfaceThreadClaim(surface)
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-review") {
+		t.Fatal("expected test surface to claim review thread")
+	}
+	surface.SelectedThreadID = "thread-review"
+	surface.ReviewSession = nil
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-1",
+		Text:             "/review uncommitted",
+	})
+
+	if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected notice + review start command, got %#v", events)
+	}
+	command := events[1].Command
+	if command.Target.ThreadID != "thread-main" {
+		t.Fatalf("expected review start to use parent thread, got %#v", command.Target)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.ParentThreadID != "thread-main" {
+		t.Fatalf("expected pending review session to store parent thread, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartCommitReviewCommandUsesParentWhenSelectionIsReviewThread(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	latest := commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+	svc.releaseSurfaceThreadClaim(surface)
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-review") {
+		t.Fatal("expected test surface to claim review thread")
+	}
+	surface.SelectedThreadID = "thread-review"
+	surface.ReviewSession = nil
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-commit",
+		Text:             "/review commit " + latest.ShortSHA,
+	})
+
+	if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected notice + review start command, got %#v", events)
+	}
+	command := events[1].Command
+	if command.Target.ThreadID != "thread-main" {
+		t.Fatalf("expected commit review start to use parent thread, got %#v", command.Target)
+	}
+	if command.Review.Target.Kind != agentproto.ReviewTargetKindCommit || command.Review.Target.CommitSHA != latest.SHA {
+		t.Fatalf("unexpected commit review target: %#v", command.Review.Target)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.ParentThreadID != "thread-main" {
+		t.Fatalf("expected pending commit review session to store parent thread, got %#v", surface.ReviewSession)
+	}
+}
+
 func TestBareReviewCommandOpensReviewRootPage(t *testing.T) {
 	svc, surface, repoRoot := newReviewSessionService(t)
 	_ = commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
