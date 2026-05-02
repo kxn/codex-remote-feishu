@@ -310,6 +310,7 @@ stable 默认会写入：
 - `/approval`：`/access` 的别名
 - `/verbose`：控制飞书前端显示过程消息的详细程度；`quiet` 更安静，`verbose` 会显示共享进行中卡
 - `/cron`：打开当前实例专属的定时任务菜单；`/cron edit` 打开配置表，编辑后执行 `/cron reload` 生效
+- `/repair`：断联后的一键修复；重连当前飞书 bot runtime，并在当前实例安全空闲时修复 provider child 或恢复离线 managed headless，不重启 daemon、不改全局 Codex 配置
 
 另外：
 

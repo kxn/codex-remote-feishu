@@ -76,6 +76,19 @@ func TestParseFeishuTextActionRecognizesRestartCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuTextActionRecognizesRepairCommand(t *testing.T) {
+	action, ok := ParseFeishuTextAction("/repair")
+	if !ok {
+		t.Fatal("expected /repair to be parsed")
+	}
+	if action.Kind != ActionRepairCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionRepairCommand)
+	}
+	if action.Text != "/repair" {
+		t.Fatalf("action text = %q, want /repair", action.Text)
+	}
+}
+
 func TestParseFeishuTextActionRecognizesBendToMyWillRollbackCommand(t *testing.T) {
 	tests := []string{
 		"/bendtomywill",
@@ -402,6 +415,7 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandNew, wantKind: ActionNewThread, wantSlash: "/new"},
 		{commandID: FeishuCommandDetach, wantKind: ActionDetach, wantSlash: "/detach"},
 		{commandID: FeishuCommandFollow, wantKind: ActionFollowLocal, wantSlash: "/follow"},
+		{commandID: FeishuCommandRepair, wantKind: ActionRepairCommand, wantSlash: "/repair"},
 		{commandID: FeishuCommandRestart, wantKind: ActionRestartCommand, wantSlash: "/restart"},
 		{commandID: FeishuCommandPatch, wantKind: ActionTurnPatchCommand, wantSlash: "/bendtomywill"},
 		{commandID: FeishuCommandWorkspaceNewWorktree, wantKind: ActionWorkspaceNewWorktree, wantSlash: "/workspace new worktree"},

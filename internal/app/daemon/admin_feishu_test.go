@@ -29,6 +29,7 @@ type fakeAdminGatewayController struct {
 	upsertErrs    []error
 	removeErrs    []error
 	applyErr      error
+	onUpsert      func(feishu.GatewayAppConfig)
 }
 
 func (f *fakeAdminGatewayController) Start(context.Context, feishu.ActionHandler) error { return nil }
@@ -38,6 +39,9 @@ func (f *fakeAdminGatewayController) Apply(_ context.Context, operations []feish
 }
 func (f *fakeAdminGatewayController) UpsertApp(_ context.Context, cfg feishu.GatewayAppConfig) error {
 	f.upserted = append(f.upserted, cfg)
+	if f.onUpsert != nil {
+		f.onUpsert(cfg)
+	}
 	if len(f.upsertErrs) > 0 {
 		err := f.upsertErrs[0]
 		f.upsertErrs = f.upsertErrs[1:]

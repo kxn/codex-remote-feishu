@@ -169,7 +169,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupCommonTools:
 		return commandRank(commandID, FeishuCommandReview, FeishuCommandAutoWhip, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
 	case FeishuCommandGroupMaintenance:
-		return commandRank(commandID, FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandRestart, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
+		return commandRank(commandID, FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandRepair, FeishuCommandRestart, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
 	default:
 		return 1_000_000
 	}

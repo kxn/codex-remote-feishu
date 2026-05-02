@@ -60,6 +60,15 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantPropagateCard: true,
 		},
 		{
+			name:              "repair daemon command",
+			action:            Action{Kind: ActionRepairCommand, Text: "/repair"},
+			wantFamily:        FeishuCommandRepair,
+			wantKind:          FeishuCommandBindingDaemonCommand,
+			wantDirectDaemon:  DaemonCommandRepair,
+			wantContinuation:  DaemonCommandRepair,
+			wantPropagateCard: true,
+		},
+		{
 			name:       "owner entry",
 			action:     Action{Kind: ActionTurnPatchCommand, Text: "/bendtomywill"},
 			wantFamily: FeishuCommandPatch,

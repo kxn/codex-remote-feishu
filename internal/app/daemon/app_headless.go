@@ -34,6 +34,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 		return a.handleDebugDaemonCommand(command)
 	case control.DaemonCommandCron:
 		return a.handleCronDaemonCommandLocked(command)
+	case control.DaemonCommandRepair:
+		return a.handleRepairDaemonCommand(command)
 	case control.DaemonCommandRestart:
 		return a.handleRestartDaemonCommand(command)
 	case control.DaemonCommandUpgrade:

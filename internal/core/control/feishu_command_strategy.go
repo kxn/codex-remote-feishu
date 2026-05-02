@@ -69,6 +69,7 @@ func resolveClaudeCommandStrategy(familyID string) FeishuCommandStrategy {
 		FeishuCommandHelp,
 		FeishuCommandMenu,
 		FeishuCommandDebug,
+		FeishuCommandRepair,
 		FeishuCommandRestart,
 		FeishuCommandUpgrade:
 		return claudeVisibleNativeStrategy(familyID)

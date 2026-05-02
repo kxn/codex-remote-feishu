@@ -150,6 +150,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 
 	bindings[FeishuCommandDebug] = daemonCommandBinding(FeishuCommandDebug, DaemonCommandDebug, false)
 	bindings[FeishuCommandCron] = daemonCommandBinding(FeishuCommandCron, DaemonCommandCron, false)
+	bindings[FeishuCommandRepair] = daemonCommandBinding(FeishuCommandRepair, DaemonCommandRepair, true)
 	bindings[FeishuCommandRestart] = daemonCommandBinding(FeishuCommandRestart, DaemonCommandRestart, true)
 	bindings[FeishuCommandUpgrade] = daemonCommandBinding(FeishuCommandUpgrade, DaemonCommandUpgrade, true)
 	bindings[FeishuCommandVSCodeMigrate] = daemonCommandBinding(FeishuCommandVSCodeMigrate, DaemonCommandVSCodeMigrateCommand, true)

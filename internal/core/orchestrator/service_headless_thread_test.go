@@ -54,6 +54,52 @@ func TestPreselectedHeadlessLaunchBlocksNormalInput(t *testing.T) {
 	}
 }
 
+func TestRepairCommandAllowedWhilePendingHeadless(t *testing.T) {
+	now := time.Date(2026, 5, 2, 16, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	start := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+	if len(start) != 2 || start[1].DaemonCommand == nil || start[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected detached /use to start headless launch, got %#v", start)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRepairCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		GatewayID:        "app-1",
+		MessageID:        "msg-repair",
+		Text:             "/repair",
+	})
+
+	if len(events) != 1 || events[0].DaemonCommand == nil {
+		t.Fatalf("expected repair daemon command while headless is pending, got %#v", events)
+	}
+	if events[0].DaemonCommand.Kind != control.DaemonCommandRepair {
+		t.Fatalf("expected repair daemon command, got %#v", events[0].DaemonCommand)
+	}
+	if events[0].DaemonCommand.SurfaceSessionID != "surface-1" || events[0].DaemonCommand.GatewayID != "app-1" || events[0].DaemonCommand.Text != "/repair" {
+		t.Fatalf("expected repair command to preserve routing fields, got %#v", events[0].DaemonCommand)
+	}
+}
+
 func TestDetachCancelsPendingHeadlessLaunch(t *testing.T) {
 	now := time.Date(2026, 4, 8, 10, 12, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
