@@ -187,7 +187,15 @@ Use `.codex/skills/safe-push/` when pushing committed changes:
 - `git push` rejected because remote advanced
 - user asks fetch/rebase/retest/push flow
 
-Prefer `./safe-push.sh` for happy-path push.
+**Always use `./safe-push.sh` to push committed changes.** Do not push with plain `git push`.
+
+When safe-push rebases and shows the rebase review gate:
+
+- The gate message will look like: `rebase review required (non-interactive shell)`
+- The gate blocks push until the rebased diff has been explicitly reviewed and confirmed.
+- The required action is: `./safe-push.sh --confirm-rebase-review`
+- Do **not** bypass this gate with `--no-verify` or other flags.
+- Confirm after reviewing the rebase log and verifying that no unrelated commits were pulled in.
 
 ### `issue-doc-sync`
 
@@ -385,6 +393,8 @@ When corresponding logic carriers changed:
 ## Commit / Push / Branch Policy
 
 - If repository work is resolved and verified, do not end the turn with uncommitted changes unless the user explicitly wants local-only uncommitted state.
+- All pushes must go through `./safe-push.sh`; plain `git push` is not allowed.
+- When safe-push rebases and blocks on the rebase review gate, review the rebase log and confirm with `./safe-push.sh --confirm-rebase-review`.
 - If you intentionally commit during task work, push in the same turn by default unless user asked local-only staging.
 - Do not end a repository task with local commits left unpushed unless one of these is true:
   - the user explicitly asked to keep it local-only
