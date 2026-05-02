@@ -3,9 +3,11 @@ package install
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -139,6 +141,104 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	}
 	if updated.CurrentVersion != "v1.1.0" {
 		t.Fatalf("current version = %q, want v1.1.0", updated.CurrentVersion)
+	}
+}
+
+func TestRunUpgradeHelperWithStatePathLaunchdUserRebootstrapsBeforeStart(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "install-state.json")
+	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
+	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+
+	cfg := config.DefaultAppConfig()
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := launchctlUserRunner
+	originalObserve := upgradeHelperObserveFunc
+	originalSleep := upgradeHelperSleepFunc
+	serviceRuntimeGOOS = "darwin"
+	serviceUserHomeDir = func() (string, error) { return dir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		launchctlUserRunner = originalRunner
+		upgradeHelperObserveFunc = originalObserve
+		upgradeHelperSleepFunc = originalSleep
+	}()
+
+	stateValue := InstallState{
+		BaseDir:           dir,
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerLaunchdUser,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: currentBinary,
+		InstalledBinary:   currentBinary,
+		VersionsRoot:      filepath.Join(dir, "releases"),
+		PendingUpgrade: &PendingUpgrade{
+			Phase:         PendingUpgradePhasePrepared,
+			TargetVersion: "v1.1.0",
+		},
+	}
+	ApplyStateMetadata(&stateValue, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        dir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+	if err := os.MkdirAll(filepath.Dir(stateValue.ServiceUnitPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(plist dir): %v", err)
+	}
+	rollbackCandidate, err := PrepareRollbackCandidate(stateValue, "v1.1.0")
+	if err != nil {
+		t.Fatalf("PrepareRollbackCandidate: %v", err)
+	}
+	stateValue.RollbackCandidate = rollbackCandidate
+	if err := WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	var calls []string
+	launchctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "print" {
+			return "", fmt.Errorf("Could not find domain for label")
+		}
+		return "", nil
+	}
+	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
+	upgradeHelperSleepFunc = func(time.Duration) {}
+
+	if err := RunUpgradeHelperWithStatePath(context.Background(), statePath); err != nil {
+		t.Fatalf("RunUpgradeHelperWithStatePath: %v", err)
+	}
+	wantTarget := "gui/" + strconv.Itoa(os.Getuid()) + "/com.codex-remote.service"
+	wantPlist := filepath.Join(dir, "Library", "LaunchAgents", "com.codex-remote.service.plist")
+	if got, want := calls, []string{
+		"bootout " + wantTarget,
+		"print " + wantTarget,
+		"bootstrap gui/" + strconv.Itoa(os.Getuid()) + " " + wantPlist,
+		"kickstart " + wantTarget,
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("launchctl calls = %#v, want %#v", got, want)
+	}
+	raw, err := os.ReadFile(targetBinary)
+	if err != nil {
+		t.Fatalf("ReadFile target: %v", err)
+	}
+	if string(raw) != "new-binary" {
+		t.Fatalf("target binary content = %q, want new-binary", string(raw))
+	}
+	currentRaw, err := os.ReadFile(currentBinary)
+	if err != nil {
+		t.Fatalf("ReadFile current: %v", err)
+	}
+	if string(currentRaw) != "new-binary" {
+		t.Fatalf("current binary content = %q, want new-binary", string(currentRaw))
 	}
 }
 

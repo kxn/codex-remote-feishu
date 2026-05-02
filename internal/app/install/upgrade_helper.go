@@ -271,6 +271,9 @@ func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relay
 func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateValue InstallState, paths relayruntime.Paths) (int, error) {
 	if isManagedServiceManager(stateValue) {
 		if effectiveServiceManager(stateValue) == ServiceManagerLaunchdUser {
+			if _, err := installLaunchdUserPlist(ctx, stateValue); err != nil {
+				return 0, err
+			}
 			return 0, launchdUserStart(ctx, stateValue)
 		}
 		return 0, systemdUserStart(ctx, stateValue)

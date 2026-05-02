@@ -38,6 +38,28 @@ func launchdUserGUITarget() string {
 	return "gui/" + strconv.Itoa(os.Getuid())
 }
 
+func launchdUserServiceTarget(state InstallState) string {
+	return launchdUserGUITarget() + "/" + launchdLabelForInstance(state.InstanceID)
+}
+
+func isLaunchdAlreadyLoadedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(text, "already loaded")
+}
+
+func isLaunchdMissingErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(text, "could not find") ||
+		strings.Contains(text, "no such process") ||
+		strings.Contains(text, "service is not loaded")
+}
+
 func launchdUserServiceState(state InstallState) (InstallState, error) {
 	if err := ensureDarwinLaunchdUserSupport(); err != nil {
 		return InstallState{}, err
@@ -146,10 +168,6 @@ func installLaunchdUserPlist(ctx context.Context, state InstallState) (InstallSt
 	if err := serviceWriteFile(state.ServiceUnitPath, []byte(plistContent), 0o644); err != nil {
 		return InstallState{}, err
 	}
-	domain := launchdUserGUITarget()
-	if _, err := launchctlUserRunner(ctx, "bootstrap", domain, state.ServiceUnitPath); err != nil {
-		return InstallState{}, err
-	}
 	return state, nil
 }
 
@@ -158,39 +176,74 @@ func uninstallLaunchdUserPlist(ctx context.Context, state InstallState) error {
 	if err != nil {
 		return err
 	}
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	_, _ = launchctlUserRunner(ctx, "bootout", domain+"/"+label)
+	_, _ = launchctlUserRunner(ctx, "enable", launchdUserServiceTarget(state))
+	_ = launchdUserBootout(ctx, state)
 	if err := serviceRemoveFile(state.ServiceUnitPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
 }
 
-func launchdUserEnable(ctx context.Context, state InstallState) error {
-	_, err := installLaunchdUserPlist(ctx, state)
+func launchdUserBootstrap(ctx context.Context, state InstallState) error {
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	_, err = launchctlUserRunner(ctx, "bootstrap", launchdUserGUITarget(), state.ServiceUnitPath)
+	if isLaunchdAlreadyLoadedErr(err) {
+		return nil
+	}
 	return err
+}
+
+func launchdUserBootout(ctx context.Context, state InstallState) error {
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	_, err = launchctlUserRunner(ctx, "bootout", launchdUserServiceTarget(state))
+	if isLaunchdMissingErr(err) {
+		return nil
+	}
+	return err
+}
+
+func launchdUserEnable(ctx context.Context, state InstallState) error {
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	if _, err := launchctlUserRunner(ctx, "enable", launchdUserServiceTarget(state)); err != nil {
+		return err
+	}
+	return launchdUserBootstrap(ctx, state)
 }
 
 func launchdUserDisable(ctx context.Context, state InstallState) error {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	_, err := launchctlUserRunner(ctx, "bootout", domain+"/"+label)
-	return err
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	if _, err := launchctlUserRunner(ctx, "disable", launchdUserServiceTarget(state)); err != nil {
+		return err
+	}
+	return launchdUserBootout(ctx, state)
 }
 
 func launchdUserStart(ctx context.Context, state InstallState) error {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	_, err := launchctlUserRunner(ctx, "kickstart", domain+"/"+label)
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	if err := launchdUserBootstrap(ctx, state); err != nil {
+		return err
+	}
+	_, err = launchctlUserRunner(ctx, "kickstart", launchdUserServiceTarget(state))
 	return err
 }
 
 func launchdUserStop(ctx context.Context, state InstallState) error {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	_, err := launchctlUserRunner(ctx, "bootout", domain+"/"+label)
-	return err
+	return launchdUserBootout(ctx, state)
 }
 
 func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, poll time.Duration) error {
@@ -222,25 +275,32 @@ func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, po
 }
 
 func launchdUserRestart(ctx context.Context, state InstallState) error {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	_, err := launchctlUserRunner(ctx, "kickstart", "-k", domain+"/"+label)
-	return err
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return err
+	}
+	if err := launchdUserBootout(ctx, state); err != nil {
+		return err
+	}
+	return launchdUserBootstrap(ctx, state)
 }
 
 func launchdUserStatus(ctx context.Context, state InstallState) (string, error) {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	return launchctlUserRunner(ctx, "print", domain+"/"+label)
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return "", err
+	}
+	return launchctlUserRunner(ctx, "print", launchdUserServiceTarget(state))
 }
 
 func launchdUserIsRunning(ctx context.Context, state InstallState) (bool, error) {
-	label := launchdLabelForInstance(state.InstanceID)
-	domain := launchdUserGUITarget()
-	output, err := launchctlUserRunner(ctx, "print", domain+"/"+label)
+	state, err := launchdUserServiceState(state)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "could not find") ||
-			strings.Contains(strings.ToLower(err.Error()), "no such process") {
+		return false, err
+	}
+	output, err := launchctlUserRunner(ctx, "print", launchdUserServiceTarget(state))
+	if err != nil {
+		if isLaunchdMissingErr(err) {
 			return false, nil
 		}
 		return false, err

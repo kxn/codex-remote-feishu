@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -83,6 +84,69 @@ func TestApplyAutostartInstallsAndEnablesSystemdUserService(t *testing.T) {
 	}
 	if _, err := os.Stat(loaded.ServiceUnitPath); err != nil {
 		t.Fatalf("expected service unit file to exist: %v", err)
+	}
+}
+
+func TestApplyAutostartInstallsAndEnablesLaunchdUserService(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary")
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := launchctlUserRunner
+	serviceRuntimeGOOS = "darwin"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		launchctlUserRunner = originalRunner
+	}()
+
+	var calls []string
+	launchctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		switch {
+		case len(args) > 0 && args[0] == "print":
+			return "state = running\npid = 12345\n", nil
+		default:
+			return "", nil
+		}
+	}
+
+	status, err := ApplyAutostart(AutostartApplyOptions{
+		StatePath:       statePath,
+		BaseDir:         baseDir,
+		InstalledBinary: binaryPath,
+		CurrentVersion:  "dev",
+	})
+	if err != nil {
+		t.Fatalf("ApplyAutostart: %v", err)
+	}
+	if status.Status != "enabled" || !status.Enabled {
+		t.Fatalf("unexpected autostart status: %#v", status)
+	}
+	wantTarget := "gui/" + strconv.Itoa(os.Getuid()) + "/com.codex-remote.service"
+	wantPlist := filepath.Join(baseDir, "Library", "LaunchAgents", "com.codex-remote.service.plist")
+	if len(calls) != 3 ||
+		calls[0] != "enable "+wantTarget ||
+		calls[1] != "bootstrap gui/"+strconv.Itoa(os.Getuid())+" "+wantPlist ||
+		calls[2] != "print "+wantTarget {
+		t.Fatalf("launchctl calls = %#v", calls)
+	}
+
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if loaded.ServiceManager != ServiceManagerLaunchdUser {
+		t.Fatalf("ServiceManager = %q, want %q", loaded.ServiceManager, ServiceManagerLaunchdUser)
+	}
+	if strings.TrimSpace(loaded.ServiceUnitPath) == "" {
+		t.Fatalf("expected service unit path to be written, got %#v", loaded)
+	}
+	if _, err := os.Stat(loaded.ServiceUnitPath); err != nil {
+		t.Fatalf("expected launchd plist to exist: %v", err)
 	}
 }
 

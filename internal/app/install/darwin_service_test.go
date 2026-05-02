@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -209,7 +210,7 @@ func TestRenderLaunchdUserPlistRejectsMissingBinary(t *testing.T) {
 	}
 }
 
-func TestInstallLaunchdUserPlistWritesPlistAndBootstraps(t *testing.T) {
+func TestInstallLaunchdUserPlistWritesPlistOnly(t *testing.T) {
 	defer withDarwinGOOS(t)()
 	baseDir := t.TempDir()
 	stubServiceUserHome(t, baseDir)
@@ -255,11 +256,8 @@ func TestInstallLaunchdUserPlistWritesPlistAndBootstraps(t *testing.T) {
 	if !strings.Contains(string(plistContent), "<key>Label</key>") {
 		t.Fatalf("plist content missing Label key: %s", string(plistContent))
 	}
-
-	// Verify bootstrap was called
-	joined := strings.Join(calls, "; ")
-	if !strings.Contains(joined, "bootstrap") {
-		t.Fatalf("expected bootstrap call, got: %v", calls)
+	if len(calls) != 0 {
+		t.Fatalf("expected plist install to avoid launchctl side effects, got calls: %v", calls)
 	}
 }
 
@@ -392,8 +390,8 @@ func TestLaunchdUserStartCallsKickstart(t *testing.T) {
 	}
 
 	joined := strings.Join(calls, "; ")
-	if !strings.Contains(joined, "kickstart") {
-		t.Fatalf("expected kickstart call, got: %v", calls)
+	if !strings.Contains(joined, "bootstrap") || !strings.Contains(joined, "kickstart") {
+		t.Fatalf("expected bootstrap + kickstart call, got: %v", calls)
 	}
 }
 
@@ -424,8 +422,83 @@ func TestLaunchdUserRestartCallsKickstartWithK(t *testing.T) {
 	}
 
 	joined := strings.Join(calls, "; ")
-	if !strings.Contains(joined, "kickstart") || !strings.Contains(joined, "-k") {
-		t.Fatalf("expected kickstart -k call, got: %v", calls)
+	if !strings.Contains(joined, "bootout") || !strings.Contains(joined, "bootstrap") {
+		t.Fatalf("expected bootout + bootstrap restart call, got: %v", calls)
+	}
+}
+
+func TestLaunchdUserEnableBootstrapsAfterWriteOnlyInstall(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary")
+	t.Setenv("PATH", "/usr/bin")
+
+	state := InstallState{
+		InstanceID:      "stable",
+		BaseDir:         baseDir,
+		StatePath:       defaultInstallStatePath(baseDir),
+		InstalledBinary: binaryPath,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+	if _, err := installLaunchdUserPlist(context.Background(), state); err != nil {
+		t.Fatalf("installLaunchdUserPlist: %v", err)
+	}
+
+	var calls []string
+	defer withMockLaunchctl(t, func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	})()
+
+	if err := launchdUserEnable(context.Background(), state); err != nil {
+		t.Fatalf("launchdUserEnable: %v", err)
+	}
+
+	if got, want := calls, []string{
+		"enable gui/" + strconv.Itoa(os.Getuid()) + "/com.codex-remote.service",
+		"bootstrap gui/" + strconv.Itoa(os.Getuid()) + " " + state.ServiceUnitPath,
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("launchctl calls = %#v, want %#v", got, want)
+	}
+}
+
+func TestLaunchdUserDisablePersistsDisabledState(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	t.Setenv("PATH", "/usr/bin")
+
+	state := InstallState{
+		InstanceID: "stable",
+		BaseDir:    baseDir,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+
+	var calls []string
+	defer withMockLaunchctl(t, func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	})()
+
+	if err := launchdUserDisable(context.Background(), state); err != nil {
+		t.Fatalf("launchdUserDisable: %v", err)
+	}
+
+	if got, want := calls, []string{
+		"disable gui/" + strconv.Itoa(os.Getuid()) + "/com.codex-remote.service",
+		"bootout gui/" + strconv.Itoa(os.Getuid()) + "/com.codex-remote.service",
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("launchctl calls = %#v, want %#v", got, want)
 	}
 }
 
