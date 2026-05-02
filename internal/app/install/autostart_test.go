@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestDetectAutostartReportsUnsupportedOutsideLinux(t *testing.T) {
+func TestDetectAutostartReportsUnsupportedOnWindows(t *testing.T) {
 	originalGOOS := serviceRuntimeGOOS
-	serviceRuntimeGOOS = "darwin"
+	serviceRuntimeGOOS = "windows"
 	defer func() {
 		serviceRuntimeGOOS = originalGOOS
 	}()
@@ -19,8 +19,8 @@ func TestDetectAutostartReportsUnsupportedOutsideLinux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DetectAutostart: %v", err)
 	}
-	if status.Platform != "darwin" {
-		t.Fatalf("Platform = %q, want darwin", status.Platform)
+	if status.Platform != "windows" {
+		t.Fatalf("Platform = %q, want windows", status.Platform)
 	}
 	if status.Supported {
 		t.Fatalf("expected unsupported status, got %#v", status)

@@ -243,7 +243,10 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 
 func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relayruntime.Paths) error {
 	upgradeHelperSleepFunc(upgradeHelperStopDelay)
-	if effectiveServiceManager(stateValue) == ServiceManagerSystemdUser {
+	if isManagedServiceManager(stateValue) {
+		if effectiveServiceManager(stateValue) == ServiceManagerLaunchdUser {
+			return launchdUserStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
+		}
 		return systemdUserStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
 	}
 
@@ -266,7 +269,10 @@ func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relay
 }
 
 func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateValue InstallState, paths relayruntime.Paths) (int, error) {
-	if effectiveServiceManager(stateValue) == ServiceManagerSystemdUser {
+	if isManagedServiceManager(stateValue) {
+		if effectiveServiceManager(stateValue) == ServiceManagerLaunchdUser {
+			return 0, launchdUserStart(ctx, stateValue)
+		}
 		return 0, systemdUserStart(ctx, stateValue)
 	}
 	env := config.FilterEnvWithoutProxy(os.Environ())

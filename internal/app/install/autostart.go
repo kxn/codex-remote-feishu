@@ -41,10 +41,17 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 		Status:           "unsupported",
 		InstallStatePath: trimmedStatePath,
 	}
-	if platform != "linux" {
+	switch platform {
+	case "linux":
+		return detectSystemdAutostart(status, trimmedStatePath)
+	case "darwin":
+		return detectLaunchdAutostart(status, trimmedStatePath)
+	default:
 		return status, nil
 	}
+}
 
+func detectSystemdAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
 	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
 	if err != nil {
 		return AutostartStatus{}, err
@@ -107,11 +114,71 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 	return status, nil
 }
 
-func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
-	if err := ensureLinuxSystemdUserSupport(); err != nil {
+func detectLaunchdAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
+	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
+	if err != nil {
 		return AutostartStatus{}, err
 	}
+	instanceID := inferInstanceID("", trimmedStatePath)
 
+	status.Supported = true
+	status.Manager = ServiceManagerLaunchdUser
+	status.CurrentManager = ServiceManagerDetached
+	status.Status = "disabled"
+	status.CanApply = true
+	status.ServiceUnitPath = launchdUserPlistPathForInstance(baseDir, instanceID)
+
+	state, err := loadAutostartStateIfPresent(trimmedStatePath)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	if state != nil {
+		ApplyStateMetadata(state, StateMetadataOptions{
+			InstanceID:     state.InstanceID,
+			StatePath:      trimmedStatePath,
+			BaseDir:        baseDir,
+			ServiceManager: state.ServiceManager,
+		})
+		status.CurrentManager = effectiveServiceManager(*state)
+		if strings.TrimSpace(state.ServiceUnitPath) != "" && effectiveServiceManager(*state) == ServiceManagerLaunchdUser {
+			status.ServiceUnitPath = state.ServiceUnitPath
+			status.Configured = true
+			status.CurrentManager = ServiceManagerLaunchdUser
+		}
+	}
+
+	if strings.TrimSpace(status.ServiceUnitPath) != "" {
+		info, statErr := os.Stat(status.ServiceUnitPath)
+		switch {
+		case statErr == nil && !info.IsDir():
+			status.Configured = true
+			status.CurrentManager = ServiceManagerLaunchdUser
+		case statErr != nil && !os.IsNotExist(statErr):
+			status.Warning = statErr.Error()
+		}
+	}
+
+	if status.Configured {
+		running, sErr := launchdUserIsRunning(context.Background(), InstallState{
+			InstanceID:      instanceID,
+			BaseDir:         baseDir,
+			ServiceUnitPath: status.ServiceUnitPath,
+			ServiceManager:  ServiceManagerLaunchdUser,
+		})
+		if sErr != nil {
+			if strings.TrimSpace(status.Warning) == "" {
+				status.Warning = sErr.Error()
+			}
+		}
+		status.Enabled = running
+		if running {
+			status.Status = "enabled"
+		}
+	}
+	return status, nil
+}
+
+func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	statePath := strings.TrimSpace(opts.StatePath)
 	instanceID, err := parseInstanceID(opts.InstanceID)
 	if err != nil {
@@ -133,16 +200,25 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 		state = &InstallState{StatePath: statePath}
 	}
 
+	platform := strings.TrimSpace(serviceRuntimeGOOS)
+	var targetManager ServiceManager
+	switch platform {
+	case "darwin":
+		targetManager = ServiceManagerLaunchdUser
+	default:
+		targetManager = ServiceManagerSystemdUser
+	}
+
 	ApplyStateMetadata(state, StateMetadataOptions{
 		InstanceID:      instanceID,
 		StatePath:       statePath,
 		BaseDir:         baseDir,
 		InstalledBinary: strings.TrimSpace(opts.InstalledBinary),
 		CurrentVersion:  strings.TrimSpace(opts.CurrentVersion),
-		ServiceManager:  ServiceManagerSystemdUser,
+		ServiceManager:  targetManager,
 	})
 	state.BaseDir = firstNonEmpty(strings.TrimSpace(state.BaseDir), baseDir)
-	state.ServiceManager = ServiceManagerSystemdUser
+	state.ServiceManager = targetManager
 	state.InstalledBinary = firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(opts.InstalledBinary))
 	state.InstalledWrapperBinary = firstNonEmpty(strings.TrimSpace(state.InstalledWrapperBinary), strings.TrimSpace(opts.InstalledBinary))
 	state.InstalledRelaydBinary = firstNonEmpty(strings.TrimSpace(state.InstalledRelaydBinary), strings.TrimSpace(opts.InstalledBinary))
@@ -151,15 +227,30 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 		return AutostartStatus{}, fmt.Errorf("current binary path is missing")
 	}
 
-	updated, err := installSystemdUserUnit(context.Background(), *state)
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	if err := WriteState(statePath, updated); err != nil {
-		return AutostartStatus{}, err
-	}
-	if err := systemdUserEnable(context.Background(), updated); err != nil {
-		return AutostartStatus{}, err
+	var updated InstallState
+	switch targetManager {
+	case ServiceManagerLaunchdUser:
+		updated, err = installLaunchdUserPlist(context.Background(), *state)
+		if err != nil {
+			return AutostartStatus{}, err
+		}
+		if err := WriteState(statePath, updated); err != nil {
+			return AutostartStatus{}, err
+		}
+		if err := launchdUserEnable(context.Background(), updated); err != nil {
+			return AutostartStatus{}, err
+		}
+	default:
+		updated, err = installSystemdUserUnit(context.Background(), *state)
+		if err != nil {
+			return AutostartStatus{}, err
+		}
+		if err := WriteState(statePath, updated); err != nil {
+			return AutostartStatus{}, err
+		}
+		if err := systemdUserEnable(context.Background(), updated); err != nil {
+			return AutostartStatus{}, err
+		}
 	}
 	return DetectAutostart(statePath)
 }

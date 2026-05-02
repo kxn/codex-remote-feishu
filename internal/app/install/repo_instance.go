@@ -96,8 +96,8 @@ func resolveInstallInstanceSelection(explicitValue, explicitBaseDir, fallbackBas
 		ConfigPath:      defaultConfigPathForInstance(resolvedBaseDir, instanceID),
 		StatePath:       defaultInstallStatePathForInstance(resolvedBaseDir, instanceID),
 		LogPath:         filepath.Join(layout.StateDir, "logs", "codex-remote-relayd.log"),
-		ServiceName:     systemdUserServiceNameForInstance(instanceID),
-		ServiceUnitPath: systemdUserUnitPathForInstance(resolvedBaseDir, instanceID),
+		ServiceName:     serviceNameForInstallInstance(goos, instanceID),
+		ServiceUnitPath: serviceUnitPathForInstallInstance(goos, resolvedBaseDir, instanceID),
 		RepoRoot:        repoRoot,
 	}
 

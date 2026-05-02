@@ -65,13 +65,33 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 			},
 		})
 	}
+	if effectiveServiceManager(state) == ServiceManagerLaunchdUser {
+		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
+			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
+			Identity:       identity,
+			ConfigPath:     state.ConfigPath,
+			Paths:          paths,
+			StartFunc: func(ctx context.Context) (int, error) {
+				if _, err := installLaunchdUserPlist(ctx, state); err != nil {
+					return 0, err
+				}
+				return 0, launchdUserStart(ctx, state)
+			},
+			RestartFunc: func(ctx context.Context) error {
+				if _, err := installLaunchdUserPlist(ctx, state); err != nil {
+					return err
+				}
+				return launchdUserRestart(ctx, state)
+			},
+		})
+	}
 	if err := manager.EnsureReady(ctx); err != nil {
-		if effectiveServiceManager(state) == ServiceManagerSystemdUser {
+		if isManagedServiceManager(state) {
 			return fallbackDaemonStatus(loaded.Config), err
 		}
 		return daemonStatus{LogPath: paths.DaemonLogFile}, err
 	}
-	if effectiveServiceManager(state) == ServiceManagerSystemdUser {
+	if isManagedServiceManager(state) {
 		return fallbackDaemonStatus(loaded.Config), nil
 	}
 	return discoverDaemonStatus(paths, loaded.Config), nil

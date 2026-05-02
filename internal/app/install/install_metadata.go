@@ -119,13 +119,18 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	if state.ServiceManager == "" {
 		state.ServiceManager = ServiceManagerDetached
 	}
-	if effectiveServiceManager(*state) == ServiceManagerSystemdUser {
+	switch effectiveServiceManager(*state) {
+	case ServiceManagerSystemdUser:
 		state.ServiceUnitPath = systemdUserUnitPathForInstance(
 			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
 			state.InstanceID,
 		)
-	}
-	if effectiveServiceManager(*state) != ServiceManagerSystemdUser {
+	case ServiceManagerLaunchdUser:
+		state.ServiceUnitPath = launchdUserPlistPathForInstance(
+			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
+			state.InstanceID,
+		)
+	default:
 		state.ServiceUnitPath = ""
 	}
 

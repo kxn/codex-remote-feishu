@@ -40,13 +40,18 @@ func TestMain(m *testing.M) {
 
 	originalHome := serviceUserHomeDir
 	originalSystemctl := systemctlUserRunner
+	originalLaunchctl := launchctlUserRunner
 	serviceUserHomeDir = func() (string, error) { return homeDir, nil }
 	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
 		return "", fmt.Errorf("unexpected live systemctl access in install tests: %v", args)
 	}
+	launchctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		return "", fmt.Errorf("unexpected live launchctl access in install tests: %v", args)
+	}
 	defer func() {
 		serviceUserHomeDir = originalHome
 		systemctlUserRunner = originalSystemctl
+		launchctlUserRunner = originalLaunchctl
 	}()
 
 	code := m.Run()

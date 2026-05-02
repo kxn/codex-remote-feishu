@@ -78,8 +78,8 @@ func loadServiceState(statePath string) (InstallState, error) {
 	return state, nil
 }
 
-func ensureSystemdUserConfigured(state InstallState) error {
-	if effectiveServiceManager(state) != ServiceManagerSystemdUser {
+func ensureManagedServiceConfigured(state InstallState) error {
+	if !isManagedServiceManager(state) {
 		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
 	}
 	return nil
@@ -90,8 +90,14 @@ func runServiceInstallUser(ctx context.Context, statePath string, stdout io.Writ
 	if err != nil {
 		return err
 	}
-	state.ServiceManager = ServiceManagerSystemdUser
-	state, err = installSystemdUserUnit(ctx, state)
+	switch serviceRuntimeGOOS {
+	case "darwin":
+		state.ServiceManager = ServiceManagerLaunchdUser
+		state, err = installLaunchdUserPlist(ctx, state)
+	default:
+		state.ServiceManager = ServiceManagerSystemdUser
+		state, err = installSystemdUserUnit(ctx, state)
+	}
 	if err != nil {
 		return err
 	}
@@ -107,7 +113,13 @@ func runServiceUninstallUser(ctx context.Context, statePath string, stdout io.Wr
 	if err != nil {
 		return err
 	}
-	if err := uninstallSystemdUserUnit(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = uninstallLaunchdUserPlist(ctx, state)
+	default:
+		err = uninstallSystemdUserUnit(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
 	state.ServiceManager = ServiceManagerDetached
@@ -129,20 +141,31 @@ func runServiceEnable(ctx context.Context, statePath string, stdout io.Writer) e
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
+	if err := ensureManagedServiceConfigured(state); err != nil {
 		return err
 	}
-	state, err = installSystemdUserUnit(ctx, state)
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		state, err = installLaunchdUserPlist(ctx, state)
+	default:
+		state, err = installSystemdUserUnit(ctx, state)
+	}
 	if err != nil {
 		return err
 	}
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserEnable(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserEnable(ctx, state)
+	default:
+		err = systemdUserEnable(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, "systemd user service enabled\n")
+	_, err = io.WriteString(stdout, "service enabled\n")
 	return err
 }
 
@@ -151,13 +174,19 @@ func runServiceDisable(ctx context.Context, statePath string, stdout io.Writer) 
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
+	if err := ensureManagedServiceConfigured(state); err != nil {
 		return err
 	}
-	if err := systemdUserDisable(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserDisable(ctx, state)
+	default:
+		err = systemdUserDisable(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, "systemd user service disabled\n")
+	_, err = io.WriteString(stdout, "service disabled\n")
 	return err
 }
 
@@ -166,20 +195,31 @@ func runServiceStart(ctx context.Context, statePath string, stdout io.Writer) er
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
+	if err := ensureManagedServiceConfigured(state); err != nil {
 		return err
 	}
-	state, err = installSystemdUserUnit(ctx, state)
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		state, err = installLaunchdUserPlist(ctx, state)
+	default:
+		state, err = installSystemdUserUnit(ctx, state)
+	}
 	if err != nil {
 		return err
 	}
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserStart(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserStart(ctx, state)
+	default:
+		err = systemdUserStart(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, "systemd user service started\n")
+	_, err = io.WriteString(stdout, "service started\n")
 	return err
 }
 
@@ -188,13 +228,19 @@ func runServiceStop(ctx context.Context, statePath string, stdout io.Writer) err
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
+	if err := ensureManagedServiceConfigured(state); err != nil {
 		return err
 	}
-	if err := systemdUserStop(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserStop(ctx, state)
+	default:
+		err = systemdUserStop(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, "systemd user service stopped\n")
+	_, err = io.WriteString(stdout, "service stopped\n")
 	return err
 }
 
@@ -203,20 +249,31 @@ func runServiceRestart(ctx context.Context, statePath string, stdout io.Writer) 
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
+	if err := ensureManagedServiceConfigured(state); err != nil {
 		return err
 	}
-	state, err = installSystemdUserUnit(ctx, state)
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		state, err = installLaunchdUserPlist(ctx, state)
+	default:
+		state, err = installSystemdUserUnit(ctx, state)
+	}
 	if err != nil {
 		return err
 	}
 	if err := WriteState(statePath, state); err != nil {
 		return err
 	}
-	if err := systemdUserRestart(ctx, state); err != nil {
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserRestart(ctx, state)
+	default:
+		err = systemdUserRestart(ctx, state)
+	}
+	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(stdout, "systemd user service restarted\n")
+	_, err = io.WriteString(stdout, "service restarted\n")
 	return err
 }
 
@@ -229,15 +286,26 @@ func runServiceStatus(ctx context.Context, statePath string, stdout io.Writer) e
 	if err != nil {
 		return err
 	}
-	if effectiveServiceManager(state) != ServiceManagerSystemdUser {
-		_, err = io.WriteString(stdout, "systemd user service is not configured\n")
+	if !isManagedServiceManager(state) {
+		_, err = io.WriteString(stdout, "managed service is not configured\n")
 		return err
 	}
-	output, err := systemdUserStatus(ctx, state)
-	if strings.TrimSpace(output) != "" {
-		if _, writeErr := io.WriteString(stdout, output+"\n"); writeErr != nil {
-			return writeErr
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		output, sErr := launchdUserStatus(ctx, state)
+		if strings.TrimSpace(output) != "" {
+			if _, writeErr := io.WriteString(stdout, output+"\n"); writeErr != nil {
+				return writeErr
+			}
 		}
+		return sErr
+	default:
+		output, sErr := systemdUserStatus(ctx, state)
+		if strings.TrimSpace(output) != "" {
+			if _, writeErr := io.WriteString(stdout, output+"\n"); writeErr != nil {
+				return writeErr
+			}
+		}
+		return sErr
 	}
-	return err
 }

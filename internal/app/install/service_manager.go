@@ -11,6 +11,7 @@ type ServiceManager string
 const (
 	ServiceManagerDetached    ServiceManager = "detached"
 	ServiceManagerSystemdUser ServiceManager = "systemd_user"
+	ServiceManagerLaunchdUser ServiceManager = "launchd_user"
 )
 
 type installLayout struct {
@@ -31,6 +32,11 @@ func ParseServiceManager(value, goos string) (ServiceManager, error) {
 			return "", fmt.Errorf("service manager %q is only supported on linux", ServiceManagerSystemdUser)
 		}
 		return ServiceManagerSystemdUser, nil
+	case ServiceManagerLaunchdUser:
+		if goos != "darwin" {
+			return "", fmt.Errorf("service manager %q is only supported on darwin", ServiceManagerLaunchdUser)
+		}
+		return ServiceManagerLaunchdUser, nil
 	default:
 		return "", fmt.Errorf("unsupported service manager %q (want detached or systemd_user)", strings.TrimSpace(value))
 	}
@@ -42,6 +48,8 @@ func normalizeServiceManager(value ServiceManager) ServiceManager {
 		return ServiceManagerDetached
 	case string(ServiceManagerSystemdUser):
 		return ServiceManagerSystemdUser
+	case string(ServiceManagerLaunchdUser):
+		return ServiceManagerLaunchdUser
 	default:
 		return ""
 	}
@@ -122,4 +130,34 @@ func systemdUserUnitPathForInstance(baseDir, instanceID string) string {
 		return ""
 	}
 	return filepath.Join(unitBaseDir, ".config", "systemd", "user", systemdUserServiceNameForInstance(instanceID))
+}
+
+func launchdUserPlistPathForInstance(baseDir, instanceID string) string {
+	if homeDir, err := serviceUserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
+		return filepath.Join(homeDir, "Library", "LaunchAgents", launchdLabelForInstance(instanceID)+".plist")
+	}
+	return ""
+}
+
+func isManagedServiceManager(state InstallState) bool {
+	m := effectiveServiceManager(state)
+	return m == ServiceManagerSystemdUser || m == ServiceManagerLaunchdUser
+}
+
+func serviceNameForInstallInstance(goos, instanceID string) string {
+	switch goos {
+	case "darwin":
+		return launchdLabelForInstance(instanceID)
+	default:
+		return systemdUserServiceNameForInstance(instanceID)
+	}
+}
+
+func serviceUnitPathForInstallInstance(goos, baseDir, instanceID string) string {
+	switch goos {
+	case "darwin":
+		return launchdUserPlistPathForInstance(baseDir, instanceID)
+	default:
+		return systemdUserUnitPathForInstance(baseDir, instanceID)
+	}
 }

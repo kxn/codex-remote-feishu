@@ -54,6 +54,14 @@ func systemdUserServiceNameForInstance(instanceID string) string {
 	return fmt.Sprintf("%s-%s.service", productName, instanceID)
 }
 
+func launchdLabelForInstance(instanceID string) string {
+	instanceID = normalizeInstanceID(instanceID)
+	if isDefaultInstance(instanceID) {
+		return "com.codex-remote.service"
+	}
+	return fmt.Sprintf("com.codex-remote-%s.service", instanceID)
+}
+
 func instanceNamespace(instanceID string) string {
 	instanceID = normalizeInstanceID(instanceID)
 	if isDefaultInstance(instanceID) {
