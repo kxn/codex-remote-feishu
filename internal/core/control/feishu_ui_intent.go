@@ -13,6 +13,7 @@ const (
 	FeishuUIIntentShowWorkspaceNewWorktree    FeishuUIIntentKind = "show_workspace_new_worktree"
 	FeishuUIIntentShowCommandMenu             FeishuUIIntentKind = "show_command_menu"
 	FeishuUIIntentShowHistory                 FeishuUIIntentKind = "show_history"
+	FeishuUIIntentShowReviewRoot              FeishuUIIntentKind = "show_review_root"
 	FeishuUIIntentShowModeCatalog             FeishuUIIntentKind = "show_mode_catalog"
 	FeishuUIIntentShowCodexProviderCatalog    FeishuUIIntentKind = "show_codex_provider_catalog"
 	FeishuUIIntentShowClaudeProfileCatalog    FeishuUIIntentKind = "show_claude_profile_catalog"

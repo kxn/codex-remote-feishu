@@ -77,6 +77,11 @@ func TestResolveFeishuFrontstageActionContractInlineViewActionSet(t *testing.T) 
 			want:   true,
 		},
 		{
+			name:   "bare review root page",
+			action: Action{Kind: ActionReviewCommand, Text: "/review"},
+			want:   true,
+		},
+		{
 			name:   "list handoff",
 			action: Action{Kind: ActionListInstances},
 			want:   true,

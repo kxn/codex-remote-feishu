@@ -103,6 +103,8 @@ func TestResolveFeishuCommandBindingIntentBuilder(t *testing.T) {
 		ok     bool
 	}{
 		{name: "history bare command", action: Action{Kind: ActionShowHistory, Text: "/history"}, want: FeishuUIIntentShowHistory, ok: true},
+		{name: "review bare command", action: Action{Kind: ActionReviewCommand, Text: "/review"}, want: FeishuUIIntentShowReviewRoot, ok: true},
+		{name: "review subcommand stays product owned", action: Action{Kind: ActionReviewCommand, Text: "/review commit"}, ok: false},
 		{name: "history non-bare stays product owned", action: Action{Kind: ActionShowHistory, Text: "/history latest"}, ok: false},
 		{name: "sendfile opens picker", action: Action{Kind: ActionSendFile, Text: "/sendfile"}, want: FeishuUIIntentOpenSendFilePicker, ok: true},
 	}

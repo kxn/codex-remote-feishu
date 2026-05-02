@@ -53,6 +53,8 @@ const (
 	ActionReactionCreated             ActionKind = "surface.message.reaction.created"
 	ActionMessageRecalled             ActionKind = "surface.message.recalled"
 	ActionReviewStart                 ActionKind = "surface.button.review_start"
+	ActionReviewStartUncommitted      ActionKind = "surface.button.review_start_uncommitted"
+	ActionReviewOpenCommitPicker      ActionKind = "surface.button.review_open_commit_picker"
 	ActionReviewDiscard               ActionKind = "surface.button.review_discard"
 	ActionReviewApply                 ActionKind = "surface.button.review_apply"
 	ActionAttachInstance              ActionKind = "surface.button.attach_instance"

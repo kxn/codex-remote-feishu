@@ -911,7 +911,7 @@ func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-menu-review-1",
-		Text:             "/review uncommitted",
+		Text:             "/review",
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
@@ -920,7 +920,7 @@ func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected menu review handoff to replace current card, got %#v", result)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "正在进入审阅" {
+	if result.ReplaceCurrentCard.CardTitle != "审阅代码变更" {
 		t.Fatalf("unexpected review replacement title: %#v", result.ReplaceCurrentCard)
 	}
 	if len(gateway.operations) != 0 {

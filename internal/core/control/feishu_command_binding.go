@@ -95,6 +95,10 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 			Kind:     FeishuCommandBindingOwnerEntry,
 		}
 	}
+	if binding, ok := bindings[FeishuCommandReview]; ok {
+		binding.intentBuilder = bareInlineIntentBuilder(FeishuUIIntentShowReviewRoot, "/review", false)
+		bindings[FeishuCommandReview] = binding
+	}
 
 	bindings[FeishuCommandWorkspace] = FeishuCommandBinding{
 		FamilyID:      FeishuCommandWorkspace,

@@ -458,6 +458,80 @@ func TestStartReviewCommandBuildsDetachedReviewCommandFromCurrentThread(t *testi
 	}
 }
 
+func TestBareReviewCommandOpensReviewRootPage(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	_ = commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-root",
+		Text:             "/review",
+	})
+
+	if len(events) != 1 || events[0].PageView == nil {
+		t.Fatalf("expected one review root page event, got %#v", events)
+	}
+	page := events[0].PageView
+	if page.Title != "审阅代码变更" {
+		t.Fatalf("unexpected review root title: %#v", page)
+	}
+	if len(page.Sections) != 1 || len(page.Sections[0].Entries) != 2 {
+		t.Fatalf("expected two review root entries, got %#v", page.Sections)
+	}
+	if svc.activeReviewPicker(surface) != nil {
+		t.Fatalf("did not expect commit picker runtime when opening root page, got %#v", svc.activeReviewPicker(surface))
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("did not expect review session when opening root page, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestReviewRootActionStartsUncommittedReview(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewStartUncommitted,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-root-1",
+		Text:             "/review uncommitted",
+		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+	})
+
+	if len(events) != 2 {
+		t.Fatalf("expected notice + review start command, got %#v", events)
+	}
+	if events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected review start command, got %#v", events)
+	}
+}
+
+func TestReviewRootActionOpensCommitPicker(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	latest := commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewOpenCommitPicker,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-root-1",
+		Text:             "/review commit",
+		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+	})
+
+	if len(events) != 1 || events[0].PageView == nil {
+		t.Fatalf("expected one picker page event, got %#v", events)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
+	if catalog.Title != "选择提交记录" {
+		t.Fatalf("unexpected commit picker catalog: %#v", catalog)
+	}
+	form := catalog.Sections[0].Entries[0].Form
+	if len(form.Field.Options) == 0 || form.Field.Options[0].Value != latest.SHA {
+		t.Fatalf("expected latest commit option first, got %#v", form.Field.Options)
+	}
+}
+
 func TestStartReviewCommandRejectsCleanRepo(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 

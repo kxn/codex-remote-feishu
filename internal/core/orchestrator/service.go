@@ -427,6 +427,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleSteerAllCommand(surface, action)
 	case control.ActionReviewCommand:
 		events = s.handleReviewCommand(surface, action)
+	case control.ActionReviewStartUncommitted:
+		events = s.startReview(surface, s.resolveUncommittedReviewStartFromCurrentContext(surface, action))
+	case control.ActionReviewOpenCommitPicker:
+		events = s.openReviewCommitPicker(surface, action)
 	case control.ActionReviewStart:
 		events = s.startReviewFromFinalCard(surface, action)
 	case control.ActionReviewDiscard:

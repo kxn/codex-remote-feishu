@@ -10,7 +10,7 @@ func TestParseFeishuReviewCommandText(t *testing.T) {
 		wantSHA   string
 		wantError bool
 	}{
-		{name: "bare review opens picker", text: "/review", wantMode: ReviewCommandModeCommitPicker},
+		{name: "bare review opens root", text: "/review", wantMode: ReviewCommandModeRoot},
 		{name: "uncommitted", text: "/review uncommitted", wantMode: ReviewCommandModeUncommitted},
 		{name: "commit picker", text: "/review commit", wantMode: ReviewCommandModeCommitPicker},
 		{name: "commit sha", text: "/review commit AbC1234", wantMode: ReviewCommandModeCommitSHA, wantSHA: "abc1234"},

@@ -437,7 +437,7 @@ func TestHandleGatewayActionStartsDetachedReviewFromCurrentThreadCommand(t *test
 	}
 }
 
-func TestHandleGatewayActionKeepsMenulessReviewCardAppendOnly(t *testing.T) {
+func TestHandleGatewayActionShowsReviewRootPageInPlace(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
 	var sent []agentproto.Command
@@ -459,15 +459,17 @@ func TestHandleGatewayActionKeepsMenulessReviewCardAppendOnly(t *testing.T) {
 		},
 	})
 
-	if result != nil {
-		t.Fatalf("expected non-menu stamped review command to stay append-only, got %#v", result)
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected bare review to replace current card with root page, got %#v", result)
 	}
-	ops := gateway.snapshotOperations()
-	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "选择提交记录" {
-		t.Fatalf("expected one appended review picker card, got %#v", ops)
+	if result.ReplaceCurrentCard.CardTitle != "审阅代码变更" {
+		t.Fatalf("expected review root page title, got %#v", result.ReplaceCurrentCard)
 	}
 	if len(sent) != 0 {
-		t.Fatalf("did not expect review start command for bare review picker open, got %#v", sent)
+		t.Fatalf("did not expect review start command for bare review root open, got %#v", sent)
+	}
+	if len(gateway.snapshotOperations()) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.snapshotOperations())
 	}
 }
 

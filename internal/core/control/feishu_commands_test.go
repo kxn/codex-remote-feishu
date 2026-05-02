@@ -352,7 +352,7 @@ func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
 
 func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
 	tests := map[string]string{
-		"review":             "/review uncommitted",
+		"review":             "/review",
 		"reviewcommit":       "/review commit",
 		"review_uncommitted": "/review uncommitted",
 	}
@@ -369,6 +369,25 @@ func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
 		}
 		if action.CommandID != FeishuCommandReview {
 			t.Fatalf("menu %q => command id %q, want %q", key, action.CommandID, FeishuCommandReview)
+		}
+	}
+}
+
+func TestReviewExtraActionRoutesBuildCanonicalText(t *testing.T) {
+	tests := []struct {
+		kind ActionKind
+		want string
+	}{
+		{kind: ActionReviewStartUncommitted, want: "/review uncommitted"},
+		{kind: ActionReviewOpenCommitPicker, want: "/review commit"},
+	}
+	for _, tt := range tests {
+		if got := BuildFeishuActionText(tt.kind, ""); got != tt.want {
+			t.Fatalf("BuildFeishuActionText(%q) = %q, want %q", tt.kind, got, tt.want)
+		}
+		commandID, ok := FeishuCommandIDForActionKind(tt.kind)
+		if !ok || commandID != FeishuCommandReview {
+			t.Fatalf("FeishuCommandIDForActionKind(%q) = (%q, %v), want (%q, true)", tt.kind, commandID, ok, FeishuCommandReview)
 		}
 	}
 }

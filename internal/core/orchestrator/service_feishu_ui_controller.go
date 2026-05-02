@@ -53,6 +53,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText, intent.SourceMessageID)}
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentShowReviewRoot:
+		return []eventcontract.Event{s.reviewRootPageEvent(surface, s.reviewRootPageTriggeredFromMenu(surface, intent.SourceMessageID))}
 	case control.FeishuUIIntentShowList:
 		if s.surfaceIsHeadless(surface) {
 			return s.openTargetPickerWithSourceForAction(surface, control.TargetPickerRequestSourceList, action, "", "", intent.SourceMessageID, true)

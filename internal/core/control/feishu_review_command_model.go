@@ -8,6 +8,7 @@ import (
 type ReviewCommandMode string
 
 const (
+	ReviewCommandModeRoot         ReviewCommandMode = "root"
 	ReviewCommandModeCommitPicker ReviewCommandMode = "commit_picker"
 	ReviewCommandModeCommitSHA    ReviewCommandMode = "commit_sha"
 	ReviewCommandModeUncommitted  ReviewCommandMode = "uncommitted"
@@ -29,7 +30,7 @@ func ParseFeishuReviewCommandText(text string) (ParsedReviewCommand, error) {
 		return ParsedReviewCommand{}, reviewCommandUsageError()
 	}
 	if len(fields) == 1 {
-		return ParsedReviewCommand{Mode: ReviewCommandModeCommitPicker}, nil
+		return ParsedReviewCommand{Mode: ReviewCommandModeRoot}, nil
 	}
 
 	switch strings.ToLower(fields[1]) {

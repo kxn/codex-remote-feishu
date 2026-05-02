@@ -71,6 +71,8 @@ func (s *Service) handleReviewCommand(surface *state.SurfaceConsoleRecord, actio
 		return notice(surface, "review_command_invalid", err.Error())
 	}
 	switch parsed.Mode {
+	case control.ReviewCommandModeRoot:
+		return []eventcontract.Event{s.reviewRootPageEvent(surface, false)}
 	case control.ReviewCommandModeUncommitted:
 		return s.startReview(surface, s.resolveUncommittedReviewStartFromCurrentContext(surface, action))
 	case control.ReviewCommandModeCommitPicker:
