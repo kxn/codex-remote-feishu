@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-04-27`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron` 与共享过程卡的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
+> Updated: `2026-05-02`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron`、结构化计划更新与共享过程卡的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
 
 ## 1. 文档定位
 
@@ -763,7 +763,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 ### 7.2.2 结构化计划更新卡
 
-当前 `turn/plan/updated` 会投影为 append-only 的“计划更新”卡片：
+当前标准 `turn.plan.updated` 会投影为 append-only 的“计划更新”卡片。来源包括 Codex native `turn/plan/updated`，以及 Claude `TodoWrite` 归一化后的同一标准事件：
 
 - 若上游携带 `explanation`，卡片会展示说明文本
 - step 列表会带状态：
@@ -772,10 +772,11 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
   - `pending`
 - 同一个 live turn 内，若新快照与上一份完全一致，不会重复发卡
 - 只有 step 内容或状态发生变化时，才会追加发送新的计划更新卡
+- 每次实际追加计划更新卡之前，orchestrator 会先 flush 共享过程卡里的 dirty reasoning，并终止当前 active shared-progress segment；后续过程项会重新开一张“工作中”卡，而不是继续 patch 旧卡
 
 当前边界：
 
-- 这条卡片只消费 `turn/plan/updated` 结构化快照
+- 这条卡片只消费标准 `turn.plan.updated + planSnapshot` 结构化快照
 - `item/plan/delta` 仍按普通文本 item 链路处理，不会混作 checklist 卡
 - 计划更新卡首版保持 append-only，不做 inline replace
 

@@ -177,3 +177,70 @@ func TestTurnPlanUpdateFlushesPendingTextBeforePlanEvent(t *testing.T) {
 		t.Fatalf("expected second event to be neutral plan update, got %#v", events)
 	}
 }
+
+func TestTurnPlanUpdateCutsSharedProgressSegment(t *testing.T) {
+	svc := prepareRemotePlanTurnForTest(t)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial shared progress event, got %#v", started)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+
+	planEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventTurnPlanUpdated,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		Initiator: agentproto.Initiator{
+			Kind:             agentproto.InitiatorRemoteSurface,
+			SurfaceSessionID: "surface-1",
+		},
+		PlanSnapshot: &agentproto.TurnPlanSnapshot{
+			Explanation: "改按新的检查顺序推进。",
+			Steps: []agentproto.TurnPlanStep{
+				{Step: "重新确认入口", Status: agentproto.TurnPlanStepStatusCompleted},
+				{Step: "调整实现", Status: agentproto.TurnPlanStepStatusInProgress},
+			},
+		},
+	})
+	if len(planEvents) != 1 || planEvents[0].Kind != eventcontract.KindPlanUpdate {
+		t.Fatalf("expected plan update event, got %#v", planEvents)
+	}
+	if surface.ActiveExecProgress != nil {
+		t.Fatalf("expected plan update to terminate active shared progress segment, got %#v", surface.ActiveExecProgress)
+	}
+
+	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "go test ./internal/core/orchestrator",
+		},
+	})
+	if len(next) != 1 || next[0].ExecCommandProgress == nil {
+		t.Fatalf("expected new shared progress event after plan update, got %#v", next)
+	}
+	progress := next[0].ExecCommandProgress
+	if activeProgressMessageID(progress) != "" {
+		t.Fatalf("expected new shared progress to start a fresh card instead of patching old card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].ItemID != "cmd-2" {
+		t.Fatalf("expected fresh shared progress state after plan boundary, got %#v", progress)
+	}
+}

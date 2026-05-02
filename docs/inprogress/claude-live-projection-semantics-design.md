@@ -1,8 +1,8 @@
 # Claude Live Projection Semantics Design
 
 > Type: `inprogress`
-> Updated: `2026-05-01`
-> Summary: 固定 Claude/Cloud live projection 的产品语义基线，明确过程卡/交互卡/final message 的分工，拆分三类 Plan，并定义 Task 家族的可见性边界。
+> Updated: `2026-05-02`
+> Summary: 固定 Claude/Cloud live projection 的产品语义基线，明确过程卡/交互卡/final message 的分工，拆分三类 Plan，并定义 `TodoWrite -> turn.plan.updated` 与 Task 家族的可见性边界。
 
 ## 1. 文档定位
 
@@ -75,7 +75,6 @@ Claude/Cloud 路径的用户可见输出，只允许落到三种面：
 
 - 运行中的过程进展
 - 工具调用的抽象语义
-- 计划进行中的快照
 - 子代理任务状态
 - reasoning 的摘要态
 
@@ -120,11 +119,13 @@ final message 只承载 assistant 的最终回答正文。
 
 展示位置：
 
-- 独立 `Plan` 卡
+- 独立 `PlanUpdate` 卡，不进入共享过程卡
 
 生命周期：
 
-- 同一 turn 内按 latest snapshot 覆盖更新
+- 同一 turn 内相同快照去重
+- 内容变化时 append 一张新的结构化计划更新卡
+- 每张实际发出的计划更新卡都是共享过程卡的分段边界：先 flush dirty reasoning，再终止当前 active progress，后续过程重新开卡
 - 只属于运行中的当前 turn
 
 严格限制：
@@ -352,12 +353,13 @@ final message 只承载 assistant 的最终回答正文。
 
 | Native carrier | 产品对象 | 用户可见面 |
 | --- | --- | --- |
-| `TodoWrite` | `current_plan_snapshot` | 独立 `Plan` 卡 |
+| `TodoWrite` | `current_plan_snapshot` | 独立 `PlanUpdate` 卡 |
 
 规则：
 
 - 直接复用现有 Codex `turn.plan.updated` / `PlanUpdate` 展示 owner
-- latest snapshot 覆盖
+- 相同快照去重；内容变化时 append 新计划更新卡
+- 计划更新卡会切断当前共享过程卡分段，后续过程重新开“工作中”卡
 - 与 turn-end proposal plan 没关系
 
 ### 6.8 交互项
@@ -391,7 +393,8 @@ final message 只承载 assistant 的最终回答正文。
 
 同一 turn 内多次 `TodoWrite`：
 
-- 只保留最新完整快照
+- 相同快照不重复投影
+- 内容变化的快照按发生顺序投影为新的 `PlanUpdate` 卡
 
 ### 7.3 `approval_plan`
 

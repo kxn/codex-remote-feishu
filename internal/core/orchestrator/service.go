@@ -730,7 +730,13 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventTurnPlanUpdated:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
-		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnPlanUpdate(instanceID, event)...))
+		planEvents := s.applyTurnPlanUpdate(instanceID, event)
+		if len(planEvents) == 0 {
+			return s.filterEventsForSurfaceVisibility(preface)
+		}
+		events := append(preface, s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)...)
+		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
+		return s.filterEventsForSurfaceVisibility(append(events, planEvents...))
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		preface = append(preface, s.maybeSealPlanProposalForTurnStart(instanceID, event.ThreadID, event.TurnID)...)

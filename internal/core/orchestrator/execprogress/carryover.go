@@ -12,7 +12,6 @@ func RolloverCarryoverEntries(progress *state.ExecCommandProgressRecord, startSe
 		return
 	}
 	maxSeq := progress.LastVisibleSeq
-	maxSeq = rolloverCarryoverBlock(progress.ProcessPlan, startSeq, maxSeq)
 	maxSeq = rolloverCarryoverExploration(progress.Exploration, startSeq, maxSeq)
 	type carryoverCandidate struct {
 		Index   int
@@ -45,13 +44,6 @@ func RolloverCarryoverEntries(progress *state.ExecCommandProgressRecord, startSe
 	if maxSeq > progress.LastVisibleSeq {
 		progress.LastVisibleSeq = maxSeq
 	}
-}
-
-func rolloverCarryoverBlock(record *state.ExecCommandProgressPlanRecord, startSeq, maxSeq int) int {
-	if record == nil || strings.ToLower(strings.TrimSpace(record.Block.Status)) != "running" {
-		return maxSeq
-	}
-	return rolloverCarryoverBlockRows(&record.Block, startSeq, maxSeq)
 }
 
 func rolloverCarryoverExploration(record *state.ExecCommandProgressExplorationRecord, startSeq, maxSeq int) int {

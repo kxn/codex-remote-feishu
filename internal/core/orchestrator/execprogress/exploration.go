@@ -29,12 +29,7 @@ func Blocks(progress *state.ExecCommandProgressRecord) []control.ExecCommandProg
 	if progress == nil {
 		return nil
 	}
-	blocks := make([]control.ExecCommandProgressBlock, 0, 2)
-	if progress.ProcessPlan != nil {
-		if block := cloneExecCommandProgressBlock(progress.ProcessPlan.Block); block != nil {
-			blocks = append(blocks, *block)
-		}
-	}
+	blocks := make([]control.ExecCommandProgressBlock, 0, 1)
 	if progress.Exploration != nil {
 		if block := cloneExecCommandProgressBlock(progress.Exploration.Block); block != nil {
 			blocks = append(blocks, *block)

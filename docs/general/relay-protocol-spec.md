@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-04-16`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn/plan/updated` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Updated: `2026-05-02`
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -564,8 +564,10 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 当前语义：
 
 - wrapper 会把 native `turn/plan/updated` 标准化成 `turn.plan.updated + planSnapshot`
+- Claude adapter 会把 `TodoWrite` 标准化成同一个 `turn.plan.updated + planSnapshot` carrier，不再通过工具过程项投影计划
 - `item/plan/delta` 仍属于 `item.delta` 文本流，不会被折叠成 `planSnapshot`
 - orchestrator 在产品层按 live turn + surface 去重同内容快照，避免重复投影相同计划更新
+- 非重复计划更新会作为共享过程卡分段边界：先 flush dirty reasoning，再终止当前 active progress，后续过程项重新开卡
 
 #### `item.completed.itemKind=context_compaction`
 

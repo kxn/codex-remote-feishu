@@ -288,9 +288,6 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	if progress.Exploration != nil && strings.TrimSpace(progress.Exploration.Block.Status) == "running" {
 		progress.Exploration.Block.Status = status
 	}
-	if progress.ProcessPlan != nil && strings.TrimSpace(progress.ProcessPlan.Block.Status) == "running" {
-		progress.ProcessPlan.Block.Status = status
-	}
 	_ = finalText
 	if status == "" {
 		return nil
