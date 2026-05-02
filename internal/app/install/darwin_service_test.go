@@ -166,14 +166,13 @@ func TestRenderLaunchdUserPlistEscapesXMLSpecialChars(t *testing.T) {
 	defer withDarwinGOOS(t)()
 	baseDir := t.TempDir()
 	stubServiceUserHome(t, baseDir)
-	binaryPath := seedBinary(t, filepath.Join(baseDir, "my & <path>", "codex-remote"), "binary")
 	t.Setenv("PATH", "/usr/bin")
 
 	state := InstallState{
 		InstanceID:      "stable",
-		BaseDir:         baseDir,
+		BaseDir:         filepath.Join(baseDir, "xml & <tag>"),
 		StatePath:       defaultInstallStatePath(baseDir),
-		InstalledBinary: binaryPath,
+		InstalledBinary: filepath.Join(baseDir, "xml-escape-test", "codex-remote"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		InstanceID:     state.InstanceID,
@@ -187,11 +186,11 @@ func TestRenderLaunchdUserPlistEscapesXMLSpecialChars(t *testing.T) {
 		t.Fatalf("renderLaunchdUserPlist: %v", err)
 	}
 
-	if strings.Contains(plist, "& ") && !strings.Contains(plist, "&amp;") {
-		t.Fatalf("plain & not escaped in plist: %s", plist)
+	if strings.Contains(plist, "xml & <tag>") {
+		t.Fatalf("expected raw special chars to be escaped in plist: %s", plist)
 	}
-	if strings.Contains(plist, "my & <path>") {
-		t.Fatalf("special chars not escaped: %s", plist)
+	if !strings.Contains(plist, "xml &amp; &lt;tag&gt;") {
+		t.Fatalf("expected xml special chars to be escaped in plist: %s", plist)
 	}
 }
 
