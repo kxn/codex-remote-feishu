@@ -605,6 +605,7 @@ type StagedImageRecord struct {
 	ImageID          string
 	SurfaceSessionID string
 	SourceMessageID  string
+	ActorUserID      string
 	LocalPath        string
 	MIMEType         string
 	State            ImageState
@@ -614,6 +615,7 @@ type StagedFileRecord struct {
 	FileID           string
 	SurfaceSessionID string
 	SourceMessageID  string
+	ActorUserID      string
 	LocalPath        string
 	FileName         string
 	State            FileState

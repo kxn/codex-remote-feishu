@@ -213,7 +213,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		cwd, routeMode = freezeDetourRoute(inst, surface)
 		createThread = false
 	}
-	inputs, stagedMessageIDs, filePrompt := s.consumeStagedInputs(surface)
+	inputs, stagedMessageIDs, filePrompt := s.consumeStagedInputs(surface, action.ActorUserID)
 	if filePrompt != "" {
 		inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: filePrompt})
 	}
@@ -317,6 +317,7 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 		ImageID:          fmt.Sprintf("img-%d", s.nextImageID),
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  action.MessageID,
+		ActorUserID:      action.ActorUserID,
 		LocalPath:        action.LocalPath,
 		MIMEType:         action.MIMEType,
 		State:            state.ImageStaged,
@@ -365,6 +366,7 @@ func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.
 		FileID:           fmt.Sprintf("file-%d", s.nextFileID),
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  action.MessageID,
+		ActorUserID:      action.ActorUserID,
 		LocalPath:        action.LocalPath,
 		FileName:         action.FileName,
 		State:            state.FileStaged,

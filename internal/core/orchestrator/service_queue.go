@@ -177,7 +177,7 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 	return append(events, s.dispatchNext(surface)...)
 }
 
-func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]agentproto.Input, []string, string) {
+func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord, actorUserID string) ([]agentproto.Input, []string, string) {
 	imageKeys := make([]string, 0, len(surface.StagedImages))
 	for imageID := range surface.StagedImages {
 		imageKeys = append(imageKeys, imageID)
@@ -193,7 +193,7 @@ func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]ag
 	var sourceMessageIDs []string
 	for _, imageID := range imageKeys {
 		image := surface.StagedImages[imageID]
-		if image.State != state.ImageStaged {
+		if image.State != state.ImageStaged || image.ActorUserID != actorUserID {
 			continue
 		}
 		inputs = append(inputs, agentproto.Input{
@@ -204,18 +204,18 @@ func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord) ([]ag
 		image.State = state.ImageBound
 		sourceMessageIDs = append(sourceMessageIDs, image.SourceMessageID)
 	}
-	filePrompt := stagedFilePrompt(surface, fileKeys, &sourceMessageIDs)
+	filePrompt := stagedFilePrompt(surface, fileKeys, actorUserID, &sourceMessageIDs)
 	return inputs, sourceMessageIDs, filePrompt
 }
 
-func stagedFilePrompt(surface *state.SurfaceConsoleRecord, fileKeys []string, sourceMessageIDs *[]string) string {
+func stagedFilePrompt(surface *state.SurfaceConsoleRecord, fileKeys []string, actorUserID string, sourceMessageIDs *[]string) string {
 	if surface == nil || len(fileKeys) == 0 {
 		return ""
 	}
 	lines := []string{"附带参考文件（内容未直接注入上下文，可按需读取以下本地路径）："}
 	for _, fileID := range fileKeys {
 		file := surface.StagedFiles[fileID]
-		if file == nil || file.State != state.FileStaged {
+		if file == nil || file.State != state.FileStaged || file.ActorUserID != actorUserID {
 			continue
 		}
 		path := strings.TrimSpace(file.LocalPath)
