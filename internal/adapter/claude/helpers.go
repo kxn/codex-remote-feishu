@@ -208,7 +208,7 @@ func stringifyTextContent(value any) string {
 
 func normalizeClaudeSemanticItemKind(raw string) string {
 	switch strings.TrimSpace(raw) {
-	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "process_plan", "file_change":
+	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "file_change":
 		return strings.TrimSpace(raw)
 	default:
 		return ""
@@ -222,7 +222,7 @@ func claudeToolItemKind(toolName string) string {
 	case "WebSearch", "WebFetch", "ToolSearch":
 		return "web_search"
 	case "TodoWrite":
-		return "process_plan"
+		return ""
 	case "Task":
 		return "delegated_task"
 	case "TaskOutput", "TaskStop":
@@ -265,14 +265,6 @@ func claudeToolMetadata(toolName string, input map[string]any) map[string]any {
 		metadata["description"] = strings.TrimSpace(lookupStringFromAny(input["description"]))
 		if prompt := strings.TrimSpace(lookupStringFromAny(input["prompt"])); prompt != "" {
 			metadata["prompt"] = prompt
-		}
-	case "process_plan":
-		if snapshot := buildClaudeTodoPlanSnapshot(input); snapshot != nil {
-			metadata["planSnapshot"] = map[string]any{
-				"explanation": snapshot.Explanation,
-				"steps":       encodeClaudePlanSteps(snapshot.Steps),
-			}
-			metadata["text"] = buildClaudePlanSummary(snapshot)
 		}
 	case "file_change":
 		mergeClaudeFileChangeMetadata(metadata, toolName, input)
@@ -338,8 +330,7 @@ func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnaps
 		return nil
 	}
 	snapshot := &agentproto.TurnPlanSnapshot{
-		Explanation: "Claude 当前计划",
-		Steps:       make([]agentproto.TurnPlanStep, 0, len(records)),
+		Steps: make([]agentproto.TurnPlanStep, 0, len(records)),
 	}
 	activeForms := make([]string, 0, len(records))
 	for _, record := range records {
@@ -367,47 +358,6 @@ func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnaps
 	}
 	if len(activeForms) != 0 {
 		snapshot.Explanation = strings.Join(activeForms, "；")
-	}
-	return snapshot
-}
-
-func encodeClaudePlanSteps(steps []agentproto.TurnPlanStep) []map[string]any {
-	if len(steps) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, map[string]any{
-			"step":   strings.TrimSpace(step.Step),
-			"status": string(step.Status),
-		})
-	}
-	return out
-}
-
-func decodeClaudePlanSnapshot(metadata map[string]any) *agentproto.TurnPlanSnapshot {
-	if len(metadata) == 0 {
-		return nil
-	}
-	raw, ok := metadata["planSnapshot"].(map[string]any)
-	if !ok || raw == nil {
-		return nil
-	}
-	snapshot := &agentproto.TurnPlanSnapshot{
-		Explanation: strings.TrimSpace(lookupStringFromAny(raw["explanation"])),
-	}
-	for _, record := range mapsFromAny(raw["steps"]) {
-		step := strings.TrimSpace(lookupStringFromAny(record["step"]))
-		if step == "" {
-			continue
-		}
-		snapshot.Steps = append(snapshot.Steps, agentproto.TurnPlanStep{
-			Step:   step,
-			Status: agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(record["status"])),
-		})
-	}
-	if snapshot.Explanation == "" && len(snapshot.Steps) == 0 {
-		return nil
 	}
 	return snapshot
 }
@@ -446,14 +396,6 @@ func buildClaudeDelegatedTaskText(metadata map[string]any) string {
 	default:
 		return "Task"
 	}
-}
-
-func buildClaudeProcessPlanText(metadata map[string]any) string {
-	snapshot := decodeClaudePlanSnapshot(metadata)
-	if snapshot == nil {
-		return strings.TrimSpace(lookupStringFromAny(metadata["text"]))
-	}
-	return buildClaudePlanSummary(snapshot)
 }
 
 func cloneMetadata(metadata map[string]any) map[string]any {

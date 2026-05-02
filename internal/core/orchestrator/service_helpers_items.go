@@ -134,7 +134,7 @@ func isDynamicToolCallItem(itemKind string) bool {
 
 func suppressesCompletedTextRender(itemKind string, metadata map[string]any) bool {
 	switch strings.TrimSpace(itemKind) {
-	case "web_search", "command_execution", "process_plan", "delegated_task":
+	case "web_search", "command_execution", "delegated_task":
 		return true
 	}
 	if len(metadata) == 0 {

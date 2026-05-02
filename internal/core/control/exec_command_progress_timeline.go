@@ -96,10 +96,6 @@ func execCommandProgressTimelineItemFromBlockRow(row ExecCommandProgressBlockRow
 		if len(row.Items) == 0 {
 			return ExecCommandProgressTimelineItem{}, false
 		}
-	case "process_plan_summary", "process_plan_step":
-		if row.Summary == "" {
-			return ExecCommandProgressTimelineItem{}, false
-		}
 	case "list", "search":
 		if row.Summary == "" {
 			return ExecCommandProgressTimelineItem{}, false

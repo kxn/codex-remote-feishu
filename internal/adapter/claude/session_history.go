@@ -313,19 +313,6 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 			Text:     text,
 			Metadata: metadata,
 		}, true
-	case "process_plan":
-		text := buildClaudeProcessPlanText(metadata)
-		if text == "" {
-			text = strings.TrimSpace(toolUseSummary(toolName, input))
-		}
-		if text == "" {
-			return agentproto.ThreadHistoryItemRecord{}, false
-		}
-		return agentproto.ThreadHistoryItemRecord{
-			Kind:     "process_plan",
-			Text:     text,
-			Metadata: metadata,
-		}, true
 	case "file_change":
 		text := buildClaudeFileChangeHistoryText(metadata)
 		if text == "" {

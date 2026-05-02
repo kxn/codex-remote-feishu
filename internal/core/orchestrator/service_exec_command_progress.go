@@ -23,8 +23,6 @@ func (s *Service) handleProcessProgressItemStarted(instanceID string, event agen
 		return s.handleFileChangeProgressStarted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressStarted(instanceID, event)
-	case "process_plan":
-		return s.handleProcessPlanProgressUpdated(instanceID, event)
 	case "delegated_task":
 		return s.handleDelegatedTaskProgressUpdated(instanceID, event)
 	case "mcp_tool_call":
@@ -68,8 +66,6 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 		return s.handleFileChangeProgressCompleted(instanceID, event)
 	case "web_search":
 		return s.handleWebSearchProgressCompleted(instanceID, event)
-	case "process_plan":
-		return s.handleProcessPlanProgressUpdated(instanceID, event)
 	case "delegated_task":
 		return s.handleDelegatedTaskProgressUpdated(instanceID, event)
 	case "mcp_tool_call":
@@ -193,19 +189,6 @@ func (s *Service) handleWebSearchProgressCompleted(instanceID string, event agen
 	if !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 		return nil
 	}
-	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
-}
-
-func (s *Service) handleProcessPlanProgressUpdated(instanceID string, event agentproto.Event) []eventcontract.Event {
-	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
-		return nil
-	}
-	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if progress == nil || !execprogress.UpsertProcessPlan(progress, event) {
-		return nil
-	}
-	progress.ItemID = execprogress.ProcessPlanBlockID
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 

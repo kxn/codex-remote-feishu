@@ -338,7 +338,7 @@ func TestProjectExecCommandProgressKeepsWebSearchStatusPlainText(t *testing.T) {
 	}
 }
 
-func TestProjectExecCommandProgressRendersProcessPlanAndDelegatedTask(t *testing.T) {
+func TestProjectExecCommandProgressRendersDelegatedTask(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
@@ -348,18 +348,8 @@ func TestProjectExecCommandProgressRendersProcessPlanAndDelegatedTask(t *testing
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "task-1",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "process_plan",
-				Kind:    "process_plan",
-				Status:  "completed",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "summary", Kind: "process_plan_summary", Summary: "Gathering evidence", LastSeq: 1},
-					{RowID: "step-1", Kind: "process_plan_step", Summary: "Gather evidence", Secondary: "in_progress", LastSeq: 2},
-					{RowID: "step-2", Kind: "process_plan_step", Summary: "Write summary", Secondary: "pending", LastSeq: 3},
-				},
-			}},
 			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "task-1", Kind: "delegated_task", Label: "Task", Summary: "Explore · Audit the repository", LastSeq: 4},
+				{ItemID: "task-1", Kind: "delegated_task", Label: "Task", Summary: "Explore · Audit the repository", LastSeq: 1},
 			},
 		}),
 	})
@@ -367,11 +357,8 @@ func TestProjectExecCommandProgressRendersProcessPlanAndDelegatedTask(t *testing
 		t.Fatalf("expected one operation, got %#v", ops)
 	}
 	body := ops[0].CardBody
-	if !strings.Contains(body, "**计划**：Gathering evidence") ||
-		!strings.Contains(body, "**计划进行中**：Gather evidence") ||
-		!strings.Contains(body, "**计划待办**：Write summary") ||
-		!strings.Contains(body, "**Task**：Explore · Audit the repository") {
-		t.Fatalf("expected process plan and delegated task rendering, got %#v", ops[0])
+	if !strings.Contains(body, "**Task**：Explore · Audit the repository") {
+		t.Fatalf("expected delegated task rendering, got %#v", ops[0])
 	}
 }
 

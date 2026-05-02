@@ -1010,7 +1010,7 @@ func TestClaudeTranslatorIgnoresRedundantAssistantTextAfterStreamCompletion(t *t
 	}
 }
 
-func TestClaudeTranslatorTodoWriteProjectsToProcessPlan(t *testing.T) {
+func TestClaudeTranslatorTodoWriteProjectsToTurnPlanUpdated(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	_, _ = startClaudeTurn(t, tr, "default")
 
@@ -1054,14 +1054,17 @@ func TestClaudeTranslatorTodoWriteProjectsToProcessPlan(t *testing.T) {
 		},
 	})
 	if len(completed.Events) != 1 {
-		t.Fatalf("expected one process plan completion event, got %#v", completed.Events)
+		t.Fatalf("expected one turn plan updated event, got %#v", completed.Events)
 	}
 	event := completed.Events[0]
-	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "process_plan" || event.Status != "completed" {
+	if event.Kind != agentproto.EventTurnPlanUpdated || event.ThreadID == "" || event.TurnID == "" {
 		t.Fatalf("unexpected TodoWrite projection: %#v", event)
 	}
-	if snapshot, ok := event.Metadata["planSnapshot"].(map[string]any); !ok || snapshot == nil {
-		t.Fatalf("expected plan snapshot metadata, got %#v", event.Metadata)
+	if event.PlanSnapshot == nil || len(event.PlanSnapshot.Steps) != 2 {
+		t.Fatalf("expected plan snapshot payload, got %#v", event)
+	}
+	if event.PlanSnapshot.Explanation != "Gathering evidence" {
+		t.Fatalf("expected in-progress active form explanation, got %#v", event.PlanSnapshot)
 	}
 }
 

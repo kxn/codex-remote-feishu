@@ -420,40 +420,6 @@ func TestWebSearchProgressQuietVerbositySuppressesCard(t *testing.T) {
 	}
 }
 
-func TestProcessPlanProgressNormalVerbosityEmitsStructuredBlock(t *testing.T) {
-	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityNormal
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "做计划", "turn-1")
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "plan-1",
-		ItemKind: "process_plan",
-		Status:   "completed",
-		Metadata: map[string]any{
-			"planSnapshot": map[string]any{
-				"explanation": "Gathering evidence",
-				"steps": []any{
-					map[string]any{"step": "Gather evidence", "status": "in_progress"},
-					map[string]any{"step": "Write summary", "status": "pending"},
-				},
-			},
-		},
-	})
-	if len(events) != 1 || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected process plan progress card, got %#v", events)
-	}
-	progress := events[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "process_plan" || len(progress.Blocks[0].Rows) != 3 {
-		t.Fatalf("expected structured process plan block, got %#v", progress.Blocks)
-	}
-}
-
 func TestDelegatedTaskProgressNormalVerbosityEmitsEntry(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

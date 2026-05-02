@@ -30,6 +30,18 @@ func (t *Translator) hiddenClaudeToolLifecycleEvent(tool *toolState, itemKind st
 		return agentproto.Event{}, false
 	}
 	switch strings.TrimSpace(tool.Name) {
+	case "TodoWrite":
+		snapshot := buildClaudeTodoPlanSnapshot(tool.Input)
+		if snapshot == nil {
+			return agentproto.Event{}, false
+		}
+		return agentproto.Event{
+			Kind:         agentproto.EventTurnPlanUpdated,
+			CommandID:    t.activeTurn.CommandID,
+			ThreadID:     t.activeTurn.ThreadID,
+			TurnID:       t.activeTurn.TurnID,
+			PlanSnapshot: snapshot,
+		}, true
 	case "TaskOutput":
 		parent := t.delegatedTaskParent(tool)
 		if parent == nil {

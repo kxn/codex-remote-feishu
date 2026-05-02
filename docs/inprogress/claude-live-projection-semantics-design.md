@@ -53,7 +53,6 @@ Claude/Cloud 路径的用户可见输出，只允许落到三种面：
 
 - `command_execution`
 - `web_search`
-- `process_plan`
 - `delegated_task`
 
 那么 turn 完成时不允许再把它回落成“工具 X 返回了 ...”这种普通文本说明。
@@ -109,7 +108,7 @@ final message 只承载 assistant 的最终回答正文。
 
 产品上必须把名字都叫 “Plan” 的东西拆成三个独立对象。
 
-### 4.1 `process_plan`
+### 4.1 `current_plan_snapshot`
 
 来源：
 
@@ -121,7 +120,7 @@ final message 只承载 assistant 的最终回答正文。
 
 展示位置：
 
-- 过程卡中
+- 独立 `Plan` 卡
 
 生命周期：
 
@@ -132,6 +131,7 @@ final message 只承载 assistant 的最终回答正文。
 
 - 不得升级成 turn 结束后的提案计划卡
 - 不得带继续执行/新上下文执行之类 turn-end 动作
+- 复用现有 `turn.plan.updated` / `PlanUpdate` 展示 owner，但语义仍然不是 turn-end proposal
 
 ### 4.2 `approval_plan`
 
@@ -157,7 +157,7 @@ final message 只承载 assistant 的最终回答正文。
 
 严格限制：
 
-- 不得等同于 `process_plan`
+- 不得等同于 `current_plan_snapshot`
 - 不得等同于 `turn_end_plan_proposal`
 - 不得因为原始数据看起来像 assistant text，就自动当 final message
 
@@ -189,9 +189,9 @@ final message 只承载 assistant 的最终回答正文。
 
 - `TodoWrite -> turn_end_plan_proposal`
 - `TodoWrite -> approval_plan`
-- `approval_plan -> process_plan`
+- `approval_plan -> current_plan_snapshot`
 - `approval_plan -> turn_end_plan_proposal`
-- `turn_end_plan_proposal -> process_plan`
+- `turn_end_plan_proposal -> current_plan_snapshot`
 
 它们属于同一命名家族，但不是同一个产品对象。
 
@@ -254,7 +254,7 @@ final message 只承载 assistant 的最终回答正文。
 截至 `2026-05-01`，当前实现已经落地：
 
 - `Task -> delegated_task`
-- `TodoWrite -> process_plan`
+- `TodoWrite -> current_plan_snapshot`
 - `Bash -> command_execution`
 - `WebSearch/WebFetch/ToolSearch -> web_search`
 - `Edit/Write/NotebookEdit -> file_change`
@@ -265,9 +265,9 @@ final message 只承载 assistant 的最终回答正文。
 - `TaskOutput` / `TaskStop` 继续隐藏，不单独可见
 - `TaskStop` 已通过父 `Task` 的隐藏 lifecycle 驱动 `delegated_task.completed|failed`
 - `TaskOutput` 已通过父 `Task` 的隐藏 delta 输入驱动同一条 `delegated_task`，但不新增可见行
-- `process_plan` 走过程卡内 block owner，不再复用独立 `turn.plan.updated` 卡
+- `TodoWrite` 直接复用独立 `turn.plan.updated` / `PlanUpdate` owner
 - `delegated_task` 走单行过程项 owner
-- `command_execution` / `web_search` / `process_plan` / `delegated_task` / `file_change` 完成后不再默认回落成普通文本
+- `command_execution` / `web_search` / `delegated_task` / `file_change` 完成后不再默认回落成普通文本
 
 ## 6. Tool 家族的产品映射
 
@@ -344,11 +344,11 @@ final message 只承载 assistant 的最终回答正文。
 
 | Native carrier | 产品对象 | 用户可见面 |
 | --- | --- | --- |
-| `TodoWrite` | `process_plan` | 过程卡中的 Plan 行 |
+| `TodoWrite` | `current_plan_snapshot` | 独立 `Plan` 卡 |
 
 规则：
 
-- 只模拟 Codex 过程中的 Plan
+- 直接复用现有 Codex `turn.plan.updated` / `PlanUpdate` 展示 owner
 - latest snapshot 覆盖
 - 与 turn-end proposal plan 没关系
 
@@ -379,7 +379,7 @@ final message 只承载 assistant 的最终回答正文。
 
 只能更新同一条 `Task` 行，不能新增新行。
 
-### 7.2 `process_plan`
+### 7.2 `current_plan_snapshot`
 
 同一 turn 内多次 `TodoWrite`：
 
