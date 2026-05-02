@@ -19,6 +19,7 @@ const (
 	ClaudeAuthTokenEnv         = "ANTHROPIC_AUTH_TOKEN"
 	ClaudeModelEnv             = "ANTHROPIC_MODEL"
 	ClaudeDefaultHaikuModelEnv = "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+	ClaudeEffortLevelEnv       = "CLAUDE_CODE_EFFORT_LEVEL"
 	ClaudeRuntimeProfileIDEnv  = "CODEX_REMOTE_CLAUDE_PROFILE_ID"
 )
 

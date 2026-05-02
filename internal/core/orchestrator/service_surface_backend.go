@@ -31,18 +31,25 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 	surface.ClaudeProfileID = contract.ClaudeProfileID
 }
 
-func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) state.HeadlessLaunchBackendContract {
+func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) state.HeadlessLaunchContract {
 	return state.HeadlessLaunchContractFromSurface(surface)
 }
 
-func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, contract state.HeadlessLaunchBackendContract) {
+func (s *Service) headlessLaunchContractWithOverride(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) state.HeadlessLaunchContract {
+	contract := s.headlessLaunchContract(surface)
+	contract.ClaudeReasoningEffort = override.ReasoningEffort
+	return state.NormalizeHeadlessLaunchContract(contract)
+}
+
+func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, contract state.HeadlessLaunchContract) {
 	if command == nil {
 		return
 	}
-	contract = state.NormalizeHeadlessLaunchBackendContract(contract)
+	contract = state.NormalizeHeadlessLaunchContract(contract)
 	command.Backend = contract.Backend
 	command.CodexProviderID = contract.CodexProviderID
 	command.ClaudeProfileID = contract.ClaudeProfileID
+	command.ClaudeReasoningEffort = contract.ClaudeReasoningEffort
 }
 
 func (s *Service) surfaceModeAlias(surface *state.SurfaceConsoleRecord) string {

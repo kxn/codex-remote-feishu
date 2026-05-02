@@ -277,11 +277,15 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 	}
 
 	queueID := surface.QueuedQueueItemIDs[0]
-	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	item := surface.QueueItems[queueID]
 	if item == nil || item.Status != state.QueueItemQueued {
+		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 		return nil
 	}
+	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, item.FrozenCWD); restarting {
+		return events
+	}
+	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	item.Status = state.QueueItemDispatching
 	surface.ActiveQueueItemID = item.ID
 	s.turns.pendingRemote[inst.InstanceID] = &remoteTurnBinding{
@@ -302,13 +306,30 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 	}
 	originMessageID := firstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)
 
-	command := &agentproto.Command{
+	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
+		QueueItemID: item.ID,
+		Status:      string(item.Status),
+		QueueOff:    true,
+	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, true)
+	events = append(events, eventcontract.Event{
+		Kind:             eventcontract.KindAgentCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Command:          s.promptSendCommandFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID),
+	})
+	return events
+}
+
+func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) *agentproto.Command {
+	if surface == nil || item == nil {
+		return nil
+	}
+	return &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
 			Surface:   surface.SurfaceSessionID,
-			UserID:    queuedItemActorUserID(item, surface),
+			UserID:    strings.TrimSpace(actorUserID),
 			ChatID:    surface.ChatID,
-			MessageID: originMessageID,
+			MessageID: strings.TrimSpace(originMessageID),
 		},
 		Target: agentproto.Target{
 			ExecutionMode:        item.FrozenExecutionMode,
@@ -329,18 +350,6 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 			PlanMode:        string(state.NormalizePlanModeSetting(item.FrozenPlanMode)),
 		},
 	}
-
-	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
-		QueueItemID: item.ID,
-		Status:      string(item.Status),
-		QueueOff:    true,
-	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, true)
-	events = append(events, eventcontract.Event{
-		Kind:             eventcontract.KindAgentCommand,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		Command:          command,
-	})
-	return events
 }
 
 func queuedItemActorUserID(item *state.QueueItemRecord, surface *state.SurfaceConsoleRecord) string {

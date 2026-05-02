@@ -55,7 +55,7 @@ func NormalizeClaudeProfileRecord(value ClaudeProfileRecord) ClaudeProfileRecord
 }
 
 func NormalizeClaudeWorkspaceProfileSnapshotRecord(value ClaudeWorkspaceProfileSnapshotRecord) ClaudeWorkspaceProfileSnapshotRecord {
-	value.ReasoningEffort = strings.TrimSpace(strings.ToLower(value.ReasoningEffort))
+	value.ReasoningEffort = NormalizeReasoningEffort(value.ReasoningEffort)
 	value.AccessMode = agentproto.NormalizeAccessMode(value.AccessMode)
 	value.PlanMode = NormalizePlanModeSetting(value.PlanMode)
 	if ClaudeWorkspaceProfileSnapshotRecordEmpty(value) {

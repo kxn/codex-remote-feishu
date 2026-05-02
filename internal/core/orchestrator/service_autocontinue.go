@@ -256,6 +256,9 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	if surface == nil || inst == nil || episode == nil {
 		return nil
 	}
+	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, episode.FrozenOverride, episode.FrozenCWD); restarting {
+		return events
+	}
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
 	item := &state.QueueItemRecord{
@@ -302,39 +305,12 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	episode.State = state.AutoContinueEpisodeRunning
 	episode.PendingDueAt = time.Time{}
 	episode.CurrentAttemptOutputSeen = false
-	command := &agentproto.Command{
-		Kind: agentproto.CommandPromptSend,
-		Origin: agentproto.Origin{
-			Surface:   surface.SurfaceSessionID,
-			UserID:    surface.ActorUserID,
-			ChatID:    surface.ChatID,
-			MessageID: episode.RootReplyToMessageID,
-		},
-		Target: agentproto.Target{
-			ExecutionMode:        item.FrozenExecutionMode,
-			SourceThreadID:       item.FrozenSourceThreadID,
-			SurfaceBindingPolicy: item.FrozenSurfaceBindingPolicy,
-			ThreadID:             item.FrozenThreadID,
-			CWD:                  item.FrozenCWD,
-			CreateThreadIfMissing: item.FrozenExecutionMode == agentproto.PromptExecutionModeStartNew ||
-				(item.FrozenExecutionMode == "" && item.FrozenThreadID == ""),
-		},
-		Prompt: agentproto.Prompt{
-			Inputs: item.Inputs,
-		},
-		Overrides: agentproto.PromptOverrides{
-			Model:           item.FrozenOverride.Model,
-			ReasoningEffort: item.FrozenOverride.ReasoningEffort,
-			AccessMode:      item.FrozenOverride.AccessMode,
-			PlanMode:        string(state.NormalizePlanModeSetting(item.FrozenPlanMode)),
-		},
-	}
 	return []eventcontract.Event{
 		s.autoContinueStatusCardEvent(surface, episode),
 		{
 			Kind:             eventcontract.KindAgentCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
-			Command:          command,
+			Command:          s.promptSendCommandFromQueueItem(surface, item, surface.ActorUserID, episode.RootReplyToMessageID),
 		},
 	}
 }

@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-05-01`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。
+> Updated: `2026-05-02`
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例。
 
 ## 1. 文档定位
 
@@ -1044,6 +1044,14 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 2. backend 切换优先
 3. 会话不继承
 4. live 参数可按各 backend 自己的快照语义重新恢复
+
+当前已落地的实现补充：
+
+1. Claude `/reasoning` 继续保留 Codex 风格的 next-turn 语义：当前 turn 与已冻结 queue/autocontinue/review apply 不回改，新入队 turn 按当时 surface override 冻结 reasoning。
+2. Claude headless 真正 dispatch 前，会用该 frozen reasoning 扩展出 `HeadlessLaunchContract{Backend, ClaudeProfileID, ClaudeReasoningEffort}`，并与 wrapper hello 上报的 observed runtime contract 比较。
+3. 若合同不一致，orchestrator 会统一走 `prompt_dispatch_restart`：写入 `PendingHeadless`、daemon `kill + start headless`、实例重新 attach 后自动继续原 dispatch。
+4. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
+5. `/model` 仍不在这条自动 restart contract 内；它继续作为后续独立问题处理。
 
 ### 7.7 `#494` final-output 终态合同（2026-04-28）
 

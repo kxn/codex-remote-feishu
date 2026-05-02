@@ -436,21 +436,22 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
 	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:       instanceID,
-		ThreadID:         view.ThreadID,
-		ThreadTitle:      threadTitle,
-		ThreadName:       threadName,
-		ThreadPreview:    threadPreview,
-		ThreadCWD:        cwd,
-		Backend:          launchContract.Backend,
-		CodexProviderID:  launchContract.CodexProviderID,
-		ClaudeProfileID:  launchContract.ClaudeProfileID,
-		RequestedAt:      s.now(),
-		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
-		Status:           state.HeadlessLaunchStarting,
-		Purpose:          state.HeadlessLaunchPurposeThreadRestore,
-		SourceInstanceID: sourceInstanceID,
-		AutoRestore:      mode == startHeadlessModeHeadlessRestore,
+		InstanceID:            instanceID,
+		ThreadID:              view.ThreadID,
+		ThreadTitle:           threadTitle,
+		ThreadName:            threadName,
+		ThreadPreview:         threadPreview,
+		ThreadCWD:             cwd,
+		Backend:               launchContract.Backend,
+		CodexProviderID:       launchContract.CodexProviderID,
+		ClaudeProfileID:       launchContract.ClaudeProfileID,
+		ClaudeReasoningEffort: launchContract.ClaudeReasoningEffort,
+		RequestedAt:           s.now(),
+		ExpiresAt:             s.now().Add(s.config.HeadlessLaunchWait),
+		Status:                state.HeadlessLaunchStarting,
+		Purpose:               state.HeadlessLaunchPurposeThreadRestore,
+		SourceInstanceID:      sourceInstanceID,
+		AutoRestore:           mode == startHeadlessModeHeadlessRestore,
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	if mode == startHeadlessModeDefault {

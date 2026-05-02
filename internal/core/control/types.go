@@ -232,17 +232,18 @@ type AttachmentSummary struct {
 }
 
 type PendingHeadlessSummary struct {
-	InstanceID      string
-	ThreadID        string
-	ThreadTitle     string
-	ThreadCWD       string
-	Backend         agentproto.Backend
-	CodexProviderID string
-	ClaudeProfileID string
-	Status          string
-	PID             int
-	ExpiresAt       time.Time
-	RequestedAt     time.Time
+	InstanceID            string
+	ThreadID              string
+	ThreadTitle           string
+	ThreadCWD             string
+	Backend               agentproto.Backend
+	CodexProviderID       string
+	ClaudeProfileID       string
+	ClaudeReasoningEffort string
+	Status                string
+	PID                   int
+	ExpiresAt             time.Time
+	RequestedAt           time.Time
 }
 
 type PromptRouteSummary struct {
@@ -623,26 +624,27 @@ const (
 )
 
 type DaemonCommand struct {
-	Kind             DaemonCommandKind
-	GatewayID        string
-	SurfaceSessionID string
-	SourceMessageID  string
-	FromCardAction   bool
-	PickerID         string
-	OptionID         string
-	InstanceID       string
-	ThreadID         string
-	ThreadTitle      string
-	ThreadCWD        string
-	Backend          agentproto.Backend
-	CodexProviderID  string
-	ClaudeProfileID  string
-	WorkspaceKey     string
-	AutoRestore      bool
-	Text             string
-	LocalPath        string
-	RepoURL          string
-	RefName          string
-	BranchName       string
-	DirectoryName    string
+	Kind                  DaemonCommandKind
+	GatewayID             string
+	SurfaceSessionID      string
+	SourceMessageID       string
+	FromCardAction        bool
+	PickerID              string
+	OptionID              string
+	InstanceID            string
+	ThreadID              string
+	ThreadTitle           string
+	ThreadCWD             string
+	Backend               agentproto.Backend
+	CodexProviderID       string
+	ClaudeProfileID       string
+	ClaudeReasoningEffort string
+	WorkspaceKey          string
+	AutoRestore           bool
+	Text                  string
+	LocalPath             string
+	RepoURL               string
+	RefName               string
+	BranchName            string
+	DirectoryName         string
 }

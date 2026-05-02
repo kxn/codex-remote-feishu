@@ -48,30 +48,31 @@ type Config struct {
 	Args            []string
 	ConfigPath      string
 
-	InstanceID           string
-	DisplayName          string
-	WorkspaceRoot        string
-	WorkspaceKey         string
-	ShortName            string
-	Backend              agentproto.Backend
-	CodexProviderID      string
-	ClaudeProfileID      string
-	ResumeThreadID       string
-	Source               string
-	Managed              bool
-	Lifetime             string
-	ParentPID            int
-	Version              string
-	Branch               string
-	BuildFingerprint     string
-	BinaryPath           string
-	ChildProxyEnv        []string
-	DaemonBinaryPath     string
-	DaemonUseSystemProxy bool
-	RuntimePaths         relayruntime.Paths
-	DebugRelayFlow       bool
-	DebugRelayRaw        bool
-	RawLogPath           string
+	InstanceID            string
+	DisplayName           string
+	WorkspaceRoot         string
+	WorkspaceKey          string
+	ShortName             string
+	Backend               agentproto.Backend
+	CodexProviderID       string
+	ClaudeProfileID       string
+	ClaudeReasoningEffort string
+	ResumeThreadID        string
+	Source                string
+	Managed               bool
+	Lifetime              string
+	ParentPID             int
+	Version               string
+	Branch                string
+	BuildFingerprint      string
+	BinaryPath            string
+	ChildProxyEnv         []string
+	DaemonBinaryPath      string
+	DaemonUseSystemProxy  bool
+	RuntimePaths          relayruntime.Paths
+	DebugRelayFlow        bool
+	DebugRelayRaw         bool
+	RawLogPath            string
 }
 
 func LoadConfig(args []string, version, branch string) (Config, error) {
@@ -134,35 +135,36 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		return Config{}, err
 	}
 	return Config{
-		RelayServerURL:       loaded.RelayServerURL,
-		CodexRealBinary:      loaded.CodexRealBinary,
-		NameMode:             loaded.NameMode,
-		Args:                 args,
-		ConfigPath:           firstNonEmpty(services.ConfigPath, loaded.ConfigPath, paths.ConfigFile),
-		InstanceID:           instanceID,
-		DisplayName:          displayName,
-		WorkspaceRoot:        workspaceRoot,
-		WorkspaceKey:         state.ResolveWorkspaceKey(workspaceRoot),
-		ShortName:            shortName,
-		Backend:              agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
-		CodexProviderID:      state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
-		ClaudeProfileID:      state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
-		ResumeThreadID:       strings.TrimSpace(os.Getenv(config.ResumeThreadIDEnv)),
-		Source:               source,
-		Managed:              managed,
-		Lifetime:             string(lifetime),
-		ParentPID:            parentPID,
-		Version:              firstNonEmpty(strings.TrimSpace(version), "dev"),
-		Branch:               firstNonEmpty(strings.TrimSpace(branch), "dev"),
-		BuildFingerprint:     binaryIdentity.BuildFingerprint,
-		BinaryPath:           binaryIdentity.BinaryPath,
-		ChildProxyEnv:        config.CaptureAndClearProxyEnv(),
-		DaemonBinaryPath:     binaryIdentity.BinaryPath,
-		DaemonUseSystemProxy: services.FeishuUseSystemProxy,
-		RuntimePaths:         paths,
-		DebugRelayFlow:       loaded.DebugRelayFlow || services.DebugRelayFlow,
-		DebugRelayRaw:        loaded.DebugRelayRaw || services.DebugRelayRaw,
-		RawLogPath:           relayruntime.WrapperRawLogFile(paths.LogsDir, os.Getpid()),
+		RelayServerURL:        loaded.RelayServerURL,
+		CodexRealBinary:       loaded.CodexRealBinary,
+		NameMode:              loaded.NameMode,
+		Args:                  args,
+		ConfigPath:            firstNonEmpty(services.ConfigPath, loaded.ConfigPath, paths.ConfigFile),
+		InstanceID:            instanceID,
+		DisplayName:           displayName,
+		WorkspaceRoot:         workspaceRoot,
+		WorkspaceKey:          state.ResolveWorkspaceKey(workspaceRoot),
+		ShortName:             shortName,
+		Backend:               agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
+		CodexProviderID:       state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
+		ClaudeProfileID:       state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
+		ClaudeReasoningEffort: state.NormalizeReasoningEffort(os.Getenv(config.ClaudeEffortLevelEnv)),
+		ResumeThreadID:        strings.TrimSpace(os.Getenv(config.ResumeThreadIDEnv)),
+		Source:                source,
+		Managed:               managed,
+		Lifetime:              string(lifetime),
+		ParentPID:             parentPID,
+		Version:               firstNonEmpty(strings.TrimSpace(version), "dev"),
+		Branch:                firstNonEmpty(strings.TrimSpace(branch), "dev"),
+		BuildFingerprint:      binaryIdentity.BuildFingerprint,
+		BinaryPath:            binaryIdentity.BinaryPath,
+		ChildProxyEnv:         config.CaptureAndClearProxyEnv(),
+		DaemonBinaryPath:      binaryIdentity.BinaryPath,
+		DaemonUseSystemProxy:  services.FeishuUseSystemProxy,
+		RuntimePaths:          paths,
+		DebugRelayFlow:        loaded.DebugRelayFlow || services.DebugRelayFlow,
+		DebugRelayRaw:         loaded.DebugRelayRaw || services.DebugRelayRaw,
+		RawLogPath:            relayruntime.WrapperRawLogFile(paths.LogsDir, os.Getpid()),
 	}, nil
 }
 
@@ -240,21 +242,22 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	client = relayws.NewClient(a.config.RelayServerURL, agentproto.Hello{
 		Protocol: agentproto.WireProtocol,
 		Instance: agentproto.InstanceHello{
-			InstanceID:       a.config.InstanceID,
-			DisplayName:      a.config.DisplayName,
-			WorkspaceRoot:    a.config.WorkspaceRoot,
-			WorkspaceKey:     a.config.WorkspaceKey,
-			ShortName:        a.config.ShortName,
-			Backend:          a.runtime.Backend(),
-			CodexProviderID:  strings.TrimSpace(a.config.CodexProviderID),
-			ClaudeProfileID:  strings.TrimSpace(a.config.ClaudeProfileID),
-			Source:           a.config.Source,
-			Managed:          a.config.Managed,
-			Version:          a.config.Version,
-			Branch:           a.config.Branch,
-			BuildFingerprint: a.config.BuildFingerprint,
-			BinaryPath:       a.config.BinaryPath,
-			PID:              os.Getpid(),
+			InstanceID:            a.config.InstanceID,
+			DisplayName:           a.config.DisplayName,
+			WorkspaceRoot:         a.config.WorkspaceRoot,
+			WorkspaceKey:          a.config.WorkspaceKey,
+			ShortName:             a.config.ShortName,
+			Backend:               a.runtime.Backend(),
+			CodexProviderID:       strings.TrimSpace(a.config.CodexProviderID),
+			ClaudeProfileID:       strings.TrimSpace(a.config.ClaudeProfileID),
+			ClaudeReasoningEffort: strings.TrimSpace(a.config.ClaudeReasoningEffort),
+			Source:                a.config.Source,
+			Managed:               a.config.Managed,
+			Version:               a.config.Version,
+			Branch:                a.config.Branch,
+			BuildFingerprint:      a.config.BuildFingerprint,
+			BinaryPath:            a.config.BinaryPath,
+			PID:                   os.Getpid(),
 		},
 		Capabilities:         a.runtime.Capabilities(),
 		CapabilitiesDeclared: true,

@@ -159,16 +159,17 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	}
 	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:       instanceID,
-		ThreadCWD:        workspaceKey,
-		Backend:          launchContract.Backend,
-		CodexProviderID:  launchContract.CodexProviderID,
-		ClaudeProfileID:  launchContract.ClaudeProfileID,
-		RequestedAt:      s.now(),
-		ExpiresAt:        s.now().Add(s.config.HeadlessLaunchWait),
-		Status:           state.HeadlessLaunchStarting,
-		Purpose:          state.HeadlessLaunchPurposeFreshWorkspace,
-		PrepareNewThread: prepareNewThread,
+		InstanceID:            instanceID,
+		ThreadCWD:             workspaceKey,
+		Backend:               launchContract.Backend,
+		CodexProviderID:       launchContract.CodexProviderID,
+		ClaudeProfileID:       launchContract.ClaudeProfileID,
+		ClaudeReasoningEffort: launchContract.ClaudeReasoningEffort,
+		RequestedAt:           s.now(),
+		ExpiresAt:             s.now().Add(s.config.HeadlessLaunchWait),
+		Status:                state.HeadlessLaunchStarting,
+		Purpose:               state.HeadlessLaunchPurposeFreshWorkspace,
+		PrepareNewThread:      prepareNewThread,
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	noticeTitle := "正在接入工作区"

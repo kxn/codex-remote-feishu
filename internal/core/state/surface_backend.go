@@ -19,10 +19,11 @@ type InstanceBackendContract struct {
 	ClaudeProfileID string
 }
 
-type HeadlessLaunchBackendContract struct {
-	Backend         agentproto.Backend
-	CodexProviderID string
-	ClaudeProfileID string
+type HeadlessLaunchContract struct {
+	Backend               agentproto.Backend
+	CodexProviderID       string
+	ClaudeProfileID       string
+	ClaudeReasoningEffort string
 }
 
 func NormalizeHeadlessBackend(backend agentproto.Backend) agentproto.Backend {
@@ -82,7 +83,7 @@ func ObservedInstanceBackendContract(inst *InstanceRecord) InstanceBackendContra
 	})
 }
 
-func NormalizeHeadlessLaunchBackendContract(contract HeadlessLaunchBackendContract) HeadlessLaunchBackendContract {
+func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLaunchContract {
 	contract.Backend = NormalizeHeadlessBackend(contract.Backend)
 	if contract.Backend == agentproto.BackendCodex {
 		contract.CodexProviderID = NormalizeCodexProviderID(contract.CodexProviderID)
@@ -91,29 +92,49 @@ func NormalizeHeadlessLaunchBackendContract(contract HeadlessLaunchBackendContra
 	}
 	if contract.Backend == agentproto.BackendClaude {
 		contract.ClaudeProfileID = NormalizeClaudeProfileID(contract.ClaudeProfileID)
+		contract.ClaudeReasoningEffort = NormalizeReasoningEffort(contract.ClaudeReasoningEffort)
 	} else {
 		contract.ClaudeProfileID = ""
+		contract.ClaudeReasoningEffort = ""
 	}
 	return contract
 }
 
-func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLaunchBackendContract {
+func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLaunchContract {
 	desired := SurfaceDesiredBackendContract(surface)
-	return NormalizeHeadlessLaunchBackendContract(HeadlessLaunchBackendContract{
-		Backend:         desired.Backend,
-		CodexProviderID: EffectiveSurfaceCodexProviderID(desired),
-		ClaudeProfileID: EffectiveSurfaceClaudeProfileID(desired),
+	reasoning := ""
+	if surface != nil {
+		reasoning = surface.PromptOverride.ReasoningEffort
+	}
+	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
+		Backend:               desired.Backend,
+		CodexProviderID:       EffectiveSurfaceCodexProviderID(desired),
+		ClaudeProfileID:       EffectiveSurfaceClaudeProfileID(desired),
+		ClaudeReasoningEffort: reasoning,
 	})
 }
 
-func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLaunchBackendContract {
+func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLaunchContract {
 	if pending == nil {
-		return NormalizeHeadlessLaunchBackendContract(HeadlessLaunchBackendContract{})
+		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
 	}
-	return NormalizeHeadlessLaunchBackendContract(HeadlessLaunchBackendContract{
-		Backend:         pending.Backend,
-		CodexProviderID: pending.CodexProviderID,
-		ClaudeProfileID: pending.ClaudeProfileID,
+	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
+		Backend:               pending.Backend,
+		CodexProviderID:       pending.CodexProviderID,
+		ClaudeProfileID:       pending.ClaudeProfileID,
+		ClaudeReasoningEffort: pending.ClaudeReasoningEffort,
+	})
+}
+
+func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchContract {
+	if inst == nil {
+		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
+	}
+	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
+		Backend:               inst.Backend,
+		CodexProviderID:       inst.CodexProviderID,
+		ClaudeProfileID:       inst.ClaudeProfileID,
+		ClaudeReasoningEffort: inst.ClaudeReasoningEffort,
 	})
 }
 

@@ -63,13 +63,14 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	}
 
 	app.startManagedHeadless(control.DaemonCommand{
-		Kind:             control.DaemonCommandStartHeadless,
-		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-claude-profile",
-		ThreadID:         "thread-claude",
-		ThreadCWD:        "/data/dl/repo",
-		Backend:          agentproto.BackendClaude,
-		ClaudeProfileID:  "devseek",
+		Kind:                  control.DaemonCommandStartHeadless,
+		SurfaceSessionID:      "surface-1",
+		InstanceID:            "inst-claude-profile",
+		ThreadID:              "thread-claude",
+		ThreadCWD:             "/data/dl/repo",
+		Backend:               agentproto.BackendClaude,
+		ClaudeProfileID:       "devseek",
+		ClaudeReasoningEffort: "high",
 	})
 
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
@@ -87,7 +88,8 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	if !containsEnvEntry(captured.Env, config.ClaudeBaseURLEnv+"=https://proxy.internal/v1") ||
 		!containsEnvEntry(captured.Env, config.ClaudeAuthTokenEnv+"=profile-token") ||
 		!containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=mimo-v2.5-pro") ||
-		!containsEnvEntry(captured.Env, config.ClaudeDefaultHaikuModelEnv+"=mimo-v2.5-haiku") {
+		!containsEnvEntry(captured.Env, config.ClaudeDefaultHaikuModelEnv+"=mimo-v2.5-haiku") ||
+		!containsEnvEntry(captured.Env, config.ClaudeEffortLevelEnv+"=high") {
 		t.Fatalf("expected custom profile env overrides, got %#v", captured.Env)
 	}
 	if containsEnvEntry(captured.Env, config.ClaudeAuthTokenEnv+"=old-token") ||

@@ -716,13 +716,22 @@ func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T
 		MessageID:        "om-review-final-1",
 	})
 
-	if len(events) != 2 {
-		t.Fatalf("expected notice + prompt send command, got %#v", events)
+	if len(events) < 2 {
+		t.Fatalf("expected review apply to enqueue and dispatch work, got %#v", events)
 	}
-	if events[1].Command == nil || events[1].Command.Kind != agentproto.CommandPromptSend {
+	if events[0].Notice == nil || events[0].Notice.Code != "review_apply_requested" {
+		t.Fatalf("expected review apply notice first, got %#v", events)
+	}
+	var command *agentproto.Command
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			command = event.Command
+			break
+		}
+	}
+	if command == nil {
 		t.Fatalf("expected prompt send command, got %#v", events)
 	}
-	command := events[1].Command
 	if command.Target.ThreadID != "thread-main" || command.Target.ExecutionMode != agentproto.PromptExecutionModeResumeExisting || command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
 		t.Fatalf("unexpected apply-review target: %#v", command.Target)
 	}

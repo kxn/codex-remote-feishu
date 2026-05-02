@@ -39,21 +39,22 @@ type BinaryIdentity struct {
 }
 
 type InstanceHello struct {
-	InstanceID       string  `json:"instanceId"`
-	DisplayName      string  `json:"displayName,omitempty"`
-	WorkspaceRoot    string  `json:"workspaceRoot,omitempty"`
-	WorkspaceKey     string  `json:"workspaceKey,omitempty"`
-	ShortName        string  `json:"shortName,omitempty"`
-	Backend          Backend `json:"backend,omitempty"`
-	CodexProviderID  string  `json:"codexProviderId,omitempty"`
-	ClaudeProfileID  string  `json:"claudeProfileId,omitempty"`
-	Source           string  `json:"source,omitempty"`
-	Managed          bool    `json:"managed,omitempty"`
-	Version          string  `json:"version,omitempty"`
-	Branch           string  `json:"branch,omitempty"`
-	BuildFingerprint string  `json:"buildFingerprint,omitempty"`
-	BinaryPath       string  `json:"binaryPath,omitempty"`
-	PID              int     `json:"pid,omitempty"`
+	InstanceID            string  `json:"instanceId"`
+	DisplayName           string  `json:"displayName,omitempty"`
+	WorkspaceRoot         string  `json:"workspaceRoot,omitempty"`
+	WorkspaceKey          string  `json:"workspaceKey,omitempty"`
+	ShortName             string  `json:"shortName,omitempty"`
+	Backend               Backend `json:"backend,omitempty"`
+	CodexProviderID       string  `json:"codexProviderId,omitempty"`
+	ClaudeProfileID       string  `json:"claudeProfileId,omitempty"`
+	ClaudeReasoningEffort string  `json:"claudeReasoningEffort,omitempty"`
+	Source                string  `json:"source,omitempty"`
+	Managed               bool    `json:"managed,omitempty"`
+	Version               string  `json:"version,omitempty"`
+	Branch                string  `json:"branch,omitempty"`
+	BuildFingerprint      string  `json:"buildFingerprint,omitempty"`
+	BinaryPath            string  `json:"binaryPath,omitempty"`
+	PID                   int     `json:"pid,omitempty"`
 }
 
 type Hello struct {

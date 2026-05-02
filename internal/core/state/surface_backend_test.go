@@ -59,3 +59,32 @@ func TestSurfaceDesiredBackendContractPreservesCrossBackendStoredIDs(t *testing.
 		t.Fatalf("expected active claude profile projection, got %q", got)
 	}
 }
+
+func TestHeadlessLaunchContractCarriesClaudeReasoningEffort(t *testing.T) {
+	surface := &SurfaceConsoleRecord{
+		ProductMode:     ProductModeNormal,
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "devseek",
+		PromptOverride:  ModelConfigRecord{ReasoningEffort: " HIGH "},
+	}
+	contract := HeadlessLaunchContractFromSurface(surface)
+	if contract.Backend != agentproto.BackendClaude {
+		t.Fatalf("unexpected backend: %#v", contract)
+	}
+	if contract.ClaudeProfileID != "devseek" {
+		t.Fatalf("unexpected claude profile: %#v", contract)
+	}
+	if contract.ClaudeReasoningEffort != "high" {
+		t.Fatalf("unexpected reasoning effort: %#v", contract)
+	}
+
+	inst := &InstanceRecord{
+		Backend:               agentproto.BackendClaude,
+		ClaudeProfileID:       "devseek",
+		ClaudeReasoningEffort: " HIGH ",
+	}
+	observed := HeadlessLaunchContractFromInstance(inst)
+	if observed.ClaudeReasoningEffort != "high" {
+		t.Fatalf("unexpected observed reasoning effort: %#v", observed)
+	}
+}

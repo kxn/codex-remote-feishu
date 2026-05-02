@@ -35,6 +35,52 @@ func (s *Service) buildHeadlessWorkspaceContinuation(surface *state.SurfaceConso
 	return continuation
 }
 
+func (s *Service) buildCurrentHeadlessResumeAttempt(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) SurfaceResumeAttempt {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	backend = agentproto.NormalizeBackend(backend)
+	if surface == nil || workspaceKey == "" || backend == "" {
+		return SurfaceResumeAttempt{}
+	}
+
+	attempt := SurfaceResumeAttempt{
+		WorkspaceKey:     workspaceKey,
+		Backend:          backend,
+		PrepareNewThread: surface.RouteMode == state.RouteModeNewThreadReady,
+	}
+	selectedThreadID := strings.TrimSpace(surface.SelectedThreadID)
+	if selectedThreadID == "" || !s.surfaceOwnsThread(surface, selectedThreadID) {
+		return attempt
+	}
+
+	attempt.ThreadID = selectedThreadID
+	attempt.ResumeHeadless = true
+
+	if view := s.mergedThreadViewForBackend(surface, selectedThreadID, backend, true); view != nil {
+		attempt.ThreadTitle = displayThreadTitle(view.Inst, view.Thread, selectedThreadID)
+		attempt.ThreadCWD = threadCWD(view)
+	}
+	if attempt.ThreadTitle == "" && surface.LastSelection != nil &&
+		strings.TrimSpace(surface.LastSelection.ThreadID) == selectedThreadID {
+		attempt.ThreadTitle = strings.TrimSpace(surface.LastSelection.Title)
+	}
+	if attempt.ThreadCWD == "" {
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		if inst != nil {
+			thread := inst.Threads[selectedThreadID]
+			if thread != nil {
+				attempt.ThreadCWD = strings.TrimSpace(thread.CWD)
+				if attempt.ThreadTitle == "" {
+					attempt.ThreadTitle = displayThreadTitle(inst, thread, selectedThreadID)
+				}
+			}
+		}
+	}
+	if attempt.ThreadCWD == "" {
+		attempt.ThreadCWD = workspaceKey
+	}
+	return attempt
+}
+
 func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend) headlessContractSwitchContinuation {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	backend = agentproto.NormalizeBackend(backend)
@@ -43,15 +89,11 @@ func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.Surface
 	}
 
 	continuation := headlessContractSwitchContinuation{
-		Attempt: SurfaceResumeAttempt{
-			WorkspaceKey:     workspaceKey,
-			Backend:          backend,
-			PrepareNewThread: surface.RouteMode == state.RouteModeNewThreadReady,
-		},
+		Attempt: s.buildCurrentHeadlessResumeAttempt(surface, workspaceKey, backend),
 	}
 
-	selectedThreadID := strings.TrimSpace(surface.SelectedThreadID)
-	if selectedThreadID == "" || !s.surfaceOwnsThread(surface, selectedThreadID) {
+	selectedThreadID := strings.TrimSpace(continuation.Attempt.ThreadID)
+	if selectedThreadID == "" {
 		if resolution := s.resolveWorkspaceContract(surface, workspaceKey, backend); resolution.Mode == contractResolutionRestartManaged && resolution.RestartInstance != nil {
 			continuation.RestartManagedNow = true
 			continuation.RestartInstanceID = strings.TrimSpace(resolution.RestartInstance.InstanceID)
@@ -59,41 +101,16 @@ func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.Surface
 		return continuation
 	}
 
-	continuation.Attempt.ThreadID = selectedThreadID
-	continuation.Attempt.ResumeHeadless = true
-
 	if inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]; isHeadlessInstance(inst) && state.EffectiveInstanceBackend(inst) == backend {
 		continuation.RestartManagedNow = true
 		continuation.RestartInstanceID = strings.TrimSpace(inst.InstanceID)
 	}
-
 	if view := s.mergedThreadViewForBackend(surface, selectedThreadID, backend, true); view != nil {
-		continuation.Attempt.ThreadTitle = displayThreadTitle(view.Inst, view.Thread, selectedThreadID)
-		continuation.Attempt.ThreadCWD = threadCWD(view)
 		resolution := s.resolveThreadContract(surface, view, view.CurrentVisible && s.currentVisibleThreadEligible(surface, view.ThreadID), true)
 		if resolution.Mode == contractResolutionRestartManaged && resolution.RestartInstance != nil {
 			continuation.RestartManagedNow = true
 			continuation.RestartInstanceID = strings.TrimSpace(resolution.RestartInstance.InstanceID)
 		}
-	}
-	if continuation.Attempt.ThreadTitle == "" && surface.LastSelection != nil &&
-		strings.TrimSpace(surface.LastSelection.ThreadID) == selectedThreadID {
-		continuation.Attempt.ThreadTitle = strings.TrimSpace(surface.LastSelection.Title)
-	}
-	if continuation.Attempt.ThreadCWD == "" {
-		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-		if inst != nil {
-			thread := inst.Threads[selectedThreadID]
-			if thread != nil {
-				continuation.Attempt.ThreadCWD = strings.TrimSpace(thread.CWD)
-				if continuation.Attempt.ThreadTitle == "" {
-					continuation.Attempt.ThreadTitle = displayThreadTitle(inst, thread, selectedThreadID)
-				}
-			}
-		}
-	}
-	if continuation.Attempt.ThreadCWD == "" {
-		continuation.Attempt.ThreadCWD = workspaceKey
 	}
 	return continuation
 }

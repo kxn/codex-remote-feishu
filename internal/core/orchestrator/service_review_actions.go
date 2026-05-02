@@ -56,7 +56,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 	promptText := reviewApplyPromptPrefix + reviewText
 	sourceMessageID := firstNonEmpty(strings.TrimSpace(action.MessageID), strings.TrimSpace(session.SourceMessageID))
 	surface.ReviewSession = nil
-	return []eventcontract.Event{
+	events := []eventcontract.Event{
 		{
 			Kind:             eventcontract.KindNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -67,36 +67,23 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 				ThemeKey: "system",
 			},
 		},
-		{
-			Kind:             eventcontract.KindAgentCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Command: &agentproto.Command{
-				Kind: agentproto.CommandPromptSend,
-				Origin: agentproto.Origin{
-					Surface:   surface.SurfaceSessionID,
-					UserID:    surface.ActorUserID,
-					ChatID:    surface.ChatID,
-					MessageID: sourceMessageID,
-				},
-				Target: agentproto.Target{
-					ExecutionMode:        agentproto.PromptExecutionModeResumeExisting,
-					ThreadID:             parentThreadID,
-					CWD:                  cwd,
-					SurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
-				},
-				Prompt: agentproto.Prompt{
-					Inputs: []agentproto.Input{{
-						Type: agentproto.InputText,
-						Text: promptText,
-					}},
-				},
-				Overrides: agentproto.PromptOverrides{
-					Model:           surface.PromptOverride.Model,
-					ReasoningEffort: surface.PromptOverride.ReasoningEffort,
-					AccessMode:      surface.PromptOverride.AccessMode,
-					PlanMode:        string(state.NormalizePlanModeSetting(surface.PlanMode)),
-				},
-			},
-		},
 	}
+	return append(events, s.enqueueQueueItemWithTarget(
+		surface,
+		sourceMessageID,
+		promptText,
+		nil,
+		[]agentproto.Input{{
+			Type: agentproto.InputText,
+			Text: promptText,
+		}},
+		parentThreadID,
+		cwd,
+		surface.RouteMode,
+		surface.PromptOverride,
+		agentproto.PromptExecutionModeResumeExisting,
+		"",
+		agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		true,
+	)...)
 }

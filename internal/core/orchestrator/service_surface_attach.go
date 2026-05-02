@@ -327,6 +327,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
+	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
+	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		surface.PendingHeadless = nil
 		pendingContract := state.HeadlessLaunchContractFromPending(pending)
@@ -393,4 +396,28 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		},
 	)
 	return events
+}
+
+func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, pending *state.HeadlessLaunchRecord) []eventcontract.Event {
+	if surface == nil || inst == nil || pending == nil {
+		return nil
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.ThreadCWD, inst.WorkspaceKey, inst.WorkspaceRoot))
+	if workspaceKey != "" && !s.claimWorkspace(surface, workspaceKey) {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
+	}
+	if !s.claimInstance(surface, inst.InstanceID) {
+		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, attachSurfaceToKnownThreadDefault)
+	}
+	surface.Backend = state.EffectiveInstanceBackend(inst)
+	surface.AttachedInstanceID = inst.InstanceID
+	surface.PendingHeadless = nil
+	surface.DispatchMode = state.DispatchModeNormal
+	surface.Abandoning = false
+	delete(s.pausedUntil, surface.SurfaceSessionID)
+	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	if isHeadlessInstance(inst) && workspaceKey != "" {
+		s.retargetManagedHeadlessInstance(inst, workspaceKey)
+	}
+	return nil
 }

@@ -185,6 +185,7 @@ type InstanceRecord struct {
 	Backend                 agentproto.Backend
 	CodexProviderID         string
 	ClaudeProfileID         string
+	ClaudeReasoningEffort   string
 	Source                  string
 	Capabilities            agentproto.Capabilities
 	CapabilitiesDeclared    bool
@@ -457,28 +458,30 @@ const (
 type HeadlessLaunchPurpose string
 
 const (
-	HeadlessLaunchPurposeThreadRestore  HeadlessLaunchPurpose = "thread_restore"
-	HeadlessLaunchPurposeFreshWorkspace HeadlessLaunchPurpose = "fresh_workspace"
+	HeadlessLaunchPurposeThreadRestore         HeadlessLaunchPurpose = "thread_restore"
+	HeadlessLaunchPurposeFreshWorkspace        HeadlessLaunchPurpose = "fresh_workspace"
+	HeadlessLaunchPurposePromptDispatchRestart HeadlessLaunchPurpose = "prompt_dispatch_restart"
 )
 
 type HeadlessLaunchRecord struct {
-	InstanceID       string
-	ThreadID         string
-	ThreadTitle      string
-	ThreadCWD        string
-	Backend          agentproto.Backend
-	CodexProviderID  string
-	ClaudeProfileID  string
-	ThreadName       string
-	ThreadPreview    string
-	RequestedAt      time.Time
-	ExpiresAt        time.Time
-	Status           HeadlessLaunchStatus
-	Purpose          HeadlessLaunchPurpose
-	PrepareNewThread bool
-	PID              int
-	SourceInstanceID string
-	AutoRestore      bool
+	InstanceID            string
+	ThreadID              string
+	ThreadTitle           string
+	ThreadCWD             string
+	Backend               agentproto.Backend
+	CodexProviderID       string
+	ClaudeProfileID       string
+	ClaudeReasoningEffort string
+	ThreadName            string
+	ThreadPreview         string
+	RequestedAt           time.Time
+	ExpiresAt             time.Time
+	Status                HeadlessLaunchStatus
+	Purpose               HeadlessLaunchPurpose
+	PrepareNewThread      bool
+	PID                   int
+	SourceInstanceID      string
+	AutoRestore           bool
 }
 
 type SelectionAnnouncementRecord struct {

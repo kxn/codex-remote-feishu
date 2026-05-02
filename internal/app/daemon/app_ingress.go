@@ -485,8 +485,10 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	if backend == agentproto.BackendClaude {
 		inst.ClaudeProfileID = state.NormalizeClaudeProfileID(hello.Instance.ClaudeProfileID)
+		inst.ClaudeReasoningEffort = state.NormalizeReasoningEffort(hello.Instance.ClaudeReasoningEffort)
 	} else {
 		inst.ClaudeProfileID = ""
+		inst.ClaudeReasoningEffort = ""
 	}
 	inst.Source = firstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
 	inst.Capabilities = capabilities
