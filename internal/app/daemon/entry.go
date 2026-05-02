@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
@@ -49,6 +50,16 @@ func RunMain(ctx context.Context, version, branch string) error {
 	if err != nil {
 		return err
 	}
+
+	if err := os.MkdirAll(paths.LogsDir, 0o755); err != nil {
+		return fmt.Errorf("create logs directory: %w", err)
+	}
+	logFile, err := os.OpenFile(paths.DaemonLogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open daemon log file: %w", err)
+	}
+	defer logFile.Close()
+	log.SetOutput(io.MultiWriter(os.Stderr, logFile))
 
 	controller := feishu.NewMultiGatewayController()
 	for _, app := range runtimeGatewayApps(loadedConfig.Config, cfg, paths) {

@@ -249,6 +249,42 @@ func TestRenderSystemdUserUnitPrefersInteractiveShellPATH(t *testing.T) {
 	}
 }
 
+func TestRenderSystemdUserUnitIncludesStandardOutputConfig(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "linux"
+	defer func() { serviceRuntimeGOOS = originalGOOS }()
+
+	baseDir := filepath.Join(string(filepath.Separator), "tmp", "codex-remote")
+	state := InstallState{
+		BaseDir:         baseDir,
+		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json"),
+		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		InstalledBinary: filepath.Join(baseDir, "bin", "codex-remote"),
+		ServiceManager:  ServiceManagerSystemdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	unitText, err := renderSystemdUserUnit(state)
+	if err != nil {
+		t.Fatalf("renderSystemdUserUnit: %v", err)
+	}
+
+	wantLogPath := normalizeServicePathValue(filepath.Join(baseDir, ".local", "share", "codex-remote", "logs", "codex-remote-relayd.log"))
+	if !strings.Contains(unitText, "StandardOutput=append:"+wantLogPath) {
+		t.Fatalf("unit missing StandardOutput=append:<logPath>: %s", unitText)
+	}
+	if !strings.Contains(unitText, "StandardError=append:"+wantLogPath) {
+		t.Fatalf("unit missing StandardError=append:<logPath>: %s", unitText)
+	}
+	if !strings.Contains(unitText, "Restart=on-failure") {
+		t.Fatalf("unit missing Restart=on-failure: %s", unitText)
+	}
+}
+
 func TestRunServiceStatusUsesWorkspaceBindingWhenStatePathOmitted(t *testing.T) {
 	repoRoot := t.TempDir()
 	baseDir := t.TempDir()

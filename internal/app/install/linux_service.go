@@ -107,6 +107,8 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 	configHome := normalizeServicePathValue(layout.ConfigHome)
 	dataHome := normalizeServicePathValue(layout.DataHome)
 	stateHome := normalizeServicePathValue(layout.StateHome)
+	logPath := normalizeServicePathValue(filepath.Join(layout.StateDir, "logs", "codex-remote-relayd.log"))
+	serviceLogPath := systemdEscapeValue(logPath)
 	description := "codex-remote service"
 	if !isDefaultInstance(state.InstanceID) {
 		description = fmt.Sprintf("codex-remote service (%s)", state.InstanceID)
@@ -128,6 +130,8 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(stateHome),
 		"Restart=on-failure",
 		"RestartSec=2s",
+		"StandardOutput=append:" + serviceLogPath,
+		"StandardError=append:" + serviceLogPath,
 		"",
 		"[Install]",
 		"WantedBy=default.target",
@@ -143,6 +147,11 @@ func installSystemdUserUnit(ctx context.Context, state InstallState) (InstallSta
 	}
 	unitContent, err := renderSystemdUserUnit(state)
 	if err != nil {
+		return InstallState{}, err
+	}
+	layout := installLayoutForInstance(state.BaseDir, state.InstanceID)
+	logsDir := filepath.Join(layout.StateDir, "logs")
+	if err := serviceMkdirAll(logsDir, 0o755); err != nil {
 		return InstallState{}, err
 	}
 	if err := serviceMkdirAll(filepath.Dir(state.ServiceUnitPath), 0o755); err != nil {

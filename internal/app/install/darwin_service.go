@@ -162,6 +162,11 @@ func installLaunchdUserPlist(ctx context.Context, state InstallState) (InstallSt
 	if err != nil {
 		return InstallState{}, err
 	}
+	layout := installLayoutForInstance(state.BaseDir, state.InstanceID)
+	logsDir := filepath.Join(layout.StateDir, "logs")
+	if err := serviceMkdirAll(logsDir, 0o755); err != nil {
+		return InstallState{}, err
+	}
 	if err := serviceMkdirAll(filepath.Dir(state.ServiceUnitPath), 0o755); err != nil {
 		return InstallState{}, err
 	}
