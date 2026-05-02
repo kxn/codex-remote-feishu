@@ -31,11 +31,12 @@ When any GitHub issue number or URL appears in the conversation:
 - If the issue carries `status:needs-clarification` or equivalent, surface the decision question before shaping or implementation.
 - This rule applies regardless of whether the user explicitly says "按流程" — issue numbers and URLs are the trigger.
 
-## Workspace Cleanliness Rule
+## Workspace Cleanliness Rule (Always On)
 
 For every new repository task in chat (not only GitHub issue workflow):
 
-- Before starting substantive read/edit/build work, check current workspace cleanliness with `git status --short`.
+- Do **not** start any substantive read/edit/build work before checking workspace cleanliness.
+- Check current workspace cleanliness with `git status --short`.
 - If the worktree is clean, proceed normally.
 - If the worktree is not clean, do not silently continue with mixed context:
   - first classify existing local changes as either `same-task` or `different-task`
@@ -227,6 +228,8 @@ Execution floor:
 
 ## Web Design Baseline
 
+When modifying any file in the trigger area below, do **not** merge until the page satisfies every baseline requirement listed. Violating any single requirement is a merge-blocker.
+
 For web page design/layout/copy/interaction changes, follow:
 
 - `docs/general/web-design-guidelines.md`
@@ -250,6 +253,8 @@ Baseline requirements:
 
 ## Feishu Card Constraints Baseline
 
+When touching Feishu card payloads, message-card patching, CardKit streaming, or card interaction pacing in the trigger area below, do **not** merge until the design has been checked against official hard limits with an explicit size budget and degradation path. Cards that silently exceed platform limits cannot ship.
+
 For any design or implementation that touches Feishu cards, message-card patching, CardKit streaming, or card interaction pacing, consult:
 
 - `docs/general/feishu-card-api-constraints.md`
@@ -269,6 +274,8 @@ Baseline requirements:
 - when relying on a numeric Feishu platform limit in code or product design, re-check the latest official docs and sync `docs/general/feishu-card-api-constraints.md` if the baseline changed
 
 ## Feishu Menu Card Baseline
+
+When touching menu card logic in the trigger area below, do **not** merge until every new or changed menu item includes contract mapping (`keep` / `enter_owner` / `enter_terminal`), handoff behavior, and regression tests for menu handoff + inline replacement.
 
 For any design or implementation that touches Feishu command menu cards, launcher-to-business handoff, or menu callback replace/append behavior, consult:
 
@@ -293,6 +300,8 @@ Baseline requirements:
 
 ## Feishu Card Content Context Baseline
 
+When touching card text construction in the trigger area below, do **not** merge until all dynamic text stays out of raw markdown and regression tests prove the split. When a new structured path replaces an old markdown contract, remove the old path — do not leave permanent legacy coexistence.
+
 For any design or implementation that touches Feishu card text contracts, markdown/plain_text split, or card text render helpers, consult:
 
 - `docs/general/feishu-card-content-context-guidelines.md`
@@ -316,6 +325,8 @@ Baseline requirements:
 
 ## Documentation Convention
 
+When adding, moving, or restructuring docs under `docs/`, do **not** merge until: the doc is placed in exactly one lifecycle dir, the metadata block is complete (`Type` / `Updated` / `Summary`), and links + `docs/README.md` are updated in the same change.
+
 For lifecycle/reference docs under `docs/`:
 
 - place docs in exactly one lifecycle dir:
@@ -332,14 +343,14 @@ For lifecycle/reference docs under `docs/`:
 - obsolete docs move to `docs/obsoleted/`
 - when moving docs, update links and `docs/README.md` in same change
 
-## State-Machine Doc Sync (Pre-commit)
+## State-Machine Doc Sync (Pre-commit Gate)
 
 Canonical docs:
 
 - remote surface: `docs/general/remote-surface-state-machine.md`
 - Feishu card UI: `docs/general/feishu-card-ui-state-machine.md`
 
-When corresponding logic carriers changed:
+When corresponding logic carriers changed, do **not** commit until: guardrail skill passes, canonical doc is synced to implemented behavior, and dead/half-dead/stale-action states are audited.
 
 - implement + test first
 - run matching guardrail skill before commit
