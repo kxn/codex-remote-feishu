@@ -9,7 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto.Event, now time.Time) bool {
+func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto.Event, backend agentproto.Backend, now time.Time) bool {
 	if progress == nil || strings.TrimSpace(event.Delta) == "" {
 		return false
 	}
@@ -33,7 +33,7 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 		record.BufferSummaryIndex = summaryIndex
 	}
 	record.Buffer += event.Delta
-	text := extractReasoningSummaryText(record.Buffer)
+	text := extractReasoningSummaryText(record.Buffer, backend)
 	if text == "" {
 		return false
 	}
@@ -84,9 +84,11 @@ func extractFirstMarkdownBold(value string) string {
 	return ""
 }
 
-func extractReasoningSummaryText(value string) string {
-	if text := normalizeReasoningText(extractFirstMarkdownBold(value)); text != "" {
-		return text
+func extractReasoningSummaryText(value string, backend agentproto.Backend) string {
+	if backend == agentproto.BackendCodex {
+		if text := normalizeReasoningText(extractFirstMarkdownBold(value)); text != "" {
+			return text
+		}
 	}
 	return normalizeReasoningText(value)
 }

@@ -897,7 +897,7 @@ Claude runtime 分三块：
 | `system:init` | 会话 ready、`session_id`、模型、cwd、permission mode | runtime host 内部 session bind；不单独投影成用户可见 event | 现有 carrier 足够；属于 runtime/session 初始化，不需要新增上层 event |
 | `stream_event.message_start` | 新一轮 assistant turn 真正进入 running | `turn.started` | 作为 Claude live turn 的主起点 |
 | `assistant.text` | assistant 正文输出 | `item.started / item.delta / item.completed` with `itemKind=agent_message` | 现有文本 item 语义可直接复用 |
-| `assistant.thinking` | provider-native reasoning / hidden chain-of-thought side channel | `item.delta` with `itemKind=reasoning_summary`；如需保留原文，仅留在 adapter-local/raw history | pre-MVP 不需要新增公开 reasoning carrier |
+| `assistant.thinking` | provider-native reasoning / hidden chain-of-thought side channel | `item.delta` with `itemKind=reasoning_summary`；前台保留过滤后的 raw thinking，adapter 仅窄清洗已知系统 info block | pre-MVP 不需要新增公开 reasoning carrier，但需要流式 side-channel 可见边界抑制 |
 | `assistant.tool_use`（外部工具） | 工具调用开始，已拿到稳定 `tool_use_id + name + input` | `item.started` with typed `itemKind` selected by tool family (`command_execution` / `web_search` / `file_change` / `dynamic_tool_call`) | 当前已知强语义工具直接进 typed owner，其余仍允许回落 `dynamic_tool_call` |
 | `user.tool_result`（外部工具） | 工具执行完成，携带 stdout/stderr/error/image/interrupt 等真实结果 | `item.completed` with the same typed `itemKind` + structured metadata | 这是工具完成的主 carrier，不能再把 assistant `tool_use` 误当 completed |
 | `control_request(can_use_tool)`（外部工具） | 外部审批点 | `request.started` with `type=approval` + `semanticKind=approval_can_use_tool` | `#494` 已有 canonical request contract，可直接复用 |

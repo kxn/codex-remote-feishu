@@ -26,7 +26,7 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 	if strings.TrimSpace(event.ItemID) != "" {
 		progress.ItemID = strings.TrimSpace(event.ItemID)
 	}
-	if !execprogress.UpsertReasoning(progress, event, s.now()) {
+	if !execprogress.UpsertReasoning(progress, event, s.surfaceBackend(surface), s.now()) {
 		return nil
 	}
 	if !s.execCommandProgressReasoningFlushDue(progress, s.now()) || !execCommandProgressReasoningCanEmit(progress) {

@@ -887,8 +887,8 @@ func TestClaudeTranslatorAccumulatesThinkingDeltasOnSingleReasoningItem(t *testi
 	if first.Events[0].Delta != "I need to inspect" {
 		t.Fatalf("expected first raw thinking delta, got %#v", first.Events[0])
 	}
-	if first.Events[0].Metadata["summaryIndex"] != 1 {
-		t.Fatalf("expected stable summary index, got %#v", first.Events[0].Metadata)
+	if len(first.Events[0].Metadata) != 0 {
+		t.Fatalf("expected Claude thinking delta not to carry synthetic metadata, got %#v", first.Events[0].Metadata)
 	}
 
 	second := observeClaude(t, tr, map[string]any{
@@ -942,6 +942,135 @@ func TestClaudeTranslatorAccumulatesThinkingDeltasOnSingleReasoningItem(t *testi
 	}
 	if stop.Events[0].Delta != "" {
 		t.Fatalf("expected thinking stop not to repeat accumulated content, got %#v", stop.Events[0])
+	}
+}
+
+func TestClaudeTranslatorFiltersKnownThinkingSideChannelBlocks(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	startClaudeTurn(t, tr, "default")
+
+	start := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		},
+	})
+	if len(start.Events) != 1 {
+		t.Fatalf("expected thinking start, got %#v", start.Events)
+	}
+
+	blocked := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "<claude_background_info>\nsecret\n</claude_background_info>\n",
+			},
+		},
+	})
+	if len(blocked.Events) != 0 {
+		t.Fatalf("expected side-channel block to stay hidden, got %#v", blocked.Events)
+	}
+
+	visible := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "Visible reasoning.",
+			},
+		},
+	})
+	if len(visible.Events) != 1 || visible.Events[0].Delta != "Visible reasoning." {
+		t.Fatalf("expected visible reasoning after hidden block, got %#v", visible.Events)
+	}
+}
+
+func TestClaudeTranslatorFiltersKnownThinkingSideChannelBlocksAcrossDeltas(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	startClaudeTurn(t, tr, "default")
+
+	observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		},
+	})
+
+	first := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "Before <claude_background",
+			},
+		},
+	})
+	if len(first.Events) != 1 || first.Events[0].Delta != "Before " {
+		t.Fatalf("expected safe prefix before partial tag, got %#v", first.Events)
+	}
+
+	second := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "_info>\nsecret\n</claude_background_info> After",
+			},
+		},
+	})
+	if len(second.Events) != 1 || second.Events[0].Delta != " After" {
+		t.Fatalf("expected hidden block to be removed across deltas, got %#v", second.Events)
+	}
+}
+
+func TestClaudeTranslatorKeepsOrdinaryHTMLLikeThinkingContent(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	startClaudeTurn(t, tr, "default")
+
+	observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		},
+	})
+
+	delta := observeClaude(t, tr, map[string]any{
+		"type": "stream_event",
+		"event": map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": "Check <code>fmt.Println()</code> in docs.",
+			},
+		},
+	})
+	if len(delta.Events) != 1 || delta.Events[0].Delta != "Check <code>fmt.Println()</code> in docs." {
+		t.Fatalf("expected ordinary HTML-like content to remain visible, got %#v", delta.Events)
 	}
 }
 

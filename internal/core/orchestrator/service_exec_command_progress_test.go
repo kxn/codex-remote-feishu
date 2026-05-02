@@ -1394,6 +1394,85 @@ func TestReasoningSummaryProgressDoesNotAnimateWithoutNewDelta(t *testing.T) {
 	}
 }
 
+func TestReasoningSummaryProgressClaudeKeepsRawThinkingInsteadOfFirstBold(t *testing.T) {
+	now := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Backend = agentproto.BackendClaude
+	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**prefix** raw thinking continues",
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected Claude reasoning progress event, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Summary != "**prefix** raw thinking continues" {
+		t.Fatalf("expected Claude reasoning to keep raw text, got %#v", progress.Timeline)
+	}
+}
+
+func TestReasoningSummaryProgressClaudeAccumulatesWithoutSummaryIndex(t *testing.T) {
+	now := time.Date(2026, 5, 2, 10, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Backend = agentproto.BackendClaude
+	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Before ",
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first Claude reasoning event, got %#v", first)
+	}
+	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Before" {
+		t.Fatalf("expected first Claude reasoning fragment, got %#v", first[0].ExecCommandProgress.Timeline)
+	}
+
+	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "after",
+	})
+	if len(second) != 0 {
+		t.Fatalf("expected coalesced Claude reasoning delta inside throttle window, got %#v", second)
+	}
+	record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning
+	if record == nil || record.Text != "Before after" {
+		t.Fatalf("expected Claude reasoning record to accumulate plain text without summaryIndex, got %#v", record)
+	}
+
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	now = now.Add(execCommandProgressReasoningFlushInterval)
+	tick := svc.Tick(now)
+	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
+		t.Fatalf("expected tick to flush accumulated Claude reasoning, got %#v", tick)
+	}
+	if got := tick[0].ExecCommandProgress.Timeline[0].Summary; got != "Before after" {
+		t.Fatalf("expected accumulated Claude reasoning summary, got %#v", tick[0].ExecCommandProgress.Timeline)
+	}
+}
+
 func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

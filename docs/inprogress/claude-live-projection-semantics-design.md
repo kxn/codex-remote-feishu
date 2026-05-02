@@ -285,8 +285,16 @@ final message 只承载 assistant 的最终回答正文。
 
 规则：
 
-- 只显示摘要态
-- 不显示 provider 原始 thinking 全文
+- `Codex` 保留现有 reasoning summary 语义：
+  - 同一 `summaryIndex` 更新同一条
+  - `summaryIndex` 递增时保留历史条目
+  - 若上游带 markdown `**...**` 摘要，可继续按该摘要态承接
+- `Claude` 不再做本地句子摘要化 / 粗体化 / 伪阶段改写
+- `Claude` 默认保留过滤后的 raw thinking：
+  - 仅窄清洗已知系统 side-channel info block
+  - 当前名单仅限 `<claude_background_info>`、`<fast_mode_info>`
+  - 清洗必须按流式 delta 可见边界进行，避免未闭合 tag 片段先露到前台
+- 不做“所有尖括号标签统一剥离”的宽规则
 - 这是过程状态，不是正文消息
 
 ### 6.3 命令执行
@@ -405,7 +413,7 @@ final message 只承载 assistant 的最终回答正文。
 以下问题仍允许在实现期继续确认，但产品归属已经固定：
 
 1. `approval_plan` 最终排版位置
-2. `reasoning_summary` 的摘要提取规则
+2. `reasoning_summary` 的 provider-aware owner cut 细节
 3. `ToolSearch` 是否未来要升级成更专门语义
 
 这些都不影响当前文档的核心结论：

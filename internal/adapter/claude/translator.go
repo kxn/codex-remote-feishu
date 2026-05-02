@@ -55,15 +55,21 @@ type messageState struct {
 }
 
 type blockState struct {
-	Index          int
-	Kind           string
-	ItemID         string
-	StartedEmitted bool
-	TextBuffer     string
-	ToolUseID      string
-	ToolName       string
-	ToolInputDelta string
-	Completed      bool
+	Index           int
+	Kind            string
+	ItemID          string
+	StartedEmitted  bool
+	TextBuffer      string
+	ReasoningFilter *thinkingFilterState
+	ToolUseID       string
+	ToolName        string
+	ToolInputDelta  string
+	Completed       bool
+}
+
+type thinkingFilterState struct {
+	Pending string
+	Active  string
 }
 
 type toolState struct {

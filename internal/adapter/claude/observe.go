@@ -111,6 +111,7 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 	if kind == "thinking" && t.activeTurn != nil {
 		state.ItemID = t.nextItemID()
 		state.StartedEmitted = true
+		state.ReasoningFilter = newThinkingFilterState()
 		events = append(events, agentproto.Event{
 			Kind:      agentproto.EventItemStarted,
 			CommandID: t.activeTurn.CommandID,
@@ -174,18 +175,13 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 		if thinking == "" {
 			return Result{}
 		}
-		state.TextBuffer += thinking
+		filtered := filterClaudeThinkingDelta(state.ReasoningFilter, thinking)
+		if filtered == "" {
+			return Result{}
+		}
+		state.TextBuffer += filtered
 		return Result{
-			Events: []agentproto.Event{{
-				Kind:      agentproto.EventItemDelta,
-				CommandID: t.activeTurn.CommandID,
-				ThreadID:  t.activeTurn.ThreadID,
-				TurnID:    t.activeTurn.TurnID,
-				ItemID:    state.ItemID,
-				ItemKind:  "reasoning_summary",
-				Delta:     thinking,
-				Metadata:  map[string]any{"summaryIndex": 1},
-			}},
+			Events: []agentproto.Event{t.newReasoningSummaryDeltaEvent(state.ItemID, filtered)},
 		}
 	case "signature_delta":
 		return Result{}
@@ -206,16 +202,17 @@ func (t *Translator) observeContentBlockStop(event map[string]any) Result {
 	}
 	if state.Kind == "thinking" {
 		state.Completed = true
+		if trailing := finalizeClaudeThinkingFilter(state.ReasoningFilter); trailing != "" {
+			state.TextBuffer += trailing
+			return Result{
+				Events: []agentproto.Event{
+					t.newReasoningSummaryDeltaEvent(state.ItemID, trailing),
+					t.newReasoningSummaryCompletedEvent(state.ItemID),
+				},
+			}
+		}
 		return Result{
-			Events: []agentproto.Event{{
-				Kind:      agentproto.EventItemCompleted,
-				CommandID: t.activeTurn.CommandID,
-				ThreadID:  t.activeTurn.ThreadID,
-				TurnID:    t.activeTurn.TurnID,
-				ItemID:    state.ItemID,
-				ItemKind:  "reasoning_summary",
-				Status:    "completed",
-			}},
+			Events: []agentproto.Event{t.newReasoningSummaryCompletedEvent(state.ItemID)},
 		}
 	}
 	if state.Kind != "text" {

@@ -215,6 +215,146 @@ func normalizeClaudeSemanticItemKind(raw string) string {
 	}
 }
 
+var claudeThinkingSideChannelTags = []string{
+	"claude_background_info",
+	"fast_mode_info",
+}
+
+func newThinkingFilterState() *thinkingFilterState {
+	return &thinkingFilterState{}
+}
+
+func filterClaudeThinkingDelta(state *thinkingFilterState, delta string) string {
+	if state == nil || delta == "" {
+		return delta
+	}
+	working := state.Pending + delta
+	state.Pending = ""
+	var out strings.Builder
+	for len(working) > 0 {
+		if state.Active != "" {
+			closeTag := "</" + state.Active + ">"
+			index := strings.Index(working, closeTag)
+			if index < 0 {
+				hold := len(closeTag) - 1
+				if hold < 1 {
+					hold = 1
+				}
+				if len(working) <= hold {
+					state.Pending = working
+					return out.String()
+				}
+				state.Pending = working[len(working)-hold:]
+				return out.String()
+			}
+			working = working[index+len(closeTag):]
+			working = strings.TrimLeft(working, "\r\n")
+			state.Active = ""
+			continue
+		}
+
+		openIndex, openTag, openName := earliestThinkingSideChannelOpenTag(working)
+		if openIndex < 0 {
+			if split := partialThinkingOpenTagStart(working); split >= 0 {
+				out.WriteString(working[:split])
+				state.Pending = working[split:]
+				return out.String()
+			}
+			out.WriteString(working)
+			return out.String()
+		}
+		if openIndex > 0 {
+			out.WriteString(working[:openIndex])
+		}
+		working = working[openIndex+len(openTag):]
+		state.Active = openName
+	}
+	return out.String()
+}
+
+func finalizeClaudeThinkingFilter(state *thinkingFilterState) string {
+	if state == nil {
+		return ""
+	}
+	if state.Active != "" {
+		state.Pending = ""
+		state.Active = ""
+		return ""
+	}
+	trailing := state.Pending
+	state.Pending = ""
+	return trailing
+}
+
+func earliestThinkingSideChannelOpenTag(value string) (int, string, string) {
+	bestIndex := -1
+	bestTag := ""
+	bestName := ""
+	for _, name := range claudeThinkingSideChannelTags {
+		tag := "<" + name + ">"
+		index := strings.Index(value, tag)
+		if index < 0 {
+			continue
+		}
+		if bestIndex < 0 || index < bestIndex {
+			bestIndex = index
+			bestTag = tag
+			bestName = name
+		}
+	}
+	return bestIndex, bestTag, bestName
+}
+
+func claudeThinkingSideChannelMaxOpenTagLen() int {
+	maxLen := 0
+	for _, name := range claudeThinkingSideChannelTags {
+		if current := len("<" + name + ">"); current > maxLen {
+			maxLen = current
+		}
+	}
+	return maxLen
+}
+
+func partialThinkingOpenTagStart(value string) int {
+	for i := len(value) - 1; i >= 0; i-- {
+		if value[i] != '<' {
+			continue
+		}
+		suffix := value[i:]
+		for _, name := range claudeThinkingSideChannelTags {
+			tag := "<" + name + ">"
+			if suffix != tag && strings.HasPrefix(tag, suffix) {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func (t *Translator) newReasoningSummaryDeltaEvent(itemID, delta string) agentproto.Event {
+	return agentproto.Event{
+		Kind:      agentproto.EventItemDelta,
+		CommandID: t.activeTurn.CommandID,
+		ThreadID:  t.activeTurn.ThreadID,
+		TurnID:    t.activeTurn.TurnID,
+		ItemID:    itemID,
+		ItemKind:  "reasoning_summary",
+		Delta:     delta,
+	}
+}
+
+func (t *Translator) newReasoningSummaryCompletedEvent(itemID string) agentproto.Event {
+	return agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		CommandID: t.activeTurn.CommandID,
+		ThreadID:  t.activeTurn.ThreadID,
+		TurnID:    t.activeTurn.TurnID,
+		ItemID:    itemID,
+		ItemKind:  "reasoning_summary",
+		Status:    "completed",
+	}
+}
+
 func claudeToolItemKind(toolName string) string {
 	switch strings.TrimSpace(toolName) {
 	case "Bash":
