@@ -1118,8 +1118,21 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	}); len(events) != 0 {
 		t.Fatalf("expected no progress card event once assistant text starts, got %#v", events)
 	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected assistant text to terminate exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatalf("expected assistant text delta to keep exec progress active until visible flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	}); len(events) != 0 {
+		t.Fatalf("expected assistant text completion to stay pending until next visible event, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatalf("expected pending assistant text to keep exec progress active until flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -1133,8 +1146,14 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 			"command": "npm test",
 		},
 	})
-	if len(completed) != 0 {
-		t.Fatalf("expected command completion not to resurrect progress card, got %#v", completed)
+	if len(completed) != 1 || completed[0].Kind != eventcontract.KindBlockCommitted || completed[0].Block == nil {
+		t.Fatalf("expected command completion to flush pending assistant text before sealing progress, got %#v", completed)
+	}
+	if completed[0].Block.Text != "先给你结果。" {
+		t.Fatalf("unexpected pending assistant text flush: %#v", completed[0].Block)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected visible assistant text flush to terminate exec progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 }
 
@@ -1645,15 +1664,46 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 		ItemID:   "msg-1",
 		ItemKind: "agent_message",
 		Delta:    "先给你结论。",
-	}); len(events) != 1 || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected assistant text delta to flush dirty reasoning before clearing progress, got %#v", events)
-	} else if progress := events[0].ExecCommandProgress; activeProgressMessageID(progress) != "om-progress-1" ||
+	}); len(events) != 0 {
+		t.Fatalf("expected assistant text delta to stay buffered until visible flush, got %#v", events)
+	}
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	}); len(events) != 0 {
+		t.Fatalf("expected assistant text completion to stay pending until next visible event, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatal("expected shared progress state to remain until pending assistant text is flushed")
+	}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(events) != 2 || events[0].Kind != eventcontract.KindExecCommandProgress || events[0].ExecCommandProgress == nil || events[1].Kind != eventcontract.KindBlockCommitted || events[1].Block == nil {
+		t.Fatalf("expected visible assistant text flush to emit reasoning snapshot then assistant block, got %#v", events)
+	}
+	if progress := events[0].ExecCommandProgress; activeProgressMessageID(progress) != "om-progress-1" ||
 		len(progress.Timeline) != 1 ||
 		progress.Timeline[0].Summary != "Thinking about response shape" {
-		t.Fatalf("expected assistant text delta to flush latest reasoning snapshot, got %#v", progress)
+		t.Fatalf("expected visible assistant text flush to emit latest reasoning snapshot, got %#v", progress)
+	}
+	if events[1].Block.Text != "先给你结论。" {
+		t.Fatalf("unexpected assistant text block flush: %#v", events[1].Block)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected assistant text delta to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+		t.Fatalf("expected visible assistant text flush to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 }
 

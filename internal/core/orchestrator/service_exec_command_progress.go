@@ -39,10 +39,6 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 		return nil
 	}
 	switch strings.TrimSpace(event.ItemKind) {
-	case "agent_message":
-		events := s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
-		s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
-		return events
 	case "reasoning_summary":
 		return s.handleReasoningSummaryProgressDelta(instanceID, event)
 	default:
@@ -53,11 +49,7 @@ func (s *Service) handleProcessProgressItemDelta(instanceID string, event agentp
 func (s *Service) handleProcessProgressItemCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	switch strings.TrimSpace(event.ItemKind) {
 	case "agent_message":
-		events := s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
-		if s.eventCarriesAssistantText(instanceID, event) {
-			s.terminateExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)
-		}
-		return events
+		return nil
 	case "reasoning_summary":
 		return s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
 	case "command_execution":

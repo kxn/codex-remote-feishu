@@ -627,6 +627,9 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 			Final:            true,
 		}}
 	}
+	if instanceKey != "" && len(blocks) != 0 {
+		events = append(events, s.flushAndSealExecCommandProgressForTurn(instanceKey, threadID, turnID)...)
+	}
 	lastBlockIndex := len(blocks) - 1
 	for i := range blocks {
 		block := blocks[i]

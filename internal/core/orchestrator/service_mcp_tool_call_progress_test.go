@@ -123,8 +123,20 @@ func TestMCPToolCallProgressDoesNotReviveAfterAssistantText(t *testing.T) {
 	}); len(events) != 0 {
 		t.Fatalf("expected assistant text to not emit extra progress events, got %#v", events)
 	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected assistant text to terminate shared progress, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatalf("expected assistant text delta to keep shared progress active until visible flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	}); len(events) != 0 {
+		t.Fatalf("expected assistant text completion to stay pending until next visible event, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
+		t.Fatalf("expected pending assistant text to keep shared progress active until flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -144,8 +156,14 @@ func TestMCPToolCallProgressDoesNotReviveAfterAssistantText(t *testing.T) {
 			"durationMs": 12,
 		},
 	})
-	if len(completed) != 0 {
-		t.Fatalf("expected completed mcp tool call not to revive shared progress after assistant text, got %#v", completed)
+	if len(completed) != 1 || completed[0].Kind != eventcontract.KindBlockCommitted || completed[0].Block == nil {
+		t.Fatalf("expected completed mcp tool call to flush pending assistant text before sealing progress, got %#v", completed)
+	}
+	if completed[0].Block.Text != "先给你结果。" {
+		t.Fatalf("unexpected assistant text block flush: %#v", completed[0].Block)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected visible assistant text flush to terminate shared progress, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 }
 

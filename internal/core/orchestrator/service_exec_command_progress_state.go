@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -35,6 +35,12 @@ func (s *Service) terminateExecCommandProgressForTurn(instanceID, threadID, turn
 	}
 }
 
+func (s *Service) flushAndSealExecCommandProgressForTurn(instanceID, threadID, turnID string) []eventcontract.Event {
+	events := s.flushExecCommandProgressReasoning(instanceID, threadID, turnID)
+	s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
+	return events
+}
+
 func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleRecord, itemKind string) bool {
 	if surface == nil {
 		return false
@@ -49,20 +55,6 @@ func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleReco
 	default:
 		return false
 	}
-}
-
-func (s *Service) eventCarriesAssistantText(instanceID string, event agentproto.Event) bool {
-	if strings.TrimSpace(metadataString(event.Metadata, "text")) != "" {
-		return true
-	}
-	if strings.TrimSpace(event.ItemID) == "" {
-		return false
-	}
-	buf := s.itemBuffers[itemBufferKey(instanceID, event.ThreadID, event.TurnID, event.ItemID)]
-	if buf == nil {
-		return false
-	}
-	return strings.TrimSpace(buf.text()) != ""
 }
 
 func activeExecCommandProgress(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID string) *state.ExecCommandProgressRecord {
