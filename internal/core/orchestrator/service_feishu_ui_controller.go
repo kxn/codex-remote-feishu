@@ -8,13 +8,16 @@ import (
 
 func (s *Service) ApplyFeishuUIIntent(action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
 	surface := s.ensureSurface(action)
+	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, intent))
 }
 
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
 	if flow, ok := control.FeishuConfigFlowDefinitionByIntentKind(intent.Kind); ok {
-		if strategy, ok := control.ResolveFeishuCommandStrategy(s.buildCatalogContext(surface), flow.CommandID); ok && !strategy.DispatchAllowed {
-			return s.commandStrategyNotice(surface, strategy)
+		if support, ok := control.ResolveFeishuCommandSupport(s.buildCatalogContext(surface), flow.CommandID); ok && !support.DispatchAllowed {
+			return s.commandSupportNotice(surface, support)
 		}
 		return s.openConfigCommandPageForAction(surface, action)
 	}

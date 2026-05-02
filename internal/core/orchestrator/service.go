@@ -396,11 +396,11 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	case control.ActionFileMessage:
 		s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindCard)
 	}
+	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, *intent))
-	}
-	if blocked := s.commandStrategyBlocked(surface, action); blocked != nil {
-		return s.filterEventsForSurfaceVisibility(blocked)
 	}
 	s.applyCommandLauncherDisposition(surface, action)
 	if events, ok := s.boundDaemonCommandEvents(surface, action); ok {

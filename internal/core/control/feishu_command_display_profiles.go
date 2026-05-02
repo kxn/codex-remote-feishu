@@ -1,98 +1,152 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
+
+type FeishuCommandSupportKind string
+
+const (
+	FeishuCommandSupportNative        FeishuCommandSupportKind = "native"
+	FeishuCommandSupportApproximation FeishuCommandSupportKind = "approximation"
+	FeishuCommandSupportPassthrough   FeishuCommandSupportKind = "passthrough"
+	FeishuCommandSupportReject        FeishuCommandSupportKind = "reject"
+)
 
 type FeishuCommandDisplayProfile struct {
-	VisibleMode string
-	Families    map[string]FeishuCommandDisplayFamilyProfile
+	VisibleMode            string
+	DefaultDispatchAllowed bool
+	DefaultSupportKind     FeishuCommandSupportKind
+	DefaultRejectNote      string
+	Families               map[string]FeishuCommandDisplayFamilyProfile
 }
 
 type FeishuCommandDisplayFamilyProfile struct {
-	FamilyID   string
-	MenuStages map[FeishuCommandMenuStage]struct{}
+	FamilyID        string
+	Visible         bool
+	MenuStages      map[FeishuCommandMenuStage]struct{}
+	DispatchAllowed bool
+	SupportKind     FeishuCommandSupportKind
+	Note            string
+}
+
+type FeishuCommandSupport struct {
+	FamilyID        string
+	Backend         agentproto.Backend
+	Kind            FeishuCommandSupportKind
+	Visible         bool
+	DispatchAllowed bool
+	Note            string
 }
 
 var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
-	"codex": newFeishuCommandDisplayProfile("codex",
-		displayProfileFamily(FeishuCommandStop),
-		displayProfileFamily(FeishuCommandCompact),
-		displayProfileFamily(FeishuCommandSteerAll),
-		displayProfileFamilyWithStages(FeishuCommandNew, FeishuCommandMenuStageNormalWorking),
-		displayProfileFamily(FeishuCommandStatus),
-		displayProfileFamily(FeishuCommandReasoning),
-		displayProfileFamily(FeishuCommandModel),
-		displayProfileFamily(FeishuCommandAccess),
-		displayProfileFamily(FeishuCommandPlan),
-		displayProfileFamily(FeishuCommandVerbose),
-		displayProfileFamily(FeishuCommandCodexProvider),
-		displayProfileFamily(FeishuCommandAutoContinue),
-		displayProfileFamily(FeishuCommandWorkspace),
-		displayProfileFamily(FeishuCommandWorkspaceList),
-		displayProfileFamily(FeishuCommandWorkspaceNew),
-		displayProfileFamily(FeishuCommandWorkspaceNewDir),
-		displayProfileFamily(FeishuCommandWorkspaceNewGit),
-		displayProfileFamily(FeishuCommandWorkspaceNewWorktree),
-		displayProfileFamily(FeishuCommandWorkspaceDetach),
-		displayProfileFamily(FeishuCommandAutoWhip),
-		displayProfileFamily(FeishuCommandHistory),
-		displayProfileFamily(FeishuCommandReview),
-		displayProfileFamily(FeishuCommandCron),
-		displayProfileFamily(FeishuCommandSendFile),
-		displayProfileFamily(FeishuCommandMode),
-		displayProfileFamily(FeishuCommandUpgrade),
-		displayProfileFamilyWithStages(FeishuCommandPatch, FeishuCommandMenuStageNormalWorking),
-		displayProfileFamily(FeishuCommandDebug),
-		displayProfileFamily(FeishuCommandHelp),
-		displayProfileFamily(FeishuCommandMenu),
+	"codex": newFeishuCommandDisplayProfile("codex", true,
+		commandSupportVisible(FeishuCommandStop),
+		commandSupportVisible(FeishuCommandCompact),
+		commandSupportVisible(FeishuCommandSteerAll),
+		commandSupportVisibleWithStages(FeishuCommandNew, FeishuCommandMenuStageNormalWorking),
+		commandSupportVisible(FeishuCommandStatus),
+		commandSupportVisible(FeishuCommandReasoning),
+		commandSupportVisible(FeishuCommandModel),
+		commandSupportVisible(FeishuCommandAccess),
+		commandSupportVisible(FeishuCommandPlan),
+		commandSupportVisible(FeishuCommandVerbose),
+		commandSupportVisible(FeishuCommandCodexProvider),
+		commandSupportVisible(FeishuCommandAutoContinue),
+		commandSupportVisible(FeishuCommandWorkspace),
+		commandSupportVisible(FeishuCommandWorkspaceList),
+		commandSupportVisible(FeishuCommandWorkspaceNew),
+		commandSupportVisible(FeishuCommandWorkspaceNewDir),
+		commandSupportVisible(FeishuCommandWorkspaceNewGit),
+		commandSupportVisible(FeishuCommandWorkspaceNewWorktree),
+		commandSupportVisible(FeishuCommandWorkspaceDetach),
+		commandSupportVisible(FeishuCommandAutoWhip),
+		commandSupportVisible(FeishuCommandHistory),
+		commandSupportVisible(FeishuCommandReview),
+		commandSupportVisible(FeishuCommandCron),
+		commandSupportVisible(FeishuCommandSendFile),
+		commandSupportVisible(FeishuCommandMode),
+		commandSupportVisible(FeishuCommandUpgrade),
+		commandSupportVisibleWithStages(FeishuCommandPatch, FeishuCommandMenuStageNormalWorking),
+		commandSupportVisible(FeishuCommandDebug),
+		commandSupportVisible(FeishuCommandHelp),
+		commandSupportVisible(FeishuCommandMenu),
+		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"),
 	),
-	"claude": newFeishuCommandDisplayProfile("claude",
-		displayProfileFamily(FeishuCommandStop),
-		displayProfileFamily(FeishuCommandNew),
-		displayProfileFamily(FeishuCommandStatus),
-		displayProfileFamily(FeishuCommandDetach),
-		displayProfileFamily(FeishuCommandReasoning),
-		displayProfileFamily(FeishuCommandModel),
-		displayProfileFamily(FeishuCommandAccess),
-		displayProfileFamily(FeishuCommandList),
-		displayProfileFamily(FeishuCommandUse),
-		displayProfileFamily(FeishuCommandVerbose),
-		displayProfileFamily(FeishuCommandHistory),
-		displayProfileFamily(FeishuCommandSendFile),
-		displayProfileFamily(FeishuCommandMode),
-		displayProfileFamily(FeishuCommandClaudeProfile),
-		displayProfileFamily(FeishuCommandUpgrade),
-		displayProfileFamily(FeishuCommandDebug),
-		displayProfileFamily(FeishuCommandHelp),
-		displayProfileFamily(FeishuCommandMenu),
+	"claude": newFeishuCommandDisplayProfile("claude", false,
+		commandSupportVisible(FeishuCommandStop),
+		commandSupportVisibleAs(FeishuCommandNew, FeishuCommandSupportApproximation, "Claude 会话切换沿用现有产品壳，但底层走 backend-aware session catalog 与 route contract。"),
+		commandSupportVisible(FeishuCommandStatus),
+		commandSupportVisible(FeishuCommandDetach),
+		commandSupportVisible(FeishuCommandReasoning),
+		commandSupportVisible(FeishuCommandModel),
+		commandSupportVisible(FeishuCommandAccess),
+		commandSupportVisibleAs(FeishuCommandList, FeishuCommandSupportApproximation, "Claude 会话切换沿用现有产品壳，但底层走 backend-aware session catalog 与 route contract。"),
+		commandSupportVisibleAs(FeishuCommandUse, FeishuCommandSupportApproximation, "Claude 会话切换沿用现有产品壳，但底层走 backend-aware session catalog 与 route contract。"),
+		commandSupportVisible(FeishuCommandVerbose),
+		commandSupportVisible(FeishuCommandHistory),
+		commandSupportVisible(FeishuCommandSendFile),
+		commandSupportVisible(FeishuCommandMode),
+		commandSupportVisible(FeishuCommandClaudeProfile),
+		commandSupportVisible(FeishuCommandUpgrade),
+		commandSupportVisible(FeishuCommandDebug),
+		commandSupportVisible(FeishuCommandHelp),
+		commandSupportVisible(FeishuCommandMenu),
+		commandSupportHiddenAllowed(FeishuCommandWorkspace),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceList),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceNew),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceNewDir),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceNewGit),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceNewWorktree),
+		commandSupportHiddenAllowed(FeishuCommandWorkspaceDetach),
+		commandSupportHiddenReject(FeishuCommandCompact, FeishuCommandSupportPassthrough, "Claude `/compact` 目前只作为后续 passthrough 候选；在 runtime host 收口前保持隐藏并拒绝直接执行。"),
+		commandSupportHiddenReject(FeishuCommandReview, FeishuCommandSupportApproximation, "Claude `/review` 当前不纳入 visible MVP；在 detached review contract 补齐前保持隐藏并拒绝直接执行。"),
+		commandSupportHiddenReject(FeishuCommandPatch, FeishuCommandSupportApproximation, "Claude `/bendtomywill` 当前不纳入 visible MVP；在 turn patch contract 补齐前保持隐藏并拒绝直接执行。"),
+		commandSupportHiddenAllowed(FeishuCommandUseAll),
+		commandSupportHiddenReject(FeishuCommandSteerAll, FeishuCommandSupportReject, "Claude 当前不支持 same-turn steer；请等待本轮结束后继续发送，或使用 /stop 中断。"),
+		commandSupportHiddenReject(FeishuCommandPlan, FeishuCommandSupportReject, "Claude 计划确认走 request bridge；在显式 plan contract 落地前不开放 `/plan` 命令入口。"),
+		commandSupportHiddenReject(FeishuCommandAutoWhip, FeishuCommandSupportReject, claudeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandAutoContinue, FeishuCommandSupportReject, claudeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandCodexProvider, FeishuCommandSupportReject, "当前不在 Codex 模式，暂时不能切换 Codex Provider。请先 `/mode codex`。"),
+		commandSupportHiddenReject(FeishuCommandFollow, FeishuCommandSupportReject, claudeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandCron, FeishuCommandSupportReject, claudeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandVSCodeMigrate, FeishuCommandSupportReject, claudeDefaultRejectNote),
 	),
-	"vscode": newFeishuCommandDisplayProfile("vscode",
-		displayProfileFamily(FeishuCommandStop),
-		displayProfileFamily(FeishuCommandCompact),
-		displayProfileFamily(FeishuCommandSteerAll),
-		displayProfileFamily(FeishuCommandStatus),
-		displayProfileFamily(FeishuCommandReasoning),
-		displayProfileFamily(FeishuCommandModel),
-		displayProfileFamily(FeishuCommandAccess),
-		displayProfileFamily(FeishuCommandPlan),
-		displayProfileFamily(FeishuCommandVerbose),
-		displayProfileFamily(FeishuCommandAutoContinue),
-		displayProfileFamily(FeishuCommandList),
-		displayProfileFamily(FeishuCommandUse),
-		displayProfileFamily(FeishuCommandUseAll),
-		displayProfileFamily(FeishuCommandDetach),
-		displayProfileFamilyWithStages(FeishuCommandFollow, FeishuCommandMenuStageVSCodeWorking),
-		displayProfileFamily(FeishuCommandAutoWhip),
-		displayProfileFamily(FeishuCommandHistory),
-		displayProfileFamily(FeishuCommandCron),
-		displayProfileFamily(FeishuCommandSendFile),
-		displayProfileFamily(FeishuCommandMode),
-		displayProfileFamily(FeishuCommandUpgrade),
-		displayProfileFamily(FeishuCommandDebug),
-		displayProfileFamily(FeishuCommandHelp),
-		displayProfileFamily(FeishuCommandMenu),
-		displayProfileFamily(FeishuCommandVSCodeMigrate),
+	"vscode": newFeishuCommandDisplayProfile("vscode", true,
+		commandSupportVisible(FeishuCommandStop),
+		commandSupportVisible(FeishuCommandCompact),
+		commandSupportVisible(FeishuCommandSteerAll),
+		commandSupportVisible(FeishuCommandStatus),
+		commandSupportVisible(FeishuCommandReasoning),
+		commandSupportVisible(FeishuCommandModel),
+		commandSupportVisible(FeishuCommandAccess),
+		commandSupportVisible(FeishuCommandPlan),
+		commandSupportVisible(FeishuCommandVerbose),
+		commandSupportVisible(FeishuCommandAutoContinue),
+		commandSupportVisible(FeishuCommandList),
+		commandSupportVisible(FeishuCommandUse),
+		commandSupportVisible(FeishuCommandUseAll),
+		commandSupportVisible(FeishuCommandDetach),
+		commandSupportVisibleWithStages(FeishuCommandFollow, FeishuCommandMenuStageVSCodeWorking),
+		commandSupportVisible(FeishuCommandAutoWhip),
+		commandSupportVisible(FeishuCommandHistory),
+		commandSupportVisible(FeishuCommandCron),
+		commandSupportVisible(FeishuCommandSendFile),
+		commandSupportVisible(FeishuCommandMode),
+		commandSupportVisible(FeishuCommandUpgrade),
+		commandSupportVisible(FeishuCommandDebug),
+		commandSupportVisible(FeishuCommandHelp),
+		commandSupportVisible(FeishuCommandMenu),
+		commandSupportVisible(FeishuCommandVSCodeMigrate),
+		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"),
 	),
 }
+
+const (
+	claudeDefaultRejectNote = "当前 Claude 模式暂不支持这个命令。"
+)
 
 func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuCommandDisplayProfile {
 	normalized := NormalizeCatalogContext(ctx)
@@ -117,7 +171,10 @@ func (p FeishuCommandDisplayProfile) FamilyProfile(familyID string) (FeishuComma
 		return FeishuCommandDisplayFamilyProfile{}, false
 	}
 	profile, ok := p.Families[familyID]
-	return profile, ok
+	if !ok || !profile.Visible {
+		return FeishuCommandDisplayFamilyProfile{}, false
+	}
+	return profile, true
 }
 
 func (p FeishuCommandDisplayProfile) IncludesFamily(familyID string) bool {
@@ -148,6 +205,57 @@ func (p FeishuCommandDisplayProfile) IncludesGroup(groupID string) bool {
 	return len(p.VisibleFamiliesForGroup(groupID)) > 0
 }
 
+func ResolveFeishuCommandSupport(ctx CatalogContext, familyID string) (FeishuCommandSupport, bool) {
+	ctx = NormalizeCatalogContext(ctx)
+	familyID = strings.TrimSpace(familyID)
+	if familyID == "" {
+		return FeishuCommandSupport{}, false
+	}
+	if _, ok := FeishuCommandDefinitionByID(familyID); !ok {
+		return FeishuCommandSupport{}, false
+	}
+	profile := ResolveFeishuCommandDisplayProfileForContext(ctx)
+	family, ok := profile.Families[familyID]
+	if !ok {
+		family = FeishuCommandDisplayFamilyProfile{
+			FamilyID:        familyID,
+			DispatchAllowed: profile.DefaultDispatchAllowed,
+			SupportKind:     profile.DefaultSupportKind,
+			Note:            profile.DefaultRejectNote,
+		}
+	}
+	kind := family.SupportKind
+	if kind == "" {
+		kind = profile.DefaultSupportKind
+	}
+	if kind == "" {
+		kind = FeishuCommandSupportNative
+	}
+	note := strings.TrimSpace(family.Note)
+	if note == "" && !family.DispatchAllowed {
+		note = strings.TrimSpace(profile.DefaultRejectNote)
+	}
+	return FeishuCommandSupport{
+		FamilyID:        familyID,
+		Backend:         ctx.Backend,
+		Kind:            kind,
+		Visible:         family.Visible,
+		DispatchAllowed: family.DispatchAllowed,
+		Note:            note,
+	}, true
+}
+
+func ResolveFeishuActionSupport(ctx CatalogContext, action Action) (FeishuCommandSupport, bool) {
+	ctx = NormalizeCatalogContext(ctx)
+	if familyID := strings.TrimSpace(action.CatalogFamilyID); familyID != "" {
+		return ResolveFeishuCommandSupport(ctx, familyID)
+	}
+	if resolved, ok := ResolveFeishuActionCatalog(ctx, action); ok {
+		return ResolveFeishuCommandSupport(ctx, resolved.FamilyID)
+	}
+	return FeishuCommandSupport{}, false
+}
+
 func (f FeishuCommandDisplayFamilyProfile) MenuVisibleInStage(stage string) bool {
 	if len(f.MenuStages) == 0 {
 		return true
@@ -156,13 +264,25 @@ func (f FeishuCommandDisplayFamilyProfile) MenuVisibleInStage(stage string) bool
 	return ok
 }
 
-func displayProfileFamily(familyID string) FeishuCommandDisplayFamilyProfile {
-	return displayProfileFamilyWithStages(familyID)
+func commandSupportVisible(familyID string) FeishuCommandDisplayFamilyProfile {
+	return commandSupportVisibleWithStages(familyID)
 }
 
-func displayProfileFamilyWithStages(familyID string, stages ...FeishuCommandMenuStage) FeishuCommandDisplayFamilyProfile {
+func commandSupportVisibleAs(familyID string, kind FeishuCommandSupportKind, note string) FeishuCommandDisplayFamilyProfile {
+	family := commandSupportVisible(familyID)
+	family.SupportKind = kind
+	family.Note = strings.TrimSpace(note)
+	return family
+}
+
+func commandSupportVisibleWithStages(familyID string, stages ...FeishuCommandMenuStage) FeishuCommandDisplayFamilyProfile {
 	familyID = strings.TrimSpace(familyID)
-	profile := FeishuCommandDisplayFamilyProfile{FamilyID: familyID}
+	profile := FeishuCommandDisplayFamilyProfile{
+		FamilyID:        familyID,
+		Visible:         true,
+		DispatchAllowed: true,
+		SupportKind:     FeishuCommandSupportNative,
+	}
 	if len(stages) == 0 {
 		return profile
 	}
@@ -174,10 +294,37 @@ func displayProfileFamilyWithStages(familyID string, stages ...FeishuCommandMenu
 	return profile
 }
 
-func newFeishuCommandDisplayProfile(visibleMode string, families ...FeishuCommandDisplayFamilyProfile) FeishuCommandDisplayProfile {
+func commandSupportHiddenAllowed(familyID string) FeishuCommandDisplayFamilyProfile {
+	return FeishuCommandDisplayFamilyProfile{
+		FamilyID:        strings.TrimSpace(familyID),
+		DispatchAllowed: true,
+		SupportKind:     FeishuCommandSupportNative,
+	}
+}
+
+func commandSupportHiddenReject(familyID string, kind FeishuCommandSupportKind, note string) FeishuCommandDisplayFamilyProfile {
+	if kind == "" {
+		kind = FeishuCommandSupportReject
+	}
+	return FeishuCommandDisplayFamilyProfile{
+		FamilyID:        strings.TrimSpace(familyID),
+		DispatchAllowed: false,
+		SupportKind:     kind,
+		Note:            strings.TrimSpace(note),
+	}
+}
+
+func newFeishuCommandDisplayProfile(visibleMode string, defaultDispatchAllowed bool, families ...FeishuCommandDisplayFamilyProfile) FeishuCommandDisplayProfile {
 	profile := FeishuCommandDisplayProfile{
-		VisibleMode: strings.TrimSpace(strings.ToLower(visibleMode)),
-		Families:    make(map[string]FeishuCommandDisplayFamilyProfile, len(families)),
+		VisibleMode:            strings.TrimSpace(strings.ToLower(visibleMode)),
+		DefaultDispatchAllowed: defaultDispatchAllowed,
+		DefaultSupportKind:     FeishuCommandSupportNative,
+		DefaultRejectNote:      "当前模式暂不支持这个命令。",
+		Families:               make(map[string]FeishuCommandDisplayFamilyProfile, len(families)),
+	}
+	if !defaultDispatchAllowed {
+		profile.DefaultSupportKind = FeishuCommandSupportReject
+		profile.DefaultRejectNote = claudeDefaultRejectNote
 	}
 	for _, family := range families {
 		familyID := strings.TrimSpace(family.FamilyID)
@@ -194,8 +341,11 @@ func (p FeishuCommandDisplayProfile) withAdditionalFamilies(families ...FeishuCo
 		return p
 	}
 	cloned := FeishuCommandDisplayProfile{
-		VisibleMode: p.VisibleMode,
-		Families:    make(map[string]FeishuCommandDisplayFamilyProfile, len(p.Families)+len(families)),
+		VisibleMode:            p.VisibleMode,
+		DefaultDispatchAllowed: p.DefaultDispatchAllowed,
+		DefaultSupportKind:     p.DefaultSupportKind,
+		DefaultRejectNote:      p.DefaultRejectNote,
+		Families:               make(map[string]FeishuCommandDisplayFamilyProfile, len(p.Families)+len(families)),
 	}
 	for familyID, profile := range p.Families {
 		cloned.Families[familyID] = profile

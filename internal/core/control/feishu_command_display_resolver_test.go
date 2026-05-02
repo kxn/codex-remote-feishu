@@ -62,7 +62,7 @@ func TestResolveFeishuCommandDisplayGroupSupportsMenuStageProjection(t *testing.
 	}
 }
 
-func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *testing.T) {
+func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.T) {
 	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, CatalogContext{
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
@@ -92,7 +92,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeStrategyProjection(t *test
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(commonTools), []string{"/history"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
 	}
 
