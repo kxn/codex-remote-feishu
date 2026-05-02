@@ -24,6 +24,8 @@ type childSession struct {
 	cancel      context.CancelFunc
 	ioCancel    context.CancelFunc
 	writeCancel context.CancelFunc
+	stdoutDone  chan struct{}
+	writeDone   chan struct{}
 }
 
 func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
@@ -77,8 +79,10 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 	session.ioCancel = ioCancel
 	writeCtx, writeCancel := context.WithCancel(ioCtx)
 	session.writeCancel = writeCancel
-	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem)
-	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem)
+	session.writeDone = make(chan struct{})
+	session.stdoutDone = make(chan struct{})
+	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem, session.writeDone)
+	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem, session.stdoutDone)
 	go streamCopy(session.stderr, parentStderr, errCh)
 }
 
@@ -113,6 +117,29 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	}
 }
 
+func waitForSessionIOStopped(session *childSession, timeout time.Duration) {
+	if session == nil || timeout <= 0 {
+		return
+	}
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	wait := func(done <-chan struct{}) bool {
+		if done == nil {
+			return true
+		}
+		select {
+		case <-done:
+			return true
+		case <-deadline.C:
+			return false
+		}
+	}
+	if !wait(session.writeDone) {
+		return
+	}
+	_ = wait(session.stdoutDone)
+}
+
 func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
 	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartTarget(request.Target)); err != nil {
 		return nil, err
@@ -141,6 +168,7 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 	// Restart should synchronously fence old IO before returning, but it should
 	// not block the relay ack path on the old child fully exiting.
 	signalStopChildSession(current, a.debugf)
+	waitForSessionIOStopped(current, wrapperChildWaitTimeout)
 	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
 	restoreClient := client
 	if !request.EmitEvent {
