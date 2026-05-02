@@ -525,6 +525,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		}
 		select {
 		case err := <-waitErrCh:
+			waitForSessionStdoutStopped(activeChild, wrapperChildWaitTimeout)
 			emitRuntimeExitReconciliation(client, turnTracker, err, problems.Emit)
 			drainAndCloseRelayClient(client, problems.Emit)
 			if err == nil {

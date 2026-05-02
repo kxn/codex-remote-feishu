@@ -140,6 +140,20 @@ func waitForSessionIOStopped(session *childSession, timeout time.Duration) {
 	_ = wait(session.stdoutDone)
 }
 
+func waitForSessionStdoutStopped(session *childSession, timeout time.Duration) bool {
+	if session == nil || session.stdoutDone == nil || timeout <= 0 {
+		return true
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-session.stdoutDone:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
 func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
 	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartTarget(request.Target)); err != nil {
 		return nil, err
