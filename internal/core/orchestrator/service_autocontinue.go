@@ -261,6 +261,7 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	item := &state.QueueItemRecord{
 		ID:                    itemID,
 		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
 		SourceKind:            state.QueueItemSourceAutoContinue,
 		AutoContinueEpisodeID: episode.EpisodeID,
 		ReplyToMessageID:      episode.RootReplyToMessageID,

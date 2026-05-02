@@ -479,6 +479,7 @@ func (s *Service) restorePendingSteerAsStagedImage(surface *state.SurfaceConsole
 		ImageID:          "img-" + strconv.Itoa(s.nextImageID),
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  item.SourceMessageID,
+		ActorUserID:      strings.TrimSpace(firstNonEmpty(item.ActorUserID, surface.ActorUserID)),
 		LocalPath:        item.Inputs[0].Path,
 		MIMEType:         item.Inputs[0].MIMEType,
 		State:            state.ImageStaged,

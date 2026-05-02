@@ -579,6 +579,7 @@ type RequestCaptureRecord struct {
 type QueueItemRecord struct {
 	ID                    string
 	SurfaceSessionID      string
+	ActorUserID           string
 	SourceKind            QueueItemSourceKind
 	AutoContinueEpisodeID string
 	SourceMessageID       string

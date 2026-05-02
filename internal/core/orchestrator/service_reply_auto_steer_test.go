@@ -194,12 +194,90 @@ func TestReplyImageSteerRejectedFallsBackToStagedImage(t *testing.T) {
 		t.Fatalf("expected rejected image reply to fall back to staged image, got %#v", surface.StagedImages)
 	}
 	for _, image := range surface.StagedImages {
-		if image.SourceMessageID != "msg-reply-image-2" || image.State != state.ImageStaged {
+		if image.SourceMessageID != "msg-reply-image-2" || image.State != state.ImageStaged || image.ActorUserID != "user-1" {
 			t.Fatalf("unexpected staged image fallback: %#v", image)
 		}
 	}
 	if len(rejected) == 0 || rejected[0].Notice == nil || rejected[0].Notice.Code != "steer_failed" {
 		t.Fatalf("expected steer_failed notice, got %#v", rejected)
+	}
+}
+
+func TestReplyImageSteerRejectedRestoredStageRespectsActorIsolation(t *testing.T) {
+	now := time.Date(2026, 4, 14, 13, 16, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	startReplyAutoSteerTurn(svc)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionImageMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-reply-image-3",
+		TargetMessageID:  "msg-active",
+		ActorUserID:      "user-1",
+		LocalPath:        "/tmp/reply-3.png",
+		MIMEType:         "image/png",
+		SteerInputs: []agentproto.Input{
+			{Type: agentproto.InputLocalImage, Path: "/tmp/reply-3.png", MIMEType: "image/png"},
+		},
+	})
+	if len(events) != 2 || events[1].Command == nil {
+		t.Fatalf("expected steer dispatch, got %#v", events)
+	}
+	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-reply-image-2")
+
+	rejected := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{
+		CommandID: "cmd-steer-reply-image-2",
+		Accepted:  false,
+		Problem: &agentproto.ErrorInfo{
+			Code:    "steer_rejected",
+			Message: "running turn already closed for steering",
+		},
+	})
+	if len(rejected) == 0 || rejected[0].Notice == nil || rejected[0].Notice.Code != "steer_failed" {
+		t.Fatalf("expected steer_failed notice, got %#v", rejected)
+	}
+
+	otherUserEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-other-user",
+		ActorUserID:      "user-2",
+		Text:             "别人的文字",
+	})
+	if len(otherUserEvents) == 0 {
+		t.Fatalf("expected queued events for other user, got %#v", otherUserEvents)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	otherItem := surface.QueueItems["queue-3"]
+	if otherItem == nil {
+		t.Fatalf("expected other user queue item, got %#v", surface.QueueItems)
+	}
+	if len(otherItem.Inputs) != 1 || otherItem.Inputs[0].Type != agentproto.InputText || otherItem.Inputs[0].Text != "别人的文字" {
+		t.Fatalf("expected other user not to consume restored image, got %#v", otherItem.Inputs)
+	}
+	if image := surface.StagedImages["img-1"]; image == nil || image.State != state.ImageStaged || image.ActorUserID != "user-1" {
+		t.Fatalf("expected restored image to remain staged for original actor, got %#v", image)
+	}
+
+	ownerEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-owner-user",
+		ActorUserID:      "user-1",
+		Text:             "我的文字",
+	})
+	if len(ownerEvents) == 0 {
+		t.Fatalf("expected queued events for owner, got %#v", ownerEvents)
+	}
+	ownerItem := surface.QueueItems["queue-4"]
+	if ownerItem == nil {
+		t.Fatalf("expected owner queue item, got %#v", surface.QueueItems)
+	}
+	if len(ownerItem.Inputs) != 2 || ownerItem.Inputs[0].Type != agentproto.InputLocalImage || ownerItem.Inputs[0].Path != "/tmp/reply-3.png" || ownerItem.Inputs[1].Type != agentproto.InputText || ownerItem.Inputs[1].Text != "我的文字" {
+		t.Fatalf("expected owner to consume restored image on next text, got %#v", ownerItem.Inputs)
+	}
+	if image := surface.StagedImages["img-1"]; image == nil || image.State != state.ImageBound {
+		t.Fatalf("expected restored image to bind after owner consumes it, got %#v", image)
 	}
 }
 

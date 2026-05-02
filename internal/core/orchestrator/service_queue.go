@@ -88,6 +88,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:           surface.SurfaceSessionID,
+		ActorUserID:                surface.ActorUserID,
 		SourceKind:                 state.QueueItemSourceUser,
 		SourceMessageID:            sourceMessageID,
 		SourceMessagePreview:       normalizeSourceMessagePreview(sourceMessagePreview),
@@ -124,6 +125,7 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:           surface.SurfaceSessionID,
+		ActorUserID:                surface.ActorUserID,
 		SourceKind:                 state.QueueItemSourceAutoWhip,
 		ReplyToMessageID:           strings.TrimSpace(replyToMessageID),
 		ReplyToMessagePreview:      normalizeSourceMessagePreview(replyToMessagePreview),
@@ -304,7 +306,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
 			Surface:   surface.SurfaceSessionID,
-			UserID:    surface.ActorUserID,
+			UserID:    queuedItemActorUserID(item, surface),
 			ChatID:    surface.ChatID,
 			MessageID: originMessageID,
 		},
@@ -339,6 +341,16 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		Command:          command,
 	})
 	return events
+}
+
+func queuedItemActorUserID(item *state.QueueItemRecord, surface *state.SurfaceConsoleRecord) string {
+	if item != nil && strings.TrimSpace(item.ActorUserID) != "" {
+		return strings.TrimSpace(item.ActorUserID)
+	}
+	if surface == nil {
+		return ""
+	}
+	return strings.TrimSpace(surface.ActorUserID)
 }
 
 func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Event) []eventcontract.Event {

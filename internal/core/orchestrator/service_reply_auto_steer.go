@@ -50,6 +50,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	item := &state.QueueItemRecord{
 		ID:                         queueItemID,
 		SurfaceSessionID:           surface.SurfaceSessionID,
+		ActorUserID:                action.ActorUserID,
 		SourceKind:                 state.QueueItemSourceUser,
 		SourceMessageID:            sourceMessageID,
 		SourceMessagePreview:       normalizeSourceMessagePreview(action.Text),
@@ -95,7 +96,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 			Kind: agentproto.CommandTurnSteer,
 			Origin: agentproto.Origin{
 				Surface:   surface.SurfaceSessionID,
-				UserID:    surface.ActorUserID,
+				UserID:    queuedItemActorUserID(item, surface),
 				ChatID:    surface.ChatID,
 				MessageID: sourceMessageID,
 			},
