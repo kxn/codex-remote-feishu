@@ -298,11 +298,11 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 	return s.emitExecCommandProgress(surface, progress, threadID, turnID, false)
 }
 
-func (s *Service) RecordExecCommandProgressMessage(surfaceID, threadID, turnID, itemID, messageID string) {
-	s.RecordExecCommandProgressMessageStartSeq(surfaceID, threadID, turnID, itemID, messageID, 0)
+func (s *Service) RecordExecCommandProgressSegment(surfaceID, threadID, turnID, itemID, messageID string) {
+	s.RecordExecCommandProgressSegmentWindow(surfaceID, threadID, turnID, itemID, messageID, 0, 0)
 }
 
-func (s *Service) RecordExecCommandProgressMessageStartSeq(surfaceID, threadID, turnID, itemID, messageID string, cardStartSeq int) {
+func (s *Service) RecordExecCommandProgressSegmentWindow(surfaceID, threadID, turnID, itemID, messageID string, cardStartSeq, cardEndSeq int) {
 	if strings.TrimSpace(surfaceID) == "" || strings.TrimSpace(messageID) == "" {
 		return
 	}
@@ -317,9 +317,24 @@ func (s *Service) RecordExecCommandProgressMessageStartSeq(surfaceID, threadID, 
 	if strings.TrimSpace(itemID) != "" && progress.ItemID != strings.TrimSpace(itemID) {
 		return
 	}
-	progress.MessageID = strings.TrimSpace(messageID)
+	appended := false
+	segment := ensureExecCommandProgressActiveSegment(progress)
+	if segment == nil || (strings.TrimSpace(segment.MessageID) != "" && strings.TrimSpace(segment.MessageID) != strings.TrimSpace(messageID)) {
+		segment = appendExecCommandProgressSegment(progress, cardStartSeq)
+		appended = true
+	}
+	if segment == nil {
+		return
+	}
+	segment.MessageID = strings.TrimSpace(messageID)
 	if cardStartSeq > 0 {
-		progress.CardStartSeq = cardStartSeq
+		segment.StartSeq = cardStartSeq
+	}
+	if cardEndSeq > 0 {
+		segment.EndSeq = cardEndSeq
+	}
+	if appended {
+		execprogress.RolloverCarryoverEntries(progress, segment.StartSeq)
 	}
 }
 

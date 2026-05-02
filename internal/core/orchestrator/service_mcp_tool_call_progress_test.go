@@ -38,7 +38,7 @@ func TestMCPToolCallProgressUsesSharedProcessCard(t *testing.T) {
 	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "mcp_tool_call" || progress.Entries[0].Label != "MCP" || progress.Entries[0].Summary != "docs.lookup" {
 		t.Fatalf("unexpected shared start progress payload: %#v", progress)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
 
 	duplicate := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -82,7 +82,7 @@ func TestMCPToolCallProgressUsesSharedProcessCard(t *testing.T) {
 		t.Fatalf("expected one shared progress failure event, got %#v", failed)
 	}
 	progress = failed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected failed mcp update to reuse shared card, got %#v", progress)
 	}
 	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "docs.lookup（失败：connector timeout）" {
@@ -176,7 +176,7 @@ func TestMCPToolCallProgressNormalVerbosityShowsSharedProcessCard(t *testing.T) 
 	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "mcp_tool_call" || progress.Entries[0].Summary != "docs.lookup" {
 		t.Fatalf("unexpected normal mcp progress payload: %#v", progress)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
@@ -199,7 +199,7 @@ func TestMCPToolCallProgressNormalVerbosityShowsSharedProcessCard(t *testing.T) 
 		t.Fatalf("expected normal verbosity to update mcp progress on completion, got %#v", completed)
 	}
 	progress = completed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" || len(progress.Entries) != 1 || progress.Entries[0].Summary != "docs.lookup（12 ms）" {
+	if activeProgressMessageID(progress) != "om-progress-1" || len(progress.Entries) != 1 || progress.Entries[0].Summary != "docs.lookup（12 ms）" {
 		t.Fatalf("unexpected normal completion payload: %#v", progress)
 	}
 }

@@ -32,17 +32,32 @@ func (p *Projector) projectExecCommandProgress(chatID string, event eventcontrac
 		CardElements:         elements,
 		CardUpdateMulti:      true,
 		ProgressCardStartSeq: window.StartSeq,
+		ProgressCardEndSeq:   window.EndSeq,
 		cardEnvelope:         cardEnvelopeV2,
 		card:                 rawCardDocument("工作中", "", cardThemeProgress, elements),
 	}
-	if strings.TrimSpace(progress.MessageID) != "" {
+	if messageID := strings.TrimSpace(activeExecCommandProgressSegmentMessageID(progress)); messageID != "" && !window.NewCard {
 		op.Kind = OperationUpdateCard
-		op.MessageID = progress.MessageID
+		op.MessageID = messageID
 	} else {
 		op.Kind = OperationSendCard
 		op = applyReplyLaneToNewOperation(event, op)
 	}
 	return []Operation{applyDetourHeaderToOperation(op, progress.DetourLabel)}
+}
+
+func activeExecCommandProgressSegmentMessageID(progress control.ExecCommandProgress) string {
+	if strings.TrimSpace(progress.ActiveSegmentID) != "" {
+		for _, segment := range progress.Segments {
+			if strings.TrimSpace(segment.SegmentID) == strings.TrimSpace(progress.ActiveSegmentID) {
+				return strings.TrimSpace(segment.MessageID)
+			}
+		}
+	}
+	if len(progress.Segments) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(progress.Segments[len(progress.Segments)-1].MessageID)
 }
 
 func execCommandProgressBody(progress control.ExecCommandProgress) string {

@@ -1,8 +1,8 @@
 # 共享探索过程卡设计
 
 > Type: `implemented`
-> Updated: `2026-05-01`
-> Summary: 记录共用探索过程卡的已落地边界：后端输出结构化 exploration block，reasoning/thinking 作为飞书“工作中”卡内持久 timeline 行展示；当前用户可见展示面为 Feishu 侧共用状态卡，Web admin 与 admin runtime API 不再承担这类运行中过程展示。
+> Updated: `2026-05-02`
+> Summary: 记录共用探索过程卡的已落地边界：后端输出结构化 exploration block，reasoning/thinking 作为飞书“工作中”卡内持久 timeline 行展示；共享过程卡超预算后改为多段 progress-card family，旧段 seal 保留，新段承接后续过程与 running 项快照。
 
 ## 背景
 
@@ -40,9 +40,11 @@
 2. `command_execution` 会把最稳定的一批命令归一进 exploration block，包括 `cat / bat / head / tail / sed / ls / rg / grep`。
 3. `dynamic_tool_call.read` 已接入同一套 exploration block，并继续沿用后端语义化而非前端猜字符串。
 4. Feishu 过程卡优先渲染 exploration block；Codex reasoning summary 与 Claude thinking 会作为 `reasoning_summary` timeline 行沉淀在同一张“工作中”卡里，不再作为底部瞬时状态，也不会因为后续普通进度或 assistant 正文开始而被撤回。reasoning/thinking delta 的主动卡片更新按约 1 秒合并；普通进度更新会携带最新 thinking，reasoning item 结束、assistant 正文开始和 turn 结束前会 flush 最后一段内容。
-5. Feishu projector 当前按“每个可见行一个 markdown element”出站共享过程卡，而不是把整段 timeline 压成单个 markdown body，避免某一行的 inline 语法把后续行一起污染。
-6. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
-7. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
+5. 共享过程卡超预算后不再裁掉最旧历史，而是改为多段 progress-card family：当前 active segment seal，直接新开下一张“工作中”卡承接后续过程；daemon 会记录每个 segment 的 `message_id + start_seq + end_seq`。
+6. 对仍处于活动态的可变过程项，segment rollover 时会把当前快照接到新 active segment，避免后续状态更新回写 sealed 旧卡；已 seal 的旧段不再做跨段重排或历史搬运。
+7. Feishu projector 当前按“每个可见行一个 markdown element”出站共享过程卡，而不是把整段 timeline 压成单个 markdown body，避免某一行的 inline 语法把后续行一起污染。
+8. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
+9. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
 
 当前仍然刻意保留的边界：
 

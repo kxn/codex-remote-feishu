@@ -11,6 +11,40 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func activeProgressMessageID(progress *control.ExecCommandProgress) string {
+	if progress == nil {
+		return ""
+	}
+	if progress.ActiveSegmentID != "" {
+		for _, segment := range progress.Segments {
+			if segment.SegmentID == progress.ActiveSegmentID {
+				return segment.MessageID
+			}
+		}
+	}
+	if len(progress.Segments) == 0 {
+		return ""
+	}
+	return progress.Segments[len(progress.Segments)-1].MessageID
+}
+
+func activeProgressStartSeq(progress *control.ExecCommandProgress) int {
+	if progress == nil {
+		return 0
+	}
+	if progress.ActiveSegmentID != "" {
+		for _, segment := range progress.Segments {
+			if segment.SegmentID == progress.ActiveSegmentID {
+				return segment.StartSeq
+			}
+		}
+	}
+	if len(progress.Segments) == 0 {
+		return 0
+	}
+	return progress.Segments[len(progress.Segments)-1].StartSeq
+}
+
 func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -48,7 +82,7 @@ func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.
 		t.Fatalf("expected first command history, got %#v", progress)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
 
 	secondStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -65,7 +99,7 @@ func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.
 		t.Fatalf("expected second exec progress update, got %#v", secondStarted)
 	}
 	progress = secondStarted[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected second start to update same card, got %#v", progress)
 	}
 	if len(progress.Entries) != 2 || progress.Entries[0].Summary != "npm test" || progress.Entries[1].Summary != "go test ./..." {
@@ -112,7 +146,7 @@ func TestRecordExecCommandProgressMessageStartSeqAdvancesActiveCardWindow(t *tes
 	if len(started) != 1 || started[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial progress event, got %#v", started)
 	}
-	svc.RecordExecCommandProgressMessageStartSeq("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-2", 7)
+	svc.RecordExecCommandProgressSegmentWindow("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-2", 7, 0)
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -128,7 +162,7 @@ func TestRecordExecCommandProgressMessageStartSeqAdvancesActiveCardWindow(t *tes
 		t.Fatalf("expected follow-up progress event, got %#v", second)
 	}
 	progress := second[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-2" || progress.CardStartSeq != 7 {
+	if activeProgressMessageID(progress) != "om-progress-2" || activeProgressStartSeq(progress) != 7 {
 		t.Fatalf("expected active progress card state to keep new message and window start, got %#v", progress)
 	}
 }
@@ -264,7 +298,7 @@ func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.
 	if len(started) != 1 || started[0].ExecCommandProgress == nil {
 		t.Fatalf("expected started file_change event, got %#v", started)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "file-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "file-1", "om-progress-1")
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
@@ -283,7 +317,7 @@ func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.
 		t.Fatalf("expected completed file_change to refresh shared progress, got %#v", completed)
 	}
 	progress := completed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected completed file_change to reuse existing card, got %#v", progress)
 	}
 	if len(progress.Entries) != 1 || progress.Entries[0].FileChange == nil {
@@ -368,7 +402,7 @@ func TestWebSearchSharesExecCommandProgressCardInVerbose(t *testing.T) {
 	if len(started) != 1 || started[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial command progress event, got %#v", started)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
 
 	searchStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -382,7 +416,7 @@ func TestWebSearchSharesExecCommandProgressCardInVerbose(t *testing.T) {
 		t.Fatalf("expected shared progress update for web search, got %#v", searchStarted)
 	}
 	progress := searchStarted[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected web search to reuse command progress card, got %#v", progress)
 	}
 	if len(progress.Entries) != 2 {
@@ -470,7 +504,7 @@ func TestDelegatedTaskProgressCompletionUpdatesSameEntry(t *testing.T) {
 	if len(started) != 1 || started[0].ExecCommandProgress == nil {
 		t.Fatalf("expected delegated task start progress, got %#v", started)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "task-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "task-1", "om-progress-1")
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
@@ -488,7 +522,7 @@ func TestDelegatedTaskProgressCompletionUpdatesSameEntry(t *testing.T) {
 		t.Fatalf("expected delegated task completion progress, got %#v", completed)
 	}
 	progress := completed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected delegated task completion to reuse same card, got %#v", progress)
 	}
 	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "delegated_task" || progress.Entries[0].Status != "completed" {
@@ -531,7 +565,7 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 		t.Fatalf("unexpected dynamic tool first exploration row: %#v", progress.Blocks[0].Rows)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -550,7 +584,7 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 		t.Fatalf("expected dynamic tool merged update, got %#v", second)
 	}
 	progress = second[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected dynamic tool update to reuse same card, got %#v", progress)
 	}
 	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
@@ -616,7 +650,7 @@ func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 		t.Fatalf("expected started event, got %#v", started)
 	}
 	itemID := started[0].ExecCommandProgress.ItemID
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", itemID, "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", itemID, "om-progress-1")
 
 	failed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
@@ -636,7 +670,7 @@ func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 		t.Fatalf("expected failure update event, got %#v", failed)
 	}
 	progress := failed[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected failure to update existing progress card, got %#v", progress)
 	}
 	if len(progress.Blocks) != 1 || progress.Blocks[0].Status != "failed" {
@@ -680,7 +714,7 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 		t.Fatalf("expected exploration command to avoid duplicate legacy entries, got %#v", progress.Entries)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
 
 	searchStarted := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -697,7 +731,7 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 		t.Fatalf("expected search exploration update, got %#v", searchStarted)
 	}
 	progress = searchStarted[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected search start to update same card, got %#v", progress)
 	}
 	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
@@ -768,7 +802,7 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 		t.Fatalf("expected first read row, got %#v", progress.Blocks)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -849,7 +883,7 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 		t.Fatalf("expected first read block row, got %#v", progress.Blocks)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
@@ -1125,7 +1159,7 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 	if len(started) != 1 {
 		t.Fatalf("expected command progress start event, got %#v", started)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
 
 	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
@@ -1233,14 +1267,14 @@ func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
 		t.Fatalf("expected reasoning record to keep accumulated plain-text summary, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
 	}
 
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 	now = now.Add(execCommandProgressReasoningFlushInterval)
 	tick := svc.Tick(now)
 	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
 		t.Fatalf("expected tick to flush coalesced reasoning delta after throttle window, got %#v", tick)
 	}
 	progress := tick[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected tick flush to update existing progress card, got %#v", progress)
 	}
 	if got := progress.Timeline[0].Summary; got != "Considering possible fixes" {
@@ -1311,7 +1345,7 @@ func TestReasoningSummaryProgressKeepsDifferentSummaryIndexesAsTimelineRows(t *t
 	if len(second) != 0 {
 		t.Fatalf("expected second reasoning summary inside throttle window to be coalesced, got %#v", second)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 	now = now.Add(execCommandProgressReasoningFlushInterval)
 	tick := svc.Tick(now)
 	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
@@ -1352,7 +1386,7 @@ func TestReasoningSummaryProgressDoesNotAnimateWithoutNewDelta(t *testing.T) {
 	if len(first[0].ExecCommandProgress.Timeline) != 1 || first[0].ExecCommandProgress.Timeline[0].Summary != "Thinking" {
 		t.Fatalf("expected reasoning timeline to keep raw text, got %#v", first[0].ExecCommandProgress.Timeline)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
 	now = now.Add(10 * time.Second)
 	if tick := svc.Tick(now); len(tick) != 0 {
@@ -1382,7 +1416,7 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 	if len(first) != 1 || first[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
 	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1413,7 +1447,7 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 		t.Fatalf("expected ordinary progress update, got %#v", second)
 	}
 	progress := second[0].ExecCommandProgress
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected ordinary progress to reuse the same card, got %#v", progress)
 	}
 	if len(progress.Timeline) != 2 ||
@@ -1494,7 +1528,7 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 	if len(first) != 1 || first[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
 	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1534,7 +1568,7 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 		Delta:    "先给你结论。",
 	}); len(events) != 1 || events[0].ExecCommandProgress == nil {
 		t.Fatalf("expected assistant text delta to flush dirty reasoning before clearing progress, got %#v", events)
-	} else if progress := events[0].ExecCommandProgress; progress.MessageID != "om-progress-1" ||
+	} else if progress := events[0].ExecCommandProgress; activeProgressMessageID(progress) != "om-progress-1" ||
 		len(progress.Timeline) != 1 ||
 		progress.Timeline[0].Summary != "Thinking about response shape" {
 		t.Fatalf("expected assistant text delta to flush latest reasoning snapshot, got %#v", progress)
@@ -1566,7 +1600,7 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 	if len(first) != 1 || first[0].ExecCommandProgress == nil {
 		t.Fatalf("expected initial reasoning progress event, got %#v", first)
 	}
-	svc.RecordExecCommandProgressMessage("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 
 	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
@@ -1601,7 +1635,7 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 		t.Fatalf("expected turn completion to finalize reasoning progress, got %#v", finished)
 	}
 	progress := progressEvent
-	if progress.MessageID != "om-progress-1" {
+	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected final progress snapshot on completion, got %#v", progress)
 	}
 	if len(progress.Timeline) != 1 ||

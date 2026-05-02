@@ -16,6 +16,18 @@ func progressWithTimeline(progress control.ExecCommandProgress) *control.ExecCom
 	return &progress
 }
 
+func progressWithActiveSegment(progress control.ExecCommandProgress, messageID string, startSeq int) *control.ExecCommandProgress {
+	if strings.TrimSpace(messageID) != "" {
+		progress.ActiveSegmentID = "segment-1"
+		progress.Segments = []control.ExecCommandProgressSegment{{
+			SegmentID: "segment-1",
+			MessageID: strings.TrimSpace(messageID),
+			StartSeq:  startSeq,
+		}}
+	}
+	return progressWithTimeline(progress)
+}
+
 func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
@@ -79,15 +91,14 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om-source-1",
-		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:  "thread-1",
-			TurnID:    "turn-1",
-			ItemID:    "cmd-1",
-			MessageID: "om-progress-1",
-			Command:   "npm test",
-			Status:    "completed",
-			Final:     true,
-		}),
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-1",
+			Command:  "npm test",
+			Status:   "completed",
+			Final:    true,
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected one operation, got %#v", ops)
@@ -257,12 +268,11 @@ func TestProjectExecCommandProgressDoesNotRetractEmptyTransientCard(t *testing.T
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om-source-1",
-		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:  "thread-1",
-			TurnID:    "turn-1",
-			ItemID:    "reasoning-1",
-			MessageID: "om-progress-1",
-		}),
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "reasoning-1",
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 0 {
 		t.Fatalf("expected empty transient clear to leave the old card in place, got %#v", ops)
@@ -368,13 +378,11 @@ func TestProjectExecCommandProgressRendersFileChangeSummaryInNormal(t *testing.T
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om-source-1",
-		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "file-1",
-			Verbosity:    "normal",
-			MessageID:    "om-progress-1",
-			CardStartSeq: 1,
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+			ItemID:    "file-1",
+			Verbosity: "normal",
 			Entries: []control.ExecCommandProgressEntry{{
 				ItemID:  "file-1::service.go",
 				Kind:    "file_change",
@@ -389,7 +397,7 @@ func TestProjectExecCommandProgressRendersFileChangeSummaryInNormal(t *testing.T
 				},
 				LastSeq: 1,
 			}},
-		}),
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected one operation, got %#v", ops)
@@ -590,24 +598,22 @@ func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: &control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "cmd-480",
-			MessageID:    "om-progress-1",
-			CardStartSeq: 1,
-			Entries:      entries,
-		},
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-480",
+			Entries:  entries,
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected oversized shared progress to stay on one card, got %#v", ops)
 	}
 	op := ops[0]
-	if op.Kind != OperationUpdateCard || op.MessageID != "om-progress-1" {
-		t.Fatalf("expected oversized shared progress to keep patching current card, got %#v", op)
+	if op.Kind != OperationSendCard || op.MessageID != "" {
+		t.Fatalf("expected oversized shared progress to open a new card segment, got %#v", op)
 	}
 	if op.ProgressCardStartSeq <= 1 {
-		t.Fatalf("expected oversized shared progress to advance visible window start, got %#v", op)
+		t.Fatalf("expected oversized shared progress to start a later segment, got %#v", op)
 	}
 	payload := renderOperationCard(op, op.effectiveCardEnvelope())
 	assertRenderedCardPayloadBasicInvariants(t, payload)
@@ -621,13 +627,56 @@ func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 	if strings.Contains(op.CardBody, oversizedCardMessage) {
 		t.Fatalf("expected projector FIFO trimming to avoid gateway truncation marker, got %#v", op)
 	}
-	if !strings.Contains(op.CardBody, execProgressOmittedHistoryText) {
-		t.Fatalf("expected oversized shared progress to explain omitted history, got %#v", op)
-	}
-	if strings.Contains(op.CardBody, "**执行**："+markdownCodeSpan("go test ./pkg/1")) || strings.Contains(op.CardBody, "**执行**："+markdownCodeSpan("go test ./pkg/2")) {
-		t.Fatalf("expected oldest progress lines to fall out of active window, got %#v", op)
+	if strings.Contains(op.CardBody, markdownCodeSpan("go test ./pkg/1")) || strings.Contains(op.CardBody, markdownCodeSpan("go test ./pkg/2")) {
+		t.Fatalf("expected new segment not to repeat earliest lines, got %#v", op)
 	}
 	if !strings.Contains(op.CardBody, markdownCodeSpan("go test ./pkg/480")) {
+		t.Fatalf("expected newest progress lines to stay visible, got %#v", op)
+	}
+}
+
+func TestProjectExecCommandProgressCarriesRunningEntryIntoNewSegment(t *testing.T) {
+	projector := NewProjector()
+	entries := make([]control.ExecCommandProgressEntry, 0, 481)
+	entries = append(entries, control.ExecCommandProgressEntry{
+		ItemID:  "cmd-active",
+		Kind:    "command_execution",
+		Label:   "执行",
+		Summary: "go test ./active",
+		Status:  "running",
+		LastSeq: 1,
+	})
+	for i := 2; i <= 481; i++ {
+		entries = append(entries, control.ExecCommandProgressEntry{
+			ItemID:  "cmd-" + strconv.Itoa(i),
+			Kind:    "command_execution",
+			Label:   "执行",
+			Summary: "go test ./pkg/" + strconv.Itoa(i),
+			Status:  "completed",
+			LastSeq: i,
+		})
+	}
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-481",
+			Entries:  entries,
+		}, "om-progress-1", 1),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected oversized shared progress to open a new segment, got %#v", ops)
+	}
+	op := ops[0]
+	if op.Kind != OperationSendCard || op.ProgressCardStartSeq <= 1 {
+		t.Fatalf("expected new card segment with later start seq, got %#v", op)
+	}
+	if !strings.Contains(op.CardBody, markdownCodeSpan("go test ./active")) {
+		t.Fatalf("expected running entry snapshot to carry into the new segment, got %#v", op)
+	}
+	if !strings.Contains(op.CardBody, markdownCodeSpan("go test ./pkg/481")) {
 		t.Fatalf("expected newest progress lines to stay visible, got %#v", op)
 	}
 }
@@ -637,19 +686,17 @@ func TestProjectExecCommandProgressUsesStoredWindowStartSeq(t *testing.T) {
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: &control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "cmd-4",
-			MessageID:    "om-progress-2",
-			CardStartSeq: 3,
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-4",
 			Entries: []control.ExecCommandProgressEntry{
 				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "go test ./one", LastSeq: 1},
 				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "go test ./two", LastSeq: 2},
 				{ItemID: "cmd-3", Kind: "command_execution", Label: "执行", Summary: "go test ./three", LastSeq: 3},
 				{ItemID: "cmd-4", Kind: "command_execution", Label: "执行", Summary: "go test ./four", LastSeq: 4},
 			},
-		},
+		}, "om-progress-2", 3),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected stored window to stay on one card, got %#v", ops)
@@ -661,9 +708,6 @@ func TestProjectExecCommandProgressUsesStoredWindowStartSeq(t *testing.T) {
 	if !strings.Contains(body, "./three") || !strings.Contains(body, "./four") {
 		t.Fatalf("expected active stored window lines to stay visible, got %#v", ops[0])
 	}
-	if !strings.Contains(body, execProgressOmittedHistoryText) {
-		t.Fatalf("expected stored window to show omitted-history marker, got %#v", ops[0])
-	}
 	if ops[0].ProgressCardStartSeq != 3 {
 		t.Fatalf("expected stored window to preserve start seq, got %#v", ops[0])
 	}
@@ -674,26 +718,21 @@ func TestProjectExecCommandProgressFallsBackWhenStoredWindowIsStale(t *testing.T
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: &control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "cmd-2",
-			MessageID:    "om-progress-3",
-			CardStartSeq: 99,
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "cmd-2",
 			Entries: []control.ExecCommandProgressEntry{
 				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "go test ./one", LastSeq: 1},
 				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "go test ./two", LastSeq: 2},
 			},
-		},
+		}, "om-progress-3", 99),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected stale stored window to fall back to visible lines, got %#v", ops)
 	}
 	if !strings.Contains(ops[0].CardBody, "./one") || !strings.Contains(ops[0].CardBody, "./two") {
 		t.Fatalf("expected stale stored window to fall back to earliest visible lines, got %#v", ops[0])
-	}
-	if strings.Contains(ops[0].CardBody, execProgressOmittedHistoryText) {
-		t.Fatalf("did not expect stale stored window fallback to invent omitted-history marker, got %#v", ops[0])
 	}
 	if ops[0].ProgressCardStartSeq != 1 {
 		t.Fatalf("expected stale stored window fallback to reset start seq, got %#v", ops[0])
@@ -706,16 +745,14 @@ func TestProjectExecCommandProgressKeepsLongReasoningSummaryUntilCardBudget(t *t
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "reasoning-1",
-			MessageID:    "om-progress-1",
-			CardStartSeq: 1,
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "reasoning-1",
 			Entries: []control.ExecCommandProgressEntry{
 				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
 			},
-		}),
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected long reasoning summary to stay on current card, got %#v", ops)
@@ -731,16 +768,14 @@ func TestProjectExecCommandProgressTruncatesSingleReasoningLineOnlyAtCardBudget(
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
 		SurfaceSessionID: "surface-1",
-		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:     "thread-1",
-			TurnID:       "turn-1",
-			ItemID:       "reasoning-1",
-			MessageID:    "om-progress-1",
-			CardStartSeq: 1,
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "reasoning-1",
 			Entries: []control.ExecCommandProgressEntry{
 				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
 			},
-		}),
+		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
 		t.Fatalf("expected oversized single reasoning row to degrade to a sendable current card, got %#v", ops)

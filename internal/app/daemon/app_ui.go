@@ -382,13 +382,14 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 		if strings.TrimSpace(operation.MessageID) == "" {
 			continue
 		}
-		a.service.RecordExecCommandProgressMessageStartSeq(
+		a.service.RecordExecCommandProgressSegmentWindow(
 			event.SurfaceSessionID,
 			progressPayload.Progress.ThreadID,
 			progressPayload.Progress.TurnID,
 			progressPayload.Progress.ItemID,
 			operation.MessageID,
 			operation.ProgressCardStartSeq,
+			operation.ProgressCardEndSeq,
 		)
 	}
 }

@@ -27,19 +27,28 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 			LastSeq:    entry.LastSeq,
 		})
 	}
+	segments := make([]control.ExecCommandProgressSegment, 0, len(progress.Segments))
+	for _, segment := range progress.Segments {
+		segments = append(segments, control.ExecCommandProgressSegment{
+			SegmentID: segment.SegmentID,
+			MessageID: segment.MessageID,
+			StartSeq:  segment.StartSeq,
+			EndSeq:    segment.EndSeq,
+		})
+	}
 	snapshot := &control.ExecCommandProgress{
-		ThreadID:     progress.ThreadID,
-		TurnID:       progress.TurnID,
-		ItemID:       progress.ItemID,
-		MessageID:    progress.MessageID,
-		CardStartSeq: progress.CardStartSeq,
-		Verbosity:    string(progress.Verbosity),
-		Blocks:       Blocks(progress),
-		Entries:      entries,
-		Commands:     append([]string(nil), progress.Commands...),
-		Command:      progress.Command,
-		CWD:          progress.CWD,
-		Status:       progress.Status,
+		ThreadID:        progress.ThreadID,
+		TurnID:          progress.TurnID,
+		ItemID:          progress.ItemID,
+		ActiveSegmentID: progress.ActiveSegmentID,
+		Segments:        segments,
+		Verbosity:       string(progress.Verbosity),
+		Blocks:          Blocks(progress),
+		Entries:         entries,
+		Commands:        append([]string(nil), progress.Commands...),
+		Command:         progress.Command,
+		CWD:             progress.CWD,
+		Status:          progress.Status,
 	}
 	snapshot.Timeline = control.BuildExecCommandProgressTimeline(*snapshot)
 	return snapshot

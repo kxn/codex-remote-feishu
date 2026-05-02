@@ -576,22 +576,29 @@ type ExecCommandProgressBlock struct {
 	Rows    []ExecCommandProgressBlockRow
 }
 
+type ExecCommandProgressSegment struct {
+	SegmentID string
+	MessageID string
+	StartSeq  int
+	EndSeq    int
+}
+
 type ExecCommandProgress struct {
-	ThreadID     string
-	TurnID       string
-	ItemID       string
-	DetourLabel  string
-	MessageID    string
-	CardStartSeq int
-	Verbosity    string
-	Blocks       []ExecCommandProgressBlock
-	Entries      []ExecCommandProgressEntry
-	Timeline     []ExecCommandProgressTimelineItem
-	Commands     []string
-	Command      string
-	CWD          string
-	Status       string
-	Final        bool
+	ThreadID        string
+	TurnID          string
+	ItemID          string
+	DetourLabel     string
+	ActiveSegmentID string
+	Segments        []ExecCommandProgressSegment
+	Verbosity       string
+	Blocks          []ExecCommandProgressBlock
+	Entries         []ExecCommandProgressEntry
+	Timeline        []ExecCommandProgressTimelineItem
+	Commands        []string
+	Command         string
+	CWD             string
+	Status          string
+	Final           bool
 }
 
 type DaemonCommandKind string

@@ -355,13 +355,20 @@ type ExecCommandProgressPlanRecord struct {
 	Snapshot *agentproto.TurnPlanSnapshot
 }
 
+type ExecCommandProgressSegmentRecord struct {
+	SegmentID string
+	MessageID string
+	StartSeq  int
+	EndSeq    int
+}
+
 type ExecCommandProgressRecord struct {
 	InstanceID           string
 	ThreadID             string
 	TurnID               string
 	ItemID               string
-	MessageID            string
-	CardStartSeq         int
+	ActiveSegmentID      string
+	Segments             []ExecCommandProgressSegmentRecord
 	Verbosity            SurfaceVerbosity
 	Entries              []ExecCommandProgressEntryRecord
 	Commands             []string

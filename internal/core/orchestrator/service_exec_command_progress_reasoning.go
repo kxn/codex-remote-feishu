@@ -79,5 +79,5 @@ func execCommandProgressReasoningCanEmit(progress *state.ExecCommandProgressReco
 	if progress == nil {
 		return false
 	}
-	return progress.LastEmittedAt.IsZero() || strings.TrimSpace(progress.MessageID) != ""
+	return progress.LastEmittedAt.IsZero() || activeExecCommandProgressSegmentMessageID(progress) != ""
 }

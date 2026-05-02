@@ -57,10 +57,12 @@
 
 当前共享“工作中”过程卡的降级基线：
 
-1. 多行过程超过卡片预算时，优先在 projector 层按可见行滚动窗口丢弃最旧历史，并在顶部提示“较早过程已省略，仅保留最近进度”。
-2. 单条可见过程行本身超过 30KB transport 预算时，才允许对这一行做预算裁剪；这不是业务级固定长度摘要规则。
-3. reasoning/thinking 行不再有单独的短截断策略，仍受上述统一卡片预算策略约束。
-4. reasoning/thinking delta 不逐条触发 `message.patch`；同一张工作中卡因 reasoning/thinking 主动更新时按约 1 秒窗口合并，普通高价值过程更新会顺手携带最新 reasoning/thinking 内容，正文开始、reasoning item 结束或 turn 结束前会强制 flush 最后一段内容。
+1. 多行过程超过卡片预算时，优先在 projector 层停止复用当前 active progress segment，并直接新开下一张 progress segment card；旧卡保留为历史快照，不再裁掉前文。
+2. 新 segment 默认只承接后续较晚的可见过程行；不会把旧段已 seal 的历史内容再搬运到新段开头。
+3. 对仍处于活动态的可变过程项，owner 会把当前快照接到新 active segment，避免后续状态更新继续回写 sealed 旧卡。
+4. 单条可见过程行本身超过 30KB transport 预算时，才允许对这一行做预算裁剪；这不是业务级固定长度摘要规则。
+5. reasoning/thinking 行不再有单独的短截断策略，仍受上述统一卡片预算策略约束。
+6. reasoning/thinking delta 不逐条触发 `message.patch`；同一张工作中卡因 reasoning/thinking 主动更新时按约 1 秒窗口合并，普通高价值过程更新会顺手携带最新 reasoning/thinking 内容，正文开始、reasoning item 结束或 turn 结束前会强制 flush 最后一段内容。
 
 来源：
 

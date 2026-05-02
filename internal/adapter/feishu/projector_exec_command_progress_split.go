@@ -7,18 +7,21 @@ import (
 )
 
 type execProgressRenderedLine struct {
-	Seq       int
-	Content   string
-	Transient bool
+	ID                string
+	Kind              string
+	Status            string
+	Seq               int
+	Content           string
+	Transient         bool
+	CarryoverEligible bool
 }
 
 type execProgressCardWindowState struct {
+	NewCard  bool
 	StartSeq int
 	EndSeq   int
 	Lines    []execProgressRenderedLine
 }
-
-const execProgressOmittedHistoryText = "较早过程已省略，仅保留最近进度。"
 
 func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []execProgressRenderedLine {
 	items := normalizedExecProgressTimeline(progress)
@@ -31,14 +34,28 @@ func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []ex
 			continue
 		}
 		lines = append(lines, execProgressRenderedLine{
-			Seq:     item.LastSeq,
-			Content: content,
+			ID:                item.ID,
+			Kind:              item.Kind,
+			Status:            item.Status,
+			Seq:               item.LastSeq,
+			Content:           content,
+			CarryoverEligible: execProgressTimelineItemCanCarryOver(item),
 		})
 	}
 	return lines
 }
 
+func execProgressTimelineItemCanCarryOver(item control.ExecCommandProgressTimelineItem) bool {
+	switch strings.ToLower(strings.TrimSpace(item.Status)) {
+	case "running", "started":
+	default:
+		return false
+	}
+	return true
+}
+
 func normalizeExecProgressCardStartSeq(progress control.ExecCommandProgress, lines []execProgressRenderedLine) int {
+	activeStartSeq := activeExecCommandProgressSegmentStartSeq(progress)
 	firstPersistent := 0
 	for _, line := range lines {
 		if line.Transient || line.Seq <= 0 {
@@ -47,17 +64,34 @@ func normalizeExecProgressCardStartSeq(progress control.ExecCommandProgress, lin
 		if firstPersistent == 0 {
 			firstPersistent = line.Seq
 		}
-		if progress.CardStartSeq > 0 && line.Seq >= progress.CardStartSeq {
-			return progress.CardStartSeq
+		if activeStartSeq > 0 && line.Seq >= activeStartSeq {
+			return activeStartSeq
 		}
 	}
 	if firstPersistent > 0 {
 		return firstPersistent
 	}
-	if progress.CardStartSeq > 0 {
-		return progress.CardStartSeq
+	if activeStartSeq > 0 {
+		return activeStartSeq
 	}
 	return 1
+}
+
+func activeExecCommandProgressSegmentStartSeq(progress control.ExecCommandProgress) int {
+	if strings.TrimSpace(progress.ActiveSegmentID) != "" {
+		for _, segment := range progress.Segments {
+			if strings.TrimSpace(segment.SegmentID) != strings.TrimSpace(progress.ActiveSegmentID) {
+				continue
+			}
+			if segment.StartSeq > 0 {
+				return segment.StartSeq
+			}
+		}
+	}
+	if len(progress.Segments) == 0 {
+		return 0
+	}
+	return progress.Segments[len(progress.Segments)-1].StartSeq
 }
 
 func execProgressRenderedContent(lines []execProgressRenderedLine) []string {
@@ -70,12 +104,6 @@ func execProgressRenderedContent(lines []execProgressRenderedLine) []string {
 
 func execProgressRenderedElements(lines []execProgressRenderedLine) []map[string]any {
 	return execCommandProgressElements(execProgressRenderedContent(lines))
-}
-
-func execProgressOmittedHistoryLine() execProgressRenderedLine {
-	return execProgressRenderedLine{
-		Content: execProgressOmittedHistoryText,
-	}
 }
 
 func execProgressCardFits(lines []execProgressRenderedLine, subtitle string) bool {
@@ -114,6 +142,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 			return execProgressCardWindowState{}
 		}
 		return execProgressCardWindowState{
+			NewCard:  activeExecCommandProgressSegmentMessageID(progress) != "",
 			StartSeq: startSeq,
 			EndSeq:   startSeq - 1,
 			Lines:    append([]execProgressRenderedLine(nil), transient...),
@@ -132,14 +161,27 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 	for windowIndex < len(persistent) {
 		window, ok := buildExecProgressCardWindow(persistent, transient, windowIndex, subtitle)
 		if ok {
+			if window.StartSeq > startSeq {
+				window.NewCard = true
+			}
 			return window
 		}
 		windowIndex++
 	}
 	lastLine := persistent[len(persistent)-1]
-	fallbackLines := []execProgressRenderedLine{lastLine}
+	fallbackLines := append(execProgressCarryoverLines(persistent, len(persistent)-1), lastLine)
 	if execProgressCardFits(fallbackLines, subtitle) {
 		return execProgressCardWindowState{
+			NewCard:  activeExecCommandProgressSegmentMessageID(progress) != "",
+			StartSeq: lastLine.Seq,
+			EndSeq:   lastLine.Seq,
+			Lines:    fallbackLines,
+		}
+	}
+	fallbackLines = []execProgressRenderedLine{lastLine}
+	if execProgressCardFits(fallbackLines, subtitle) {
+		return execProgressCardWindowState{
+			NewCard:  activeExecCommandProgressSegmentMessageID(progress) != "",
 			StartSeq: lastLine.Seq,
 			EndSeq:   lastLine.Seq,
 			Lines:    fallbackLines,
@@ -147,6 +189,7 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 	}
 	if truncated, ok := truncateExecProgressRenderedLineToFit(lastLine, subtitle); ok {
 		return execProgressCardWindowState{
+			NewCard:  activeExecCommandProgressSegmentMessageID(progress) != "",
 			StartSeq: lastLine.Seq,
 			EndSeq:   lastLine.Seq,
 			Lines:    []execProgressRenderedLine{truncated},
@@ -190,10 +233,7 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 	if windowIndex >= len(persistent) {
 		return execProgressCardWindowState{}, false
 	}
-	base := append([]execProgressRenderedLine(nil), persistent[windowIndex:]...)
-	if windowIndex > 0 {
-		base = append([]execProgressRenderedLine{execProgressOmittedHistoryLine()}, base...)
-	}
+	base := append(execProgressCarryoverLines(persistent, windowIndex), persistent[windowIndex:]...)
 	lines := append([]execProgressRenderedLine(nil), base...)
 	if len(transient) != 0 {
 		lines = append(lines, transient...)
@@ -213,4 +253,18 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 		EndSeq:   persistent[len(persistent)-1].Seq,
 		Lines:    base,
 	}, true
+}
+
+func execProgressCarryoverLines(persistent []execProgressRenderedLine, windowIndex int) []execProgressRenderedLine {
+	if windowIndex <= 0 || windowIndex > len(persistent) {
+		return nil
+	}
+	lines := make([]execProgressRenderedLine, 0, windowIndex)
+	for _, line := range persistent[:windowIndex] {
+		if !line.CarryoverEligible {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }

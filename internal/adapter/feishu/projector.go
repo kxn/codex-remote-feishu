@@ -50,6 +50,7 @@ type Operation struct {
 	CardElements         []map[string]any
 	CardUpdateMulti      bool
 	ProgressCardStartSeq int
+	ProgressCardEndSeq   int
 	cardEnvelope         cardEnvelopeVersion
 	card                 *cardDocument
 	finalSourceBody      string
