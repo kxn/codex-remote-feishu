@@ -16,9 +16,11 @@ func (s *Service) startReviewFromFinalCard(surface *state.SurfaceConsoleRecord, 
 }
 
 func (s *Service) discardReviewSession(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	if surface == nil || s.activeReviewSession(surface) == nil {
+	session := s.validReviewSession(surface)
+	if surface == nil || session == nil {
 		return notice(surface, "review_session_inactive", "当前没有进行中的审阅会话。")
 	}
+	s.ensureReviewSessionParentSelection(surface, session)
 	surface.ReviewSession = nil
 	return []eventcontract.Event{{
 		Kind:             eventcontract.KindNotice,
@@ -36,7 +38,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 	if surface == nil {
 		return nil
 	}
-	session := s.activeReviewSession(surface)
+	session := s.validReviewSession(surface)
 	if session == nil {
 		return notice(surface, "review_session_inactive", "当前没有进行中的审阅会话。")
 	}
@@ -55,6 +57,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 	}
 	promptText := reviewApplyPromptPrefix + reviewText
 	sourceMessageID := firstNonEmpty(strings.TrimSpace(action.MessageID), strings.TrimSpace(session.SourceMessageID))
+	s.ensureReviewSessionParentSelection(surface, session)
 	surface.ReviewSession = nil
 	events := []eventcontract.Event{
 		{

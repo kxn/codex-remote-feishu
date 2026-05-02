@@ -11,7 +11,7 @@ func threadIsReview(thread *state.ThreadRecord) bool {
 	return thread != nil && thread.Source != nil && thread.Source.IsReview()
 }
 
-func (s *Service) activeReviewSession(surface *state.SurfaceConsoleRecord) *state.ReviewSessionRecord {
+func (s *Service) validReviewSession(surface *state.SurfaceConsoleRecord) *state.ReviewSessionRecord {
 	if surface == nil || surface.ReviewSession == nil {
 		return nil
 	}
@@ -27,10 +27,46 @@ func (s *Service) activeReviewSession(surface *state.SurfaceConsoleRecord) *stat
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {
 		return nil
 	}
-	if strings.TrimSpace(surface.SelectedThreadID) != parentThreadID {
+	return session
+}
+
+func (s *Service) activeReviewSession(surface *state.SurfaceConsoleRecord) *state.ReviewSessionRecord {
+	session := s.validReviewSession(surface)
+	if session == nil {
+		return nil
+	}
+	selectedThreadID := strings.TrimSpace(surface.SelectedThreadID)
+	if selectedThreadID != strings.TrimSpace(session.ParentThreadID) && selectedThreadID != strings.TrimSpace(session.ReviewThreadID) {
 		return nil
 	}
 	return session
+}
+
+func (s *Service) ensureReviewSessionParentSelection(surface *state.SurfaceConsoleRecord, session *state.ReviewSessionRecord) {
+	if surface == nil || session == nil {
+		return
+	}
+	parentThreadID := strings.TrimSpace(session.ParentThreadID)
+	reviewThreadID := strings.TrimSpace(session.ReviewThreadID)
+	selectedThreadID := strings.TrimSpace(surface.SelectedThreadID)
+	if parentThreadID == "" || selectedThreadID == parentThreadID || selectedThreadID != reviewThreadID {
+		return
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if inst == nil {
+		return
+	}
+	prevRouteMode := surface.RouteMode
+	s.releaseSurfaceThreadClaim(surface)
+	if !s.claimKnownThread(surface, inst, parentThreadID) {
+		surface.SelectedThreadID = selectedThreadID
+		surface.RouteMode = prevRouteMode
+		_ = s.claimKnownThread(surface, inst, selectedThreadID)
+		return
+	}
+	surface.SelectedThreadID = parentThreadID
+	surface.RouteMode = prevRouteMode
+	s.clearPreparedNewThread(surface)
 }
 
 func clearIdleReviewSession(surface *state.SurfaceConsoleRecord) {
@@ -59,7 +95,7 @@ func (s *Service) reviewSessionSurface(instanceID, threadID string) (*state.Surf
 		return nil, nil
 	}
 	for _, surface := range s.findAttachedSurfaces(instanceID) {
-		session := s.activeReviewSession(surface)
+		session := s.validReviewSession(surface)
 		if session == nil {
 			continue
 		}

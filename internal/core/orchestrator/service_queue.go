@@ -36,6 +36,9 @@ func (s *Service) maybeBindSurfaceForRemoteTurn(surface *state.SurfaceConsoleRec
 	if binding != nil {
 		targetThreadID = remoteBindingSurfaceThreadID(binding)
 	}
+	if _, session := s.reviewSessionSurface(instanceID, threadID); session != nil {
+		return nil
+	}
 	if targetThreadID == "" {
 		return nil
 	}

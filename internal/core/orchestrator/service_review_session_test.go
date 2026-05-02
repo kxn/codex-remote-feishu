@@ -199,6 +199,98 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 	}
 }
 
+func TestReviewSessionTextRecoversReviewThreadSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.releaseSurfaceThreadClaim(surface)
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-review") {
+		t.Fatal("expected test surface to claim review thread")
+	}
+	surface.SelectedThreadID = "thread-review"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-2",
+		Text:             "这里需要继续审阅",
+	})
+
+	if len(events) != 3 || events[2].Command == nil {
+		t.Fatalf("expected review session command after recovery, got %#v", events)
+	}
+	command := events[2].Command
+	if command.Target.ThreadID != "thread-review" ||
+		command.Target.SourceThreadID != "thread-main" ||
+		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("unexpected recovered review session command target: %#v", command.Target)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected review text recovery to restore parent selection, got %q", surface.SelectedThreadID)
+	}
+}
+
+func TestReviewSessionFinalRenderDoesNotStealSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	itemEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "建议继续收口 review session 的状态机。"},
+	})
+	if len(itemEvents) != 0 {
+		t.Fatalf("expected completed agent message to wait for final render, got %#v", itemEvents)
+	}
+
+	finalEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected review final render to keep parent selection, got %q with events %#v", surface.SelectedThreadID, finalEvents)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.ActiveTurnID != "" {
+		t.Fatalf("expected idle active review session after final render, got %#v", surface.ReviewSession)
+	}
+	if svc.ReviewSession(surface.SurfaceSessionID) == nil {
+		t.Fatalf("expected review session to remain visible for final-card exit actions")
+	}
+
+	replyEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-2",
+		Text:             "再按这个方向检查一遍",
+	})
+	if len(replyEvents) != 3 || replyEvents[2].Command == nil {
+		t.Fatalf("expected follow-up review prompt command, got %#v", replyEvents)
+	}
+	command := replyEvents[2].Command
+	if command.Target.ThreadID != "thread-review" ||
+		command.Target.SourceThreadID != "thread-main" ||
+		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("unexpected follow-up review target: %#v", command.Target)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected follow-up review prompt to keep parent selection, got %q", surface.SelectedThreadID)
+	}
+}
+
 func TestNewThreadExitsIdleReviewSessionBeforeFirstText(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
@@ -743,6 +835,48 @@ func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T
 	}
 }
 
+func TestApplyReviewSessionResultRecoversReviewThreadSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+		ThreadCWD:      "/data/dl/droid",
+		LastReviewText: "建议把审阅意见带回主会话。",
+	}
+	svc.releaseSurfaceThreadClaim(surface)
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-review") {
+		t.Fatal("expected test surface to claim review thread")
+	}
+	surface.SelectedThreadID = "thread-review"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+
+	var command *agentproto.Command
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			command = event.Command
+			break
+		}
+	}
+	if command == nil {
+		t.Fatalf("expected apply from recovered review selection to enqueue prompt, got %#v", events)
+	}
+	if command.Target.ThreadID != "thread-main" || command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		t.Fatalf("unexpected recovered apply target: %#v", command.Target)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected recovered apply to restore parent selection, got %q", surface.SelectedThreadID)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected recovered apply to clear review session, got %#v", surface.ReviewSession)
+	}
+}
+
 func TestDiscardReviewSessionClearsRuntime(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
@@ -762,5 +896,35 @@ func TestDiscardReviewSessionClearsRuntime(t *testing.T) {
 	}
 	if surface.ReviewSession != nil {
 		t.Fatalf("expected review session to clear, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDiscardReviewSessionRecoversReviewThreadSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+	}
+	svc.releaseSurfaceThreadClaim(surface)
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-review") {
+		t.Fatal("expected test surface to claim review thread")
+	}
+	surface.SelectedThreadID = "thread-review"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "review_discarded" {
+		t.Fatalf("expected discard notice after recovering review selection, got %#v", events)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected recovered discard to restore parent selection, got %q", surface.SelectedThreadID)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected recovered discard to clear review session, got %#v", surface.ReviewSession)
 	}
 }

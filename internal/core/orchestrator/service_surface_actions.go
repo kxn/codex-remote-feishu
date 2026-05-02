@@ -180,6 +180,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
 	reviewSession := s.activeReviewSession(surface)
+	if reviewSession != nil {
+		s.ensureReviewSessionParentSelection(surface, reviewSession)
+	}
 	detour, detourProblem := s.resolveDetourDirective(surface, inst, text)
 	if detourProblem != "" {
 		return notice(surface, "detour_invalid", detourProblem)
