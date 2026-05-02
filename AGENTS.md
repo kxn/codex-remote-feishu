@@ -19,6 +19,18 @@
 - If multiple skills match, use all relevant skills together.
 - Exclusion notes (for example “pure copy/styling/logging/tests only”) apply only when you can confirm logic carriers are unchanged.
 
+## Issue Gate Rule (Always On)
+
+When any GitHub issue number or URL appears in the conversation:
+
+- Do **not** start code assessment or implementation directly.
+- First enter the issue workflow via `prepare`: read the issue, classify as `tiny` / `medium` / `large`, verify current state against the live codebase, and decide the execution path.
+- A `tiny` fix that can be finished immediately is the only exception that skips formal `prepare`.
+- For medium/large issues: shape the issue before implementation, record an execution snapshot in the issue body, and follow `lint` / `finish` entry points.
+- Never conflate "product decision received" with "ready to implement" — first complete the prepare pass, then proceed.
+- If the issue carries `status:needs-clarification` or equivalent, surface the decision question before shaping or implementation.
+- This rule applies regardless of whether the user explicitly says "按流程" — issue numbers and URLs are the trigger.
+
 ## Workspace Cleanliness Rule
 
 For every new repository task in chat (not only GitHub issue workflow):
