@@ -157,6 +157,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 	}
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
@@ -171,7 +172,6 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 		Purpose:               state.HeadlessLaunchPurposeFreshWorkspace,
 		PrepareNewThread:      prepareNewThread,
 	}
-	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	noticeTitle := "正在接入工作区"
 	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
 	if prepareNewThread {

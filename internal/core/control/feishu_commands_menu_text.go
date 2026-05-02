@@ -13,7 +13,7 @@ func normalizeModelMenuArgument(value string) (string, bool) {
 func normalizeReasoningMenuArgument(value string) (string, bool) {
 	effort := strings.ToLower(strings.TrimSpace(value))
 	switch effort {
-	case "low", "medium", "high", "xhigh", "clear":
+	case "low", "medium", "high", "xhigh", "max", "clear":
 		return effort, true
 	default:
 		return "", false

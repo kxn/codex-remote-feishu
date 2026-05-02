@@ -1,6 +1,7 @@
 package control
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -90,6 +91,48 @@ func TestBuildFeishuCommandConfigPageViewResolvesFromCatalogFamily(t *testing.T)
 	if form.CatalogFamilyID != FeishuCommandModel || form.CatalogVariantID != "model.codex.normal" || form.CatalogBackend != agentproto.BackendCodex {
 		t.Fatalf("expected catalog provenance to stay on config form, got %#v", form)
 	}
+}
+
+func TestBuildFeishuReasoningConfigPageUsesBackendSpecificOptions(t *testing.T) {
+	codexPage := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:      FeishuCommandReasoning,
+		CatalogBackend: agentproto.BackendCodex,
+	})
+	if got := commandTextsForFirstButtonRow(codexPage); !reflect.DeepEqual(got, []string{
+		"/reasoning low",
+		"/reasoning medium",
+		"/reasoning high",
+		"/reasoning xhigh",
+		"/reasoning clear",
+	}) {
+		t.Fatalf("unexpected codex reasoning options: %#v", got)
+	}
+
+	claudePage := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:      FeishuCommandReasoning,
+		CatalogBackend: agentproto.BackendClaude,
+	})
+	if got := commandTextsForFirstButtonRow(claudePage); !reflect.DeepEqual(got, []string{
+		"/reasoning low",
+		"/reasoning medium",
+		"/reasoning high",
+		"/reasoning max",
+		"/reasoning clear",
+	}) {
+		t.Fatalf("unexpected claude reasoning options: %#v", got)
+	}
+}
+
+func commandTextsForFirstButtonRow(page FeishuPageView) []string {
+	if len(page.Sections) == 0 || len(page.Sections[0].Entries) == 0 {
+		return nil
+	}
+	buttons := page.Sections[0].Entries[0].Buttons
+	commands := make([]string, 0, len(buttons))
+	for _, button := range buttons {
+		commands = append(commands, button.CommandText)
+	}
+	return commands
 }
 
 func TestFeishuConfigFlowIntentOnlyMatchesBareCommands(t *testing.T) {

@@ -434,6 +434,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		}
 	}
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
+	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	launchContract := s.headlessLaunchContract(surface)
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
@@ -453,7 +454,6 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		SourceInstanceID:      sourceInstanceID,
 		AutoRestore:           mode == startHeadlessModeHeadlessRestore,
 	}
-	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	if mode == startHeadlessModeDefault {
 		events = append(events, eventcontract.Event{
 			Kind:             eventcontract.KindNotice,

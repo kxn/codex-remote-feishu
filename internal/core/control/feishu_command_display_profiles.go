@@ -81,7 +81,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportVisible(FeishuCommandStatus),
 		commandSupportVisible(FeishuCommandDetach),
 		commandSupportVisible(FeishuCommandReasoning),
-		commandSupportVisible(FeishuCommandModel),
+		commandSupportHiddenReject(FeishuCommandModel, FeishuCommandSupportReject, "Claude 模型请在 Claude 配置里设置，当前飞书会话不支持临时切换模型。"),
 		commandSupportVisible(FeishuCommandAccess),
 		commandSupportVisibleAs(FeishuCommandList, FeishuCommandSupportApproximation, "Claude 会话切换沿用现有产品壳，但底层走 backend-aware session catalog 与 route contract。"),
 		commandSupportVisibleAs(FeishuCommandUse, FeishuCommandSupportApproximation, "Claude 会话切换沿用现有产品壳，但底层走 backend-aware session catalog 与 route contract。"),

@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-05-02`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例。
+> Updated: `2026-05-03`
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。
 
 ## 1. 文档定位
 
@@ -968,7 +968,8 @@ Claude runtime 分三块：
 
 | family / 入口 | Claude 策略 | help/menu 可见性 | 当前应否允许直接派发 | 说明 |
 | --- | --- | --- | --- | --- |
-| `/stop` `/status` `/history` `/model` `/reasoning` `/access` `/claudeprofile` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 仍属于 Claude MVP 已批准的 native 或纯本地产品入口。 |
+| `/stop` `/status` `/history` `/reasoning` `/access` `/claudeprofile` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 仍属于 Claude MVP 已批准的 native 或纯本地产品入口。 |
+| `/model` | reject | hidden | reject | Claude 模型只在 Claude profile 内配置，飞书会话不开放临时模型覆盖。 |
 | `/sendfile` | native | visible | allow | 飞书/本地侧文件投递能力，不依赖 Claude runtime/backend；可按既有 sendfile picker 与后台发送流程开放。 |
 | `/detach` | native | visible | allow | Claude MVP 正式开放；它不再只是隐藏逃生口，而是统一的脱困 / 解除接管入口。 |
 | `/workspace detach` | native | hidden | allow | 仅保留兼容 alias；Claude 的主展示入口是 `/detach`。 |
@@ -983,7 +984,7 @@ Claude runtime 分三块：
 
 1. `current_work` 只保留 `/stop`、`/new`、`/status`、`/detach`
 2. `switch_target` 只保留 `/list`、`/use`
-3. `send_settings` 继续保留 `/reasoning`、`/model`、`/access`、`/verbose`、`/claudeprofile`
+3. `send_settings` 继续保留 `/reasoning`、`/access`、`/verbose`、`/claudeprofile`
 4. `common_tools` 当前保留 `/history`、`/sendfile`
 
 #### 7.6.2 `/detach` 的产品语义
@@ -1047,11 +1048,12 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 
 当前已落地的实现补充：
 
-1. Claude `/reasoning` 继续保留 Codex 风格的 next-turn 语义：当前 turn 与已冻结 queue/autocontinue/review apply 不回改，新入队 turn 按当时 surface override 冻结 reasoning。
+1. Claude `/reasoning` 继续保留 Codex 风格的 next-turn 语义：当前 turn 与已冻结 queue/autocontinue/review apply 不回改，新入队 turn 按当时 surface override 冻结 reasoning；Claude 可选档位固定为 `low / medium / high / max / clear`，不使用 Codex 的 `xhigh`。
 2. Claude headless 真正 dispatch 前，会用该 frozen reasoning 扩展出 `HeadlessLaunchContract{Backend, ClaudeProfileID, ClaudeReasoningEffort}`，并与 wrapper hello 上报的 observed runtime contract 比较。
 3. 若合同不一致，orchestrator 会统一走 `prompt_dispatch_restart`：写入 `PendingHeadless`、daemon `kill + start headless`、实例重新 attach 后自动继续原 dispatch。
-4. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
-5. `/model` 仍不在这条自动 restart contract 内；它继续作为后续独立问题处理。
+4. `workspace+profile` 快照会保存 `reasoning / access / plan`，`/reasoning clear` 会同步删除空快照；fresh workspace 与 concrete thread restore 都必须先恢复快照，再生成 `PendingHeadless` 与 daemon start command，避免 daemon 重启后丢失 reasoning。
+5. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
+6. `/model` 不在 Claude 飞书命令面里：Claude 模型只从 Claude profile 注入，飞书侧不支持临时模型覆盖，也不把 Codex 默认模型投影成 Claude 当前模型。
 
 ### 7.7 `#494` final-output 终态合同（2026-04-28）
 

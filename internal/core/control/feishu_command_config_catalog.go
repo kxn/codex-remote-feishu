@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
 
 var commonFeishuModelValues = []string{
 	"gpt-5.5",
@@ -145,9 +149,14 @@ func reasoningPageViewFromCommandConfigView(view FeishuCatalogConfigView) Feishu
 	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即应用",
 		Entries: []CommandCatalogEntry{{
-			Buttons: choiceButtonsFromOptions(def.Options, strings.TrimSpace(view.OverrideValue), ""),
+			Buttons: choiceButtonsFromOptions(reasoningOptionsForConfigView(view), strings.TrimSpace(view.OverrideValue), ""),
 		}},
 	}})
+}
+
+func reasoningOptionsForConfigView(view FeishuCatalogConfigView) []FeishuCommandOption {
+	backend := agentproto.NormalizeBackend(view.CatalogBackend)
+	return ReasoningOptionsForBackend(backend)
 }
 
 func accessPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {

@@ -255,6 +255,7 @@ func TestParseFeishuMenuActionBuildsCanonicalTextFromDynamicRoutes(t *testing.T)
 		wantFamily string
 	}{
 		{eventKey: "reasoning_high", wantKind: ActionReasoningCommand, wantText: "/reasoning high", wantFamily: FeishuCommandReasoning},
+		{eventKey: "reasoning_max", wantKind: ActionReasoningCommand, wantText: "/reasoning max", wantFamily: FeishuCommandReasoning},
 		{eventKey: "model_gpt-5.4", wantKind: ActionModelCommand, wantText: "/model gpt-5.4", wantFamily: FeishuCommandModel},
 		{eventKey: "access_confirm", wantKind: ActionAccessCommand, wantText: "/access confirm", wantFamily: FeishuCommandAccess},
 		{eventKey: "plan-on", wantKind: ActionPlanCommand, wantText: "/plan on", wantFamily: FeishuCommandPlan},
@@ -702,18 +703,18 @@ func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing
 	})
 	for _, section := range page.Sections {
 		for _, entry := range section.Entries {
-			if len(entry.Buttons) == 0 || len(entry.Commands) == 0 || entry.Commands[0] != "/model" {
+			if len(entry.Buttons) == 0 || len(entry.Commands) == 0 || entry.Commands[0] != "/claudeprofile" {
 				continue
 			}
 			button := entry.Buttons[0]
-			if button.CommandID != FeishuCommandModel {
-				t.Fatalf("command id = %q, want %q", button.CommandID, FeishuCommandModel)
+			if button.CommandID != FeishuCommandClaudeProfile {
+				t.Fatalf("command id = %q, want %q", button.CommandID, FeishuCommandClaudeProfile)
 			}
-			if button.CatalogFamilyID != FeishuCommandModel {
-				t.Fatalf("catalog family id = %q, want %q", button.CatalogFamilyID, FeishuCommandModel)
+			if button.CatalogFamilyID != FeishuCommandClaudeProfile {
+				t.Fatalf("catalog family id = %q, want %q", button.CatalogFamilyID, FeishuCommandClaudeProfile)
 			}
-			if button.CatalogVariantID != "model.claude.normal" {
-				t.Fatalf("catalog variant id = %q, want %q", button.CatalogVariantID, "model.claude.normal")
+			if button.CatalogVariantID != "claude_profile.claude.normal" {
+				t.Fatalf("catalog variant id = %q, want %q", button.CatalogVariantID, "claude_profile.claude.normal")
 			}
 			if button.CatalogBackend != agentproto.BackendClaude {
 				t.Fatalf("catalog backend = %q, want %q", button.CatalogBackend, agentproto.BackendClaude)
@@ -721,7 +722,7 @@ func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing
 			return
 		}
 	}
-	t.Fatalf("expected contextual /model menu entry, got %#v", page.Sections)
+	t.Fatalf("expected contextual /claudeprofile menu entry, got %#v", page.Sections)
 }
 
 func TestParseFeishuTextActionRecognizesMenuSubcommands(t *testing.T) {

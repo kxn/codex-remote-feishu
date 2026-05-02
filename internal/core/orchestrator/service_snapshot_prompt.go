@@ -111,17 +111,26 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	}
 	override = compactPromptOverride(override)
 	baseModel, baseEffort, baseAccess := s.resolveBasePromptConfig(inst, surface, threadID, cwd)
+	backend := s.promptConfigBackend(inst, surface)
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		override.Model = ""
+		baseModel = configValue{Source: "profile"}
+	}
 	effectiveModel := baseModel
 	if override.Model != "" {
 		effectiveModel = configValue{Value: override.Model, Source: "surface_override"}
 	} else if effectiveModel.Value == "" {
-		effectiveModel = configValue{Value: defaultModel, Source: "surface_default"}
+		if defaultValue := defaultPromptModelForBackend(backend); defaultValue != "" {
+			effectiveModel = configValue{Value: defaultValue, Source: "surface_default"}
+		}
 	}
 	effectiveEffort := baseEffort
 	if override.ReasoningEffort != "" {
 		effectiveEffort = configValue{Value: override.ReasoningEffort, Source: "surface_override"}
 	} else if effectiveEffort.Value == "" {
-		effectiveEffort = configValue{Value: defaultReasoningEffort, Source: "surface_default"}
+		if defaultValue := defaultPromptReasoningEffortForBackend(backend); defaultValue != "" {
+			effectiveEffort = configValue{Value: defaultValue, Source: "surface_default"}
+		}
 	}
 	effectiveAccessModeSource := "surface_default"
 	effectiveAccessMode := agentproto.AccessModeFullAccess
@@ -141,6 +150,30 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 		EffectiveAccessMode:       effectiveAccessMode,
 		EffectiveAccessModeSource: effectiveAccessModeSource,
 	}
+}
+
+func (s *Service) promptConfigBackend(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord) agentproto.Backend {
+	if surface != nil {
+		return s.surfaceWorkspaceDefaultsBackend(surface, inst)
+	}
+	if inst != nil {
+		return state.EffectiveInstanceBackend(inst)
+	}
+	return agentproto.BackendCodex
+}
+
+func defaultPromptModelForBackend(backend agentproto.Backend) string {
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return ""
+	}
+	return defaultModel
+}
+
+func defaultPromptReasoningEffortForBackend(backend agentproto.Backend) string {
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return ""
+	}
+	return defaultReasoningEffort
 }
 
 func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string) (configValue, configValue, configValue) {

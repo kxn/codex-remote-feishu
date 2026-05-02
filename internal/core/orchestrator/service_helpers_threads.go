@@ -493,15 +493,6 @@ func isClearCommand(value string) bool {
 	}
 }
 
-func looksLikeReasoningEffort(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "low", "medium", "high", "xhigh":
-		return true
-	default:
-		return false
-	}
-}
-
 func formatOverrideNotice(summary control.PromptRouteSummary, prefix string) string {
 	lines := []string{prefix}
 	lines = append(lines, fmt.Sprintf("当前生效模型：%s", displayConfigValue(summary.EffectiveModel, summary.EffectiveModelSource)))

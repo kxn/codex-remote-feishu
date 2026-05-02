@@ -585,14 +585,16 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 	override := surface.PromptOverride
 	override.Model = parts[1]
 	if len(parts) == 3 {
-		if !looksLikeReasoningEffort(parts[2]) {
+		backend := s.surfaceBackend(surface)
+		effort, ok := control.NormalizeReasoningEffortForBackend(backend, parts[2])
+		if !ok {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind:       "error",
-				StatusText:       "推理强度建议使用 `low`、`medium`、`high` 或 `xhigh`。",
+				StatusText:       "推理强度建议使用 " + control.ReasoningEffortHintForBackend(backend) + "。",
 				FormDefaultValue: actionCommandArgumentText(action),
 			})
 		}
-		override.ReasoningEffort = strings.ToLower(parts[2])
+		override.ReasoningEffort = effort
 	}
 	surface.PromptOverride = override
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
@@ -625,6 +627,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 	if len(parts) == 2 && isClearCommand(parts[1]) {
 		surface.PromptOverride.ReasoningEffort = ""
 		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
@@ -634,14 +637,19 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		}
 		return notice(surface, "surface_override_reasoning_cleared", "已清除飞书临时推理强度覆盖。")
 	}
-	if len(parts) != 2 || !looksLikeReasoningEffort(parts[1]) {
+	backend := s.surfaceBackend(surface)
+	effort, ok := "", false
+	if len(parts) == 2 {
+		effort, ok = control.NormalizeReasoningEffortForBackend(backend, parts[1])
+	}
+	if len(parts) != 2 || !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。",
+			StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。推理强度建议使用 " + control.ReasoningEffortHintForBackend(backend) + "。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	surface.PromptOverride.ReasoningEffort = strings.ToLower(parts[1])
+	surface.PromptOverride.ReasoningEffort = effort
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	if commandCardOwnsInlineResult(action) {

@@ -255,6 +255,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "reasonmedium", action: Action{Kind: ActionReasoningCommand, Text: "/reasoning medium"}},
 			{alias: "reasonhigh", action: Action{Kind: ActionReasoningCommand, Text: "/reasoning high"}},
 			{alias: "reasonxhigh", action: Action{Kind: ActionReasoningCommand, Text: "/reasoning xhigh"}},
+			{alias: "reasonmax", action: Action{Kind: ActionReasoningCommand, Text: "/reasoning max"}},
 		},
 		menuDynamic: []feishuCommandDynamicMenuMatch{
 			{prefix: "reasoning_", kind: ActionReasoningCommand, parseArgument: normalizeReasoningMenuArgument},
