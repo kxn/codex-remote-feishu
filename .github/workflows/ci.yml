@@ -80,7 +80,8 @@ jobs:
           go build ./cmd/...
 
       - name: Test
-        run: go test ./...
+        timeout-minutes: 12
+        run: go test -v -timeout=8m ./...
 
       - name: Test install and upgrade flows
         run: go test ./internal/app/install ./internal/app/wrapper ./internal/runtime ./internal/externalaccess -count=1
@@ -109,7 +110,8 @@ jobs:
         run: go build ./cmd/...
 
       - name: Test
-        run: go test ./...
+        timeout-minutes: 12
+        run: go test -v -timeout=8m ./...
 
   release-artifacts:
     runs-on: ubuntu-latest
