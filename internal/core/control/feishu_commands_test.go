@@ -9,7 +9,7 @@ import (
 )
 
 func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/debug")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/debug")
 	if !ok {
 		t.Fatal("expected /debug to be parsed")
 	}
@@ -22,7 +22,7 @@ func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesDebugAdminCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/debug admin")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/debug admin")
 	if !ok {
 		t.Fatal("expected /debug admin to be parsed")
 	}
@@ -44,7 +44,7 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 		"/upgrade local",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -64,7 +64,7 @@ func TestParseFeishuTextActionRecognizesBendToMyWillRollbackCommand(t *testing.T
 		"/bendtomywill rollback patch-thread-1-1",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -84,7 +84,7 @@ func TestParseFeishuTextActionRecognizesAutoWhipCommand(t *testing.T) {
 		"/autowhip off",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -104,7 +104,7 @@ func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
 		"/autocontinue off",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -126,7 +126,7 @@ func TestParseFeishuTextActionRejectsLegacyRecoveryAliases(t *testing.T) {
 		"/autorecovery on",
 		"/autorecovery off",
 	} {
-		if action, ok := ParseFeishuTextAction(input); ok {
+		if action, ok := ParseFeishuTextActionWithoutCatalog(input); ok {
 			t.Fatalf("expected %q to be rejected, got %#v", input, action)
 		}
 	}
@@ -139,7 +139,7 @@ func TestParseFeishuTextActionRecognizesModeCommand(t *testing.T) {
 		"/mode vscode",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -159,7 +159,7 @@ func TestParseFeishuTextActionRecognizesClaudeProfileCommand(t *testing.T) {
 		"/claudeprofile devseek",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -179,7 +179,7 @@ func TestParseFeishuTextActionRecognizesCodexProviderCommand(t *testing.T) {
 		"/codexprovider team-proxy",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -193,7 +193,7 @@ func TestParseFeishuTextActionRecognizesCodexProviderCommand(t *testing.T) {
 }
 
 func TestParseFeishuMenuActionRecognizesCodexProviderCommand(t *testing.T) {
-	action, ok := ParseFeishuMenuAction("codex_provider")
+	action, ok := ParseFeishuMenuActionWithoutCatalog("codex_provider")
 	if !ok {
 		t.Fatal("expected codex_provider menu action to be parsed")
 	}
@@ -209,7 +209,7 @@ func TestParseFeishuMenuActionRecognizesCodexProviderCommand(t *testing.T) {
 }
 
 func TestParseFeishuMenuActionRecognizesClaudeProfileCommand(t *testing.T) {
-	action, ok := ParseFeishuMenuAction("claude_profile")
+	action, ok := ParseFeishuMenuActionWithoutCatalog("claude_profile")
 	if !ok {
 		t.Fatal("expected claude_profile menu action to be parsed")
 	}
@@ -225,7 +225,7 @@ func TestParseFeishuMenuActionRecognizesClaudeProfileCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesSteerAllCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/steerall")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/steerall")
 	if !ok {
 		t.Fatal("expected /steerall to be parsed")
 	}
@@ -237,7 +237,7 @@ func TestParseFeishuTextActionRecognizesSteerAllCommand(t *testing.T) {
 func TestParseFeishuMenuActionRecognizesSteerAllCommand(t *testing.T) {
 	tests := []string{"steerall", "steer_all"}
 	for _, key := range tests {
-		action, ok := ParseFeishuMenuAction(key)
+		action, ok := ParseFeishuMenuActionWithoutCatalog(key)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", key)
 		}
@@ -264,7 +264,7 @@ func TestParseFeishuMenuActionBuildsCanonicalTextFromDynamicRoutes(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.eventKey, func(t *testing.T) {
-			action, ok := ParseFeishuMenuAction(tt.eventKey)
+			action, ok := ParseFeishuMenuActionWithoutCatalog(tt.eventKey)
 			if !ok {
 				t.Fatalf("expected %q to be parsed", tt.eventKey)
 			}
@@ -289,7 +289,7 @@ func TestParseFeishuTextActionRecognizesVerboseCommand(t *testing.T) {
 		"/verbose verbose",
 	}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -303,7 +303,7 @@ func TestParseFeishuTextActionRecognizesVerboseCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesVSCodeMigrateCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/vscode-migrate")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/vscode-migrate")
 	if !ok {
 		t.Fatal("expected /vscode-migrate to be parsed")
 	}
@@ -313,7 +313,7 @@ func TestParseFeishuTextActionRecognizesVSCodeMigrateCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesSendFileCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/sendfile")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/sendfile")
 	if !ok {
 		t.Fatal("expected /sendfile to be parsed")
 	}
@@ -323,7 +323,7 @@ func TestParseFeishuTextActionRecognizesSendFileCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesHistoryCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/history")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/history")
 	if !ok {
 		t.Fatal("expected /history to be parsed")
 	}
@@ -335,7 +335,7 @@ func TestParseFeishuTextActionRecognizesHistoryCommand(t *testing.T) {
 func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
 	tests := []string{"/review", "/review uncommitted", "/review commit", "/review commit abc1234"}
 	for _, input := range tests {
-		action, ok := ParseFeishuTextAction(input)
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
@@ -358,7 +358,7 @@ func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
 		"review_uncommitted": "/review uncommitted",
 	}
 	for key, wantText := range tests {
-		action, ok := ParseFeishuMenuAction(key)
+		action, ok := ParseFeishuMenuActionWithoutCatalog(key)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", key)
 		}
@@ -424,12 +424,12 @@ func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
 
 func TestParseFeishuLegacyHeadlessCompatCommandsRejected(t *testing.T) {
 	for _, input := range []string{"/newinstance", "/killinstance"} {
-		if action, ok := ParseFeishuTextAction(input); ok {
+		if action, ok := ParseFeishuTextActionWithoutCatalog(input); ok {
 			t.Fatalf("expected %q to be rejected, got %#v", input, action)
 		}
 	}
 	for _, input := range []string{"newinstance", "new_instance", "killinstance", "kill_instance"} {
-		if action, ok := ParseFeishuMenuAction(input); ok {
+		if action, ok := ParseFeishuMenuActionWithoutCatalog(input); ok {
 			t.Fatalf("expected %q menu alias to be rejected, got %#v", input, action)
 		}
 	}
@@ -444,7 +444,7 @@ func TestFeishuMenuVisibleCommandsHaveCanonicalSlashAndMenuParity(t *testing.T) 
 		if slash == "" {
 			t.Fatalf("menu-visible command %q missing canonical slash", def.ID)
 		}
-		textAction, ok := ParseFeishuTextAction(slash)
+		textAction, ok := ParseFeishuTextActionWithoutCatalog(slash)
 		if !ok {
 			t.Fatalf("menu-visible command %q slash %q is not parseable", def.ID, slash)
 		}
@@ -453,7 +453,7 @@ func TestFeishuMenuVisibleCommandsHaveCanonicalSlashAndMenuParity(t *testing.T) 
 		if menuKey == "" {
 			t.Fatalf("menu-visible command %q missing canonical menu key", def.ID)
 		}
-		menuAction, ok := ParseFeishuMenuAction(menuKey)
+		menuAction, ok := ParseFeishuMenuActionWithoutCatalog(menuKey)
 		if !ok {
 			t.Fatalf("menu-visible command %q menu key %q is not parseable", def.ID, menuKey)
 		}
@@ -519,7 +519,7 @@ func TestFeishuHelpVisibleCommandsHaveCanonicalSlashParsing(t *testing.T) {
 		if slash == "" {
 			t.Fatalf("help-visible command %q missing canonical slash", def.ID)
 		}
-		if _, ok := ParseFeishuTextAction(slash); !ok {
+		if _, ok := ParseFeishuTextActionWithoutCatalog(slash); !ok {
 			t.Fatalf("help-visible command %q slash %q is not parseable", def.ID, slash)
 		}
 	}
@@ -726,7 +726,7 @@ func TestFeishuCommandMenuGroupPageCarriesContextualVariantProvenance(t *testing
 }
 
 func TestParseFeishuTextActionRecognizesMenuSubcommands(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/menu send_settings")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/menu send_settings")
 	if !ok {
 		t.Fatal("expected /menu send_settings to be parsed")
 	}
@@ -739,7 +739,7 @@ func TestParseFeishuTextActionRecognizesMenuSubcommands(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRejectsBareMenuAlias(t *testing.T) {
-	action, ok := ParseFeishuTextAction("menu")
+	action, ok := ParseFeishuTextActionWithoutCatalog("menu")
 	if ok {
 		t.Fatalf("expected bare menu text to be ignored, got %#v", action)
 	}

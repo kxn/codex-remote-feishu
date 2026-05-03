@@ -273,19 +273,16 @@ func TestWorkspaceSelectionEventCarriesFeishuTargetPickerContext(t *testing.T) {
 	}
 }
 
-func TestApplyFeishuUIIntentBuildsModeCatalog(t *testing.T) {
+func TestApplySurfaceActionBuildsModeCatalog(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
-	events := svc.ApplyFeishuUIIntent(control.Action{
+	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModeCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/mode",
-	}, control.FeishuUIIntent{
-		Kind:    control.FeishuUIIntentShowModeCatalog,
-		RawText: "/mode",
 	})
 	if len(events) != 1 {
 		t.Fatalf("expected mode catalog event, got %#v", events)
@@ -302,19 +299,16 @@ func TestApplyFeishuUIIntentBuildsModeCatalog(t *testing.T) {
 	}
 }
 
-func TestApplyFeishuUIIntentBuildsVerboseCatalog(t *testing.T) {
+func TestApplySurfaceActionBuildsVerboseCatalog(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
-	events := svc.ApplyFeishuUIIntent(control.Action{
+	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionVerboseCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/verbose",
-	}, control.FeishuUIIntent{
-		Kind:    control.FeishuUIIntentShowVerboseCatalog,
-		RawText: "/verbose",
 	})
 	if len(events) != 1 {
 		t.Fatalf("expected verbose catalog event, got %#v", events)
@@ -331,7 +325,7 @@ func TestApplyFeishuUIIntentBuildsVerboseCatalog(t *testing.T) {
 	}
 }
 
-func TestApplyFeishuUIIntentBuildsConfigCatalogsFromRegistry(t *testing.T) {
+func TestApplySurfaceActionBuildsConfigCatalogsFromRegistry(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 
 	for _, flow := range control.FeishuConfigFlowDefinitions() {
@@ -343,15 +337,12 @@ func TestApplyFeishuUIIntentBuildsConfigCatalogsFromRegistry(t *testing.T) {
 			case control.FeishuCommandCodexProvider:
 				svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "", "", "", "")
 			}
-			events := svc.ApplyFeishuUIIntent(control.Action{
+			events := svc.ApplySurfaceAction(control.Action{
 				Kind:             flow.ActionKind,
 				SurfaceSessionID: "surface-1",
 				ChatID:           "chat-1",
 				ActorUserID:      "user-1",
 				Text:             flow.BareCommand,
-			}, control.FeishuUIIntent{
-				Kind:    flow.IntentKind,
-				RawText: flow.BareCommand,
 			})
 			if len(events) != 1 {
 				t.Fatalf("expected a single config catalog event, got %#v", events)

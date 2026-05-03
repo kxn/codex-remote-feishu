@@ -3,7 +3,7 @@ package control
 import "testing"
 
 func TestParseFeishuTextActionRecognizesCompactCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/compact")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/compact")
 	if !ok {
 		t.Fatal("expected /compact to be parsed")
 	}
@@ -13,7 +13,7 @@ func TestParseFeishuTextActionRecognizesCompactCommand(t *testing.T) {
 }
 
 func TestParseFeishuMenuActionRecognizesCompactCommand(t *testing.T) {
-	action, ok := ParseFeishuMenuAction("compact")
+	action, ok := ParseFeishuMenuActionWithoutCatalog("compact")
 	if !ok {
 		t.Fatal("expected compact menu key to be parsed")
 	}

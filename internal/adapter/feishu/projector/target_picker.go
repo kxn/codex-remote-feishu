@@ -136,7 +136,7 @@ func targetPickerBackActionPayload(view control.FeishuTargetPickerView) map[stri
 	if commandText == "" {
 		return nil
 	}
-	action, ok := control.ParseFeishuTextAction(commandText)
+	action, ok := control.ParseFeishuTextActionWithoutCatalog(commandText)
 	if !ok {
 		return nil
 	}

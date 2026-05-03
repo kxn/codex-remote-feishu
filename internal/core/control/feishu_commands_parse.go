@@ -13,12 +13,6 @@ func ParseFeishuTextActionWithoutCatalog(text string) (Action, bool) {
 	return actionWithoutCatalogProvenance(resolved.Action), true
 }
 
-// ParseFeishuTextAction is a compatibility wrapper around
-// ParseFeishuTextActionWithoutCatalog.
-func ParseFeishuTextAction(text string) (Action, bool) {
-	return ParseFeishuTextActionWithoutCatalog(text)
-}
-
 func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand, bool) {
 	ctx = NormalizeCatalogContext(ctx)
 	trimmed := strings.TrimSpace(text)
@@ -64,12 +58,6 @@ func ParseFeishuMenuActionWithoutCatalog(eventKey string) (Action, bool) {
 		return Action{}, false
 	}
 	return actionWithoutCatalogProvenance(resolved.Action), true
-}
-
-// ParseFeishuMenuAction is a compatibility wrapper around
-// ParseFeishuMenuActionWithoutCatalog.
-func ParseFeishuMenuAction(eventKey string) (Action, bool) {
-	return ParseFeishuMenuActionWithoutCatalog(eventKey)
 }
 
 func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {

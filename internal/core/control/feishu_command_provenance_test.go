@@ -26,7 +26,7 @@ func TestResolveFeishuTextCommandCarriesCatalogProvenance(t *testing.T) {
 }
 
 func TestParseFeishuTextActionDoesNotFreezeCatalogProvenance(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/mode claude")
+	action, ok := ParseFeishuTextActionWithoutCatalog("/mode claude")
 	if !ok {
 		t.Fatal("expected /mode claude to parse")
 	}

@@ -6,17 +6,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-// ApplyFeishuUIIntent is a thin test-facing helper for exercising an already
-// resolved UI intent. Production runtime dispatch goes through
-// ApplySurfaceAction + FeishuUIIntentFromAction.
-func (s *Service) ApplyFeishuUIIntent(action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
-	surface := s.ensureSurface(action)
-	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
-		return s.filterEventsForSurfaceVisibility(blocked)
-	}
-	return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, intent))
-}
-
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
 	if flow, ok := control.FeishuConfigFlowDefinitionByIntentKind(intent.Kind); ok {
 		if support, ok := control.ResolveFeishuCommandSupport(s.buildCatalogContext(surface), flow.CommandID); ok && !support.DispatchAllowed {

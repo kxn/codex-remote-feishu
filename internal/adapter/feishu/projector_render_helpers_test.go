@@ -204,7 +204,7 @@ func cardButtonPayload(t *testing.T, button map[string]any) map[string]any {
 
 func assertPageActionPayloadMatchesCommand(t *testing.T, value map[string]any, commandText string) {
 	t.Helper()
-	action, ok := control.ParseFeishuTextAction(commandText)
+	action, ok := control.ParseFeishuTextActionWithoutCatalog(commandText)
 	if !ok {
 		t.Fatalf("expected parseable command text %q", commandText)
 	}
