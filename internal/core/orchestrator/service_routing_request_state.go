@@ -164,12 +164,9 @@ func (s *Service) surfaceForInitiator(instanceID string, event agentproto.Event)
 func (s *Service) pauseForLocal(instanceID string) []eventcontract.Event {
 	var events []eventcontract.Event
 	for _, surface := range s.findAttachedSurfaces(instanceID) {
-		s.pausedUntil[surface.SurfaceSessionID] = s.now().Add(s.config.LocalPauseMaxWait)
-		if surface.DispatchMode == state.DispatchModePausedForLocal {
-			continue
+		if s.pauseSurfaceDispatchForLocal(surface, s.now().Add(s.config.LocalPauseMaxWait)) {
+			events = append(events, notice(surface, "local_activity_detected", "检测到本地 VS Code 正在使用，飞书消息将继续排队。")...)
 		}
-		surface.DispatchMode = state.DispatchModePausedForLocal
-		events = append(events, notice(surface, "local_activity_detected", "检测到本地 VS Code 正在使用，飞书消息将继续排队。")...)
 	}
 	return events
 }
@@ -180,14 +177,7 @@ func (s *Service) enterHandoff(instanceID string) []eventcontract.Event {
 		if surface.DispatchMode != state.DispatchModePausedForLocal {
 			continue
 		}
-		delete(s.pausedUntil, surface.SurfaceSessionID)
-		if len(surface.QueuedQueueItemIDs) == 0 {
-			surface.DispatchMode = state.DispatchModeNormal
-			delete(s.handoffUntil, surface.SurfaceSessionID)
-			continue
-		}
-		surface.DispatchMode = state.DispatchModeHandoffWait
-		s.handoffUntil[surface.SurfaceSessionID] = s.now().Add(s.config.TurnHandoffWait)
+		s.enterSurfaceDispatchHandoff(surface, s.now().Add(s.config.TurnHandoffWait))
 	}
 	return events
 }

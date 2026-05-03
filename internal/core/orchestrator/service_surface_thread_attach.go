@@ -146,34 +146,8 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	events := []eventcontract.Event{}
-	if surface.AttachedInstanceID != "" {
-		events = append(events, s.discardDrafts(surface)...)
-		events = append(events, s.finalizeDetachedSurface(surface)...)
-	} else {
-		events = append(events, s.discardDrafts(surface)...)
-		clearAutoContinueRuntime(surface)
-		clearSurfaceRequestCapture(surface)
-		clearSurfaceRequests(surface)
-		s.clearPreparedNewThread(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.PendingHeadless = nil
-		surface.ActiveQueueItemID = ""
-		surface.DispatchMode = state.DispatchModeNormal
-		surface.Abandoning = false
-		delete(s.pausedUntil, surface.SurfaceSessionID)
-		delete(s.abandoningUntil, surface.SurfaceSessionID)
-	}
+	events := s.prepareSurfaceForExecutionReattach(surface)
 	surface.Backend = instanceBackend
-	surface.PendingHeadless = nil
-	surface.ActiveQueueItemID = ""
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.Abandoning = false
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
-	clearSurfaceRequests(surface)
-	s.clearPreparedNewThread(surface)
-	surface.PromptOverride = state.ModelConfigRecord{}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if isHeadlessInstance(inst) && strings.TrimSpace(threadCWD(view)) != "" {
@@ -377,18 +351,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		sourceInstanceID = view.Inst.InstanceID
 	}
 
-	events := []eventcontract.Event{}
-	if surface.AttachedInstanceID != "" {
-		events = append(events, s.discardDrafts(surface)...)
-		events = append(events, s.finalizeDetachedSurface(surface)...)
-	} else {
-		events = append(events, s.discardDrafts(surface)...)
-		clearAutoContinueRuntime(surface)
-		clearSurfaceRequestCapture(surface)
-		clearSurfaceRequests(surface)
-		s.clearPreparedNewThread(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
-	}
+	events := s.prepareSurfaceForExecutionReattach(surface)
 	if !s.claimWorkspace(surface, cwd) {
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			if mode == startHeadlessModeHeadlessRestore {
@@ -425,7 +388,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 	surface.Backend = agentproto.NormalizeBackend(targetBackend)
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	launchContract := s.headlessLaunchContract(surface)
-	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+	s.adoptSurfacePendingHeadlessLaunch(surface, &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
 		ThreadID:              view.ThreadID,
 		ThreadTitle:           threadTitle,
@@ -442,7 +405,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		Purpose:               state.HeadlessLaunchPurposeThreadRestore,
 		SourceInstanceID:      sourceInstanceID,
 		AutoRestore:           mode == startHeadlessModeHeadlessRestore,
-	}
+	})
 	if mode == startHeadlessModeDefault {
 		events = append(events, eventcontract.Event{
 			Kind:             eventcontract.KindNotice,

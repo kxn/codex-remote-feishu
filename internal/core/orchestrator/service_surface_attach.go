@@ -50,25 +50,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
 
-	events := []eventcontract.Event{}
-	if surface.AttachedInstanceID != "" {
-		events = append(events, s.discardDrafts(surface)...)
-		events = append(events, s.finalizeDetachedSurface(surface)...)
-	} else {
-		events = append(events, s.discardDrafts(surface)...)
-		clearAutoContinueRuntime(surface)
-		clearSurfaceRequestCapture(surface)
-		clearSurfaceRequests(surface)
-		s.releaseSurfaceThreadClaim(surface)
-		s.clearPreparedNewThread(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.PendingHeadless = nil
-		surface.ActiveQueueItemID = ""
-		surface.DispatchMode = state.DispatchModeNormal
-		surface.Abandoning = false
-		delete(s.pausedUntil, surface.SurfaceSessionID)
-		delete(s.abandoningUntil, surface.SurfaceSessionID)
-	}
+	events := s.prepareSurfaceForExecutionReattach(surface)
 
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
 		AttachedInstanceID: inst.InstanceID,
@@ -77,14 +59,6 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	}) {
 		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")...)
 	}
-	surface.PendingHeadless = nil
-	surface.ActiveQueueItemID = ""
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.Abandoning = false
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
-	clearSurfaceRequests(surface)
-	surface.PromptOverride = state.ModelConfigRecord{}
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  "",
 		RouteMode: string(state.RouteModeUnbound),
@@ -170,23 +144,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	events := s.discardDrafts(surface)
-	if surface.AttachedInstanceID != "" {
-		events = append(events, s.finalizeDetachedSurface(surface)...)
-	} else {
-		clearAutoContinueRuntime(surface)
-		clearSurfaceRequestCapture(surface)
-		clearSurfaceRequests(surface)
-		s.releaseSurfaceThreadClaim(surface)
-		s.clearPreparedNewThread(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
-	}
-	surface.PendingHeadless = nil
-	surface.ActiveQueueItemID = ""
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.Abandoning = false
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	events := s.prepareSurfaceForExecutionReattach(surface)
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if s.surfaceIsVSCode(surface) {
@@ -330,7 +288,6 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
-		surface.PendingHeadless = nil
 		pendingContract := state.HeadlessLaunchContractFromPending(pending)
 		s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
 			ProductMode:     surface.ProductMode,
@@ -369,7 +326,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		}
 		return s.attachSurfaceToKnownThread(surface, inst, view, mode)
 	}
-	surface.PendingHeadless = nil
+	s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
 	events := []eventcontract.Event{}
 	if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
@@ -422,11 +379,8 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, attachSurfaceToKnownThreadDefault)
 	}
 	surface.Backend = state.EffectiveInstanceBackend(inst)
-	surface.PendingHeadless = nil
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.Abandoning = false
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	s.resetSurfaceExecutionGates(surface)
+	s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
 	if isHeadlessInstance(inst) && workspaceKey != "" {
 		s.retargetManagedHeadlessInstance(inst, workspaceKey)
 	}

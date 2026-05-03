@@ -2,10 +2,10 @@ package orchestrator
 
 import (
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func (s *Service) PauseSurfaceDispatch(surfaceID string) {
@@ -13,11 +13,7 @@ func (s *Service) PauseSurfaceDispatch(surfaceID string) {
 	if surface == nil {
 		return
 	}
-	delete(s.handoffUntil, surface.SurfaceSessionID)
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	if surface.DispatchMode == state.DispatchModeNormal {
-		surface.DispatchMode = state.DispatchModePausedForLocal
-	}
+	s.pauseSurfaceDispatchForLocal(surface, time.Time{})
 }
 
 func (s *Service) ResumeSurfaceDispatch(surfaceID string, notice *control.Notice) []eventcontract.Event {
@@ -25,11 +21,7 @@ func (s *Service) ResumeSurfaceDispatch(surfaceID string, notice *control.Notice
 	if surface == nil {
 		return nil
 	}
-	delete(s.handoffUntil, surface.SurfaceSessionID)
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	if surface.DispatchMode == state.DispatchModePausedForLocal {
-		surface.DispatchMode = state.DispatchModeNormal
-	}
+	s.restoreSurfaceDispatchNormal(surface)
 	var events []eventcontract.Event
 	if notice != nil && (strings.TrimSpace(notice.Code) != "" || strings.TrimSpace(notice.Title) != "" || strings.TrimSpace(notice.Text) != "") {
 		events = append(events, eventcontract.Event{

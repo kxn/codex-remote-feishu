@@ -840,7 +840,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		if surface == nil || surface.DispatchMode != state.DispatchModeHandoffWait {
 			continue
 		}
-		surface.DispatchMode = state.DispatchModeNormal
+		s.restoreSurfaceDispatchNormal(surface)
 		if len(surface.QueuedQueueItemIDs) == 0 {
 			continue
 		}
@@ -863,7 +863,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		if surface == nil || surface.DispatchMode != state.DispatchModePausedForLocal {
 			continue
 		}
-		surface.DispatchMode = state.DispatchModeNormal
+		s.restoreSurfaceDispatchNormal(surface)
 		if len(surface.QueuedQueueItemIDs) == 0 {
 			continue
 		}

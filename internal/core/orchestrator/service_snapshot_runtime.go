@@ -144,47 +144,6 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	}
 }
 
-func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, notice *control.Notice, tryDispatchNext bool) []eventcontract.Event {
-	if surface == nil || item == nil {
-		return nil
-	}
-	item.Status = state.QueueItemFailed
-	if surface.ActiveQueueItemID == item.ID {
-		surface.ActiveQueueItemID = ""
-	}
-	binding := s.remoteBindingForSurface(surface)
-	if binding != nil {
-		s.clearTurnArtifacts(binding.InstanceID, binding.ThreadID, binding.TurnID)
-	}
-	s.clearRemoteOwnership(surface)
-	if shouldRestorePreparedNewThread(surface, item, binding) {
-		s.transitionSurfaceRouteCore(surface, s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)], surfaceRouteCoreState{
-			AttachedInstanceID:   strings.TrimSpace(surface.AttachedInstanceID),
-			RouteMode:            state.RouteModeNewThreadReady,
-			PreparedThreadCWD:    strings.TrimSpace(surface.PreparedThreadCWD),
-			PreparedFromThreadID: strings.TrimSpace(surface.PreparedFromThreadID),
-		})
-	}
-
-	events := s.pendingInputEvents(surface, control.PendingInputState{
-		QueueItemID: item.ID,
-		Status:      string(item.Status),
-		TypingOff:   true,
-	}, queueItemSourceMessageIDs(item))
-	if notice != nil && (strings.TrimSpace(notice.Code) != "" || strings.TrimSpace(notice.Title) != "" || strings.TrimSpace(notice.Text) != "") {
-		events = append(events, eventcontract.Event{
-			Kind:             eventcontract.KindNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice:           notice,
-		})
-	}
-	if tryDispatchNext {
-		events = append(events, s.dispatchNext(surface)...)
-	}
-	events = append(events, s.finishSurfaceAfterWork(surface)...)
-	return events
-}
-
 func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) []eventcontract.Event {
 	surface := s.root.Surfaces[surfaceID]
 	if events := s.restorePendingCompactDispatch(surfaceID, commandID, "dispatch_failed", err); len(events) != 0 {
@@ -277,12 +236,12 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil {
-		delete(s.turns.pendingRemote, instanceID)
+		s.clearPendingRemoteTurn(instanceID)
 		return nil
 	}
 	item := surface.QueueItems[binding.QueueItemID]
 	if item == nil || item.Status != state.QueueItemDispatching {
-		delete(s.turns.pendingRemote, instanceID)
+		s.clearPendingRemoteTurn(instanceID)
 		return nil
 	}
 	notice := NoticeForProblem(commandAckProblem(surface.SurfaceSessionID, ack))
@@ -494,20 +453,20 @@ func (s *Service) restorePendingSteerAsStagedImage(surface *state.SurfaceConsole
 
 func (s *Service) HandleHeadlessLaunchStarted(surfaceID, instanceID string, pid int) []eventcontract.Event {
 	surface := s.root.Surfaces[surfaceID]
-	if surface == nil || surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID {
+	pending := s.pendingSurfaceHeadlessLaunch(surface, instanceID)
+	if pending == nil {
 		return nil
 	}
-	surface.PendingHeadless.PID = pid
+	pending.PID = pid
 	return nil
 }
 
 func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err error) []eventcontract.Event {
 	surface := s.root.Surfaces[surfaceID]
-	if surface == nil || surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID {
+	pending := s.consumeSurfacePendingHeadlessLaunch(surface, instanceID)
+	if pending == nil {
 		return nil
 	}
-	pending := surface.PendingHeadless
-	surface.PendingHeadless = nil
 	if pending.AutoRestore {
 		events := []eventcontract.Event{{
 			Kind:             eventcontract.KindNotice,
@@ -570,7 +529,7 @@ func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Even
 	var events []eventcontract.Event
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	for _, surface := range s.root.Surfaces {
-		pending := surface.PendingHeadless
+		pending := s.pendingSurfaceHeadlessLaunch(surface, instanceID)
 		if pending == nil || pending.InstanceID != instanceID {
 			continue
 		}
@@ -594,10 +553,9 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	events := s.failCompactTurn(instanceID, "当前实例已离线，上下文压缩已中断。", nil, false)
 
 	for _, surface := range s.root.Surfaces {
-		if surface.PendingHeadless == nil || surface.PendingHeadless.InstanceID != instanceID {
+		if s.consumeSurfacePendingHeadlessLaunch(surface, instanceID) == nil {
 			continue
 		}
-		surface.PendingHeadless = nil
 		events = append(events, s.maybeFinalizePendingTargetPicker(surface, nil, "当前工作目标准备已中断，请重新发送 /list、/use 或 /useall 再试一次。")...)
 	}
 
@@ -605,18 +563,14 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
 		delete(s.instanceClaims, instanceID)
-		delete(s.turns.pendingRemote, instanceID)
-		delete(s.turns.activeRemote, instanceID)
+		s.clearInstanceRemoteTurnOwnership(instanceID)
 		return events
 	}
 
 	for _, surface := range surfaces {
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.ActiveTurnOrigin = ""
-		surface.DispatchMode = state.DispatchModeNormal
-		surface.Abandoning = false
-		delete(s.handoffUntil, surface.SurfaceSessionID)
+		s.resetSurfaceExecutionGates(surface)
 		clearSurfaceRequests(surface)
 
 		if surface.ActiveQueueItemID != "" {
@@ -626,7 +580,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 					Text: s.attachmentOfflineText(surface, inst),
 				}, false)...)
 			} else {
-				surface.ActiveQueueItemID = ""
+				s.clearSurfaceActiveQueueItem(surface, "")
 			}
 		}
 
@@ -641,8 +595,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 		})
 	}
 	delete(s.instanceClaims, instanceID)
-	delete(s.turns.pendingRemote, instanceID)
-	delete(s.turns.activeRemote, instanceID)
+	s.clearInstanceRemoteTurnOwnership(instanceID)
 	return events
 }
 
@@ -660,8 +613,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	events := s.failCompactTurn(instanceID, "当前实例连接已中断，上下文压缩已中断。", nil, false)
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
-		delete(s.turns.pendingRemote, instanceID)
-		delete(s.turns.activeRemote, instanceID)
+		s.clearInstanceRemoteTurnOwnership(instanceID)
 		return events
 	}
 
@@ -671,10 +623,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 		noticeText = s.attachmentTransportDegradedText(surface, inst)
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.ActiveTurnOrigin = ""
-		surface.DispatchMode = state.DispatchModeNormal
-		surface.Abandoning = false
-		delete(s.handoffUntil, surface.SurfaceSessionID)
+		s.resetSurfaceExecutionGates(surface)
 
 		binding := s.remoteBindingForSurface(surface)
 		if binding != nil && surface.ActiveQueueItemID != "" {
@@ -712,7 +661,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 				events = append(events, s.failSurfaceActiveQueueItem(surface, item, noticePtr, true)...)
 				continue
 			}
-			surface.ActiveQueueItemID = ""
+			s.clearSurfaceActiveQueueItem(surface, "")
 		}
 
 		s.clearRemoteOwnership(surface)
@@ -727,8 +676,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 		}
 	}
 	if !preserveRemoteOwnership {
-		delete(s.turns.pendingRemote, instanceID)
-		delete(s.turns.activeRemote, instanceID)
+		s.clearInstanceRemoteTurnOwnership(instanceID)
 	}
 	return events
 }
@@ -747,22 +695,18 @@ func (s *Service) RemoveInstance(instanceID string) {
 		if surface == nil {
 			continue
 		}
-		if surface.PendingHeadless != nil && surface.PendingHeadless.InstanceID == instanceID {
-			surface.PendingHeadless = nil
-		}
+		s.consumeSurfacePendingHeadlessLaunch(surface, instanceID)
 		if surface.AttachedInstanceID != instanceID {
 			continue
 		}
 		s.discardDrafts(surface)
-		surface.ActiveTurnOrigin = ""
-		surface.Abandoning = false
-		delete(s.handoffUntil, surface.SurfaceSessionID)
+		s.resetSurfaceExecutionGates(surface)
 		if surface.ActiveQueueItemID != "" {
 			if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil && (item.Status == state.QueueItemDispatching || item.Status == state.QueueItemRunning) {
 				s.failSurfaceActiveQueueItem(surface, item, nil, false)
 			} else {
 				s.clearRemoteOwnership(surface)
-				surface.ActiveQueueItemID = ""
+				s.clearSurfaceActiveQueueItem(surface, "")
 			}
 		} else {
 			s.clearRemoteOwnership(surface)
@@ -771,8 +715,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 	}
 	delete(s.root.Instances, instanceID)
 	delete(s.instanceClaims, instanceID)
-	delete(s.turns.pendingRemote, instanceID)
-	delete(s.turns.activeRemote, instanceID)
+	s.clearInstanceRemoteTurnOwnership(instanceID)
 	delete(s.threadRefreshes, instanceID)
 	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
 	deleteMatchingMCPToolCallProgress(s.progress.mcpToolCallProgress, instanceID, "", "")

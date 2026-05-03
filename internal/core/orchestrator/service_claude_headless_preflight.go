@@ -50,7 +50,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-prompt-restart-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+	pending := &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
 		ThreadID:              strings.TrimSpace(attempt.ThreadID),
 		ThreadTitle:           strings.TrimSpace(attempt.ThreadTitle),
@@ -67,10 +67,10 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 		SourceInstanceID:      inst.InstanceID,
 	}
 	if !s.claimWorkspace(surface, workspaceKey) {
-		surface.PendingHeadless = nil
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
 	surface.AttachedInstanceID = ""
+	s.adoptSurfacePendingHeadlessLaunch(surface, pending)
 
 	return []eventcontract.Event{
 		{

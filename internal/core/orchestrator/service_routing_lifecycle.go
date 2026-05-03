@@ -18,15 +18,10 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	clearAutoContinueRuntime(surface)
 	s.clearRemoteOwnership(surface)
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
-	surface.Abandoning = false
-	surface.DispatchMode = state.DispatchModeNormal
-	surface.ActiveTurnOrigin = ""
+	s.resetSurfaceExecutionGates(surface)
 	surface.PromptOverride = state.ModelConfigRecord{}
-	surface.PendingHeadless = nil
-	surface.ActiveQueueItemID = ""
-	delete(s.handoffUntil, surface.SurfaceSessionID)
-	delete(s.pausedUntil, surface.SurfaceSessionID)
-	delete(s.abandoningUntil, surface.SurfaceSessionID)
+	s.consumeSurfacePendingHeadlessLaunch(surface, "")
+	s.clearSurfaceActiveQueueItem(surface, "")
 	clearSurfaceRequests(surface)
 	s.clearSurfacePathPicker(surface)
 	s.clearPlanProposalRuntime(surface)

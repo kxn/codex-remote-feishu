@@ -147,7 +147,9 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 	if surface == nil || pending == nil {
 		return nil
 	}
-	surface.PendingHeadless = nil
+	if current := s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID); current == nil {
+		return nil
+	}
 	events := []eventcontract.Event{}
 	if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)

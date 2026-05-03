@@ -120,12 +120,12 @@ func (s *Service) pendingRemoteBindingRecord(instanceID string) (*remoteTurnBind
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil {
-		delete(s.turns.pendingRemote, instanceID)
+		s.clearPendingRemoteTurn(instanceID)
 		return nil, nil, nil
 	}
 	item := surface.QueueItems[binding.QueueItemID]
 	if item == nil || (item.Status != state.QueueItemDispatching && item.Status != state.QueueItemRunning) {
-		delete(s.turns.pendingRemote, instanceID)
+		s.clearPendingRemoteTurn(instanceID)
 		return nil, nil, nil
 	}
 	return binding, surface, item
@@ -184,7 +184,7 @@ func (s *Service) promotePendingRemote(instanceID string, event agentproto.Event
 	if binding == nil {
 		return s.activeRemoteBinding(instanceID, event.TurnID)
 	}
-	delete(s.turns.pendingRemote, instanceID)
+	s.clearPendingRemoteTurn(instanceID)
 	threadID := strings.TrimSpace(event.ThreadID)
 	if threadID != "" {
 		binding.ThreadID = threadID
@@ -194,7 +194,7 @@ func (s *Service) promotePendingRemote(instanceID string, event agentproto.Event
 	}
 	binding.TurnID = strings.TrimSpace(event.TurnID)
 	binding.Status = string(state.QueueItemRunning)
-	s.turns.activeRemote[instanceID] = binding
+	s.bindActiveRemoteTurn(instanceID, binding)
 	return binding
 }
 
@@ -259,10 +259,10 @@ func shouldClearTrackedInstanceActiveTurn(inst *state.InstanceRecord, threadID, 
 
 func (s *Service) clearRemoteTurn(instanceID, turnID string) {
 	if binding := s.activeRemoteBinding(instanceID, turnID); binding != nil {
-		delete(s.turns.activeRemote, instanceID)
+		s.clearActiveRemoteTurn(instanceID)
 	}
 	if binding := s.turns.pendingRemote[instanceID]; binding != nil && (turnID == "" || binding.TurnID == turnID) {
-		delete(s.turns.pendingRemote, instanceID)
+		s.clearPendingRemoteTurn(instanceID)
 	}
 }
 
@@ -282,10 +282,10 @@ func (s *Service) clearRemoteOwnership(surface *state.SurfaceConsoleRecord) {
 		return
 	}
 	if binding := s.turns.pendingRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
-		delete(s.turns.pendingRemote, surface.AttachedInstanceID)
+		s.clearPendingRemoteTurn(surface.AttachedInstanceID)
 	}
 	if binding := s.turns.activeRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
-		delete(s.turns.activeRemote, surface.AttachedInstanceID)
+		s.clearActiveRemoteTurn(surface.AttachedInstanceID)
 	}
 }
 

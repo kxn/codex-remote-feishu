@@ -286,22 +286,12 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 		item.FrozenExecutionMode = defaultPromptExecutionModeForThread(item.FrozenThreadID)
 	}
 	surface.QueueItems[item.ID] = item
-	surface.ActiveQueueItemID = item.ID
-	s.turns.pendingRemote[inst.InstanceID] = &remoteTurnBinding{
-		InstanceID:            inst.InstanceID,
-		SurfaceSessionID:      surface.SurfaceSessionID,
-		QueueItemID:           item.ID,
-		AutoContinueEpisodeID: episode.EpisodeID,
-		AttemptTriggerKind:    string(episode.TriggerKind),
-		ExecutionMode:         item.FrozenExecutionMode,
-		ReplyToMessageID:      episode.RootReplyToMessageID,
-		ReplyToMessagePreview: episode.RootReplyToMessagePreview,
-		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
-		SourceThreadID:        strings.TrimSpace(firstNonEmpty(episode.FrozenSourceThreadID, item.FrozenSourceThreadID, item.FrozenThreadID)),
-		SurfaceBindingPolicy:  agentproto.EffectiveSurfaceBindingPolicy(item.FrozenSurfaceBindingPolicy),
-		ThreadCWD:             item.FrozenCWD,
-		Status:                string(item.Status),
+	binding := newRemoteTurnBindingForQueueItem(surface, inst, item)
+	if binding != nil {
+		binding.AutoContinueEpisodeID = episode.EpisodeID
+		binding.AttemptTriggerKind = string(episode.TriggerKind)
 	}
+	s.activateSurfaceQueueItemDispatchWithBinding(surface, item, binding)
 	episode.State = state.AutoContinueEpisodeRunning
 	episode.PendingDueAt = time.Time{}
 	episode.CurrentAttemptOutputSeen = false

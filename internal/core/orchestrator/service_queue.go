@@ -289,24 +289,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		return events
 	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
-	item.Status = state.QueueItemDispatching
-	surface.ActiveQueueItemID = item.ID
-	s.turns.pendingRemote[inst.InstanceID] = &remoteTurnBinding{
-		InstanceID:            inst.InstanceID,
-		SurfaceSessionID:      surface.SurfaceSessionID,
-		QueueItemID:           item.ID,
-		SourceMessageID:       item.SourceMessageID,
-		SourceMessagePreview:  item.SourceMessagePreview,
-		ReplyToMessageID:      firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
-		ReplyToMessagePreview: firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
-		ExecutionMode:         item.FrozenExecutionMode,
-		BootstrapNewThread:    item.RouteModeAtEnqueue == state.RouteModeNewThreadReady,
-		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
-		SourceThreadID:        queuedItemSourceThreadID(item),
-		SurfaceBindingPolicy:  queuedItemSurfaceBindingPolicy(item),
-		ThreadCWD:             item.FrozenCWD,
-		Status:                string(item.Status),
-	}
+	s.activateSurfaceQueueItemDispatch(surface, inst, item)
 	originMessageID := firstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)
 
 	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
@@ -441,7 +424,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	default:
 		item.Status = state.QueueItemFailed
 	}
-	surface.ActiveQueueItemID = ""
+	s.clearSurfaceActiveQueueItem(surface, item.ID)
 	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID: item.ID,
 		Status:      string(item.Status),

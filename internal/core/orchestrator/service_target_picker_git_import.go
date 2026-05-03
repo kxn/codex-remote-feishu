@@ -90,7 +90,6 @@ func (s *Service) cancelTargetPickerGitImport(surface *state.SurfaceConsoleRecor
 	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(pending.ThreadCWD) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
 		return events
 	}
-	surface.PendingHeadless = nil
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindDaemonCommand,

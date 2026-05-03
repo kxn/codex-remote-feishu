@@ -137,29 +137,13 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-workspace-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	events := []eventcontract.Event{}
-	if surface.AttachedInstanceID != "" {
-		events = append(events, s.discardDrafts(surface)...)
-		events = append(events, s.finalizeDetachedSurface(surface)...)
-	} else {
-		events = append(events, s.discardDrafts(surface)...)
-		clearSurfaceRequestCapture(surface)
-		clearSurfaceRequests(surface)
-		s.clearPreparedNewThread(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.PendingHeadless = nil
-		surface.ActiveQueueItemID = ""
-		surface.DispatchMode = state.DispatchModeNormal
-		surface.Abandoning = false
-		delete(s.pausedUntil, surface.SurfaceSessionID)
-		delete(s.abandoningUntil, surface.SurfaceSessionID)
-	}
+	events := s.prepareSurfaceForExecutionReattach(surface)
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	launchContract := s.headlessLaunchContract(surface)
-	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+	s.adoptSurfacePendingHeadlessLaunch(surface, &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
 		ThreadCWD:             workspaceKey,
 		Backend:               launchContract.Backend,
@@ -171,7 +155,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 		Status:                state.HeadlessLaunchStarting,
 		Purpose:               state.HeadlessLaunchPurposeFreshWorkspace,
 		PrepareNewThread:      prepareNewThread,
-	}
+	})
 	noticeTitle := "正在接入工作区"
 	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
 	if prepareNewThread {

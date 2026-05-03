@@ -720,10 +720,10 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []eventcontra
 }
 
 func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecord, notice *control.Notice) []eventcontract.Event {
-	if surface == nil || surface.PendingHeadless == nil {
+	pending := s.pendingSurfaceHeadlessLaunch(surface, "")
+	if pending == nil {
 		return nil
 	}
-	pending := surface.PendingHeadless
 	events := s.discardDrafts(surface)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	events = append(events, eventcontract.Event{
@@ -753,7 +753,7 @@ func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecor
 }
 
 func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	if surface.PendingHeadless != nil {
+	if s.pendingSurfaceHeadlessLaunch(surface, "") != nil {
 		return s.cancelPendingHeadlessLaunch(surface, &control.Notice{
 			Code:  "detached",
 			Title: "已取消恢复流程",
@@ -766,11 +766,9 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	events := s.discardDrafts(surface)
 	clearSurfaceRequests(surface)
-	surface.PendingHeadless = nil
+	s.consumeSurfacePendingHeadlessLaunch(surface, "")
 	surface.PromptOverride = state.ModelConfigRecord{}
-	surface.DispatchMode = state.DispatchModeNormal
-	delete(s.handoffUntil, surface.SurfaceSessionID)
-	delete(s.pausedUntil, surface.SurfaceSessionID)
+	s.restoreSurfaceDispatchNormal(surface)
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceHasPreStartRemoteDispatch(surface) {
 		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
@@ -780,8 +778,7 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		return append(events, notice(surface, "detached", s.detachedText(surface))...)
 	}
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
-		surface.Abandoning = true
-		s.abandoningUntil[surface.SurfaceSessionID] = s.now().Add(s.config.DetachAbandonWait)
+		s.setSurfaceDetachAbandoning(surface, s.now().Add(s.config.DetachAbandonWait))
 		if binding := s.remoteBindingForSurface(surface); binding != nil && binding.TurnID != "" {
 			events = append(events, eventcontract.Event{
 				Kind:             eventcontract.KindAgentCommand,
@@ -811,9 +808,7 @@ func (s *Service) abortSurfaceActiveQueueItemForDetach(surface *state.SurfaceCon
 		return nil
 	}
 	item.Status = state.QueueItemFailed
-	if surface.ActiveQueueItemID == item.ID {
-		surface.ActiveQueueItemID = ""
-	}
+	s.clearSurfaceActiveQueueItem(surface, item.ID)
 	if binding := s.remoteBindingForSurface(surface); binding != nil {
 		s.clearTurnArtifacts(binding.InstanceID, binding.ThreadID, binding.TurnID)
 	}
