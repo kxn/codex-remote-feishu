@@ -223,7 +223,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
 	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
-	entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
+	entry.PlanMode = normalizeOptionalPlanMode(entry.PlanMode)
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
 	entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(entry.ResumeThreadCWD)
@@ -254,6 +254,14 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		entry.UpdatedAt = entry.UpdatedAt.UTC()
 	}
 	return entry, true
+}
+
+func normalizeOptionalPlanMode(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return string(state.NormalizePlanModeSetting(state.PlanModeSetting(value)))
 }
 
 func SameEntryContent(left, right Entry) bool {

@@ -11,59 +11,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
-func TestStatusUsesObservedWorkspaceDefaultAccessMode(t *testing.T) {
-	now := time.Date(2026, 4, 9, 13, 30, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
-		ShortName:               "droid",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
-		},
-	})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:        agentproto.EventConfigObserved,
-		ThreadID:    "thread-1",
-		CWD:         "/data/dl/droid",
-		ConfigScope: "cwd_default",
-		AccessMode:  agentproto.AccessModeConfirm,
-	})
-
-	snapshot := svc.SurfaceSnapshot("surface-1")
-	if snapshot == nil {
-		t.Fatal("expected surface snapshot")
-	}
-	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeConfirm || snapshot.NextPrompt.EffectiveAccessModeSource != "workspace_default" {
-		t.Fatalf("expected workspace default confirm access in snapshot, got %#v", snapshot.NextPrompt)
-	}
-
-	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-1",
-		MessageID:        "msg-1",
-		Text:             "你好",
-	})
-
-	surface := svc.root.Surfaces["surface-1"]
-	var item *state.QueueItemRecord
-	for _, current := range surface.QueueItems {
-		item = current
-	}
-	if item == nil {
-		t.Fatal("expected queue item")
-	}
-	if item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("expected queue item to freeze workspace default access, got %#v", item.FrozenOverride)
-	}
-}
-
 func TestObserveConfigVSCodeDoesNotPersistWorkspaceDefaults(t *testing.T) {
 	now := time.Date(2026, 4, 9, 14, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

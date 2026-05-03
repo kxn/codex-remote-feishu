@@ -290,6 +290,48 @@ func TestSurfaceResumeStatePersistsCodexProviderID(t *testing.T) {
 	}
 }
 
+func TestDaemonDoesNotRestoreCodexPlanModeAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ProductMode:      "normal",
+		Backend:          "codex",
+		CodexProviderID:  "team-proxy",
+		PlanMode:         "on",
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected latent surface after restart")
+	}
+	events := app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/plan off",
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "surface_plan_mode_current" {
+		t.Fatalf("expected codex plan mode to restore as off, got %#v", events)
+	}
+
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil {
+		t.Fatal("expected surface resume entry after sync")
+	}
+	if entry.PlanMode != "" {
+		t.Fatalf("expected codex plan mode to be omitted from persisted resume state, got %#v", entry)
+	}
+}
+
 func TestSurfaceResumeStoreCanonicalizesLegacyCodexBackendWithClaudeProfile(t *testing.T) {
 	t.Parallel()
 

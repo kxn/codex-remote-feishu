@@ -115,12 +115,11 @@ func TestUpdateWorkspaceDefaultsMigratesLegacySeedToProviderKey(t *testing.T) {
 		},
 	})
 
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:            agentproto.EventConfigObserved,
-		ThreadID:        "thread-1",
-		CWD:             workspaceKey,
-		ConfigScope:     "cwd_default",
-		ReasoningEffort: "medium",
+	svc.updateWorkspaceDefaults(workspaceKey, state.InstanceBackendContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "team-proxy",
+	}, func(current *state.ModelConfigRecord) {
+		current.ReasoningEffort = "medium"
 	})
 
 	defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{

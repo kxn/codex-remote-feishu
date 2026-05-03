@@ -206,14 +206,14 @@
 | `/mode` | Local Routing / Launch Contract | 是 | `surfaceSessionID` | desired state 应由本系统持有。 |
 | `/codexprovider` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `providerID` | provider 定义和 surface 选择应分开。 |
 | `/claudeprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | profile 定义和 surface 选择应分开。 |
-| Codex headless model 默认值 | Backend Behavior With Local SSOT，待确认 | 是，若确认 backend 不会另路修改 | `codex + codexProviderID + workspaceKey` | 当前更像临时 surface override，需要调整。 |
-| Codex headless reasoning 默认值 | Backend Behavior With Local SSOT，待确认 | 是，若确认 backend 不会另路修改 | `codex + codexProviderID + workspaceKey` | 需要确认 upstream 是否保存为后续默认。 |
-| Codex headless access 默认值 | Backend Behavior With Local SSOT，待确认 | 是，若确认 backend 不会另路修改 | `codex + codexProviderID + workspaceKey` | 需要确认 backend/session 行为。 |
+| Codex headless model | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `model` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
+| Codex headless reasoning | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `reasoning` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
+| Codex headless access | Backend Behavior With Shared Authority | 否 | surface override + prompt frozen override | 不按 model/reasoning 同级别推断为 thread persisted default，不写 `Root.WorkspaceDefaults`。 |
+| Codex headless plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume 持久化 | live surface runtime + prompt frozen override | live session 内 sticky；不是 thread persisted default，surface resume 不恢复 Codex plan。 |
 | Claude profile model | Local Routing / Launch Contract / profile config | 是 | `profileID` | 不应开放飞书 `/model` 临时改 Claude model。 |
 | Claude profile reasoning 默认值 | Backend Behavior With Local SSOT | 是 | `profileID` 或 `claude + claudeProfileID + workspaceKey` | 若作为全局 profile 默认，用 `profileID`；若允许工作区覆盖，再加 `workspaceKey`。 |
 | Claude access | Backend Behavior With Shared Authority，待确认 | 待定 | 待定 | 需要确认 Claude permission mode 是进程级、session 级还是持久状态。 |
 | Claude plan mode | Backend Behavior With Shared Authority | 默认不做强持久 | observed state / per-turn override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan。 |
-| Codex plan mode | Backend Behavior With Shared Authority，待确认 | 待定 | 待定 | 需要确认 Codex plan 是否只按 per-turn override，还是 backend 也会主动改。 |
 | VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + per-turn override | VS Code 端也可能修改，飞书不应覆盖 VS Code 最新状态。 |
 
 ## 5. 新增配置项决策流程
@@ -240,9 +240,6 @@
 
 以下行为不能靠产品假设决定，必须通过代码或黑盒测试确认：
 
-- Codex plan mode 是否可能被 backend 或 LLM 主动退出
-- Codex `model` / `reasoning` 注入后，是只影响单 turn，还是会成为 thread 后续默认
-- Codex `access` 注入后，是只影响单 turn，还是会成为 workspace / thread 后续默认
 - VS Code 端修改 model / reasoning / access / plan 时，wrapper 是否能完整观测并上报
 - Claude permission mode 的真实作用域：进程级、session 级、thread 级还是临时状态
 - Claude reasoning 运行中能否无损切换；若不能，重启 headless 是否是唯一正确方式
