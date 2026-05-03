@@ -68,7 +68,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		ProductMode: "normal",
 		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
 	})
-	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status", "/detach"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/steerall", "/new", "/status", "/detach"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude current_work menu commands = %#v, want %#v", got, want)
 	}
 

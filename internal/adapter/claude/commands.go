@@ -21,6 +21,8 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 	switch command.Kind {
 	case agentproto.CommandPromptSend:
 		return t.translatePromptSend(command)
+	case agentproto.CommandTurnSteer:
+		return t.translateTurnSteer(command)
 	case agentproto.CommandTurnInterrupt:
 		return t.translateInterrupt(command)
 	case agentproto.CommandRequestRespond:
@@ -41,19 +43,13 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 }
 
 func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, error) {
-	text, err := flattenPromptText(command.Prompt.Inputs)
+	text, err := t.requireTextPromptInputs(
+		command,
+		"claude_prompt_inputs_unsupported",
+		"当前 Claude runtime 第一版只支持纯文本 prompt.send。",
+	)
 	if err != nil {
-		return nil, agentproto.ErrorInfo{
-			Code:             "claude_prompt_inputs_unsupported",
-			Layer:            "wrapper",
-			Stage:            "translate_command",
-			Operation:        string(command.Kind),
-			Message:          "当前 Claude runtime 第一版只支持纯文本 prompt.send。",
-			Details:          err.Error(),
-			SurfaceSessionID: command.Origin.Surface,
-			CommandID:        command.CommandID,
-			ThreadID:         command.Target.ThreadID,
-		}
+		return nil, err
 	}
 	threadID := strings.TrimSpace(command.Target.ThreadID)
 	if t.sessionID != "" {
@@ -74,19 +70,69 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 		outbound = append(outbound, frame)
 	}
 
-	payload := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"role":    "user",
-			"content": text,
-		},
-	}
-	frame, err := marshalNDJSON(payload)
+	frame, err := marshalUserTextFrame(text)
 	if err != nil {
 		return nil, err
 	}
 	outbound = append(outbound, frame)
 	return outbound, nil
+}
+
+func (t *Translator) translateTurnSteer(command agentproto.Command) ([][]byte, error) {
+	if t.activeTurn == nil {
+		return nil, agentproto.ErrorInfo{
+			Code:             "claude_steer_requires_active_turn",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "Claude 只有在当前存在 active turn 时才能并入文本补充。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	if targetThread := strings.TrimSpace(command.Target.ThreadID); targetThread != "" && targetThread != t.activeTurn.ThreadID {
+		return nil, agentproto.ErrorInfo{
+			Code:             "claude_steer_turn_mismatch",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "当前 Claude active turn 已变化，无法把补充并入目标轮次。",
+			Details:          fmt.Sprintf("expected active thread id %q, got %q", t.activeTurn.ThreadID, targetThread),
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	if targetTurn := strings.TrimSpace(command.Target.TurnID); targetTurn != "" && targetTurn != t.activeTurn.TurnID {
+		return nil, agentproto.ErrorInfo{
+			Code:             "claude_steer_turn_mismatch",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "当前 Claude active turn 已变化，无法把补充并入目标轮次。",
+			Details:          fmt.Sprintf("expected active turn id %q, got %q", t.activeTurn.TurnID, targetTurn),
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	text, err := t.requireTextPromptInputs(
+		command,
+		"claude_steer_inputs_unsupported",
+		"Claude 当前只能把纯文本补充并入 active turn。",
+	)
+	if err != nil {
+		return nil, err
+	}
+	frame, err := marshalUserTextFrame(text)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{frame}, nil
 }
 
 func (t *Translator) buildPermissionModeFrame(accessMode, planMode string) ([]byte, bool, error) {
@@ -242,6 +288,35 @@ func requestResponseAnswers(request *pendingRequest, response map[string]any) ma
 		answers[question.Question] = values[0]
 	}
 	return answers
+}
+
+func (t *Translator) requireTextPromptInputs(command agentproto.Command, code, message string) (string, error) {
+	text, err := flattenPromptText(command.Prompt.Inputs)
+	if err == nil {
+		return text, nil
+	}
+	return "", agentproto.ErrorInfo{
+		Code:             code,
+		Layer:            "wrapper",
+		Stage:            "translate_command",
+		Operation:        string(command.Kind),
+		Message:          message,
+		Details:          err.Error(),
+		SurfaceSessionID: command.Origin.Surface,
+		CommandID:        command.CommandID,
+		ThreadID:         command.Target.ThreadID,
+		TurnID:           command.Target.TurnID,
+	}
+}
+
+func marshalUserTextFrame(text string) ([]byte, error) {
+	return marshalNDJSON(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role":    "user",
+			"content": text,
+		},
+	})
 }
 
 func flattenPromptText(inputs []agentproto.Input) (string, error) {

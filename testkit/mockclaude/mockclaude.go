@@ -17,6 +17,7 @@ const (
 	ScenarioToolApproval      Scenario = "tool-approval"
 	ScenarioAskUserQuestion   Scenario = "ask-user-question"
 	ScenarioPlanConfirmation  Scenario = "plan-confirmation"
+	ScenarioTextSteer         Scenario = "text-steer"
 	ScenarioInterrupt         Scenario = "interrupt"
 	ScenarioExitWithoutResult Scenario = "exit-without-result"
 )
@@ -34,6 +35,7 @@ type MockClaude struct {
 
 	pendingApproval    *pendingApproval
 	interruptReady     bool
+	textSteerArmed     bool
 	exitAfterWriteCode int
 }
 
@@ -232,6 +234,13 @@ func (m *MockClaude) handleUserMessage(message map[string]any) ([][]byte, error)
 		return m.startAskUserQuestion(), nil
 	case ScenarioPlanConfirmation:
 		return m.startPlanConfirmation(), nil
+	case ScenarioTextSteer:
+		if !m.textSteerArmed {
+			m.textSteerArmed = true
+			return m.startStreamingOnly(), nil
+		}
+		finalText := "Steer merged: " + strings.TrimSpace(stringValue(content))
+		return m.startPlainText(finalText), nil
 	case ScenarioInterrupt:
 		m.interruptReady = true
 		return m.startStreamingOnly(), nil

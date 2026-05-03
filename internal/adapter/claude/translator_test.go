@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -219,6 +220,89 @@ func TestClaudeTranslatorAskUserQuestionRoundTrip(t *testing.T) {
 	}
 	if resolved.Events[0].Kind != agentproto.EventRequestResolved || resolved.Events[0].RequestID != "req-ask-1" {
 		t.Fatalf("unexpected request resolved event: %#v", resolved.Events[0])
+	}
+}
+
+func TestClaudeTranslatorTurnSteerAcceptsTextOnlyWithinActiveTurn(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, turnID := startClaudeTurn(t, tr, "default")
+
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-steer-1",
+		Kind:      agentproto.CommandTurnSteer,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: threadID, TurnID: turnID},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "补充一下最后一段"}}},
+	})
+	if err != nil {
+		t.Fatalf("translate turn steer: %v", err)
+	}
+	if len(payloads) != 1 {
+		t.Fatalf("expected one steer payload, got %#v", payloads)
+	}
+	payload := decodeFrame(t, payloads[0])
+	if payload["type"] != "user" {
+		t.Fatalf("unexpected steer payload: %#v", payload)
+	}
+	message := testMapValue(payload["message"])
+	if lookupStringFromAny(message["role"]) != "user" || lookupStringFromAny(message["content"]) != "补充一下最后一段" {
+		t.Fatalf("unexpected steer message payload: %#v", message)
+	}
+	if tr.activeTurn == nil || tr.activeTurn.ThreadID != threadID || tr.activeTurn.TurnID != turnID {
+		t.Fatalf("expected active turn to remain unchanged, got %#v", tr.activeTurn)
+	}
+	if len(tr.pendingTurns) != 0 {
+		t.Fatalf("expected steer not to create pending turns, got %#v", tr.pendingTurns)
+	}
+}
+
+func TestClaudeTranslatorTurnSteerRequiresActiveTurn(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-steer-no-active",
+		Kind:      agentproto.CommandTurnSteer,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-1", TurnID: "turn-1"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "补充"}}},
+	})
+	problem := expectClaudeCommandError(t, err)
+	if problem.Code != "claude_steer_requires_active_turn" {
+		t.Fatalf("unexpected problem: %#v", problem)
+	}
+}
+
+func TestClaudeTranslatorTurnSteerRejectsTargetMismatch(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, _ := startClaudeTurn(t, tr, "default")
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-steer-mismatch",
+		Kind:      agentproto.CommandTurnSteer,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: threadID, TurnID: "turn-wrong"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "补充"}}},
+	})
+	problem := expectClaudeCommandError(t, err)
+	if problem.Code != "claude_steer_turn_mismatch" || !strings.Contains(problem.Details, "expected active turn id") {
+		t.Fatalf("unexpected problem: %#v", problem)
+	}
+}
+
+func TestClaudeTranslatorTurnSteerRejectsNonTextInputs(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	threadID, turnID := startClaudeTurn(t, tr, "default")
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-steer-image",
+		Kind:      agentproto.CommandTurnSteer,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: threadID, TurnID: turnID},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputLocalImage, Path: "/tmp/reply.png", MIMEType: "image/png"}}},
+	})
+	problem := expectClaudeCommandError(t, err)
+	if problem.Code != "claude_steer_inputs_unsupported" || !strings.Contains(problem.Details, "unsupported prompt input type") {
+		t.Fatalf("unexpected problem: %#v", problem)
 	}
 }
 
@@ -1739,6 +1823,18 @@ func decodeFrame(t *testing.T, raw []byte) map[string]any {
 		t.Fatalf("unmarshal frame: %v", err)
 	}
 	return payload
+}
+
+func expectClaudeCommandError(t *testing.T, err error) agentproto.ErrorInfo {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected command error")
+	}
+	problem, ok := err.(agentproto.ErrorInfo)
+	if !ok {
+		t.Fatalf("expected agentproto.ErrorInfo, got %T (%v)", err, err)
+	}
+	return problem.Normalize()
 }
 
 func testMapValue(value any) map[string]any {

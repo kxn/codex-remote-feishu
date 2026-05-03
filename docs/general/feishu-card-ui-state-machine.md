@@ -872,9 +872,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
   - 锁定 `/list` 在 `codex` / `claude` / `vscode` 三条菜单路径下都改走同卡 handoff；其中 Claude `/list` / `/use` 的 target picker 刷新与结果也会留在原菜单卡，vscode `/list` / `/use` / `/useall` 的空态、attach 结果与 `use_thread` 结果同样继续收口在原菜单卡；同时 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口，`/stop`、`/new`、`/follow`、`/detach` 也会直接 seal 当前菜单卡
 - [internal/core/control/feishu_command_support_test.go](../../internal/core/control/feishu_command_support_test.go)
-  - 锁定 command support profile 的命令矩阵：`/new`、`/list`、`/use` 现在是 visible + allow approximation；`/sendfile` 在 Claude 下 visible + allow；`/model` 在 Claude 下 hidden + reject；`/review`、`/bendtomywill`、`/autocontinue` 继续 hidden + reject，`/steerall` 继续显式 reject
+  - 锁定 command support profile 的命令矩阵：`/new`、`/list`、`/use`、`/steerall` 现在是 visible + allow approximation；`/sendfile` 在 Claude 下 visible + allow；`/model` 在 Claude 下 hidden + reject；`/review`、`/bendtomywill`、`/autocontinue` 继续 hidden + reject
 - [internal/core/control/feishu_command_display_resolver_test.go](../../internal/core/control/feishu_command_display_resolver_test.go)
-  - 锁定 Claude `current_work` / `switch_target` / `send_settings` / `common_tools` 的 help/menu projection：`/stop`、`/new`、`/status`、`/detach`，`/list`、`/use`，`/reasoning`、`/access`、`/verbose`、`/claudeprofile`，以及 `/history` 与 `/sendfile`
+  - 锁定 Claude `current_work` / `switch_target` / `send_settings` / `common_tools` 的 help/menu projection：`/stop`、`/steerall`、`/new`、`/status`、`/detach`，`/list`、`/use`，`/reasoning`、`/access`、`/verbose`、`/claudeprofile`，以及 `/history` 与 `/sendfile`
 - [internal/core/orchestrator/service_mode_backend_test.go](../../internal/core/orchestrator/service_mode_backend_test.go)
   - 锁定 `/mode claude` 从已有工作区切入时，会保留 workspace claim 并直接进入 Claude workspace prepare，而不是停在 detached idle
 - [internal/core/orchestrator/service_workspace_selection_model_test.go](../../internal/core/orchestrator/service_workspace_selection_model_test.go)

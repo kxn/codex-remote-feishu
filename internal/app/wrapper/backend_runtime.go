@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
@@ -20,13 +21,22 @@ type runtimeObserveResult struct {
 }
 
 type runtimeCommandResult struct {
-	Events          []agentproto.Event
-	OutboundToChild [][]byte
-	Restart         *runtimeCommandRestart
+	Events              []agentproto.Event
+	OutboundToChild     [][]byte
+	Restart             *runtimeCommandRestart
+	CommandResponseGate *runtimeCommandResponseGate
 }
 
 type runtimeCommandRestart struct {
 	Target agentproto.Target
+}
+
+type runtimeCommandResponseGate struct {
+	RequestID      string
+	RejectProblem  agentproto.ErrorInfo
+	Timeout        time.Duration
+	TimeoutProblem agentproto.ErrorInfo
+	SuppressFrame  bool
 }
 
 type backendRuntime interface {
@@ -120,7 +130,15 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 	if err != nil {
 		return runtimeCommandResult{}, err
 	}
-	return runtimeCommandResult{OutboundToChild: outbound}, nil
+	result := runtimeCommandResult{OutboundToChild: outbound}
+	if command.Kind == agentproto.CommandTurnSteer && len(outbound) > 0 {
+		gate, err := newTurnSteerResponseGate(command, outbound[0])
+		if err != nil {
+			return runtimeCommandResult{}, err
+		}
+		result.CommandResponseGate = gate
+	}
+	return result, nil
 }
 
 func (r *codexBackendRuntime) PrepareChildRestart(string, agentproto.Target) error {
@@ -240,6 +258,50 @@ func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (run
 		return runtimeCommandResult{}, err
 	}
 	return runtimeCommandResult{OutboundToChild: outbound}, nil
+}
+
+func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtimeCommandResponseGate, error) {
+	requestID := lookupStringFromRawFrame(frame, "id")
+	if strings.TrimSpace(requestID) == "" {
+		return nil, agentproto.ErrorInfo{
+			Code:             "missing_command_request_id",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "wrapper 生成追加输入请求时缺少 request id。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	return &runtimeCommandResponseGate{
+		RequestID: requestID,
+		RejectProblem: agentproto.ErrorInfo{
+			Code:             "steer_rejected",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "本地 Codex 拒绝了这次追加输入。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		Timeout: steerCommandResponseTimeout,
+		TimeoutProblem: agentproto.ErrorInfo{
+			Code:             "steer_response_timeout",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "等待本地 Codex 确认追加输入时超时。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		SuppressFrame: true,
+	}, nil
 }
 
 func (r *claudeBackendRuntime) PrepareChildRestart(_ string, target agentproto.Target) error {

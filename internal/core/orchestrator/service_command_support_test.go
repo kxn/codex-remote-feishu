@@ -9,7 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestClaudeRejectsSteerAllBeforeCommandHandler(t *testing.T) {
+func TestClaudeSteerAllReachesCommandHandler(t *testing.T) {
 	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
@@ -22,10 +22,10 @@ func TestClaudeRejectsSteerAllBeforeCommandHandler(t *testing.T) {
 		Text:             "/steerall",
 	})
 	if len(events) != 1 || events[0].Notice == nil {
-		t.Fatalf("expected single rejection notice, got %#v", events)
+		t.Fatalf("expected single noop notice, got %#v", events)
 	}
-	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "same-turn steer") {
-		t.Fatalf("unexpected rejection notice: %#v", events[0].Notice)
+	if events[0].Notice.Code != "steer_all_noop" || strings.Contains(events[0].Notice.Text, "same-turn steer") {
+		t.Fatalf("unexpected steerall notice: %#v", events[0].Notice)
 	}
 }
 

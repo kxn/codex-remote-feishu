@@ -35,7 +35,7 @@ func TestResolveFeishuCommandSupportAppliesClaudeProfile(t *testing.T) {
 		{familyID: FeishuCommandReview, wantKind: FeishuCommandSupportApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
 		{familyID: FeishuCommandPatch, wantKind: FeishuCommandSupportApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
 		{familyID: FeishuCommandModel, wantKind: FeishuCommandSupportReject, wantVisible: false, wantDispatch: false, wantNoteContains: "Claude 配置"},
-		{familyID: FeishuCommandSteerAll, wantKind: FeishuCommandSupportReject, wantVisible: false, wantDispatch: false, wantNoteContains: "same-turn steer"},
+		{familyID: FeishuCommandSteerAll, wantKind: FeishuCommandSupportApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "纯文本补充"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.familyID, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestResolveFeishuActionSupportUsesResolvedFamily(t *testing.T) {
 	if !ok {
 		t.Fatal("expected steer action support to resolve")
 	}
-	if support.FamilyID != FeishuCommandSteerAll || support.DispatchAllowed {
+	if support.FamilyID != FeishuCommandSteerAll || !support.DispatchAllowed || support.Kind != FeishuCommandSupportApproximation {
 		t.Fatalf("unexpected resolved action support: %#v", support)
 	}
 }

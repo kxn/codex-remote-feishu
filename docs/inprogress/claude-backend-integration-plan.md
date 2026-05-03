@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-05-03`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude text-only steer approximation：native capability 仍是 unsupported，但 reply auto steer 与 `/steerall` 的纯文本补充已经可以并入当前 active turn。
 
 ## 1. 文档定位
 
@@ -851,6 +851,7 @@ MVP 目标值：
 2. 不包含业务层 approximation
 3. 不包含 raw passthrough
 4. `#498` 落地后的当前代码基线里，Claude 默认 capability 应真实宣称 `sessionCatalog=true` 与 `threadsRefresh=true`；这两个 bit 仍然不能在未接 host bridge 时被提前混为一谈
+5. `turn.steer` 仍然不应出现在 capability declaration 里；当前文本 steer 只是 command-profile 层的 approximation，不是 native capability
 
 ### 7.3 Claude runtime 内部设计
 
@@ -883,7 +884,10 @@ Claude runtime 分三块：
 2. `turn.started` 来自 Claude 进入 running 边界
 3. `turn.completed` 由 Claude 最终结果、runtime 退出时的 completed reconciliation，以及 idle/running 边界共同收口
 4. `threads.refresh` / `thread.history.read` 不从 live stream 提供
-5. `turn.steer` 显式 rejected
+5. `turn.steer`
+   - native capability 继续视为 unsupported
+   - 但 command profile 可为明确批准的文本补充入口开放 approximation：向当前 active turn 追加一条 Claude `user` frame
+   - accepted 语义只表示“本地 runtime 已完成 dispatch”，不表示 Claude 提供了独立 steer ack
 6. `AskUserQuestion` / `ExitPlanMode`
    - 先观察 assistant `tool_use`
    - 再处理 `control_request(can_use_tool)`
@@ -957,7 +961,9 @@ Claude runtime 分三块：
 第一版建议：
 
 1. `turn.steer`
-   - 继续 reject，不做近似
+   - 不做 fake native support
+   - 但可为 reply auto steer 与 `/steerall` 这类已批准入口开放 text-only approximation
+   - 输入必须并入当前 active turn，不能退化成 `interrupt + prompt.send`
 2. `/compact`
    - 如果后续验证 Claude CLI 侧命令稳定，可作为 passthrough 候选；但不计入 capability support
 3. 某些 session 管理入口
@@ -982,12 +988,12 @@ Claude runtime 分三块：
 | `/new` `/list` `/use` | approximation | visible | allow | Claude MVP 的工作会话主链；继续复用现有产品壳，但底层改走 backend-aware session catalog / route contract。 |
 | `/review` `/patch` | approximation | hidden | reject | 当前不纳入 Claude MVP；在 detached review / turn patch 的 runtime contract 补齐前，不对用户暴露。 |
 | `/workspace*` `/useall` | approximation | hidden | reject | Claude MVP 不开放工作区父页或跨工作区总览。 |
-| `/steerall` | reject | hidden | reject | Claude 当前不支持 same-turn steer；必须显式拒绝。 |
+| `/steerall` | approximation | visible | allow | 仅文本补充可并入当前 active turn；图片等非文本仍显式拒绝，并恢复原 queue/staged 状态。 |
 | `/plan` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
 
 对 help/menu 的显式投影也一并固定为：
 
-1. `current_work` 只保留 `/stop`、`/new`、`/status`、`/detach`
+1. `current_work` 只保留 `/stop`、`/steerall`、`/new`、`/status`、`/detach`
 2. `switch_target` 只保留 `/list`、`/use`
 3. `send_settings` 继续保留 `/reasoning`、`/access`、`/verbose`、`/claudeprofile`
 4. `common_tools` 当前保留 `/history`、`/sendfile`
@@ -1154,7 +1160,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 4. Claude `request.respond`
 5. Claude `threads.refresh`
 6. Claude `thread.history.read`
-7. 明确 `turn.steer` rejected
+7. 明确 `turn.steer` native capability unsupported，并只为批准入口保留后续 approximation 空间
 
 本阶段的用户侧预期：
 
@@ -1165,7 +1171,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 
 1. `/mode claude` 已作为 dev 环境可见入口落地。
 2. 普通文本、`/stop`、request/respond 主链、`/new`、`/list`、`/use` 已进入 Claude visible MVP。
-3. same-turn steer 继续显式 reject，不再伪装成可用能力。
+3. `turn.steer` 继续不宣称 native capability；但文本型 reply auto steer 与 `/steerall` 现已走 approximation，并入当前 active turn。
 4. 上述结果只证明 dev-visible Claude 主链已经可接通；不等于 2026-04-29 重新拍板后的最终 MVP 暴露面。按最新产品决议，`/detach` 应升级为 visible + allow，而 `/review` / `/bendtomywill` 应回退为 hidden + reject，直到 runtime contract 补齐。
 
 ### 阶段 E：补齐 command catalog / help / menu / workspace config（已完成）
@@ -1212,7 +1218,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 3. interrupt 成功
 4. approval / user input / elicitation 回写成功
 5. `threads.refresh` 与 `thread.history.read` 成功
-6. `turn.steer` 稳定 rejected，且不污染 queue / request state
+6. 文本 steer approximation 成功并入当前 active turn；非文本 steer 仍显式 reject，且不污染 queue / request state
 
 ### 9.3 混合场景安全
 

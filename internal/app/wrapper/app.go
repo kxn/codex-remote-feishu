@@ -422,33 +422,13 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				summarizeFrames(result.OutboundToChild),
 			)
 			var waitCh <-chan *agentproto.ErrorInfo
-			requestID := ""
-			if command.Kind == agentproto.CommandTurnSteer && len(result.OutboundToChild) > 0 {
-				requestID = lookupStringFromRawFrame(result.OutboundToChild[0], "id")
-				if strings.TrimSpace(requestID) == "" {
-					return agentproto.ErrorInfo{
-						Code:             "missing_command_request_id",
-						Layer:            "wrapper",
-						Stage:            "translate_command",
-						Operation:        string(command.Kind),
-						Message:          "wrapper 生成追加输入请求时缺少 request id。",
-						SurfaceSessionID: command.Origin.Surface,
-						CommandID:        command.CommandID,
-						ThreadID:         command.Target.ThreadID,
-						TurnID:           command.Target.TurnID,
-					}
-				}
-				waitCh = commandResponses.Register(requestID, agentproto.ErrorInfo{
-					Code:             "steer_rejected",
-					Layer:            "wrapper",
-					Stage:            "command_response",
-					Operation:        string(command.Kind),
-					Message:          "本地 Codex 拒绝了这次追加输入。",
-					SurfaceSessionID: command.Origin.Surface,
-					CommandID:        command.CommandID,
-					ThreadID:         command.Target.ThreadID,
-					TurnID:           command.Target.TurnID,
-				}, true)
+			responseGate := result.CommandResponseGate
+			if responseGate != nil {
+				waitCh = commandResponses.Register(
+					responseGate.RequestID,
+					responseGate.RejectProblem,
+					responseGate.SuppressFrame,
+				)
 			}
 			turnTracker.ObserveEvents(result.Events)
 			if len(result.Events) != 0 {
@@ -470,31 +450,23 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			for _, line := range result.OutboundToChild {
 				select {
 				case writeCh <- line:
-					a.debugf("relay command queued for codex: command=%s frame=%s", command.CommandID, summarizeFrame(line))
+					a.debugf("relay command queued for child: command=%s frame=%s", command.CommandID, summarizeFrame(line))
 				case <-ctx.Done():
-					commandResponses.Cancel(requestID)
+					if responseGate != nil {
+						commandResponses.Cancel(responseGate.RequestID)
+					}
 					return ctx.Err()
 				}
 			}
 			turnTracker.ObserveCommand(command)
-			if command.Kind == agentproto.CommandTurnSteer {
-				err := waitCommandResponse(ctx, waitCh, steerCommandResponseTimeout, agentproto.ErrorInfo{
-					Code:             "steer_response_timeout",
-					Layer:            "wrapper",
-					Stage:            "command_response",
-					Operation:        string(command.Kind),
-					Message:          "等待本地 Codex 确认追加输入时超时。",
-					SurfaceSessionID: command.Origin.Surface,
-					CommandID:        command.CommandID,
-					ThreadID:         command.Target.ThreadID,
-					TurnID:           command.Target.TurnID,
-				})
+			if responseGate != nil {
+				err := waitCommandResponse(ctx, waitCh, responseGate.Timeout, responseGate.TimeoutProblem)
 				if err != nil {
-					commandResponses.Cancel(requestID)
-					a.debugf("relay command response failed: command=%s request=%s err=%v", command.CommandID, requestID, err)
+					commandResponses.Cancel(responseGate.RequestID)
+					a.debugf("relay command response failed: command=%s request=%s err=%v", command.CommandID, responseGate.RequestID, err)
 					return err
 				}
-				a.debugf("relay command response accepted: command=%s request=%s", command.CommandID, requestID)
+				a.debugf("relay command response accepted: command=%s request=%s", command.CommandID, responseGate.RequestID)
 			}
 			return nil
 		},

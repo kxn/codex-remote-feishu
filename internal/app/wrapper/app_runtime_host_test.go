@@ -415,6 +415,76 @@ func TestWrapperClaudeInterruptMainChain(t *testing.T) {
 	)
 }
 
+func TestWrapperClaudeTurnSteerUsesDispatchAcceptanceWithoutCommandResponse(t *testing.T) {
+	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestApp(t, "text-steer")
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-prompt-claude-steer",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
+		Target: agentproto.Target{
+			ThreadID: "thread-1",
+			CWD:      testutil.WorkspacePath("data", "dl", "droid"),
+		},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "先开始处理这个任务"}},
+		},
+	}); err != nil {
+		t.Fatalf("send prompt: %v", err)
+	}
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-prompt-claude-steer" && ack.Accepted
+	}, stdout, stderr, done)
+
+	var runtimeThreadID string
+	var runtimeTurnID string
+	waitForEvent(t, eventsCh, 10*time.Second, func(events []agentproto.Event) bool {
+		for _, event := range events {
+			if event.Kind == agentproto.EventTurnStarted {
+				runtimeThreadID = event.ThreadID
+				runtimeTurnID = event.TurnID
+				return true
+			}
+		}
+		return false
+	}, stdout, stderr, done)
+	if strings.TrimSpace(runtimeThreadID) == "" || strings.TrimSpace(runtimeTurnID) == "" {
+		t.Fatalf("expected active Claude turn ids, got thread=%q turn=%q", runtimeThreadID, runtimeTurnID)
+	}
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-turn-steer-claude",
+		Kind:      agentproto.CommandTurnSteer,
+		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
+		Target:    agentproto.Target{ThreadID: runtimeThreadID, TurnID: runtimeTurnID},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "请重点看最后一段"}},
+		},
+	}); err != nil {
+		t.Fatalf("send steer: %v", err)
+	}
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-turn-steer-claude" && ack.Accepted
+	}, stdout, stderr, done)
+
+	waitForObservedEvents(t, eventsCh, 10*time.Second, stdout, stderr, done,
+		func(event agentproto.Event) bool {
+			text, _ := event.Metadata["text"].(string)
+			return event.Kind == agentproto.EventItemCompleted &&
+				event.ItemKind == "agent_message" &&
+				event.ThreadID == runtimeThreadID &&
+				event.TurnID == runtimeTurnID &&
+				text == "Steer merged: 请重点看最后一段"
+		},
+		func(event agentproto.Event) bool {
+			return event.Kind == agentproto.EventTurnCompleted &&
+				event.Status == "completed" &&
+				event.ThreadID == runtimeThreadID &&
+				event.TurnID == runtimeTurnID
+		},
+	)
+}
+
 func TestWrapperClaudeReconcilesFailedTurnWhenChildExitsWithoutResult(t *testing.T) {
 	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestApp(t, "exit-without-result")
 
