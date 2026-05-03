@@ -51,7 +51,7 @@ func TestFinalizeDetachedSurfaceSealsWorkspacePageAndClearsIdleReviewSession(t *
 func TestFinalizeDetachedSurfaceSealsVisiblePathPickerAndClearsHiddenTargetPicker(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 
-	targetEvents := svc.openTargetPicker(surface, control.TargetPickerRequestSourceDir, "", "", "", false)
+	targetEvents := svc.openTargetPicker(surface, control.TargetPickerRequestSourceDir, "", nil, "", false)
 	targetView := singleTargetPickerEvent(t, targetEvents)
 	svc.RecordTargetPickerMessage(surface.SurfaceSessionID, targetView.PickerID, "om-target-picker-1")
 	record := svc.activeTargetPicker(surface)

@@ -117,7 +117,7 @@ func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testin
 	for _, button := range operationCardButtons(*targetPickerResult.ReplaceCurrentCard) {
 		value := cardButtonPayload(button)
 		switch value["kind"] {
-		case "page_action":
+		case "page_local_action":
 			if value["action_kind"] == string(control.ActionWorkspaceRoot) {
 				hasWorkspaceBack = true
 			}
@@ -922,6 +922,12 @@ func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
 	}
 	if result.ReplaceCurrentCard.CardTitle != "审阅代码变更" {
 		t.Fatalf("unexpected review replacement title: %#v", result.ReplaceCurrentCard)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionReviewStartUncommitted)) {
+		t.Fatalf("expected review root to keep local uncommitted-review action, got %#v", result.ReplaceCurrentCard.CardElements)
+	}
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionReviewOpenCommitPicker)) {
+		t.Fatalf("expected review root to keep local commit-picker action, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 	if len(gateway.operations) != 0 {
 		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)

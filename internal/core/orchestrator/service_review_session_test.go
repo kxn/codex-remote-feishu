@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -731,11 +732,36 @@ func TestStartReviewCommitCommandOpensPickerPage(t *testing.T) {
 		t.Fatalf("expected single form entry, got %#v", catalog.Sections)
 	}
 	form := catalog.Sections[0].Entries[0].Form
-	if form.CommandText != "/review commit" || form.Field.Kind != control.CommandCatalogFormFieldSelectStatic {
+	if form == nil || form.Field.Kind != control.CommandCatalogFormFieldSelectStatic {
 		t.Fatalf("unexpected commit picker form: %#v", form)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(form.SubmitValue, "kind")); got != "page_local_submit" {
+		t.Fatalf("expected local submit payload on review commit picker, got %#v", form.SubmitValue)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(form.SubmitValue, "action_kind")); got != string(control.ActionReviewCommand) {
+		t.Fatalf("unexpected review commit submit action kind: %#v", form.SubmitValue)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(form.SubmitValue, "action_arg_prefix")); got != "commit" {
+		t.Fatalf("unexpected review commit submit action arg prefix: %#v", form.SubmitValue)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(form.SubmitValue, "field_name")); got != reviewCommitPickerFieldName {
+		t.Fatalf("unexpected review commit submit field name: %#v", form.SubmitValue)
 	}
 	if len(form.Field.Options) == 0 || form.Field.Options[0].Value != latest.SHA {
 		t.Fatalf("expected latest commit option first, got %#v", form.Field.Options)
+	}
+	if len(catalog.RelatedButtons) != 1 {
+		t.Fatalf("expected one cancel button, got %#v", catalog.RelatedButtons)
+	}
+	cancelValue := catalog.RelatedButtons[0].CallbackValue
+	if got := strings.TrimSpace(anyStringMapValue(cancelValue, "kind")); got != "page_local_action" {
+		t.Fatalf("expected local cancel payload, got %#v", cancelValue)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(cancelValue, "action_kind")); got != string(control.ActionReviewCommand) {
+		t.Fatalf("unexpected review cancel action kind: %#v", cancelValue)
+	}
+	if got := strings.TrimSpace(anyStringMapValue(cancelValue, "action_arg")); got != "cancel" {
+		t.Fatalf("unexpected review cancel action arg: %#v", cancelValue)
 	}
 	if flow := svc.activeOwnerCardFlow(surface); flow == nil || flow.Kind != ownerCardFlowKindReviewPicker {
 		t.Fatalf("expected active review picker flow, got %#v", flow)
@@ -1000,4 +1026,12 @@ func TestDiscardReviewSessionRecoversReviewThreadSelection(t *testing.T) {
 	if surface.ReviewSession != nil {
 		t.Fatalf("expected recovered discard to clear review session, got %#v", surface.ReviewSession)
 	}
+}
+
+func anyStringMapValue(value map[string]any, key string) string {
+	if len(value) == 0 {
+		return ""
+	}
+	current, _ := value[key].(string)
+	return current
 }

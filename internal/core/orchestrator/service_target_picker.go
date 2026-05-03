@@ -22,7 +22,7 @@ const (
 
 type targetPickerOpenOptions struct {
 	PreferredWorkspaceKey string
-	BackCommandText       string
+	BackValue             map[string]any
 	SourceMessageID       string
 	Inline                bool
 	LockedWorkspaceKey    string
@@ -32,28 +32,28 @@ type targetPickerOpenOptions struct {
 	CatalogBackend        agentproto.Backend
 }
 
-func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
+func (s *Service) openTargetPicker(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, preferredWorkspaceKey string, backValue map[string]any, sourceMessageID string, inline bool) []eventcontract.Event {
 	return s.openTargetPickerWithOptions(surface, source, targetPickerOpenOptions{
 		PreferredWorkspaceKey: preferredWorkspaceKey,
-		BackCommandText:       backCommandText,
+		BackValue:             cloneTargetPickerActionPayload(backValue),
 		SourceMessageID:       sourceMessageID,
 		Inline:                inline,
 	})
 }
 
-func (s *Service) openTargetPickerForAction(surface *state.SurfaceConsoleRecord, action control.Action, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
+func (s *Service) openTargetPickerForAction(surface *state.SurfaceConsoleRecord, action control.Action, preferredWorkspaceKey string, backValue map[string]any, sourceMessageID string, inline bool) []eventcontract.Event {
 	source := control.TargetPickerRequestSourceList
 	if flow, ok := control.ResolveFeishuWorkspaceSessionFlowFromAction(action); ok && flow.TargetPicker != "" {
 		source = flow.TargetPicker
 	}
-	return s.openTargetPickerWithSourceForAction(surface, source, action, preferredWorkspaceKey, backCommandText, sourceMessageID, inline)
+	return s.openTargetPickerWithSourceForAction(surface, source, action, preferredWorkspaceKey, backValue, sourceMessageID, inline)
 }
 
-func (s *Service) openTargetPickerWithSourceForAction(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, action control.Action, preferredWorkspaceKey, backCommandText, sourceMessageID string, inline bool) []eventcontract.Event {
+func (s *Service) openTargetPickerWithSourceForAction(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, action control.Action, preferredWorkspaceKey string, backValue map[string]any, sourceMessageID string, inline bool) []eventcontract.Event {
 	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
 	return s.openTargetPickerWithOptions(surface, source, targetPickerOpenOptions{
 		PreferredWorkspaceKey: preferredWorkspaceKey,
-		BackCommandText:       backCommandText,
+		BackValue:             cloneTargetPickerActionPayload(backValue),
 		SourceMessageID:       sourceMessageID,
 		Inline:                inline,
 		CatalogFamilyID:       familyID,
@@ -125,7 +125,7 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		CatalogBackend:       agentproto.NormalizeBackend(opts.CatalogBackend),
 		Stage:                control.FeishuTargetPickerStageEditing,
 		Page:                 targetPickerDefaultPage(source),
-		BackCommandText:      strings.TrimSpace(opts.BackCommandText),
+		BackValue:            cloneTargetPickerActionPayload(opts.BackValue),
 		LockedWorkspaceKey:   lockedWorkspaceKey,
 		AllowNewThread:       opts.AllowNewThread,
 		WorkspaceCursor:      -1,
@@ -214,20 +214,6 @@ func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pi
 	default:
 		return notice(surface, "target_picker_invalid_page_action", "当前翻页动作无效，请重新打开目标选择器。")
 	}
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
-}
-
-func (s *Service) handleTargetPickerBack(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string, answers map[string][]string) []eventcontract.Event {
-	record, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID)
-	if blocked != nil {
-		return blocked
-	}
-	resetTargetPickerEditingState(record)
-	s.applyTargetPickerDraftAnswers(record, answers)
 	view, err := s.buildTargetPickerView(surface, record)
 	if err != nil {
 		return notice(surface, "target_picker_unavailable", err.Error())
@@ -552,8 +538,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	confirmLabel := "确认切换"
 	confirmValidatesOnSubmit := false
 	canConfirm := false
-	backCommandText := strings.TrimSpace(record.BackCommandText)
-	canGoBack := stage == control.FeishuTargetPickerStageEditing && backCommandText != ""
+	backValue := cloneTargetPickerActionPayload(record.BackValue)
+	canGoBack := stage == control.FeishuTargetPickerStageEditing && len(backValue) != 0
 	backLabel := ""
 	if canGoBack {
 		backLabel = "返回上一层"
@@ -643,7 +629,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		ProcessingCancelLabel:    processingCancelLabel,
 		CanGoBack:                canGoBack,
 		BackLabel:                backLabel,
-		BackCommandText:          backCommandText,
+		BackValue:                backValue,
 		ShowWorkspaceSelect:      showWorkspaceSelect,
 		ShowSessionSelect:        showSessionSelect,
 		WorkspaceSelectionLocked: workspaceSelectionLocked,
@@ -676,6 +662,17 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		Messages:                 messages,
 		SourceMessages:           sourceMessages,
 	}), nil
+}
+
+func cloneTargetPickerActionPayload(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(value))
+	for key, current := range value {
+		cloned[key] = current
+	}
+	return cloned
 }
 
 func (s *Service) catalogProvenanceForAction(surface *state.SurfaceConsoleRecord, action control.Action) (string, string, agentproto.Backend) {

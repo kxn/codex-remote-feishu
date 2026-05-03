@@ -494,7 +494,6 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 		cardActionKindTargetPickerSelectSession,
 		cardActionKindTargetPickerPage,
 		cardActionKindTargetPickerOpenPathPicker,
-		cardActionKindTargetPickerBack,
 		cardActionKindTargetPickerCancel,
 		cardActionKindTargetPickerConfirm:
 		return parseTargetPickerCardAction(env, value, event, meta, surfaceSessionID, chatID, operatorID, messageID)

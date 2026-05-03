@@ -83,7 +83,7 @@ type activeTargetPickerRecord struct {
 	PendingWorkspaceKey   string
 	PendingThreadID       string
 	Page                  control.FeishuTargetPickerPage
-	BackCommandText       string
+	BackValue             map[string]any
 	LockedWorkspaceKey    string
 	AllowNewThread        bool
 	WorkspaceCursor       int

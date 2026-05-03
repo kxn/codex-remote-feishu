@@ -521,7 +521,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 		Title:                    "选择工作区与会话",
 		Page:                     control.FeishuTargetPickerPageGit,
 		CanGoBack:                true,
-		BackCommandText:          "/workspace",
+		BackValue:                actionPayloadPageLocalAction(string(control.ActionWorkspaceRoot), ""),
 		ConfirmLabel:             "克隆并继续",
 		CanConfirm:               false,
 		ConfirmValidatesOnSubmit: true,
@@ -595,7 +595,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
 				sawOpenPath = true
 			}
-		case cardActionKindPageAction:
+		case cardActionKindPageLocalAction:
 			sawBack = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
@@ -707,7 +707,7 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 			Title:            "选择工作区与会话",
 			Page:             control.FeishuTargetPickerPageGit,
 			CanGoBack:        true,
-			BackCommandText:  "/workspace",
+			BackValue:        actionPayloadPageLocalAction(string(control.ActionWorkspaceRoot), ""),
 			ConfirmLabel:     "克隆并继续",
 			CanConfirm:       true,
 			GitParentDir:     "/data/dl",

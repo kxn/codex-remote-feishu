@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -218,7 +219,7 @@ func (s *Service) buildReviewCommitPickerView(flow *activeOwnerCardFlowRecord, r
 			Entries: []control.CommandCatalogEntry{{
 				Form: &control.CommandCatalogForm{
 					CommandID:   control.FeishuCommandReview,
-					CommandText: "/review commit",
+					SubmitValue: frontstagecontract.ActionPayloadPageLocalSubmit(string(control.ActionReviewCommand), "commit", reviewCommitPickerFieldName),
 					SubmitLabel: "开始审阅",
 					Field: control.CommandCatalogFormField{
 						Name:        reviewCommitPickerFieldName,
@@ -230,9 +231,9 @@ func (s *Service) buildReviewCommitPickerView(flow *activeOwnerCardFlowRecord, r
 			}},
 		}},
 		RelatedButtons: []control.CommandCatalogButton{{
-			Label:       "取消",
-			Kind:        control.CommandCatalogButtonAction,
-			CommandText: "/review cancel",
+			Label:         "取消",
+			Kind:          control.CommandCatalogButtonCallbackAction,
+			CallbackValue: frontstagecontract.ActionPayloadPageLocalAction(string(control.ActionReviewCommand), "cancel"),
 		}},
 	})
 }

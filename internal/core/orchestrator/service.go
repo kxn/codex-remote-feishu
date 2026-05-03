@@ -337,7 +337,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	switch action.Kind {
 	case control.ActionListInstances:
 		if s.surfaceIsHeadless(surface) {
-			events = s.openTargetPickerForAction(surface, action, "", "", "", false)
+			events = s.openTargetPickerForAction(surface, action, "", nil, "", false)
 			break
 		}
 		events = s.presentInstanceSelectionWithAction(surface, action, false)

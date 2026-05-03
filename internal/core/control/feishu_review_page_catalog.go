@@ -18,7 +18,7 @@ func BuildFeishuReviewRootPageView(inMenu bool) FeishuPageView {
 						Label:         "Review 待提交内容",
 						Kind:          CommandCatalogButtonCallbackAction,
 						CommandID:     FeishuCommandReview,
-						CallbackValue: frontstagecontract.ActionPayloadPageAction(string(ActionReviewStartUncommitted), ""),
+						CallbackValue: frontstagecontract.ActionPayloadPageLocalAction(string(ActionReviewStartUncommitted), ""),
 					},
 				),
 				reviewRootPageEntry(
@@ -28,7 +28,7 @@ func BuildFeishuReviewRootPageView(inMenu bool) FeishuPageView {
 						Label:         "Review 指定提交",
 						Kind:          CommandCatalogButtonCallbackAction,
 						CommandID:     FeishuCommandReview,
-						CallbackValue: frontstagecontract.ActionPayloadPageAction(string(ActionReviewOpenCommitPicker), ""),
+						CallbackValue: frontstagecontract.ActionPayloadPageLocalAction(string(ActionReviewOpenCommitPicker), ""),
 					},
 				),
 			},

@@ -87,7 +87,7 @@ type FeishuTargetPickerView struct {
 	ProcessingCancelLabel    string
 	CanGoBack                bool
 	BackLabel                string
-	BackCommandText          string
+	BackValue                map[string]any
 	ShowWorkspaceSelect      bool
 	ShowSessionSelect        bool
 	WorkspaceSelectionLocked bool
@@ -152,6 +152,7 @@ func NormalizeFeishuTargetPickerView(view FeishuTargetPickerView) FeishuTargetPi
 	view.Phase = frame.Phase
 	view.ActionPolicy = frame.ActionPolicy
 	view.Sealed = frontstagecontract.SealedForPhase(frame.Phase)
+	view.BackValue = cloneActionPayload(view.BackValue)
 	return view
 }
 

@@ -5,17 +5,18 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func workspacePageCommandText(commandID string) string {
+func workspacePageParentPayloadForCommand(commandID string) map[string]any {
 	switch strings.TrimSpace(commandID) {
 	case control.FeishuCommandWorkspace:
-		return "/workspace"
+		return frontstagecontract.ActionPayloadPageLocalAction(string(control.ActionWorkspaceRoot), "")
 	case control.FeishuCommandWorkspaceNew:
-		return "/workspace new"
+		return frontstagecontract.ActionPayloadPageLocalAction(string(control.ActionWorkspaceNew), "")
 	default:
-		return ""
+		return nil
 	}
 }
 
@@ -26,23 +27,23 @@ func (s *Service) clearWorkspacePageRuntime(surface *state.SurfaceConsoleRecord)
 	s.clearSurfaceWorkspacePage(surface)
 }
 
-func (s *Service) workspacePageParentCommand(surface *state.SurfaceConsoleRecord, sourceMessageID string) string {
+func (s *Service) workspacePageParentPayload(surface *state.SurfaceConsoleRecord, sourceMessageID string) map[string]any {
 	sourceMessageID = strings.TrimSpace(sourceMessageID)
 	if sourceMessageID == "" {
-		return ""
+		return nil
 	}
 	record := s.activeWorkspacePage(surface)
 	if record == nil {
-		return ""
+		return nil
 	}
 	if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(s.now()) {
 		s.clearWorkspacePageRuntime(surface)
-		return ""
+		return nil
 	}
 	if strings.TrimSpace(record.MessageID) != sourceMessageID {
-		return ""
+		return nil
 	}
-	return workspacePageCommandText(record.CommandID)
+	return workspacePageParentPayloadForCommand(record.CommandID)
 }
 
 func (s *Service) workspacePageTriggeredFromMenu(surface *state.SurfaceConsoleRecord, sourceMessageID string) bool {

@@ -132,15 +132,7 @@ func targetPickerBackButtonElement(view control.FeishuTargetPickerView, daemonLi
 }
 
 func targetPickerBackActionPayload(view control.FeishuTargetPickerView) map[string]any {
-	commandText := strings.TrimSpace(view.BackCommandText)
-	if commandText == "" {
-		return nil
-	}
-	action, ok := control.ParseFeishuTextActionWithoutCatalog(commandText)
-	if !ok {
-		return nil
-	}
-	return actionPayloadPageAction(string(action.Kind), control.FeishuActionArgumentText(action.Text))
+	return cloneActionPayload(view.BackValue)
 }
 
 func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {

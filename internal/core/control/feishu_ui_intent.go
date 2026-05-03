@@ -45,7 +45,6 @@ const (
 	FeishuUIIntentTargetPickerSelectSession   FeishuUIIntentKind = "target_picker_select_session"
 	FeishuUIIntentTargetPickerPage            FeishuUIIntentKind = "target_picker_page"
 	FeishuUIIntentTargetPickerOpenPathPicker  FeishuUIIntentKind = "target_picker_open_path_picker"
-	FeishuUIIntentTargetPickerBack            FeishuUIIntentKind = "target_picker_back"
 	FeishuUIIntentTargetPickerCancel          FeishuUIIntentKind = "target_picker_cancel"
 	FeishuUIIntentHistoryPage                 FeishuUIIntentKind = "history_page"
 	FeishuUIIntentHistoryDetail               FeishuUIIntentKind = "history_detail"
@@ -117,8 +116,6 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerPage, PickerID: action.PickerID, FieldName: action.FieldName, Cursor: action.Cursor, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerOpenPathPicker:
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerOpenPathPicker, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
-	case ActionTargetPickerBack:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerBack, PickerID: action.PickerID, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerCancel:
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerCancel, PickerID: action.PickerID, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionHistoryPage:
