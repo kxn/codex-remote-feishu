@@ -3186,6 +3186,16 @@
       "recordedAt": "2026-04-22T19:02:24Z"
     },
     {
+      "number": 349,
+      "title": "[Track] standalone Codex binary 升级（含 child restart 基座）",
+      "updatedAt": "2026-04-24T04:20:29Z",
+      "closedAt": "2026-04-24T04:20:29Z",
+      "decision": "skip",
+      "reason": "Current canonical remote-surface and Feishu card state-machine docs already cover the durable parent conclusions for standalone Codex upgrade, child restart/restore, and the owner-card flow, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/349",
+      "recordedAt": "2026-05-03T23:13:21Z"
+    },
+    {
       "number": 350,
       "title": "菜单分组和文案",
       "updatedAt": "2026-04-22T04:14:34Z",
@@ -3804,6 +3814,140 @@
       "reason": "Current canonical docs already cover the durable child-restart and thread-restore contract, including two-phase process.child.restart outcome semantics and remote-surface effects; no additional doc change is needed.",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/414",
       "recordedAt": "2026-05-03T23:06:17Z"
+    },
+    {
+      "number": 415,
+      "title": "[Work] standalone Codex binary 来源识别、npm 检查与共享升级事务",
+      "updatedAt": "2026-04-24T03:26:14Z",
+      "closedAt": "2026-04-24T03:26:10Z",
+      "decision": "skip",
+      "reason": "Current canonical remote-surface and local self-upgrade docs already cover standalone Codex source detection, npm latest checking, shared upgrade transaction, and the dispatch pause/restore contract, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/415",
+      "recordedAt": "2026-05-03T23:13:05Z"
+    },
+    {
+      "number": 416,
+      "title": "[Work] Codex 升级管理菜单与 initiator-only owner card",
+      "updatedAt": "2026-04-24T04:19:47Z",
+      "closedAt": "2026-04-24T04:19:44Z",
+      "decision": "skip",
+      "reason": "Current canonical Feishu card UI and state-machine docs already cover conditional Codex-upgrade entry visibility, the /upgrade codex owner flow, and initiator-only same-card patch semantics, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/416",
+      "recordedAt": "2026-05-03T23:13:13Z"
+    },
+    {
+      "number": 417,
+      "title": "[Bug] Feishu attention @ 应挂在原锚点消息而非额外 follow-up",
+      "updatedAt": "2026-04-24T02:12:44Z",
+      "closedAt": "2026-04-24T02:12:41Z",
+      "decision": "skip",
+      "reason": "Current canonical Feishu interaction and state-machine docs already cover keeping inline attention on the original anchor/current owner card instead of emitting an extra follow-up, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/417",
+      "recordedAt": "2026-05-03T23:12:58Z"
+    },
+    {
+      "number": 418,
+      "title": "Design upstream retryable turn auto-recovery with stable reply anchors",
+      "updatedAt": "2026-04-24T05:14:22Z",
+      "closedAt": "2026-04-24T05:14:19Z",
+      "decision": "skip",
+      "reason": "Current canonical remote-surface, Feishu card UI, and product docs already cover retryable-turn auto-recovery and stable reply-anchor behavior, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/418",
+      "recordedAt": "2026-05-03T23:13:29Z"
+    },
+    {
+      "number": 419,
+      "title": "Parent: Rescope oversized daemon/orchestrator/feishu boundaries and frontstage contract overlap",
+      "updatedAt": "2026-04-24T09:03:59Z",
+      "closedAt": "2026-04-24T09:03:59Z",
+      "decision": "skip",
+      "reason": "Current canonical frontstage, eventcontract, and Feishu card state-machine docs already cover the durable parent conclusions about action-contract ownership, followup taxonomy, and owner-card lifecycle boundaries, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/419",
+      "recordedAt": "2026-05-03T23:13:36Z"
+    },
+    {
+      "number": 420,
+      "title": "Child: Make Feishu frontstage action contract truthful",
+      "updatedAt": "2026-04-24T09:03:22Z",
+      "closedAt": "2026-04-24T09:03:19Z",
+      "decision": "skip",
+      "reason": "Current canonical Feishu card UI and state-machine docs already cover LauncherDisposition as the launcher handoff owner and the removal of dead TerminalResult semantics, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/420",
+      "recordedAt": "2026-05-03T23:13:43Z"
+    },
+    {
+      "number": 421,
+      "title": "Child: Remove dead followup carrier from frontstage lifecycle contract",
+      "updatedAt": "2026-04-24T09:03:22Z",
+      "closedAt": "2026-04-24T09:03:19Z",
+      "decision": "skip",
+      "reason": "Current canonical Feishu card UI and state-machine docs already reflect lifecycle-contract purity and no longer treat followup as part of the owner-card lifecycle contract, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/421",
+      "recordedAt": "2026-05-03T23:13:50Z"
+    },
+    {
+      "number": 422,
+      "title": "Child: Canonicalize followup taxonomy and event delivery defaults under eventcontract",
+      "updatedAt": "2026-04-24T09:03:22Z",
+      "closedAt": "2026-04-24T09:03:19Z",
+      "decision": "skip",
+      "reason": "Current canonical Feishu card UI and state-machine docs already cover shared handoff or followup taxonomy ownership under eventcontract and its canonical delivery defaults, so no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/422",
+      "recordedAt": "2026-05-03T23:13:57Z"
+    },
+    {
+      "number": 423,
+      "title": "Web Setup / Web Admin 改造落地：统一测试链路与后端接口收口",
+      "updatedAt": "2026-04-25T04:13:51Z",
+      "closedAt": "2026-04-25T04:13:51Z",
+      "decision": "skip",
+      "reason": "This parent issue is mostly orchestration and roll-up history; current Setup/Admin baseline docs already preserve the durable product conclusions, so no additional canonical doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/423",
+      "recordedAt": "2026-05-03T23:17:38Z"
+    },
+    {
+      "number": 424,
+      "title": "[Work] 按已确认 Mock 落 Web Setup / Web Admin 页面",
+      "updatedAt": "2026-04-25T03:50:40Z",
+      "closedAt": "2026-04-25T03:50:37Z",
+      "decision": "skip",
+      "reason": "Current Setup/Admin docs and mock baselines already preserve the durable page-structure conclusions, so this issue is implementation history rather than an additional canonical-doc delta.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/424",
+      "recordedAt": "2026-05-03T23:17:24Z"
+    },
+    {
+      "number": 425,
+      "title": "[Work] Setup/Admin 后端前置：权限检查、测试触发与存储接口收口",
+      "updatedAt": "2026-04-25T03:15:06Z",
+      "closedAt": "2026-04-25T03:15:02Z",
+      "decision": "skip",
+      "reason": "This issue is mainly backend page-contract plumbing and runtime implementation detail for the completed Setup/Admin rollout; current docs already preserve the user-facing baseline and no separate canonical doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/425",
+      "recordedAt": "2026-05-03T23:17:17Z"
+    },
+    {
+      "number": 426,
+      "title": "[Work] Web Setup / Web Admin 收尾清理：移除旧路径并同步测试文档",
+      "updatedAt": "2026-04-25T04:09:52Z",
+      "closedAt": "2026-04-25T04:09:49Z",
+      "decision": "skip",
+      "reason": "This issue is mainly single-path cleanup and closeout history for the completed Setup/Admin rollout; no separate canonical doc addition is needed beyond the current baseline docs.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/426",
+      "recordedAt": "2026-05-03T23:17:31Z"
+    },
+    {
+      "number": 431,
+      "title": "[Bug] Web Setup / Web Admin 跟进：版本号、飞书后台链接与事件/回调测试收口",
+      "updatedAt": "2026-04-25T06:27:26Z",
+      "closedAt": "2026-04-25T06:27:23Z",
+      "decision": "merge",
+      "reason": "Merged the durable Setup/Admin follow-up conclusions about real version titles, backend-provided console links, shared connect flow, and explicit web test recipient semantics into the current Setup/Admin baseline docs.",
+      "targetDocs": [
+        "docs/draft/web-setup-flow-v2.md",
+        "docs/implemented/web-admin-ui-redesign.md"
+      ],
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/431",
+      "recordedAt": "2026-05-03T23:17:46Z"
     }
   ]
 }
