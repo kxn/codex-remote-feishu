@@ -290,23 +290,6 @@ func TestClaudeTranslatorTurnSteerRejectsTargetMismatch(t *testing.T) {
 	}
 }
 
-func TestClaudeTranslatorTurnSteerRejectsNonTextInputs(t *testing.T) {
-	tr := NewTranslator("inst-1")
-	threadID, turnID := startClaudeTurn(t, tr, "default")
-
-	_, err := tr.TranslateCommand(agentproto.Command{
-		CommandID: "cmd-steer-image",
-		Kind:      agentproto.CommandTurnSteer,
-		Origin:    agentproto.Origin{Surface: "surface-1"},
-		Target:    agentproto.Target{ThreadID: threadID, TurnID: turnID},
-		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputLocalImage, Path: "/tmp/reply.png", MIMEType: "image/png"}}},
-	})
-	problem := expectClaudeCommandError(t, err)
-	if problem.Code != "claude_steer_inputs_unsupported" || !strings.Contains(problem.Details, "unsupported prompt input type") {
-		t.Fatalf("unexpected problem: %#v", problem)
-	}
-}
-
 func TestClaudeTranslatorPromptSendAcceptsLocalImageAndTrailingText(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	imagePath := filepath.Join(t.TempDir(), "prompt.png")

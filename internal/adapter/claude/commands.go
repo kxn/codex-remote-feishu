@@ -43,7 +43,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 }
 
 func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, error) {
-	content, err := t.requireUserPromptContent(
+	frame, err := t.requireUserPromptFrame(
 		command,
 		"claude_prompt_inputs_unsupported",
 		"当前 Claude runtime 第一版支持文本与本地图片 prompt.send；远程图片与 document 输入仍未接通。",
@@ -69,11 +69,6 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 	} else if ok {
 		outbound = append(outbound, frame)
 	}
-
-	frame, err := marshalUserPromptFrame(content)
-	if err != nil {
-		return nil, err
-	}
 	outbound = append(outbound, frame)
 	return outbound, nil
 }
@@ -85,7 +80,7 @@ func (t *Translator) translateTurnSteer(command agentproto.Command) ([][]byte, e
 			Layer:            "wrapper",
 			Stage:            "translate_command",
 			Operation:        string(command.Kind),
-			Message:          "Claude 只有在当前存在 active turn 时才能并入文本补充。",
+			Message:          "Claude 只有在当前存在 active turn 时才能并入补充输入。",
 			SurfaceSessionID: command.Origin.Surface,
 			CommandID:        command.CommandID,
 			ThreadID:         command.Target.ThreadID,
@@ -120,15 +115,11 @@ func (t *Translator) translateTurnSteer(command agentproto.Command) ([][]byte, e
 			TurnID:           command.Target.TurnID,
 		}
 	}
-	text, err := t.requireTextPromptInputs(
+	frame, err := t.requireUserPromptFrame(
 		command,
 		"claude_steer_inputs_unsupported",
-		"Claude 当前只能把纯文本补充并入 active turn。",
+		"Claude 当前支持把文本与本地图片补充并入 active turn；远程图片与 document 输入仍未接通。",
 	)
-	if err != nil {
-		return nil, err
-	}
-	frame, err := marshalUserTextFrame(text)
 	if err != nil {
 		return nil, err
 	}
@@ -290,20 +281,20 @@ func requestResponseAnswers(request *pendingRequest, response map[string]any) ma
 	return answers
 }
 
-func (t *Translator) requireTextPromptInputs(command agentproto.Command, code, message string) (string, error) {
-	text, err := flattenPromptText(command.Prompt.Inputs)
-	if err == nil {
-		return text, nil
-	}
-	return "", t.wrapPromptInputError(command, code, message, err)
-}
-
 func (t *Translator) requireUserPromptContent(command agentproto.Command, code, message string) (any, error) {
 	content, err := buildClaudeUserPromptContent(command.Prompt.Inputs)
 	if err == nil {
 		return content, nil
 	}
 	return nil, t.wrapPromptInputError(command, code, message, err)
+}
+
+func (t *Translator) requireUserPromptFrame(command agentproto.Command, code, message string) ([]byte, error) {
+	content, err := t.requireUserPromptContent(command, code, message)
+	if err != nil {
+		return nil, err
+	}
+	return marshalUserPromptFrame(content)
 }
 
 func (t *Translator) wrapPromptInputError(command agentproto.Command, code, message string, err error) agentproto.ErrorInfo {
@@ -329,28 +320,6 @@ func marshalUserPromptFrame(content any) ([]byte, error) {
 			"content": content,
 		},
 	})
-}
-
-func marshalUserTextFrame(text string) ([]byte, error) {
-	return marshalUserPromptFrame(text)
-}
-
-func flattenPromptText(inputs []agentproto.Input) (string, error) {
-	if len(inputs) == 0 {
-		return "", nil
-	}
-	parts := make([]string, 0, len(inputs))
-	for _, input := range inputs {
-		switch input.Type {
-		case agentproto.InputText:
-			if strings.TrimSpace(input.Text) != "" {
-				parts = append(parts, input.Text)
-			}
-		default:
-			return "", fmt.Errorf("unsupported prompt input type %q", input.Type)
-		}
-	}
-	return strings.Join(parts, "\n\n"), nil
 }
 
 func firstNonEmptyString(values ...string) string {

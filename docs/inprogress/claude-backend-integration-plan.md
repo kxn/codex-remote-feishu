@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-05-03`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude `prompt.send` 的本地图片输入支持，文件继续保持 `@path` 文本桥接；Claude steer 侧仍只有 text-only approximation：native capability 仍是 unsupported，但 reply auto steer 与 `/steerall` 的纯文本补充已经可以并入当前 active turn。
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 仍不宣称 native capability，但 reply auto steer 与 `/steerall` 已可把文本与本地图片补充并入当前 active turn。
 
 ## 1. 文档定位
 
@@ -962,7 +962,7 @@ Claude runtime 分三块：
 
 1. `turn.steer`
    - 不做 fake native support
-   - 但可为 reply auto steer 与 `/steerall` 这类已批准入口开放 text-only approximation
+   - 但可为 reply auto steer 与 `/steerall` 这类已批准入口开放文本与本地图片 approximation
    - 输入必须并入当前 active turn，不能退化成 `interrupt + prompt.send`
 2. `/compact`
    - 如果后续验证 Claude CLI 侧命令稳定，可作为 passthrough 候选；但不计入 capability support
@@ -1171,7 +1171,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 
 1. `/mode claude` 已作为 dev 环境可见入口落地。
 2. 普通文本、`/stop`、request/respond 主链、`/new`、`/list`、`/use` 已进入 Claude visible MVP。
-3. `turn.steer` 继续不宣称 native capability；但文本型 reply auto steer 与 `/steerall` 现已走 approximation，并入当前 active turn。
+3. `turn.steer` 继续不宣称 native capability；但 reply auto steer 与 `/steerall` 现已走 approximation，可把文本与本地图片补充并入当前 active turn。
 4. 上述结果只证明 dev-visible Claude 主链已经可接通；不等于 2026-04-29 重新拍板后的最终 MVP 暴露面。按最新产品决议，`/detach` 应升级为 visible + allow，而 `/review` / `/bendtomywill` 应回退为 hidden + reject，直到 runtime contract 补齐。
 
 ### 阶段 E：补齐 command catalog / help / menu / workspace config（已完成）
@@ -1260,7 +1260,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 1. Claude 的 vscode mode
 2. Claude 等价 `turn.steer`
 3. Claude review/compact/skills 的强对齐
-4. Claude 多模态图片输入的完整承诺（当前只接通 `prompt.send` 的本地图片输入；`turn.steer` 图片 continuation 与 remote image 仍属后续）
+4. Claude 多模态图片输入的完整承诺（当前已接通 `prompt.send` 与 `turn.steer` approximation 的本地图片输入；remote image 与更完整的 document/image 产品承诺仍属后续）
 5. 全仓 `thread -> session` 命名迁移
 
 后续预留位：
