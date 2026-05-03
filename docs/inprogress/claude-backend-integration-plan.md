@@ -1057,7 +1057,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 2. 有效 Claude reasoning 的运行时优先级固定为：飞书 surface override / frozen override > Claude Profile 默认 reasoning > 系统默认。`/reasoning clear` 只清掉飞书临时覆盖；如果当前 profile 配了默认 reasoning，后续启动、恢复和 dispatch restart 会回落到 profile 默认值。
 3. Claude headless 真正 dispatch 前，会用该 frozen/effective reasoning 扩展出 `HeadlessLaunchContract{Backend, ClaudeProfileID, ClaudeReasoningEffort}`，并与 wrapper hello 上报的 observed runtime contract 比较。
 4. 若合同不一致，orchestrator 会统一走 `prompt_dispatch_restart`：写入 `PendingHeadless`、daemon `kill + start headless`、实例重新 attach 后自动继续原 dispatch。
-5. `workspace+profile` 快照会保存 `reasoning / access / plan`，但其中的 reasoning 只表示飞书临时覆盖，不保存 profile 默认值；`/reasoning clear` 会同步删除空快照；fresh workspace 与 concrete thread restore 都必须先恢复快照，再用 profile fallback 生成 `PendingHeadless` 与 daemon start command。
+5. `workspace+profile` 快照只保存飞书临时 `reasoning` 覆盖，不保存 profile 默认值，也不保存 `access / plan`；surface resume 也不跨 daemon 恢复 Claude plan；`/reasoning clear` 会同步删除空快照；fresh workspace 与 concrete thread restore 都必须先恢复临时 reasoning 覆盖，再用 profile fallback 生成 `PendingHeadless` 与 daemon start command。
 6. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
 7. `/model` 不在 Claude 飞书命令面里：Claude 模型只从 Claude profile 注入，飞书侧不支持临时模型覆盖，也不把 Codex 默认模型投影成 Claude 当前模型。
 

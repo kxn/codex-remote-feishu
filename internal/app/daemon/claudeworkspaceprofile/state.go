@@ -20,6 +20,11 @@ type StateFile struct {
 	Entries map[string]state.ClaudeWorkspaceProfileSnapshotRecord `json:"entries,omitempty"`
 }
 
+type rawStateFile struct {
+	Version int                        `json:"version"`
+	Entries map[string]json.RawMessage `json:"entries,omitempty"`
+}
+
 type Store struct {
 	path    string
 	entries map[string]state.ClaudeWorkspaceProfileSnapshotRecord
@@ -53,7 +58,7 @@ func LoadStore(path string) (*Store, error) {
 		}
 		return nil, err
 	}
-	var persisted StateFile
+	var persisted rawStateFile
 	if err := json.Unmarshal(raw, &persisted); err != nil {
 		return nil, err
 	}
@@ -63,8 +68,15 @@ func LoadStore(path string) (*Store, error) {
 	if persisted.Version != StateVersion {
 		return nil, fmt.Errorf("unsupported claude workspace profile state version: %d", persisted.Version)
 	}
-	for key, entry := range persisted.Entries {
+	for key, rawEntry := range persisted.Entries {
 		key = strings.TrimSpace(key)
+		if legacyClaudeSnapshotHasDroppedFields(rawEntry) {
+			store.dirty = true
+		}
+		var entry state.ClaudeWorkspaceProfileSnapshotRecord
+		if err := json.Unmarshal(rawEntry, &entry); err != nil {
+			return nil, err
+		}
 		entry = state.NormalizeClaudeWorkspaceProfileSnapshotRecord(entry)
 		if key == "" || state.ClaudeWorkspaceProfileSnapshotRecordEmpty(entry) {
 			store.dirty = true
@@ -73,6 +85,20 @@ func LoadStore(path string) (*Store, error) {
 		store.entries[key] = entry
 	}
 	return store, nil
+}
+
+func legacyClaudeSnapshotHasDroppedFields(rawEntry json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(rawEntry, &fields); err != nil {
+		return false
+	}
+	for key := range fields {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "accessmode", "access_mode", "planmode", "plan_mode":
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) Entries() map[string]state.ClaudeWorkspaceProfileSnapshotRecord {

@@ -212,8 +212,8 @@
 | Codex headless plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume 持久化 | live surface runtime + prompt frozen override | live session 内 sticky；不是 thread persisted default，surface resume 不恢复 Codex plan。 |
 | Claude profile model | Local Routing / Launch Contract / profile config | 是 | `profileID` | 不应开放飞书 `/model` 临时改 Claude model。 |
 | Claude profile reasoning 默认值 | Backend Behavior With Local SSOT | 是 | `profileID` 或 `claude + claudeProfileID + workspaceKey` | 若作为全局 profile 默认，用 `profileID`；若允许工作区覆盖，再加 `workspaceKey`。 |
-| Claude access | Backend Behavior With Shared Authority，待确认 | 待定 | 待定 | 需要确认 Claude permission mode 是进程级、session 级还是持久状态。 |
-| Claude plan mode | Backend Behavior With Shared Authority | 默认不做强持久 | observed state / per-turn override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan。 |
+| Claude access | Backend Behavior With Shared Authority | 不作为 workspace/profile 快照持久化 | surface override + prompt frozen override | `set_permission_mode` 是当前 session runtime state，不等同于 profile/workspace 默认值。 |
+| Claude plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume，也不作为 workspace/profile 快照持久化 | live surface runtime + prompt frozen override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan。 |
 | VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + per-turn override | VS Code 端也可能修改，飞书不应覆盖 VS Code 最新状态。 |
 
 ## 5. 新增配置项决策流程
@@ -241,7 +241,7 @@
 以下行为不能靠产品假设决定，必须通过代码或黑盒测试确认：
 
 - VS Code 端修改 model / reasoning / access / plan 时，wrapper 是否能完整观测并上报
-- Claude permission mode 的真实作用域：进程级、session 级、thread 级还是临时状态
-- Claude reasoning 运行中能否无损切换；若不能，重启 headless 是否是唯一正确方式
+- Claude access 若未来要做成 profile 默认值，需要单独确认 settings/profile 侧的稳定配置入口，不能复用 `set_permission_mode` runtime state
+- Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 `CLAUDE_CODE_EFFORT_LEVEL` env pin；当前实现按重启 headless 生效
 
 在这些调研完成前，对应配置不得直接做成强持久 SSOT。

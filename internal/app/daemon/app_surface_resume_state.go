@@ -71,10 +71,6 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 	sort.Strings(surfaceIDs)
 	for _, surfaceID := range surfaceIDs {
 		entry := entries[surfaceID]
-		planMode := state.PlanModeSetting(entry.PlanMode)
-		if agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) == agentproto.BackendCodex {
-			planMode = state.PlanModeSettingOff
-		}
 		a.service.MaterializeSurfaceResumeWithCodexProvider(
 			entry.SurfaceSessionID,
 			entry.GatewayID,
@@ -85,7 +81,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			entry.CodexProviderID,
 			entry.ClaudeProfileID,
 			state.SurfaceVerbosity(entry.Verbosity),
-			planMode,
+			state.PlanModeSettingOff,
 		)
 	}
 }
@@ -251,9 +247,6 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		CodexProviderID:  strings.TrimSpace(a.service.SurfaceCodexProviderID(surface.SurfaceSessionID)),
 		ClaudeProfileID:  strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
 		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
-	}
-	if agentproto.NormalizeBackend(agentproto.Backend(entry.Backend)) != agentproto.BackendCodex {
-		entry.PlanMode = string(state.NormalizePlanModeSetting(surface.PlanMode))
 	}
 	if entry.SurfaceSessionID == "" {
 		return surfaceresume.Entry{}, false

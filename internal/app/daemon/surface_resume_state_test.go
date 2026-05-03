@@ -294,15 +294,20 @@ func TestDaemonDoesNotRestoreCodexPlanModeAcrossRestart(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
-		SurfaceSessionID: "surface-1",
-		GatewayID:        "app-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		ProductMode:      "normal",
-		Backend:          "codex",
-		CodexProviderID:  "team-proxy",
-		PlanMode:         "on",
+	writeSurfaceResumeStateForTest(t, stateDir, surfaceresume.StateFile{
+		Version: 1,
+		Entries: map[string]surfaceresume.Entry{
+			"surface-1": {
+				SurfaceSessionID: "surface-1",
+				GatewayID:        "app-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				ProductMode:      "normal",
+				Backend:          "codex",
+				CodexProviderID:  "team-proxy",
+				PlanMode:         "on",
+			},
+		},
 	})
 
 	app := newRestoreHintTestApp(stateDir)
@@ -329,6 +334,49 @@ func TestDaemonDoesNotRestoreCodexPlanModeAcrossRestart(t *testing.T) {
 	}
 	if entry.PlanMode != "" {
 		t.Fatalf("expected codex plan mode to be omitted from persisted resume state, got %#v", entry)
+	}
+}
+
+func TestDaemonDoesNotRestoreClaudePlanModeAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	writeSurfaceResumeStateForTest(t, stateDir, surfaceresume.StateFile{
+		Version: 1,
+		Entries: map[string]surfaceresume.Entry{
+			"surface-1": {
+				SurfaceSessionID: "surface-1",
+				GatewayID:        "app-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				ProductMode:      "normal",
+				Backend:          "claude",
+				ClaudeProfileID:  "devseek",
+				PlanMode:         "on",
+			},
+		},
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected latent surface after restart")
+	}
+	surface := app.service.Surface("surface-1")
+	if surface == nil || surface.PlanMode != state.PlanModeSettingOff {
+		t.Fatalf("expected claude plan mode to restore as off, got %#v", surface)
+	}
+
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil {
+		t.Fatal("expected surface resume entry after sync")
+	}
+	if entry.PlanMode != "" {
+		t.Fatalf("expected claude plan mode to be omitted from persisted resume state, got %#v", entry)
 	}
 }
 

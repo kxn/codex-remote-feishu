@@ -172,8 +172,6 @@ type ModelConfigRecord struct {
 
 type ClaudeWorkspaceProfileSnapshotRecord struct {
 	ReasoningEffort string
-	AccessMode      string
-	PlanMode        PlanModeSetting
 }
 
 type InstanceRecord struct {

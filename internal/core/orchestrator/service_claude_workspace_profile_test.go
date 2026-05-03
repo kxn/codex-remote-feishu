@@ -11,7 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestClaudeWorkspaceProfileSnapshotPartitionsAndClearsUnsupportedModelOverride(t *testing.T) {
+func TestClaudeWorkspaceProfileSnapshotPartitionsAndClearsUnsupportedRuntimeOverrides(t *testing.T) {
 	now := time.Date(2026, 4, 29, 8, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := svc.ensureSurface(control.Action{
@@ -45,15 +45,11 @@ func TestClaudeWorkspaceProfileSnapshotPartitionsAndClearsUnsupportedModelOverri
 	keyB := state.ClaudeWorkspaceProfileSnapshotStorageKey("/data/dl/repo-b", agentproto.BackendClaude, "profile-b")
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[keyA]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "high",
-		AccessMode:      agentproto.AccessModeConfirm,
-		PlanMode:        state.PlanModeSettingOn,
 	}) {
 		t.Fatalf("unexpected profile A snapshot: %#v", got)
 	}
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[keyB]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "medium",
-		AccessMode:      agentproto.AccessModeFullAccess,
-		PlanMode:        state.PlanModeSettingOff,
 	}) {
 		t.Fatalf("unexpected profile B snapshot: %#v", got)
 	}
@@ -63,11 +59,11 @@ func TestClaudeWorkspaceProfileSnapshotPartitionsAndClearsUnsupportedModelOverri
 	surface.PlanMode = state.PlanModeSettingOff
 	surface.PromptOverride = state.ModelConfigRecord{Model: "clear-me"}
 	svc.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
-	if surface.PlanMode != state.PlanModeSettingOn {
-		t.Fatalf("expected plan mode restored from snapshot, got %q", surface.PlanMode)
+	if surface.PlanMode != state.PlanModeSettingOff {
+		t.Fatalf("expected plan mode not to restore from snapshot, got %q", surface.PlanMode)
 	}
-	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "high" || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("expected restored snapshot to clear model and restore reasoning/access, got %#v", surface.PromptOverride)
+	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "high" || surface.PromptOverride.AccessMode != "" {
+		t.Fatalf("expected restored snapshot to clear model/access and restore reasoning only, got %#v", surface.PromptOverride)
 	}
 
 	surface.ClaudeProfileID = "profile-c"
@@ -148,7 +144,7 @@ func TestClaudeReasoningCommandUsesMaxAndClearDeletesWorkspaceProfileSnapshot(t 
 	}
 }
 
-func TestClaudeReasoningAndAccessCommandsShareWorkspaceProfileSnapshotContract(t *testing.T) {
+func TestClaudeReasoningSnapshotIgnoresAccessCommand(t *testing.T) {
 	now := time.Date(2026, 5, 3, 9, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/repo"
@@ -180,7 +176,6 @@ func TestClaudeReasoningAndAccessCommandsShareWorkspaceProfileSnapshotContract(t
 	}
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "max",
-		PlanMode:        state.PlanModeSettingOff,
 	}) {
 		t.Fatalf("expected reasoning-only snapshot, got %#v", got)
 	}
@@ -195,10 +190,8 @@ func TestClaudeReasoningAndAccessCommandsShareWorkspaceProfileSnapshotContract(t
 	}
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "max",
-		AccessMode:      agentproto.AccessModeConfirm,
-		PlanMode:        state.PlanModeSettingOff,
 	}) {
-		t.Fatalf("expected reasoning+access snapshot, got %#v", got)
+		t.Fatalf("expected access command not to enter snapshot, got %#v", got)
 	}
 
 	events = svc.ApplySurfaceAction(control.Action{
@@ -211,7 +204,6 @@ func TestClaudeReasoningAndAccessCommandsShareWorkspaceProfileSnapshotContract(t
 	}
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "max",
-		PlanMode:        state.PlanModeSettingOff,
 	}) {
 		t.Fatalf("expected reasoning-only snapshot after access clear, got %#v", got)
 	}

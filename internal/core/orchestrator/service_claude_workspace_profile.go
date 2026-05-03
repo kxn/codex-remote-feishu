@@ -144,8 +144,6 @@ func (s *Service) currentClaudeWorkspaceProfileSnapshotRecord(surface *state.Sur
 	}
 	return state.NormalizeClaudeWorkspaceProfileSnapshotRecord(state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: surface.PromptOverride.ReasoningEffort,
-		AccessMode:      surface.PromptOverride.AccessMode,
-		PlanMode:        surface.PlanMode,
 	})
 }
 
@@ -184,8 +182,6 @@ func (s *Service) restoreCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 		if record, ok := s.root.ClaudeWorkspaceProfileSnapshots[key]; ok {
 			record = state.NormalizeClaudeWorkspaceProfileSnapshotRecord(record)
 			surface.PromptOverride.ReasoningEffort = record.ReasoningEffort
-			surface.PromptOverride.AccessMode = record.AccessMode
-			surface.PlanMode = record.PlanMode
 		}
 	}
 	surface.PromptOverride = compactPromptOverride(surface.PromptOverride)

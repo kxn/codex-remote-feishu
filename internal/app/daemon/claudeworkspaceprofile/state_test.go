@@ -1,6 +1,9 @@
 package claudeworkspaceprofile
 
 import (
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -19,8 +22,6 @@ func TestStoreRoundTrip(t *testing.T) {
 	key := state.ClaudeWorkspaceProfileSnapshotStorageKey("/data/dl/repo", agentproto.BackendClaude, "devseek")
 	if err := store.Put(key, state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: " HIGH ",
-		AccessMode:      "confirm",
-		PlanMode:        "on",
 	}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -35,9 +36,57 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "high",
-		AccessMode:      agentproto.AccessModeConfirm,
-		PlanMode:        state.PlanModeSettingOn,
 	}) {
 		t.Fatalf("unexpected stored snapshot: %#v", got)
+	}
+}
+
+func TestStoreDropsLegacyAccessAndPlanFieldsOnLoad(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := StatePath(stateDir)
+	key := state.ClaudeWorkspaceProfileSnapshotStorageKey("/data/dl/repo", agentproto.BackendClaude, "devseek")
+	raw, err := json.MarshalIndent(map[string]any{
+		"version": 1,
+		"entries": map[string]any{
+			key: map[string]string{
+				"ReasoningEffort": "max",
+				"AccessMode":      "confirm",
+				"PlanMode":        "on",
+			},
+		},
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal legacy state: %v", err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+		t.Fatalf("write legacy state: %v", err)
+	}
+
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if !store.Dirty() {
+		t.Fatal("expected legacy access/plan fields to mark store dirty")
+	}
+	got, ok := store.Get(key)
+	if !ok {
+		t.Fatal("expected stored claude workspace profile snapshot")
+	}
+	if got != (state.ClaudeWorkspaceProfileSnapshotRecord{ReasoningEffort: "max"}) {
+		t.Fatalf("expected only reasoning to survive legacy load, got %#v", got)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	sanitized, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read sanitized state: %v", err)
+	}
+	text := string(sanitized)
+	if strings.Contains(text, "AccessMode") || strings.Contains(text, "PlanMode") {
+		t.Fatalf("expected legacy fields to be removed after save, got %s", text)
 	}
 }

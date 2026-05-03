@@ -100,8 +100,6 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 	svc.MaterializeClaudeWorkspaceProfileSnapshots(map[string]state.ClaudeWorkspaceProfileSnapshotRecord{
 		state.ClaudeWorkspaceProfileSnapshotStorageKey(workspaceKey, agentproto.BackendClaude, "profile-b"): {
 			ReasoningEffort: "high",
-			AccessMode:      agentproto.AccessModeConfirm,
-			PlanMode:        state.PlanModeSettingOn,
 		},
 	})
 
@@ -122,11 +120,11 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 	if surface.PendingHeadless.ClaudeProfileID != "profile-b" || !surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected pending headless to carry profile-b and preserve new-thread-ready, got %#v", surface.PendingHeadless)
 	}
-	if surface.PlanMode != state.PlanModeSettingOn {
-		t.Fatalf("expected target profile plan mode restored, got %q", surface.PlanMode)
+	if surface.PlanMode != state.PlanModeSettingOff {
+		t.Fatalf("expected target profile plan mode not to restore from snapshot, got %q", surface.PlanMode)
 	}
-	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "high" || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("expected target profile prompt snapshot restored, got %#v", surface.PromptOverride)
+	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "high" || surface.PromptOverride.AccessMode != "" {
+		t.Fatalf("expected target profile snapshot to restore reasoning only, got %#v", surface.PromptOverride)
 	}
 	if len(events) != 3 {
 		t.Fatalf("expected switch notice + workspace restart notice + daemon command, got %#v", events)
