@@ -68,6 +68,23 @@ func TestClassifyInboundActionMarksOldCard(t *testing.T) {
 	}
 }
 
+func TestClassifyInboundActionRejectsUnstampedFeishuUICallback(t *testing.T) {
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	action := app.classifyInboundAction(control.Action{
+		Kind: control.ActionShowCommandMenu,
+		Text: "/menu send_settings",
+		Inbound: &control.ActionInboundMeta{
+			CardCallback: true,
+		},
+	})
+
+	if action.Inbound == nil || action.Inbound.LifecycleVerdict != control.InboundLifecycleOldCard || action.Inbound.LifecycleReason != "card_callback_missing_lifecycle" {
+		t.Fatalf("expected unstamped feishu-ui callback to be rejected as old card, got %#v", action.Inbound)
+	}
+}
+
 func TestRejectedInboundActionDetailShowsCommandText(t *testing.T) {
 	got := rejectedInboundActionDetail(control.Action{
 		Kind: control.ActionDetach,

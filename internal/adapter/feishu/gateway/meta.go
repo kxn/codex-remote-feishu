@@ -63,6 +63,7 @@ func InboundMetaFromCardActionEvent(event *larkcallback.CardActionTriggerEvent) 
 		return nil
 	}
 	meta := newInboundMeta(headerFromCardActionEvent(event), requestIDFromEventReq(event.EventReq))
+	meta.CardCallback = true
 	if event.Event != nil {
 		if event.Event.Context != nil {
 			meta.OpenMessageID = strings.TrimSpace(event.Event.Context.OpenMessageID)

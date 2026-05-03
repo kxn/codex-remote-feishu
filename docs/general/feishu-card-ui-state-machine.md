@@ -61,10 +61,10 @@
   - 当前统一使用 `FeishuFrontstageActionContract` 判定 replace：
     - `inline_view`：命中 `SupportsFeishuSynchronousCurrentCardReplacement(action)` 且首个事件显式 `InlineReplaceCurrentCard`
     - `first_result_card`：命中同一同步条件后，从事件流里挑首张可投影卡直接作为 `ReplaceCurrentCard`；`inline_view` 严格命中失败时也允许回退到这条首结果替换
-    - 命中当前活跃 `command_menu` launcher 卡的 callback 当前还有一条更高优先级默认规则：除显式走原地 `UpdateCard`/patch 的 owner flow 外，daemon 会默认尝试把事件流里的首张可投影卡同位替回当前菜单卡，不再要求每个菜单动作分别加入 action allowlist
     - active picker 阻断保护：若事件流是 `path_picker_active` / `target_picker_processing` 这类阻断 notice，daemon 会保持当前卡不替换，避免把活跃 owner 子步骤误封成终态
   - 命令菜单 launcher 的 handoff 当前也统一读取 `ResolveFeishuFrontstageActionContract(action).LauncherDisposition`：`keep` 保留菜单导航/配置页，`enter_terminal` 当前用于 stamped `/help`、`/status`，其余 stamped launcher 动作默认 `enter_owner`
   - `ResolveFeishuFrontstageActionContract(action)` 里的 `ContinuationDaemonCommand` 与 `FollowupPolicy` 现在也优先从 `FeishuCommandBinding` 读取：`/debug`、`/cron`、`/upgrade`、`/vscode-migrate` 的首结果卡续接 daemon command，以及 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach` 这组命令的 followup drop 策略，不再分别散落在 lifecycle switch 里
+  - 未打标的 `FeishuUIIntent` card callback 当前会在 ingress lifecycle gate 直接判成 expired old-card，不再保留“异步继续执行但不做同步 replace”的 compat 路径
   - 旧 bare continuation / command submission anchor 当前已退出 live 路径，不再承接 stamped current-card 回调
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
@@ -648,21 +648,21 @@ MCP request 卡片当前新增的可视语义：
 
 | verdict | 触发条件 | 当前结果 |
 | --- | --- | --- |
-| `current` | 未命中旧消息窗口，且 `daemon_lifecycle_id` 为空或匹配 | 正常继续处理 |
+| `current` | 未命中旧消息窗口，且满足以下之一：`daemon_lifecycle_id` 匹配；或这不是 card callback；或这是当前仍保留兼容的非-`FeishuUIIntent` 未打标 card callback | 正常继续处理 |
 | `old` | `message_create_time` 或 `menu_click_time` 落在旧窗口外 | 发“旧动作已忽略” notice，不进入产品处理 |
-| `old_card` | callback 带 `daemon_lifecycle_id` 且与当前 daemon 不匹配 | 发“旧卡片已过期” notice，不进入产品处理，也不会 replace 当前卡；review final card 的 `Review 待提交内容` / `放弃审阅` / `按审阅意见继续修改` 也完全复用这条拒绝路径 |
+| `old_card` | callback 带 `daemon_lifecycle_id` 且与当前 daemon 不匹配；或 callback 命中 `FeishuUIIntent` 但缺少 `daemon_lifecycle_id` | 发“旧卡片已过期” notice，不进入产品处理，也不会 replace 当前卡；review final card 的 `Review 待提交内容` / `放弃审阅` / `按审阅意见继续修改` 也完全复用这条拒绝路径 |
 
 ### 6.2 当前一个重要边界
 
-**没有 `daemon_lifecycle_id` 的卡片 callback，不会被判成 old card，也不会进入同步 inline replace。**
+**没有 `daemon_lifecycle_id` 的 card callback，现在只对仍保留兼容的非-`FeishuUIIntent` 路径继续放行；命中 `FeishuUIIntent` 的这类旧 callback 会直接被判成 expired old-card。**
 
 当前行为是：
 
 - gateway 立即 ack，异步处理
-- daemon 不会做 old-card 生命周期拒绝
-- 这保证了旧卡/未打标卡仍能兼容旧路径，但也意味着 freshness 证明不足
+- `FeishuUIIntent` 这条前台 UI callback 主链会在 ingress 直接拒绝，不再继续异步执行业务
+- 仍保留兼容的只剩少量非-`FeishuUIIntent` 未打标 callback；它们不会进入同步 inline replace，属于尚未完全删净的历史过渡面
 
-这是当前实现的兼容性边界，不是未来一定要保留的产品结论。
+这意味着旧卡 reject 与 frontstage UI freshness 现在已经统一收紧到 action contract + ingress lifecycle gate；剩余少量未打标非-`FeishuUIIntent` callback 仅作为历史兼容过渡保留。
 
 ### 6.3 daemon freshness 与 view/session freshness 的当前边界
 
@@ -898,5 +898,4 @@ MCP request 卡片当前新增的可视语义：
 
 ## 待讨论取舍
 
-- 是否要把“缺少 `daemon_lifecycle_id` 的纯导航 callback”从当前的兼容异步路径，收紧成显式 reject 或显式降级提示；这会影响旧卡兼容性与 freshness 保证之间的取舍。
 - final reply split 当前采用“主卡保留原标题与 footer，overflow 统一标题为 `✅ 最后答复（续）`”的最小语义；是否要进一步升级成显式 `1/N` 编号、或把 footer 改挂到最后一张 continuation card，仍是产品取舍。

@@ -214,33 +214,6 @@ func (s *Service) activeCommandLauncherMessageID(surface *state.SurfaceConsoleRe
 	return strings.TrimSpace(flow.MessageID)
 }
 
-func (s *Service) activeCommandLauncherMatchesMessage(surface *state.SurfaceConsoleRecord, messageID string) bool {
-	if surface == nil {
-		return false
-	}
-	messageID = strings.TrimSpace(messageID)
-	if messageID == "" {
-		return false
-	}
-	flow := s.activeCommandLauncherFlow(surface)
-	if flow == nil || flow.Role != frontstageFlowRoleLauncher {
-		return false
-	}
-	if !flow.ExpiresAt.IsZero() && !flow.ExpiresAt.After(s.now()) {
-		s.clearSurfaceOwnerCardFlow(surface)
-		return false
-	}
-	return strings.TrimSpace(flow.MessageID) == messageID
-}
-
-func (s *Service) ActionTargetsActiveCommandLauncher(action control.Action) bool {
-	if s == nil || !action.IsCardAction() {
-		return false
-	}
-	surface := s.root.Surfaces[strings.TrimSpace(action.SurfaceSessionID)]
-	return s.activeCommandLauncherMatchesMessage(surface, action.MessageID)
-}
-
 func (s *Service) refreshCommandLauncherMessage(surface *state.SurfaceConsoleRecord, messageID string) {
 	flow := s.activeCommandLauncherFlow(surface)
 	if flow == nil || flow.Role != frontstageFlowRoleLauncher {

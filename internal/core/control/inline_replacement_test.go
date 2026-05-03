@@ -219,6 +219,35 @@ func TestAllowsInlineCardReplacementRequiresDaemonFreshness(t *testing.T) {
 	}
 }
 
+func TestRejectsUnstampedFeishuCardCallback(t *testing.T) {
+	menuAction := Action{
+		Kind:    ActionShowCommandMenu,
+		Text:    "/menu send_settings",
+		Inbound: &ActionInboundMeta{CardCallback: true},
+	}
+	if !RejectsUnstampedFeishuCardCallback(menuAction) {
+		t.Fatalf("expected unstamped menu callback to be rejected")
+	}
+
+	requestAction := Action{
+		Kind:    ActionRespondRequest,
+		Request: &ActionRequestResponse{RequestID: "req-1", RequestOptionID: "step_next"},
+		Inbound: &ActionInboundMeta{CardCallback: true},
+	}
+	if RejectsUnstampedFeishuCardCallback(requestAction) {
+		t.Fatalf("expected request step callback to stay outside unstamped navigation reject path")
+	}
+
+	stampedAction := Action{
+		Kind:    ActionShowCommandMenu,
+		Text:    "/menu send_settings",
+		Inbound: &ActionInboundMeta{CardCallback: true, CardDaemonLifecycleID: "life-1"},
+	}
+	if RejectsUnstampedFeishuCardCallback(stampedAction) {
+		t.Fatalf("expected stamped menu callback not to be rejected")
+	}
+}
+
 func TestAllowsInlineCardReplacementForPathPickerNavigation(t *testing.T) {
 	action := Action{
 		Kind:     ActionPathPickerEnter,

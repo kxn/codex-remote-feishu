@@ -108,6 +108,7 @@ type ActionInboundMeta struct {
 	MessageCreateTime     time.Time
 	MenuClickTime         time.Time
 	OpenMessageID         string
+	CardCallback          bool
 	CardDaemonLifecycleID string
 	LifecycleVerdict      InboundLifecycleVerdict
 	LifecycleReason       string

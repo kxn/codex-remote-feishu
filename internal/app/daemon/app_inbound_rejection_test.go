@@ -107,8 +107,38 @@ func TestDaemonRejectsOldCardDetachAndShowsExpiredNotice(t *testing.T) {
 		t.Fatalf("expected old card callback not to detach surface, got %#v", snapshot)
 	}
 	delta := gateway.operations[before:]
-	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "重新发送对应命令获取新卡片")
+	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "请回到当前活跃卡继续")
 	if !strings.Contains(delta[0].CardBody, "/detach") {
 		t.Fatalf("expected expired card notice to mention /detach, got %#v", delta)
+	}
+}
+
+func TestDaemonRejectsUnstampedMenuNavigationCardAndShowsExpiredNotice(t *testing.T) {
+	gateway := &recordingGateway{}
+	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: startedAt})
+
+	seedAttachedSurfaceForInboundTests(app)
+
+	before := len(gateway.operations)
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "feishu:app-1:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-card-1",
+		Text:             "/menu send_settings",
+		Inbound: &control.ActionInboundMeta{
+			CardCallback: true,
+		},
+	})
+
+	delta := gateway.operations[before:]
+	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "请回到当前活跃卡继续")
+	if !strings.Contains(delta[0].CardBody, "freshness") {
+		t.Fatalf("expected unstamped callback notice to mention freshness, got %#v", delta)
+	}
+	if !strings.Contains(delta[0].CardBody, "/menu") {
+		t.Fatalf("expected unstamped callback notice to mention /menu, got %#v", delta)
 	}
 }

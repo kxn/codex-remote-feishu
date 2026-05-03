@@ -369,7 +369,7 @@ func TestHandleGatewayActionRejectsOldNavigationCardAndShowsExpiredNotice(t *tes
 		t.Fatalf("expected old navigation card not to inline replace, got %#v", result)
 	}
 	delta := gateway.operations[before:]
-	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "重新发送对应命令获取新卡片")
+	assertSingleRejectedNotice(t, delta, "旧卡片已过期", "请回到当前活跃卡继续")
 	if !strings.Contains(delta[0].CardBody, "/menu") {
 		t.Fatalf("expected expired navigation card notice to mention /menu, got %#v", delta)
 	}

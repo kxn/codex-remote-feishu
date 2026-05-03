@@ -36,6 +36,11 @@ func (a *App) classifyInboundAction(action control.Action) control.Action {
 		meta.LifecycleReason = "card_lifecycle_mismatch"
 		return action
 	}
+	if control.RejectsUnstampedFeishuCardCallback(action) {
+		meta.LifecycleVerdict = control.InboundLifecycleOldCard
+		meta.LifecycleReason = "card_callback_missing_lifecycle"
+		return action
+	}
 
 	switch {
 	case a.inboundTimeIsOld(meta.MessageCreateTime):
@@ -97,11 +102,17 @@ func rejectedInboundNotice(action control.Action) *control.Notice {
 			ThemeKey: "error",
 		}
 	case control.InboundLifecycleOldCard:
-		text := "这张卡片来自服务上一个生命周期，已过期。"
+		text := "这张卡片已过期。"
+		switch inboundReason(action) {
+		case "card_lifecycle_mismatch":
+			text = "这张卡片来自服务上一个生命周期，已过期。"
+		case "card_callback_missing_lifecycle":
+			text = "这张卡片缺少当前服务可验证的 freshness 标记，已过期。"
+		}
 		if detail := rejectedInboundActionDetail(action); detail != "" {
 			text += "\n\n卡片对应动作：" + detail + "。"
 		}
-		text += "\n\n请重新发送对应命令获取新卡片。"
+		text += "\n\n请回到当前活跃卡继续；如果当前卡已丢失，请重新发送对应命令获取新卡片。"
 		return &control.Notice{
 			Code:     "old_card_expired",
 			Title:    "旧卡片已过期",

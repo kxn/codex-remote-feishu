@@ -50,6 +50,7 @@ type FeishuFrontstageActionContract struct {
 	DaemonFreshness           string
 	RequiresViewSession       bool
 	ViewSessionStrategy       string
+	RejectsUnstampedCallback  bool
 	ContinuationDaemonCommand DaemonCommandKind
 	FollowupPolicy            FeishuFollowupPolicy
 }
@@ -62,6 +63,9 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 		DaemonFreshness:         FeishuUIInlineReplaceFreshnessDaemonLifecycle,
 		RequiresViewSession:     false,
 		ViewSessionStrategy:     FeishuUIInlineReplaceViewSessionSurfaceState,
+	}
+	if _, ok := FeishuUIIntentFromAction(action); ok {
+		contract.RejectsUnstampedCallback = true
 	}
 
 	switch {
@@ -122,6 +126,16 @@ func AllowsInlineCardReplacement(action Action) bool {
 		return false
 	}
 	return SupportsFeishuSynchronousCurrentCardReplacement(action)
+}
+
+func RejectsUnstampedFeishuCardCallback(action Action) bool {
+	if action.Inbound == nil || !action.Inbound.CardCallback {
+		return false
+	}
+	if ActionTargetsCurrentFeishuCard(action) {
+		return false
+	}
+	return ResolveFeishuFrontstageActionContract(action).RejectsUnstampedCallback
 }
 
 func AllowsCommandCardResultReplacement(action Action) bool {
