@@ -92,8 +92,8 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 				Commands:    []string{confirmCommand},
 				Description: description,
 				Buttons: []control.CommandCatalogButton{
-					{Label: "确认升级", CommandText: confirmCommand},
-					{Label: "查看状态", CommandText: "/upgrade"},
+					runCommandButton("确认升级", confirmCommand, "", false),
+					runCommandButton("查看状态", "/upgrade", "", false),
 				},
 			}},
 		}},

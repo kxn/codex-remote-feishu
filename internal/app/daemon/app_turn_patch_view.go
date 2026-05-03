@@ -293,7 +293,7 @@ func turnPatchAppliedPageView(flow *turnpatchruntime.FlowRecord) control.FeishuP
 		buttons = append(buttons, control.CommandCatalogButton{
 			Label: "回滚最近一次修补",
 			Kind:  control.CommandCatalogButtonCallbackAction,
-			CallbackValue: frontstagecontract.ActionPayloadPageAction(
+			CallbackValue: frontstagecontract.ActionPayloadPageLocalAction(
 				string(control.ActionTurnPatchRollback),
 				strings.TrimSpace(flow.PatchID),
 			),

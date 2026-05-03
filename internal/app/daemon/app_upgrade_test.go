@@ -435,6 +435,9 @@ func TestBuildDebugRootPageOnlyExposesAdminEntry(t *testing.T) {
 	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/debug admin" {
 		t.Fatalf("expected debug catalog to expose admin link button, got %#v", catalog.Sections[0].Entries[0].Buttons)
 	}
+	if button := catalog.Sections[0].Entries[0].Buttons[0]; button.Kind != control.CommandCatalogButtonCallbackAction || button.CallbackValue["kind"] != "page_local_action" || button.CallbackValue["action_kind"] != string(control.ActionDebugCommand) || button.CallbackValue["action_arg"] != "admin" {
+		t.Fatalf("expected debug root button to stay on current card, got %#v", button)
+	}
 	summary := catalogSummaryText(&catalog)
 	if summary != "" {
 		t.Fatalf("expected debug root page to stay free of summary copy, got %#v", summary)
@@ -455,6 +458,9 @@ func TestBuildUpgradeRootPageOnlyExposesUpgradeMenus(t *testing.T) {
 	}
 	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/upgrade track" {
 		t.Fatalf("expected upgrade catalog to expose track button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+	if button := catalog.Sections[0].Entries[0].Buttons[0]; button.Kind != control.CommandCatalogButtonCallbackAction || button.CallbackValue["kind"] != "page_local_action" || button.CallbackValue["action_kind"] != string(control.ActionUpgradeCommand) || button.CallbackValue["action_arg"] != "track" {
+		t.Fatalf("expected upgrade root button to stay on current card, got %#v", button)
 	}
 	for _, button := range catalog.Sections[0].Entries[0].Buttons {
 		if strings.HasPrefix(button.CommandText, "/upgrade track ") {
@@ -481,6 +487,28 @@ func TestBuildUpgradeRootPageCanExposeCodexUpgradeEntry(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected upgrade root page to expose /upgrade codex button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	}
+}
+
+func TestBuildUpgradePromptCatalogUsesLocalCurrentCardButtons(t *testing.T) {
+	catalog := buildUpgradePromptPageView(install.InstallState{
+		CurrentVersion: "v1.0.0",
+		PendingUpgrade: &install.PendingUpgrade{
+			Source:        install.UpgradeSourceRelease,
+			TargetTrack:   install.ReleaseTrackBeta,
+			TargetVersion: "v1.1.0",
+			TargetSlot:    "v1.1.0",
+		},
+	})
+	entry := catalog.Sections[0].Entries[0]
+	if len(entry.Buttons) != 2 {
+		t.Fatalf("prompt buttons = %#v, want confirm + status", entry.Buttons)
+	}
+	if value := entry.Buttons[0].CallbackValue; entry.Buttons[0].Kind != control.CommandCatalogButtonCallbackAction || value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionUpgradeCommand) || value["action_arg"] != "latest" {
+		t.Fatalf("expected prompt confirm button to stay on current card, got %#v", entry.Buttons[0])
+	}
+	if value := entry.Buttons[1].CallbackValue; entry.Buttons[1].Kind != control.CommandCatalogButtonCallbackAction || value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionUpgradeCommand) {
+		t.Fatalf("expected prompt status button to stay on current card, got %#v", entry.Buttons[1])
 	}
 }
 

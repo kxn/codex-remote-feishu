@@ -186,13 +186,15 @@ func pageButtons(buttons []control.CommandCatalogButton, pageBackend controlBack
 				continue
 			}
 			payload = cloneActionPayload(button.CallbackValue)
-			if resolved, ok := resolveCatalogActionForPage(control.Action{
-				CommandID:        strings.TrimSpace(button.CommandID),
-				CatalogFamilyID:  strings.TrimSpace(button.CatalogFamilyID),
-				CatalogVariantID: strings.TrimSpace(button.CatalogVariantID),
-				CatalogBackend:   pageCatalogBackend(pageBackend, button.CatalogBackend),
-			}, pageCatalogBackend(pageBackend, button.CatalogBackend)); ok {
-				payload = actionPayloadWithCatalog(payload, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
+			if !isLocalPagePayload(payload) {
+				if resolved, ok := resolveCatalogActionForPage(control.Action{
+					CommandID:        strings.TrimSpace(button.CommandID),
+					CatalogFamilyID:  strings.TrimSpace(button.CatalogFamilyID),
+					CatalogVariantID: strings.TrimSpace(button.CatalogVariantID),
+					CatalogBackend:   pageCatalogBackend(pageBackend, button.CatalogBackend),
+				}, pageCatalogBackend(pageBackend, button.CatalogBackend)); ok {
+					payload = actionPayloadWithCatalog(payload, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
+				}
 			}
 		default:
 			continue
@@ -207,6 +209,15 @@ func pageButtons(buttons []control.CommandCatalogButton, pageBackend controlBack
 		actions = append(actions, cardCallbackButtonElement(label, buttonType, stampActionValue(payload, daemonLifecycleID), button.Disabled, ""))
 	}
 	return actions
+}
+
+func isLocalPagePayload(payload map[string]any) bool {
+	switch strings.TrimSpace(fmt.Sprint(payload[cardActionPayloadKeyKind])) {
+	case cardActionKindPageLocalAction, cardActionKindPageLocalSubmit:
+		return true
+	default:
+		return false
+	}
 }
 
 func pageCompactButtonElements(buttons []control.CommandCatalogButton, pageBackend controlBackend, daemonLifecycleID string) []map[string]any {

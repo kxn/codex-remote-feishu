@@ -103,3 +103,27 @@ func TestApplySurfaceActionDoesNotRejectLocalPageActionWithoutCatalogProvenance(
 		t.Fatalf("expected local page action to bypass command provenance rejection, got %#v", events)
 	}
 }
+
+func TestBoundDaemonCommandEventsPropagateCardOriginForLocalPageAction(t *testing.T) {
+	now := time.Date(2026, 5, 3, 10, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+
+	events, ok := svc.boundDaemonCommandEvents(surface, control.Action{
+		Kind:             control.ActionCronCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-card-4",
+		Text:             "/cron run rec-1",
+		LocalPageAction:  true,
+		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-4"},
+	})
+	if !ok || len(events) != 1 || events[0].DaemonCommand == nil {
+		t.Fatalf("expected daemon command event, got %#v", events)
+	}
+	if !events[0].DaemonCommand.FromCardAction {
+		t.Fatalf("expected local page action to keep card origin for daemon continuation, got %#v", events[0].DaemonCommand)
+	}
+}

@@ -37,6 +37,9 @@ func TestBuildUpgradePromptCatalogUsesDevCommandForDevCandidate(t *testing.T) {
 	if got := entry.Buttons[0].CommandText; got != "/upgrade dev" {
 		t.Fatalf("confirm command = %q, want /upgrade dev", got)
 	}
+	if value := entry.Buttons[0].CallbackValue; entry.Buttons[0].Kind != control.CommandCatalogButtonCallbackAction || value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionUpgradeCommand) || value["action_arg"] != "dev" {
+		t.Fatalf("expected dev confirm button to stay on current card, got %#v", entry.Buttons[0])
+	}
 	summary := catalogSummaryText(&catalog)
 	if !strings.Contains(summary, "再次发送 /upgrade dev") {
 		t.Fatalf("summary = %q, want /upgrade dev guidance", summary)

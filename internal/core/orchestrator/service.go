@@ -482,7 +482,7 @@ func (s *Service) boundDaemonCommandEvents(surface *state.SurfaceConsoleRecord, 
 		SourceMessageID:  action.MessageID,
 		Text:             action.Text,
 	}
-	if binding.PropagateCardActionToDaemon {
+	if binding.PropagateCardActionToDaemon || action.LocalPageAction {
 		command.FromCardAction = action.IsCardAction()
 	}
 	return []eventcontract.Event{{

@@ -68,8 +68,8 @@ func TestCronRuntimeDirectOwnerSurfaceContracts(t *testing.T) {
 		t.Fatalf("BuildListPageView() buttons = %#v, want callback action button", entry.Buttons)
 	}
 	value := entry.Buttons[0].CallbackValue
-	if value["kind"] != "page_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-1" {
-		t.Fatalf("BuildListPageView() callback = %#v, want cron run page_action", value)
+	if value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-1" {
+		t.Fatalf("BuildListPageView() callback = %#v, want cron run page_local_action", value)
 	}
 }
 

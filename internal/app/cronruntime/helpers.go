@@ -50,21 +50,16 @@ func commandCatalogTextSection(label string, lines ...string) control.FeishuCard
 }
 
 func runCommandButton(label, commandText, style string, disabled bool) control.CommandCatalogButton {
-	return control.CommandCatalogButton{
-		Label:       strings.TrimSpace(label),
-		Kind:        control.CommandCatalogButtonAction,
-		CommandText: strings.TrimSpace(commandText),
-		Style:       strings.TrimSpace(style),
-		Disabled:    disabled,
-	}
+	return control.FeishuLocalPageCommandButton(label, commandText, style, disabled)
 }
 
 func callbackActionButton(label, commandID string, actionKind control.ActionKind, actionArg, style string, disabled bool) control.CommandCatalogButton {
 	return control.CommandCatalogButton{
 		Label:         strings.TrimSpace(label),
 		Kind:          control.CommandCatalogButtonCallbackAction,
+		CommandText:   control.BuildFeishuActionText(actionKind, actionArg),
 		CommandID:     strings.TrimSpace(commandID),
-		CallbackValue: frontstagecontract.ActionPayloadPageAction(string(actionKind), actionArg),
+		CallbackValue: frontstagecontract.ActionPayloadPageLocalAction(string(actionKind), actionArg),
 		Style:         strings.TrimSpace(style),
 		Disabled:      disabled,
 	}

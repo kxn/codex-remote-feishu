@@ -214,7 +214,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	if len(firstEntry.Buttons) != 1 || firstEntry.Buttons[0].Kind != control.CommandCatalogButtonCallbackAction {
 		t.Fatalf("unexpected first /cron list buttons: %#v", firstEntry.Buttons)
 	}
-	if value := firstEntry.Buttons[0].CallbackValue; value["kind"] != "page_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-2" {
+	if value := firstEntry.Buttons[0].CallbackValue; value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-2" {
 		t.Fatalf("unexpected first /cron list callback: %#v", value)
 	}
 	if secondEntry.Title != "Nightly" || !strings.Contains(secondEntry.Description, "下次 04-18 11:00") || !strings.Contains(secondEntry.Description, "来源：/tmp/project") {
@@ -223,7 +223,7 @@ func TestCronStatusListAndEditCommandsReturnSpecificCatalogs(t *testing.T) {
 	if len(secondEntry.Buttons) != 1 || secondEntry.Buttons[0].Kind != control.CommandCatalogButtonCallbackAction {
 		t.Fatalf("unexpected second /cron list buttons: %#v", secondEntry.Buttons)
 	}
-	if value := secondEntry.Buttons[0].CallbackValue; value["kind"] != "page_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-1" {
+	if value := secondEntry.Buttons[0].CallbackValue; value["kind"] != "page_local_action" || value["action_kind"] != string(control.ActionCronCommand) || value["action_arg"] != "run rec-1" {
 		t.Fatalf("unexpected second /cron list callback: %#v", value)
 	}
 }

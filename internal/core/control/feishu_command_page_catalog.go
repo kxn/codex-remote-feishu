@@ -40,11 +40,9 @@ func FeishuCommandBackToRootButtons(commandID string) []CommandCatalogButton {
 	if command == "" {
 		return nil
 	}
-	return []CommandCatalogButton{{
-		Label:       "返回" + strings.TrimSpace(def.Title),
-		Kind:        CommandCatalogButtonAction,
-		CommandText: command,
-	}}
+	return []CommandCatalogButton{
+		FeishuLocalPageCommandButton("返回"+strings.TrimSpace(def.Title), command, "", false),
+	}
 }
 
 func splitFeishuCommandPageSummaryLines(text string) []string {

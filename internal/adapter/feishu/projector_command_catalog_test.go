@@ -239,3 +239,27 @@ func TestProjectCommandCatalogRendersNoticeAreaBetweenBusinessAndFooter(t *testi
 		t.Fatalf("expected both dividers to survive V2 render, got %#v", renderedElements)
 	}
 }
+
+func TestProjectCommandCatalogKeepsManualLocalCallbackFreeOfCatalogProvenance(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(control.FeishuPageView{
+		Title:       "调试",
+		Interactive: true,
+		Sections: []control.CommandCatalogSection{{
+			Entries: []control.CommandCatalogEntry{{
+				Buttons: []control.CommandCatalogButton{{
+					Label:         "管理页外链",
+					Kind:          control.CommandCatalogButtonCallbackAction,
+					CommandID:     control.FeishuCommandDebug,
+					CallbackValue: actionPayloadPageLocalAction(string(control.ActionDebugCommand), "admin"),
+				}},
+			}},
+		}},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	row := cardElementButtons(t, ops[0].CardElements[0])
+	value := cardButtonPayload(t, row[0])
+	assertPageLocalActionPayloadMatchesCommand(t, value, "/debug admin")
+}

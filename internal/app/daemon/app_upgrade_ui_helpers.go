@@ -15,13 +15,7 @@ func upgradeUsageEvents(surfaceID, formDefault, message string) []eventcontract.
 }
 
 func runCommandButton(label, commandText, style string, disabled bool) control.CommandCatalogButton {
-	return control.CommandCatalogButton{
-		Label:       label,
-		Kind:        control.CommandCatalogButtonAction,
-		CommandText: commandText,
-		Style:       style,
-		Disabled:    disabled,
-	}
+	return control.FeishuLocalPageCommandButton(label, commandText, style, disabled)
 }
 
 func debugNoticeEvent(surfaceID, code, text string) eventcontract.Event {
