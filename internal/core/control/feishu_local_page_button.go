@@ -6,12 +6,20 @@ import (
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
-func FeishuLocalPageCommandPayload(commandText string) (map[string]any, bool) {
+func FeishuLocalCardActionPayload(actionKind ActionKind, actionArg string) map[string]any {
+	return frontstagecontract.ActionPayloadPageLocalAction(string(actionKind), strings.TrimSpace(actionArg))
+}
+
+func FeishuLocalCardCommandPayload(commandText string) (map[string]any, bool) {
 	action, ok := ParseFeishuTextActionWithoutCatalog(commandText)
 	if !ok {
 		return nil, false
 	}
-	return frontstagecontract.ActionPayloadPageLocalAction(string(action.Kind), FeishuActionArgumentText(action.Text)), true
+	return FeishuLocalCardActionPayload(action.Kind, FeishuActionArgumentText(action.Text)), true
+}
+
+func FeishuLocalPageCommandPayload(commandText string) (map[string]any, bool) {
+	return FeishuLocalCardCommandPayload(commandText)
 }
 
 func FeishuLocalPageCommandButton(label, commandText, style string, disabled bool) CommandCatalogButton {
@@ -21,7 +29,7 @@ func FeishuLocalPageCommandButton(label, commandText, style string, disabled boo
 		Style:       strings.TrimSpace(style),
 		Disabled:    disabled,
 	}
-	if payload, ok := FeishuLocalPageCommandPayload(button.CommandText); ok {
+	if payload, ok := FeishuLocalCardCommandPayload(button.CommandText); ok {
 		button.Kind = CommandCatalogButtonCallbackAction
 		button.CallbackValue = payload
 		return button

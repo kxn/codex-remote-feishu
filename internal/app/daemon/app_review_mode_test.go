@@ -133,7 +133,7 @@ func TestDeliverUIEventDoesNotAddReviewEntryButtonToNormalFinalCardWithoutFileCh
 	if ops[0].CardTitle != "✅ 最后答复" {
 		t.Fatalf("unexpected normal final title: %#v", ops[0])
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button without file changes, got %#v", ops[0].CardElements)
 	}
 }
@@ -164,7 +164,7 @@ func TestDeliverUIEventAddsReviewEntryButtonWhenRepoHasUncommittedChanges(t *tes
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("expected review entry button with dirty repo, got %#v", ops[0].CardElements)
 	}
 }
@@ -202,7 +202,7 @@ func TestDeliverUIEventDoesNotAddReviewEntryButtonWhenRepoIsCleanEvenIfFinalCard
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button for clean repo, got %#v", ops[0].CardElements)
 	}
 }
@@ -238,7 +238,7 @@ func TestDeliverUIEventAddsReviewEntryButtonForRepoWideDirtyStateFromSubdir(t *t
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("expected review entry button for repo-wide dirty state, got %#v", ops[0].CardElements)
 	}
 }
@@ -280,13 +280,13 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if !strings.Contains(ops[0].CardTitle, "提交 abc1234") {
 		t.Fatalf("expected review title to include commit target label, got %#v", ops[0].CardTitle)
 	}
-	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewDiscard)) {
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("expected discard button, got %#v", ops[0].CardElements)
 	}
-	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewApply)) {
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewApply)) {
 		t.Fatalf("expected apply button, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button on review final card, got %#v", ops[0].CardElements)
 	}
 }
@@ -319,16 +319,16 @@ func TestDeliverUIEventKeepsReviewFinalCardSuppressedAfterSessionRuntimeClears(t
 	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
 		t.Fatalf("expected review title prefix even after session runtime clears, got %#v", ops[0].CardTitle)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewStart)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button on detached review final card, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewCommand)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
 		t.Fatalf("did not expect commit review buttons on detached review final card, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewDiscard)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("did not expect exit buttons once session runtime is gone, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewApply)) {
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewApply)) {
 		t.Fatalf("did not expect exit buttons once session runtime is gone, got %#v", ops[0].CardElements)
 	}
 }
@@ -359,7 +359,7 @@ func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if !operationHasActionValue(ops[0], "page_action", "action_kind", string(control.ActionReviewCommand)) {
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
 		t.Fatalf("expected commit review button, got %#v", ops[0].CardElements)
 	}
 }
@@ -473,7 +473,7 @@ func TestHandleGatewayActionShowsReviewRootPageInPlace(t *testing.T) {
 	}
 }
 
-func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T) {
+func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCardLocalCallback(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
 	var sent []agentproto.Command
@@ -491,7 +491,7 @@ func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T
 		Final:      true,
 	}, "msg-1", "om-final-1", app.daemonLifecycleID)
 
-	result := handleGatewayActionForTest(context.Background(), app, control.Action{
+	result := app.HandleGatewayAction(context.Background(), control.Action{
 		Kind:             control.ActionReviewCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -499,6 +499,7 @@ func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T
 		ActorUserID:      "user-1",
 		MessageID:        "om-final-1",
 		Text:             "/review commit " + shortSHA,
+		LocalPageAction:  true,
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
@@ -516,6 +517,36 @@ func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T
 	}
 	if sent[0].Review.Target.Kind != agentproto.ReviewTargetKindCommit || !strings.HasPrefix(sent[0].Review.Target.CommitSHA, shortSHA) {
 		t.Fatalf("unexpected commit review target: %#v", sent[0].Review.Target)
+	}
+}
+
+func TestHandleGatewayActionRejectsExpiredCommitReviewFinalCardLocalCallback(t *testing.T) {
+	app, gateway, _ := newReviewModeAppForTest(t)
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		t.Fatalf("did not expect command dispatch for expired commit review card: %#v", command)
+		return nil
+	}
+
+	result := app.HandleGatewayAction(context.Background(), control.Action{
+		Kind:             control.ActionReviewCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-final-old-commit-1",
+		Text:             "/review commit abc1234",
+		LocalPageAction:  true,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "old-daemon",
+		},
+	})
+
+	if result != nil {
+		t.Fatalf("expected expired commit review card to bypass inline result, got %#v", result)
+	}
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "旧卡片已过期" {
+		t.Fatalf("expected old-card rejection notice, got %#v", ops)
 	}
 }
 

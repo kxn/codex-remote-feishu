@@ -136,10 +136,12 @@ func appendFooterButtons(operation *feishu.Operation, buttons []map[string]any) 
 }
 
 func reviewEntryButton(daemonLifecycleID string) map[string]any {
-	return cardCallbackButton(
+	return localCurrentCardActionButton(
 		"审阅待提交内容",
 		"primary",
-		stampActionPayload(frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewStart), ""), daemonLifecycleID),
+		daemonLifecycleID,
+		control.ActionReviewStart,
+		"",
 	)
 }
 
@@ -150,10 +152,12 @@ func reviewCommitButtons(commits []gitmeta.CommitSummary, daemonLifecycleID stri
 		if commit.SHA == "" {
 			continue
 		}
-		buttons = append(buttons, cardCallbackButton(
+		buttons = append(buttons, localCurrentCardActionButton(
 			fmt.Sprintf("审阅 %s", reviewCommitButtonSHA(firstNonEmpty(commit.ShortSHA, commit.SHA))),
 			"default",
-			stampActionPayload(frontstageActionPayloadReviewCommit(commit.SHA), daemonLifecycleID),
+			daemonLifecycleID,
+			control.ActionReviewCommand,
+			"commit "+strings.TrimSpace(commit.SHA),
 		))
 	}
 	return buttons
@@ -169,15 +173,19 @@ func reviewCommitButtonSHA(value string) string {
 
 func reviewExitButtons(daemonLifecycleID string) []map[string]any {
 	return []map[string]any{
-		cardCallbackButton(
+		localCurrentCardActionButton(
 			"放弃审阅",
 			"default",
-			stampActionPayload(frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewDiscard), ""), daemonLifecycleID),
+			daemonLifecycleID,
+			control.ActionReviewDiscard,
+			"",
 		),
-		cardCallbackButton(
+		localCurrentCardActionButton(
 			"按审阅意见继续修改",
 			"primary",
-			stampActionPayload(frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewApply), ""), daemonLifecycleID),
+			daemonLifecycleID,
+			control.ActionReviewApply,
+			"",
 		),
 	}
 }
@@ -186,12 +194,11 @@ func stampActionPayload(value map[string]any, daemonLifecycleID string) map[stri
 	return frontstagecontract.ActionPayloadWithLifecycle(value, daemonLifecycleID)
 }
 
-func frontstageActionPayloadReviewCommit(commitSHA string) map[string]any {
-	return frontstagecontract.ActionPayloadWithCatalog(
-		frontstagecontract.ActionPayloadPageAction(string(control.ActionReviewCommand), "commit "+strings.TrimSpace(commitSHA)),
-		control.FeishuCommandReview,
-		"",
-		"",
+func localCurrentCardActionButton(label, buttonType, daemonLifecycleID string, actionKind control.ActionKind, actionArg string) map[string]any {
+	return cardCallbackButton(
+		label,
+		buttonType,
+		stampActionPayload(control.FeishuLocalCardActionPayload(actionKind, actionArg), daemonLifecycleID),
 	)
 }
 
