@@ -3794,6 +3794,16 @@
       "reason": "当前文档已覆盖对应闭包结论，无需新增或合并文档。",
       "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/412",
       "recordedAt": "2026-04-23T19:08:04Z"
+    },
+    {
+      "number": 414,
+      "title": "[Work] 封装 wrapper child Codex 无缝重启与 thread 恢复能力",
+      "updatedAt": "2026-04-24T02:05:35Z",
+      "closedAt": "2026-04-24T02:05:32Z",
+      "decision": "skip",
+      "reason": "Current canonical docs already cover the durable child-restart and thread-restore contract, including two-phase process.child.restart outcome semantics and remote-surface effects; no additional doc change is needed.",
+      "sourceUrl": "https://github.com/kxn/codex-remote-feishu/issues/414",
+      "recordedAt": "2026-05-03T23:06:17Z"
     }
   ]
 }
