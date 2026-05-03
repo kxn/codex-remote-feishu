@@ -354,7 +354,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 	succeeded := false
 	switch kind {
 	case control.FeishuTargetPickerSessionThread:
-		events = s.useThread(surface, threadID, true)
+		events = s.useThreadPreservingTargetPicker(surface, threadID, true)
 		succeeded = targetPickerThreadReady(surface, threadID)
 	case control.FeishuTargetPickerSessionNewThread:
 		events = s.enterTargetPickerNewThread(surface, workspaceKey)
@@ -421,12 +421,15 @@ func (s *Service) enterTargetPickerNewThread(surface *state.SurfaceConsoleRecord
 		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，不能在这里直接新建会话。")
 	}
 	if currentWorkspace := s.surfaceCurrentWorkspaceKey(surface); currentWorkspace == workspaceKey && strings.TrimSpace(surface.AttachedInstanceID) != "" {
-		return s.prepareNewThread(surface)
+		return s.prepareNewThreadPreservingTargetPicker(surface)
 	}
 	targetBackend := s.surfaceBackend(surface)
 	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, true)
 	resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
-	return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{PrepareNewThread: true})
+	return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{
+		PrepareNewThread: true,
+		OverlayCleanup:   surfaceOverlayRouteCleanupOptions{PreserveTargetPicker: true},
+	})
 }
 
 func targetPickerNewThreadSucceeded(surface *state.SurfaceConsoleRecord, workspaceKey string) bool {

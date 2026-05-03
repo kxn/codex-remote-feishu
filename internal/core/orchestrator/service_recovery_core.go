@@ -27,13 +27,21 @@ func (s *Service) resetSurfaceExecutionGates(surface *state.SurfaceConsoleRecord
 }
 
 func (s *Service) prepareSurfaceForExecutionReattach(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
 	events := s.discardDrafts(surface)
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" {
-		events = append(events, s.finalizeDetachedSurface(surface)...)
+		events = append(events, s.finalizeDetachedSurfaceWithOverlayCleanup(surface, cleanup)...)
 	} else {
+		events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{
+			PreserveTargetPicker:  cleanup.PreserveTargetPicker,
+			ForceClearReviewState: true,
+		})...)
 		clearAutoContinueRuntime(surface)
 		clearSurfaceRequests(surface)
 		s.clearPreparedNewThread(surface)

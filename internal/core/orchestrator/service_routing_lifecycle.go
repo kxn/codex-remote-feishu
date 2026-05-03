@@ -9,6 +9,10 @@ import (
 )
 
 func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.finalizeDetachedSurfaceWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) finalizeDetachedSurfaceWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
@@ -18,12 +22,15 @@ func (s *Service) finalizeDetachedSurface(surface *state.SurfaceConsoleRecord) [
 	clearAutoContinueRuntime(surface)
 	s.clearRemoteOwnership(surface)
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已断开", surfaceOverlayRouteCleanupOptions{
+		PreserveTargetPicker:  cleanup.PreserveTargetPicker,
+		ForceClearReviewState: true,
+	})...)
 	s.resetSurfaceExecutionGates(surface)
 	surface.PromptOverride = state.ModelConfigRecord{}
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")
 	s.clearSurfaceActiveQueueItem(surface, "")
 	clearSurfaceRequests(surface)
-	s.clearSurfacePathPicker(surface)
 	s.clearPlanProposalRuntime(surface)
 	clearSurfaceFinalCards(surface)
 	surface.LastSelection = nil
@@ -62,9 +69,9 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []eventcontra
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
-	if s.surfaceHasRouteMutationRequestState(surface) &&
+	if s.surfaceHasRouteMutationBlocker(surface) &&
 		(surface.RouteMode != state.RouteModeFollowLocal || s.followLocalWouldRetarget(surface, inst)) {
-		if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+		if blocked := s.blockRouteMutation(surface); blocked != nil {
 			return blocked
 		}
 	}
@@ -101,6 +108,7 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []eventcontra
 	}) {
 		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
 	}
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 	reevaluated := s.reevaluateFollowSurface(surface)
 	events = append(events, reevaluated...)
 	if len(reevaluated) == 0 && surface.SelectedThreadID != "" && s.surfaceOwnsThread(surface, surface.SelectedThreadID) {
@@ -156,7 +164,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 	if s.surfaceHasLiveRemoteWork(surface) {
 		return nil
 	}
-	if s.surfaceHasRouteMutationRequestState(surface) {
+	if s.surfaceHasRouteMutationBlocker(surface) {
 		return nil
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
@@ -181,6 +189,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		}) {
 			return events
 		}
+		events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 		return append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）")...)
 	}
 	if owner := s.threadClaimSurface(targetThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
@@ -197,6 +206,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		}) {
 			return events
 		}
+		events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 		return append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）")...)
 	}
 	if surface.SelectedThreadID == targetThreadID && s.surfaceOwnsThread(surface, targetThreadID) {
@@ -288,6 +298,7 @@ func (s *Service) releaseVictimThread(surface *state.SurfaceConsoleRecord, inst 
 	}) {
 		return events
 	}
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 	events = append(events, s.threadSelectionEvents(surface, "", string(routeMode), title)...)
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindNotice,

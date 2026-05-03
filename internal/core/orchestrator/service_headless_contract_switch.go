@@ -116,6 +116,10 @@ func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.Surface
 }
 
 func (s *Service) restartHeadlessContractContinuation(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation) []eventcontract.Event {
+	return s.restartHeadlessContractContinuationWithOverlayCleanup(surface, continuation, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) restartHeadlessContractContinuationWithOverlayCleanup(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
@@ -123,7 +127,7 @@ func (s *Service) restartHeadlessContractContinuation(surface *state.SurfaceCons
 	if normalizeWorkspaceClaimKey(attempt.WorkspaceKey) == "" {
 		return nil
 	}
-	return s.startHeadlessForContractSwitch(surface, attempt)
+	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, attempt, cleanup)
 }
 
 func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, resolution contractResolution, options attachWorkspaceOptions) []eventcontract.Event {
@@ -140,7 +144,7 @@ func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceCon
 		return s.attachWorkspaceWithOptions(surface, workspaceKey, options)
 	case contractResolutionRestartManaged, contractResolutionCreateHeadless:
 		events := s.queueHeadlessContractRestart(nil, surface, continuation)
-		return append(events, s.restartHeadlessContractContinuation(surface, continuation)...)
+		return append(events, s.restartHeadlessContractContinuationWithOverlayCleanup(surface, continuation, options.OverlayCleanup)...)
 	case contractResolutionUnavailable:
 		return notice(surface,
 			firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"),
@@ -152,16 +156,20 @@ func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceCon
 }
 
 func (s *Service) startHeadlessForContractSwitch(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt) []eventcontract.Event {
+	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, attempt, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) startHeadlessForContractSwitchWithOverlayCleanup(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
 	if strings.TrimSpace(attempt.ThreadID) != "" {
 		view := s.headlessRestoreView(surface, attempt)
 		if view != nil {
-			return s.startHeadlessForResolvedThreadWithMode(surface, view, startHeadlessModeDefault)
+			return s.startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface, view, startHeadlessModeDefault, cleanup)
 		}
 	}
-	return s.startFreshWorkspaceHeadlessWithOptions(surface, attempt.WorkspaceKey, attempt.PrepareNewThread)
+	return s.startFreshWorkspaceHeadlessWithOverlayCleanup(surface, attempt.WorkspaceKey, attempt.PrepareNewThread, cleanup)
 }
 
 func (s *Service) queueHeadlessContractRestart(events []eventcontract.Event, surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation) []eventcontract.Event {

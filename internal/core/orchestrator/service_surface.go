@@ -53,6 +53,7 @@ const (
 type attachWorkspaceOptions struct {
 	ResumeNotice     bool
 	PrepareNewThread bool
+	OverlayCleanup   surfaceOverlayRouteCleanupOptions
 }
 
 type attachInstanceMode string

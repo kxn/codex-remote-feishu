@@ -42,6 +42,7 @@ func (s *Service) bindSurfaceToThreadMode(surface *state.SurfaceConsoleRecord, i
 		return nil
 	}
 	events := s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已变化，之前的提案计划已失效。")
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
 	events = append(events, s.threadSelectionEvents(
 		surface,

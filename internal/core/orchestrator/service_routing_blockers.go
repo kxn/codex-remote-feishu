@@ -39,7 +39,7 @@ func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []
 	if surface == nil || surface.AttachedInstanceID == "" {
 		return nil
 	}
-	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+	if blocked := s.blockRouteMutation(surface); blocked != nil {
 		return blocked
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
@@ -52,30 +52,6 @@ func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
 		return notice(surface, "thread_attach_requires_detach", s.threadAttachRequiresDetachText(surface))
-	}
-	return nil
-}
-
-func (s *Service) surfaceHasRouteMutationRequestState(surface *state.SurfaceConsoleRecord) bool {
-	if surface == nil {
-		return false
-	}
-	return surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil || s.activePathPicker(surface) != nil
-}
-
-func (s *Service) blockRouteMutationForRequestState(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	if surface == nil {
-		return nil
-	}
-	if s.activePathPicker(surface) != nil {
-		return notice(surface, "path_picker_active", "当前正在进行路径选择，请先在卡片里确认或取消；如需查看状态，可继续使用 /status。")
-	}
-	if surface.ActiveRequestCapture != nil {
-		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
-	}
-	if pending := activePendingRequest(surface); pending != nil {
-		_ = pending
-		return notice(surface, "request_pending", pendingRequestNoticeText(activePendingRequest(surface)))
 	}
 	return nil
 }

@@ -47,24 +47,26 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 		CallbackPayloadOwner:           control.FeishuUICallbackPayloadOwnerAdapter,
 		ActiveOwnerCard:                s.buildFeishuUIOwnerCardFlowContext(s.activeOwnerCardFlow(surface)),
 	}
-	if surface.ActiveRequestCapture != nil {
+	switch blockedBy := s.surfaceRouteMutationBlock(surface); blockedBy {
+	case surfaceRouteMutationBlockRequestCapture:
 		context.RouteMutationBlocked = true
 		context.RouteMutationBlockedBy = "request_capture"
 		return context
-	}
-	if s.targetPickerHasBlockingProcessing(surface) {
+	case surfaceRouteMutationBlockTargetPicker:
 		context.RouteMutationBlocked = true
 		context.RouteMutationBlockedBy = "target_picker"
 		return context
-	}
-	if s.activePathPicker(surface) != nil {
+	case surfaceRouteMutationBlockPathPicker:
 		context.RouteMutationBlocked = true
 		context.RouteMutationBlockedBy = "path_picker"
 		return context
-	}
-	if activePendingRequest(surface) != nil {
+	case surfaceRouteMutationBlockPendingRequest:
 		context.RouteMutationBlocked = true
 		context.RouteMutationBlockedBy = "pending_request"
+		return context
+	case surfaceRouteMutationBlockReviewRunning:
+		context.RouteMutationBlocked = true
+		context.RouteMutationBlockedBy = "review_running"
 	}
 	return context
 }

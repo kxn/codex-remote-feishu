@@ -50,7 +50,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
 
-	events := s.prepareSurfaceForExecutionReattach(surface)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, options.OverlayCleanup)
 
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
 		AttachedInstanceID: inst.InstanceID,
@@ -67,7 +67,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	}
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	if options.PrepareNewThread {
-		return s.prepareNewThread(surface)
+		return s.prepareNewThreadWithOverlayCleanup(surface, options.OverlayCleanup)
 	}
 
 	noticeCode := "workspace_attached"
@@ -144,7 +144,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	events := s.prepareSurfaceForExecutionReattach(surface)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if s.surfaceIsVSCode(surface) {
@@ -284,6 +284,10 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
+	cleanup := surfaceOverlayRouteCleanupOptions{}
+	if record := s.activeTargetPicker(surface); targetPickerPendingStillRunning(surface, record) {
+		cleanup.PreserveTargetPicker = true
+	}
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}
@@ -296,7 +300,10 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 			ClaudeProfileID: pending.ClaudeProfileID,
 		})
 		if pending.PrepareNewThread {
-			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{PrepareNewThread: true})
+			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{
+				PrepareNewThread: true,
+				OverlayCleanup:   cleanup,
+			})
 		}
 		return s.attachWorkspace(surface, pending.ThreadCWD)
 	}
@@ -324,7 +331,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		if pending.AutoRestore {
 			mode = attachSurfaceToKnownThreadHeadlessRestore
 		}
-		return s.attachSurfaceToKnownThread(surface, inst, view, mode)
+		return s.attachSurfaceToKnownThreadWithOverlayCleanup(surface, inst, view, mode, cleanup)
 	}
 	s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
 	events := []eventcontract.Event{}

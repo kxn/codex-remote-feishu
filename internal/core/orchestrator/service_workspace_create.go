@@ -120,6 +120,10 @@ func (s *Service) startFreshWorkspaceHeadless(surface *state.SurfaceConsoleRecor
 }
 
 func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceConsoleRecord, workspaceKey string, prepareNewThread bool) []eventcontract.Event {
+	return s.startFreshWorkspaceHeadlessWithOverlayCleanup(surface, workspaceKey, prepareNewThread, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.SurfaceConsoleRecord, workspaceKey string, prepareNewThread bool, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
@@ -137,7 +141,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-workspace-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	events := s.prepareSurfaceForExecutionReattach(surface)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, cleanup)
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 	}

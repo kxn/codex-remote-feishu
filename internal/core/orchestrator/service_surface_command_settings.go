@@ -288,7 +288,7 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 		return notice(surface, "claude_profile_current", text)
 	}
 
-	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+	if blocked := s.blockRouteMutation(surface); blocked != nil {
 		if commandCardOwnsInlineResult(action) {
 			text := ""
 			if len(blocked) > 0 && blocked[0].Notice != nil {

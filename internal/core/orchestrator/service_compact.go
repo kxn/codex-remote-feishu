@@ -17,7 +17,7 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
-	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+	if blocked := s.blockRouteMutation(surface); blocked != nil {
 		return blocked
 	}
 	threadID := strings.TrimSpace(surface.SelectedThreadID)

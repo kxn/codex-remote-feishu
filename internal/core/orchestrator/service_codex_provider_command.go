@@ -68,7 +68,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 		return notice(surface, "codex_provider_current", text)
 	}
 
-	if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+	if blocked := s.blockRouteMutation(surface); blocked != nil {
 		if commandCardOwnsInlineResult(action) {
 			text := ""
 			if len(blocked) > 0 && blocked[0].Notice != nil {

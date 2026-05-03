@@ -342,7 +342,6 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		}
 		events = s.presentInstanceSelectionWithAction(surface, action, false)
 	case control.ActionWorkspaceDetach:
-		s.clearWorkspacePageRuntime(surface)
 		events = s.detach(surface)
 	case control.ActionNewThread:
 		events = s.prepareNewThread(surface)

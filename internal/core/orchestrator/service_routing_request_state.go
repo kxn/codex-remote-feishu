@@ -36,6 +36,7 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []eventcont
 			}) {
 				continue
 			}
+			events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）")...)
 			events = append(events, s.reevaluateFollowSurface(surface)...)
 		default:
@@ -46,6 +47,7 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []eventcont
 			}) {
 				continue
 			}
+			events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{})...)
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeUnbound), "未选择会话")...)
 			events = append(events, eventcontract.Event{
 				Kind:             eventcontract.KindNotice,

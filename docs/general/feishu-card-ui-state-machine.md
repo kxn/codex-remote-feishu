@@ -695,12 +695,20 @@ MCP request 卡片当前新增的可视语义：
     - 它现在对应的是 owner-card runtime v1 的 `flow id`
     - `history_page` / `history_detail` 必须命中当前 surface 上仍然 active 的 history owner-card flow
     - 同 daemon 生命周期里的旧 history 卡如果 `picker_id` 不匹配、flow 已过期，或点击者不是当前 flow owner，会收到失效/无权限提示，而不会继续改写当前卡
+  - `review commit picker` 与 workspace page 当前也属于 context-bound owner runtime
+    - review commit picker 若仍命中当前 owner flow，会继续 patch 同一张卡；若 route / attach 上下文已经变化，只要还保留 `message_id`，服务端就会主动把它封成 sealed `已失效` 页
+    - workspace page 也是同一条规则：有稳定 `message_id` 时，detach / reattach / route-change 会直接把旧页 patch 成只读失败态；没有 anchor 时只清 runtime，不伪造补封
+  - context-bound overlay 当前还会在 route / attach 变化时统一经过 cleanup seam
+    - active path picker 优先 patch 当前可见子卡；如果它其实只是 target-picker owner-subpage，而父 target picker 隐藏在同一张 owner message 后面，则隐藏父卡 runtime 只静默清掉，避免 double patch
+    - target picker、history、review commit picker、workspace page 只要仍有稳定 anchor，就会主动 patch 成 sealed `已失效` 态；没有 anchor 时退化为 runtime cleanup + 后续 callback fail-closed
+    - idle review session 会随这条 seam 一起清掉；只有 `ReviewSession.ActiveTurnID` 非空的 running review 会改为 route-mutation blocker，而不是被静默清理
 
 因此当前的 same-daemon 并发点击 / 旧 view 点击策略是：
 
 - pure navigation：允许，按当前 surface state 重建
 - 产品动作：不走 inline replace，仍按 append-only 产品语义处理
 - old daemon card：直接拒绝并提示重开卡片
+- route / attach 上下文已变化但仍有稳定 owner anchor 的旧卡：优先主动 seal 成已失效态，而不是继续把“第一次再点旧卡才发现过期”留给用户
 
 ## 7. 当前回归基线
 
@@ -723,6 +731,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/adapter/feishu/projector/request.go](../../internal/adapter/feishu/projector/request.go)
 - [internal/core/orchestrator/service_ui_runtime.go](../../internal/core/orchestrator/service_ui_runtime.go)
 - [internal/core/orchestrator/service_target_picker_owner_card.go](../../internal/core/orchestrator/service_target_picker_owner_card.go)
+- [internal/core/orchestrator/service_overlay_runtime.go](../../internal/core/orchestrator/service_overlay_runtime.go)
 - [internal/core/orchestrator/service_feishu_ui_context.go](../../internal/core/orchestrator/service_feishu_ui_context.go)
 - [internal/adapter/feishu/projector_exec_command_progress.go](../../internal/adapter/feishu/projector_exec_command_progress.go)
 - [internal/adapter/codex/translator_helpers.go](../../internal/adapter/codex/translator_helpers.go)
@@ -827,6 +836,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 `/sendfile` 当前会在独立 file picker 卡上完成启动前校验与 terminal handoff：cancel、启动前失败继续 patch 当前卡、启动成功封成 `已开始发送，可继续其他操作`、后台成功不额外发成功卡、后台失败只补轻量 notice；menu handoff 路径也会复用同一张 picker/message id
 - [internal/core/orchestrator/service_thread_history_view_test.go](../../internal/core/orchestrator/service_thread_history_view_test.go)
   - 锁定 `/history` 已迁到 owner-card runtime v1：flow 建立、loading/resolved phase 推进、列表/详情回填与 message patch 目标不漂移
+- [internal/core/orchestrator/service_overlay_runtime_test.go](../../internal/core/orchestrator/service_overlay_runtime_test.go)
+  - 锁定 detach / route-change cleanup 会主动 seal context-bound overlay、清掉 idle review session，并在 running review turn 下暴露 `review_running` route blocker
 - [internal/app/daemon/app_thread_history_test.go](../../internal/app/daemon/app_thread_history_test.go)
   - 锁定 history daemon command 的分发、pending 跟踪、reject/loaded/failure 的收口行为
 - [internal/app/daemon/app_history_card_test.go](../../internal/app/daemon/app_history_card_test.go)
@@ -895,6 +906,7 @@ MCP request 卡片当前新增的可视语义：
 7. target picker confirm 是否会对 stale 选择 silent fallback 到别的默认候选
 8. request prompt / selection prompt / path picker / target picker 是否把产品状态机职责偷渡进 Feishu UI 层
 9. `/history` 的 owner-card runtime 与 history 业务态是否仍保持单一真相源，而不是重新长回两套 owner lifecycle
+10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
 
 ## 待讨论取舍
 

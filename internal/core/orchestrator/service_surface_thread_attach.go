@@ -11,25 +11,37 @@ import (
 )
 
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) []eventcontract.Event {
+	return s.useThreadWithOverlayCleanup(surface, threadID, allowCrossWorkspace, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) useThreadPreservingTargetPicker(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) []eventcontract.Event {
+	return s.useThreadWithOverlayCleanup(surface, threadID, allowCrossWorkspace, surfaceOverlayRouteCleanupOptions{PreserveTargetPicker: true})
+}
+
+func (s *Service) useThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	threadID = strings.TrimSpace(threadID)
 	target := s.resolveThreadTargetWithScope(surface, threadID, allowCrossWorkspace)
-	return s.executeResolvedThreadTarget(surface, threadID, target)
+	return s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, target, cleanup)
 }
 
 func (s *Service) executeResolvedThreadTarget(surface *state.SurfaceConsoleRecord, threadID string, target resolvedThreadTarget) []eventcontract.Event {
+	return s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, target, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) executeResolvedThreadTargetWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, target resolvedThreadTarget, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	switch target.Mode {
 	case threadAttachCurrentVisible:
-		return s.useAttachedVisibleThread(surface, threadID)
+		return s.useAttachedVisibleThreadModeWithOverlayCleanup(surface, threadID, s.surfaceThreadPickRouteMode(surface), cleanup)
 	case threadAttachFreeVisible, threadAttachReuseHeadless:
 		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
 			return blocked
 		}
-		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadDefault)
+		return s.attachSurfaceToKnownThreadWithOverlayCleanup(surface, target.Instance, target.View, attachSurfaceToKnownThreadDefault, cleanup)
 	case threadAttachCreateHeadless:
 		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
 			return blocked
 		}
-		return s.startHeadlessForResolvedThread(surface, target.View)
+		return s.startHeadlessForResolvedThreadWithOverlayCleanup(surface, target.View, cleanup)
 	default:
 		code := firstNonEmpty(target.NoticeCode, "thread_not_found")
 		text := firstNonEmpty(target.NoticeText, "目标会话不存在或当前不可见。")
@@ -42,12 +54,16 @@ func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, 
 }
 
 func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleRecord, threadID string, routeMode state.RouteMode) []eventcontract.Event {
+	return s.useAttachedVisibleThreadModeWithOverlayCleanup(surface, threadID, routeMode, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) useAttachedVisibleThreadModeWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, routeMode state.RouteMode, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
-	if (surface.RouteMode != routeMode || surface.SelectedThreadID != threadID) && s.surfaceHasRouteMutationRequestState(surface) {
-		if blocked := s.blockRouteMutationForRequestState(surface); blocked != nil {
+	if (surface.RouteMode != routeMode || surface.SelectedThreadID != threadID) && s.surfaceHasRouteMutationBlocker(surface) {
+		if blocked := s.blockRouteMutation(surface); blocked != nil {
 			return blocked
 		}
 	}
@@ -97,6 +113,7 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
 	}
 	events = append(events, s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到其他会话，之前的提案计划已失效。")...)
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", cleanup)...)
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
 	title := threadID
 	thread = s.ensureThread(inst, threadID)
@@ -111,6 +128,10 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, view *mergedThreadView, mode attachSurfaceToKnownThreadMode) []eventcontract.Event {
+	return s.attachSurfaceToKnownThreadWithOverlayCleanup(surface, inst, view, mode, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, view *mergedThreadView, mode attachSurfaceToKnownThreadMode, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil || inst == nil || view == nil || strings.TrimSpace(view.ThreadID) == "" {
 		return nil
 	}
@@ -146,7 +167,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	events := s.prepareSurfaceForExecutionReattach(surface)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, cleanup)
 	surface.Backend = instanceBackend
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
@@ -251,7 +272,11 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 }
 
 func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRecord, view *mergedThreadView) []eventcontract.Event {
-	return s.startHeadlessForResolvedThreadWithMode(surface, view, startHeadlessModeDefault)
+	return s.startHeadlessForResolvedThreadWithOverlayCleanup(surface, view, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) startHeadlessForResolvedThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, view *mergedThreadView, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
+	return s.startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface, view, startHeadlessModeDefault, cleanup)
 }
 
 func attachSurfaceToKnownThreadInstanceBusyNotice(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, mode attachSurfaceToKnownThreadMode) []eventcontract.Event {
@@ -312,6 +337,10 @@ func attachSurfaceToKnownThreadWorkspaceBusyNotice(surface *state.SurfaceConsole
 }
 
 func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode) []eventcontract.Event {
+	return s.startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface, view, mode, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface *state.SurfaceConsoleRecord, view *mergedThreadView, mode startHeadlessMode, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil || view == nil {
 		return nil
 	}
@@ -351,7 +380,7 @@ func (s *Service) startHeadlessForResolvedThreadWithMode(surface *state.SurfaceC
 		sourceInstanceID = view.Inst.InstanceID
 	}
 
-	events := s.prepareSurfaceForExecutionReattach(surface)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, cleanup)
 	if !s.claimWorkspace(surface, cwd) {
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			if mode == startHeadlessModeHeadlessRestore {

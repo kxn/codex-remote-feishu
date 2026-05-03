@@ -11,6 +11,14 @@ import (
 )
 
 func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.prepareNewThreadWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) prepareNewThreadPreservingTargetPicker(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.prepareNewThreadWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{PreserveTargetPicker: true})
+}
+
+func (s *Service) prepareNewThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if !s.surfaceIsHeadless(surface) {
 		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 headless 模式可用。请先 `/mode codex` 或 `/mode claude`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
 	}
@@ -83,6 +91,7 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 		return append(events, notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")...)
 	}
 	surface.PreparedAt = s.now()
+	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", cleanup)...)
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeNewThreadReady)...)
 	events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle())...)
 	text := "已清空当前远端上下文。下一条文本会创建新会话。"
