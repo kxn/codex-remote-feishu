@@ -114,9 +114,6 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	}
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
-		if effort := state.NormalizeReasoningEffort(command.ClaudeReasoningEffort); effort != "" {
-			env = append(env, config.ClaudeEffortLevelEnv+"="+effort)
-		}
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
 	env, launchArgs, err := a.applyCodexHeadlessProviderConfig(env, launchArgs, backend, command.CodexProviderID)
@@ -150,6 +147,11 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			ThreadID:         command.ThreadID,
 			Retryable:        true,
 		}))
+	}
+	if backend == agentproto.BackendClaude {
+		if effort := state.NormalizeClaudeReasoningEffort(command.ClaudeReasoningEffort); effort != "" {
+			env = config.UpsertEnvValue(env, config.ClaudeEffortLevelEnv, effort)
+		}
 	}
 	if strings.TrimSpace(command.ThreadCWD) == "" {
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")

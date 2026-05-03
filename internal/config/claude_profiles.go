@@ -35,13 +35,14 @@ type ClaudeSettings struct {
 }
 
 type ClaudeProfileConfig struct {
-	ID         string `json:"id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	AuthMode   string `json:"authMode,omitempty"`
-	BaseURL    string `json:"baseURL,omitempty"`
-	AuthToken  string `json:"authToken,omitempty"`
-	Model      string `json:"model,omitempty"`
-	SmallModel string `json:"smallModel,omitempty"`
+	ID              string `json:"id,omitempty"`
+	Name            string `json:"name,omitempty"`
+	AuthMode        string `json:"authMode,omitempty"`
+	BaseURL         string `json:"baseURL,omitempty"`
+	AuthToken       string `json:"authToken,omitempty"`
+	Model           string `json:"model,omitempty"`
+	SmallModel      string `json:"smallModel,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 type ClaudeProfile struct {
@@ -68,6 +69,16 @@ func NormalizeClaudeAuthMode(value string) string {
 		return ClaudeAuthModeAuthToken
 	default:
 		return ClaudeAuthModeInherit
+	}
+}
+
+func NormalizeClaudeReasoningEffort(value string) string {
+	effort := strings.ToLower(strings.TrimSpace(value))
+	switch effort {
+	case "low", "medium", "high", "max":
+		return effort
+	default:
+		return ""
 	}
 }
 
@@ -122,13 +133,14 @@ func NormalizeClaudeProfiles(profiles []ClaudeProfileConfig) []ClaudeProfileConf
 	}
 	for _, profile := range profiles {
 		current := ClaudeProfileConfig{
-			ID:         strings.TrimSpace(profile.ID),
-			Name:       strings.TrimSpace(profile.Name),
-			AuthMode:   NormalizeClaudeAuthMode(profile.AuthMode),
-			BaseURL:    strings.TrimSpace(profile.BaseURL),
-			AuthToken:  strings.TrimSpace(profile.AuthToken),
-			Model:      strings.TrimSpace(profile.Model),
-			SmallModel: strings.TrimSpace(profile.SmallModel),
+			ID:              strings.TrimSpace(profile.ID),
+			Name:            strings.TrimSpace(profile.Name),
+			AuthMode:        NormalizeClaudeAuthMode(profile.AuthMode),
+			BaseURL:         strings.TrimSpace(profile.BaseURL),
+			AuthToken:       strings.TrimSpace(profile.AuthToken),
+			Model:           strings.TrimSpace(profile.Model),
+			SmallModel:      strings.TrimSpace(profile.SmallModel),
+			ReasoningEffort: NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
 		}
 		current.ID = nextClaudeProfileID(current.ID, current.Name, used)
 		if strings.TrimSpace(current.Name) == "" {
@@ -202,6 +214,9 @@ func ApplyClaudeProfileLaunchEnv(baseEnv []string, profile ClaudeProfile) ([]str
 	}
 	if value := strings.TrimSpace(profile.SmallModel); value != "" {
 		env = upsertEnvValue(env, ClaudeDefaultHaikuModelEnv, value)
+	}
+	if value := NormalizeClaudeReasoningEffort(profile.ReasoningEffort); value != "" {
+		env = upsertEnvValue(env, ClaudeEffortLevelEnv, value)
 	}
 	return env, nil
 }

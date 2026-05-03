@@ -12,16 +12,17 @@ type adminClaudeSettingsView struct {
 }
 
 type adminClaudeProfileView struct {
-	ID           string `json:"id"`
-	Name         string `json:"name,omitempty"`
-	AuthMode     string `json:"authMode,omitempty"`
-	BaseURL      string `json:"baseURL,omitempty"`
-	HasAuthToken bool   `json:"hasAuthToken"`
-	Model        string `json:"model,omitempty"`
-	SmallModel   string `json:"smallModel,omitempty"`
-	BuiltIn      bool   `json:"builtIn,omitempty"`
-	Persisted    bool   `json:"persisted"`
-	ReadOnly     bool   `json:"readOnly,omitempty"`
+	ID              string `json:"id"`
+	Name            string `json:"name,omitempty"`
+	AuthMode        string `json:"authMode,omitempty"`
+	BaseURL         string `json:"baseURL,omitempty"`
+	HasAuthToken    bool   `json:"hasAuthToken"`
+	Model           string `json:"model,omitempty"`
+	SmallModel      string `json:"smallModel,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	BuiltIn         bool   `json:"builtIn,omitempty"`
+	Persisted       bool   `json:"persisted"`
+	ReadOnly        bool   `json:"readOnly,omitempty"`
 }
 
 type claudeProfilesResponse struct {
@@ -33,11 +34,12 @@ type claudeProfileResponse struct {
 }
 
 type claudeProfileWriteRequest struct {
-	Name       *string `json:"name"`
-	BaseURL    *string `json:"baseURL"`
-	AuthToken  *string `json:"authToken"`
-	Model      *string `json:"model"`
-	SmallModel *string `json:"smallModel"`
+	Name            *string `json:"name"`
+	BaseURL         *string `json:"baseURL"`
+	AuthToken       *string `json:"authToken"`
+	Model           *string `json:"model"`
+	SmallModel      *string `json:"smallModel"`
+	ReasoningEffort *string `json:"reasoningEffort"`
 }
 
 func (a *App) handleClaudeProfilesList(w http.ResponseWriter, _ *http.Request) {
@@ -98,18 +100,22 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	profile := config.ClaudeProfileConfig{
-		ID:         profileID,
-		Name:       name,
-		AuthMode:   config.ClaudeAuthModeAuthToken,
-		BaseURL:    optionalStringValue(req.BaseURL),
-		AuthToken:  optionalStringValue(req.AuthToken),
-		Model:      optionalStringValue(req.Model),
-		SmallModel: optionalStringValue(req.SmallModel),
+		ID:              profileID,
+		Name:            name,
+		AuthMode:        config.ClaudeAuthModeAuthToken,
+		BaseURL:         optionalStringValue(req.BaseURL),
+		AuthToken:       optionalStringValue(req.AuthToken),
+		Model:           optionalStringValue(req.Model),
+		SmallModel:      optionalStringValue(req.SmallModel),
+		ReasoningEffort: config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort)),
 	}
 	if index := config.IndexOfClaudeProfile(updated.Claude.Profiles, profileID); index >= 0 {
 		current := updated.Claude.Profiles[index]
 		if strings.TrimSpace(profile.AuthToken) == "" {
 			profile.AuthToken = strings.TrimSpace(current.AuthToken)
+		}
+		if req.ReasoningEffort == nil {
+			profile.ReasoningEffort = config.NormalizeClaudeReasoningEffort(current.ReasoningEffort)
 		}
 		updated.Claude.Profiles[index] = profile
 	} else {
@@ -227,6 +233,9 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if req.AuthToken != nil {
 		current.AuthToken = optionalStringValue(req.AuthToken)
 	}
+	if req.ReasoningEffort != nil {
+		current.ReasoningEffort = config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort))
+	}
 	updated.Claude.Profiles[index] = current
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
 		a.adminConfigMu.Unlock()
@@ -322,16 +331,17 @@ func adminClaudeProfilesView(cfg config.AppConfig) []adminClaudeProfileView {
 
 func adminClaudeProfileViewFromConfig(profile config.ClaudeProfile) adminClaudeProfileView {
 	return adminClaudeProfileView{
-		ID:           strings.TrimSpace(profile.ID),
-		Name:         strings.TrimSpace(profile.Name),
-		AuthMode:     config.NormalizeClaudeAuthMode(profile.AuthMode),
-		BaseURL:      strings.TrimSpace(profile.BaseURL),
-		HasAuthToken: strings.TrimSpace(profile.AuthToken) != "",
-		Model:        strings.TrimSpace(profile.Model),
-		SmallModel:   strings.TrimSpace(profile.SmallModel),
-		BuiltIn:      profile.BuiltIn,
-		Persisted:    !profile.BuiltIn,
-		ReadOnly:     profile.BuiltIn,
+		ID:              strings.TrimSpace(profile.ID),
+		Name:            strings.TrimSpace(profile.Name),
+		AuthMode:        config.NormalizeClaudeAuthMode(profile.AuthMode),
+		BaseURL:         strings.TrimSpace(profile.BaseURL),
+		HasAuthToken:    strings.TrimSpace(profile.AuthToken) != "",
+		Model:           strings.TrimSpace(profile.Model),
+		SmallModel:      strings.TrimSpace(profile.SmallModel),
+		ReasoningEffort: config.NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
+		BuiltIn:         profile.BuiltIn,
+		Persisted:       !profile.BuiltIn,
+		ReadOnly:        profile.BuiltIn,
 	}
 }
 

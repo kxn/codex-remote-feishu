@@ -27,6 +27,7 @@ type ClaudeProfileDraft = {
   authToken: string;
   model: string;
   smallModel: string;
+  reasoningEffort: string;
 };
 
 type ClaudeProfileSectionProps = {
@@ -37,6 +38,7 @@ type ClaudeProfileSectionProps = {
 };
 
 const newClaudeProfileID = "new-claude-profile";
+const claudeReasoningOptions = ["low", "medium", "high", "max"] as const;
 
 export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
   const { profiles, loadError, setProfiles, onReload } = props;
@@ -508,6 +510,25 @@ function renderDetailCard(props: DetailCardProps) {
               }
             />
           </label>
+          <label className="field">
+            <span>推理强度</span>
+            <select
+              value={draft.reasoningEffort}
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  reasoningEffort: event.target.value,
+                }))
+              }
+            >
+              <option value="">不设置</option>
+              {claudeReasoningOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="button-row">
@@ -552,6 +573,7 @@ function createEmptyDraft(): ClaudeProfileDraft {
     authToken: "",
     model: "",
     smallModel: "",
+    reasoningEffort: "",
   };
 }
 
@@ -562,6 +584,7 @@ function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDra
     authToken: "",
     model: profile.model?.trim() || "",
     smallModel: profile.smallModel?.trim() || "",
+    reasoningEffort: normalizeClaudeReasoningEffort(profile.reasoningEffort),
   };
 }
 
@@ -579,6 +602,7 @@ function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     authToken: optionalString(draft.authToken),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
+    reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
 }
 
@@ -591,6 +615,7 @@ function buildUpdatePayload(
     baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
+    reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
   const authToken = optionalString(draft.authToken);
   if (authToken) {
@@ -624,6 +649,13 @@ function removeProfile(
 function optionalString(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeClaudeReasoningEffort(value: string | undefined): string {
+  const trimmed = value?.trim().toLowerCase() ?? "";
+  return claudeReasoningOptions.includes(trimmed as (typeof claudeReasoningOptions)[number])
+    ? trimmed
+    : "";
 }
 
 function profileTitle(profile: ClaudeProfileSummary | null): string {

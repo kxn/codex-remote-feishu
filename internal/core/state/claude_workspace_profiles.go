@@ -33,14 +33,16 @@ func ClaudeWorkspaceProfileSnapshotStorageKey(workspaceKey string, backend agent
 }
 
 type ClaudeProfileRecord struct {
-	ID      string
-	Name    string
-	BuiltIn bool
+	ID              string
+	Name            string
+	ReasoningEffort string
+	BuiltIn         bool
 }
 
 func NormalizeClaudeProfileRecord(value ClaudeProfileRecord) ClaudeProfileRecord {
 	value.ID = NormalizeClaudeProfileID(value.ID)
 	value.Name = strings.TrimSpace(value.Name)
+	value.ReasoningEffort = NormalizeClaudeReasoningEffort(value.ReasoningEffort)
 	if value.Name == "" {
 		if value.ID == DefaultClaudeProfileID {
 			value.Name = DefaultClaudeProfileName

@@ -116,6 +116,47 @@ func TestDispatchNextRestartsClaudeHeadlessForQueuedReasoningMismatch(t *testing
 	}
 }
 
+func TestDispatchNextRestartsClaudeHeadlessBackToProfileReasoning(t *testing.T) {
+	svc, surface, inst := newClaudeHeadlessPreflightService(t)
+	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{
+		ID:              "devseek",
+		Name:            "DevSeek",
+		ReasoningEffort: "high",
+	}})
+	inst.ClaudeReasoningEffort = "max"
+	surface.PromptOverride = state.ModelConfigRecord{}
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenThreadID:        "thread-1",
+		FrozenCWD:             "/data/dl/repo",
+		FrozenExecutionMode:   agentproto.PromptExecutionModeResumeExisting,
+		FrozenOverride: state.ModelConfigRecord{
+			AccessMode: agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:     state.PlanModeSettingOff,
+		RouteModeAtEnqueue: state.RouteModePinned,
+		Status:             state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+
+	events := svc.dispatchNext(surface)
+
+	if surface.PendingHeadless == nil || surface.PendingHeadless.ClaudeReasoningEffort != "high" {
+		t.Fatalf("expected restart pending headless to fall back to profile reasoning, got %#v", surface.PendingHeadless)
+	}
+	if len(events) != 3 || events[2].DaemonCommand == nil || events[2].DaemonCommand.ClaudeReasoningEffort != "high" {
+		t.Fatalf("expected restart start command to use profile reasoning, got %#v", events)
+	}
+}
+
 func TestApplyInstanceConnectedAfterClaudePromptRestartDispatchesQueuedItem(t *testing.T) {
 	svc, surface, _ := newClaudeHeadlessPreflightService(t)
 	surface.QueueItems["queue-1"] = &state.QueueItemRecord{

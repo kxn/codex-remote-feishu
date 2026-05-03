@@ -10,13 +10,14 @@ func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 	cfg := DefaultAppConfig()
 	cfg.Claude.Profiles = []ClaudeProfileConfig{
 		{
-			ID:         " default ",
-			Name:       " Proxy Profile ",
-			AuthMode:   " AUTH_TOKEN ",
-			BaseURL:    " https://proxy.internal/v1 ",
-			AuthToken:  " secret-token ",
-			Model:      " mimo-v2.5-pro ",
-			SmallModel: " mimo-v2.5-haiku ",
+			ID:              " default ",
+			Name:            " Proxy Profile ",
+			AuthMode:        " AUTH_TOKEN ",
+			BaseURL:         " https://proxy.internal/v1 ",
+			AuthToken:       " secret-token ",
+			Model:           " mimo-v2.5-pro ",
+			SmallModel:      " mimo-v2.5-haiku ",
+			ReasoningEffort: " MAX ",
 		},
 		{
 			Name:     "Dev Seek",
@@ -46,7 +47,7 @@ func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 	if profiles[0].AuthMode != ClaudeAuthModeAuthToken || profiles[0].BaseURL != "https://proxy.internal/v1" || profiles[0].AuthToken != "secret-token" {
 		t.Fatalf("unexpected normalized auth fields: %#v", profiles[0])
 	}
-	if profiles[0].Model != "mimo-v2.5-pro" || profiles[0].SmallModel != "mimo-v2.5-haiku" {
+	if profiles[0].Model != "mimo-v2.5-pro" || profiles[0].SmallModel != "mimo-v2.5-haiku" || profiles[0].ReasoningEffort != "max" {
 		t.Fatalf("unexpected normalized model fields: %#v", profiles[0])
 	}
 
@@ -61,13 +62,14 @@ func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	cfg := DefaultAppConfig()
 	cfg.Claude.Profiles = []ClaudeProfileConfig{{
-		ID:         "devseek",
-		Name:       "DevSeek",
-		AuthMode:   ClaudeAuthModeAuthToken,
-		BaseURL:    "https://proxy.internal/v1",
-		AuthToken:  "profile-token",
-		Model:      "mimo-v2.5-pro",
-		SmallModel: "mimo-v2.5-haiku",
+		ID:              "devseek",
+		Name:            "DevSeek",
+		AuthMode:        ClaudeAuthModeAuthToken,
+		BaseURL:         "https://proxy.internal/v1",
+		AuthToken:       "profile-token",
+		Model:           "mimo-v2.5-pro",
+		SmallModel:      "mimo-v2.5-haiku",
+		ReasoningEffort: "high",
 	}}
 
 	listed := ListClaudeProfiles(cfg)
@@ -92,6 +94,7 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 		ClaudeAuthTokenEnv + "=old-token",
 		ClaudeModelEnv + "=old-model",
 		ClaudeDefaultHaikuModelEnv + "=old-small-model",
+		ClaudeEffortLevelEnv + "=old-effort",
 	}
 	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, customProfile)
 	if err != nil {
@@ -115,6 +118,19 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	}
 	if value, ok := lookupEnvValue(updatedEnv, ClaudeDefaultHaikuModelEnv); !ok || value != "mimo-v2.5-haiku" {
 		t.Fatalf("unexpected small model env: %#v", updatedEnv)
+	}
+	if value, ok := lookupEnvValue(updatedEnv, ClaudeEffortLevelEnv); !ok || value != "high" {
+		t.Fatalf("unexpected reasoning env: %#v", updatedEnv)
+	}
+
+	noReasoningProfile := customProfile
+	noReasoningProfile.ReasoningEffort = ""
+	noReasoningEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, noReasoningProfile)
+	if err != nil {
+		t.Fatalf("ApplyClaudeProfileLaunchEnv(no reasoning): %v", err)
+	}
+	if value, ok := lookupEnvValue(noReasoningEnv, ClaudeEffortLevelEnv); !ok || value != "old-effort" {
+		t.Fatalf("expected unset profile reasoning to preserve system default effort, got %#v", noReasoningEnv)
 	}
 
 	defaultEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, defaultProfile)

@@ -15,13 +15,14 @@ import (
 func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Claude.Profiles = []config.ClaudeProfileConfig{{
-		ID:         "devseek",
-		Name:       "DevSeek",
-		AuthMode:   config.ClaudeAuthModeAuthToken,
-		BaseURL:    "https://proxy.internal/v1",
-		AuthToken:  "profile-token",
-		Model:      "mimo-v2.5-pro",
-		SmallModel: "mimo-v2.5-haiku",
+		ID:              "devseek",
+		Name:            "DevSeek",
+		AuthMode:        config.ClaudeAuthModeAuthToken,
+		BaseURL:         "https://proxy.internal/v1",
+		AuthToken:       "profile-token",
+		Model:           "mimo-v2.5-pro",
+		SmallModel:      "mimo-v2.5-haiku",
+		ReasoningEffort: "medium",
 	}}
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -40,6 +41,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 			config.ClaudeAuthTokenEnv + "=old-token",
 			config.ClaudeModelEnv + "=old-model",
 			config.ClaudeDefaultHaikuModelEnv + "=old-small-model",
+			config.ClaudeEffortLevelEnv + "=old-effort",
 		},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),

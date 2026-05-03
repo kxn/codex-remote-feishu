@@ -92,7 +92,7 @@ func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLa
 	}
 	if contract.Backend == agentproto.BackendClaude {
 		contract.ClaudeProfileID = NormalizeClaudeProfileID(contract.ClaudeProfileID)
-		contract.ClaudeReasoningEffort = NormalizeReasoningEffort(contract.ClaudeReasoningEffort)
+		contract.ClaudeReasoningEffort = NormalizeClaudeReasoningEffort(contract.ClaudeReasoningEffort)
 	} else {
 		contract.ClaudeProfileID = ""
 		contract.ClaudeReasoningEffort = ""

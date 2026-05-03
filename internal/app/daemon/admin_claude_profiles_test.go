@@ -17,7 +17,8 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
   "baseURL":"https://proxy.internal/v1",
   "authToken":"secret-token",
   "model":"mimo-v2.5-pro",
-  "smallModel":"mimo-v2.5-haiku"
+  "smallModel":"mimo-v2.5-haiku",
+  "reasoningEffort":"HIGH"
 }`)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want 201 body=%s", createRec.Code, createRec.Body.String())
@@ -29,10 +30,10 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if createResp.Profile.ID != "devseek" || !createResp.Profile.HasAuthToken || createResp.Profile.BuiltIn || createResp.Profile.ReadOnly {
+	if createResp.Profile.ID != "devseek" || !createResp.Profile.HasAuthToken || createResp.Profile.ReasoningEffort != "high" || createResp.Profile.BuiltIn || createResp.Profile.ReadOnly {
 		t.Fatalf("unexpected create response: %#v", createResp.Profile)
 	}
-	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].ID != "devseek" {
+	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].ID != "devseek" || got[1].ReasoningEffort != "high" {
 		t.Fatalf("expected runtime catalog to include default + devseek after create, got %#v", got)
 	}
 
@@ -52,7 +53,7 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if len(loaded.Config.Claude.Profiles) != 1 {
 		t.Fatalf("expected idempotent same-name create to keep one profile, got %#v", loaded.Config.Claude.Profiles)
 	}
-	if loaded.Config.Claude.Profiles[0].AuthToken != "secret-token" || loaded.Config.Claude.Profiles[0].BaseURL != "https://proxy.retry/v1" {
+	if loaded.Config.Claude.Profiles[0].AuthToken != "secret-token" || loaded.Config.Claude.Profiles[0].BaseURL != "https://proxy.retry/v1" || loaded.Config.Claude.Profiles[0].ReasoningEffort != "high" {
 		t.Fatalf("expected retry create to update visible fields and keep token, got %#v", loaded.Config.Claude.Profiles)
 	}
 
@@ -70,7 +71,7 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if listResp.Profiles[0].ID != config.ClaudeDefaultProfileID || !listResp.Profiles[0].BuiltIn || !listResp.Profiles[0].ReadOnly || listResp.Profiles[0].Persisted {
 		t.Fatalf("unexpected built-in default profile view: %#v", listResp.Profiles[0])
 	}
-	if listResp.Profiles[1].ID != "devseek" || listResp.Profiles[1].BaseURL != "https://proxy.retry/v1" || !listResp.Profiles[1].Persisted {
+	if listResp.Profiles[1].ID != "devseek" || listResp.Profiles[1].BaseURL != "https://proxy.retry/v1" || listResp.Profiles[1].ReasoningEffort != "high" || !listResp.Profiles[1].Persisted {
 		t.Fatalf("unexpected custom profile view: %#v", listResp.Profiles[1])
 	}
 
@@ -93,7 +94,8 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
   "name":"DevSeek 2",
   "baseURL":"https://proxy.second/v1",
   "model":"",
-  "smallModel":""
+  "smallModel":"",
+  "reasoningEffort":""
 }`)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want 200 body=%s", updateRec.Code, updateRec.Body.String())
@@ -105,10 +107,10 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	if updateResp.Profile.ID != "devseek-2" || updateResp.Profile.Name != "DevSeek 2" || updateResp.Profile.AuthMode != config.ClaudeAuthModeAuthToken || !updateResp.Profile.HasAuthToken {
 		t.Fatalf("unexpected update response: %#v", updateResp.Profile)
 	}
-	if updateResp.Profile.BaseURL != "https://proxy.second/v1" || updateResp.Profile.Model != "" || updateResp.Profile.SmallModel != "" {
+	if updateResp.Profile.BaseURL != "https://proxy.second/v1" || updateResp.Profile.Model != "" || updateResp.Profile.SmallModel != "" || updateResp.Profile.ReasoningEffort != "" {
 		t.Fatalf("expected cleared override fields, got %#v", updateResp.Profile)
 	}
-	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].ID != "devseek-2" || got[1].Name != "DevSeek 2" {
+	if got := app.service.ClaudeProfiles(); len(got) != 2 || got[1].ID != "devseek-2" || got[1].Name != "DevSeek 2" || got[1].ReasoningEffort != "" {
 		t.Fatalf("expected runtime catalog to reflect update, got %#v", got)
 	}
 

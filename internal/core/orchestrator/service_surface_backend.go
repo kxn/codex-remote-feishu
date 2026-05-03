@@ -32,12 +32,18 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 }
 
 func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) state.HeadlessLaunchContract {
-	return state.HeadlessLaunchContractFromSurface(surface)
+	contract := state.HeadlessLaunchContractFromSurface(surface)
+	if contract.Backend == agentproto.BackendClaude {
+		contract.ClaudeReasoningEffort = s.effectiveClaudeReasoningEffort(surface, surfacePromptOverride(surface))
+	}
+	return state.NormalizeHeadlessLaunchContract(contract)
 }
 
 func (s *Service) headlessLaunchContractWithOverride(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) state.HeadlessLaunchContract {
 	contract := s.headlessLaunchContract(surface)
-	contract.ClaudeReasoningEffort = override.ReasoningEffort
+	if contract.Backend == agentproto.BackendClaude {
+		contract.ClaudeReasoningEffort = s.effectiveClaudeReasoningEffort(surface, override)
+	}
 	return state.NormalizeHeadlessLaunchContract(contract)
 }
 
@@ -55,6 +61,23 @@ func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, co
 func (s *Service) surfaceModeAlias(surface *state.SurfaceConsoleRecord) string {
 	mode := s.normalizeSurfaceProductMode(surface)
 	return state.SurfaceModeAlias(mode, s.surfaceBackend(surface))
+}
+
+func surfacePromptOverride(surface *state.SurfaceConsoleRecord) state.ModelConfigRecord {
+	if surface == nil {
+		return state.ModelConfigRecord{}
+	}
+	return surface.PromptOverride
+}
+
+func (s *Service) effectiveClaudeReasoningEffort(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) string {
+	if effort := state.NormalizeClaudeReasoningEffort(override.ReasoningEffort); effort != "" {
+		return effort
+	}
+	if surface == nil {
+		return ""
+	}
+	return s.claudeProfileReasoningEffort(s.surfaceClaudeProfileID(surface))
 }
 
 func (s *Service) SurfaceBackend(surfaceID string) agentproto.Backend {

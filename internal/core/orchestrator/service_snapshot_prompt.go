@@ -115,6 +115,10 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
 		override.Model = ""
 		baseModel = configValue{Source: "profile"}
+		baseEffort = configValue{
+			Value:  s.claudeProfileReasoningEffort(s.promptConfigClaudeProfileID(inst, surface)),
+			Source: "profile",
+		}
 	}
 	effectiveModel := baseModel
 	if override.Model != "" {
@@ -160,6 +164,16 @@ func (s *Service) promptConfigBackend(inst *state.InstanceRecord, surface *state
 		return state.EffectiveInstanceBackend(inst)
 	}
 	return agentproto.BackendCodex
+}
+
+func (s *Service) promptConfigClaudeProfileID(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord) string {
+	if surface != nil {
+		return s.surfaceClaudeProfileID(surface)
+	}
+	if inst != nil {
+		return inst.ClaudeProfileID
+	}
+	return state.DefaultClaudeProfileID
 }
 
 func defaultPromptModelForBackend(backend agentproto.Backend) string {

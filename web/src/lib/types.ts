@@ -94,6 +94,7 @@ export interface ClaudeProfileSummary {
   hasAuthToken: boolean;
   model?: string;
   smallModel?: string;
+  reasoningEffort?: string;
   builtIn?: boolean;
   persisted: boolean;
   readOnly?: boolean;
@@ -113,6 +114,7 @@ export interface ClaudeProfileWriteRequest {
   authToken?: string;
   model?: string;
   smallModel?: string;
+  reasoningEffort?: string;
 }
 
 export interface CodexProviderSummary {

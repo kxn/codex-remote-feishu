@@ -591,6 +591,7 @@ describe("AdminRoute", () => {
             hasAuthToken: Boolean(body.authToken),
             model: body.model,
             smallModel: body.smallModel,
+            reasoningEffort: body.reasoningEffort,
             builtIn: false,
             persisted: true,
             readOnly: false,
@@ -609,6 +610,7 @@ describe("AdminRoute", () => {
           hasAuthToken: true,
           model: body.model,
           smallModel: body.smallModel,
+          reasoningEffort: body.reasoningEffort,
           builtIn: false,
           persisted: true,
           readOnly: false,
@@ -632,6 +634,7 @@ describe("AdminRoute", () => {
     await user.type(nameInput, "DevSeek Updated");
     await user.clear(screen.getByLabelText("端点地址"));
     await user.type(screen.getByLabelText("端点地址"), "https://proxy.updated/v1");
+    await user.selectOptions(screen.getByLabelText("推理强度"), "max");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
 
     expect(await screen.findByText("Claude 配置已保存。")).toBeInTheDocument();
@@ -644,6 +647,7 @@ describe("AdminRoute", () => {
       baseURL: "https://proxy.updated/v1",
       model: "mimo-v2.5-pro",
       smallModel: "mimo-v2.5-haiku",
+      reasoningEffort: "max",
     });
     expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
@@ -661,6 +665,7 @@ describe("AdminRoute", () => {
 
     await user.type(screen.getByLabelText(/名称/), "测试配置");
     await user.type(screen.getByLabelText("认证 Token"), "new-token");
+    await user.selectOptions(screen.getByLabelText("推理强度"), "high");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     const createCall = calls.find(
@@ -673,6 +678,7 @@ describe("AdminRoute", () => {
       authToken: "new-token",
       model: "",
       smallModel: "",
+      reasoningEffort: "high",
     });
   });
 });

@@ -94,6 +94,10 @@ func (s *Service) claudeProfileRecord(profileID string) state.ClaudeProfileRecor
 	})
 }
 
+func (s *Service) claudeProfileReasoningEffort(profileID string) string {
+	return s.claudeProfileRecord(profileID).ReasoningEffort
+}
+
 func (s *Service) claudeProfileDisplayName(profileID string) string {
 	return s.claudeProfileRecord(profileID).Name
 }

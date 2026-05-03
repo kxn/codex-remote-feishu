@@ -313,6 +313,69 @@ func TestClaudePromptSummaryIgnoresModelOverridesAndDefaults(t *testing.T) {
 	}
 }
 
+func TestClaudeProfileReasoningActsAsDefaultAfterOverrideClear(t *testing.T) {
+	now := time.Date(2026, 5, 3, 9, 9, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/repo"
+	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{
+		ID:              "devseek",
+		Name:            "DevSeek",
+		ReasoningEffort: "high",
+	}})
+	inst := &state.InstanceRecord{
+		InstanceID:      "inst-claude-1",
+		WorkspaceRoot:   workspaceKey,
+		WorkspaceKey:    workspaceKey,
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "devseek",
+		Online:          true,
+		Threads:         map[string]*state.ThreadRecord{},
+	}
+	svc.UpsertInstance(inst)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.Backend = agentproto.BackendClaude
+	surface.ClaudeProfileID = "devseek"
+	surface.AttachedInstanceID = "inst-claude-1"
+
+	summary := svc.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
+	if summary.BaseReasoningEffort != "high" || summary.BaseReasoningEffortSource != "profile" {
+		t.Fatalf("expected profile reasoning base, got %#v", summary)
+	}
+	if summary.EffectiveReasoningEffort != "high" || summary.EffectiveReasoningEffortSource != "profile" {
+		t.Fatalf("expected profile reasoning effective value, got %#v", summary)
+	}
+	if contract := svc.headlessLaunchContract(surface); contract.ClaudeReasoningEffort != "high" {
+		t.Fatalf("expected launch contract to use profile reasoning, got %#v", contract)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning max",
+	})
+	if len(events) != 1 || surface.PromptOverride.ReasoningEffort != "max" {
+		t.Fatalf("expected max override to apply, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	if contract := svc.headlessLaunchContract(surface); contract.ClaudeReasoningEffort != "max" {
+		t.Fatalf("expected launch contract to prefer surface override, got %#v", contract)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning clear",
+	})
+	if len(events) != 1 || surface.PromptOverride.ReasoningEffort != "" {
+		t.Fatalf("expected clear to remove surface override, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	summary = svc.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
+	if summary.EffectiveReasoningEffort != "high" || summary.EffectiveReasoningEffortSource != "profile" {
+		t.Fatalf("expected clear to fall back to profile reasoning, got %#v", summary)
+	}
+}
+
 func TestFreshClaudeWorkspaceRestoresReasoningBeforeLaunchContract(t *testing.T) {
 	now := time.Date(2026, 5, 3, 9, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -338,6 +401,34 @@ func TestFreshClaudeWorkspaceRestoresReasoningBeforeLaunchContract(t *testing.T)
 	start := startHeadlessCommandFromEvents(events)
 	if start == nil || start.ClaudeReasoningEffort != "max" {
 		t.Fatalf("expected daemon start command to carry restored reasoning, got %#v", events)
+	}
+}
+
+func TestFreshClaudeWorkspaceUsesProfileReasoningWhenNoSnapshotOverride(t *testing.T) {
+	now := time.Date(2026, 5, 3, 9, 12, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/repo"
+	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{
+		ID:              "devseek",
+		Name:            "DevSeek",
+		ReasoningEffort: "high",
+	}})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.Backend = agentproto.BackendClaude
+	surface.ClaudeProfileID = "devseek"
+
+	events := svc.startFreshWorkspaceHeadlessWithOptions(surface, workspaceKey, false)
+	if surface.PendingHeadless == nil || surface.PendingHeadless.ClaudeReasoningEffort != "high" {
+		t.Fatalf("expected pending launch to carry profile reasoning, got %#v", surface.PendingHeadless)
+	}
+	if surface.PromptOverride.ReasoningEffort != "" {
+		t.Fatalf("expected profile reasoning not to be written into surface override, got %#v", surface.PromptOverride)
+	}
+	start := startHeadlessCommandFromEvents(events)
+	if start == nil || start.ClaudeReasoningEffort != "high" {
+		t.Fatalf("expected daemon start command to carry profile reasoning, got %#v", events)
 	}
 }
 

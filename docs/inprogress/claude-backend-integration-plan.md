@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-05-03`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 只覆盖端点、认证与模型环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。
 
 ## 1. 文档定位
 
@@ -413,6 +413,9 @@ Claude runtime：
    - model overrides 当前固定两项：
      - `model -> ANTHROPIC_MODEL`
      - `smallModel -> ANTHROPIC_DEFAULT_HAIKU_MODEL`
+   - profile 可选默认 reasoning：
+     - 空值表示不设置，继续使用更高优先级覆盖或系统默认
+     - `low / medium / high / max -> CLAUDE_CODE_EFFORT_LEVEL`
 2. admin backend contract
    - `GET /api/admin/claude/profiles`
    - `POST /api/admin/claude/profiles`
@@ -421,7 +424,7 @@ Claude runtime：
    - response 只回显 redacted summary，不回显旧 token；token 只暴露 `hasAuthToken`
    - built-in `default` profile 在 list 中可见，但只读、不可编辑、不可删除
 3. product contract: profile is not a session boundary
-   - Claude profile 是“调用配置”：端点、认证、模型。
+   - Claude profile 是“调用配置”：端点、认证、模型、默认 reasoning。
    - Claude profile 不是“会话空间”：同一个用户在不同 profile 下看到同一组 Claude session/history/catalog。
    - 用户切换 profile 后，后续新启动或恢复的 Claude 子进程使用新 profile 的调用配置；已有 session id、workspace session catalog 与恢复逻辑不因为 profile 改变而分叉。
    - `/list`、`/use`、自动恢复、workspace recency 与 session history 只能按 backend/workspace/session 语义过滤，不允许重新引入按 profile 隔离 session 的路径。
@@ -431,7 +434,9 @@ Claude runtime：
      - 保留继承环境中的 `CLAUDE_CONFIG_DIR`
      - 清掉继承环境中的 `ANTHROPIC_*` profile 覆盖项
      - 再按 profile 注入 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`
-   - profile 只是 endpoint/key/model 配置，不是 session namespace
+     - profile 配置了默认 reasoning 时，再注入或覆盖 `CLAUDE_CODE_EFFORT_LEVEL`；profile 未配置 reasoning 时不主动修改底层默认值
+   - 如果 daemon start command 携带显式 `ClaudeReasoningEffort`，它必须在 profile env 注入之后覆盖 profile 默认值。
+   - profile 只是 endpoint/key/model/reasoning 配置，不是 session namespace
    - wrapper 本地 session catalog/history plane 与 Claude child 必须继续共享同一个 `CLAUDE_CONFIG_DIR` 视图
    - 不允许为 custom profile 创建 `<stateDir>/claude/profiles/<profileID>` 这类 profile-scoped runtime config dir
 5. built-in `default` profile 语义
@@ -1049,11 +1054,12 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 当前已落地的实现补充：
 
 1. Claude `/reasoning` 继续保留 Codex 风格的 next-turn 语义：当前 turn 与已冻结 queue/autocontinue/review apply 不回改，新入队 turn 按当时 surface override 冻结 reasoning；Claude 可选档位固定为 `low / medium / high / max / clear`，不使用 Codex 的 `xhigh`。
-2. Claude headless 真正 dispatch 前，会用该 frozen reasoning 扩展出 `HeadlessLaunchContract{Backend, ClaudeProfileID, ClaudeReasoningEffort}`，并与 wrapper hello 上报的 observed runtime contract 比较。
-3. 若合同不一致，orchestrator 会统一走 `prompt_dispatch_restart`：写入 `PendingHeadless`、daemon `kill + start headless`、实例重新 attach 后自动继续原 dispatch。
-4. `workspace+profile` 快照会保存 `reasoning / access / plan`，`/reasoning clear` 会同步删除空快照；fresh workspace 与 concrete thread restore 都必须先恢复快照，再生成 `PendingHeadless` 与 daemon start command，避免 daemon 重启后丢失 reasoning。
-5. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
-6. `/model` 不在 Claude 飞书命令面里：Claude 模型只从 Claude profile 注入，飞书侧不支持临时模型覆盖，也不把 Codex 默认模型投影成 Claude 当前模型。
+2. 有效 Claude reasoning 的运行时优先级固定为：飞书 surface override / frozen override > Claude Profile 默认 reasoning > 系统默认。`/reasoning clear` 只清掉飞书临时覆盖；如果当前 profile 配了默认 reasoning，后续启动、恢复和 dispatch restart 会回落到 profile 默认值。
+3. Claude headless 真正 dispatch 前，会用该 frozen/effective reasoning 扩展出 `HeadlessLaunchContract{Backend, ClaudeProfileID, ClaudeReasoningEffort}`，并与 wrapper hello 上报的 observed runtime contract 比较。
+4. 若合同不一致，orchestrator 会统一走 `prompt_dispatch_restart`：写入 `PendingHeadless`、daemon `kill + start headless`、实例重新 attach 后自动继续原 dispatch。
+5. `workspace+profile` 快照会保存 `reasoning / access / plan`，但其中的 reasoning 只表示飞书临时覆盖，不保存 profile 默认值；`/reasoning clear` 会同步删除空快照；fresh workspace 与 concrete thread restore 都必须先恢复快照，再用 profile fallback 生成 `PendingHeadless` 与 daemon start command。
+6. `/access` 与 `/plan` 仍只走动态 `set_permission_mode` 通道，不被并入这条 restart 合同。
+7. `/model` 不在 Claude 飞书命令面里：Claude 模型只从 Claude profile 注入，飞书侧不支持临时模型覆盖，也不把 Codex 默认模型投影成 Claude 当前模型。
 
 ### 7.7 `#494` final-output 终态合同（2026-04-28）
 
