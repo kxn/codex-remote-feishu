@@ -69,8 +69,10 @@ func applyPromptOverridesToThreadStart(params map[string]any, overrides agentpro
 		configMap["reasoning_effort"] = overrides.ReasoningEffort
 		params["config"] = configMap
 	}
-	params["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
-	params["sandbox"] = agentproto.ThreadSandboxForAccessMode(overrides.AccessMode)
+	if agentproto.NormalizeAccessMode(overrides.AccessMode) != "" {
+		params["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
+		params["sandbox"] = agentproto.ThreadSandboxForAccessMode(overrides.AccessMode)
+	}
 }
 
 func applyPromptOverridesToTurnStart(template map[string]any, overrides agentproto.PromptOverrides) {
@@ -111,8 +113,10 @@ func applyPromptOverridesToTurnStart(template map[string]any, overrides agentpro
 		}
 		template["collaborationMode"] = collaborationMode
 	}
-	template["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
-	template["sandboxPolicy"] = agentproto.TurnSandboxPolicyForAccessMode(overrides.AccessMode)
+	if agentproto.NormalizeAccessMode(overrides.AccessMode) != "" {
+		template["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
+		template["sandboxPolicy"] = agentproto.TurnSandboxPolicyForAccessMode(overrides.AccessMode)
+	}
 }
 
 func normalizeObservedPlanMode(value string) string {

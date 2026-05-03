@@ -76,6 +76,22 @@ func parsePlanMode(value string) (state.PlanModeSetting, bool) {
 	}
 }
 
+func setSurfacePlanModeOverride(surface *state.SurfaceConsoleRecord, value state.PlanModeSetting) {
+	if surface == nil {
+		return
+	}
+	surface.PlanMode = state.NormalizePlanModeSetting(value)
+	surface.PlanModeOverrideSet = true
+}
+
+func clearSurfacePlanModeOverride(surface *state.SurfaceConsoleRecord) {
+	if surface == nil {
+		return
+	}
+	surface.PlanMode = state.PlanModeSettingOff
+	surface.PlanModeOverrideSet = false
+}
+
 func (s *Service) resolveClaudeProfileSelection(value string) (state.ClaudeProfileRecord, bool) {
 	targetID := state.NormalizeClaudeProfileID(value)
 	for _, profile := range s.ClaudeProfiles() {
@@ -321,7 +337,7 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 	s.setSurfaceClaudeProfileID(surface, target.ID)
 	if currentWorkspaceKey == "" {
 		surface.PromptOverride = state.ModelConfigRecord{}
-		surface.PlanMode = state.PlanModeSettingOff
+		clearSurfacePlanModeOverride(surface)
 		text := fmt.Sprintf("已切换到 Claude 配置：%s。当前没有接管中的工作区。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -503,10 +519,22 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
+	if len(parts) == 2 && isClearCommand(parts[1]) {
+		text := "已清除飞书临时 Plan mode 覆盖。之后从飞书发送的消息将跟随底层当前状态。"
+		return s.applySurfaceSettingChange(surface, action, func() {
+			clearSurfacePlanModeOverride(surface)
+		}, func() surfaceSettingFeedback {
+			return surfaceSettingFeedback{
+				NoticeCode:     "surface_plan_mode_cleared",
+				NoticeText:     text,
+				CardStatusText: text,
+			}
+		})
+	}
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`。",
+			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`；`/plan clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -514,12 +542,12 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`。",
+			StatusText:       "用法：`/plan` 查看当前设置；`/plan on`；`/plan off`；`/plan clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
 	current := state.NormalizePlanModeSetting(surface.PlanMode)
-	if target == current {
+	if target == current && (!s.surfaceUsesLocalRequestedPromptOverrides(surface) || surface.PlanModeOverrideSet) {
 		text := fmt.Sprintf("当前 Plan mode 已经是 %s。", target)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -535,7 +563,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 		text += " 当前已在执行或排队的消息不受影响。"
 	}
 	return s.applySurfaceSettingChange(surface, action, func() {
-		surface.PlanMode = target
+		setSurfacePlanModeOverride(surface, target)
 	}, func() surfaceSettingFeedback {
 		return surfaceSettingFeedback{
 			NoticeCode:     "surface_plan_mode_updated",

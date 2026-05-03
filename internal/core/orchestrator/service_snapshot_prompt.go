@@ -97,12 +97,32 @@ func compactPromptOverride(value state.ModelConfigRecord) state.ModelConfigRecor
 }
 
 func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, override state.ModelConfigRecord) state.ModelConfigRecord {
+	if s.surfaceUsesLocalRequestedPromptOverrides(surface) {
+		if promptOverrideIsEmpty(override) && surface != nil {
+			override = surface.PromptOverride
+		}
+		return compactPromptOverride(override)
+	}
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, override)
 	return state.ModelConfigRecord{
 		Model:           resolution.EffectiveModel.Value,
 		ReasoningEffort: resolution.EffectiveReasoningEffort.Value,
 		AccessMode:      resolution.EffectiveAccessMode,
 	}
+}
+
+func (s *Service) surfaceUsesLocalRequestedPromptOverrides(surface *state.SurfaceConsoleRecord) bool {
+	return surface != nil && state.IsVSCodeProductMode(s.normalizeSurfaceProductMode(surface))
+}
+
+func (s *Service) freezePlanModeForPrompt(surface *state.SurfaceConsoleRecord) state.PlanModeSetting {
+	if surface == nil {
+		return ""
+	}
+	if state.IsVSCodeProductMode(s.normalizeSurfaceProductMode(surface)) && !surface.PlanModeOverrideSet {
+		return ""
+	}
+	return state.NormalizePlanModeSetting(surface.PlanMode)
 }
 
 func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, override state.ModelConfigRecord) promptConfigResolution {

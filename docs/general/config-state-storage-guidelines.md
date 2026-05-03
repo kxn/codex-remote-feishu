@@ -194,6 +194,8 @@
 - backend 上报或 session catalog 观测到的状态应能更新 observed state
 - 如果 backend 主动退出某状态，例如 Claude `ExitPlanMode`，本地不应因为旧的持久 desired state 又强行切回去
 - 飞书端 UI 应展示“当前 backend 状态”和“下一条飞书消息覆盖”之间的区别
+- VS Code 模式下，observed state 只能作为展示和本地入队时的参考；没有飞书显式 requested override 时，prompt command 不应把 observed model / reasoning / access / plan 再作为 override 下发给 backend
+- VS Code 模式下，`/plan on|off` 属于显式 requested override；`/plan clear` 会回到“跟随 backend 当前状态”，后续 prompt 不再携带 plan override
 - 没有完成底层调研前，不应把这类配置做成永久默认值
 
 ## 4. 当前能力的建议归类
@@ -214,7 +216,7 @@
 | Claude profile reasoning 默认值 | Backend Behavior With Local SSOT | 是 | `profileID` 或 `claude + claudeProfileID + workspaceKey` | 若作为全局 profile 默认，用 `profileID`；若允许工作区覆盖，再加 `workspaceKey`。 |
 | Claude access | Backend Behavior With Shared Authority | 不作为 workspace/profile 快照持久化 | surface override + prompt frozen override | `set_permission_mode` 是当前 session runtime state，不等同于 profile/workspace 默认值。 |
 | Claude plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume，也不作为 workspace/profile 快照持久化 | live surface runtime + prompt frozen override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan。 |
-| VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + per-turn override | VS Code 端也可能修改，飞书不应覆盖 VS Code 最新状态。 |
+| VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + local requested per-turn override | VS Code 端也可能修改；没有飞书显式 override 时，只展示 observed state，不把 observed/default 值重新下发给 backend。 |
 
 ## 5. 新增配置项决策流程
 

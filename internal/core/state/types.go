@@ -256,6 +256,7 @@ type SurfaceConsoleRecord struct {
 	ClaudeProfileID      string
 	Verbosity            SurfaceVerbosity
 	PlanMode             PlanModeSetting
+	PlanModeOverrideSet  bool
 	ClaimedWorkspaceKey  string
 	AttachedInstanceID   string
 	SelectedThreadID     string

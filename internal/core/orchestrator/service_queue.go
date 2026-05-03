@@ -105,7 +105,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		FrozenSourceThreadID:       "",
 		FrozenSurfaceBindingPolicy: defaultSurfaceBindingPolicy(),
 		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:             state.NormalizePlanModeSetting(surface.PlanMode),
+		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
 		RouteModeAtEnqueue:         routeMode,
 		Status:                     state.QueueItemQueued,
 	}
@@ -139,7 +139,7 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 		FrozenSourceThreadID:       "",
 		FrozenSurfaceBindingPolicy: defaultSurfaceBindingPolicy(),
 		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:             state.NormalizePlanModeSetting(surface.PlanMode),
+		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
 		RouteModeAtEnqueue:         routeMode,
 		Status:                     state.QueueItemQueued,
 	}
@@ -333,9 +333,16 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 			Model:           item.FrozenOverride.Model,
 			ReasoningEffort: item.FrozenOverride.ReasoningEffort,
 			AccessMode:      item.FrozenOverride.AccessMode,
-			PlanMode:        string(state.NormalizePlanModeSetting(item.FrozenPlanMode)),
+			PlanMode:        frozenPlanModeOverrideValue(item.FrozenPlanMode),
 		},
 	}
+}
+
+func frozenPlanModeOverrideValue(value state.PlanModeSetting) string {
+	if strings.TrimSpace(string(value)) == "" {
+		return ""
+	}
+	return string(state.NormalizePlanModeSetting(value))
 }
 
 func queuedItemActorUserID(item *state.QueueItemRecord, surface *state.SurfaceConsoleRecord) string {

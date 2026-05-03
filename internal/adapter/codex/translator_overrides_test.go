@@ -19,7 +19,7 @@ func TestTranslatePromptSendAppliesOverridesToExistingThreadTurnStart(t *testing
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
 		Target:    agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
 		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
-		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high"},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
@@ -53,7 +53,7 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
 		Target:    agentproto.Target{CWD: "/tmp/project"},
 		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
-		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high"},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
@@ -137,6 +137,36 @@ func TestTranslatePromptSendConfirmAccessModeOverridesPolicies(t *testing.T) {
 	turnParams, _ := turnStart["params"].(map[string]any)
 	if turnParams["approvalPolicy"] != "on-request" || !reflect.DeepEqual(turnParams["sandboxPolicy"], map[string]any{"type": "workspaceWrite"}) {
 		t.Fatalf("expected confirm mode on followup turn/start, got %#v", turnParams)
+	}
+}
+
+func TestTranslatePromptSendEmptyAccessPreservesObservedPolicies(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","approvalPolicy":"on-request","sandboxPolicy":{"type":"workspaceWrite"}}}`)); err != nil {
+		t.Fatalf("observe current thread turn start: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{ChatID: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4"},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one turn/start command, got %d", len(commands))
+	}
+
+	var turnStart map[string]any
+	if err := json.Unmarshal(commands[0], &turnStart); err != nil {
+		t.Fatalf("unmarshal turn/start: %v", err)
+	}
+	params, _ := turnStart["params"].(map[string]any)
+	if params["approvalPolicy"] != "on-request" || !reflect.DeepEqual(params["sandboxPolicy"], map[string]any{"type": "workspaceWrite"}) {
+		t.Fatalf("expected empty access override to preserve observed policies, got %#v", params)
 	}
 }
 
@@ -286,11 +316,11 @@ func TestInternalHelperThreadStartDoesNotPoisonRemoteThreadStart(t *testing.T) {
 		t.Fatalf("unmarshal thread/start: %v", err)
 	}
 	params, _ := threadStart["params"].(map[string]any)
-	if params["approvalPolicy"] != "never" {
-		t.Fatalf("helper thread start overwrote approval policy, got %#v", params)
+	if params["approvalPolicy"] != "on-request" {
+		t.Fatalf("expected thread/start default approval policy without access override, got %#v", params)
 	}
-	if params["sandbox"] != "danger-full-access" {
-		t.Fatalf("expected default full access sandbox, got %#v", params)
+	if params["sandbox"] != "read-only" {
+		t.Fatalf("expected thread/start default sandbox without access override, got %#v", params)
 	}
 	if _, exists := params["ephemeral"]; exists {
 		t.Fatalf("helper thread start leaked ephemeral flag into remote thread/start: %#v", params)

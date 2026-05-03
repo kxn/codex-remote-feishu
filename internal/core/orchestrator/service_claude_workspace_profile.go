@@ -177,7 +177,7 @@ func (s *Service) restoreCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 	surface.PromptOverride.Model = ""
 	surface.PromptOverride.ReasoningEffort = ""
 	surface.PromptOverride.AccessMode = ""
-	surface.PlanMode = state.PlanModeSettingOff
+	clearSurfacePlanModeOverride(surface)
 	if s.root != nil && s.root.ClaudeWorkspaceProfileSnapshots != nil {
 		if record, ok := s.root.ClaudeWorkspaceProfileSnapshots[key]; ok {
 			record = state.NormalizeClaudeWorkspaceProfileSnapshotRecord(record)

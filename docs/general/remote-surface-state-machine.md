@@ -170,20 +170,25 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. `/verbose quiet|normal|verbose` 直接改当前 surface。
    2. `/detach` 不会清掉它。
    3. daemon 重启后，latent surface 会从 `surface resume state` 恢复之前的 `Verbosity`。
-8. `PlanMode` 当前也是 surface 级偏好：
-   1. `/plan on|off` 直接改当前 surface，只影响后续新 turn。
+8. `PlanMode` 当前也是 surface 级偏好，但 headless 与 `vscode` 的下发语义不同：
+   1. `/plan on|off` 直接改当前 surface，只影响后续新 turn；`/plan clear` 会清掉显式 plan 覆盖并把 surface 投影恢复成 `off`。
    2. 当前 running turn、已入队消息、当前 turn 的 `/steer` 与 reply auto-steer 都不受新设置追溯改写。
-   3. queue item 会在入队时冻结 `PlanMode`，dispatch `turn/start` 时再把它落到 `PromptOverrides.PlanMode -> collaborationMode.mode=plan/default`。
-   4. `/detach`、`/new`、`/use`、`/mode normal|codex|claude|vscode` 不会顺手清掉当前内存里的 `PlanMode`；daemon 重启后，latent surface 不再从 `surface resume state` 恢复 `PlanMode`，旧持久化 entry 里的 `planMode` 会被忽略并在下一次保存时清理。
-   4.1. 在 `claude` 模式下，`PlanMode` 也不进入 `workspace+profile` 快照：
+   3. headless 主链的 queue item 会在入队时冻结 `PlanMode`，dispatch `turn/start` 时再把它落到 `PromptOverrides.PlanMode -> collaborationMode.mode=plan/default`。
+   4. `vscode` 主链属于 shared-authority：只有用户显式 `/plan on|off` 后才会冻结 `PlanMode`；若未设置或已 `/plan clear`，queue item 的 `FrozenPlanMode` 保持 empty，dispatch 时不下发 plan override，让 VS Code/backend 保持当前状态。
+   5. `/detach`、`/new`、`/use`、`/mode normal|codex|claude|vscode` 不会顺手清掉当前内存里的 `PlanMode`；daemon 重启后，latent surface 不再从 `surface resume state` 恢复 `PlanMode`，旧持久化 entry 里的 `planMode` 会被忽略并在下一次保存时清理。
+   6. 在 `claude` 模式下，`PlanMode` 也不进入 `workspace+profile` 快照：
       1. 进入某个 Claude workspace 时，只会按 `workspace + ClaudeProfileID` 恢复最近一次飞书临时 `ReasoningEffort` 覆盖。
       2. 离开该 workspace 或切走该 profile 前，只把当前临时 `ReasoningEffort` 覆盖写回独立的 `workspace+profile` 持久化 store。
       3. 若目标 `workspace+profile` 没有快照，则会恢复成空 override + `PlanMode=off`，不会沿用别的 workspace/profile 残留值。
       4. `Model`、`AccessMode` 与 `PlanMode` 明确不在这套快照里；Claude workspace/profile 恢复时会主动清掉这些临时运行态，不把它们当作可持久化热改能力。
-   5. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
+   7. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
       对 `keep_surface_selection` 的 detached-branch turn，这张卡仍回原 surface，并按 source/main thread 判断是否 suppress，不会因为 execution thread 不同而被误吞。
-   6. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
-9. headless workspace-first 主链当前已经完成这一轮产品收窄：
+   8. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回显式 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
+9. `PromptOverride` 当前承载飞书侧显式 model / reasoning / access requested override：
+   1. headless 主链为了保持现有执行合同，queue item 仍会冻结最终 effective model / reasoning / access。
+   2. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
+   3. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
+10. headless workspace-first 主链当前已经完成这一轮产品收窄：
    1. bare `/workspace` 是工作会话父页，固定展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`解除接管` 四个入口；bare `/workspace new` 是只含三条新建路径的子页。
    2. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都收敛到同一张 `切换工作会话` 卡。
    3. 这张切换卡直接落在“工作区 + 会话”同页：
@@ -217,7 +222,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
       3. 用户若尝试从旧卡切到别的工作区，或确认一个已经不属于当前工作区的旧候选，服务端不会 cross-workspace fallback，而是刷新同一张锁定卡，并明确提示“当前工作区已锁定”。
    9. `/new` 已变成 workspace-owned prepared state。
    10. `/follow` 在 headless 主链下只返回迁移提示，不再进入 follow route。
-10. `vscode` 主链当前已经完成这一轮收窄：
+11. `vscode` 主链当前已经完成这一轮收窄：
    1. `/list` attach/switch instance 后默认进入 follow-first，而不是落回 pinned/unbound。
    2. 默认跟随目标只看 `ObservedFocusedThreadID`，不再回落 `ActiveThreadID`。
    3. detached `vscode /use` / `/useall` 会直接拒绝，并要求先 `/list`。
@@ -1666,8 +1671,9 @@ retained-offline overlay 额外规则：
 1. `/plan`
 2. `/plan on`
 3. `/plan off`
+4. `/plan clear`
 
-三者都映射到 `ActionPlanCommand`，由服务端在当前 surface 上解释并决定新的 surface-level `PlanMode`；真正的提案 handoff 卡按钮则单独走 `ActionPlanProposalDecision`。
+四者都映射到 `ActionPlanCommand`，由服务端在当前 surface 上解释并决定新的 surface-level `PlanMode` / 显式 plan override；真正的提案 handoff 卡按钮则单独走 `ActionPlanProposalDecision`。
 
 同时，文本命令里新增：
 
