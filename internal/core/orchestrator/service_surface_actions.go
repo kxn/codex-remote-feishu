@@ -32,8 +32,14 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 		cwd := strings.TrimSpace(surface.PreparedThreadCWD)
 		if cwd == "" {
 			if fallbackCWD, fallbackThreadID, ok := s.prepareNewThreadBase(surface, inst); ok {
-				surface.PreparedThreadCWD = fallbackCWD
-				surface.PreparedFromThreadID = fallbackThreadID
+				if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+					AttachedInstanceID:   inst.InstanceID,
+					RouteMode:            state.RouteModeNewThreadReady,
+					PreparedThreadCWD:    fallbackCWD,
+					PreparedFromThreadID: fallbackThreadID,
+				}) {
+					return notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")
+				}
 				cwd = fallbackCWD
 			}
 		}
@@ -68,10 +74,14 @@ func (s *Service) prepareNewThread(surface *state.SurfaceConsoleRecord) []eventc
 	events = append(events, s.discardDrafts(surface)...)
 	prevThreadID := surface.SelectedThreadID
 	prevRouteMode := surface.RouteMode
-	s.releaseSurfaceThreadClaim(surface)
-	surface.RouteMode = state.RouteModeNewThreadReady
-	surface.PreparedThreadCWD = cwd
-	surface.PreparedFromThreadID = threadID
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID:   inst.InstanceID,
+		RouteMode:            state.RouteModeNewThreadReady,
+		PreparedThreadCWD:    cwd,
+		PreparedFromThreadID: threadID,
+	}) {
+		return append(events, notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")...)
+	}
 	surface.PreparedAt = s.now()
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeNewThreadReady)...)
 	events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle())...)
@@ -136,7 +146,14 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.Surfac
 		return nil
 	}
 	if strings.TrimSpace(surface.PreparedThreadCWD) != "" {
-		surface.RouteMode = state.RouteModeNewThreadReady
+		if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+			AttachedInstanceID:   inst.InstanceID,
+			RouteMode:            state.RouteModeNewThreadReady,
+			PreparedThreadCWD:    surface.PreparedThreadCWD,
+			PreparedFromThreadID: surface.PreparedFromThreadID,
+		}) {
+			return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
+		}
 		surface.PreparedAt = s.now()
 		return nil
 	}
@@ -147,10 +164,14 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.Surfac
 	if blocked := s.blockNewThreadPreparation(surface); blocked != nil {
 		return blocked
 	}
-	s.releaseSurfaceThreadClaim(surface)
-	surface.RouteMode = state.RouteModeNewThreadReady
-	surface.PreparedThreadCWD = cwd
-	surface.PreparedFromThreadID = threadID
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID:   inst.InstanceID,
+		RouteMode:            state.RouteModeNewThreadReady,
+		PreparedThreadCWD:    cwd,
+		PreparedFromThreadID: threadID,
+	}) {
+		return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
+	}
 	surface.PreparedAt = s.now()
 	return nil
 }

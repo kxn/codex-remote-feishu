@@ -158,9 +158,12 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 	}
 	s.clearRemoteOwnership(surface)
 	if shouldRestorePreparedNewThread(surface, item, binding) {
-		s.releaseSurfaceThreadClaim(surface)
-		surface.SelectedThreadID = ""
-		surface.RouteMode = state.RouteModeNewThreadReady
+		s.transitionSurfaceRouteCore(surface, s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)], surfaceRouteCoreState{
+			AttachedInstanceID:   strings.TrimSpace(surface.AttachedInstanceID),
+			RouteMode:            state.RouteModeNewThreadReady,
+			PreparedThreadCWD:    strings.TrimSpace(surface.PreparedThreadCWD),
+			PreparedFromThreadID: strings.TrimSpace(surface.PreparedFromThreadID),
+		})
 	}
 
 	events := s.pendingInputEvents(surface, control.PendingInputState{

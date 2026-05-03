@@ -194,7 +194,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 		ClaudeProfileID: surface.ClaudeProfileID,
 	})
 	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {
-		surface.ClaimedWorkspaceKey = currentWorkspaceKey
+		s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	}
 	if shouldContinueWorkspaceAfterNormalBackendSwitch(currentMode, currentBackend, target, currentWorkspaceKey) {
 		resumeEvents := s.continueWorkspaceAfterNormalBackendSwitch(surface, currentWorkspaceKey)
@@ -333,7 +333,7 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 		return append(events, notice(surface, "claude_profile_switched", text)...)
 	}
 
-	surface.ClaimedWorkspaceKey = currentWorkspaceKey
+	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Claude 配置：%s。正在重新准备当前工作区。", targetLabel)

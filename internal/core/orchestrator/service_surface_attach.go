@@ -70,16 +70,13 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		delete(s.abandoningUntil, surface.SurfaceSessionID)
 	}
 
-	if !s.claimWorkspace(surface, workspaceKey) {
-		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
-	}
-	if !s.claimInstance(surface, inst.InstanceID) {
-		s.releaseSurfaceWorkspaceClaim(surface)
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: inst.InstanceID,
+		WorkspaceKey:       workspaceKey,
+		RouteMode:          state.RouteModeUnbound,
+	}) {
 		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")...)
 	}
-
-	surface.AttachedInstanceID = inst.InstanceID
-	s.surfaceCurrentWorkspaceKey(surface)
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
 	surface.DispatchMode = state.DispatchModeNormal
@@ -87,11 +84,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	delete(s.pausedUntil, surface.SurfaceSessionID)
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
 	clearSurfaceRequests(surface)
-	s.clearPreparedNewThread(surface)
-	s.releaseSurfaceThreadClaim(surface)
 	surface.PromptOverride = state.ModelConfigRecord{}
-	surface.SelectedThreadID = ""
-	surface.RouteMode = state.RouteModeUnbound
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  "",
 		RouteMode: string(state.RouteModeUnbound),
@@ -188,18 +181,6 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		s.clearPreparedNewThread(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
 	}
-	if !s.claimWorkspace(surface, workspaceKey) {
-		if s.surfaceUsesWorkspaceClaims(surface) {
-			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
-		}
-		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标对应的工作区，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")...)
-	}
-	if !s.claimInstance(surface, instanceID) {
-		s.releaseSurfaceWorkspaceClaim(surface)
-		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
-	}
-	s.surfaceCurrentWorkspaceKey(surface)
-	surface.AttachedInstanceID = instanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
 	surface.DispatchMode = state.DispatchModeNormal
@@ -209,16 +190,32 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	if s.surfaceIsVSCode(surface) {
+		if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+			AttachedInstanceID: instanceID,
+			RouteMode:          state.RouteModeFollowLocal,
+		}) {
+			return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
+		}
 		return append(events, s.attachVSCodeInstance(surface, inst, switchingInstance, mode)...)
 	}
 
 	initialThreadID := s.defaultAttachThread(inst)
-	if initialThreadID != "" && s.claimThread(surface, inst, initialThreadID) {
-		surface.SelectedThreadID = initialThreadID
-		surface.RouteMode = state.RouteModePinned
-	} else {
-		surface.SelectedThreadID = ""
-		surface.RouteMode = state.RouteModeUnbound
+	if initialThreadID != "" && s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: instanceID,
+		WorkspaceKey:       workspaceKey,
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   initialThreadID,
+		ThreadClaimPolicy:  surfaceRouteThreadClaimVisible,
+	}) {
+	} else if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: instanceID,
+		WorkspaceKey:       workspaceKey,
+		RouteMode:          state.RouteModeUnbound,
+	}) {
+		if s.surfaceUsesWorkspaceClaims(surface) {
+			return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
+		}
+		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
 	}
 	lastTitle := ""
 	lastPreview := ""
@@ -271,10 +268,12 @@ func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst
 	if surface == nil || inst == nil {
 		return nil
 	}
-	surface.SelectedThreadID = ""
-	s.clearPreparedNewThread(surface)
-	surface.RouteMode = state.RouteModeFollowLocal
-
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: inst.InstanceID,
+		RouteMode:          state.RouteModeFollowLocal,
+	}) {
+		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
+	}
 	events := s.reevaluateFollowSurface(surface)
 	if len(events) == 0 && surface.SelectedThreadID == "" {
 		events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）")...)
@@ -406,11 +405,23 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 	if workspaceKey != "" && !s.claimWorkspace(surface, workspaceKey) {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
-	if !s.claimInstance(surface, inst.InstanceID) {
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID:   inst.InstanceID,
+		WorkspaceKey:         workspaceKey,
+		RouteMode:            surface.RouteMode,
+		SelectedThreadID:     strings.TrimSpace(surface.SelectedThreadID),
+		PreparedThreadCWD:    strings.TrimSpace(surface.PreparedThreadCWD),
+		PreparedFromThreadID: strings.TrimSpace(surface.PreparedFromThreadID),
+		ThreadClaimPolicy: func() surfaceRouteThreadClaimPolicy {
+			if strings.TrimSpace(surface.SelectedThreadID) == "" {
+				return surfaceRouteThreadClaimNone
+			}
+			return surfaceRouteThreadClaimKnown
+		}(),
+	}) {
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, attachSurfaceToKnownThreadDefault)
 	}
 	surface.Backend = state.EffectiveInstanceBackend(inst)
-	surface.AttachedInstanceID = inst.InstanceID
 	surface.PendingHeadless = nil
 	surface.DispatchMode = state.DispatchModeNormal
 	surface.Abandoning = false

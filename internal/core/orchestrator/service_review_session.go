@@ -57,16 +57,14 @@ func (s *Service) ensureReviewSessionParentSelection(surface *state.SurfaceConso
 		return
 	}
 	prevRouteMode := surface.RouteMode
-	s.releaseSurfaceThreadClaim(surface)
-	if !s.claimKnownThread(surface, inst, parentThreadID) {
-		surface.SelectedThreadID = selectedThreadID
-		surface.RouteMode = prevRouteMode
-		_ = s.claimKnownThread(surface, inst, selectedThreadID)
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: inst.InstanceID,
+		RouteMode:          prevRouteMode,
+		SelectedThreadID:   parentThreadID,
+		ThreadClaimPolicy:  surfaceRouteThreadClaimKnown,
+	}) {
 		return
 	}
-	surface.SelectedThreadID = parentThreadID
-	surface.RouteMode = prevRouteMode
-	s.clearPreparedNewThread(surface)
 }
 
 func clearIdleReviewSession(surface *state.SurfaceConsoleRecord) {

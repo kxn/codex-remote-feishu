@@ -111,7 +111,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 		return append(events, notice(surface, "codex_provider_switched", text)...)
 	}
 
-	surface.ClaimedWorkspaceKey = currentWorkspaceKey
+	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Codex Provider：%s。正在重新准备当前工作区。", targetLabel)
 	if commandCardOwnsInlineResult(action) {

@@ -27,15 +27,25 @@ func (s *Service) reconcileInstanceSurfaceThreads(instanceID string) []eventcont
 		clearAutoContinueRuntime(surface)
 		prevThreadID := surface.SelectedThreadID
 		prevRouteMode := surface.RouteMode
-		s.releaseSurfaceThreadClaim(surface)
 		switch surface.RouteMode {
 		case state.RouteModeFollowLocal:
 			events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeFollowLocal)...)
+			if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+				AttachedInstanceID: inst.InstanceID,
+				RouteMode:          state.RouteModeFollowLocal,
+			}) {
+				continue
+			}
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeFollowLocal), "跟随当前 VS Code（等待中）")...)
 			events = append(events, s.reevaluateFollowSurface(surface)...)
 		default:
-			surface.RouteMode = state.RouteModeUnbound
 			events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeUnbound)...)
+			if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+				AttachedInstanceID: inst.InstanceID,
+				RouteMode:          state.RouteModeUnbound,
+			}) {
+				continue
+			}
 			events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeUnbound), "未选择会话")...)
 			events = append(events, eventcontract.Event{
 				Kind:             eventcontract.KindNotice,

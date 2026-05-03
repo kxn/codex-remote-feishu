@@ -239,7 +239,12 @@ surface 不是单一枚举，而是五层正交状态叠加。
 
 补充说明：
 
-1. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
+1. 从 2026-05-03 起，`R1~R5` 的 live mutation 已收口到同一个 route-core transition seam：
+   1. `AttachedInstanceID`、`SelectedThreadID`、`RouteMode`、`PreparedThread*` 不再允许由 attach/use/follow/new/detach/kick/thread-lost 各自平行直写。
+   2. 真正发生 attachment 变更时，会在同一处重做 workspace / instance / thread claim 对齐。
+   3. 仅在同一 attachment 内切换 route 时，不再重复改写 instance claim；这类 transition 只重排 thread claim 与 route 主字段，避免把历史兼容态或 kick-thread 迁移路径卡死在“instance claim 必须先转移”的半状态。
+2. detached 态当前仍允许保留一个“记住当前 workspace”的弱 carrier：`AttachedInstanceID == ""` 时 `ClaimedWorkspaceKey` 可以仅作为 continuation intent 存在，但它不等价于 active workspace claim。
+3. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
    1. surface 有 `gateway/chat/user` 路由信息。
    2. surface 的 `ProductMode`、`Backend`、`Verbosity` 与 `PlanMode` 已从持久化 `surface resume state` 恢复。
    3. surface 可能还带有持久化的 resume target 元数据（instance / thread / workspace / route 语义）；它们不会在 materialize 当下直接投影成 live attach，但 daemon 随后会异步评估恢复。

@@ -88,17 +88,16 @@ func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleReco
 	if prevThreadID != threadID || prevRouteMode != routeMode {
 		clearAutoContinueRuntime(surface)
 	}
-	s.releaseSurfaceThreadClaim(surface)
-	if !s.claimThread(surface, inst, threadID) {
-		surface.RouteMode = state.RouteModeUnbound
-		s.clearPreparedNewThread(surface)
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: inst.InstanceID,
+		RouteMode:          routeMode,
+		SelectedThreadID:   threadID,
+		ThreadClaimPolicy:  surfaceRouteThreadClaimVisible,
+	}) {
 		return append(events, notice(surface, "thread_busy", "目标会话当前已被其他飞书会话占用。")...)
 	}
 	events = append(events, s.maybeSealPlanProposalForRouteChange(surface, "当前工作目标已切换到其他会话，之前的提案计划已失效。")...)
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, threadID, routeMode)...)
-	surface.SelectedThreadID = threadID
-	s.clearPreparedNewThread(surface)
-	surface.RouteMode = routeMode
 	title := threadID
 	thread = s.ensureThread(inst, threadID)
 	s.touchThread(thread)
@@ -165,20 +164,7 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		delete(s.pausedUntil, surface.SurfaceSessionID)
 		delete(s.abandoningUntil, surface.SurfaceSessionID)
 	}
-	if !s.claimWorkspace(surface, workspaceKey) {
-		if s.surfaceUsesWorkspaceClaims(surface) {
-			return append(events, attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)...)
-		}
-		return append(events, notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")...)
-	}
-
-	if !s.claimInstance(surface, inst.InstanceID) {
-		s.releaseSurfaceWorkspaceClaim(surface)
-		return append(events, attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)...)
-	}
-	s.surfaceCurrentWorkspaceKey(surface)
 	surface.Backend = instanceBackend
-	surface.AttachedInstanceID = inst.InstanceID
 	surface.PendingHeadless = nil
 	surface.ActiveQueueItemID = ""
 	surface.DispatchMode = state.DispatchModeNormal
@@ -227,13 +213,16 @@ func (s *Service) attachSurfaceToKnownThread(surface *state.SurfaceConsoleRecord
 		s.adoptThreadReplay(inst, view.ThreadID)
 	}
 	s.touchThread(thread)
-	s.releaseSurfaceThreadClaim(surface)
-	if !s.claimKnownThread(surface, inst, view.ThreadID) {
+	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: inst.InstanceID,
+		WorkspaceKey:       workspaceKey,
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   view.ThreadID,
+		ThreadClaimPolicy:  surfaceRouteThreadClaimKnown,
+	}) {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 		return append(events, attachSurfaceToKnownThreadThreadBusyNotice(surface, mode)...)
 	}
-	surface.SelectedThreadID = view.ThreadID
-	surface.RouteMode = state.RouteModePinned
 
 	title := displayThreadTitle(inst, thread, view.ThreadID)
 	preview := threadPreview(thread)
