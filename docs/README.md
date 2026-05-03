@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-04-30`
-> Summary: 补充 mode 术语基线索引，并同步当前文档分类状态。
+> Updated: `2026-05-03`
+> Summary: 新增配置状态存储规范索引，作为后续配置项持久化和 SSOT 判定基线。
 
 ## 1. 适用范围
 
@@ -112,6 +112,7 @@
 
 - [architecture.md](./general/architecture.md)
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
+- [config-state-storage-guidelines.md](./general/config-state-storage-guidelines.md)
 - [dev-conversation-trace.md](./general/dev-conversation-trace.md)
 - [feishu-api-timeout-discipline.md](./general/feishu-api-timeout-discipline.md)
 - [feishu-business-card-interaction-principles.md](./general/feishu-business-card-interaction-principles.md)
