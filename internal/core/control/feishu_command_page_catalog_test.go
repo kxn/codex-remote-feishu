@@ -58,7 +58,7 @@ func TestNormalizeFeishuPageViewPromotesNoticeAndSealedContract(t *testing.T) {
 }
 
 func TestNormalizeFeishuPageViewKeepsMenuHomeAtRoot(t *testing.T) {
-	view := NormalizeFeishuPageView(BuildFeishuCommandMenuHomePageView())
+	view := NormalizeFeishuPageView(BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{}))
 	if len(view.Breadcrumbs) != 1 || view.Breadcrumbs[0].Label != "菜单首页" {
 		t.Fatalf("expected menu home breadcrumb to stay at root, got %#v", view.Breadcrumbs)
 	}

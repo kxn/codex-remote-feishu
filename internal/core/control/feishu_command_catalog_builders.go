@@ -6,14 +6,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
-func BuildFeishuCommandMenuHomePageView() FeishuPageView {
-	return BuildFeishuCommandMenuHomePageViewForProductMode("")
-}
-
-func BuildFeishuCommandMenuHomePageViewForProductMode(productMode string) FeishuPageView {
-	return BuildFeishuCommandMenuHomePageViewForContext(legacyCatalogContext(productMode, ""))
-}
-
 func BuildFeishuCommandMenuHomePageViewForContext(ctx CatalogContext) FeishuPageView {
 	ctx = NormalizeCatalogContext(ctx)
 	return FeishuPageView{
@@ -28,10 +20,6 @@ func BuildFeishuCommandMenuHomePageViewForContext(ctx CatalogContext) FeishuPage
 			Entries: buildFeishuCommandMenuGroupEntries(ctx),
 		}},
 	}
-}
-
-func BuildFeishuCommandMenuPageView(view FeishuCatalogMenuView, productMode, menuStage string) FeishuPageView {
-	return BuildFeishuCommandMenuPageViewForContext(view, legacyCatalogContext(productMode, menuStage))
 }
 
 func BuildFeishuCommandMenuPageViewForContext(view FeishuCatalogMenuView, ctx CatalogContext) FeishuPageView {
@@ -51,10 +39,6 @@ func BuildFeishuCommandMenuPageViewForContext(view FeishuCatalogMenuView, ctx Ca
 	}
 	ctx.MenuStage = stage
 	return BuildFeishuCommandMenuGroupPageViewForContext(groupID, ctx)
-}
-
-func BuildFeishuCommandMenuGroupPageView(groupID, productMode, menuStage string) FeishuPageView {
-	return BuildFeishuCommandMenuGroupPageViewForContext(groupID, legacyCatalogContext(productMode, menuStage))
 }
 
 func BuildFeishuCommandMenuGroupPageViewForContext(groupID string, ctx CatalogContext) FeishuPageView {

@@ -44,7 +44,7 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, action.Inbound, message, "parse_text_content", err)
 			return control.Action{}, false, err
 		}
-		commandAction, handled := env.ParseTextAction(commandText)
+		commandAction, handled := env.ParseTextActionWithoutCatalog(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID
 			commandAction.SurfaceSessionID = surfaceSessionID

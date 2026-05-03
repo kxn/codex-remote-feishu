@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func (s *Service) enrichCatalogAction(surface *state.SurfaceConsoleRecord, action control.Action) control.Action {
+func (s *Service) resolveCatalogActionFromSurfaceContext(surface *state.SurfaceConsoleRecord, action control.Action) control.Action {
 	if strings.TrimSpace(action.CatalogFamilyID) != "" && strings.TrimSpace(action.CatalogVariantID) != "" && action.CatalogBackend != "" {
 		return action
 	}

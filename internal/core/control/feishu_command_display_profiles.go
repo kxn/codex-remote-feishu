@@ -157,14 +157,6 @@ func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuComm
 	return profile
 }
 
-func ResolveFeishuCommandDisplayProfile(productMode string) FeishuCommandDisplayProfile {
-	normalized := VisibleModeForCatalogContext(legacyCatalogContext(productMode, ""))
-	if profile, ok := feishuCommandDisplayProfiles[normalized]; ok {
-		return profile
-	}
-	return feishuCommandDisplayProfiles["codex"]
-}
-
 func (p FeishuCommandDisplayProfile) FamilyProfile(familyID string) (FeishuCommandDisplayFamilyProfile, bool) {
 	familyID = strings.TrimSpace(familyID)
 	if familyID == "" {

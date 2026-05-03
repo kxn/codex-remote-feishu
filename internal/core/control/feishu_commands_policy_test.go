@@ -105,29 +105,33 @@ func TestVSCodeMigrateDisplayRespectsProductMode(t *testing.T) {
 		t.Fatal("expected vscode migrate definition")
 	}
 
-	if _, ok := FeishuCommandDefinitionForDisplay(def, "normal", false, ""); ok {
+	normalDetached := CatalogContext{ProductMode: "normal"}
+	normalWorking := CatalogContext{ProductMode: "normal", MenuStage: string(FeishuCommandMenuStageNormalWorking)}
+	vscodeDetached := CatalogContext{ProductMode: "vscode"}
+
+	if _, ok := FeishuCommandDefinitionForDisplayContext(def, false, normalDetached); ok {
 		t.Fatalf("expected /vscode-migrate to stay hidden from normal help")
 	}
-	if _, ok := FeishuCommandDefinitionForDisplay(def, "normal", true, string(FeishuCommandMenuStageNormalWorking)); ok {
+	if _, ok := FeishuCommandDefinitionForDisplayContext(def, true, normalWorking); ok {
 		t.Fatalf("expected /vscode-migrate to stay hidden from normal menu")
 	}
-	if projected, ok := FeishuCommandDefinitionForDisplay(def, "vscode", false, ""); !ok {
+	if projected, ok := FeishuCommandDefinitionForDisplayContext(def, false, vscodeDetached); !ok {
 		t.Fatalf("expected /vscode-migrate to stay visible in vscode help")
 	} else if projected.CanonicalSlash != "/vscode-migrate" {
 		t.Fatalf("unexpected vscode migrate display projection: %#v", projected)
 	}
 
-	normalHelp := BuildFeishuCommandDisplayPageView("命令帮助", "", false, "normal", "")
+	normalHelp := BuildFeishuCommandDisplayPageViewForContext("命令帮助", "", false, normalDetached)
 	if catalogContainsCommand(normalHelp, "/vscode-migrate") {
 		t.Fatalf("expected normal help catalog to hide /vscode-migrate: %#v", normalHelp)
 	}
 
-	vscodeHelp := BuildFeishuCommandDisplayPageView("命令帮助", "", false, "vscode", "")
+	vscodeHelp := BuildFeishuCommandDisplayPageViewForContext("命令帮助", "", false, vscodeDetached)
 	if !catalogContainsCommand(vscodeHelp, "/vscode-migrate") {
 		t.Fatalf("expected vscode help catalog to include /vscode-migrate: %#v", vscodeHelp)
 	}
 
-	normalMenu := BuildFeishuCommandMenuGroupPageView(FeishuCommandGroupMaintenance, "normal", string(FeishuCommandMenuStageNormalWorking))
+	normalMenu := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupMaintenance, normalWorking)
 	if catalogContainsCommand(normalMenu, "/vscode-migrate") {
 		t.Fatalf("expected normal maintenance menu to hide /vscode-migrate: %#v", normalMenu)
 	}

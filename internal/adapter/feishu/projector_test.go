@@ -680,9 +680,9 @@ func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testin
 }
 
 func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
-	catalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+	catalog, ok := control.FeishuPageViewFromViewContext(control.FeishuCatalogView{
 		Menu: &control.FeishuCatalogMenuView{Stage: "detached"},
-	}, "", "detached")
+	}, control.CatalogContext{MenuStage: "detached"})
 	if !ok {
 		t.Fatalf("expected menu view to project into command page")
 	}
@@ -698,9 +698,9 @@ func TestCommandCatalogFromViewBuildsDetachedMenuHome(t *testing.T) {
 }
 
 func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
-	normalCatalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+	normalCatalog, ok := control.FeishuPageViewFromViewContext(control.FeishuCatalogView{
 		Menu: &control.FeishuCatalogMenuView{Stage: "normal_working", GroupID: "current_work"},
-	}, "", "")
+	}, control.CatalogContext{ProductMode: "normal"})
 	if !ok {
 		t.Fatalf("expected normal current_work menu to project")
 	}
@@ -710,9 +710,9 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", gotNormal, wantNormal)
 	}
 
-	vscodeCatalog, ok := control.FeishuPageViewFromView(control.FeishuCatalogView{
+	vscodeCatalog, ok := control.FeishuPageViewFromViewContext(control.FeishuCatalogView{
 		Menu: &control.FeishuCatalogMenuView{Stage: "vscode_working", GroupID: "current_work"},
-	}, "", "")
+	}, control.CatalogContext{ProductMode: "vscode"})
 	if !ok {
 		t.Fatalf("expected vscode current_work menu to project")
 	}

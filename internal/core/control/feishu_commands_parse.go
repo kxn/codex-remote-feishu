@@ -2,16 +2,21 @@ package control
 
 import "strings"
 
-func ParseFeishuTextAction(text string) (Action, bool) {
+// ParseFeishuTextActionWithoutCatalog parses slash-style text into an action
+// shape but intentionally strips catalog provenance. Runtime callers that need
+// backend-aware command routing must follow with ResolveFeishuActionCatalog.
+func ParseFeishuTextActionWithoutCatalog(text string) (Action, bool) {
 	resolved, ok := ResolveFeishuTextCommand(CatalogContext{}, text)
 	if !ok {
 		return Action{}, false
 	}
-	action := resolved.Action
-	action.CatalogFamilyID = ""
-	action.CatalogVariantID = ""
-	action.CatalogBackend = ""
-	return action, true
+	return actionWithoutCatalogProvenance(resolved.Action), true
+}
+
+// ParseFeishuTextAction is a compatibility wrapper around
+// ParseFeishuTextActionWithoutCatalog.
+func ParseFeishuTextAction(text string) (Action, bool) {
+	return ParseFeishuTextActionWithoutCatalog(text)
 }
 
 func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand, bool) {
@@ -50,16 +55,21 @@ func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand,
 	return ResolvedCommand{}, false
 }
 
-func ParseFeishuMenuAction(eventKey string) (Action, bool) {
+// ParseFeishuMenuActionWithoutCatalog parses menu callback keys into an action
+// shape but intentionally strips catalog provenance. Runtime callers that need
+// backend-aware command routing must follow with ResolveFeishuActionCatalog.
+func ParseFeishuMenuActionWithoutCatalog(eventKey string) (Action, bool) {
 	resolved, ok := ResolveFeishuMenuCommand(CatalogContext{}, eventKey)
 	if !ok {
 		return Action{}, false
 	}
-	action := resolved.Action
-	action.CatalogFamilyID = ""
-	action.CatalogVariantID = ""
-	action.CatalogBackend = ""
-	return action, true
+	return actionWithoutCatalogProvenance(resolved.Action), true
+}
+
+// ParseFeishuMenuAction is a compatibility wrapper around
+// ParseFeishuMenuActionWithoutCatalog.
+func ParseFeishuMenuAction(eventKey string) (Action, bool) {
+	return ParseFeishuMenuActionWithoutCatalog(eventKey)
 }
 
 func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {
@@ -114,4 +124,11 @@ func NormalizeFeishuMenuEventKey(value string) string {
 		}
 	}
 	return b.String()
+}
+
+func actionWithoutCatalogProvenance(action Action) Action {
+	action.CatalogFamilyID = ""
+	action.CatalogVariantID = ""
+	action.CatalogBackend = ""
+	return action
 }

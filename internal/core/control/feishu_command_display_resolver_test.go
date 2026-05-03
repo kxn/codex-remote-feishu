@@ -143,7 +143,7 @@ func TestResolveFeishuCommandDisplayFamilySupportsMenuStageProjection(t *testing
 }
 
 func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing.T) {
-	codex := ResolveFeishuCommandDisplayProfile("codex")
+	codex := ResolveFeishuCommandDisplayProfileForContext(CatalogContext{ProductMode: "normal"})
 	if got, want := codex.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
 		FeishuCommandWorkspace,
 		FeishuCommandWorkspaceList,
@@ -166,7 +166,7 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		t.Fatalf("codex visible common_tools families = %#v, want %#v", got, want)
 	}
 
-	vscode := ResolveFeishuCommandDisplayProfile("vscode")
+	vscode := ResolveFeishuCommandDisplayProfileForContext(CatalogContext{ProductMode: "vscode"})
 	if got, want := vscode.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget), []string{
 		FeishuCommandList,
 		FeishuCommandUse,

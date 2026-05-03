@@ -821,7 +821,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 }
 
 func (s *Service) catalogProvenanceForAction(surface *state.SurfaceConsoleRecord, action control.Action) (string, string, agentproto.Backend) {
-	action = s.enrichCatalogAction(surface, action)
+	action = s.resolveCatalogActionFromSurfaceContext(surface, action)
 	return strings.TrimSpace(action.CatalogFamilyID), strings.TrimSpace(action.CatalogVariantID), agentproto.NormalizeBackend(action.CatalogBackend)
 }
 

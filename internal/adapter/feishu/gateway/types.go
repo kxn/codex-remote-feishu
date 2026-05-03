@@ -17,7 +17,7 @@ type RoutingEnv struct {
 type InboundEnv struct {
 	GatewayID                        string
 	LookupSurfaceMessage             func(messageID string) string
-	ParseTextAction                  func(text string) (control.Action, bool)
+	ParseTextActionWithoutCatalog    func(text string) (control.Action, bool)
 	QuotedInputs                     func(context.Context, *larkim.EventMessage) []agentproto.Input
 	ParsePostInputs                  func(context.Context, string, string) ([]agentproto.Input, string, error)
 	BuildMergeForwardStructuredInput func(context.Context, *larkim.EventMessage) (string, []agentproto.Input, error)

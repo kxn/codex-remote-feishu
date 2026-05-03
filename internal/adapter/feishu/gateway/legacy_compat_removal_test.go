@@ -9,8 +9,8 @@ import (
 
 func TestPlanInboundMessageEventRemovedLegacyCompatQueuesPlainTextMessage(t *testing.T) {
 	env := InboundEnv{
-		GatewayID:       "app-2",
-		ParseTextAction: parseTextAction,
+		GatewayID:                     "app-2",
+		ParseTextActionWithoutCatalog: parseTextAction,
 		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
 			t.Helper()
 			if messageID != "om-msg-compat" {

@@ -11,7 +11,7 @@ type FeishuWorkspaceSessionFlow struct {
 }
 
 func ResolveFeishuWorkspaceSessionFlowFromAction(action Action) (FeishuWorkspaceSessionFlow, bool) {
-	if flow, ok := ResolveFeishuWorkspaceSessionFlowForCatalog(action.CatalogFamilyID, action.CatalogVariantID); ok {
+	if flow, ok := ResolveFeishuWorkspaceSessionFlowForFamily(action.CatalogFamilyID); ok {
 		return flow, true
 	}
 	switch action.Kind {
@@ -30,8 +30,7 @@ func ResolveFeishuWorkspaceSessionFlowFromAction(action Action) (FeishuWorkspace
 	}
 }
 
-func ResolveFeishuWorkspaceSessionFlowForCatalog(familyID, variantID string) (FeishuWorkspaceSessionFlow, bool) {
-	_ = strings.TrimSpace(variantID)
+func ResolveFeishuWorkspaceSessionFlowForFamily(familyID string) (FeishuWorkspaceSessionFlow, bool) {
 	return resolveFeishuWorkspaceSessionFlow(strings.TrimSpace(familyID))
 }
 

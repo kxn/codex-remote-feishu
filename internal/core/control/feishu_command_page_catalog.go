@@ -2,10 +2,6 @@ package control
 
 import "strings"
 
-func FeishuPageViewFromView(view FeishuCatalogView, productMode, menuStage string) (FeishuPageView, bool) {
-	return FeishuPageViewFromViewContext(view, legacyCatalogContext(productMode, menuStage))
-}
-
 func FeishuPageViewFromViewContext(view FeishuCatalogView, ctx CatalogContext) (FeishuPageView, bool) {
 	switch {
 	case view.Menu != nil:

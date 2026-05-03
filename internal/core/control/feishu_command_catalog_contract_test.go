@@ -21,23 +21,25 @@ func TestStaticCommandCatalogsUsePlainTextContracts(t *testing.T) {
 }
 
 func TestDisplayCatalogBuilderUsesPlainTextContracts(t *testing.T) {
-	catalog := BuildFeishuCommandDisplayPageView(
+	catalog := BuildFeishuCommandDisplayPageViewForContext(
 		"命令帮助",
 		"当前展示 canonical 命令。",
 		false,
-		"normal",
-		"",
+		CatalogContext{ProductMode: "normal"},
 	)
 	assertCommandCatalogUsesPlainTextContracts(t, catalog)
 }
 
 func TestCommandViewCatalogBuildersUsePlainTextContracts(t *testing.T) {
 	t.Run("menu_home", func(t *testing.T) {
-		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuHomePageView())
+		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{}))
 	})
 
 	t.Run("menu_group", func(t *testing.T) {
-		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuGroupPageView("current_work", "normal", "normal_working"))
+		assertCommandCatalogUsesPlainTextContracts(t, BuildFeishuCommandMenuGroupPageViewForContext("current_work", CatalogContext{
+			ProductMode: "normal",
+			MenuStage:   string(FeishuCommandMenuStageNormalWorking),
+		}))
 	})
 
 	t.Run("attachment_required", func(t *testing.T) {

@@ -118,7 +118,7 @@ func surfaceLaneInner(lane *surfaceInboundLane) *gatewaypkg.SurfaceInboundLane {
 }
 
 func menuAction(eventKey string) (control.Action, bool) {
-	return control.ParseFeishuMenuAction(eventKey)
+	return control.ParseFeishuMenuActionWithoutCatalog(eventKey)
 }
 
 func menuActionKind(eventKey string) (control.ActionKind, bool) {
@@ -134,7 +134,7 @@ func normalizeMenuEventKey(value string) string {
 }
 
 func parseTextAction(text string) (control.Action, bool) {
-	return control.ParseFeishuTextAction(text)
+	return control.ParseFeishuTextActionWithoutCatalog(text)
 }
 
 func parseTextContent(rawContent string) (string, error) {

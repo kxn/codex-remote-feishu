@@ -30,11 +30,11 @@ func (g *LiveGateway) routingEnv() gatewaypkg.RoutingEnv {
 
 func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 	return gatewaypkg.InboundEnv{
-		GatewayID:            g.config.GatewayID,
-		LookupSurfaceMessage: g.lookupSurfaceMessage,
-		ParseTextAction:      control.ParseFeishuTextAction,
-		QuotedInputs:         g.quotedInputs,
-		ParsePostInputs:      g.parsePostInputs,
+		GatewayID:                     g.config.GatewayID,
+		LookupSurfaceMessage:          g.lookupSurfaceMessage,
+		ParseTextActionWithoutCatalog: control.ParseFeishuTextActionWithoutCatalog,
+		QuotedInputs:                  g.quotedInputs,
+		ParsePostInputs:               g.parsePostInputs,
 		BuildMergeForwardStructuredInput: func(ctx context.Context, message *larkim.EventMessage) (string, []agentproto.Input, error) {
 			payload, err := g.buildMergeForwardStructuredPayloadFromEvent(ctx, message)
 			if err != nil {

@@ -171,7 +171,7 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 func TestProjectMenuHomeRendersRootBreadcrumbAndNamedGroupButtons(t *testing.T) {
 	projector := NewProjector()
 	projector.SetMenuHomeVersion("v9.9.9")
-	view := control.BuildFeishuCommandMenuHomePageView()
+	view := control.BuildFeishuCommandMenuHomePageViewForContext(control.CatalogContext{})
 	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(view))
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
 		t.Fatalf("unexpected ops: %#v", ops)

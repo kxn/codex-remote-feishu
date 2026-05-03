@@ -638,11 +638,11 @@ func requestAnswersFromMap(values map[string]interface{}) map[string][]string {
 }
 
 func parseTextAction(text string) (control.Action, bool) {
-	return control.ParseFeishuTextAction(text)
+	return control.ParseFeishuTextActionWithoutCatalog(text)
 }
 
 func menuAction(eventKey string) (control.Action, bool) {
-	return control.ParseFeishuMenuAction(eventKey)
+	return control.ParseFeishuMenuActionWithoutCatalog(eventKey)
 }
 
 func NormalizeMenuEventKey(value string) string {
