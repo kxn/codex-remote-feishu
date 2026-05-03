@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -302,6 +303,121 @@ func TestClaudeTranslatorTurnSteerRejectsNonTextInputs(t *testing.T) {
 	})
 	problem := expectClaudeCommandError(t, err)
 	if problem.Code != "claude_steer_inputs_unsupported" || !strings.Contains(problem.Details, "unsupported prompt input type") {
+		t.Fatalf("unexpected problem: %#v", problem)
+	}
+}
+
+func TestClaudeTranslatorPromptSendAcceptsLocalImageAndTrailingText(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	imagePath := filepath.Join(t.TempDir(), "prompt.png")
+	if err := os.WriteFile(imagePath, []byte("prompt-image"), 0o644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-prompt-image-text",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-fresh"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{
+			{Type: agentproto.InputLocalImage, Path: imagePath, MIMEType: "image/png"},
+			{Type: agentproto.InputText, Text: "请描述这张图"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("translate prompt send: %v", err)
+	}
+	if len(payloads) != 2 {
+		t.Fatalf("expected permission frame + prompt payload, got %#v", payloads)
+	}
+	payload := decodeFrame(t, payloads[len(payloads)-1])
+	message := testMapValue(payload["message"])
+	content := testSliceMapValue(message["content"])
+	if len(content) != 2 {
+		t.Fatalf("expected image + trailing text blocks, got %#v", message["content"])
+	}
+	if content[0]["type"] != "image" {
+		t.Fatalf("unexpected first block: %#v", content[0])
+	}
+	source := testMapValue(content[0]["source"])
+	if source["type"] != "base64" || lookupStringFromAny(source["media_type"]) != "image/png" || lookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("prompt-image")) {
+		t.Fatalf("unexpected image block source: %#v", source)
+	}
+	if content[1]["type"] != "text" || lookupStringFromAny(content[1]["text"]) != "请描述这张图" {
+		t.Fatalf("unexpected trailing text block: %#v", content[1])
+	}
+	if len(tr.pendingTurns) != 1 || tr.pendingTurns[0].ThreadID != "thread-fresh" {
+		t.Fatalf("expected pending fresh-thread turn, got %#v", tr.pendingTurns)
+	}
+}
+
+func TestClaudeTranslatorPromptSendPreservesFileBridgeTextOrderOnResumedSession(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	imagePath := filepath.Join(t.TempDir(), "resume.png")
+	if err := os.WriteFile(imagePath, []byte("resume-image"), 0o644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+	observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "session-resume-1",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+
+	filePrompt := "附带参考文件（内容未直接注入上下文，可按需读取以下本地路径）：\n- notes.txt: /tmp/notes.txt"
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-prompt-resume-image-file-text",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-resume"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{
+			{Type: agentproto.InputLocalImage, Path: imagePath, MIMEType: "image/png"},
+			{Type: agentproto.InputText, Text: filePrompt},
+			{Type: agentproto.InputText, Text: "请结合文件继续处理"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("translate prompt send: %v", err)
+	}
+	if len(payloads) != 1 {
+		t.Fatalf("expected one prompt payload, got %#v", payloads)
+	}
+	payload := decodeFrame(t, payloads[0])
+	message := testMapValue(payload["message"])
+	content := testSliceMapValue(message["content"])
+	if len(content) != 3 {
+		t.Fatalf("expected image + file prompt + user text blocks, got %#v", message["content"])
+	}
+	if content[0]["type"] != "image" {
+		t.Fatalf("unexpected first block: %#v", content[0])
+	}
+	if content[1]["type"] != "text" || lookupStringFromAny(content[1]["text"]) != filePrompt {
+		t.Fatalf("unexpected file prompt block: %#v", content[1])
+	}
+	if content[2]["type"] != "text" || lookupStringFromAny(content[2]["text"]) != "请结合文件继续处理" {
+		t.Fatalf("unexpected trailing user text block: %#v", content[2])
+	}
+	if len(tr.pendingTurns) != 1 || tr.pendingTurns[0].ThreadID != "session-resume-1" {
+		t.Fatalf("expected pending resumed-session turn, got %#v", tr.pendingTurns)
+	}
+}
+
+func TestClaudeTranslatorPromptSendRejectsRemoteImageInputs(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-prompt-remote-image",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{
+			{Type: agentproto.InputRemoteImage, URL: "https://example.test/image.png", MIMEType: "image/png"},
+		}},
+	})
+	problem := expectClaudeCommandError(t, err)
+	if problem.Code != "claude_prompt_inputs_unsupported" || !strings.Contains(problem.Details, "unsupported prompt input type") {
 		t.Fatalf("unexpected problem: %#v", problem)
 	}
 }
@@ -1843,4 +1959,16 @@ func testMapValue(value any) map[string]any {
 		return map[string]any{}
 	}
 	return current
+}
+
+func testSliceMapValue(value any) []map[string]any {
+	raw, _ := value.([]any)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		out = append(out, testMapValue(item))
+	}
+	return out
 }

@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-05-03`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude text-only steer approximation：native capability 仍是 unsupported，但 reply auto steer 与 `/steerall` 的纯文本补充已经可以并入当前 active turn。
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude `prompt.send` 的本地图片输入支持，文件继续保持 `@path` 文本桥接；Claude steer 侧仍只有 text-only approximation：native capability 仍是 unsupported，但 reply auto steer 与 `/steerall` 的纯文本补充已经可以并入当前 active turn。
 
 ## 1. 文档定位
 
@@ -1260,7 +1260,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 1. Claude 的 vscode mode
 2. Claude 等价 `turn.steer`
 3. Claude review/compact/skills 的强对齐
-4. Claude 多模态图片输入的完整承诺
+4. Claude 多模态图片输入的完整承诺（当前只接通 `prompt.send` 的本地图片输入；`turn.steer` 图片 continuation 与 remote image 仍属后续）
 5. 全仓 `thread -> session` 命名迁移
 
 后续预留位：

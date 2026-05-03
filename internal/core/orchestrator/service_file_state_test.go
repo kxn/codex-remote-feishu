@@ -66,6 +66,72 @@ func TestTextMessageConsumesStagedFilesAndAddsPromptReference(t *testing.T) {
 	}
 }
 
+func TestTextMessageOrdersStagedImageBeforeFilePromptAndUserText(t *testing.T) {
+	now := time.Date(2026, 4, 20, 12, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "repo",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		ShortName:               "repo",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "主会话", CWD: "/data/dl/repo"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionImageMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-image",
+		LocalPath:        "/tmp/diagram.png",
+		MIMEType:         "image/png",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionFileMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-file",
+		LocalPath:        "/data/dl/repo/.codex-remote/inbox/feishu-files/msg-file/notes.txt",
+		FileName:         "notes.txt",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-text",
+		Text:             "请结合图片和文件继续处理",
+	})
+
+	if len(events) < 3 {
+		t.Fatalf("expected queued + dispatch + command events, got %#v", events)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if len(surface.QueueItems) != 1 {
+		t.Fatalf("expected one queue item, got %#v", surface.QueueItems)
+	}
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected one queue item")
+	}
+	if len(item.Inputs) != 3 {
+		t.Fatalf("expected image + file reference prompt + user text, got %#v", item.Inputs)
+	}
+	if item.Inputs[0].Type != agentproto.InputLocalImage || item.Inputs[0].Path != "/tmp/diagram.png" {
+		t.Fatalf("unexpected staged image input: %#v", item.Inputs[0])
+	}
+	if item.Inputs[1].Type != agentproto.InputText || !strings.Contains(item.Inputs[1].Text, "notes.txt") {
+		t.Fatalf("unexpected file reference prompt: %#v", item.Inputs[1])
+	}
+	if item.Inputs[2].Type != agentproto.InputText || item.Inputs[2].Text != "请结合图片和文件继续处理" {
+		t.Fatalf("unexpected user input: %#v", item.Inputs[2])
+	}
+}
+
 func TestMessageRecalledCancelsStagedFile(t *testing.T) {
 	now := time.Date(2026, 4, 20, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

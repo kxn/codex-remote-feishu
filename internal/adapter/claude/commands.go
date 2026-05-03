@@ -43,10 +43,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 }
 
 func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, error) {
-	text, err := t.requireTextPromptInputs(
+	content, err := t.requireUserPromptContent(
 		command,
 		"claude_prompt_inputs_unsupported",
-		"当前 Claude runtime 第一版只支持纯文本 prompt.send。",
+		"当前 Claude runtime 第一版支持文本与本地图片 prompt.send；远程图片与 document 输入仍未接通。",
 	)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 		outbound = append(outbound, frame)
 	}
 
-	frame, err := marshalUserTextFrame(text)
+	frame, err := marshalUserPromptFrame(content)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,19 @@ func (t *Translator) requireTextPromptInputs(command agentproto.Command, code, m
 	if err == nil {
 		return text, nil
 	}
-	return "", agentproto.ErrorInfo{
+	return "", t.wrapPromptInputError(command, code, message, err)
+}
+
+func (t *Translator) requireUserPromptContent(command agentproto.Command, code, message string) (any, error) {
+	content, err := buildClaudeUserPromptContent(command.Prompt.Inputs)
+	if err == nil {
+		return content, nil
+	}
+	return nil, t.wrapPromptInputError(command, code, message, err)
+}
+
+func (t *Translator) wrapPromptInputError(command agentproto.Command, code, message string, err error) agentproto.ErrorInfo {
+	return agentproto.ErrorInfo{
 		Code:             code,
 		Layer:            "wrapper",
 		Stage:            "translate_command",
@@ -309,14 +321,18 @@ func (t *Translator) requireTextPromptInputs(command agentproto.Command, code, m
 	}
 }
 
-func marshalUserTextFrame(text string) ([]byte, error) {
+func marshalUserPromptFrame(content any) ([]byte, error) {
 	return marshalNDJSON(map[string]any{
 		"type": "user",
 		"message": map[string]any{
 			"role":    "user",
-			"content": text,
+			"content": content,
 		},
 	})
+}
+
+func marshalUserTextFrame(text string) ([]byte, error) {
+	return marshalUserPromptFrame(text)
 }
 
 func flattenPromptText(inputs []agentproto.Input) (string, error) {
